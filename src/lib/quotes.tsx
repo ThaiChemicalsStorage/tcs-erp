@@ -1,0 +1,152 @@
+import { FilePen, Clock, CheckCircle2, Ban } from "lucide-react";
+
+export type QuoteStatus = "ร่าง" | "รออนุมัติ" | "อนุมัติแล้ว" | "ยกเลิก";
+export type QuoteInterest = "น่าสนใจ" | "ไม่น่าสนใจ" | null;
+
+export interface SubDetail {
+  id: string;
+  text: string;
+}
+
+export interface QuoteLine {
+  id: number;
+  description: string;
+  unit: string;
+  qty: number;
+  unitPrice: number;
+  discount: number;
+  notes: string;
+  subDetails: SubDetail[];
+}
+
+export interface Quote {
+  id: string;
+  client: string;
+  date: string;
+  valid: string;
+  amount: number;
+  status: QuoteStatus;
+  salesperson: string;
+  interest: QuoteInterest;
+  lines: QuoteLine[];
+  discount: number;
+}
+
+export const VAT_RATE = 7;
+
+export const statusStyle: Record<QuoteStatus, string> = {
+  "ร่าง": "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20",
+  "รออนุมัติ": "bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/20",
+  "อนุมัติแล้ว": "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20",
+  "ยกเลิก": "bg-[#e05252]/10 text-[#e05252] border border-[#e05252]/20",
+};
+
+export const statusIcon: Record<QuoteStatus, React.ReactNode> = {
+  "ร่าง": <FilePen size={10} />,
+  "รออนุมัติ": <Clock size={10} />,
+  "อนุมัติแล้ว": <CheckCircle2 size={10} />,
+  "ยกเลิก": <Ban size={10} />,
+};
+
+export function fmt(n: number): string {
+  return n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+let lineIdCounter = 1000;
+export function newLineId(): number {
+  lineIdCounter += 1;
+  return Date.now() + lineIdCounter;
+}
+
+export function newSubDetailId(): string {
+  return `sd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+export function blankLine(): QuoteLine {
+  return { id: newLineId(), description: "", unit: "ชิ้น", qty: 1, unitPrice: 0, discount: 0, notes: "", subDetails: [] };
+}
+
+export function blankQuoteTemplate(): QuoteLine[] {
+  return [
+    {
+      id: newLineId(), description: "เครื่องจักรอุตสาหกรรม รุ่น X-500", unit: "เครื่อง", qty: 2, unitPrice: 285000, discount: 5,
+      notes: "• ราคารวมการฝึกอบรมการใช้งานเบื้องต้น 1 วัน\n• รับประกันตัวเครื่อง 2 ปี ไม่รวมอะไหล่สิ้นเปลือง",
+      subDetails: [
+        { id: newSubDetailId(), text: "จัดส่งและติดตั้งหน้างาน" },
+        { id: newSubDetailId(), text: "ทดสอบระบบก่อนส่งมอบ" },
+      ],
+    },
+    { id: newLineId(), description: "ชุดอะไหล่สำรอง (ชุดมาตรฐาน)", unit: "ชุด", qty: 5, unitPrice: 12500, discount: 0, notes: "", subDetails: [] },
+    {
+      id: newLineId(), description: "บริการติดตั้งและทดสอบ", unit: "ครั้ง", qty: 1, unitPrice: 45000, discount: 10,
+      notes: "ขอบเขตงาน:\n1. เดินระบบท่อและงานไฟฟ้าที่เกี่ยวข้อง\n2. ทดสอบแรงดันระบบ\n3. อบรมการใช้งานให้ทีมลูกค้า",
+      subDetails: [
+        { id: newSubDetailId(), text: "สำรวจหน้างานก่อนติดตั้ง" },
+        { id: newSubDetailId(), text: "ติดตั้งและเดินระบบท่อ" },
+        { id: newSubDetailId(), text: "ทดสอบแรงดันและความปลอดภัย" },
+        { id: newSubDetailId(), text: "อบรมการใช้งานให้ทีมลูกค้า" },
+      ],
+    },
+  ];
+}
+
+export function lineSubtotal(l: QuoteLine): number {
+  return l.qty * l.unitPrice * (1 - l.discount / 100);
+}
+
+export function computeTotals(lines: QuoteLine[], discountPct: number) {
+  const subtotal = lines.reduce((s, l) => s + lineSubtotal(l), 0);
+  const discountAmt = subtotal * (discountPct / 100);
+  const afterDiscount = subtotal - discountAmt;
+  const vatAmt = afterDiscount * (VAT_RATE / 100);
+  const total = afterDiscount + vatAmt;
+  return { subtotal, discountAmt, afterDiscount, vatAmt, total };
+}
+
+export function cloneLines(lines: QuoteLine[]): QuoteLine[] {
+  return lines.map((l) => ({
+    ...l,
+    id: newLineId(),
+    subDetails: l.subDetails.map((sd) => ({ ...sd, id: newSubDetailId() })),
+  }));
+}
+
+export function nextQuoteId(quotes: Quote[]): string {
+  const year = 2567;
+  const maxNum = quotes
+    .map((q) => parseInt(q.id.split("-").pop() ?? "0", 10))
+    .filter((n) => !Number.isNaN(n))
+    .reduce((max, n) => Math.max(max, n), 0);
+  return `QT-${year}-${String(maxNum + 1).padStart(4, "0")}`;
+}
+
+export const initialQuotes: Quote[] = [
+  {
+    id: "QT-2567-0041", client: "เมอริเดียน คอร์ป", date: "14 ธ.ค. 2567", valid: "14 ม.ค. 2568", amount: 892500,
+    status: "อนุมัติแล้ว", salesperson: "นภา ลาเรนต์", interest: "น่าสนใจ", discount: 0, lines: blankQuoteTemplate(),
+  },
+  {
+    id: "QT-2567-0040", client: "เอเพ็กซ์ โกลบอล", date: "13 ธ.ค. 2567", valid: "13 ม.ค. 2568", amount: 2140000,
+    status: "รออนุมัติ", salesperson: "สมชาย วงศ์ดี", interest: "น่าสนใจ", discount: 0, lines: blankQuoteTemplate(),
+  },
+  {
+    id: "QT-2567-0039", client: "สเตอร์ลิง ไดนามิกส์", date: "12 ธ.ค. 2567", valid: "12 ม.ค. 2568", amount: 345000,
+    status: "ร่าง", salesperson: "อรุณ ศรีสวัสดิ์", interest: null, discount: 0, lines: [blankLine()],
+  },
+  {
+    id: "QT-2567-0038", client: "ดูรอง เฟรร์ เอสเอ", date: "10 ธ.ค. 2567", valid: "10 ม.ค. 2568", amount: 678900,
+    status: "ยกเลิก", salesperson: "วิภา เจริญสุข", interest: "ไม่น่าสนใจ", discount: 0, lines: [blankLine()],
+  },
+  {
+    id: "QT-2567-0037", client: "นากามูระ โฮลดิ้งส์", date: "9 ธ.ค. 2567", valid: "9 ม.ค. 2568", amount: 1250000,
+    status: "อนุมัติแล้ว", salesperson: "นภา ลาเรนต์", interest: "น่าสนใจ", discount: 0, lines: blankQuoteTemplate(),
+  },
+  {
+    id: "QT-2567-0036", client: "แบล็กเวลล์ แอนด์ ซันส์", date: "7 ธ.ค. 2567", valid: "7 ม.ค. 2568", amount: 540000,
+    status: "ร่าง", salesperson: "ธีรพัฒน์ มานะ", interest: null, discount: 0, lines: [blankLine()],
+  },
+  {
+    id: "QT-2567-0035", client: "ฮาร์ทเวลล์ อินดัสทรีส์", date: "5 ธ.ค. 2567", valid: "5 ม.ค. 2568", amount: 320000,
+    status: "รออนุมัติ", salesperson: "สมชาย วงศ์ดี", interest: "ไม่น่าสนใจ", discount: 0, lines: [blankLine()],
+  },
+];
