@@ -141,3 +141,7 @@ See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the maintained completion perce
 8. Before considering any task complete: `npx tsc --noEmit`, `npm run lint`, and `npm run build` must all pass clean.
 
 A task is not done until the code works **and** the docs reflect it.
+
+## Full target module list (long-term charter)
+
+Dashboard, Leads, Customers, Products, Quotations, User Management (RBAC), Company Settings, User Profile, Notifications, Audit Logs. Status of each: see Current Modules table above and [PROJECT_STATUS.md](./PROJECT_STATUS.md). Detailed per-feature requirements for not-yet-built work (PDF polish, user profile uploads, expanded company settings, sidebar "coming soon" policy, dashboard KPI rework) live in [TODO.md](./TODO.md) — this file stays a summary, not the backlog itself.
