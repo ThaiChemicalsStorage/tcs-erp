@@ -11,30 +11,30 @@
 
 ## Medium Priority — PDF / Quotation document polish (2026-07-08 request)
 
-- [ ] Company **logo** upload (Settings → Company Info) + render in the quotation PDF header, replacing the current text-only "TCS ERP" wordmark
-- [ ] Company **stamp** upload (optional), rendered near the signature block
-- [ ] **Prepared By**: tie the "ผู้เสนอราคา" signature line to the actual signed-in user (name + their uploaded signature, see User Profile below) instead of a static blank line
-- [ ] **Hide empty fields automatically** in the PDF/print view (e.g. don't print "อ้างอิง PO" row at all if empty) — currently every field prints even if blank
-- [ ] **Do not display placeholder text** in the PDF — currently several document fields (ผู้ติดต่อ, เบอร์โทร, ที่อยู่, เลขประจำตัวผู้เสียภาษี on `QuoteDocument.tsx`) show hardcoded example values ("คุณสมชาย วงศ์ดี", "081-234-5678", ...) regardless of the actual quote — these need to become real per-quote fields (ties into the "secondary quotation fields" item below) rather than looking like real data when they're just static placeholders
-- [ ] Quotation item **tags** (not currently modeled — separate from notes/sub-details)
-- [ ] Quotation item **specifications** field (distinct from notes) — Product already has a `specifications` field; decide whether a quote line inherits/overrides it or needs its own
-- [ ] "Nested" sub-details — current sub-details are a flat reorderable list (see [Quotation.md](./MODULES/Quotation.md)); re-confirm whether true nesting (sub-details of sub-details) is actually needed or the flat list satisfies the real business case before building tree UI
+- [x] Company **logo** upload (Settings → Company Info) + render in the quotation PDF header, replacing the text-only "TCS ERP" wordmark when set
+- [x] Company **stamp** upload (optional), rendered near the "ผู้อนุมัติ" signature block when set
+- [x] **Prepared By**: "พนักงานขาย" is now a real controlled field, bound to `Quote.salesperson`, defaulting to the signed-in user's name on new quotes; the "ผู้เสนอราคา" signature line pre-fills that name in print instead of dots. (Actual signature **image** upload is still pending — see User Profile below; this only covers the name.)
+- [x] **Hide empty fields automatically** in the PDF/print view — verified: a fresh quote with no contact/phone/address/tax ID/PO filled in prints none of those rows
+- [x] **Do not display placeholder text** in the PDF — `ผู้ติดต่อ`/`เบอร์โทร`/`ที่อยู่`/`เลขประจำตัวผู้เสียภาษี`/`อ้างอิง PO`/`เงื่อนไขการชำระเงิน`/`วันที่ออกเอกสาร`/`วันหมดอายุ` are now real controlled fields on `Quote`, saved per-quote, not hardcoded example values
+- [x] Quotation item **tags** — chip input in the line-item expand panel, rendered as pills on screen and in print
+- [x] Quotation item **specifications** field (distinct from notes) — added to `QuoteLine`; copied from `Product.specifications` automatically when a line is added via the product picker
+- [ ] "Nested" sub-details — **decision made**: keeping the flat reorderable list. Re-open only if a concrete business case for sub-sub-details shows up; not building speculative tree UI for it now.
 
 ## Medium Priority — User Profile (2026-07-08 request)
 
 - [ ] Profile picture upload
-- [ ] Signature upload, auto-used in quotation PDFs (empty signature line if none set) — depends on file storage, which doesn't exist yet (no backend/object storage — client-only `localStorage` can't hold images at scale, needs the Phase 2 backend or a client-side size-limited data-URL approach as an interim)
+- [ ] Signature **image** upload, auto-used in quotation PDFs — the *name* is now wired (see PDF polish above); the image itself still depends on file storage, which doesn't exist yet (no backend/object storage — client-only `localStorage` can't hold images at scale, needs the Phase 2 backend or a client-side size-limited data-URL approach as an interim, same pattern now proven out for company logo/stamp in `SettingsPage.tsx`'s `ImageUploadField`)
 
 ## Medium Priority — Company Settings expansion (2026-07-08 request)
 
-- [ ] Company logo + stamp management (ties into PDF items above)
+- [x] Company logo + stamp management — done (see PDF polish above)
 - [ ] Bank account info field(s)
 - [ ] VAT rate as a configurable setting — currently hardcoded `VAT_RATE = 7` in `src/lib/quotes.tsx`
 - [ ] Terms & Conditions as an editable company-level default (currently hardcoded static text in `QuoteDocument.tsx`'s remarks textarea)
 
 ## Medium Priority — Other
 
-- [ ] Persist the secondary quotation document fields (contact person, phone, address, tax ID, PO reference, issue/expiry dates, payment terms) — currently cosmetic/uncontrolled inputs, see PDF polish items above for why this now also matters for correct PDF output
+- [x] Persist the secondary quotation document fields (contact person, phone, address, tax ID, PO reference, issue/expiry dates, payment terms) — done as part of the PDF polish work above, now real fields on `Quote`
 - [ ] **Dashboard KPI rework** (2026-07-08 request): replace current KPIs (revenue, active orders, inventory value, headcount) with Total Customers / Active Leads / Quotations / Won-Lost Deals / Revenue / Recent Activities / Follow-ups / Pipeline — **blocked on Lead & Customer module existing first**, since most of these KPIs have no underlying data yet
 - [ ] **Dashboard date-range filter** (Today/Last 3/7/14/30 days/This Month/This Year/Custom Range) driving all KPIs/charts — not built at all currently, every metric is hardcoded to "ธ.ค. 2567"
 - [ ] **Sidebar "Coming Soon" entries** for not-yet-built modules (Leads, Customers, User Management, Notifications, Audit Logs) so the roadmap is visible instead of those modules simply not appearing — needs a design decision on whether a "Coming Soon" nav item just shows a placeholder page or is hidden until closer to ready
@@ -66,3 +66,4 @@
 - [x] Code-split by page via `React.lazy`, resolved bundle-size warning
 - [x] Git repo initialized and pushed to GitHub (`Wisarutbuasumlee/tcs-erp`, private)
 - [x] Full documentation system under `/docs`
+- [x] Quotation PDF polish: company logo/stamp upload, real per-quote contact/document fields (no more hardcoded placeholder text), auto-hide-empty-fields in print, salesperson bound to the signed-in user, item tags, item specifications field

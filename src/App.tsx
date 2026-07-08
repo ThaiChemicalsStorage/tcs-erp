@@ -184,7 +184,7 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
           <Suspense fallback={<PageLoading />}>
             {activeNav === "ใบเสนอราคา"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} products={products} categories={categories} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} user={user} products={products} categories={categories} />
               : activeNav === "ตั้งค่า"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} user={user} onUserChange={updateUser} />
               : activeNav === "คลังสินค้า"

@@ -31,9 +31,11 @@ interface Company {
   phone: string;
   email: string;
   taxId: string;
+  logoDataUrl: string;   // base64 data URL, "" if none, 1MB client-side cap
+  stampDataUrl: string;  // base64 data URL, "" if none, 1MB client-side cap
 }
 ```
-Single record (not a list) — there is only ever one company profile, edited via Settings.
+Single record (not a list) — there is only ever one company profile, edited via Settings. `logoDataUrl`/`stampDataUrl` are rendered into the quotation PDF header/signature block — see [MODULES/Quotation.md](./MODULES/Quotation.md).
 
 ### `UserProfile` (`src/lib/storage.ts`)
 ```ts
@@ -86,6 +88,8 @@ interface QuoteLine {
   unitPrice: number;
   discount: number;    // line-level discount %
   notes: string;         // multi-line, supports "• " and "1. " prefixes for bullet/numbered rendering
+  specifications: string;  // distinct from notes; auto-copied from Product.specifications via the picker
+  tags: string[];
   subDetails: SubDetail[];
 }
 
@@ -96,12 +100,21 @@ interface Quote {
   valid: string;                 // display string, not a real Date
   amount: number;                 // snapshot of computed total at last save
   status: QuoteStatus;
-  salesperson: string;
+  salesperson: string;          // real per-quote field; defaults to the signed-in user's name on new quotes
   interest: QuoteInterest;
   lines: QuoteLine[];
   discount: number;               // quote-level discount %
+  contactName: string;
+  contactPhone: string;
+  address: string;
+  taxId: string;
+  poRef: string;
+  paymentTerms: string;
+  issueDate: string;    // yyyy-mm-dd
+  expiryDate: string;   // yyyy-mm-dd
 }
 ```
+All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section).
 
 **Relationships (current, in-memory)**: `Product.categoryId → ProductCategory.id`. `QuoteLine` has **no** reference back to `Product` — picking a product from the library copies its `name`/`unit`/`defaultPrice` into a new, independent `QuoteLine` at selection time. This is deliberate: editing or archiving a `Product` must never change historical quotes (see [MODULES/Product.md](./MODULES/Product.md) and [MODULES/Quotation.md](./MODULES/Quotation.md)).
 

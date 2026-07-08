@@ -1,7 +1,7 @@
 import { Fragment, useRef, useState } from "react";
 import {
   Plus, Trash2, Percent, PackageSearch,
-  List, ListOrdered, GripVertical, StickyNote,
+  List, ListOrdered, GripVertical, StickyNote, X,
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
 import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
@@ -116,6 +116,55 @@ function SubDetailsEditor({
   );
 }
 
+function SpecificationsEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">ข้อกำหนดเฉพาะ</p>
+      <textarea
+        rows={3}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="สเปกหรือคุณสมบัติเฉพาะของรายการนี้..."
+        className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed"
+      />
+    </div>
+  );
+}
+
+function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+
+  const addTag = () => {
+    const t = draft.trim();
+    if (t && !tags.includes(t)) onChange([...tags, t]);
+    setDraft("");
+  };
+
+  return (
+    <div>
+      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">แท็ก</p>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {tags.map((t) => (
+          <span key={t} className="flex items-center gap-1 px-2 py-1 text-[11px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-full">
+            {t}
+            <button onClick={() => onChange(tags.filter((x) => x !== t))} className="hover:text-[#e05252] transition-colors">
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+        onBlur={addTag}
+        placeholder="พิมพ์แท็กแล้วกด Enter"
+        className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+      />
+    </div>
+  );
+}
+
 export function LineItemsEditor({
   lines,
   onChange,
@@ -146,7 +195,7 @@ export function LineItemsEditor({
 
   const addLine = () => onChange([...lines, blankLine()]);
   const addLineFromProduct = (product: Product) =>
-    onChange([...lines, { ...blankLine(), description: product.name, unit: product.unit, unitPrice: product.defaultPrice }]);
+    onChange([...lines, { ...blankLine(), description: product.name, unit: product.unit, unitPrice: product.defaultPrice, specifications: product.specifications }]);
   const removeLine = (id: number) => onChange(lines.filter((l) => l.id !== id));
 
   const addSubDetail = (lineId: number) =>
@@ -191,7 +240,7 @@ export function LineItemsEditor({
           <tbody>
             {lines.map((line, idx) => {
               const isExpanded = expanded.has(line.id);
-              const hasDetails = line.notes.trim() !== "" || line.subDetails.length > 0;
+              const hasDetails = line.notes.trim() !== "" || line.subDetails.length > 0 || line.specifications.trim() !== "" || line.tags.length > 0;
               return (
                 <Fragment key={line.id}>
                   <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group print:hidden">
@@ -243,6 +292,8 @@ export function LineItemsEditor({
                             onRemove={(subId) => removeSubDetail(line.id, subId)}
                             onReorder={(from, to) => reorderSubDetails(line.id, from, to)}
                           />
+                          <SpecificationsEditor value={line.specifications} onChange={(v) => updateLine(line.id, "specifications", v)} />
+                          <TagsEditor tags={line.tags} onChange={(tags) => updateLine(line.id, "tags", tags)} />
                         </div>
                       </td>
                     </tr>
@@ -253,8 +304,18 @@ export function LineItemsEditor({
                     <td className="px-4 py-2 text-center text-xs font-mono text-muted-foreground">{idx + 1}</td>
                     <td className="px-4 py-2" colSpan={4}>
                       <p className="text-sm text-foreground">{line.description}</p>
+                      {line.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {line.tags.map((t) => (
+                            <span key={t} className="px-1.5 py-0.5 text-[9px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-full">{t}</span>
+                          ))}
+                        </div>
+                      )}
                       {hasDetails && (
                         <div className="mt-1 pl-3 border-l-2 border-[#c9a84c]/40 text-xs text-muted-foreground leading-relaxed">
+                          {line.specifications.trim() && (
+                            <p className="italic">{line.specifications}</p>
+                          )}
                           <FormattedNotes text={line.notes} />
                           {line.subDetails.length > 0 && (
                             <ul className="list-disc pl-4 mt-1 space-y-0.5">

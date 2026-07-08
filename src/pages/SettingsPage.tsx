@@ -1,9 +1,83 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   User, Building2, ShieldCheck, Bell, CheckCircle2, Hash, Mail, Phone, MapPin, type LucideIcon,
+  Image as ImageIcon, Stamp, Upload, X, AlertTriangle,
 } from "lucide-react";
 import type { Company, UserProfile } from "../lib/storage";
 import { initials } from "../lib/storage";
+
+const MAX_IMAGE_BYTES = 1_000_000;
+
+function ImageUploadField({
+  label,
+  icon: Icon,
+  value,
+  onChange,
+  aspect = "square",
+}: {
+  label: string;
+  icon: LucideIcon;
+  value: string;
+  onChange: (dataUrl: string) => void;
+  aspect?: "square" | "wide";
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState("");
+
+  const handleFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("กรุณาเลือกไฟล์รูปภาพเท่านั้น");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError("ไฟล์มีขนาดใหญ่เกินไป (สูงสุด 1MB)");
+      return;
+    }
+    setError("");
+    const reader = new FileReader();
+    reader.onload = () => onChange(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div>
+      <label className={labelCls}><span className="flex items-center gap-1"><Icon size={10} /> {label}</span></label>
+      <div className="flex items-center gap-3">
+        <div className={`flex-shrink-0 flex items-center justify-center bg-secondary border border-border rounded-lg overflow-hidden ${aspect === "square" ? "w-16 h-16" : "w-28 h-16"}`}>
+          {value ? (
+            <img src={value} alt={label} className="w-full h-full object-contain" />
+          ) : (
+            <Icon size={18} className="text-muted-foreground" />
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+            >
+              <Upload size={12} /> อัปโหลด
+            </button>
+            {value && (
+              <button
+                type="button"
+                onClick={() => onChange("")}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-[#e05252] hover:border-[#e05252]/40 transition-all"
+              >
+                <X size={12} /> ลบ
+              </button>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground">PNG/JPG ไม่เกิน 1MB</p>
+        </div>
+        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+      </div>
+      {error && <p className="text-xs text-[#e05252] mt-1.5 flex items-center gap-1"><AlertTriangle size={11} /> {error}</p>}
+    </div>
+  );
+}
 
 type Tab = "profile" | "company" | "security" | "notifications";
 
@@ -176,6 +250,10 @@ export function SettingsPage({
           <p className="text-xs text-muted-foreground leading-relaxed">
             ข้อมูลนี้จะแสดงบนหัวเอกสารใบเสนอราคาที่ออกให้ลูกค้า
           </p>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <ImageUploadField label="โลโก้บริษัท" icon={ImageIcon} value={companyDraft.logoDataUrl} onChange={(v) => setCompanyDraft((c) => ({ ...c, logoDataUrl: v }))} aspect="wide" />
+            <ImageUploadField label="ตราประทับบริษัท (ไม่บังคับ)" icon={Stamp} value={companyDraft.stampDataUrl} onChange={(v) => setCompanyDraft((c) => ({ ...c, stampDataUrl: v }))} />
+          </div>
           <div className="space-y-4">
             <div>
               <label className={labelCls}>ชื่อบริษัท</label>

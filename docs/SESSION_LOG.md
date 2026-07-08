@@ -4,6 +4,41 @@
 
 ---
 
+## Session — 2026-07-08 (continued: master-prompt triage + PDF polish)
+
+### What was implemented
+- Discovered and triaged a large "master prompt" the user pasted directly into `docs/CLAUDE.md` — extracted its requirements into `TODO.md`, kept `CLAUDE.md` concise
+- Asked the user to prioritize among the huge resulting backlog (Leads/Customers, RBAC, PDF polish, User Profile uploads, Company Settings expansion, Dashboard rework) rather than attempting all of it at once
+- Built the chosen priority: **Quotation PDF polish** — company logo/stamp upload, real per-quote document fields (killed the last hardcoded-placeholder-text issue), auto-hide-empty-fields in print, salesperson bound to the real signed-in user, item tags, item specifications field
+
+### Files Modified
+`docs/CLAUDE.md`, `docs/TODO.md`, `src/lib/storage.ts`, `src/lib/quotes.tsx`, `src/pages/SettingsPage.tsx`, `src/pages/quotation/{QuoteDocument,QuotationPage,LineItemsEditor}.tsx`, `src/App.tsx` — see [CHANGELOG.md](./CHANGELOG.md) for full detail.
+
+### Architectural Decisions
+- Images (logo/stamp) stored as size-capped (1MB) base64 data URLs inside the existing `localStorage`-backed `Company` record — an explicit, documented interim choice given no object storage exists yet, not a silent hack.
+- Kept quotation sub-details as a flat, reorderable list rather than building nested tree UI — the master prompt asked to "re-confirm" whether nesting was needed, and no concrete business case for it surfaced, so the simpler existing implementation was kept and the decision was documented rather than deferred indefinitely.
+- Standing documentation instructions (the "master prompt") were deliberately NOT left inline in `docs/CLAUDE.md` — moved to `TODO.md` so the entry-point doc stays accurate as items ship, per `CLAUDE.md`'s own stated purpose.
+
+### Problems Found
+- Several `QuoteDocument.tsx` fields (contact person, phone, address, tax ID) were hardcoded example values shown regardless of which quote was open — effectively fake data masquerading as real, which the user's master prompt explicitly flagged as unacceptable for a PDF sent to a real customer.
+- The "พนักงานขาย" (salesperson) field in the document view was a completely disconnected hardcoded input, not bound to `Quote.salesperson` at all, despite that field already existing on the `Quote` type and being used correctly elsewhere (the quote list).
+
+### Problems Fixed
+Both of the above — see [CHANGELOG.md](./CHANGELOG.md) 2026-07-08 "Quotation PDF polish" entry. Verified via scripted Playwright pass covering logo/stamp upload, print-media rendering, and empty-field auto-hiding on a fresh quote. Zero console errors; `tsc`/`eslint`/`build` all clean.
+
+### New TODO Items
+Signature **image** upload (name is wired, image is not), bank account info, configurable VAT rate, company-level default Terms & Conditions — all added to `TODO.md` under their respective sections.
+
+### Future Recommendations
+1. The remaining backlog buckets (Leads/Customers, RBAC, User Profile uploads, Dashboard rework) are all still open — next session should re-run the same prioritization conversation rather than assuming an order.
+2. Signature image upload and Dashboard KPI rework are both explicitly blocked on other work (file storage / Phase 2 backend, and the Lead & Customer module, respectively) — don't attempt them in isolation.
+3. The `ImageUploadField` pattern built for company logo/stamp (`SettingsPage.tsx`) is directly reusable for the future User Profile picture/signature upload — no need to design a second pattern.
+
+### Estimated Completion Percentage
+~19% of the full long-term ERP vision (small increment — this was a document-quality/correctness pass on an existing module, not new module coverage); ~92% of the currently-scoped Phase 1 frontend-only modules. See [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+
+---
+
 ## Session — 2026-07-08
 
 ### What was implemented

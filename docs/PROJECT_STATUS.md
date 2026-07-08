@@ -17,12 +17,13 @@ Within **Phase 1 (frontend demo)** specifically, the scoped modules (Dashboard, 
 - ✅ Dashboard: KPI cards, revenue/expense area chart, category donut, sales leaderboard, orders table, activity feed (static sample data)
 - ✅ Quotation list: search/filter by status, summary cards
 - ✅ Quotation document: create/edit/duplicate, line items with qty/price/discount, quote-level discount + VAT (7%) calculation, remarks, signature blocks
-- ✅ Quotation item notes (multi-line, bullet/numbered toolbar) and unlimited sub-details (add/edit/delete/drag-to-reorder) — snapshot per line item, independent of the Product Library
-- ✅ Print/PDF export via browser print, with a dedicated print-only rendering of notes/sub-details (indented, formatted)
+- ✅ Quotation item notes (multi-line, bullet/numbered toolbar), unlimited sub-details (add/edit/delete/drag-to-reorder), **tags**, and a **specifications** field — all snapshot per line item, independent of the Product Library
+- ✅ Print/PDF export via browser print, with a dedicated print-only rendering of notes/sub-details/tags/specifications (indented, formatted), **company logo in the header and stamp near the signature block, and empty document fields automatically hidden**
+- ✅ Quotation document fields (contact person, phone, address, tax ID, PO reference, issue/expiry dates, payment terms, salesperson) are real per-quote data now, not hardcoded placeholder text — salesperson defaults to the signed-in user's name on new quotes
 - ✅ Product Library: CRUD, categories (create/rename/archive), archive vs. permanent delete (with confirmation), duplicate, search/filter/sort/pagination
-- ✅ Quotation ↔ Product Library integration: pick-from-library modal that snapshots product data into a line item (never a live reference)
-- ✅ Sign in / Sign up (client-only fake auth), Settings (profile, company info, security mock, notification toggles)
-- ✅ Company info entered in Settings flows through live to the quotation document header
+- ✅ Quotation ↔ Product Library integration: pick-from-library modal that snapshots product data (including specifications) into a line item (never a live reference)
+- ✅ Sign in / Sign up (client-only fake auth), Settings (profile, company info incl. logo/stamp upload, security mock, notification toggles)
+- ✅ Company info (including logo/stamp) entered in Settings flows through live to the quotation document header/signature block
 - ✅ ESLint + strict TypeScript (`noUnusedLocals`/`noUnusedParameters`) wired in; `tsc`/`eslint`/`build` all pass clean
 - ✅ Code-split by page via `React.lazy` (Dashboard's `recharts` dependency no longer bloats the main bundle)
 - ✅ Git repo initialized, pushed to GitHub (`Wisarutbuasumlee/tcs-erp`, private)
@@ -39,7 +40,8 @@ Within **Phase 1 (frontend demo)** specifically, the scoped modules (Dashboard, 
 - Lead Management module — **not started**
 - Customer Management module — **not started** (quotations currently carry only a free-text client name, no customer entity)
 - Quote persistence — quotes currently live in React state only and reset on page reload (see Technical Debt)
-- Secondary quotation document fields (contact person, phone, address, tax ID, PO reference, dates, payment terms) are visually editable but not saved anywhere
+- User profile picture + signature **image** upload (the signature *name* is wired into the PDF; the image itself is not — no file storage exists yet)
+- Company bank account info, configurable VAT rate, and a company-level default Terms & Conditions — Settings currently only covers name/address/phone/email/tax ID/logo/stamp
 - Dashboard's "ส่งออกรายงาน" (export report), "+ สร้างคำสั่งซื้อ" (create order), "ดูทั้งหมด" (view all orders) — reference an Orders/Reports module that doesn't exist yet, left inert by design
 - Global header search — decorative, not wired to any data
 - Notification bell — decorative badge, no real notification feed
@@ -67,8 +69,8 @@ Not yet planned — depends on the Phase 2 backend decision (see [TODO.md](./TOD
 
 ## Technical Debt
 
-- `Quote[]` state in `App.tsx` is not persisted to `localStorage` (unlike `Product`, `ProductCategory`, `Company`, `UserProfile`) — inconsistent persistence story across domains.
-- Document meta-fields beyond client name (contact, phone, address, tax ID, PO ref, dates, payment terms) are uncontrolled/cosmetic inputs on `QuoteDocument.tsx` — not part of the `Quote` type, not saved.
+- `Quote[]` state in `App.tsx` is not persisted to `localStorage` (unlike `Product`, `ProductCategory`, `Company`, `UserProfile`) — inconsistent persistence story across domains. (Document meta-fields are now real `Quote` fields, but the whole `Quote[]` array still doesn't survive a reload.)
+- Company logo/stamp images are stored as base64 data URLs inside the `tcs_erp_company` `localStorage` entry, capped at 1MB each client-side — fine for a demo, but `localStorage` has a ~5-10MB total quota per origin depending on browser, so this doesn't scale to real object storage; revisit when the Phase 2 backend exists.
 - `salesTeam` (sales leaderboard data) is shared, static sample data with no CRUD — will need to become real data once an HR/Sales-team entity exists.
 - No automated tests exist anywhere in the project.
 - No CI pipeline configured.

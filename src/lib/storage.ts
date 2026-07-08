@@ -4,6 +4,8 @@ export interface Company {
   phone: string;
   email: string;
   taxId: string;
+  logoDataUrl: string;
+  stampDataUrl: string;
 }
 
 export interface UserProfile {
@@ -18,6 +20,8 @@ export const defaultCompany: Company = {
   phone: "[เบอร์โทรศัพท์]",
   email: "info@tcs-erp.co.th",
   taxId: "[เลขประจำตัวผู้เสียภาษี]",
+  logoDataUrl: "",
+  stampDataUrl: "",
 };
 
 export const defaultUser: UserProfile = {

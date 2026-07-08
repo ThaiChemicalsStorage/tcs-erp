@@ -11,7 +11,7 @@ Account/organization configuration: user profile, company info (which feeds the 
 1. Accessed via the sidebar "ตั้งค่า" nav item or the header user-menu dropdown.
 2. Four tabs, each independently save-able:
    - **โปรไฟล์ (Profile)**: name, email, role (free-text display, not RBAC) → `saveUser()`.
-   - **ข้อมูลบริษัท (Company Info)**: name, address, phone, email, tax ID → `saveCompany()`. **This is the one piece of Settings with a real downstream effect**: `QuoteDocument.tsx` reads `company` (passed down from `App.tsx`) and renders it live in the quotation document header/footer.
+   - **ข้อมูลบริษัท (Company Info)**: name, address, phone, email, tax ID, **logo upload, stamp upload** → `saveCompany()`. **This is the one piece of Settings with a real downstream effect**: `QuoteDocument.tsx` reads `company` (passed down from `App.tsx`) and renders it live in the quotation document header (logo) and signature block (stamp). Logo/stamp use a shared `ImageUploadField` component (image files only, 1MB cap, stored as base64 data URLs, preview + remove).
    - **ความปลอดภัย (Security)**: current/new/confirm password fields with client-side validation (length, match) — submitting shows a success toast but **does not actually change any credential** (there is none to change, see [Auth.md](./Auth.md)).
    - **การแจ้งเตือน (Notifications)**: three toggle switches (quote-approved, low-stock, weekly-digest) — **in-memory only, not persisted**, resets on reload.
 3. Each save shows a brief inline "บันทึกการเปลี่ยนแปลงแล้ว" confirmation (`useSavedFlash` hook, local to this file).
@@ -39,7 +39,7 @@ None — see [RBAC.md](../RBAC.md). Every signed-in user can edit the single sha
 ## Current Features
 
 - Profile edit (name/email/role)
-- Company info edit, verified to flow live into the Quotation document
+- Company info edit (incl. logo/stamp upload), verified to flow live into the Quotation document
 - Mock password change flow (validation works, nothing is actually stored)
 - Notification toggles (UI only)
 
@@ -48,6 +48,8 @@ None — see [RBAC.md](../RBAC.md). Every signed-in user can edit the single sha
 - Persist notification preferences
 - Real password change once real auth exists (Phase 2)
 - Once multi-user/RBAC exists, Company info likely becomes an admin-only setting rather than editable by every user
+- User Profile picture + signature image upload — same `ImageUploadField` pattern already built for company logo/stamp, directly reusable
+- Bank account info, configurable VAT rate, company-level default Terms & Conditions (see [TODO.md](../TODO.md))
 
 ## Known Issues
 

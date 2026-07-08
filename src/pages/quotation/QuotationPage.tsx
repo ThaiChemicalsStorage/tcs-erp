@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { Company } from "../../lib/storage";
+import type { Company, UserProfile } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
-import { type Quote, type QuoteInterest, type QuoteStatus, type QuoteLine, cloneLines, nextQuoteId } from "../../lib/quotes";
+import { type Quote, type QuoteInterest, type QuoteDraftFields, cloneLines, nextQuoteId } from "../../lib/quotes";
 import { QuoteList } from "./QuoteList";
 import { QuoteDocument } from "./QuoteDocument";
 import { Toast } from "../../components/Toast";
@@ -11,12 +11,14 @@ export function QuotationPage({
   quotes,
   setQuotes,
   company,
+  user,
   products,
   categories,
 }: {
   quotes: Quote[];
   setQuotes: React.Dispatch<React.SetStateAction<Quote[]>>;
   company: Company;
+  user: UserProfile;
   products: Product[];
   categories: ProductCategory[];
 }) {
@@ -29,21 +31,16 @@ export function QuotationPage({
   const setInterest = (id: string, v: QuoteInterest) =>
     setQuotes((prev) => prev.map((q) => (q.id === id ? { ...q, interest: v } : q)));
 
-  const handleSave = (data: { client: string; status: QuoteStatus; lines: QuoteLine[]; discount: number; amount: number }) => {
+  const handleSave = (data: QuoteDraftFields) => {
     if (view === "new") {
       const id = nextQuoteId(quotes);
       const today = new Date();
       const newQuote: Quote = {
+        ...data,
         id,
-        client: data.client,
         date: today.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }),
         valid: new Date(today.getTime() + 30 * 86400000).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" }),
-        amount: data.amount,
-        status: data.status,
-        salesperson: "นภา ลาเรนต์",
         interest: null,
-        lines: data.lines,
-        discount: data.discount,
       };
       setQuotes((prev) => [newQuote, ...prev]);
       setSelectedId(id);
@@ -90,6 +87,7 @@ export function QuotationPage({
         quote={view === "detail" ? selectedQuote : undefined}
         nextId={nextQuoteId(quotes)}
         company={company}
+        user={user}
         products={products}
         categories={categories}
         onBack={() => setView("list")}
