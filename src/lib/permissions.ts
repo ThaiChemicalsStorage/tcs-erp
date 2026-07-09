@@ -1,3 +1,5 @@
+import type { TranslationKey } from "./i18n";
+
 export type Permission =
   | "dashboard:view"
   | "quotations:view"
@@ -57,10 +59,32 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "auditLog:view": "ดูบันทึกการใช้งาน (Audit Log)",
 };
 
-export const PERMISSION_GROUPS: { label: string; permissions: Permission[] }[] = [
-  { label: "แดชบอร์ด", permissions: ["dashboard:view"] },
+/** Translated display label per permission — `PERMISSION_LABELS` (Thai) stays as-is since it's also used to seed the `permissions` collection's stored `label` field; this map is UI-display only. */
+export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
+  "dashboard:view": "permission.dashboardView",
+  "quotations:view": "permission.quotationsView",
+  "quotations:create": "permission.quotationsCreate",
+  "quotations:edit": "permission.quotationsEdit",
+  "quotations:delete": "permission.quotationsDelete",
+  "quotations:approve": "permission.quotationsApprove",
+  "quotations:reject": "permission.quotationsReject",
+  "quotations:export": "permission.quotationsExport",
+  "products:view": "permission.productsView",
+  "products:create": "permission.productsCreate",
+  "products:edit": "permission.productsEdit",
+  "products:delete": "permission.productsDelete",
+  "products:export": "permission.productsExport",
+  "users:manage": "permission.usersManage",
+  "roles:manage": "permission.rolesManage",
+  "company:manage": "permission.companyManage",
+  "auditLog:view": "permission.auditLogView",
+};
+
+export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
+  { label: "แดชบอร์ด", labelKey: "nav.dashboard", permissions: ["dashboard:view"] },
   {
     label: "ใบเสนอราคา",
+    labelKey: "nav.quotations",
     permissions: [
       "quotations:view",
       "quotations:create",
@@ -73,10 +97,12 @@ export const PERMISSION_GROUPS: { label: string; permissions: Permission[] }[] =
   },
   {
     label: "คลังสินค้า",
+    labelKey: "nav.products",
     permissions: ["products:view", "products:create", "products:edit", "products:delete", "products:export"],
   },
   {
     label: "ระบบ",
+    labelKey: "permissionGroup.system",
     permissions: ["users:manage", "roles:manage", "company:manage", "auditLog:view"],
   },
 ];

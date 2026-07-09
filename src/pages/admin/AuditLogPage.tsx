@@ -25,21 +25,21 @@ export function AuditLogPage() {
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหาบันทึกการใช้งาน..." className="bg-transparent text-sm outline-none w-full text-foreground placeholder-muted-foreground" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("auditLog.searchPlaceholder")} className="bg-transparent text-sm outline-none w-full text-foreground placeholder-muted-foreground" />
         </div>
-        <p className="text-xs text-muted-foreground">{entries.length} รายการทั้งหมด — เรียงจากล่าสุด · ไม่สามารถแก้ไขหรือลบได้</p>
+        <p className="text-xs text-muted-foreground">{t("auditLog.totalCount").replace("{n}", String(entries.length))}</p>
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
-              <th className="text-left font-medium px-4 py-3">วันที่/เวลา</th>
-              <th className="text-left font-medium px-4 py-3">ผู้ใช้งาน</th>
-              <th className="text-left font-medium px-4 py-3">บทบาท</th>
-              <th className="text-left font-medium px-4 py-3">โมดูล</th>
-              <th className="text-left font-medium px-4 py-3">การกระทำ</th>
-              <th className="text-left font-medium px-4 py-3">รายละเอียด</th>
+              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.datetime")}</th>
+              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.user")}</th>
+              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.role")}</th>
+              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.module")}</th>
+              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.action")}</th>
+              <th className="text-left font-medium px-4 py-3">{t("auditLog.col.details")}</th>
             </tr>
           </thead>
           <tbody>
@@ -56,12 +56,12 @@ export function AuditLogPage() {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={6} className="text-center text-xs text-muted-foreground py-10">
-                  {loading ? "กำลังโหลด..." : entries.length === 0 ? (
+                  {loading ? t("auditLog.loading") : entries.length === 0 ? (
                     <div className="flex flex-col items-center gap-1">
                       <span className="font-medium text-foreground">{t("empty.auditLog.title")}</span>
                       <span>{t("empty.auditLog.sub")}</span>
                     </div>
-                  ) : "ไม่พบบันทึกการใช้งานที่ตรงกับเงื่อนไข"}
+                  ) : t("auditLog.noFilterResults")}
                 </td>
               </tr>
             )}
