@@ -50,13 +50,16 @@ async function handleOne(req: VercelRequest, res: VercelResponse, key: string) {
   const roles = await rolesCollection();
   const target = await roles.findOne({ key });
   if (!target) throw new HttpError(404, "ไม่พบบทบาท");
-  if (target.isSystem) throw new HttpError(400, "ไม่สามารถแก้ไขหรือลบบทบาทระบบได้");
 
   if (req.method === "PATCH") {
+    // Only the Super Admin role itself is fully locked — its permissions must always be "everything".
+    // Other system roles (e.g. Administrator) are locked to their built-in name, but description/permissions stay editable.
+    if (target.isSuperAdmin) throw new HttpError(400, "ไม่สามารถแก้ไขบทบาท Super Admin ได้");
+
     const body = req.body ?? {};
     const update: Record<string, unknown> = {};
 
-    if (typeof body.name === "string" && body.name.trim()) {
+    if (!target.isSystem && typeof body.name === "string" && body.name.trim()) {
       const name = body.name.trim();
       const nameTaken = await roles.findOne({ key: { $ne: key }, name: { $regex: `^${escapeRegExp(name)}$`, $options: "i" } });
       if (nameTaken) throw new HttpError(409, "มีบทบาทชื่อนี้อยู่แล้ว");
@@ -76,6 +79,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, key: string) {
   }
 
   if (req.method === "DELETE") {
+    if (target.isSystem) throw new HttpError(400, "ไม่สามารถลบบทบาทระบบได้");
     const users = await usersCollection();
     const inUse = await users.countDocuments({ roleKey: key });
     if (inUse > 0) throw new HttpError(409, "ไม่สามารถลบบทบาทที่มีผู้ใช้งานอยู่ได้ กรุณาเปลี่ยนบทบาทผู้ใช้งานก่อน");

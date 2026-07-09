@@ -46,7 +46,9 @@ export function RoleManagementPage({
     setForm({ name: r.name, description: r.description, permissions: [...r.permissions] });
     setEditingKey(r.key);
     setError("");
-    setView(r.isSystem ? "view" : "edit");
+    // Only the Super Admin role itself is fully locked (view-only). Other system roles
+    // (e.g. Administrator) are editable — just with their name locked, see nameLocked below.
+    setView(r.isSuperAdmin ? "view" : "edit");
   };
 
   const togglePermission = (p: Permission) => {
@@ -96,6 +98,8 @@ export function RoleManagementPage({
   };
 
   const readOnly = view === "view";
+  /** Name can't change for any built-in role (Super Admin or Administrator) — permissions/description still can, for non-Super-Admin system roles. */
+  const nameLocked = readOnly || !!editingRole?.isSystem;
 
   if (view !== "list") {
     return (
@@ -110,12 +114,17 @@ export function RoleManagementPage({
                 <Lock size={10} /> บทบาทระบบ — ดูได้อย่างเดียว
               </span>
             )}
+            {!readOnly && editingRole?.isSystem && (
+              <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
+                <Lock size={10} /> บทบาทระบบ — เปลี่ยนชื่อไม่ได้
+              </span>
+            )}
           </div>
           <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-5 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1.5">ชื่อบทบาท *</label>
-                <input disabled={readOnly} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                <input disabled={nameLocked} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1.5">คำอธิบาย</label>
@@ -189,7 +198,7 @@ export function RoleManagementPage({
                 <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{r.name}</p>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => startEdit(r)} title={r.isSystem ? "ดูรายละเอียด" : "แก้ไข"} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><Pencil size={13} /></button>
+                <button onClick={() => startEdit(r)} title={r.isSuperAdmin ? "ดูรายละเอียด" : "แก้ไข"} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><Pencil size={13} /></button>
                 <button
                   onClick={() => setDeleteTarget(r)}
                   disabled={r.isSystem || usersWithRole(r.key) > 0}

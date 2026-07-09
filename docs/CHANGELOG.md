@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-09 — Fix: Administrator role incorrectly locked read-only in Role Management
+
+**Bug**: `RoleManagementPage.tsx` routed to a fully read-only view whenever `role.isSystem` was true, and `api/handlers/roles.ts` rejected any `PATCH`/`DELETE` under the same `isSystem` check. Both "Super Admin" and "Administrator" have `isSystem: true`, so Administrator's permission checkboxes and description were locked identically to Super Admin — even though `Role`'s own doc comment says system roles should only have their name/Super-Admin-flag locked, not their permissions.
+
+**Fix**: both client and server now key the edit lock off `isSuperAdmin` specifically (only Super Admin is fully read-only), while the delete lock and the name-field lock stay keyed off `isSystem` (Administrator's name still can't change, and it still can't be deleted — but its description/permissions are editable like any custom role). See [RBAC.md](./RBAC.md) "System-role locking" for the precise rule.
+
+**Files Modified**: `api/handlers/roles.ts` (`handleOne`: split the single `isSystem` guard into a `PATCH`-time `isSuperAdmin` check + a `DELETE`-time `isSystem` check, and gated the `name` field update on `!target.isSystem`), `src/pages/admin/RoleManagementPage.tsx` (`startEdit` now checks `isSuperAdmin` not `isSystem`; added a `nameLocked` flag distinct from `readOnly`; added a lighter "name locked" badge for system-but-editable roles; Pencil button tooltip now reflects `isSuperAdmin`), `docs/RBAC.md`.
+
+---
+
 ## 2026-07-09 — Production-readiness pass: branding, real Dashboard, MongoDB schema prep, dead-code removal, i18n
 
 **Scope**: a full production-readiness pass covering official branding, removing every fake/demo data source, preparing the MongoDB schema for planned future modules, and basic Thai/English internationalization — requested as a single large task, executed in phases (each verified with a clean `npm run build`/`npm run lint` before moving to the next).
