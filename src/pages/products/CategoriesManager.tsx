@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight, Plus, Pencil, Archive, ArchiveRestore, Check, X, Tags } from "lucide-react";
 import type { ProductCategory } from "../../lib/products";
 import { createCategory, updateCategory } from "../../lib/products";
+import { useI18n } from "../../lib/i18n";
 
 export function CategoriesManager({
   categories,
@@ -12,6 +13,7 @@ export function CategoriesManager({
   onChange: (categories: ProductCategory[]) => void;
   onBack: () => void;
 }) {
+  const { t } = useI18n();
   const [newName, setNewName] = useState("");
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -20,11 +22,11 @@ export function CategoriesManager({
   const addCategory = async () => {
     const trimmed = newName.trim();
     if (!trimmed) {
-      setError("กรุณากรอกชื่อหมวดหมู่");
+      setError(t("products.categories.errorRequired"));
       return;
     }
     if (categories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
-      setError("มีหมวดหมู่นี้อยู่แล้ว");
+      setError(t("products.categories.errorDuplicate"));
       return;
     }
     try {
@@ -33,7 +35,7 @@ export function CategoriesManager({
       setNewName("");
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "สร้างหมวดหมู่ไม่สำเร็จ");
+      setError(err instanceof Error ? err.message : t("products.categories.createError"));
     }
   };
 
@@ -46,7 +48,7 @@ export function CategoriesManager({
       onChange(categories.map((c) => (c.id === editingId ? updated : c)));
       setEditingId(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
+      setError(err instanceof Error ? err.message : t("products.saveError"));
     }
   };
 
@@ -61,27 +63,27 @@ export function CategoriesManager({
     <div className="flex-1 overflow-y-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
         <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> คลังสินค้า
+          <ChevronRight size={14} className="rotate-180" /> {t("products.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', serif" }}>จัดการหมวดหมู่</span>
+        <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', serif" }}>{t("products.manageCategories")}</span>
       </div>
 
       <div className="p-6 max-w-2xl mx-auto space-y-5">
         <div className="bg-card border border-border rounded-xl p-5">
           <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', serif" }}>
-            <Tags size={13} /> เพิ่มหมวดหมู่ใหม่
+            <Tags size={13} /> {t("products.categories.addNewTitle")}
           </p>
           <div className="flex items-center gap-2">
             <input
               value={newName}
               onChange={(e) => { setNewName(e.target.value); setError(""); }}
               onKeyDown={(e) => e.key === "Enter" && addCategory()}
-              placeholder="ชื่อหมวดหมู่ เช่น บรรจุภัณฑ์"
+              placeholder={t("products.categories.namePlaceholder")}
               className="flex-1 text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
             />
             <button onClick={addCategory} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
-              <Plus size={14} /> เพิ่ม
+              <Plus size={14} /> {t("common.add")}
             </button>
           </div>
           {error && <p className="text-xs text-[#e05252] mt-1.5">{error}</p>}
@@ -109,12 +111,12 @@ export function CategoriesManager({
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
                       c.archived ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20" : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"
                     }`}>
-                      {c.archived ? "เก็บถาวร" : "ใช้งาน"}
+                      {c.archived ? t("common.status.archived") : t("common.status.active")}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => startEdit(c)} title="แก้ไขชื่อ" className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Pencil size={14} /></button>
-                    <button onClick={() => toggleArchive(c.id)} title={c.archived ? "เลิกเก็บถาวร" : "เก็บถาวร"} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
+                    <button onClick={() => startEdit(c)} title={t("products.categories.editNameTitle")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Pencil size={14} /></button>
+                    <button onClick={() => toggleArchive(c.id)} title={c.archived ? t("common.unarchive") : t("common.archive")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
                       {c.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
                     </button>
                   </div>

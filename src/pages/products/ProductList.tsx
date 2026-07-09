@@ -10,6 +10,7 @@ import { useI18n } from "../../lib/i18n";
 type SortKey = "code" | "name" | "category" | "unit" | "defaultPrice" | "status" | "updatedAt";
 
 const PAGE_SIZE = 8;
+const ALL_CATEGORIES = "all";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
@@ -36,22 +37,22 @@ export function ProductList({
 }) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("ทั้งหมด");
+  const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES);
   const [showArchived, setShowArchived] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "updatedAt", dir: "desc" });
   const [page, setPage] = useState(1);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const categoryName = useCallback(
-    (id: string) => categories.find((c) => c.id === id)?.name ?? "ไม่ระบุหมวดหมู่",
-    [categories],
+    (id: string) => categories.find((c) => c.id === id)?.name ?? t("products.categoryUnspecified"),
+    [categories, t],
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return products
       .filter((p) => (showArchived ? true : !p.archived))
-      .filter((p) => (categoryFilter === "ทั้งหมด" ? true : p.categoryId === categoryFilter))
+      .filter((p) => (categoryFilter === ALL_CATEGORIES ? true : p.categoryId === categoryFilter))
       .filter((p) => (q ? p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) : true));
   }, [products, search, categoryFilter, showArchived]);
 
@@ -83,28 +84,28 @@ export function ProductList({
   };
 
   const columns: { key: SortKey; label: string }[] = [
-    { key: "code", label: "รหัสสินค้า" },
-    { key: "name", label: "ชื่อสินค้า" },
-    { key: "category", label: "หมวดหมู่" },
-    { key: "unit", label: "หน่วย" },
-    { key: "defaultPrice", label: "ราคาเริ่มต้น" },
-    { key: "status", label: "สถานะ" },
-    { key: "updatedAt", label: "อัปเดตล่าสุด" },
+    { key: "code", label: t("products.col.code") },
+    { key: "name", label: t("products.col.name") },
+    { key: "category", label: t("products.col.category") },
+    { key: "unit", label: t("products.col.unit") },
+    { key: "defaultPrice", label: t("products.col.price") },
+    { key: "status", label: t("products.col.status") },
+    { key: "updatedAt", label: t("products.col.updatedAt") },
   ];
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>คลังสินค้า / บริการ</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">รายการสินค้าและบริการต้นแบบสำหรับใช้ในใบเสนอราคา</p>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{t("products.pageTitle")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("products.pageSubtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onManageCategories} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
-            <Tags size={15} /> จัดการหมวดหมู่
+            <Tags size={15} /> {t("products.manageCategories")}
           </button>
           <button onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
-            <Plus size={15} /> เพิ่มสินค้าใหม่
+            <Plus size={15} /> {t("products.addNew")}
           </button>
         </div>
       </div>
@@ -117,7 +118,7 @@ export function ProductList({
             type="text"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            placeholder="ค้นหารหัสหรือชื่อสินค้า..."
+            placeholder={t("products.searchPlaceholder")}
             className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
           />
         </div>
@@ -126,9 +127,9 @@ export function ProductList({
           onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
           className="text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none"
         >
-          <option value="ทั้งหมด">ทุกหมวดหมู่</option>
+          <option value={ALL_CATEGORIES}>{t("products.allCategories")}</option>
           {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}{c.archived ? " (เก็บถาวร)" : ""}</option>
+            <option key={c.id} value={c.id}>{c.name}{c.archived ? t("products.categoryArchivedSuffix") : ""}</option>
           ))}
         </select>
         <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-muted-foreground ml-auto">
@@ -138,7 +139,7 @@ export function ProductList({
             onChange={(e) => { setShowArchived(e.target.checked); setPage(1); }}
             className="w-4 h-4 rounded border-border accent-[#c9a84c]"
           />
-          แสดงรายการที่เก็บถาวร
+          {t("products.showArchived")}
         </label>
       </div>
 
@@ -160,7 +161,7 @@ export function ProductList({
             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
               <Package size={20} className="text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground">ไม่พบสินค้าที่ตรงกับเงื่อนไข</p>
+            <p className="text-sm text-muted-foreground">{t("products.noFilterResults")}</p>
           </div>
         ) : (
           <>
@@ -194,22 +195,22 @@ export function ProductList({
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                         p.archived ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20" : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"
                       }`}>
-                        {p.archived ? "เก็บถาวร" : "ใช้งาน"}
+                        {p.archived ? t("common.status.archived") : t("common.status.active")}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{fmtDate(p.updatedAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => onEdit(p.id)} title="แก้ไข" className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
+                        <button onClick={() => onEdit(p.id)} title={t("common.edit")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
                           <Pencil size={14} />
                         </button>
-                        <button onClick={() => onDuplicate(p.id)} title="ทำสำเนา" className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
+                        <button onClick={() => onDuplicate(p.id)} title={t("products.action.duplicate")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
                           <Copy size={14} />
                         </button>
-                        <button onClick={() => onArchiveToggle(p.id)} title={p.archived ? "เลิกเก็บถาวร" : "เก็บถาวร"} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
+                        <button onClick={() => onArchiveToggle(p.id)} title={p.archived ? t("common.unarchive") : t("common.archive")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
                           {p.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
                         </button>
-                        <button onClick={() => setConfirmDeleteId(p.id)} title="ลบ" className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors">
+                        <button onClick={() => setConfirmDeleteId(p.id)} title={t("common.delete")} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -222,7 +223,10 @@ export function ProductList({
             {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-border">
               <p className="text-xs text-muted-foreground font-mono">
-                แสดง {(clampedPage - 1) * PAGE_SIZE + 1}-{Math.min(clampedPage * PAGE_SIZE, sorted.length)} จาก {sorted.length} รายการ
+                {t("products.showingRange")
+                  .replace("{a}", String((clampedPage - 1) * PAGE_SIZE + 1))
+                  .replace("{b}", String(Math.min(clampedPage * PAGE_SIZE, sorted.length)))
+                  .replace("{c}", String(sorted.length))}
               </p>
               <div className="flex items-center gap-1">
                 <button
@@ -248,9 +252,9 @@ export function ProductList({
 
       <ConfirmDialog
         open={confirmDeleteId !== null}
-        title="ลบสินค้านี้ถาวร?"
-        message="การลบจะไม่สามารถย้อนกลับได้ ใบเสนอราคาที่เคยใช้สินค้านี้จะไม่ได้รับผลกระทบ แนะนำให้ใช้ 'เก็บถาวร' แทนหากต้องการเก็บประวัติไว้"
-        confirmLabel="ลบถาวร"
+        title={t("products.deleteConfirmTitle")}
+        message={t("products.deleteConfirmMessage")}
+        confirmLabel={t("products.deletePermanently")}
         danger
         onCancel={() => setConfirmDeleteId(null)}
         onConfirm={() => { if (confirmDeleteId) onDelete(confirmDeleteId); setConfirmDeleteId(null); }}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronRight, Save, X } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
+import { useI18n } from "../../lib/i18n";
 
 export interface ProductDraft {
   code: string;
@@ -30,6 +31,7 @@ export function ProductForm({
   onSave: (draft: ProductDraft) => Promise<string | null>;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const activeCategories = categories.filter((c) => !c.archived || c.id === initial?.categoryId);
 
   const [code, setCode] = useState(initial?.code ?? "");
@@ -43,12 +45,12 @@ export function ProductForm({
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!code.trim()) e.code = "กรุณากรอกรหัสสินค้า";
-    else if (existingCodes.includes(code.trim().toUpperCase())) e.code = "รหัสสินค้านี้ถูกใช้แล้ว";
-    if (!name.trim()) e.name = "กรุณากรอกชื่อสินค้า";
-    if (!categoryId) e.categoryId = "กรุณาเลือกหมวดหมู่";
-    if (!unit.trim()) e.unit = "กรุณากรอกหน่วย";
-    if (defaultPrice < 0) e.defaultPrice = "ราคาต้องไม่ติดลบ";
+    if (!code.trim()) e.code = t("products.form.errorCode");
+    else if (existingCodes.includes(code.trim().toUpperCase())) e.code = t("products.form.errorCodeTaken");
+    if (!name.trim()) e.name = t("products.form.errorName");
+    if (!categoryId) e.categoryId = t("products.form.errorCategory");
+    if (!unit.trim()) e.unit = t("products.form.errorUnit");
+    if (defaultPrice < 0) e.defaultPrice = t("products.form.errorPrice");
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -71,18 +73,18 @@ export function ProductForm({
     <div className="flex-1 overflow-y-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
         <button onClick={onCancel} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> คลังสินค้า
+          <ChevronRight size={14} className="rotate-180" /> {t("products.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
         <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', serif" }}>
-          {mode === "create" ? "เพิ่มสินค้าใหม่" : `แก้ไข: ${initial?.code}`}
+          {mode === "create" ? t("products.addNew") : t("products.form.editTitle").replace("{code}", initial?.code ?? "")}
         </span>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={onCancel} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-            <X size={13} /> ยกเลิก
+            <X size={13} /> {t("common.cancel")}
           </button>
           <button onClick={handleSave} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
-            <Save size={13} /> บันทึกสินค้า
+            <Save size={13} /> {t("products.form.save")}
           </button>
         </div>
       </div>
@@ -91,15 +93,15 @@ export function ProductForm({
         <div className="bg-card border border-border rounded-xl p-6 space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>รหัสสินค้า</label>
-              <input className={`${inputCls} font-mono`} value={code} onChange={(e) => setCode(e.target.value)} placeholder="เช่น MAT-0008" />
+              <label className={labelCls}>{t("products.form.codeLabel")}</label>
+              <input className={`${inputCls} font-mono`} value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("products.form.codePlaceholder")} />
               {errors.code && <p className="text-xs text-[#e05252] mt-1">{errors.code}</p>}
             </div>
             <div>
-              <label className={labelCls}>หมวดหมู่</label>
+              <label className={labelCls}>{t("products.col.category")}</label>
               <select className={`${inputCls} appearance-none`} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                 {activeCategories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}{c.archived ? " (เก็บถาวร)" : ""}</option>
+                  <option key={c.id} value={c.id}>{c.name}{c.archived ? t("products.categoryArchivedSuffix") : ""}</option>
                 ))}
               </select>
               {errors.categoryId && <p className="text-xs text-[#e05252] mt-1">{errors.categoryId}</p>}
@@ -107,36 +109,36 @@ export function ProductForm({
           </div>
 
           <div>
-            <label className={labelCls}>ชื่อสินค้า</label>
-            <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="เช่น ถังเก็บสารเคมี HDPE 1000L" />
+            <label className={labelCls}>{t("products.col.name")}</label>
+            <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("products.form.namePlaceholder")} />
             {errors.name && <p className="text-xs text-[#e05252] mt-1">{errors.name}</p>}
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>หน่วย</label>
-              <input className={inputCls} value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="เช่น ชิ้น, ชุด, เที่ยว" />
+              <label className={labelCls}>{t("products.col.unit")}</label>
+              <input className={inputCls} value={unit} onChange={(e) => setUnit(e.target.value)} placeholder={t("products.form.unitPlaceholder")} />
               {errors.unit && <p className="text-xs text-[#e05252] mt-1">{errors.unit}</p>}
             </div>
             <div>
-              <label className={labelCls}>ราคาเริ่มต้น (฿)</label>
+              <label className={labelCls}>{t("products.form.priceLabel")}</label>
               <input type="number" min={0} className={`${inputCls} font-mono`} value={defaultPrice} onChange={(e) => setDefaultPrice(parseFloat(e.target.value) || 0)} />
               {errors.defaultPrice && <p className="text-xs text-[#e05252] mt-1">{errors.defaultPrice}</p>}
             </div>
           </div>
 
           <div>
-            <label className={labelCls}>รายละเอียด</label>
-            <textarea rows={3} className={`${inputCls} resize-none leading-relaxed`} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="คำอธิบายสินค้าหรือบริการ" />
+            <label className={labelCls}>{t("products.form.descriptionLabel")}</label>
+            <textarea rows={3} className={`${inputCls} resize-none leading-relaxed`} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("products.form.descriptionPlaceholder")} />
           </div>
 
           <div>
-            <label className={labelCls}>ข้อกำหนดเฉพาะ (ไม่บังคับ)</label>
-            <textarea rows={3} className={`${inputCls} resize-none leading-relaxed`} value={specifications} onChange={(e) => setSpecifications(e.target.value)} placeholder="สเปกหรือคุณสมบัติเฉพาะของสินค้า" />
+            <label className={labelCls}>{t("products.form.specLabel")}</label>
+            <textarea rows={3} className={`${inputCls} resize-none leading-relaxed`} value={specifications} onChange={(e) => setSpecifications(e.target.value)} placeholder={t("products.form.specPlaceholder")} />
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed pt-1 border-t border-border">
-            การแก้ไขสินค้าต้นแบบจะมีผลกับใบเสนอราคาที่สร้างใหม่เท่านั้น ใบเสนอราคาที่มีอยู่แล้วจะไม่เปลี่ยนแปลง
+            {t("products.form.editHint")}
           </p>
         </div>
       </div>

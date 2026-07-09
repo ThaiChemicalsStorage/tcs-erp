@@ -4,6 +4,7 @@ import { createProduct, updateProduct, deleteProduct } from "../../lib/products"
 import { ProductList } from "./ProductList";
 import { ProductForm, type ProductDraft } from "./ProductForm";
 import { CategoriesManager } from "./CategoriesManager";
+import { useI18n } from "../../lib/i18n";
 
 type View = "list" | "create" | "edit" | "categories";
 
@@ -18,6 +19,7 @@ export function ProductsPage({
   categories: ProductCategory[];
   onCategoriesChange: (categories: ProductCategory[]) => void;
 }) {
+  const { t } = useI18n();
   const [view, setView] = useState<View>("list");
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -30,7 +32,7 @@ export function ProductsPage({
       setView("list");
       return null;
     } catch (err) {
-      return err instanceof Error ? err.message : "สร้างสินค้าไม่สำเร็จ";
+      return err instanceof Error ? err.message : t("products.createError");
     }
   };
 
@@ -43,7 +45,7 @@ export function ProductsPage({
       setEditingId(null);
       return null;
     } catch (err) {
-      return err instanceof Error ? err.message : "บันทึกไม่สำเร็จ";
+      return err instanceof Error ? err.message : t("products.saveError");
     }
   };
 
@@ -66,7 +68,7 @@ export function ProductsPage({
     let n = 2;
     while (products.some((p) => p.code === code)) { code = `${source.code}-COPY${n}`; n++; }
     const created = await createProduct({
-      code, name: `${source.name} (สำเนา)`, categoryId: source.categoryId, unit: source.unit,
+      code, name: `${source.name}${t("products.copySuffix")}`, categoryId: source.categoryId, unit: source.unit,
       defaultPrice: source.defaultPrice, description: source.description, specifications: source.specifications,
     });
     onProductsChange([...products, created]);
