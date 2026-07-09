@@ -98,7 +98,8 @@ const ROLES_KEY = "tcs_erp_roles";
 export function loadRoles(): Role[] {
   try {
     const raw = localStorage.getItem(ROLES_KEY);
-    return raw ? JSON.parse(raw) : defaultRoles;
+    const parsed: Role[] = raw ? JSON.parse(raw) : [];
+    return parsed.length > 0 ? parsed : defaultRoles;
   } catch {
     return defaultRoles;
   }

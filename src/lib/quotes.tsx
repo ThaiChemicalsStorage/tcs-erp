@@ -156,6 +156,8 @@ export interface QuotePermissions {
   canMarkWon: boolean;
   canMarkLost: boolean;
   canCancel: boolean;
+  canExport: boolean;
+  canDuplicate: boolean;
 }
 
 export function computeQuotePermissions(quote: Quote | undefined, isNew: boolean, currentUser: User, roles: Role[]): QuotePermissions {
@@ -179,6 +181,8 @@ export function computeQuotePermissions(quote: Quote | undefined, isNew: boolean
     canMarkWon: !isNew && status === "ลูกค้ายอมรับ" && editableByOwnerOrApprover,
     canMarkLost: !isNew && status === "ลูกค้าปฏิเสธ" && editableByOwnerOrApprover,
     canCancel: !isNew && !!status && ["ร่าง", "รออนุมัติ", "อนุมัติแล้ว"].includes(status) && hasDelete,
+    canExport: hasPermission(currentUser, roles, "quotations:export"),
+    canDuplicate: hasCreate,
   };
 }
 
@@ -291,6 +295,30 @@ export function blankQuoteTemplate(): QuoteLine[] {
 
 export function lineSubtotal(l: QuoteLine): number {
   return l.qty * l.unitPrice * (1 - l.discount / 100);
+}
+
+/** Whether a line has any notes/sub-details/specifications/tags worth showing in an expand panel or print. */
+export function lineHasDetails(l: QuoteLine): boolean {
+  return l.notes.trim() !== "" || l.subDetails.some((sd) => sd.text.trim() !== "") || l.specifications.trim() !== "" || l.tags.length > 0;
+}
+
+export function formatQuoteDateThai(iso: string): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
+export function formatQuoteDateNumeric(iso: string): string {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  } catch {
+    return "";
+  }
 }
 
 export function computeTotals(lines: QuoteLine[], discountPct: number) {

@@ -8,21 +8,13 @@ import type { Product, ProductCategory } from "../../lib/products";
 import type { User } from "../../lib/users";
 import {
   type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type ApprovalAction, type QuotePermissions,
-  statusIcon, statusStyle, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabel,
+  statusIcon, statusStyle, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabel, formatQuoteDateThai,
 } from "../../lib/quotes";
 import { InterestButtons } from "./InterestButtons";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { PrintDocument } from "./PrintDocument";
 
 const DEFAULT_TERMS = "1. ราคานี้ยังไม่รวมค่าขนส่งและค่าติดตั้ง\n2. ราคามีผลภายใน 30 วันนับจากวันที่ในเอกสาร\n3. การส่งมอบภายใน 45 วันทำการหลังได้รับ PO\n4. การชำระเงินมัดจำ 30% ก่อนเริ่มผลิต";
-
-function fmtDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
-  } catch {
-    return "";
-  }
-}
 
 const ACTION_ICON: Record<ApprovalAction, React.ReactNode> = {
   submitted: <Send size={13} />,
@@ -66,7 +58,7 @@ export function QuoteDocument({
   onSave: (data: QuoteDraftFields) => void;
   onDuplicate: () => void;
   onInterestChange: (v: QuoteInterest) => void;
-  onWorkflowAction: (action: ApprovalAction, comment: string) => void;
+  onWorkflowAction: (action: ApprovalAction, comment: string, draft: QuoteDraftFields) => void;
   showToast: (msg: string) => void;
 }) {
   const isDetail = mode === "detail" && !!quote;
@@ -99,12 +91,14 @@ export function QuoteDocument({
   const { total } = computeTotals(lines, discount);
   const disabled = !permissions.canEdit;
 
+  const currentDraft = (): QuoteDraftFields => ({
+    client, status: quoteStatus, lines, discount, amount: total,
+    salesperson, contactName, contactPhone, contactEmail, address, taxId,
+    deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate, remarks,
+  });
+
   const save = (message: string) => {
-    onSave({
-      client, status: quoteStatus, lines, discount, amount: total,
-      salesperson, contactName, contactPhone, contactEmail, address, taxId,
-      deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate, remarks,
-    });
+    onSave(currentDraft());
     showToast(message);
   };
 
@@ -113,7 +107,10 @@ export function QuoteDocument({
   const confirmAction = () => {
     if (!pendingAction) return;
     if (commentRequired && !actionComment.trim()) { setActionError("กรุณาระบุเหตุผล"); return; }
-    onWorkflowAction(pendingAction, actionComment.trim());
+    // Pass the current on-screen draft, not just the action — otherwise any unsaved edit
+    // (e.g. line items changed but "บันทึก" not yet clicked) is silently discarded when the
+    // workflow transition is applied to the last-saved quote record instead.
+    onWorkflowAction(pendingAction, actionComment.trim(), currentDraft());
     setPendingAction(null);
   };
 
@@ -121,10 +118,11 @@ export function QuoteDocument({
   const preparerUser = isDetail
     ? users.find((u) => u.id === quote!.createdByUserId)
     : currentUser;
-  const lastApprovalEntry = isDetail ? [...quote!.approvalHistory].reverse().find((e) => e.action === "approved") : undefined;
+  const reversedApprovalHistory = isDetail ? [...quote!.approvalHistory].reverse() : [];
+  const lastApprovalEntry = reversedApprovalHistory.find((e) => e.action === "approved");
   const approverUser = lastApprovalEntry ? users.find((u) => u.id === lastApprovalEntry.userId) : undefined;
-  const preparerDate = isDetail ? quote!.date : fmtDate(todayIso());
-  const approverDate = lastApprovalEntry ? fmtDate(lastApprovalEntry.createdAt) : "";
+  const preparerDate = isDetail ? quote!.date : formatQuoteDateThai(todayIso());
+  const approverDate = lastApprovalEntry ? formatQuoteDateThai(lastApprovalEntry.createdAt) : "";
 
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
@@ -144,7 +142,7 @@ export function QuoteDocument({
           </span>
         )}
 
-        {isDetail && (
+        {isDetail && permissions.canEdit && (
           <div className="flex items-center gap-2 ml-1 pl-3 border-l border-border">
             <span className="text-xs text-muted-foreground">ความสนใจ:</span>
             <InterestButtons value={quote!.interest} onChange={onInterestChange} />
@@ -152,10 +150,12 @@ export function QuoteDocument({
         )}
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-            <Printer size={13} /> พิมพ์ / PDF
-          </button>
-          {isDetail && (
+          {permissions.canExport && (
+            <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+              <Printer size={13} /> พิมพ์ / PDF
+            </button>
+          )}
+          {isDetail && permissions.canDuplicate && (
             <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
               <Copy size={13} /> คัดลอก
             </button>
@@ -324,7 +324,7 @@ export function QuoteDocument({
                     {paymentTermsOptions.map((opt) => <option key={opt}>{opt}</option>)}
                   </select>
                 </div>
-                {isDetail && (
+                {isDetail && permissions.canEdit && (
                   <div>
                     <label className="text-[10px] text-muted-foreground block mb-1">ระดับความสนใจของลูกค้า</label>
                     <InterestButtons value={quote!.interest} onChange={onInterestChange} />
@@ -384,7 +384,7 @@ export function QuoteDocument({
               <History size={13} /> ประวัติการอนุมัติ
             </p>
             <div className="space-y-2.5">
-              {[...quote!.approvalHistory].reverse().map((entry) => (
+              {reversedApprovalHistory.map((entry) => (
                 <div key={entry.id} className="flex items-start gap-3 text-xs">
                   <div className="w-6 h-6 rounded-lg bg-[#c9a84c]/10 text-[#c9a84c] flex items-center justify-center flex-shrink-0 mt-0.5">
                     {ACTION_ICON[entry.action]}

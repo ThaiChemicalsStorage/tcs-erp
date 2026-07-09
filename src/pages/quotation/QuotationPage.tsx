@@ -92,7 +92,7 @@ export function QuotationPage({
     toast.show("คัดลอกใบเสนอราคาเรียบร้อยแล้ว");
   };
 
-  const handleWorkflowAction = (action: ApprovalAction, comment: string) => {
+  const handleWorkflowAction = (action: ApprovalAction, comment: string, draft: QuoteDraftFields) => {
     if (!selectedQuote) return;
     const transition = workflowTransitions[action];
     const entry: ApprovalHistoryEntry = {
@@ -104,8 +104,11 @@ export function QuotationPage({
       comment,
       createdAt: new Date().toISOString(),
     };
+    // Merge in the current on-screen draft (not just selectedQuote as last saved) so any
+    // unsaved edit made right before triggering a workflow action isn't silently discarded.
     const updated: Quote = {
       ...selectedQuote,
+      ...draft,
       status: transition.to,
       createdByUserId: selectedQuote.createdByUserId || currentUser.id,
       approvalHistory: [...selectedQuote.approvalHistory, entry],

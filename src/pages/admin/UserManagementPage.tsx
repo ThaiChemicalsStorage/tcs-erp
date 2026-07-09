@@ -3,6 +3,7 @@ import { Plus, Pencil, KeyRound, UserCheck, UserX, Trash2, Search, ShieldCheck }
 import type { User, UserStatus } from "../../lib/users";
 import { newUser, isEmployeeIdTaken, isUsernameTaken, isEmailTaken, hashPassword, initials, POSITION_SUGGESTIONS, DEPARTMENT_SUGGESTIONS } from "../../lib/users";
 import type { Role } from "../../lib/roles";
+import { nowIso } from "../../lib/products";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -102,10 +103,14 @@ export function UserManagementPage({
       const target = users.find((u) => u.id === editingId);
       const roleChanged = target && target.roleKey !== form.roleKey;
       if (editingId === currentUser.id && roleChanged) { setError("ไม่สามารถเปลี่ยนบทบาทของบัญชีตนเองได้"); return; }
+      if (target && roleChanged && isLastActiveSuperAdmin(target) && !roles.find((r) => r.key === form.roleKey)?.isSuperAdmin) {
+        setError("ไม่สามารถเปลี่ยนบทบาทของ Super Admin คนสุดท้ายที่ใช้งานอยู่ได้");
+        return;
+      }
       onUsersChange(users.map((u) => (u.id === editingId ? {
         ...u, fullName: form.fullName.trim(), employeeId: form.employeeId.trim(), username: form.username.trim(),
         email: form.email.trim(), phone: form.phone.trim(), department: form.department.trim(), position: form.position.trim(),
-        roleKey: form.roleKey, status: form.status, updatedAt: new Date().toISOString(),
+        roleKey: form.roleKey, status: form.status, updatedAt: nowIso(),
       } : u)));
       onAudit("User Updated", `แก้ไขข้อมูลผู้ใช้ ${form.fullName}${roleChanged ? ` (เปลี่ยนบทบาทเป็น ${roleName(form.roleKey)})` : ""}`);
       show("บันทึกการเปลี่ยนแปลงแล้ว");
@@ -118,7 +123,7 @@ export function UserManagementPage({
     if (!resetTarget) return;
     if (resetPw.password.length < 6) { setError("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); return; }
     if (resetPw.password !== resetPw.confirm) { setError("รหัสผ่านและการยืนยันไม่ตรงกัน"); return; }
-    onUsersChange(users.map((u) => (u.id === resetTarget.id ? { ...u, passwordHash: hashPassword(resetPw.password), updatedAt: new Date().toISOString() } : u)));
+    onUsersChange(users.map((u) => (u.id === resetTarget.id ? { ...u, passwordHash: hashPassword(resetPw.password), updatedAt: nowIso() } : u)));
     onAudit("Password Reset", `รีเซ็ตรหัสผ่านให้ผู้ใช้ ${resetTarget.fullName}`);
     show("รีเซ็ตรหัสผ่านเรียบร้อยแล้ว");
     setResetTarget(null);
@@ -128,8 +133,9 @@ export function UserManagementPage({
 
   const confirmToggleStatus = () => {
     if (!statusTarget) return;
+    if (statusTarget.status === "active" && isLastActiveSuperAdmin(statusTarget)) { setStatusTarget(null); return; }
     const next: UserStatus = statusTarget.status === "active" ? "inactive" : "active";
-    onUsersChange(users.map((u) => (u.id === statusTarget.id ? { ...u, status: next, updatedAt: new Date().toISOString() } : u)));
+    onUsersChange(users.map((u) => (u.id === statusTarget.id ? { ...u, status: next, updatedAt: nowIso() } : u)));
     onAudit(next === "active" ? "User Activated" : "User Deactivated", `${next === "active" ? "เปิดใช้งาน" : "ระงับการใช้งาน"}ผู้ใช้ ${statusTarget.fullName}`);
     show(next === "active" ? "เปิดใช้งานบัญชีแล้ว" : "ระงับการใช้งานบัญชีแล้ว");
     setStatusTarget(null);
@@ -150,6 +156,10 @@ export function UserManagementPage({
     if (isTargetSuperAdmin && superAdminCount <= 1) return false;
     return true;
   };
+
+  const activeSuperAdminCount = users.filter((u) => u.status === "active" && roles.find((r) => r.key === u.roleKey)?.isSuperAdmin).length;
+  const isLastActiveSuperAdmin = (u: User) =>
+    u.status === "active" && !!roles.find((r) => r.key === u.roleKey)?.isSuperAdmin && activeSuperAdminCount <= 1;
 
   if (view !== "list") {
     return (
@@ -274,8 +284,8 @@ export function UserManagementPage({
                       <button onClick={() => { setResetTarget(u); setResetPw({ password: "", confirm: "" }); setError(""); }} title="รีเซ็ตรหัสผ่าน" className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><KeyRound size={14} /></button>
                       <button
                         onClick={() => setStatusTarget(u)}
-                        disabled={u.id === currentUser.id}
-                        title={u.status === "active" ? "ระงับการใช้งาน" : "เปิดใช้งาน"}
+                        disabled={u.id === currentUser.id || isLastActiveSuperAdmin(u)}
+                        title={isLastActiveSuperAdmin(u) ? "ไม่สามารถระงับ Super Admin คนสุดท้ายที่ใช้งานอยู่ได้" : u.status === "active" ? "ระงับการใช้งาน" : "เปิดใช้งาน"}
                         className="p-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                       >
                         {u.status === "active" ? <UserX size={14} /> : <UserCheck size={14} />}

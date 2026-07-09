@@ -2,27 +2,11 @@ import { Fragment } from "react";
 import { Pin } from "lucide-react";
 import type { Company } from "../../lib/storage";
 import type { User } from "../../lib/users";
-import { type Quote, type QuoteLine, fmt, lineSubtotal, computeTotals, bahtText, VAT_RATE } from "../../lib/quotes";
+import {
+  type Quote, type QuoteLine, fmt, lineSubtotal, computeTotals, bahtText, VAT_RATE,
+  lineHasDetails, formatQuoteDateThai as fmtThaiDate, formatQuoteDateNumeric as fmtNumericDate,
+} from "../../lib/quotes";
 import { FormattedNotes } from "./notesFormat";
-
-function fmtThaiDate(iso: string): string {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
-  } catch {
-    return "";
-  }
-}
-
-function fmtNumericDate(iso: string): string {
-  if (!iso) return "";
-  try {
-    const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-  } catch {
-    return "";
-  }
-}
 
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   if (!value.trim()) return null;
@@ -159,7 +143,7 @@ export function PrintDocument({
       </thead>
       <tbody>
         {lines.map((line, idx) => {
-          const hasDetails = line.notes.trim() !== "" || line.subDetails.some((sd) => sd.text.trim()) || line.specifications.trim() !== "" || line.tags.length > 0;
+          const hasDetails = lineHasDetails(line);
           const unitDiscount = line.unitPrice * (line.discount / 100);
           return (
             <Fragment key={line.id}>
@@ -238,7 +222,10 @@ export function PrintDocument({
               <tbody>
                 <tr>
                   {signatureColumns.map((col, i) => (
-                    <td key={col.label} className={`px-3 py-2 align-bottom h-20 ${i < 2 ? "border-r border-[#0b1d3a]/20" : ""}`}>
+                    <td key={col.label} className={`px-3 py-2 align-bottom h-20 relative ${i < 2 ? "border-r border-[#0b1d3a]/20" : ""}`}>
+                      {i === 1 && company.stampDataUrl && (
+                        <img src={company.stampDataUrl} alt="ตราประทับ" className="absolute right-2 top-1 h-12 w-12 object-contain opacity-80 pointer-events-none" />
+                      )}
                       <div className="h-10 flex items-end justify-center">
                         {col.user?.signatureDataUrl && (
                           <img src={col.user.signatureDataUrl} alt="" className="max-h-9 max-w-[80%] object-contain" />

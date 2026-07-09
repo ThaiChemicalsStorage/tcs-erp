@@ -4,7 +4,7 @@ import {
   List, ListOrdered, GripVertical, StickyNote, X,
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
-import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
+import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, lineHasDetails, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 
 function insertAtCursor(textarea: HTMLTextAreaElement, prefix: string, value: string, onChange: (v: string) => void) {
@@ -239,7 +239,7 @@ export function LineItemsEditor({
           <tbody>
             {lines.map((line, idx) => {
               const isExpanded = expanded.has(line.id);
-              const hasDetails = line.notes.trim() !== "" || line.subDetails.length > 0 || line.specifications.trim() !== "" || line.tags.length > 0;
+              const hasDetails = lineHasDetails(line);
               return (
                 <Fragment key={line.id}>
                   <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">

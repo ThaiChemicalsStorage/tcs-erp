@@ -4,6 +4,7 @@ import type { Role } from "../../lib/roles";
 import { isPermissionLockedToSuperAdmin } from "../../lib/roles";
 import { PERMISSION_GROUPS, PERMISSION_LABELS, type Permission } from "../../lib/permissions";
 import type { User } from "../../lib/users";
+import { newId } from "../../lib/products";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -60,7 +61,7 @@ export function RoleManagementPage({
     if (nameTaken) { setError("มีบทบาทชื่อนี้อยู่แล้ว"); return; }
 
     if (view === "create") {
-      const key = `role_${Date.now().toString(36)}`;
+      const key = newId("role");
       const created: Role = { key, name: form.name.trim(), description: form.description.trim(), permissions: form.permissions, isSuperAdmin: false, isSystem: false };
       onRolesChange([...roles, created]);
       onAudit("Role Changed", `สร้างบทบาทใหม่ "${created.name}"`);

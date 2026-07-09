@@ -4,6 +4,39 @@
 
 ---
 
+## Session — 2026-07-09 (Code review + bug fixes)
+
+### What was implemented
+- Ran a full multi-angle code review (8 independent finder passes: line-by-line diff scan, removed-behavior audit, cross-file call-site tracing, reuse, simplification, efficiency, altitude/design-depth, CLAUDE.md conventions) over the previously-committed RBAC system + quotation print/PDF redesign.
+- Fixed every confirmed correctness bug: unenforced `quotations:export` permission on the print button, unguarded interest-toggle and Duplicate actions, workflow actions discarding unsaved edits (and mis-triggering the high-value notification off stale data), a missing last-active-Super-Admin safeguard on deactivate/role-change, a `loadRoles()` empty-array crash risk, a missing company stamp image in print output, and an inconsistent "has details" check between the editor and the print view.
+- Applied several low-risk cleanup fixes alongside: unified date-formatting helpers, reused existing `nowIso()`/`newId()` helpers instead of ad hoc duplicates, deduplicated a double-reverse of approval history.
+
+### Files Modified
+`src/lib/{quotes,roles}.ts(x)`, `src/pages/quotation/{QuoteDocument,QuotationPage,LineItemsEditor,PrintDocument}.tsx`, `src/pages/admin/{UserManagementPage,RoleManagementPage}.tsx`. See [CHANGELOG.md](./CHANGELOG.md) for full detail.
+
+### Architectural Decisions
+- Extended the existing `QuotePermissions` object (`canExport`, `canDuplicate`) rather than adding one-off inline permission checks at each button — keeps every quotation action gated through the one shared `computeQuotePermissions()` function, consistent with how every other workflow button already worked.
+- Fixed the stale-state workflow bug by threading the current on-screen draft through `onWorkflowAction` rather than forcing users to Save before every transition — preserves the existing one-click Submit/Approve UX while closing the data-loss gap.
+- Fixed `loadRoles()` at the shared loader level (fall back to `defaultRoles` on an empty array, not just a missing key) rather than special-casing the Setup Wizard's call site — the general fix closes the same risk anywhere else `loadRoles()` is called too.
+
+### Problems Found
+See the "Bugs fixed" list in [CHANGELOG.md](./CHANGELOG.md) — eight real, verified issues surfaced across the two prior sessions' work, none previously caught by `tsc`/`eslint` since they were all either permission-gating gaps, stale-closure/state bugs, or a rare-state crash, not type errors.
+
+### Problems Fixed
+All eight — see CHANGELOG for detail. Re-verified via scripted Playwright passes: a Viewer-role account confirmed to no longer see the print/duplicate/interest controls on a quote; an unsaved line-item edit confirmed to survive a direct "Submit for Approval" click (previously silently reverted); a fresh print/PDF export re-checked for regressions after the `PrintDocument.tsx` changes. Zero console errors throughout. `tsc --noEmit`, `eslint .`, `npm run build` all clean before and after.
+
+### New TODO Items
+None new — the two consciously-skipped items (legacy quote ownership edge case, VAT rate wiring) were already either newly-identified-but-out-of-scope (documented in CHANGELOG rather than TODO, since neither is a committed-to future task yet) or already tracked in [TODO.md](./TODO.md).
+
+### Future Recommendations
+1. If the legacy-quote-ownership edge case (a seed/legacy quote's `createdByUserId` getting silently claimed by whoever first acts on it) ever surfaces as a real business complaint, revisit it as its own scoped task — it needs an explicit decision on how "ownership" should work for data that predates the RBAC system, not a quick patch.
+2. This review was scoped to the two most recent sessions' diff (`@{upstream}...HEAD`), not the whole codebase — an earlier full-history review may still surface more, but was out of scope for this pass.
+
+### Estimated Completion Percentage
+No change to the ERP-vision percentage (a correctness/quality pass, not new feature coverage); Phase 1 frontend-only modules remain ~93% complete, now with fewer known permission/data-integrity gaps in the RBAC and quotation modules. See [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+
+---
+
 ## Session — 2026-07-09 (Quotation print/PDF redesign)
 
 ### What was implemented
