@@ -5,13 +5,14 @@ import type { User } from "../../lib/users";
 import type { Role } from "../../lib/roles";
 import {
   type Quote, type QuoteInterest, type QuoteDraftFields, type ApprovalAction,
-  createQuote, updateQuote, duplicateQuote, performWorkflowAction, approvalActionLabel, computeQuotePermissions, nextQuoteId,
+  createQuote, updateQuote, duplicateQuote, performWorkflowAction, approvalActionLabel, approvalActionLabelKey, computeQuotePermissions, nextQuoteId,
 } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import { QuoteList } from "./QuoteList";
 import { QuoteDocument } from "./QuoteDocument";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
+import { useI18n } from "../../lib/i18n";
 
 export function QuotationPage({
   quotes,
@@ -36,6 +37,7 @@ export function QuotationPage({
   onNotify: () => void;
   onAudit: (action: string, details: string) => void;
 }) {
+  const { t } = useI18n();
   const [view, setView] = useState<"list" | "new" | "detail">("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const toast = useToast();
@@ -61,7 +63,7 @@ export function QuotationPage({
         onAudit("Quotation Updated", `แก้ไขใบเสนอราคา ${selectedQuote.id}`);
       }
     } catch (err) {
-      toast.show(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
+      toast.show(err instanceof ApiError ? err.message : t("quotation.saveErrorToast"));
     }
   };
 
@@ -72,9 +74,9 @@ export function QuotationPage({
       setQuotes((prev) => [created, ...prev]);
       setSelectedId(created.id);
       onAudit("Quotation Created", `คัดลอกใบเสนอราคาเป็น ${created.id} จาก ${selectedQuote.id}`);
-      toast.show("คัดลอกใบเสนอราคาเรียบร้อยแล้ว");
+      toast.show(t("quotation.duplicateSuccessToast"));
     } catch (err) {
-      toast.show(err instanceof ApiError ? err.message : "คัดลอกไม่สำเร็จ");
+      toast.show(err instanceof ApiError ? err.message : t("quotation.duplicateErrorToast"));
     }
   };
 
@@ -93,9 +95,9 @@ export function QuotationPage({
         action === "rejected" ? "Quotation Rejected" :
         "Status Changed";
       onAudit(auditAction, `${approvalActionLabel[action]} ใบเสนอราคา ${updated.id}${comment ? ` — ${comment}` : ""}`);
-      toast.show(`${approvalActionLabel[action]}เรียบร้อยแล้ว`);
+      toast.show(t("quotation.actionCompletedToast").replace("{action}", t(approvalActionLabelKey[action])));
     } catch (err) {
-      toast.show(err instanceof ApiError ? err.message : "ดำเนินการไม่สำเร็จ");
+      toast.show(err instanceof ApiError ? err.message : t("quotation.workflowErrorToast"));
     }
   };
 

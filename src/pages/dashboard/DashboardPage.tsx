@@ -7,7 +7,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import type { Quote } from "../../lib/quotes";
+import { type Quote, interestLabelKey } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardStats } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 
@@ -192,9 +192,9 @@ export function DashboardPage({ quotes }: { quotes: Quote[] }) {
               <h2 className="text-base font-semibold text-foreground mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>{t("dashboard.interest.title")}</h2>
               <div className="space-y-3">
                 {[
-                  { label: "น่าสนใจ", count: quotes.filter((q) => q.interest === "น่าสนใจ").length, color: "#2aa36b", icon: <ThumbsUp size={13} /> },
-                  { label: "ไม่น่าสนใจ", count: quotes.filter((q) => q.interest === "ไม่น่าสนใจ").length, color: "#e05252", icon: <ThumbsDown size={13} /> },
-                  { label: "ยังไม่ประเมิน", count: quotes.filter((q) => q.interest === null).length, color: "#5a7299", icon: <CircleDot size={13} /> },
+                  { label: t(interestLabelKey["น่าสนใจ"]), count: quotes.filter((q) => q.interest === "น่าสนใจ").length, color: "#2aa36b", icon: <ThumbsUp size={13} /> },
+                  { label: t(interestLabelKey["ไม่น่าสนใจ"]), count: quotes.filter((q) => q.interest === "ไม่น่าสนใจ").length, color: "#e05252", icon: <ThumbsDown size={13} /> },
+                  { label: t("quotation.interest.notEvaluated"), count: quotes.filter((q) => q.interest === null).length, color: "#5a7299", icon: <CircleDot size={13} /> },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${item.color}15` }}>
@@ -203,7 +203,7 @@ export function DashboardPage({ quotes }: { quotes: Quote[] }) {
                     <div className="flex-1">
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-xs text-foreground">{item.label}</span>
-                        <span className="text-xs font-mono font-semibold text-foreground">{item.count} ฉบับ</span>
+                        <span className="text-xs font-mono font-semibold text-foreground">{item.count} {t("quotation.countUnit")}</span>
                       </div>
                       <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
                         <div className="h-full rounded-full" style={{ width: `${quotes.length ? (item.count / quotes.length) * 100 : 0}%`, background: item.color }} />

@@ -6,6 +6,7 @@ import {
 import type { Product, ProductCategory } from "../../lib/products";
 import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, lineHasDetails, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
 import { ProductPickerModal } from "../products/ProductPickerModal";
+import { useI18n } from "../../lib/i18n";
 
 function insertAtCursor(textarea: HTMLTextAreaElement, prefix: string, value: string, onChange: (v: string) => void) {
   const start = textarea.selectionStart ?? value.length;
@@ -22,6 +23,7 @@ function insertAtCursor(textarea: HTMLTextAreaElement, prefix: string, value: st
 }
 
 function NotesEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLTextAreaElement>(null);
   return (
     <div>
@@ -29,18 +31,18 @@ function NotesEditor({ value, onChange }: { value: string; onChange: (v: string)
         <button
           type="button"
           onClick={() => ref.current && insertAtCursor(ref.current, "• ", value, onChange)}
-          title="เพิ่มรายการหัวข้อย่อย"
+          title={t("quotation.lineItems.notesBulletTitle")}
           className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
         >
-          <List size={11} /> บูลเลต
+          <List size={11} /> {t("quotation.lineItems.notesBullet")}
         </button>
         <button
           type="button"
           onClick={() => ref.current && insertAtCursor(ref.current, "1. ", value, onChange)}
-          title="เพิ่มรายการลำดับเลข"
+          title={t("quotation.lineItems.notesNumberedTitle")}
           className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
         >
-          <ListOrdered size={11} /> ลำดับเลข
+          <ListOrdered size={11} /> {t("quotation.lineItems.notesNumbered")}
         </button>
       </div>
       <textarea
@@ -48,7 +50,7 @@ function NotesEditor({ value, onChange }: { value: string; onChange: (v: string)
         rows={4}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="เช่น ขอบเขตงาน, รายละเอียดการติดตั้ง, การรับประกัน, ความต้องการของลูกค้า, เงื่อนไข, หมายเหตุภายใน..."
+        placeholder={t("quotation.lineItems.notesPlaceholder")}
         className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed"
       />
     </div>
@@ -68,12 +70,13 @@ function SubDetailsEditor({
   onRemove: (id: string) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
 }) {
+  const { t } = useI18n();
   const dragIndex = useRef<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
   return (
     <div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">รายละเอียดย่อย</p>
+      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.subDetailsTitle")}</p>
       <div className="space-y-1">
         {subDetails.map((sd, idx) => (
           <div
@@ -90,13 +93,13 @@ function SubDetailsEditor({
             }}
             className={`flex items-center gap-1.5 rounded-lg transition-colors ${overIndex === idx ? "bg-[#c9a84c]/10" : ""}`}
           >
-            <span className="text-muted-foreground cursor-grab active:cursor-grabbing flex-shrink-0" title="ลากเพื่อจัดลำดับใหม่">
+            <span className="text-muted-foreground cursor-grab active:cursor-grabbing flex-shrink-0" title={t("quotation.lineItems.subDetailsDragTitle")}>
               <GripVertical size={13} />
             </span>
             <input
               value={sd.text}
               onChange={(e) => onUpdate(sd.id, e.target.value)}
-              placeholder="รายละเอียดย่อย เช่น จัดหากล้อง 4MP"
+              placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
               className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
             />
             <button onClick={() => onRemove(sd.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1">
@@ -109,21 +112,22 @@ function SubDetailsEditor({
         onClick={onAdd}
         className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 text-[11px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium"
       >
-        <Plus size={11} /> เพิ่มรายละเอียดย่อย
+        <Plus size={11} /> {t("quotation.lineItems.addSubDetail")}
       </button>
     </div>
   );
 }
 
 function SpecificationsEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useI18n();
   return (
     <div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">ข้อกำหนดเฉพาะ</p>
+      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.specTitle")}</p>
       <textarea
         rows={3}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="สเปกหรือคุณสมบัติเฉพาะของรายการนี้..."
+        placeholder={t("quotation.lineItems.specPlaceholder")}
         className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed"
       />
     </div>
@@ -131,22 +135,23 @@ function SpecificationsEditor({ value, onChange }: { value: string; onChange: (v
 }
 
 function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState("");
 
   const addTag = () => {
-    const t = draft.trim();
-    if (t && !tags.includes(t)) onChange([...tags, t]);
+    const tag = draft.trim();
+    if (tag && !tags.includes(tag)) onChange([...tags, tag]);
     setDraft("");
   };
 
   return (
     <div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">แท็ก</p>
+      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.tagsTitle")}</p>
       <div className="flex flex-wrap gap-1.5 mb-2">
-        {tags.map((t) => (
-          <span key={t} className="flex items-center gap-1 px-2 py-1 text-[11px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-full">
-            {t}
-            <button onClick={() => onChange(tags.filter((x) => x !== t))} className="hover:text-[#e05252] transition-colors">
+        {tags.map((tag) => (
+          <span key={tag} className="flex items-center gap-1 px-2 py-1 text-[11px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-full">
+            {tag}
+            <button onClick={() => onChange(tags.filter((x) => x !== tag))} className="hover:text-[#e05252] transition-colors">
               <X size={10} />
             </button>
           </span>
@@ -157,7 +162,7 @@ function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: strin
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
         onBlur={addTag}
-        placeholder="พิมพ์แท็กแล้วกด Enter"
+        placeholder={t("quotation.lineItems.tagsPlaceholder")}
         className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
       />
     </div>
@@ -179,6 +184,7 @@ export function LineItemsEditor({
   products: Product[];
   categories: ProductCategory[];
 }) {
+  const { t } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
@@ -212,16 +218,22 @@ export function LineItemsEditor({
 
   const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount);
 
+  const columns = [
+    t("quotation.lineItems.col.no"), t("quotation.lineItems.col.description"), t("quotation.lineItems.col.unit"),
+    t("quotation.lineItems.col.qty"), t("quotation.lineItems.col.unitPrice"), t("quotation.lineItems.col.discount"),
+    t("quotation.lineItems.col.amount"), "",
+  ];
+
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
-        <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>รายการสินค้า / บริการ</p>
+        <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("quotation.lineItems.title")}</p>
         <div className="flex items-center gap-2">
           <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
-            <PackageSearch size={12} /> เลือกจากคลังสินค้า
+            <PackageSearch size={12} /> {t("quotation.lineItems.pickFromCatalog")}
           </button>
           <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
-            <Plus size={12} /> เพิ่มรายการเอง
+            <Plus size={12} /> {t("quotation.lineItems.addManual")}
           </button>
         </div>
       </div>
@@ -231,7 +243,7 @@ export function LineItemsEditor({
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/20">
-              {["#", "รายละเอียด", "หน่วย", "จำนวน", "ราคา/หน่วย (฿)", "ส่วนลด (%)", "จำนวนเงิน (฿)", ""].map((h, i) => (
+              {columns.map((h, i) => (
                 <th key={i} className={`px-4 py-2.5 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider ${i === 0 ? "w-10 text-center" : i === 1 ? "text-left" : "text-right"} ${i === 7 ? "w-10" : ""}`}>{h}</th>
               ))}
             </tr>
@@ -245,7 +257,7 @@ export function LineItemsEditor({
                   <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
                     <td className="px-4 py-3 text-center text-xs font-mono text-muted-foreground align-top">{idx + 1}</td>
                     <td className="px-4 py-3 align-top">
-                      <input className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.description} onChange={(e) => updateLine(line.id, "description", e.target.value)} placeholder="รายละเอียด" />
+                      <input className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.description} onChange={(e) => updateLine(line.id, "description", e.target.value)} placeholder={t("quotation.lineItems.descriptionPlaceholder")} />
                     </td>
                     <td className="px-4 py-3 align-top">
                       <input className="w-20 text-xs text-center text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unit} onChange={(e) => updateLine(line.id, "unit", e.target.value)} />
@@ -267,7 +279,7 @@ export function LineItemsEditor({
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => toggleExpand(line.id)}
-                          title="หมายเหตุ / รายละเอียดย่อย"
+                          title={t("quotation.lineItems.notesIconTitle")}
                           className={`transition-colors relative ${hasDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-0 group-hover:opacity-100"} hover:text-[#c9a84c]`}
                         >
                           <StickyNote size={13} />
@@ -309,12 +321,12 @@ export function LineItemsEditor({
       <div className="flex justify-end p-5 border-t border-border">
         <div className="w-72 space-y-2">
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>ยอดรวมก่อนหักส่วนลด</span>
+            <span>{t("quotation.totals.subtotal")}</span>
             <span className="font-mono">฿{fmt(subtotal)}</span>
           </div>
           <div className="flex justify-between text-sm text-muted-foreground items-center">
             <span className="flex items-center gap-2">
-              ส่วนลดพิเศษ
+              {t("quotation.totals.discount")}
               <span className="flex items-center gap-1 bg-secondary border border-border rounded px-2 py-0.5">
                 <input type="number" className="w-10 text-xs font-mono text-foreground bg-transparent outline-none text-right" value={discount} onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)} min={0} max={100} />
                 <Percent size={10} className="text-muted-foreground" />
@@ -323,15 +335,15 @@ export function LineItemsEditor({
             <span className="font-mono text-[#e05252]">-฿{fmt(discountAmt)}</span>
           </div>
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>ยอดหลังหักส่วนลด</span>
+            <span>{t("quotation.totals.afterDiscount")}</span>
             <span className="font-mono">฿{fmt(afterDiscount)}</span>
           </div>
           <div className="flex justify-between text-sm text-muted-foreground">
-            <span>ภาษีมูลค่าเพิ่ม (VAT {VAT_RATE}%)</span>
+            <span>{t("quotation.totals.vat").replace("{rate}", String(VAT_RATE))}</span>
             <span className="font-mono">฿{fmt(vatAmt)}</span>
           </div>
           <div className="flex justify-between text-base font-bold text-foreground pt-2 border-t border-border">
-            <span style={{ fontFamily: "'Playfair Display', serif" }}>ยอดรวมทั้งสิ้น</span>
+            <span style={{ fontFamily: "'Playfair Display', serif" }}>{t("quotation.totals.grandTotal")}</span>
             <span className="font-mono text-[#c9a84c] text-lg">฿{fmt(total)}</span>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Search, X, Package } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
+import { useI18n } from "../../lib/i18n";
 
 export function ProductPickerModal({
   open,
@@ -15,9 +16,10 @@ export function ProductPickerModal({
   onSelect: (product: Product) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState("");
 
-  const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? "ไม่ระบุหมวดหมู่";
+  const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? t("products.categoryUnspecified");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -33,7 +35,7 @@ export function ProductPickerModal({
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
       <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>เลือกจากคลังสินค้า</p>
+          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("quotation.lineItems.pickFromCatalog")}</p>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
         </div>
         <div className="px-5 py-3 border-b border-border">
@@ -44,7 +46,7 @@ export function ProductPickerModal({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ค้นหารหัสหรือชื่อสินค้า..."
+              placeholder={t("products.searchPlaceholder")}
               className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
             />
           </div>
@@ -53,7 +55,7 @@ export function ProductPickerModal({
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 gap-2">
               <Package size={20} className="text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">ไม่พบสินค้าที่ตรงกับเงื่อนไข</p>
+              <p className="text-sm text-muted-foreground">{t("products.noFilterResults")}</p>
             </div>
           ) : (
             filtered.map((p) => (

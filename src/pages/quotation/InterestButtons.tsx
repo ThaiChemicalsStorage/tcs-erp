@@ -1,7 +1,9 @@
 import { ThumbsUp, ThumbsDown } from "lucide-react";
 import type { QuoteInterest } from "../../lib/quotes";
+import { useI18n } from "../../lib/i18n";
 
 export function InterestButtons({ value, onChange }: { value: QuoteInterest; onChange: (v: QuoteInterest) => void }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-1.5">
       <button
@@ -13,7 +15,7 @@ export function InterestButtons({ value, onChange }: { value: QuoteInterest; onC
         }`}
       >
         <ThumbsUp size={12} />
-        น่าสนใจ
+        {t("quotation.interest.interested")}
       </button>
       <button
         onClick={(e) => { e.stopPropagation(); onChange(value === "ไม่น่าสนใจ" ? null : "ไม่น่าสนใจ"); }}
@@ -24,7 +26,7 @@ export function InterestButtons({ value, onChange }: { value: QuoteInterest; onC
         }`}
       >
         <ThumbsDown size={12} />
-        ไม่น่าสนใจ
+        {t("quotation.interest.notInterested")}
       </button>
     </div>
   );

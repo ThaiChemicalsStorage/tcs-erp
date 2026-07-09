@@ -2,6 +2,7 @@ import { FilePen, Clock, CheckCircle2, Ban, Send, CheckCheck, Trophy, XCircle, F
 import type { User } from "./users";
 import { type Role, hasPermission } from "./roles";
 import { apiFetch } from "./apiClient.js";
+import type { TranslationKey } from "./i18n";
 
 export type QuoteStatus =
   | "ร่าง"
@@ -122,6 +123,38 @@ export const statusStyle: Record<QuoteStatus, string> = {
   "ลูกค้าปฏิเสธ": "bg-[#e08a3c]/10 text-[#e08a3c] border border-[#e08a3c]/20",
   "เสียโอกาส": "bg-[#e05252]/10 text-[#e05252] border border-[#e05252]/20",
   "ยกเลิก": "bg-[#8a94a6]/10 text-[#8a94a6] border border-[#8a94a6]/20",
+};
+
+/** Translated display label per status — `QuoteStatus` itself stays the fixed Thai literal stored in MongoDB and used for all comparisons/state-machine logic; this map is display-only. */
+export const statusLabelKey: Record<QuoteStatus, TranslationKey> = {
+  "ร่าง": "quotation.status.draft",
+  "รออนุมัติ": "quotation.status.pendingApproval",
+  "อนุมัติแล้ว": "quotation.status.approved",
+  "ส่งให้ลูกค้าแล้ว": "quotation.status.sentToCustomer",
+  "ลูกค้ายอมรับ": "quotation.status.customerAccepted",
+  "ปิดการขายสำเร็จ": "quotation.status.won",
+  "ลูกค้าปฏิเสธ": "quotation.status.customerRejected",
+  "เสียโอกาส": "quotation.status.lost",
+  "ยกเลิก": "quotation.status.cancelled",
+};
+
+/** Translated display label per approval action — `approvalActionLabel` (Thai) stays as-is for audit-log data; this is for on-screen UI only. */
+export const approvalActionLabelKey: Record<ApprovalAction, TranslationKey> = {
+  submitted: "quotation.action.submitted",
+  approved: "quotation.action.approved",
+  rejected: "quotation.action.rejected",
+  sent_to_customer: "quotation.action.sentToCustomer",
+  customer_accepted: "quotation.action.customerAccepted",
+  customer_rejected: "quotation.action.customerRejected",
+  marked_won: "quotation.action.markedWon",
+  marked_lost: "quotation.action.markedLost",
+  cancelled: "quotation.action.cancelled",
+};
+
+/** Translated display label for the two non-null QuoteInterest values — the stored value itself stays Thai. */
+export const interestLabelKey: Record<"น่าสนใจ" | "ไม่น่าสนใจ", TranslationKey> = {
+  "น่าสนใจ": "quotation.interest.interested",
+  "ไม่น่าสนใจ": "quotation.interest.notInterested",
 };
 
 export const statusIcon: Record<QuoteStatus, React.ReactNode> = {
