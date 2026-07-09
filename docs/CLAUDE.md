@@ -4,22 +4,25 @@
 
 ## Project Overview
 
-**TCS ERP** (Thai Chemicals Storage ERP) is a Thai-language, internal business web app for a single chemical storage/distribution company (not a multi-tenant SaaS product). It's being built incrementally toward a full multi-module ERP (per the long-term vision in [PROJECT_STATUS.md](./PROJECT_STATUS.md)), starting with **Quotation management** and a **Product library**, plus the supporting shell (auth, settings, dashboard) and — as of 2026-07-08 — a full **RBAC / user management / quotation approval workflow / notifications / audit log** system, simulated entirely client-side (see [RBAC.md](./RBAC.md) for what "simulated" means and why).
+**TCS ERP** (Thai Chemicals Storage ERP) is a Thai-language, internal business web app for a single chemical storage/distribution company (not a multi-tenant SaaS product). It's being built incrementally toward a full multi-module ERP (per the long-term vision in [PROJECT_STATUS.md](./PROJECT_STATUS.md)), starting with **Quotation management** and a **Product library**, plus the supporting shell (auth, settings, dashboard) and — as of 2026-07-08 — a full **RBAC / user management / quotation approval workflow / notifications / audit log** system. As of 2026-07-09 this system is **real, server-enforced** (Vercel Serverless Functions + MongoDB Atlas), not a client-side simulation — see [RBAC.md](./RBAC.md) for exactly what's enforced where.
 
 - **Repo**: https://github.com/Wisarutbuasumlee/tcs-erp (private)
+- **Live**: https://tcs-erp-nine.vercel.app (Vercel project `tcs-erp`, auto-deploy on push to `master`)
 - **Language**: Thai UI throughout, English code/comments
 - **Branding**: navy (`#0b1d3a`) + gold (`#c9a84c`), serif headings (Playfair Display), sans body (Inter), mono numbers (JetBrains Mono)
 
 ## Current Development Phase
 
-**Phase 1 — Frontend demo, client-only.** Everything currently runs as a Vite React SPA with **no backend and no database**. Data lives in React state, most of it mirrored to `localStorage` (see [DATABASE.md](./DATABASE.md) for exactly what is and isn't persisted). As of 2026-07-08 the app has a real multi-user login (hashed passwords, active/inactive accounts), role-based permissions, a quotation approval workflow, notifications, and an audit log — but all of it is **enforced client-side only** (any check can be bypassed via devtools, since there's no server to be the source of truth). Treat it as a UI/UX simulation of enterprise RBAC, not a secure system — see [RBAC.md](./RBAC.md).
+**Real full-stack app, deployed and live.** As of 2026-07-09 the app is a Vite React frontend + **Vercel Serverless Functions (Node.js) backend + MongoDB Atlas database** — not client-only anymore. Data lives in MongoDB, not `localStorage` (see [DATABASE.md](./DATABASE.md) for the collections). Auth is real: bcrypt-hashed passwords, JWT sessions in an httpOnly cookie, and every request re-fetches the user fresh from MongoDB so a deactivated account is locked out on its very next request. RBAC is enforced **server-side** on every mutating API route (`requirePermission()` in `api/_lib/auth.ts`, reusing the same pure permission functions from `src/lib/roles.ts`) — this is genuinely no longer bypassable via devtools; the server is the source of truth. See [ARCHITECTURE.md](./ARCHITECTURE.md), [API.md](./API.md), [DATABASE.md](./DATABASE.md), and [RBAC.md](./RBAC.md) for full detail.
 
-A **Phase 2 architecture** (Next.js + Prisma + PostgreSQL + real RBAC) was designed and agreed on stack-wise, but **has not been started** — no Next.js project exists yet, no database is provisioned. See [ARCHITECTURE.md](./ARCHITECTURE.md) and [RBAC.md](./RBAC.md) for the proposed design, clearly marked as not-yet-implemented. Do not assume any backend/API/RBAC code exists until this migration actually happens.
+This supersedes the previously-proposed "Phase 2" stack (Next.js + Prisma + PostgreSQL + Auth.js) — that plan was **never built**; the migration that actually happened used a different, simpler stack (Vite unchanged + Vercel Functions + MongoDB) chosen for a faster path to a real backend without a frontend framework rewrite. The old proposal is kept in [ARCHITECTURE.md](./ARCHITECTURE.md) as a superseded historical record only — do not build against it.
+
+Known, deliberate scope limitations (not bugs, see [RBAC.md](./RBAC.md) Known Gaps): no automated tests, no CI pipeline, no login rate limiting.
 
 ## Project Goals
 
-1. Give TCS employees a working Quotation + Product Library tool today (done, client-only).
-2. Re-platform onto a real multi-user backend (Next.js/Prisma/Postgres) with proper RBAC — **pending decision, not started**.
+1. Give TCS employees a working Quotation + Product Library tool today (done).
+2. Re-platform onto a real multi-user backend with proper server-enforced RBAC — **done** (2026-07-09, Vercel Functions + MongoDB Atlas, not the originally-proposed Next.js/Prisma/Postgres stack — see Current Development Phase above).
 3. Add further ERP modules (Lead/Customer management, HR, Accounting, Inventory, Warehouse, Purchasing, Project Management) on top of that foundation — **not started**.
 
 ## Folder Structure
@@ -48,30 +51,43 @@ ERP/
 │       ├── RoleManagement.md
 │       ├── Notifications.md
 │       └── AuditLog.md
+├── api/                           # Vercel Serverless Functions backend (Node.js) — see ARCHITECTURE.md
+│   ├── handlers/                  # api/handlers/{auth,users,roles,products,categories,notifications,quotes}.ts — one file per resource, dispatches on parsed URL path, reached via vercel.json rewrites (the live routing)
+│   ├── company/index.ts           # plain single-route file (GET/PUT)
+│   ├── audit-log/index.ts         # plain single-route file (GET/POST)
+│   ├── dashboard/index.ts         # plain single-route file (GET) — real KPI/chart aggregation, added 2026-07-09 prod-readiness pass
+│   └── _lib/                      # shared server-only code: mongodb.ts, http.ts, auth.ts, collections.ts, rbacSeed.ts, systemSeed.ts, quoteWorkflow.ts
+│       # Note: a duplicate `api/{auth,users,roles,products,categories,notifications,quotes}/[[...segments]].ts` catch-all layer existed
+│       # pre-2026-07-09 but was confirmed dead (shadowed by vercel.json's rewrites — see ARCHITECTURE.md) and deleted.
+├── vercel.json                    # rewrites mapping /api/<resource>[/:path*] to its handler file
+├── tsconfig.api.json              # Node-target tsconfig covering api/ (separate from root tsconfig.json which covers src/)
 ├── src/
 │   ├── App.tsx                    # root shell: sidebar, topbar, bootstrap/auth gate, page router (string switch, no react-router)
 │   ├── main.tsx                   # entry point
 │   ├── components/                # generic, reusable, cross-module UI
 │   │   ├── ConfirmDialog.tsx
 │   │   ├── Toast.tsx
-│   │   └── NotificationBell.tsx   # header bell + dropdown panel
+│   │   ├── NotificationBell.tsx   # header bell + dropdown panel
+│   │   └── BrandMark.tsx          # single shared logo/wordmark component — added 2026-07-09, replaces 6 copy-pasted inline blocks
 │   ├── hooks/
 │   │   └── useToast.ts
-│   ├── lib/                       # types + sample data + pure helpers + localStorage I/O, per domain
-│   │   ├── storage.ts             # Company (incl. bank/VAT/T&C fields)
+│   ├── lib/                       # types + pure helpers + REST API calls (apiFetch), per domain
+│   │   ├── apiClient.ts           # apiFetch<T>() — the one place every domain lib talks to the backend
+│   │   ├── storage.ts             # Company (incl. bank/VAT/T&C fields, updatedAt/updatedBy)
 │   │   ├── users.ts               # User (employee + account record), password hashing, uniqueness checks
 │   │   ├── roles.ts               # Role, default role set, hasPermission()/userIsSuperAdmin()/roleNameFor()
 │   │   ├── permissions.ts         # Permission union, labels, grouping, Super-Admin-only permissions
-│   │   ├── session.ts             # current-session userId load/save/clear
+│   │   ├── session.ts             # real session (httpOnly JWT cookie) fetch/login/logout
 │   │   ├── notifications.ts       # Notification type + per-event builders (submitted/approved/rejected/high-value/...)
 │   │   ├── auditLog.ts            # append-only AuditLogEntry log + logAudit()
-│   │   ├── products.ts            # Product, ProductCategory
+│   │   ├── products.ts            # Product, ProductCategory (now incl. createdBy/updatedBy)
 │   │   ├── quotes.tsx             # Quote (+ approval workflow: statuses, ApprovalHistoryEntry, computeQuotePermissions)
-│   │   └── salesTeam.ts           # shared sample sales-team data (Dashboard + Quotation)
+│   │   ├── dashboard.ts           # fetchDashboardStats() — real KPI/chart data, added 2026-07-09
+│   │   └── i18n.tsx               # Thai/English translation context — added 2026-07-09, covers only strings this pass touched, see TODO.md
 │   ├── pages/
 │   │   ├── SetupWizardPage.tsx / SignInPage.tsx / AuthLayout.tsx   # no public sign-up — see MODULES/Auth.md
-│   │   ├── SettingsPage.tsx
-│   │   ├── dashboard/DashboardPage.tsx
+│   │   ├── SettingsPage.tsx       # incl. language toggle (profile tab)
+│   │   ├── dashboard/DashboardPage.tsx   # real MongoDB-backed KPIs/charts — see MODULES/Dashboard.md
 │   │   ├── products/              # ProductsPage, ProductList, ProductForm, CategoriesManager, ProductPickerModal
 │   │   ├── quotation/             # QuotationPage, QuoteList, QuoteDocument, LineItemsEditor, InterestButtons, notesFormat
 │   │   └── admin/                 # UserManagementPage, RoleManagementPage, AuditLogPage
@@ -86,8 +102,8 @@ ERP/
 
 - **Vite 6 + React 18 + TypeScript 5.6 (strict) + Tailwind v4.** No UI kit dependency — all hand-rolled Tailwind utility classes matching the navy/gold design system.
 - **No router.** `App.tsx` holds an `activeNav` string and switches between page components directly. Pages are `React.lazy`-loaded so each module (and its dependencies, e.g. `recharts` for Dashboard) is a separate JS chunk.
-- **No backend.** All "APIs" are plain function calls in `lib/*.ts`. Product/Category/Company/Users/Roles/Notifications/AuditLog/Quotes all persist to `localStorage` now (quotes gained persistence as part of the 2026-07-08 RBAC work — previously they didn't).
-- **Real-ish client-side auth.** A first-run Setup Wizard creates the one Super Admin account; every subsequent account is admin-created via User Management (no public self-signup). Sign-in checks username/email + password against a hashed (not cryptographically, see [RBAC.md](./RBAC.md)) password stored per user. Still not real security — it's all enforced and stored in the browser, trivially bypassable via devtools. No server exists to be the actual source of truth.
+- **Real backend: Vercel Serverless Functions + MongoDB Atlas.** Every domain lib (`users.ts`, `roles.ts`, `products.ts`, `notifications.ts`, `auditLog.ts`, `quotes.tsx`, `storage.ts`, `session.ts`, `dashboard.ts`) calls a REST API (`src/lib/apiClient.ts`'s `apiFetch()`) instead of reading/writing `localStorage`. Data lives in MongoDB: 8 fully-wired collections (`users`, `roles`, `company`, `products`, `categories`, `notifications`, `audit_log`, `quotes`) plus 15 schema-prepped collections added 2026-07-09 (CRM, org, files, settings scaffolding — no API routes/UI on top of most of them yet) — see [DATABASE.md](./DATABASE.md) for the full list and which is which.
+- **Real auth.** A first-run Setup Wizard creates the one Super Admin account; every subsequent account is admin-created via User Management (no public self-signup). Sign-in checks username/email + password via `bcrypt.compare()` against a real bcrypt hash (cost 10) stored per user, server-side. Sessions are a JWT in an httpOnly, secure, `sameSite=lax` cookie (`tcs_erp_session`, 7-day expiry); every request re-fetches the user from MongoDB and checks `status === "active"`, so a deactivated user is locked out on their next request even though the JWT itself is still technically valid. RBAC permission checks run server-side on every mutating route — genuinely unbypassable via devtools now. See [RBAC.md](./RBAC.md).
 
 Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
 
@@ -95,18 +111,18 @@ Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 | Module | Status | Summary | Docs |
 |---|---|---|---|
-| Dashboard | ✅ Built | KPI cards, revenue/expense chart, category donut, sales leaderboard, orders table, activity feed — all static sample data | [MODULES/Dashboard.md](./MODULES/Dashboard.md) |
+| Dashboard | ✅ Built (real data) | 7 KPI cards (customers/leads/quotations/products/revenue/won/lost), monthly revenue chart, products-by-category donut, quotation interest summary — all from real MongoDB queries via `GET /api/dashboard`; empty states when there's no business data yet. Rebuilt 2026-07-09, replacing the previous all-static-sample-data version (no more fake orders table/activity feed/sales leaderboard — those had no real backing collection and were removed rather than empty-stated) | [MODULES/Dashboard.md](./MODULES/Dashboard.md) |
 | Quotation | ✅ Built | List + create/edit/duplicate quotes, line items with per-item notes and unlimited sub-details, print/PDF export, product-library picker, **9-status approval workflow** (Draft → Pending Approval → Approved → Sent to Customer → Customer Accepted/Rejected → Won/Lost, plus Cancelled) with approval history and signature-image integration | [MODULES/Quotation.md](./MODULES/Quotation.md) |
 | Product Library | ✅ Built | Product + category CRUD, archive (soft-delete), search/filter/sort/pagination, duplicate, feeds the Quotation line-item picker as independent snapshots | [MODULES/Product.md](./MODULES/Product.md) |
-| Auth (Setup Wizard + Sign in) | ✅ Built (client-side, not secure) | First-run Setup Wizard creates the Super Admin; real (client-checked) username/password login; no public self-signup | [MODULES/Auth.md](./MODULES/Auth.md) |
+| Auth (Setup Wizard + Sign in) | ✅ Built (server-verified) | First-run Setup Wizard creates the Super Admin; bcrypt+JWT login verified server-side; no public self-signup | [MODULES/Auth.md](./MODULES/Auth.md) |
 | Settings | ✅ Built | Self-service profile (incl. picture + signature upload), Super-Admin-only company info (incl. bank/VAT/T&C), security (real password change), notification toggles | [MODULES/Settings.md](./MODULES/Settings.md) |
 | User Management | ✅ Built | Create/edit users, reset password, activate/deactivate, assign role/department/position | [MODULES/UserManagement.md](./MODULES/UserManagement.md) |
 | Role Management | ✅ Built | Create/delete custom roles, edit permission matrix — Super Admin only | [MODULES/RoleManagement.md](./MODULES/RoleManagement.md) |
 | Notifications | ✅ Built | Header bell with unread badge + panel, role-based delivery for quotation events | [MODULES/Notifications.md](./MODULES/Notifications.md) |
 | Audit Log | ✅ Built | Append-only, read-only log of every sensitive action | [MODULES/AuditLog.md](./MODULES/AuditLog.md) |
-| Lead Management | ❌ Not started | Planned per original ERP spec | [MODULES/Lead.md](./MODULES/Lead.md) |
-| Customer Management | ❌ Not started | Planned per original ERP spec | [MODULES/Customer.md](./MODULES/Customer.md) |
-| RBAC / Admin (server-enforced) | ❌ Not started | Client-side simulation built (see rows above); real server-enforced version still pending the Phase 2 Next.js migration decision | [RBAC.md](./RBAC.md) |
+| Lead Management | ⚠️ Schema only | MongoDB collections (`leads`, `lead_activities`) + indexes exist as of 2026-07-09 prod-readiness pass; no API routes or UI yet | [MODULES/Lead.md](./MODULES/Lead.md) |
+| Customer Management | ⚠️ Schema only | MongoDB collections (`customers`, `customer_contacts`) + indexes exist as of 2026-07-09 prod-readiness pass; no API routes or UI yet | [MODULES/Customer.md](./MODULES/Customer.md) |
+| RBAC / Admin (server-enforced) | ✅ Built | 2026-07-09: migrated from client-side simulation to real server-side enforcement (Vercel Functions + MongoDB, bcrypt + JWT auth, `requirePermission()` on every mutating route) — see rows above for the UI/UX, unchanged by the migration | [RBAC.md](./RBAC.md) |
 
 ## Coding Standards
 
@@ -116,6 +132,8 @@ Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
 - One `lib/<domain>.ts` per data domain: types + sample/seed data + pure helper functions + (if applicable) `localStorage` load/save. Pages import from there, never redefine types locally.
 - One `pages/<module>/` folder per module once it grows past a single file; a top-level `<Module>Page.tsx` manages view-switching state and composes smaller view components from the same folder.
 - Reuse `components/ConfirmDialog.tsx` for any destructive-action confirmation and `components/Toast.tsx` + `hooks/useToast.ts` for transient success feedback — don't build a second one-off version of either.
+- Reuse `components/BrandMark.tsx` for any logo/wordmark rendering — never re-inline a copy-pasted logo block.
+- The app is Thai-language by default; `src/lib/i18n.tsx` (`useI18n()`/`t()`) provides an English alternative, toggled in Settings. Only strings the 2026-07-09 prod-readiness pass touched (Dashboard, empty states, the language toggle itself) are in the translation dictionary — the rest of the app's Thai text is intentionally still hardcoded. Extend the dictionary rather than hardcoding new user-facing strings if you're touching a file that already imports `useI18n`; don't feel obligated to translate untouched pages as a side effect of an unrelated change (see TODO.md for the tracked follow-up to translate the rest of the app).
 - Every module's sidebar/nav visual language, table styling, form input styling, and button styling should match [UI_GUIDELINES.md](./UI_GUIDELINES.md) — copy an existing page's patterns rather than inventing new ones.
 
 ## Design System
@@ -134,11 +152,11 @@ See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the maintained completion perce
 | [CHANGELOG.md](./CHANGELOG.md) | Dated history of every implemented change |
 | [SESSION_LOG.md](./SESSION_LOG.md) | Higher-level retrospective per work session (problems found/fixed, recommendations, completion estimate) |
 | [TODO.md](./TODO.md) | Prioritized task backlog |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Frontend/backend/db/api architecture, folder & component organization, refactor decisions |
-| [DATABASE.md](./DATABASE.md) | Current client-side data shapes + proposed future Prisma schema |
-| [API.md](./API.md) | Current client-side "operations" + proposed future API design |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Frontend/backend/db/api architecture (Vite + React frontend, Vercel Functions + MongoDB backend), folder & component organization, refactor decisions |
+| [DATABASE.md](./DATABASE.md) | Real MongoDB collections and their shapes |
+| [API.md](./API.md) | Real REST API: every route, method, auth/permission requirement |
 | [UI_GUIDELINES.md](./UI_GUIDELINES.md) | Design tokens and component patterns |
-| [RBAC.md](./RBAC.md) | Current (none) + proposed roles/permissions design |
+| [RBAC.md](./RBAC.md) | Roles/permissions model and where each check is enforced (server-side, real) |
 | [MODULES/](./MODULES/) | Per-module deep dive (Dashboard, Quotation, Product, Lead, Customer, Auth, Settings) |
 
 ---

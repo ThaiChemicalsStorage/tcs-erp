@@ -4,19 +4,19 @@
 
 ## Purpose
 
-Client-side session gate in front of the whole app, now backed by real multi-user accounts and credential checks. **Still not real security** — see Known Issues and [RBAC.md](../RBAC.md).
+Session gate in front of the whole app, backed by real multi-user accounts and server-verified credentials. As of the 2026-07-09 backend migration this is **real security**: bcrypt password hashing, JWT httpOnly-cookie sessions, server-side re-verification on every request. See [RBAC.md](../RBAC.md) for the full model and its honest remaining gaps (no rate limiting, no true session revocation).
 
 ## Business Flow
 
-1. **Bootstrap**: `App.tsx` checks `users.length === 0` (loaded via `loadUsers()`). If the app has never had a user created, it renders `SetupWizardPage` instead of anything else — a one-time flow collecting Full Name, Employee ID, Username, Email, Password, Confirm Password, and creating the first `User` as `super_admin` with full access. This never shows again once any user exists.
-2. **Sign in**: `SignInPage` collects a username-or-email identifier + password. `App.tsx`'s `handleSignIn` looks the user up via `findUserByLogin()`, verifies the password via `verifyPassword()`, and checks the account is `active` (not deactivated) — a real (if not cryptographically secure) credential check, replacing the old "any input succeeds" flow. On success it saves the session (`saveSession(userId)`) and logs a `Login` audit entry.
+1. **Bootstrap**: `App.tsx` calls `GET /api/auth/session` on mount; the response's `needsSetup: true` (only when the `users` collection is empty) renders `SetupWizardPage` instead of anything else — a one-time flow collecting Full Name, Employee ID, Username, Email, Password, Confirm Password, and creating the first `User` with the Super Admin role server-side (`POST /api/auth/setup`), password bcrypt-hashed. This never shows again once any user exists.
+2. **Sign in**: `SignInPage` collects a username-or-email identifier + password, sent to `POST /api/auth/login`. The server looks the user up by username/email (case-insensitive), verifies the password via `bcrypt.compare()`, and checks the account is `active` (not deactivated) — a real, server-side credential check. On success the server issues a JWT in an httpOnly session cookie (`tcs_erp_session`) and the client logs a `Login` audit entry via `POST /api/audit-log`.
 3. **No public sign-up.** The old `SignUpPage.tsx` was removed 2026-07-08 — enterprise ERPs don't allow self-registration. Every account past the first is created by an admin via [UserManagement.md](./UserManagement.md).
-4. **Log out**: via the header user-menu dropdown, clears the session (`clearSession()`), logs a `Logout` audit entry, resets `activeNav` to Dashboard.
+4. **Log out**: via the header user-menu dropdown, calls `POST /api/auth/logout` (clears the session cookie server-side), logs a `Logout` audit entry, resets `activeNav` to Dashboard.
 
 ## Pages
 
 - `src/pages/SetupWizardPage.tsx` — first-run Super Admin creation.
-- `src/pages/SignInPage.tsx` — username/email + password, real client-side credential check.
+- `src/pages/SignInPage.tsx` — username/email + password, real server-verified credential check.
 - `src/pages/AuthLayout.tsx` — shared two-pane layout (navy branding panel + form panel), used by both.
 
 ## Components
@@ -25,11 +25,11 @@ None shared beyond `AuthLayout`.
 
 ## Database Tables
 
-None (no real DB) — see [DATABASE.md](../DATABASE.md). Persists to `tcs_erp_users` (`User[]`) and `tcs_erp_session` (current `userId`).
+The `users` MongoDB collection (server-only, includes `passwordHash`; see [DATABASE.md](../DATABASE.md)). No separate session table — sessions are stateless JWTs, not stored server-side.
 
 ## APIs
 
-None — see [API.md](../API.md) Auth / Bootstrap section.
+`GET /api/auth/session`, `POST /api/auth/setup`, `POST /api/auth/login`, `POST /api/auth/logout` — see [API.md](../API.md) Auth section.
 
 ## Permissions
 
@@ -38,15 +38,16 @@ Every signed-in user can reach the app shell; what they see inside it is gated p
 ## Current Features
 
 - One-time Initial Setup Wizard, never reappears once a user exists
-- Real username/email + password check against stored accounts, with an inactive-account error message
+- Real, server-verified username/email + password check (bcrypt) against MongoDB, with an inactive-account error message
 - No public self-registration — accounts are Wizard- or admin-created only
-- Session persists across reloads via `localStorage` (`tcs_erp_session`)
-- Login/Logout are audit-logged
+- Session is a JWT in an httpOnly, secure, `sameSite=lax` cookie (`tcs_erp_session`, 7-day expiry); every request re-verifies it and re-fetches the user's current status from MongoDB
+- Login/Logout are audit-logged, with the audit entry's actor identity always server-derived
 
 ## Future Improvements
 
-This entire module gets replaced, not extended, when the Phase 2 backend migration happens (see [ARCHITECTURE.md](../ARCHITECTURE.md)): real bcrypt password hashing, database sessions via Auth.js, server-verified credentials, server-invalidatable sessions (deactivating a user can't currently force-log-out an already-signed-in session in another tab).
+- True session revocation (a server-side deny-list or database-backed sessions) so a still-active account's leaked token can be force-invalidated before its natural 7-day expiry — currently only a *deactivated* account is locked out immediately; see [RBAC.md](../RBAC.md) "What Was Achieved vs. the Old Proposed Design."
+- Rate limiting on `POST /api/auth/login` — currently unthrottled.
 
 ## Known Issues
 
-- **By design, not a bug to fix client-side**: `hashPassword()` is a simple checksum, not a real cryptographic hash, and the session is just a `localStorage` string with no expiry or server-side revocation. This is acceptable only because the whole app is a client-only demo with no real data at stake — must not be treated as secure. See [RBAC.md](../RBAC.md).
+None currently open. The pre-migration client-side checksum/`localStorage`-session limitations were closed by the 2026-07-09 backend migration (real bcrypt hashing, httpOnly JWT cookie) — see [RBAC.md](../RBAC.md) for the remaining honest gaps (no rate limiting, no true mid-expiry session revocation).

@@ -13,6 +13,7 @@ import {
 import { InterestButtons } from "./InterestButtons";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { PrintDocument } from "./PrintDocument";
+import { BrandMark } from "../../components/BrandMark";
 
 const DEFAULT_TERMS = "1. ราคานี้ยังไม่รวมค่าขนส่งและค่าติดตั้ง\n2. ราคามีผลภายใน 30 วันนับจากวันที่ในเอกสาร\n3. การส่งมอบภายใน 45 วันทำการหลังได้รับ PO\n4. การชำระเงินมัดจำ 30% ก่อนเริ่มผลิต";
 
@@ -223,12 +224,7 @@ export function QuoteDocument({
                 {company.logoDataUrl ? (
                   <img src={company.logoDataUrl} alt={company.name} className="h-8 max-w-[140px] object-contain" />
                 ) : (
-                  <>
-                    <div className="w-7 h-7 rounded-md bg-[#c9a84c] flex items-center justify-center">
-                      <span className="text-[#0b1d3a] text-xs font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>ท</span>
-                    </div>
-                    <span className="text-white text-base font-semibold" style={{ fontFamily: "'Playfair Display', serif" }}>TCS ERP</span>
-                  </>
+                  <BrandMark size={28} variant="full" theme="dark" />
                 )}
               </div>
               <p className="text-[#a8bed8] text-xs mt-1">{company.name} · {company.address}</p>

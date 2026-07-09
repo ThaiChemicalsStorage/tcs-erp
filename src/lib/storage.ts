@@ -1,3 +1,5 @@
+import { apiFetch } from "./apiClient.js";
+
 export interface Company {
   name: string;
   address: string;
@@ -12,6 +14,8 @@ export interface Company {
   bankAccountNumber: string;
   bankBranch: string;
   termsAndConditions: string;
+  updatedAt: string;
+  updatedBy: string;
 }
 
 export const defaultCompany: Company = {
@@ -28,18 +32,15 @@ export const defaultCompany: Company = {
   bankAccountNumber: "",
   bankBranch: "",
   termsAndConditions: "",
+  updatedAt: "",
+  updatedBy: "",
 };
 
-const COMPANY_KEY = "tcs_erp_company";
-
-export function loadCompany(): Company {
-  try {
-    const raw = localStorage.getItem(COMPANY_KEY);
-    return raw ? { ...defaultCompany, ...JSON.parse(raw) } : defaultCompany;
-  } catch {
-    return defaultCompany;
-  }
+export async function fetchCompany(): Promise<Company> {
+  const { company } = await apiFetch<{ company: Company }>("/company");
+  return company;
 }
-export function saveCompany(company: Company) {
-  localStorage.setItem(COMPANY_KEY, JSON.stringify(company));
+export async function saveCompany(company: Company): Promise<Company> {
+  const { company: updated } = await apiFetch<{ company: Company }>("/company", { method: "PUT", body: JSON.stringify(company) });
+  return updated;
 }

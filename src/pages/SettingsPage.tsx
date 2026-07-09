@@ -4,9 +4,12 @@ import {
   Image as ImageIcon, Stamp, Upload, X, AlertTriangle, PenTool, Landmark, FileText,
 } from "lucide-react";
 import type { Company } from "../lib/storage";
+import { saveCompany as saveCompanyApi } from "../lib/storage";
 import type { User } from "../lib/users";
-import { initials, verifyPassword, hashPassword } from "../lib/users";
+import { initials, updateUser } from "../lib/users";
+import { ApiError } from "../lib/apiClient";
 import type { Role } from "../lib/roles";
+import { useI18n, type Lang } from "../lib/i18n";
 
 const MAX_IMAGE_BYTES = 1_000_000;
 
@@ -81,6 +84,34 @@ function ImageUploadField({
   );
 }
 
+function LanguageField() {
+  const { lang, setLang, t } = useI18n();
+  const options: { key: Lang; label: string }[] = [
+    { key: "th", label: t("settings.language.th") },
+    { key: "en", label: t("settings.language.en") },
+  ];
+  return (
+    <div>
+      <label className={labelCls}>{t("settings.language")}</label>
+      <p className="text-[10px] text-muted-foreground mb-2 -mt-1">{t("settings.language.sub")}</p>
+      <div className="flex items-center gap-1 bg-muted rounded-lg p-1 w-fit">
+        {options.map((o) => (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => setLang(o.key)}
+            className={`px-3.5 py-1.5 text-xs rounded-md font-medium transition-all ${
+              lang === o.key ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type Tab = "profile" | "company" | "security" | "notifications";
 
 function SavedNote({ show }: { show: boolean }) {
@@ -148,9 +179,11 @@ export function SettingsPage({
 
   const [profileDraft, setProfileDraft] = useState(currentUser);
   const [profileSaved, flashProfileSaved] = useSavedFlash();
+  const [profileError, setProfileError] = useState("");
 
   const [companyDraft, setCompanyDraft] = useState(company);
   const [companySaved, flashCompanySaved] = useSavedFlash();
+  const [companyError, setCompanyError] = useState("");
 
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -166,25 +199,38 @@ export function SettingsPage({
 
   const roleName = roles.find((r) => r.key === currentUser.roleKey)?.name ?? currentUser.roleKey;
 
-  const saveProfile = () => {
-    onUserChange({ ...currentUser, fullName: profileDraft.fullName, phone: profileDraft.phone, profilePictureDataUrl: profileDraft.profilePictureDataUrl, signatureDataUrl: profileDraft.signatureDataUrl, updatedAt: new Date().toISOString() });
-    onAudit("Profile Updated", `${profileDraft.fullName} แก้ไขข้อมูลโปรไฟล์ของตนเอง`);
-    flashProfileSaved();
+  const saveProfile = async () => {
+    try {
+      const updated = await updateUser(currentUser.id, {
+        fullName: profileDraft.fullName,
+        phone: profileDraft.phone,
+        profilePictureDataUrl: profileDraft.profilePictureDataUrl,
+        signatureDataUrl: profileDraft.signatureDataUrl,
+      });
+      setProfileError("");
+      onUserChange(updated);
+      onAudit("Profile Updated", `${profileDraft.fullName} แก้ไขข้อมูลโปรไฟล์ของตนเอง`);
+      flashProfileSaved();
+    } catch (err) {
+      setProfileError(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    }
   };
 
-  const saveCompany = () => {
-    onCompanyChange(companyDraft);
-    onAudit("Company Settings Updated", `${currentUser.fullName} แก้ไขข้อมูลบริษัท`);
-    flashCompanySaved();
+  const saveCompany = async () => {
+    try {
+      const updated = await saveCompanyApi(companyDraft);
+      setCompanyError("");
+      onCompanyChange(updated);
+      onAudit("Company Settings Updated", `${currentUser.fullName} แก้ไขข้อมูลบริษัท`);
+      flashCompanySaved();
+    } catch (err) {
+      setCompanyError(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    }
   };
 
-  const savePassword = () => {
+  const savePassword = async () => {
     if (!currentPw || !newPw || !confirmPw) {
       setPwError("กรุณากรอกข้อมูลให้ครบถ้วน");
-      return;
-    }
-    if (!verifyPassword(currentPw, currentUser.passwordHash)) {
-      setPwError("รหัสผ่านปัจจุบันไม่ถูกต้อง");
       return;
     }
     if (newPw.length < 6) {
@@ -195,13 +241,18 @@ export function SettingsPage({
       setPwError("รหัสผ่านใหม่และการยืนยันไม่ตรงกัน");
       return;
     }
-    setPwError("");
-    onUserChange({ ...currentUser, passwordHash: hashPassword(newPw), updatedAt: new Date().toISOString() });
-    onAudit("Password Reset", `${currentUser.fullName} เปลี่ยนรหัสผ่านของตนเอง`);
-    setCurrentPw("");
-    setNewPw("");
-    setConfirmPw("");
-    flashPwSaved();
+    try {
+      const updated = await updateUser(currentUser.id, { password: newPw, currentPassword: currentPw });
+      setPwError("");
+      onUserChange(updated);
+      onAudit("Password Reset", `${currentUser.fullName} เปลี่ยนรหัสผ่านของตนเอง`);
+      setCurrentPw("");
+      setNewPw("");
+      setConfirmPw("");
+      flashPwSaved();
+    } catch (err) {
+      setPwError(err instanceof ApiError ? err.message : "เปลี่ยนรหัสผ่านไม่สำเร็จ");
+    }
   };
 
   return (
@@ -292,6 +343,11 @@ export function SettingsPage({
           </div>
           <p className="text-[10px] text-muted-foreground -mt-3">ลายเซ็นนี้จะถูกใช้อัตโนมัติในใบเสนอราคาที่คุณสร้างหรืออนุมัติ</p>
 
+          <div className="pt-2 border-t border-border">
+            <LanguageField />
+          </div>
+
+          {profileError && <p className="text-xs text-[#e05252]">{profileError}</p>}
           <div className="flex items-center gap-3 pt-1">
             <button onClick={saveProfile} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
               บันทึกการเปลี่ยนแปลง
@@ -363,6 +419,7 @@ export function SettingsPage({
             </button>
             <SavedNote show={companySaved} />
           </div>
+          {companyError && <p className="text-xs text-[#e05252]">{companyError}</p>}
         </div>
       )}
 

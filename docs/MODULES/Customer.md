@@ -1,8 +1,14 @@
 # Module: Customer
 
-## Status: ❌ Not Implemented
+## Status: ⚠️ Schema only (as of 2026-07-09)
 
-No code for this module exists anywhere in the repository. This file is a placeholder describing what was originally scoped, so a future session knows this is planned work, not a forgotten feature.
+No API routes or UI exist yet. As of the 2026-07-09 production-readiness pass, the MongoDB collections **do** exist with real indexes, ahead of the feature — see [DATABASE.md](../DATABASE.md) "Schema-prep collections":
+- `customers` — `CustomerFields` (`api/_lib/collections.ts`): companyName, contactName, position, phone, email, address, taxId, source, salesOwnerId, notes, status (active/inactive), createdAt/updatedAt/createdBy/updatedBy, `deletedAt` (real soft-delete — no existing lifecycle flag to reuse, unlike `Product.archived`).
+- `customer_contacts` — secondary contacts beyond the primary one on `customers`.
+
+The Dashboard's `totalCustomers` KPI (`GET /api/dashboard`) already queries this collection (`countDocuments({ deletedAt: null })`) — it correctly reads `0` today since nothing writes to `customers` yet, and will start reporting real numbers automatically once this module gets a create path, with no Dashboard changes required.
+
+**Lead vs. Customer decision, resolved 2026-07-09**: the 2026-07-09 spec explicitly asked for both a `customers` and a `leads` collection, which settles the open question below in favor of **two separate collections/entities** (not one entity with a status field). `leads.convertedToCustomerId` is the link between them once a lead is won.
 
 ## Purpose (planned)
 
@@ -15,21 +21,25 @@ A proper customer entity — company name, contact name, position, phone, email,
 3. Status tracking (New Lead → ... → Won/Lost, shared conceptually with [Lead.md](./Lead.md) — the original spec treats "Lead" and "Customer" as the same underlying entity at different pipeline stages, not two separate tables) with a timeline of status changes, who made them, and notes.
 4. Quotations reference a Customer record instead of a free-text name.
 
-## Pages / Components / Database Tables / APIs / Permissions
+## Pages / Components / APIs / Permissions
 
-None exist. When this module is built:
-- Decide whether Lead and Customer are one entity with a status field (matches the original spec's framing) or two related entities — this decision should be made and documented here before implementation starts.
+None exist yet. When this module is built:
 - Follow the established pattern: `src/lib/customers.ts` + `src/pages/customers/`, mirroring `src/lib/products.ts` + `src/pages/products/`.
 - Update `Quotation`'s `client: string` field to reference a customer ID once this exists — this is a breaking change to the `Quote` type, coordinate with [Quotation.md](./Quotation.md) and [DATABASE.md](../DATABASE.md).
+- The empty-state copy for this page ("No customers have been created.") is already decided (see [TODO.md](../TODO.md) i18n follow-up) but not yet implemented since the page doesn't exist.
+
+## Database Tables
+
+`customers`, `customer_contacts` — schema/indexes only, see Status above and [DATABASE.md](../DATABASE.md).
 
 ## Current Features
 
-None.
+None (schema only — see Status above).
 
 ## Future Improvements
 
-Build the module. See [TODO.md](../TODO.md) High Priority.
+Build API routes + UI on top of the existing schema. See [TODO.md](../TODO.md) High Priority.
 
 ## Known Issues
 
-N/A — nothing to have issues with yet.
+N/A — nothing to have issues with yet (schema-only, no live code path touches these collections besides the Dashboard's read-only count).

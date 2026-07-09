@@ -1,0 +1,117 @@
+import {
+  permissionsCollection, departmentsCollection, positionsCollection,
+  notificationTypesCollection, systemSettingsCollection,
+} from "./collections.js";
+import { ALL_PERMISSIONS, PERMISSION_LABELS, PERMISSION_GROUPS, SUPER_ADMIN_ONLY_PERMISSIONS } from "../../src/lib/permissions.js";
+import type { NotificationType } from "../../src/lib/notifications.js";
+import { nowIso } from "../../src/lib/products.js";
+
+function groupFor(permission: string): string {
+  return PERMISSION_GROUPS.find((g) => g.permissions.includes(permission as never))?.label ?? "อื่นๆ";
+}
+
+/** Idempotent: only seeds when the permissions collection is empty. Scaffolding for a future admin-configurable permission registry — RBAC still checks the hardcoded TS union, not this collection. */
+export async function seedPermissionsIfEmpty(): Promise<void> {
+  const permissions = await permissionsCollection();
+  const count = await permissions.estimatedDocumentCount();
+  if (count > 0) return;
+  const now = nowIso();
+  await permissions.insertMany(
+    ALL_PERMISSIONS.map((key) => ({
+      key,
+      label: PERMISSION_LABELS[key],
+      group: groupFor(key),
+      isSuperAdminOnly: (SUPER_ADMIN_ONLY_PERMISSIONS as string[]).includes(key),
+      createdAt: now,
+    })),
+  );
+}
+
+const DEFAULT_DEPARTMENTS = [
+  { name: "ฝ่ายขาย", code: "SALES" },
+  { name: "ฝ่ายจัดซื้อ", code: "PURCHASING" },
+  { name: "ฝ่ายคลังสินค้า", code: "WAREHOUSE" },
+  { name: "ฝ่ายบัญชี", code: "ACCOUNTING" },
+  { name: "ฝ่ายทรัพยากรบุคคล", code: "HR" },
+  { name: "ฝ่ายบริหาร", code: "MANAGEMENT" },
+  { name: "ฝ่ายไอที", code: "IT" },
+];
+
+/** Idempotent. Generic starter list, not wired into User.department (still free text) — rename/manage via a future admin UI. */
+export async function seedDepartmentsIfEmpty(): Promise<void> {
+  const departments = await departmentsCollection();
+  const count = await departments.estimatedDocumentCount();
+  if (count > 0) return;
+  const now = nowIso();
+  await departments.insertMany(
+    DEFAULT_DEPARTMENTS.map((d) => ({ ...d, isActive: true, createdAt: now, updatedAt: now, createdBy: "system", updatedBy: "system" })),
+  );
+}
+
+const DEFAULT_POSITIONS = [
+  { name: "พนักงาน", code: "STAFF" },
+  { name: "หัวหน้างาน", code: "SUPERVISOR" },
+  { name: "ผู้จัดการ", code: "MANAGER" },
+  { name: "ผู้จัดการทั่วไป", code: "GENERAL_MANAGER" },
+  { name: "กรรมการผู้จัดการ", code: "MANAGING_DIRECTOR" },
+];
+
+/** Idempotent. Generic starter list, not wired into User.position (still free text) — rename/manage via a future admin UI. */
+export async function seedPositionsIfEmpty(): Promise<void> {
+  const positions = await positionsCollection();
+  const count = await positions.estimatedDocumentCount();
+  if (count > 0) return;
+  const now = nowIso();
+  await positions.insertMany(
+    DEFAULT_POSITIONS.map((p) => ({ ...p, isActive: true, createdAt: now, updatedAt: now, createdBy: "system", updatedBy: "system" })),
+  );
+}
+
+const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module: string }> = {
+  quotation_submitted: { label: "ใบเสนอราคารออนุมัติ", module: "ใบเสนอราคา" },
+  quotation_approved: { label: "ใบเสนอราคาได้รับการอนุมัติ", module: "ใบเสนอราคา" },
+  quotation_rejected: { label: "ใบเสนอราคาถูกปฏิเสธ", module: "ใบเสนอราคา" },
+  quotation_high_value: { label: "ใบเสนอราคามูลค่าสูงรออนุมัติ", module: "ใบเสนอราคา" },
+  quotation_customer_accepted: { label: "ลูกค้ายอมรับใบเสนอราคา", module: "ใบเสนอราคา" },
+  quotation_customer_rejected: { label: "ลูกค้าปฏิเสธใบเสนอราคา", module: "ใบเสนอราคา" },
+};
+
+/** Idempotent. Mirrors the NotificationType union in src/lib/notifications.ts — scaffolding, not read by any live code path yet. */
+export async function seedNotificationTypesIfEmpty(): Promise<void> {
+  const notificationTypes = await notificationTypesCollection();
+  const count = await notificationTypes.estimatedDocumentCount();
+  if (count > 0) return;
+  const now = nowIso();
+  await notificationTypes.insertMany(
+    (Object.keys(NOTIFICATION_TYPE_LABELS) as NotificationType[]).map((key) => ({
+      key, label: NOTIFICATION_TYPE_LABELS[key].label, module: NOTIFICATION_TYPE_LABELS[key].module, createdAt: now,
+    })),
+  );
+}
+
+/** Idempotent upsert of the singleton system-settings doc. Defaults mirror current hardcoded behavior (SESSION_DAYS in api/_lib/auth.ts) so future wiring is a no-op migration. */
+export async function seedSystemSettingsIfEmpty(): Promise<void> {
+  const systemSettings = await systemSettingsCollection();
+  const existing = await systemSettings.findOne({ _id: "singleton" });
+  if (existing) return;
+  const now = nowIso();
+  await systemSettings.insertOne({
+    _id: "singleton",
+    defaultPageSize: 25,
+    maintenanceMode: false,
+    sessionDurationDays: 7,
+    updatedAt: now,
+    updatedBy: "system",
+  });
+}
+
+/** Orchestrator — seeds all system/config data. Explicitly does NOT seed any business data (customers/leads/products/quotes/notifications/company content) — the system starts with zero business data by design. */
+export async function seedSystemDataIfEmpty(): Promise<void> {
+  await Promise.all([
+    seedPermissionsIfEmpty(),
+    seedDepartmentsIfEmpty(),
+    seedPositionsIfEmpty(),
+    seedNotificationTypesIfEmpty(),
+  ]);
+  await seedSystemSettingsIfEmpty();
+}

@@ -4,6 +4,47 @@
 
 ---
 
+## Session — 2026-07-09 (Real backend migration: Vercel Serverless Functions + MongoDB Atlas)
+
+### What was implemented
+- Migrated the entire app off client-only/`localStorage` onto a real deployed backend: Vite + React frontend (unchanged) + Vercel Serverless Functions (Node.js) + MongoDB Atlas. Live at https://tcs-erp-nine.vercel.app.
+- Real auth: bcrypt password hashing, JWT httpOnly-cookie sessions, per-request fresh user re-fetch from MongoDB so deactivation is immediate.
+- Real, server-enforced RBAC on every mutating API route, reusing the same pure permission functions the client already had — genuinely unbypassable via devtools now.
+- 8 MongoDB collections (`users`, `roles`, `company`, `products`, `categories`, `notifications`, `audit_log`, `quotes`), 9 consolidated serverless function files, an explicit `vercel.json` rewrite table for routing.
+- Rewrote every frontend domain lib to call a real REST API via a new `apiClient.ts`; `App.tsx` now boots asynchronously against `GET /api/auth/session`.
+- Full documentation pass across `docs/` reflecting the new architecture, superseding the old never-built "Phase 2" (Next.js/Prisma/Postgres/Auth.js) proposal.
+
+### Files Modified
+`api/**` (new), `vercel.json` (new), `tsconfig.api.json` (new), `src/lib/apiClient.ts` (new), `src/lib/{users,roles,session,storage,products,notifications,auditLog,quotes}.ts(x)`, `src/App.tsx`, `src/pages/admin/AuditLogPage.tsx`, `package.json`, `eslint.config.js`, all `docs/**/*.md`. See [CHANGELOG.md](./CHANGELOG.md) for full detail.
+
+### Architectural Decisions
+- Chose **Vercel Serverless Functions + MongoDB Atlas** over the previously-designed Next.js + Prisma + PostgreSQL + Auth.js "Phase 2" plan — a deliberately simpler, faster path to a real backend that didn't require replacing the frontend framework (Vite stayed, no Next.js rewrite). The old plan is superseded, not implemented, and documented as such rather than silently dropped.
+- **JWT sessions instead of database-backed sessions**: the old proposal specifically chose database sessions so deactivating a user could force-invalidate their session immediately. The JWT approach achieves the same practical, user-facing effect differently — every request re-fetches the user from MongoDB and checks `status`, so a deactivated user is locked out on their next request — but is not literally the same mechanism (a still-valid JWT for a still-active account isn't revocable before natural expiry). Documented precisely as "practically equivalent, mechanically different" in [RBAC.md](./RBAC.md), not glossed over as identical.
+- **`api/handlers/` + `vercel.json` rewrites instead of Vercel's native dynamic-route folders**: after hitting three separate undocumented routing quirks (wrong catch-all query-param key, zero-segment paths never matching, `_`-prefixed folders silently excluded), the team root-caused all three and landed on an explicit rewrite table as the reliable, tested mechanism — documented in detail in [ARCHITECTURE.md](./ARCHITECTURE.md) specifically so a future engineer doesn't rediscover the same three bugs.
+- **`quoteWorkflow.ts` duplicated rather than imported** from `src/lib/quotes.tsx` into `api/_lib/`, because the source file contains JSX (a `lucide-react` icon map) and the team judged importing a `.tsx`-with-JSX file by value into a Node serverless function too risky/unproven, accepting a documented "keep these two in sync" maintenance burden instead.
+- **Consolidated to 9 function files** (one-file-per-resource with internal path dispatch, or plain method dispatch for single-route resources) specifically to stay under Vercel Hobby's 12-function deployment cap.
+
+### Problems Found
+- **Vercel dynamic-route (`[...segments]`) behavior on a plain-Vite deployment did not match Next.js conventions or documentation**: the catch-all query param came through as the literal string `"...segments"` (dots included), not `segments`; a zero-segment base path (e.g. `GET /api/quotes` with no trailing path) never matched a `[...segments]` or `[[...segments]]` folder at all; and an early `api/_handlers/` folder was silently excluded from routing entirely by Vercel's `_`-prefix convention (the same convention `api/_lib/` deliberately relies on). None of these are prominently documented by Vercel for plain Functions (non-Next.js) projects — each was discovered by hitting real 404s/wrong-param-name bugs in testing.
+- **Missing `.js` extensions on relative imports caused `ERR_MODULE_NOT_FOUND` in production** (but not locally) multiple times — TypeScript's `moduleResolution: "bundler"` silently permits omitting the extension, and the error only surfaces when Vercel's Node ESM loader tries to resolve the un-bundled, per-file-transpiled function at runtime. Hit and fixed repeatedly across different files before the "always add `.js` to relative imports in `api/`" rule was internalized project-wide.
+- A MongoDB Atlas database-user password was pasted into the chat session by the user while working through connection-string setup — flagged to the user as a rotation recommendation; not something the assistant can verify or force, so tracked as an open TODO rather than assumed resolved.
+
+### Problems Fixed
+The routing mechanism (switched to `api/handlers/` + `vercel.json` rewrites, verified working in production) and every missing `.js` extension (found via repeated `ERR_MODULE_NOT_FOUND` production errors, fixed as each was hit, eventually converted into a documented project-wide rule so it stops recurring).
+
+### New TODO Items
+Rotate the MongoDB Atlas database-user password (unconfirmed whether done); set up CI (typecheck/lint/build on push — there is real risk now that the repo auto-deploys to production on push to `master` with nothing checking it first); explicitly verify GitHub → Vercel auto-deploy is actually wired (the CLI output implies it, but it hasn't been tested by an actual push-and-observe cycle); add rate limiting to `POST /api/auth/login`; add automated tests, especially for the new server-side permission/ownership logic in the API layer, which currently has zero test coverage and was only manually verified. All added to [TODO.md](./TODO.md).
+
+### Future Recommendations
+1. **CI is now higher-priority than before the migration**: previously a broken build only affected local dev; now the GitHub repo is connected to Vercel for auto-deploy, so an untested push could reach production. Wiring up typecheck/lint/build-on-PR should be the next infrastructure task, not deferred further.
+2. **Automated tests for the API layer specifically** — the permission/ownership logic in `api/handlers/quotes.ts` and `api/handlers/users.ts` (last-active-Super-Admin guards, ownership checks, workflow state-machine validation) is exactly the kind of logic that's easy to regress silently and hard to catch via manual testing alone; it was ported carefully from the client-side version during this migration, but has no regression safety net going forward.
+3. Lead & Customer Management is now unambiguously the single largest remaining bucket from the original spec — the backend migration was the other large outstanding item, and it's now done.
+
+### Estimated Completion Percentage
+~34% of the full long-term ERP vision (a large jump — this closed the single biggest previously-outstanding architectural gap: a real, server-enforced multi-user backend). ~93% of the currently-scoped modules, unchanged by this migration since it altered where logic runs, not what any module does. See [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+
+---
+
 ## Session — 2026-07-09 (Code review + bug fixes)
 
 ### What was implemented

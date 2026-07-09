@@ -27,7 +27,7 @@ export function ProductForm({
   initial?: Product;
   categories: ProductCategory[];
   existingCodes: string[];
-  onSave: (draft: ProductDraft) => void;
+  onSave: (draft: ProductDraft) => Promise<string | null>;
   onCancel: () => void;
 }) {
   const activeCategories = categories.filter((c) => !c.archived || c.id === initial?.categoryId);
@@ -53,9 +53,9 @@ export function ProductForm({
     return Object.keys(e).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return;
-    onSave({
+    const error = await onSave({
       code: code.trim().toUpperCase(),
       name: name.trim(),
       categoryId,
@@ -64,6 +64,7 @@ export function ProductForm({
       description: description.trim(),
       specifications: specifications.trim(),
     });
+    if (error) setErrors({ code: error });
   };
 
   return (

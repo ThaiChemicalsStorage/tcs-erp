@@ -28,15 +28,15 @@ Uses `src/components/ConfirmDialog.tsx` for delete confirmation. No product-spec
 
 ## Database Tables
 
-None (no real DB) — see [DATABASE.md](../DATABASE.md) for the current `Product`/`ProductCategory` TypeScript shapes and their `localStorage` keys (`tcs_erp_products`, `tcs_erp_categories`) — this is the one module (besides Company/User) where data actually survives a page reload today.
+The `products` and `categories` MongoDB collections — see [DATABASE.md](../DATABASE.md) for the `Product`/`ProductCategory` shapes. Migrated 2026-07-09 from `localStorage` (`tcs_erp_products`, `tcs_erp_categories`).
 
 ## APIs
 
-None — see [API.md](../API.md).
+`GET/POST /api/products`, `PATCH/DELETE /api/products/:id`, `GET/POST /api/categories`, `PATCH /api/categories/:id` — see [API.md](../API.md).
 
 ## Permissions
 
-None — see [RBAC.md](../RBAC.md). Every signed-in user has full CRUD access.
+Server-enforced per action: `products:view`/`create`/`edit`/`delete` on the respective API routes (categories share the same `products:*` permission family — there is no separate `categories:*` permission). The UI itself only gates the sidebar entry (`products:view`) — the create/edit/delete buttons inside `ProductsPage`/`ProductList` are not yet hidden per-permission (a known UX gap, see [TODO.md](../TODO.md)), though a user without the right permission would now get a real `403` from the server if they somehow triggered the action anyway.
 
 ## Current Features
 

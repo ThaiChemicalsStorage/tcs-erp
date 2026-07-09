@@ -1,5 +1,6 @@
-import { ALL_PERMISSIONS, type Permission, SUPER_ADMIN_ONLY_PERMISSIONS } from "./permissions";
+import { ALL_PERMISSIONS, type Permission, SUPER_ADMIN_ONLY_PERMISSIONS } from "./permissions.js";
 import type { User } from "./users";
+import { apiFetch } from "./apiClient.js";
 
 export interface Role {
   key: string;
@@ -12,6 +13,7 @@ export interface Role {
   isSystem: boolean;
 }
 
+/** Seeded server-side into the roles collection on first-run setup (see api/_lib/rbacSeed.ts). */
 export const defaultRoles: Role[] = [
   {
     key: "super_admin",
@@ -93,21 +95,6 @@ export const defaultRoles: Role[] = [
   },
 ];
 
-const ROLES_KEY = "tcs_erp_roles";
-
-export function loadRoles(): Role[] {
-  try {
-    const raw = localStorage.getItem(ROLES_KEY);
-    const parsed: Role[] = raw ? JSON.parse(raw) : [];
-    return parsed.length > 0 ? parsed : defaultRoles;
-  } catch {
-    return defaultRoles;
-  }
-}
-export function saveRoles(roles: Role[]) {
-  localStorage.setItem(ROLES_KEY, JSON.stringify(roles));
-}
-
 export function findRole(roles: Role[], roleKey: string): Role | undefined {
   return roles.find((r) => r.key === roleKey);
 }
@@ -136,4 +123,26 @@ export function userIsSuperAdmin(user: User | null | undefined, roles: Role[]): 
 export function roleNameFor(user: User | null | undefined, roles: Role[]): string {
   if (!user) return "";
   return findRole(roles, user.roleKey)?.name ?? user.roleKey;
+}
+
+export interface RoleFields {
+  name: string;
+  description: string;
+  permissions: Permission[];
+}
+
+export async function fetchRoles(): Promise<Role[]> {
+  const { roles } = await apiFetch<{ roles: Role[] }>("/roles");
+  return roles;
+}
+export async function createRole(fields: RoleFields): Promise<Role> {
+  const { role } = await apiFetch<{ role: Role }>("/roles", { method: "POST", body: JSON.stringify(fields) });
+  return role;
+}
+export async function updateRole(key: string, fields: Partial<RoleFields>): Promise<Role> {
+  const { role } = await apiFetch<{ role: Role }>(`/roles/${key}`, { method: "PATCH", body: JSON.stringify(fields) });
+  return role;
+}
+export async function deleteRole(key: string): Promise<void> {
+  await apiFetch<void>(`/roles/${key}`, { method: "DELETE" });
 }

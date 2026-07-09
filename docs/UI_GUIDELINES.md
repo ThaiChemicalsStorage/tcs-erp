@@ -39,7 +39,10 @@ Beyond the tokens, many components also use raw hex literals directly (`#c9a84c`
 ## Component Patterns
 
 ### Sidebar
-Fixed-width (`w-64` expanded / `w-16` collapsed) navy (`bg-sidebar`) column. Logo mark (gold rounded square + "ท" Playfair glyph) + brand name + tagline at top. Nav items: icon + label, active state = `bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25`, inactive hover = `hover:bg-sidebar-accent hover:text-white`. Settings pinned at the bottom, same active-state pattern.
+Fixed-width (`w-64` expanded / `w-16` collapsed) navy (`bg-sidebar`) column. Logo + brand name + Thai subtitle at top via `components/BrandMark.tsx` (see Brand Mark below) — collapses to icon-only, centered, when the sidebar collapses. Nav items: icon + label, active state = `bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25`, inactive hover = `hover:bg-sidebar-accent hover:text-white`. Settings pinned at the bottom, same active-state pattern.
+
+### Brand Mark (`src/components/BrandMark.tsx`, added 2026-07-09)
+The single source of truth for the app's logo — always use this instead of a new inline `<img>`/placeholder block. Props: `size` (px height, width auto, aspect ratio always preserved — never stretch), `variant` (`"mark"` = logo only, `"full"` = logo + "Thai Chemicals Storage ERP" wordmark + "ระบบองค์กร" Thai subtitle), `theme` (`"dark"` for navy panels, `"light"` for card/print backgrounds). The underlying image is `public/logo.png` (the official logo, root-absolute so it also serves as the favicon with zero duplication). Current call sites: sidebar header, login page (desktop + mobile), the quote/print document header fallback (only when no `company.logoDataUrl` is uploaded — that's a separate, admin-configurable company letterhead concept), and the boot/loading screen.
 
 ### Topbar
 `bg-card border-b border-border`, sidebar collapse toggle, breadcrumb (`องค์กร > {activeNav}` in Playfair gold), search input (currently decorative), notification bell (see Notification Bell below), user avatar dropdown (initials circle or uploaded picture, name/role, dropdown with Settings/Log out).

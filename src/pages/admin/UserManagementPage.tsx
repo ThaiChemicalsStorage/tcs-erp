@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Plus, Pencil, KeyRound, UserCheck, UserX, Trash2, Search, ShieldCheck } from "lucide-react";
 import type { User, UserStatus } from "../../lib/users";
-import { newUser, isEmployeeIdTaken, isUsernameTaken, isEmailTaken, hashPassword, initials, POSITION_SUGGESTIONS, DEPARTMENT_SUGGESTIONS } from "../../lib/users";
+import { createUser, updateUser, deleteUser, isEmployeeIdTaken, isUsernameTaken, isEmailTaken, initials, POSITION_SUGGESTIONS, DEPARTMENT_SUGGESTIONS } from "../../lib/users";
 import type { Role } from "../../lib/roles";
-import { nowIso } from "../../lib/products";
+import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -82,7 +82,7 @@ export function UserManagementPage({
     setView("edit");
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.fullName.trim() || !form.employeeId.trim() || !form.username.trim() || !form.email.trim()) {
       setError("กรุณากรอกข้อมูลที่จำเป็นให้ครบถ้วน");
@@ -92,60 +92,83 @@ export function UserManagementPage({
     if (isUsernameTaken(users, form.username, editingId ?? undefined)) { setError("ชื่อผู้ใช้นี้มีผู้ใช้งานแล้ว"); return; }
     if (isEmailTaken(users, form.email, editingId ?? undefined)) { setError("อีเมลนี้มีผู้ใช้งานแล้ว"); return; }
 
-    if (view === "create") {
-      if (!form.password || form.password.length < 6) { setError("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); return; }
-      if (form.password !== form.confirm) { setError("รหัสผ่านและการยืนยันไม่ตรงกัน"); return; }
-      const created = newUser({ ...form, roleKey: form.roleKey });
-      onUsersChange([...users, created]);
-      onAudit("User Created", `สร้างผู้ใช้ ${created.fullName} (${created.username}) บทบาท ${roleName(created.roleKey)}`);
-      show("สร้างผู้ใช้งานเรียบร้อยแล้ว");
-    } else if (editingId) {
-      const target = users.find((u) => u.id === editingId);
-      const roleChanged = target && target.roleKey !== form.roleKey;
-      if (editingId === currentUser.id && roleChanged) { setError("ไม่สามารถเปลี่ยนบทบาทของบัญชีตนเองได้"); return; }
-      if (target && roleChanged && isLastActiveSuperAdmin(target) && !roles.find((r) => r.key === form.roleKey)?.isSuperAdmin) {
-        setError("ไม่สามารถเปลี่ยนบทบาทของ Super Admin คนสุดท้ายที่ใช้งานอยู่ได้");
-        return;
+    try {
+      if (view === "create") {
+        if (!form.password || form.password.length < 6) { setError("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); return; }
+        if (form.password !== form.confirm) { setError("รหัสผ่านและการยืนยันไม่ตรงกัน"); return; }
+        const created = await createUser({
+          employeeId: form.employeeId, fullName: form.fullName, username: form.username, email: form.email,
+          password: form.password, phone: form.phone, department: form.department, position: form.position, roleKey: form.roleKey,
+        });
+        onUsersChange([...users, created]);
+        onAudit("User Created", `สร้างผู้ใช้ ${created.fullName} (${created.username}) บทบาท ${roleName(created.roleKey)}`);
+        show("สร้างผู้ใช้งานเรียบร้อยแล้ว");
+      } else if (editingId) {
+        const target = users.find((u) => u.id === editingId);
+        const roleChanged = target && target.roleKey !== form.roleKey;
+        if (editingId === currentUser.id && roleChanged) { setError("ไม่สามารถเปลี่ยนบทบาทของบัญชีตนเองได้"); return; }
+        if (target && roleChanged && isLastActiveSuperAdmin(target) && !roles.find((r) => r.key === form.roleKey)?.isSuperAdmin) {
+          setError("ไม่สามารถเปลี่ยนบทบาทของ Super Admin คนสุดท้ายที่ใช้งานอยู่ได้");
+          return;
+        }
+        const updated = await updateUser(editingId, {
+          fullName: form.fullName, employeeId: form.employeeId, username: form.username, email: form.email,
+          phone: form.phone, department: form.department, position: form.position, roleKey: form.roleKey, status: form.status,
+        });
+        onUsersChange(users.map((u) => (u.id === editingId ? updated : u)));
+        onAudit("User Updated", `แก้ไขข้อมูลผู้ใช้ ${form.fullName}${roleChanged ? ` (เปลี่ยนบทบาทเป็น ${roleName(form.roleKey)})` : ""}`);
+        show("บันทึกการเปลี่ยนแปลงแล้ว");
       }
-      onUsersChange(users.map((u) => (u.id === editingId ? {
-        ...u, fullName: form.fullName.trim(), employeeId: form.employeeId.trim(), username: form.username.trim(),
-        email: form.email.trim(), phone: form.phone.trim(), department: form.department.trim(), position: form.position.trim(),
-        roleKey: form.roleKey, status: form.status, updatedAt: nowIso(),
-      } : u)));
-      onAudit("User Updated", `แก้ไขข้อมูลผู้ใช้ ${form.fullName}${roleChanged ? ` (เปลี่ยนบทบาทเป็น ${roleName(form.roleKey)})` : ""}`);
-      show("บันทึกการเปลี่ยนแปลงแล้ว");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      return;
     }
     setView("list");
     setEditingId(null);
   };
 
-  const confirmResetPassword = () => {
+  const confirmResetPassword = async () => {
     if (!resetTarget) return;
     if (resetPw.password.length < 6) { setError("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร"); return; }
     if (resetPw.password !== resetPw.confirm) { setError("รหัสผ่านและการยืนยันไม่ตรงกัน"); return; }
-    onUsersChange(users.map((u) => (u.id === resetTarget.id ? { ...u, passwordHash: hashPassword(resetPw.password), updatedAt: nowIso() } : u)));
-    onAudit("Password Reset", `รีเซ็ตรหัสผ่านให้ผู้ใช้ ${resetTarget.fullName}`);
-    show("รีเซ็ตรหัสผ่านเรียบร้อยแล้ว");
-    setResetTarget(null);
-    setResetPw({ password: "", confirm: "" });
-    setError("");
+    try {
+      const updated = await updateUser(resetTarget.id, { password: resetPw.password });
+      onUsersChange(users.map((u) => (u.id === resetTarget.id ? updated : u)));
+      onAudit("Password Reset", `รีเซ็ตรหัสผ่านให้ผู้ใช้ ${resetTarget.fullName}`);
+      show("รีเซ็ตรหัสผ่านเรียบร้อยแล้ว");
+      setResetTarget(null);
+      setResetPw({ password: "", confirm: "" });
+      setError("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "รีเซ็ตรหัสผ่านไม่สำเร็จ");
+    }
   };
 
-  const confirmToggleStatus = () => {
+  const confirmToggleStatus = async () => {
     if (!statusTarget) return;
     if (statusTarget.status === "active" && isLastActiveSuperAdmin(statusTarget)) { setStatusTarget(null); return; }
     const next: UserStatus = statusTarget.status === "active" ? "inactive" : "active";
-    onUsersChange(users.map((u) => (u.id === statusTarget.id ? { ...u, status: next, updatedAt: nowIso() } : u)));
-    onAudit(next === "active" ? "User Activated" : "User Deactivated", `${next === "active" ? "เปิดใช้งาน" : "ระงับการใช้งาน"}ผู้ใช้ ${statusTarget.fullName}`);
-    show(next === "active" ? "เปิดใช้งานบัญชีแล้ว" : "ระงับการใช้งานบัญชีแล้ว");
+    try {
+      const updated = await updateUser(statusTarget.id, { status: next });
+      onUsersChange(users.map((u) => (u.id === statusTarget.id ? updated : u)));
+      onAudit(next === "active" ? "User Activated" : "User Deactivated", `${next === "active" ? "เปิดใช้งาน" : "ระงับการใช้งาน"}ผู้ใช้ ${statusTarget.fullName}`);
+      show(next === "active" ? "เปิดใช้งานบัญชีแล้ว" : "ระงับการใช้งานบัญชีแล้ว");
+    } catch (err) {
+      show(err instanceof ApiError ? err.message : "ดำเนินการไม่สำเร็จ");
+    }
     setStatusTarget(null);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
-    onUsersChange(users.filter((u) => u.id !== deleteTarget.id));
-    onAudit("User Deleted", `ลบผู้ใช้ ${deleteTarget.fullName} (${deleteTarget.username})`);
-    show("ลบผู้ใช้งานแล้ว");
+    try {
+      await deleteUser(deleteTarget.id);
+      onUsersChange(users.filter((u) => u.id !== deleteTarget.id));
+      onAudit("User Deleted", `ลบผู้ใช้ ${deleteTarget.fullName} (${deleteTarget.username})`);
+      show("ลบผู้ใช้งานแล้ว");
+    } catch (err) {
+      show(err instanceof ApiError ? err.message : "ลบไม่สำเร็จ");
+    }
     setDeleteTarget(null);
   };
 

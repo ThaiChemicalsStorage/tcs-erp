@@ -1,97 +1,127 @@
 # API
 
-## Current State: No Backend, No HTTP API
+## Current State: Real REST API (Vercel Serverless Functions)
 
-This project has **no server, no HTTP endpoints, and no network requests of any kind**. Every "operation" is a synchronous JavaScript function call within the browser, reading/writing React state and (for some domains) `localStorage`. There is no request/response cycle, no validation layer beyond in-component form checks, and no authentication token of any kind.
+As of 2026-07-09 this project has a **real HTTP API**: Vercel Serverless Functions (Node.js) backed by MongoDB Atlas, served from the same domain as the frontend (https://tcs-erp-nine.vercel.app/api/...). The frontend calls it via `apiFetch<T>()` (`src/lib/apiClient.ts`) — a thin wrapper around `fetch` with `credentials: "include"` (so the session cookie is sent), JSON request/response handling, and an `ApiError` class thrown for any non-2xx response. Every domain lib file (`users.ts`, `roles.ts`, `session.ts`, `storage.ts`, `products.ts`, `notifications.ts`, `auditLog.ts`, `quotes.tsx`) exposes `fetchX()`/`createX()`/`updateX()`/etc. functions that call this API — the old `loadX()`/`saveX()` `localStorage` functions are gone.
 
-The tables below document the current **client-side operation surface** — the functions that stand in for what would be API endpoints in a real backend — so the eventual real API can be designed to match the same operations.
+This supersedes the pre-2026-07-09 "no backend, plain function calls" state and the never-built "proposed future Next.js/Server Actions" design further down this file's history — see [ARCHITECTURE.md](./ARCHITECTURE.md) for why the actual stack (Vercel Functions + MongoDB) differs from that old proposal.
 
-### Auth / Bootstrap (`src/lib/{users,session}.ts`, invoked from `App.tsx`)
+### Routing mechanics (read [ARCHITECTURE.md](./ARCHITECTURE.md) for the full gotcha writeup)
 
-| Operation | Function | Request | Response | Validation | Notes |
-|---|---|---|---|---|---|
-| First-run bootstrap | `App.tsx` renders `SetupWizardPage` when `users.length === 0` | Full Name, Employee ID, Username, Email, Password, Confirm | creates the first `User` as `super_admin`, `saveSession(id)` | all fields required, password ≥ 6 chars, passwords match | Never shows again once any user exists |
-| Sign in | `handleSignIn(identifier, password)` in `App.tsx` | `identifier` (username or email), `password: string` | `null` on success (session saved) or a Thai error string on failure | looks up via `findUserByLogin()`, checks `verifyPassword()`, checks `status === "active"` | **Real (client-checked) credential verification** — replaces the pre-2026-07-08 "any input succeeds" flow. `verifyPassword`/`hashPassword` are not cryptographically secure — see [RBAC.md](./RBAC.md). |
-| Log out | `handleLogout()` in `App.tsx` | — | `clearSession()`, writes a `Logout` audit entry | — | |
-| Session load/save/clear | `loadSession()`/`saveSession(userId)`/`clearSession()` in `src/lib/session.ts` | — | current `userId` or `null` | — | Replaces the old boolean `tcs_erp_auth` flag |
+Routes are consolidated into 9 function files to stay under Vercel Hobby's 12-function cap: `api/company/index.ts` and `api/audit-log/index.ts` dispatch on `req.method` directly; `api/handlers/{auth,users,roles,products,categories,notifications,quotes}.ts` each dispatch on parsed URL path segments. `vercel.json` `rewrites` map every `/api/<resource>` and `/api/<resource>/:path*` request to its one handler file — this is the real, tested routing mechanism in production, not Vercel's own dynamic-route folder convention.
 
-There is no public self-registration — the old `SignUpPage`/`handleSignUp` flow was removed. Every account past the first is created via User Management (`users:manage`).
+### Auth model (every route below)
 
-### Company / Users / Roles (`src/lib/{storage,users,roles}.ts`)
+- **Session**: a JWT in an httpOnly, `secure`, `sameSite=lax` cookie (`tcs_erp_session`, 7-day expiry), issued by `issueSessionCookie()` on setup/login.
+- **"Authenticated"** = `requireUser(req)` (`api/_lib/auth.ts`) succeeds: a valid, unexpired JWT whose `sub` (user ID) resolves to a MongoDB user document with `status === "active"`. The user and their role are re-fetched from MongoDB on **every** request — nothing about authorization is trusted from the JWT payload itself beyond the user ID. A 401 `{ error: "Not authenticated" }` is thrown otherwise.
+- **"Permission: `x:y`"** = `requirePermission(req, "x:y")` — calls `requireUser` first, then `roleHasPermission(ctx.role, "x:y")` (the same pure function from `src/lib/roles.ts`, value-imported into the API layer). A 403 `{ error: "Forbidden" }` is thrown if the caller's role lacks the permission (Super Admin always passes, via `roleHasPermission`'s short-circuit).
+- Errors are always `{ error: string }` JSON with the matching HTTP status, produced by `HttpError`/`sendError`/`withErrorHandling` (`api/_lib/http.ts`).
 
-| Operation | Function | Notes |
+---
+
+## Auth (`api/handlers/auth.ts`, mounted at `/api/auth`)
+
+| Method & Path | Auth | Request | Response | Notes |
+|---|---|---|---|---|
+| `GET /api/auth/session` | None | — | `200 { user: PublicUser \| null, needsSetup: boolean }` | `needsSetup: true` only when the `users` collection is empty (no user has ever been created) — drives the Setup Wizard vs. Sign In branch in `App.tsx`'s boot sequence. |
+| `POST /api/auth/setup` | None (blocked once any user exists) | `{ employeeId, fullName, username, email, password }` | `201 { user }`, sets session cookie | `409` if `users` collection is non-empty. Creates the first user with the `isSuperAdmin` role from `defaultRoles`, seeds default roles into MongoDB first (`seedDefaultRolesIfEmpty()`). Password must be ≥ 6 chars. |
+| `POST /api/auth/login` | None | `{ identifier, password }` | `200 { user }`, sets session cookie | `identifier` matched case-insensitively against `username` or `email`. `401` on bad credentials, `403` if the account is `inactive`. |
+| `POST /api/auth/logout` | None | — | `204`, clears session cookie | |
+
+## Users (`api/handlers/users.ts`, mounted at `/api/users`)
+
+| Method & Path | Auth | Notes |
 |---|---|---|
-| Load/save company | `loadCompany()` / `saveCompany(company)` | Falls back to `defaultCompany`; save gated by `company:manage` in the UI |
-| Load/save users | `loadUsers()` / `saveUsers(users)` | `loadUsers()` returns `[]` (not seed data) when nothing is stored — this empty state is what triggers the Setup Wizard |
-| Create user | `newUser(fields)` in `src/lib/users.ts` | Builds a `User` with a hashed password; uniqueness of employeeId/username/email checked separately via `isEmployeeIdTaken`/`isUsernameTaken`/`isEmailTaken` before calling it |
-| Reset password | `UserManagementPage` sets `passwordHash: hashPassword(newPw)` directly on the target user, admin-only | No "forgot password" email flow exists (no backend) |
-| Activate/deactivate | `UserManagementPage` toggles `User.status` | Blocked for your own account in the UI |
-| Delete user | `UserManagementPage` filters the user out of `users[]` | Blocked for your own account and for the last remaining Super Admin |
-| Load/save roles | `loadRoles()` / `saveRoles(roles)` | Falls back to `defaultRoles` (6 roles) if nothing stored |
-| Create/edit/delete role | `RoleManagementPage`, Super-Admin-only (hardcoded, not just permission-gated) | Delete blocked for `isSystem` roles and for any role still assigned to a user |
-| Permission check | `hasPermission(user, roles, permission)` / `userIsSuperAdmin(user, roles)` / `roleNameFor(user, roles)` in `src/lib/roles.ts` | The one shared implementation used everywhere (sidebar filtering, button gating, quotation workflow gating) — client-side/display-only, see [RBAC.md](./RBAC.md) |
+| `GET /api/users` | Any authenticated user | Returns every user (`PublicUser[]`, no `passwordHash`), sorted by `fullName`. Not gated by `users:manage` — see Known Scope Limitations below. |
+| `POST /api/users` | `users:manage` | Creates a user. `409` on duplicate `employeeId`/`username`/`email`. `403` if the caller tries to assign the Super Admin role without being Super Admin themselves. Password ≥ 6 chars, hashed with bcrypt before storage. |
+| `PATCH /api/users/:id` | Self, or `users:manage` for other fields/other users | Self can update `fullName`/`phone`/`department`/`position`/profile & signature images, and change their own password (requires `currentPassword`, verified via `bcrypt.compare`). Only a `users:manage` holder can change `employeeId`/`username`/`email`/`roleKey`/`status`, and never on themselves for `roleKey`/`status`. Guards: can't reassign the last active Super Admin's role, can't deactivate the last active Super Admin, can't assign the Super Admin role unless the caller is already Super Admin. Admin-initiated password resets on **other** users skip the current-password check. |
+| `DELETE /api/users/:id` | `users:manage` | `400` if deleting self or the last remaining user with the Super Admin role. |
 
-### Notifications (`src/lib/notifications.ts`)
+## Roles (`api/handlers/roles.ts`, mounted at `/api/roles`)
 
-| Operation | Function | Notes |
+| Method & Path | Auth | Notes |
 |---|---|---|
-| Load/save | `loadNotifications()` / `saveNotifications(list)` | One shared array for all users, filtered client-side by `recipientUserId` |
-| Create (per event) | `notifyQuotationSubmitted/Approved/Rejected/HighValue/CustomerAccepted/CustomerRejected(...)` | Each returns `Notification[]` (one per recipient); `QuotationPage.handleWorkflowAction` calls the right one per transition and passes the result to `App.tsx`'s `addNotifications` |
-| Mark read / mark all read / delete | `markNotificationRead(id)` / `markAllNotificationsRead()` / `deleteNotification(id)` in `App.tsx` | All three read-modify-write the shared array and persist |
-| Unread count | `unreadCountFor(notifications, userId)` | Drives the bell badge (hidden at 0, "99+" cap otherwise) |
+| `GET /api/roles` | Any authenticated user | Every client-side `hasPermission()` call needs the full role list, so this is intentionally open to any signed-in user, not gated by `roles:manage`. Seeds default roles into MongoDB first if the collection is empty. |
+| `POST /api/roles` | `roles:manage` | Creates a custom role (`key: "role_<ObjectId>"`). `409` on duplicate name (case-insensitive). Strips any `roles:manage`/`company:manage` permission from the submitted list server-side (`isPermissionLockedToSuperAdmin()`) — cannot be granted to a custom role via the API even if the client sends it. |
+| `PATCH /api/roles/:key` | `roles:manage` | `400` if the target role is `isSystem` (Super Admin/Administrator — undeletable, unmodifiable). Same permission-stripping as create. |
+| `DELETE /api/roles/:key` | `roles:manage` | `400` if `isSystem`. `409` if any user currently holds this role. |
 
-### Audit Log (`src/lib/auditLog.ts`)
+## Company (`api/company/index.ts`, mounted at `/api/company`)
 
-| Operation | Function | Notes |
+| Method & Path | Auth | Notes |
 |---|---|---|
-| Append | `logAudit({ userId, userName, roleName, module, action, details })` | Reads the current log, prepends, writes back, returns the new array. **No update/delete function exists** — there is no code path to alter history. |
-| View | `AuditLogPage.tsx` | Read-only, gated by `auditLog:view` |
-| Load | `loadAuditLog()` | Falls back to `[]` |
+| `GET /api/company` | Any authenticated user | Displayed on every quotation/settings screen, so open to any signed-in user, not gated by `company:manage`. Returns `defaultCompany` merged with the stored singleton doc (or just `defaultCompany` if none exists yet). |
+| `PUT /api/company` | `company:manage` | Full-document replace (merged with `defaultCompany` for any missing fields), upserted into the singleton doc (`_id: "singleton"`). |
 
-### Products (`src/lib/products.ts`)
+## Products (`api/handlers/products.ts`, mounted at `/api/products`)
 
-| Operation | Function | Notes |
+| Method & Path | Auth | Notes |
 |---|---|---|
-| Load products | `loadProducts()` | Falls back to `defaultProducts` seed data |
-| Save products | `saveProducts(products)` | Full-array overwrite, called after every create/edit/archive/delete/duplicate |
-| Load categories | `loadCategories()` | Falls back to `defaultCategories` |
-| Save categories | `saveCategories(categories)` | Full-array overwrite |
+| `GET /api/products` | `products:view` | Sorted by `code`. |
+| `POST /api/products` | `products:create` | `409` on duplicate `code`. |
+| `PATCH /api/products/:id` | `products:edit` | Partial update; `409` if the new `code` collides with another product. |
+| `DELETE /api/products/:id` | `products:delete` | Hard delete (no soft-delete check server-side beyond the client's own archive/delete UX distinction — `archived` is just a boolean field, set via `PATCH`). |
 
-Product CRUD itself happens in `src/pages/products/ProductsPage.tsx` (`handleCreate`, `handleUpdate`, `handleArchiveToggle`, `handleDelete`, `handleDuplicate`) — these mutate the in-memory array and call `onProductsChange`, which is wired to `saveProducts` in `App.tsx`. No dedicated "API function" per operation; it's direct state manipulation.
+## Categories (`api/handlers/categories.ts`, mounted at `/api/categories`)
 
-### Quotations (`src/lib/quotes.tsx`, orchestrated from `src/pages/quotation/QuotationPage.tsx`)
-
-| Operation | Where | Notes |
+| Method & Path | Auth | Notes |
 |---|---|---|
-| List/filter quotes | `QuoteList.tsx` | Client-side filter over the `quotes` array (now persisted, `tcs_erp_quotes`) |
-| Create quote | `handleSave` in `QuotationPage.tsx`, `mode === "new"` | Generates ID via `nextQuoteId(quotes)`, prepends to array, stamps `createdByUserId: currentUser.id`, `approvalHistory: []`, status always `"ร่าง"` |
-| Update quote (fields only) | `handleSave` in `QuotationPage.tsx`, `mode === "detail"` | Merges edited fields, **status is explicitly excluded** (`status: q.status`) — field edits can never sneak a status change through the regular Save path |
-| Workflow transition | `handleWorkflowAction(action, comment)` in `QuotationPage.tsx` | The only way status changes: looks up `workflowTransitions[action]`, appends an `ApprovalHistoryEntry`, updates `Quote.status`, fires the matching `notify*` call(s), writes an audit entry. Gated by `computeQuotePermissions()` (permission + ownership) before the button is even shown. |
-| Duplicate quote | `handleDuplicate` in `QuotationPage.tsx` | Clones with a fresh ID via `nextQuoteId`, fresh line/sub-detail IDs via `cloneLines()`, status forced to `"ร่าง"`, fresh `createdByUserId`/empty `approvalHistory` |
-| Change interest flag | `setInterest` in `QuotationPage.tsx` | Updates `Quote.interest` in place |
-| Print / PDF export | "พิมพ์ / PDF" button in `QuoteDocument.tsx` | Calls `window.print()`; no server-side PDF generation |
+| `GET /api/categories` | `products:view` | Sorted by `name`. Categories share the `products:*` permission family — there is no separate `categories:*` permission. |
+| `POST /api/categories` | `products:create` | `409` on duplicate name (case-insensitive). |
+| `PATCH /api/categories/:id` | `products:edit` | Rename and/or toggle `archived`. `409` on duplicate name. |
 
-No dedicated validation layer — the only checks are: required fields with inline error text on the Setup Wizard/Sign-in/User Management/Product/Role forms, required comment on Reject/Customer-Reject/Cancel workflow actions, and numeric clamps (`min`/`max`) on quantity/price/discount inputs.
+No `DELETE /api/categories/:id` route exists — matches the pre-migration UI, which only ever supported archive/unarchive for categories, never permanent delete.
 
-## Authentication
+## Notifications (`api/handlers/notifications.ts`, mounted at `/api/notifications`)
 
-Client-checked only. `loadSession()`/`saveSession(userId)` (`src/lib/session.ts`) is the closest thing to a "token" — a plain `userId` string in `localStorage`, no expiry, no server to validate it against, trivially editable via devtools to impersonate any account. See [RBAC.md](./RBAC.md).
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/notifications` | Any authenticated user | Returns **only the caller's own** notifications (`recipientUserId === ctx.user.id`, filtered server-side), sorted newest first — a real fix over the pre-migration behavior where all users' notifications lived in the client's memory. |
+| `POST /api/notifications/mark-all-read` | Any authenticated user | Marks all of the caller's unread notifications read. Scoped to the caller — cannot mark another user's notifications. |
+| `PATCH /api/notifications/:id` | Any authenticated user (must own it) | Marks one notification read. `404` if it doesn't belong to the caller (returned as not-found, not forbidden, to avoid confirming another user's notification IDs exist). |
+| `DELETE /api/notifications/:id` | Any authenticated user (must own it) | Same ownership check as `PATCH`. |
 
-## Permission
+There is deliberately **no** `POST /api/notifications` (create-arbitrary-notification) route — notification creation only happens as a side effect of `POST /api/quotes/:id/workflow` (see below), to prevent a client from spamming or spoofing notifications to other users.
 
-`hasPermission(user, roles, permission)` (`src/lib/roles.ts`) gates every sidebar item, workflow action button, and admin page — but purely client-side. There is no server to re-check any of it, so this is display/workflow logic, not access control. See [RBAC.md](./RBAC.md) for the full model and its limitations.
+## Audit Log (`api/audit-log/index.ts`, mounted at `/api/audit-log`)
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/audit-log` | `auditLog:view` | Newest-first, capped at 1000 entries. |
+| `POST /api/audit-log` | Any authenticated user | `userId`/`userName`/`roleName` are **always** derived from the authenticated session server-side, never taken from the request body — a client can describe what happened (`module`/`action`/`details`) but can never claim to be a different user. This is why the route itself has no permission gate beyond "must be signed in": every signed-in user is allowed to log their own actions (login, profile edit, etc.), and the server, not the client, controls who gets credited. |
+
+`AuditLogPage.tsx` self-fetches via `useEffect` on mount (not part of the universal boot-time `Promise.all` fetch in `App.tsx`), since this route is permission-gated and shouldn't be called for every signed-in user regardless of whether they can see the page.
+
+## Dashboard (`api/dashboard/index.ts`, mounted at `/api/dashboard` — added 2026-07-09)
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/dashboard` | `dashboard:view` | Returns `{ kpis, revenueByMonth, categoryBreakdown }` — real MongoDB counts/aggregations, no client-side computation. See [DATABASE.md](./DATABASE.md) "Dashboard KPI/chart aggregation" for exactly what each field means and how it's computed. |
+
+`DashboardPage.tsx` self-fetches on mount via `src/lib/dashboard.ts`'s `fetchDashboardStats()`, same pattern as `AuditLogPage.tsx` above — not part of the universal boot-time fetch, since it's the only page that needs this particular aggregate.
+
+## Quotations (`api/handlers/quotes.ts`, mounted at `/api/quotes`)
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/quotes` | `quotations:view` | Returns every quote (no server-side ownership filtering — matches the pre-migration UI, which always showed the full list with client-side status filters). |
+| `POST /api/quotes` | `quotations:create` | Creates a new quote, ID generated server-side via `nextQuoteId()` (scans existing `_id`s for the highest `QT-<year>-NNNN` sequence number). `createdByUserId` is always the authenticated caller — never trusted from the request body. Status always starts at `"ร่าง"` (Draft), `approvalHistory: []`. |
+| `PATCH /api/quotes/:id` | `quotations:edit` + ownership (or `quotations:approve`) | General field edit (client/lines/discount/contact fields/etc. — an explicit allowlist, `EDITABLE_FIELDS`; `status` and `approvalHistory` are **not** in it, so this route can never sneak a status change through). Ownership: the caller must be the quote's creator, **or** hold `quotations:approve` (matches the client-side `computeQuotePermissions()` ownership model, now enforced server-side, not just hidden client-side). Legacy/seed quotes with an empty `createdByUserId` are treated as ownerless — any editor with `quotations:edit` passes the ownership check. |
+| `POST /api/quotes/:id/duplicate` | `quotations:create` | Clones the quote: fresh `_id` (new sequence number), fresh line/sub-detail IDs (`cloneLines()`), status reset to `"ร่าง"`, `interest: null`, `createdByUserId` set to the duplicating caller, `approvalHistory: []`. |
+| `POST /api/quotes/:id/workflow` | Varies per `action` — see below | Body: `{ action: ApprovalAction, comment?: string, draft?: Partial<Quote> }`. Validates `action` against `workflowTransitions` (`api/_lib/quoteWorkflow.ts` — a duplicated copy of the state machine in `src/lib/quotes.tsx`, see [ARCHITECTURE.md](./ARCHITECTURE.md) for why) and that the quote's current status is a valid `from` state for that action (`400` otherwise). Merges any in-flight `draft` field edits (the on-screen unsaved state) into the quote **before** applying the status transition, closing the same "workflow action discards unsaved edits" bug documented in [CHANGELOG.md](./CHANGELOG.md) 2026-07-09 — now enforced this way server-side too. Appends an `ApprovalHistoryEntry` stamped with the authenticated caller's identity (never client-supplied). Fires `createWorkflowNotifications()` as a side effect: `submitted` notifies every active user holding `quotations:approve` (plus every active `approver_2`-keyed user if `quote.amount >= HIGH_VALUE_THRESHOLD`, ฿500,000); `approved`/`rejected`/`customer_accepted`/`customer_rejected` notify the quote's creator. Permission-per-action is checked via `isWorkflowActionAllowed()` combining `roleHasPermission()` for the relevant permission (`create`/`edit`/`approve`/`reject`/`delete`, mapped per action) with the same ownership rule as `PATCH` above; a `403` includes the Thai label of the specific permission that was missing. |
+
+No dedicated `DELETE /api/quotes/:id` route exists — matches the pre-migration UI/workflow design, where "Cancel" (a workflow action, not a hard delete) is the only way to retire a quote.
 
 ## Errors
 
-No error-handling layer exists because there's no network boundary to fail. Form validation shows inline red text (`text-[#e05252]`) next to the relevant field; there's no toast-based error reporting (only success toasts, via `components/Toast.tsx`).
+Every route funnels exceptions through `withErrorHandling()` (`api/_lib/http.ts`): an `HttpError(status, message)` produces `{ status } { error: message }` (Thai-language messages for user-facing validation errors, matching the app's UI language); any other thrown error is logged server-side and produces a generic `500 { error: "Internal server error" }`, so internal error details are never leaked to the client. `apiFetch()` on the frontend throws `ApiError` for any non-2xx response, caught by each page's existing try/catch + `useToast()` error-toast pattern.
 
-## Future APIs (proposed, not implemented)
+## Known, Deliberate Scope Limitations (not bugs — see [RBAC.md](./RBAC.md) for the full RBAC picture)
 
-If/when the Phase 2 Next.js migration happens (see [ARCHITECTURE.md](./ARCHITECTURE.md)), the plan is:
+- `GET /api/users`, `GET /api/roles`, `GET /api/company`, `GET /api/products`, `GET /api/categories` are open to any **authenticated** user, not gated by e.g. `users:manage`. This matches the pre-migration behavior, where the full dataset already lived in every signed-in user's browser — so it's not a new permission surface, just now real authentication is required at all (previously anyone could open the site with zero login). Mutations on all of these remain properly permission-gated per action.
+- No rate limiting on `POST /api/auth/login` — a gap worth closing before this app is exposed beyond a trusted internal network. See [TODO.md](./TODO.md).
+- No pagination on any list route (`GET /api/quotes`, `GET /api/users`, `GET /api/audit-log` aside from its 1000-entry cap) — fine at current data volumes, worth revisiting if any collection grows large.
 
-- **Auth.js route handler** at `app/api/auth/[...nextauth]/route.ts` (Credentials provider, bcrypt password check, database sessions).
-- **Server Actions**, not a REST/JSON API, for most mutations — e.g. `modules/admin/actions/createUser.ts`, each starting with a `requirePermission(permission)` guard, validating input with Zod, writing an `AuditLog` row, then `revalidatePath`.
-- **Server Components / `queries/*.ts`** for reads — e.g. `modules/admin/queries/listUsers.ts` — direct Prisma calls in the Node runtime, not a client-fetched JSON endpoint.
-- A coarse **`middleware.ts`** doing only "is there a session" checks (edge-safe, no Prisma at the edge); fine-grained permission checks happen in the page/action itself.
+## Superseded: the old proposed Next.js API design — NOT what got built
 
-None of this exists in the repo today. Do not write code against it.
+If/when a hypothetical Next.js migration happened (the "Phase 2" plan, see [ARCHITECTURE.md](./ARCHITECTURE.md) "Superseded" section), the plan had been: an Auth.js route handler, Server Actions (not REST/JSON) for most mutations, Server Components/`queries/*.ts` for reads, and a coarse `middleware.ts` session check. **None of this was built.** The real API that shipped 2026-07-09 is a plain REST/JSON API over Vercel Serverless Functions, documented in full above. This paragraph is kept only as a historical record — do not write code against the old proposal.

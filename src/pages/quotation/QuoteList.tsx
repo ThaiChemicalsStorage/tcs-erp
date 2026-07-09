@@ -1,8 +1,18 @@
 import { useState } from "react";
 import { Plus, FileText } from "lucide-react";
 import { type Quote, type QuoteStatus, type QuoteInterest, statusStyle, statusIcon } from "../../lib/quotes";
-import { salesTeam } from "../../lib/salesTeam";
+import { initials } from "../../lib/users";
 import { InterestButtons } from "./InterestButtons";
+import { useI18n } from "../../lib/i18n";
+
+const AVATAR_COLORS = ["#c9a84c", "#1a5fb4", "#2aa36b", "#7c4dbb", "#e05252"];
+
+/** Deterministic initials-avatar color for any salesperson name — works for every real name, not just a fixed roster. */
+function avatarColorFor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
 
 const statuses: QuoteStatus[] = [
   "ร่าง",
@@ -27,6 +37,7 @@ export function QuoteList({
   onCreateNew: () => void;
   onInterestChange: (id: string, v: QuoteInterest) => void;
 }) {
+  const { t } = useI18n();
   const [filterStatus, setFilterStatus] = useState<string>("ทั้งหมด");
   const filtered = filterStatus === "ทั้งหมด" ? quotes : quotes.filter((q) => q.status === filterStatus);
 
@@ -72,6 +83,25 @@ export function QuoteList({
 
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
+        {quotes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <FileText size={20} className="text-muted-foreground" />
+            </div>
+            <p className="text-sm font-medium text-foreground">{t("empty.quotations.title")}</p>
+            <p className="text-xs text-muted-foreground max-w-xs text-center">{t("empty.quotations.sub")}</p>
+            <button onClick={onCreateNew} className="mt-1 flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+              <Plus size={15} /> {t("empty.quotations.action")}
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+              <FileText size={20} className="text-muted-foreground" />
+            </div>
+            <p className="text-sm text-muted-foreground">ไม่พบใบเสนอราคาที่ตรงกับเงื่อนไข</p>
+          </div>
+        ) : (
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40">
@@ -91,15 +121,19 @@ export function QuoteList({
                 </td>
                 <td className="px-4 py-3.5">
                   <div className="flex items-center gap-2">
-                    {(() => {
-                      const s = salesTeam.find((t) => t.name === q.salesperson);
-                      return s ? (
-                        <>
-                          <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: s.color }}>{s.avatar}</div>
-                          <span className="text-xs text-foreground">{q.salesperson.split(" ")[0]}</span>
-                        </>
-                      ) : <span className="text-xs text-muted-foreground">{q.salesperson}</span>;
-                    })()}
+                    {q.salesperson ? (
+                      <>
+                        <div
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
+                          style={{ background: avatarColorFor(q.salesperson) }}
+                        >
+                          {initials(q.salesperson)}
+                        </div>
+                        <span className="text-xs text-foreground">{q.salesperson.split(" ")[0]}</span>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono">{q.date}</td>
@@ -116,6 +150,7 @@ export function QuoteList({
             ))}
           </tbody>
         </table>
+        )}
       </div>
     </div>
   );

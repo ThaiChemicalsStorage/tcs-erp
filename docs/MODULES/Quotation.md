@@ -39,11 +39,11 @@ The preparer's signature is looked up via `quote.createdByUserId`; the approver'
 
 ## Database Tables
 
-None (no real DB) — see [DATABASE.md](../DATABASE.md) for the current `Quote`/`QuoteLine`/`SubDetail`/`ApprovalHistoryEntry` TypeScript shapes, which are the closest thing to a schema. **Quotes now persist to `localStorage`** (`tcs_erp_quotes`, fixed 2026-07-08) — this used to be the biggest known gap, now resolved.
+The `quotes` MongoDB collection (see [DATABASE.md](../DATABASE.md) for the `Quote`/`QuoteLine`/`SubDetail`/`ApprovalHistoryEntry` shapes) — keyed by the human-readable business ID (e.g. `"QT-2567-0041"`) as the literal MongoDB `_id`, not an `ObjectId`. Migrated 2026-07-09 from `localStorage` (`tcs_erp_quotes`, fixed 2026-07-08) to real server-side persistence.
 
 ## APIs
 
-None — see [API.md](../API.md) for the current client-side operation list (create/update-fields/workflow-transition/duplicate/interest-change, in `QuotationPage.tsx`/`QuoteDocument.tsx`).
+`GET/POST /api/quotes`, `PATCH /api/quotes/:id`, `POST /api/quotes/:id/duplicate`, `POST /api/quotes/:id/workflow` — see [API.md](../API.md) Quotations section for the full route table, auth requirements, and server-side ownership/workflow validation.
 
 ## Permissions
 
@@ -52,7 +52,7 @@ Client-side RBAC (see [RBAC.md](../RBAC.md)) via `computeQuotePermissions(quote,
 ## Current Features
 
 - List with status filter (all 9 statuses) + summary cards
-- Full create/edit/duplicate flow, persisted to `localStorage`
+- Full create/edit/duplicate flow, persisted to MongoDB via a real REST API (server-enforced permission + ownership checks on every mutation, see [API.md](../API.md))
 - Line items: description/unit/qty/price/discount, auto-computed subtotal
 - Quote-level discount % + 7% VAT, full totals breakdown
 - Per-line notes (multi-line, bullet/numbered formatting), unlimited sub-details (add/edit/delete/drag-reorder), specifications, and tags

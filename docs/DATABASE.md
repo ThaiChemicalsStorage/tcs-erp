@@ -1,32 +1,59 @@
 # Database
 
-## Current State: No Database
+## Current State: MongoDB Atlas (real database, live)
 
-There is **no database** in this project. All data lives in browser memory (React state) for the session, and some domains additionally mirror to the browser's `localStorage` so they survive a page reload. Nothing is shared across users or devices — this is a single-browser, client-only demo.
+As of 2026-07-09 this project has a **real database**: MongoDB Atlas (free-tier M0 cluster), accessed exclusively from the Vercel Serverless Functions backend (`api/`) via a singleton connection per warm serverless instance (`api/_lib/mongodb.ts`). The frontend never talks to MongoDB directly — it calls the REST API (see [API.md](./API.md)), which reads/writes these collections. `MONGODB_URI` lives only in Vercel environment variables (production/preview/development), never committed to the repo.
 
-### What persists to `localStorage` today
+This supersedes the pre-2026-07-09 `localStorage`-only persistence described lower in this file's Migration Notes — that description is now historical (it documents what the client-side shapes looked like before the migration, useful context for how each collection got its current shape) rather than current state.
 
-| Domain | Key | Shape | Source |
+### MongoDB collections
+
+| Collection | `_id` | Shape | Notes |
 |---|---|---|---|
-| Current session | `tcs_erp_session` | `userId: string` or absent | `src/lib/session.ts` |
-| Users (employee + account records) | `tcs_erp_users` | `User[]` (JSON) | `src/lib/users.ts` |
-| Roles | `tcs_erp_roles` | `Role[]` (JSON) | `src/lib/roles.ts` |
-| Notifications | `tcs_erp_notifications` | `Notification[]` (JSON) | `src/lib/notifications.ts` |
-| Audit log | `tcs_erp_audit_log` | `AuditLogEntry[]` (JSON, append-only) | `src/lib/auditLog.ts` |
-| Company profile | `tcs_erp_company` | `Company` (JSON) | `src/lib/storage.ts` |
-| Products | `tcs_erp_products` | `Product[]` (JSON) | `src/lib/products.ts` |
-| Product categories | `tcs_erp_categories` | `ProductCategory[]` (JSON) | `src/lib/products.ts` |
-| Quotes | `tcs_erp_quotes` | `Quote[]` (JSON) | `src/lib/quotes.tsx` |
+| `users` | MongoDB `ObjectId` | server-only `UserFields` (see below) | Includes `passwordHash` — never sent to the client. `toPublicUser()` (`api/_lib/collections.ts`) strips it before any response. |
+| `roles` | `key: string` (e.g. `"super_admin"`, or `"role_<ObjectId>"` for custom roles) | `Role` (unchanged shape from the old client-side type) | Seeded from `defaultRoles` (`src/lib/roles.ts`) via `api/_lib/rbacSeed.ts` on first run (`seedDefaultRolesIfEmpty()`), called from the Setup Wizard and from `GET /api/roles`. |
+| `company` | fixed string `"singleton"` | `Company` (unchanged shape) | Always exactly one document; `GET /api/company` falls back to `defaultCompany` merged with the stored doc if it doesn't exist yet. |
+| `products` | MongoDB `ObjectId` | `Product` minus `id` (Mongo `_id` takes its place) | `withStringId()` maps `_id` → `id: string` for the client response. |
+| `categories` | MongoDB `ObjectId` | `ProductCategory` minus `id` | Same `withStringId()` mapping. |
+| `notifications` | MongoDB `ObjectId` | `Notification` minus `id` | `GET /api/notifications` filters server-side to `recipientUserId === <the caller>` — the collection holds every user's notifications, but a user can only ever read their own via the API. |
+| `audit_log` | MongoDB `ObjectId` | `AuditLogEntry` minus `id` | `POST /api/audit-log` always derives `userId`/`userName`/`roleName` from the authenticated session, never trusting those fields from the request body. |
+| `quotes` | **the business ID string itself** (e.g. `"QT-2567-0041"`), not an `ObjectId` | `Quote` minus `id` (the business ID is `_id`) | `nextQuoteId()` in `api/handlers/quotes.ts` scans existing `_id`s to compute the next sequence number. |
+| `dashboard` (virtual — no collection) | — | — | `GET /api/dashboard` (`api/dashboard/index.ts`) is a read-only aggregation over `customers`/`leads`/`quotes`/`products`/`categories` — it doesn't own or write any collection of its own. See Dashboard KPI section below. |
 
-The old singleton `tcs_erp_auth` (boolean flag) / `tcs_erp_user` (single `UserProfile`) keys from before 2026-07-08 are gone — replaced by `tcs_erp_session` (which user is signed in) + `tcs_erp_users` (the full account list). **Quotes now persist** (`tcs_erp_quotes`) — this was the single biggest tracked gap before 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)); `App.tsx` syncs `quotes` state to `localStorage` via a `useEffect`.
+### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
 
-### What does NOT persist (in-memory only, resets on reload)
+Per the 2026-07-09 production-readiness pass, every collection below exists with real indexes ahead of the feature that will use it (`api/_lib/collections.ts`), seeded where noted (`api/_lib/systemSeed.ts`, called once from the Setup Wizard alongside `seedDefaultRolesIfEmpty()`). **None of these have API routes or UI built on top of them yet** except where called out — they're schema/index scaffolding only, so that future features don't start from an empty, un-indexed collection.
 
-- Everything that's plain component `useState` not listed above (which view is open, form drafts before Save, UI toggles like "show archived", the notification-panel open/closed state).
+| Collection | Purpose | Seeded? | Indexes |
+|---|---|---|---|
+| `permissions` | Mirrors `ALL_PERMISSIONS` (`src/lib/permissions.ts`) as documents — forward-looking scaffolding for an eventual admin-configurable permission registry. RBAC still checks the hardcoded TS union, **not** this collection. | Yes, from `ALL_PERMISSIONS`/`PERMISSION_LABELS`/`PERMISSION_GROUPS`/`SUPER_ADMIN_ONLY_PERMISSIONS` | `{ key: 1 }` unique |
+| `sessions` | Scaffolding for future "log out other devices" / session revocation. Nothing writes to it — auth is still pure-JWT (`api/_lib/auth.ts`), unchanged. | No | `{ userId: 1 }`, TTL index `{ expiresAt: 1 }` (`expireAfterSeconds: 0`, auto-purges) |
+| `departments` | Org unit list. **Not** wired into `User.department` (still free text, unchanged — see `User` below). | Yes, generic starter list (ฝ่ายขาย, ฝ่ายจัดซื้อ, ฝ่ายคลังสินค้า, ฝ่ายบัญชี, ฝ่ายทรัพยากรบุคคล, ฝ่ายบริหาร, ฝ่ายไอที) — rename/manage via a future admin UI | `{ code: 1 }` unique |
+| `positions` | Position/level list. **Not** wired into `User.position` (still free text, unchanged). | Yes, generic starter list (พนักงาน, หัวหน้างาน, ผู้จัดการ, ผู้จัดการทั่วไป, กรรมการผู้จัดการ) | `{ code: 1 }` unique |
+| `customers` | CRM customer record — company/contact/tax/sales-owner fields, soft-delete via `deletedAt`. No API routes/UI yet; `GET /api/dashboard`'s `totalCustomers` KPI counts this (correctly always 0 until the module ships). | No (zero business data by design) | `{ salesOwnerId: 1 }`, `{ deletedAt: 1 }`, `{ companyName: 1 }` |
+| `customer_contacts` | Secondary contacts beyond a customer's primary contact. | No | `{ customerId: 1 }` |
+| `leads` | CRM lead/pipeline record, 9-stage `LeadStage` (ลูกค้าใหม่ → ... → ปิดการขายสำเร็จ/เสียโอกาส), `convertedToCustomerId` link. Resolves the open "Lead vs Customer: one entity or two?" question from `MODULES/Customer.md`/`Lead.md` — this pass builds them as **two separate collections**. `GET /api/dashboard`'s `totalLeads` KPI counts this. | No | `{ salesOwnerId: 1 }`, `{ stage: 1 }`, `{ deletedAt: 1 }` |
+| `lead_activities` | Append-only lead timeline (stage changes, notes, calls, emails, meetings) — same immutable-event-log shape as `audit_log`/embedded `approvalHistory`, no `updatedAt`/`deletedAt`. | No | `{ leadId: 1, createdAt: -1 }` |
+| `product_templates` | Reusable presets for fast product creation, independent of the live `products` catalog. **Semantics not fully settled** — treat as a starting interpretation, confirm before building UI against it. | No | `{ categoryId: 1 }`, `{ isActive: 1 }` |
+| `quotation_comments` | General discussion thread on a quote — distinct from `approvalHistory` (which is transition-specific, not freeform). | No | `{ quoteId: 1, createdAt: 1 }` |
+| `quotation_tags` | Quote-level tag *registry* (name + color) — distinct from the existing embedded per-line `QuoteLine.tags` (free chip strings). | No | `{ name: 1 }` unique |
+| `notification_types` | Mirrors the hardcoded `NotificationType` union (`src/lib/notifications.ts`) as documents — same "scaffolding, not read by any live code path" treatment as `permissions`. | Yes | `{ key: 1 }` unique |
+| `system_settings` | Singleton (`_id: "singleton"`, like `company`) — application config (`defaultPageSize`, `maintenanceMode`, `sessionDurationDays`), distinct from `company`'s business identity. Defaults mirror current hardcoded behavior (`sessionDurationDays: 7` matches `SESSION_DAYS` in `api/_lib/auth.ts`) so future wiring is a no-op migration — nothing reads from this collection yet. | Yes (upsert-once) | none beyond default `_id` |
+| `uploads` | Forward-looking scaffolding for real blob storage. Nothing writes to it today — every current upload (logo/stamp/profile picture/signature) is inline base64 on its parent document (see `Company`/`User` below); that has a practical 16MB Mongo document ceiling, tracked in TODO.md. | No | `{ uploadedByUserId: 1 }`, `{ purpose: 1 }` |
+| `attachments` | Polymorphic file-to-entity link (`entityType`/`entityId` → `uploadId`), for when `uploads` is wired up. | No | `{ entityType: 1, entityId: 1 }` |
 
-## Entity Descriptions (current, client-side shapes)
+**Deliberately not built as separate collections** (decisions recorded here per the prod-readiness spec's request for `quotation_items`/`quotation_approvals`/`quotation_status_history`):
+- **`quotation_items`** — stays embedded as `Quote.lines` (`QuoteLine[]`). Always read/written together with its parent quote (every render, every edit); extracting it would touch `LineItemsEditor.tsx`, `computeTotals()`, and the handler's field-whitelisting logic for no clear benefit.
+- **`quotation_approvals`** — stays embedded as `Quote.approvalHistory`. Same reasoning: always read together with its parent, small/bounded array.
+- **`quotation_status_history`** — not built at all, **redundant with `approvalHistory`**: every workflow action already records a status transition (`workflowTransitions[action].to` in `api/_lib/quoteWorkflow.ts`), so `approvalHistory` already *is* the complete status history.
 
-These are the actual TypeScript shapes in use today — they double as the most accurate reference for what the eventual database schema needs to capture.
+### What does NOT persist server-side (in-memory only, resets on reload)
+
+- Everything that's plain component `useState` (which view is open, form drafts before Save, UI toggles like "show archived", the notification-panel open/closed state). This is unchanged by the backend migration — it was always ephemeral UI state, never meant to persist.
+
+## Entity Descriptions (current, real shapes)
+
+These map closely onto the pre-migration client-side TypeScript shapes — most fields are unchanged. Differences from the old `localStorage`-era shapes are called out per entity below.
 
 ### `Company` (`src/lib/storage.ts`)
 ```ts
@@ -44,33 +71,38 @@ interface Company {
   bankAccountNumber: string;
   bankBranch: string;
   termsAndConditions: string;    // default value for the quotation remarks textarea when set
+  updatedAt: string;              // ISO datetime, added 2026-07-09 — set server-side on every PUT
+  updatedBy: string;              // → User.id, added 2026-07-09 — set server-side, not client-writable
 }
 ```
-Single record (not a list) — there is only ever one company, matching this app's single-company (not multi-tenant) design. Editable only by Super Admin (`company:manage`, hardcoded — see [RBAC.md](./RBAC.md)). `logoDataUrl`/`stampDataUrl` are rendered into the quotation PDF header/signature block — see [MODULES/Quotation.md](./MODULES/Quotation.md).
+Single record (not a list) — there is only ever one company, matching this app's single-company (not multi-tenant) design. Editable only by Super Admin (`company:manage`, hardcoded — see [RBAC.md](./RBAC.md)). `logoDataUrl`/`stampDataUrl` are rendered into the quotation PDF header/signature block — see [MODULES/Quotation.md](./MODULES/Quotation.md). If `logoDataUrl` is empty, quote/print headers and the app's own branding (sidebar/login/loading/favicon) fall back to the static official logo (`public/logo.png`, via `components/BrandMark.tsx`) — see ARCHITECTURE.md/UI_GUIDELINES.md.
 
-### `User` (`src/lib/users.ts`) — replaces the old singleton `UserProfile`
+### `User` (`src/lib/users.ts`, client-facing) / `UserFields` (`api/_lib/collections.ts`, server-only storage schema)
 ```ts
 type UserStatus = "active" | "inactive";
 
+// Client-facing type — src/lib/users.ts. Never includes a password field.
 interface User {
-  id: string;
-  employeeId: string;    // enforced unique
+  id: string;             // Mongo _id.toString()
+  employeeId: string;      // enforced unique
   fullName: string;
-  username: string;      // enforced unique, used for login
-  email: string;         // enforced unique, used for login
-  passwordHash: string;  // NOT a real crypto hash — see RBAC.md
+  username: string;        // enforced unique, used for login
+  email: string;           // enforced unique, used for login
   phone: string;
-  department: string;    // free text, suggestions only
-  position: string;      // free text, suggestions only — deliberately independent of roleKey
-  roleKey: string;       // → Role.key
+  department: string;      // free text, suggestions only
+  position: string;        // free text, suggestions only — deliberately independent of roleKey
+  roleKey: string;         // → Role.key
   status: UserStatus;
   profilePictureDataUrl: string;
-  signatureDataUrl: string;   // rendered on quotations this user prepared/approved
+  signatureDataUrl: string;    // rendered on quotations this user prepared/approved
   createdAt: string;
   updatedAt: string;
 }
+
+// Server-only DB storage schema — api/_lib/collections.ts. UserFields = Omit<User, "id"> & { passwordHash: string }.
+// toPublicUser() strips passwordHash and maps _id -> id before any response reaches the client.
 ```
-A list now (`User[]`), not a singleton — real multi-account support. The "current user" is derived at runtime as `users.find(u => u.id === loadSession())`, not stored redundantly.
+`passwordHash` is a **real bcrypt hash** (`bcryptjs`, cost 10) — the old client-side `hashPassword()` non-cryptographic checksum function is gone entirely, deleted, not just deprecated. `User[]` (a MongoDB collection now, not a `localStorage` array) is real multi-account support. The "current user" is real React state in `App.tsx` (`currentUser`), populated on boot from `GET /api/auth/session` and kept in sync via `updateUsers`/`updateCurrentUser` — no longer derived via `.find()` against a separately-tracked session id.
 
 ### `Role` (`src/lib/roles.ts`) / `Permission` (`src/lib/permissions.ts`)
 ```ts
@@ -90,7 +122,7 @@ interface Role {
   isSystem: boolean;      // built-in (Super Admin/Administrator) — undeletable, read-only permission matrix
 }
 ```
-6 default roles ship in `defaultRoles`; admins can add custom ones. `roles:manage`/`company:manage` cannot be granted to any role but the Super Admin role itself (`isPermissionLockedToSuperAdmin()`).
+6 default roles ship in `defaultRoles` (`src/lib/roles.ts`), seeded into the `roles` MongoDB collection on first run by `api/_lib/rbacSeed.ts`'s `seedDefaultRolesIfEmpty()`; admins can add custom ones (`key: "role_<ObjectId>"`). `roles:manage`/`company:manage` cannot be granted to any role but the Super Admin role itself (`isPermissionLockedToSuperAdmin()`), enforced both client-side (UI) and server-side (`api/handlers/roles.ts` filters these out of any create/edit payload).
 
 ### `Notification` (`src/lib/notifications.ts`)
 ```ts
@@ -110,7 +142,7 @@ interface Notification {
   read: boolean;
 }
 ```
-All notifications (for every user) live in one shared array — a single-`localStorage` simulation of what would be per-user delivery in a real backend. Filtered client-side by `recipientUserId` for display.
+All notifications (for every user) live in one `notifications` collection, but `GET /api/notifications` filters **server-side** to `recipientUserId === <the authenticated caller>` — a genuine improvement over the pre-migration behavior, where the client held every user's notifications in memory and only filtered client-side for display (a real, if low-stakes, data exposure). Notification creation now only happens inside `api/handlers/quotes.ts`'s workflow handler, as a side effect of a status transition (querying `users`/`roles` server-side to determine recipients) — there is deliberately no generic "create notification for arbitrary user" endpoint, to prevent spam/spoofing. Index added 2026-07-09: `{ recipientUserId: 1, createdAt: -1 }`, serving both the filter and the feed sort order (was previously an unindexed `find`).
 
 ### `AuditLogEntry` (`src/lib/auditLog.ts`)
 ```ts
@@ -125,7 +157,7 @@ interface AuditLogEntry {
   createdAt: string;
 }
 ```
-Append-only — `logAudit()` has no corresponding update/delete function, so there is no code path to alter history from the UI (including for Super Admin).
+Append-only — `logAudit()` has no corresponding update/delete function, so there is no code path to alter history from the UI (including for Super Admin). `POST /api/audit-log` (`api/audit-log/index.ts`) always derives `userId`/`userName`/`roleName` from the authenticated session server-side, never trusting those fields from the request body — a genuine integrity improvement over the pre-migration `localStorage` array, where a client could have written an entry claiming to be any user. Index added 2026-07-09: `{ createdAt: -1 }` (was previously an unindexed `find().sort().limit(1000)`).
 
 ### `Product` / `ProductCategory` (`src/lib/products.ts`)
 ```ts
@@ -133,6 +165,10 @@ interface ProductCategory {
   id: string;
   name: string;
   archived: boolean;
+  createdAt: string;       // ISO datetime, added 2026-07-09
+  updatedAt: string;       // ISO datetime, added 2026-07-09
+  createdBy: string;       // → User.id, added 2026-07-09
+  updatedBy: string;       // → User.id, added 2026-07-09
 }
 
 interface Product {
@@ -144,11 +180,14 @@ interface Product {
   defaultPrice: number;
   description: string;
   specifications: string;
-  archived: boolean;
+  archived: boolean;       // the soft-delete flag — no separate deletedAt field
   createdAt: string;       // ISO datetime
   updatedAt: string;       // ISO datetime
+  createdBy: string;       // → User.id, added 2026-07-09
+  updatedBy: string;       // → User.id, added 2026-07-09
 }
 ```
+Indexes added 2026-07-09: `products` gets `{ categoryId: 1 }` and `{ archived: 1 }`; `categories` gets `{ name: 1 }` (non-unique — existing data wasn't verified duplicate-free before adding it, so it's not enforced as a constraint).
 
 ### `Quote` / `QuoteLine` / `SubDetail` (`src/lib/quotes.tsx`)
 ```ts
@@ -220,20 +259,37 @@ interface Quote {
   expiryDate: string;   // yyyy-mm-dd
   remarks: string;       // real per-quote field now (see Known Issues below) — defaults to Company.termsAndConditions only for brand-new quotes
   createdByUserId: string;             // → User.id, "" for legacy/seed quotes (any editor treated as owner)
+  updatedBy: string;                   // → User.id, added 2026-07-09 — set server-side on every plain edit or workflow action, "" until first edit
   approvalHistory: ApprovalHistoryEntry[];  // append-only
 }
 ```
-All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest.
+All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session.
+
+Indexes added 2026-07-09 (`quotes` had none beyond default `_id` before this): `{ status: 1 }`, `{ createdByUserId: 1 }` (already used for ownership checks), `{ issueDate: 1 }` (needed for the Dashboard's monthly revenue aggregation — see below). No soft-delete field — the `ยกเลิก` (Cancelled) terminal workflow status already serves that role.
+
+### Dashboard KPI/chart aggregation (`GET /api/dashboard`, added 2026-07-09)
+
+Read-only, no collection of its own — see [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full widget-by-widget breakdown. Summary of what each number is:
+- `totalCustomers`/`totalLeads`: `countDocuments({ deletedAt: null })` on `customers`/`leads` — always `0` today (module not built yet), which is correct per the "empty database → display 0" requirement, not a placeholder.
+- `totalQuotations`/`totalProducts`: real counts (`quotes.countDocuments({})`, `products.countDocuments({ archived: false })`).
+- `wonDeals`/`lostDeals`: `quotes.countDocuments({ status: "ปิดการขายสำเร็จ" })` / `{ status: "เสียโอกาส" })`. Note: `ลูกค้าปฏิเสธ` (Customer Rejected) is a distinct terminal status and is **not** counted as "lost" — only quotes actually marked `เสียโอกาส` are.
+- `totalRevenue`: `$sum` of `amount` over quotes with `status: "ปิดการขายสำเร็จ"` — the only unambiguous "closed revenue" signal in the current data model.
+- `revenueByMonth`: groups won quotes by `$substr(issueDate, 0, 7)` (`issueDate` is a plain `yyyy-mm-dd` string, not a real Mongo `Date`), then zero-fills the last 12 calendar months server-side so the chart never renders blank on an empty database.
+- `categoryBreakdown`: real `products` grouped by `categoryId` (archived excluded) — intentionally **not** "revenue by category," since `QuoteLine` has no `categoryId` reference back to `Product` (see Relationships below) and there's no reliable way to compute that without unreliable string-matching.
+
+**`id` → `_id` mapping**: `Quote.id` (the client-facing field, e.g. `"QT-2567-0041"`) is stored as the literal MongoDB `_id` for the `quotes` collection — not an `ObjectId`. This is deliberate: quote IDs are already unique, human-meaningful business identifiers (generated by `nextQuoteId()` in `api/handlers/quotes.ts`, which scans existing `_id`s for the highest sequence number), so there was no reason to also carry a separate `ObjectId`. Every other collection (`users`, `products`, `categories`, `notifications`, `audit_log`) uses a real MongoDB `ObjectId` as `_id`, mapped to a string `id` field for the client via `withStringId()`/`toPublicUser()` (`api/_lib/collections.ts`).
 
 `bahtText(amount: number): string` (`src/lib/quotes.tsx`) converts a THB amount to its Thai-words form (e.g. `689615` → `"(หกแสนแปดหมื่นเก้าพันหกร้อยสิบห้าบาทถ้วน)"`), used under the print document's grand total.
 
-**Relationships (current, in-memory/localStorage)**: `Product.categoryId → ProductCategory.id`. `QuoteLine` has **no** reference back to `Product` — picking a product from the library copies its `name`/`unit`/`defaultPrice` into a new, independent `QuoteLine` at selection time. This is deliberate: editing or archiving a `Product` must never change historical quotes (see [MODULES/Product.md](./MODULES/Product.md) and [MODULES/Quotation.md](./MODULES/Quotation.md)). `Quote.createdByUserId → User.id` and `ApprovalHistoryEntry.userId → User.id` are the only cross-domain references introduced by the RBAC work — both are plain string IDs looked up at render time (e.g. for signature images), not enforced foreign keys (no database exists to enforce them). `User.roleKey → Role.key`, `Notification.recipientUserId → User.id`, `AuditLogEntry.userId → User.id` are the same pattern.
+**Relationships**: `Product.categoryId → ProductCategory.id`. `QuoteLine` has **no** reference back to `Product` — picking a product from the library copies its `name`/`unit`/`defaultPrice` into a new, independent `QuoteLine` at selection time. This is deliberate: editing or archiving a `Product` must never change historical quotes (see [MODULES/Product.md](./MODULES/Product.md) and [MODULES/Quotation.md](./MODULES/Quotation.md)). `Quote.createdByUserId → User.id` and `ApprovalHistoryEntry.userId → User.id` are cross-domain references — plain string IDs looked up at query/render time (e.g. for signature images), not enforced foreign keys (MongoDB doesn't enforce referential integrity; nothing prevents a dangling reference if a user is deleted). `User.roleKey → Role.key`, `Notification.recipientUserId → User.id`, `AuditLogEntry.userId → User.id` are the same pattern.
 
-No indexes, primary/foreign key constraints, or migrations exist because there is no database — `id` fields above are just string/number values generated client-side (`newId()`, `newLineId()`, `newSubDetailId()`, `nextQuoteId()`).
+**Update 2026-07-09**: `ensureIndexes()` (`api/_lib/collections.ts`, called once from the Setup Wizard's first-run path) now creates real indexes across every collection — see the per-collection Indexes column in the schema-prep table above, plus the additions called out inline for `products`/`categories`/`quotes`/`notifications`/`audit_log`. `users.username`/`users.email` uniqueness was already a real unique index before this pass (not newly added) — the paragraph that previously said "no explicit indexes exist" was stale and has been corrected.
 
-## Future Database Plans (proposed, not implemented)
+## Superseded: the old proposed Prisma/PostgreSQL schema — NOT what got built
 
-A Prisma/PostgreSQL schema was designed for the Phase 2 backend migration (see [ARCHITECTURE.md](./ARCHITECTURE.md)). **No Prisma project, migration, or database instance exists yet.** The client-side `User`/`Role`/`Permission`/`Notification`/`AuditLogEntry` shapes above (built 2026-07-08) were deliberately designed to map closely onto the proposed models below — see Migration Notes — but the two role sets differ (6 client-side roles built directly against this session's request vs. the 9-role `RoleKey` enum proposed below) and will need reconciling, not a blind 1:1 port. Summary of the proposed Phase-2-first-cut models (RBAC + auth foundation only — Lead/Quotation/Product tables would be designed in a later phase, informed by the shapes above):
+A Prisma/PostgreSQL schema was designed (never implemented) for the originally-proposed "Phase 2" Next.js migration (see [ARCHITECTURE.md](./ARCHITECTURE.md) "Superseded" section). **That migration never happened** — the real backend that shipped 2026-07-09 uses MongoDB (documented above), not Prisma/PostgreSQL. The section below is kept only as a historical record of the design that was considered and abandoned; do not write code against it or assume any Prisma project/migration exists. Where useful, the Migration Notes at the bottom of this file explain how the fields below map onto what actually got built.
+
+Summary of the superseded Phase-2-first-cut models (RBAC + auth foundation only — Lead/Quotation/Product tables would have been designed in a later phase):
 
 - `Department` — org units (name, code, isActive)
 - `Role` — fixed `RoleKey` enum (SUPER_ADMIN, ADMIN, MANAGER, SALES, ACCOUNTING, WAREHOUSE, PURCHASING, HR, EMPLOYEE) + editable display name
@@ -243,14 +299,15 @@ A Prisma/PostgreSQL schema was designed for the Phase 2 backend migration (see [
 - `Account` / `Session` / `VerificationToken` — Auth.js/NextAuth-required tables (Credentials provider + Prisma adapter, database session strategy)
 - `AuditLog` — generic (`actorId`, `action`, `entityType`, `entityId`, `metadata`, `createdAt`), every future module's mutations write through this
 
-**Convention for future modules**: every business table gets `createdAt`, `updatedAt`, `createdById → User`, and `departmentId → Department` where department-scoped. Enum-like lookups that need to be admin-editable (statuses, categories) should be DB tables, not Prisma enums, from Phase 2 onward — `RoleKey` is a deliberate exception since the 9 roles are fixed by business requirements.
+**Convention envisioned for future modules under that superseded plan**: every business table gets `createdAt`, `updatedAt`, `createdById → User`, and `departmentId → Department` where department-scoped. Not adopted verbatim by the real MongoDB schema (no `Department` collection exists), but `createdAt`/`updatedAt`/`createdByUserId`-style fields are already present on `Quote`/`Product` and are a reasonable convention to keep for any future collection.
 
-## Migration Notes
+## Migration Notes (historical — how the old client-side shapes informed the real 2026-07-09 migration)
 
-When Phase 2 starts:
-1. `Product`/`ProductCategory` map close to 1:1 onto future Prisma models — the client-side shapes above are a solid starting schema.
-2. `Quote`/`QuoteLine`/`SubDetail` will need `id` fields changed from client-generated strings/numbers to database-generated IDs (e.g. `cuid()`). `createdByUserId` already exists and maps directly to a `createdById → User` foreign key; `salesperson` is still a free-text snapshot string, not a `User` reference, and should probably be superseded by `createdByUserId` rather than kept alongside it.
-3. `Company` becomes a proper settings table (or a single-row table) rather than a `localStorage` blob — `vatRate`/bank fields/`termsAndConditions` already match what that table needs.
-4. `User`, `Role`, `Permission` (client-side, built 2026-07-08) map reasonably well onto the proposed `User`/`Role`/`Permission`/`RolePermission` tables in the Future Database Plans section above — the biggest gaps to close during migration: `passwordHash` needs real bcrypt hashing (not the client-side checksum), `Role.permissions: Permission[]` (an array on the row) needs to become a proper `RolePermission` many-to-many join, and the 6-role set built here needs reconciling against the 9-role `RoleKey` enum already proposed.
-5. `ApprovalHistoryEntry[]` on `Quote` maps to a new `QuotationApproval` table (`quoteId`, `userId`, `action`, `comment`, `createdAt`) rather than a JSON array column, so it can be queried/reported on.
-6. `Notification` and `AuditLogEntry` map close to 1:1 onto their own tables — `AuditLogEntry` in particular is already shaped like the generic `AuditLog` model in the Future Database Plans section above (`actorId`→`userId`, `action`, `entityType`→`module`, `metadata`→`details`).
+This section originally described a hypothetical future Prisma/PostgreSQL migration; it's kept, reframed, as an accurate record of how the pre-existing client-side shapes actually mapped onto the real MongoDB migration that shipped 2026-07-09:
+
+1. `Product`/`ProductCategory` mapped close to 1:1 onto their MongoDB collections — the client-side shapes were a solid starting schema, as predicted; only `id` changed from a client-generated string to a MongoDB `ObjectId` (mapped back to `id: string` for the client via `withStringId()`).
+2. `Quote`/`QuoteLine`/`SubDetail`: `Quote.id` did **not** move to a database-generated ID — it stayed the client-meaningful business ID (`"QT-2567-0041"`) and became the literal MongoDB `_id` for that collection (see the "`id` → `_id` mapping" note above), a deliberate deviation from the originally-imagined `cuid()` approach since the business ID was already unique. `createdByUserId` maps directly to the session user's ID captured server-side on create/duplicate. `salesperson` remains a free-text snapshot string, not a `User` reference, unchanged.
+3. `Company` became a proper singleton MongoDB document (`_id: "singleton"`) rather than a `localStorage` blob, exactly as anticipated — `vatRate`/bank fields/`termsAndConditions` carried over unchanged.
+4. `User`/`Role`/`Permission`: `passwordHash` is now a real bcrypt hash (cost 10), closing the biggest gap this section flagged in advance. `Role.permissions: Permission[]` stayed an array field on the `roles` document rather than becoming a `RolePermission` many-to-many join table — MongoDB's document model made the join-table normalization unnecessary; the array-on-document shape works fine for a role count in the tens. The 6-role client-side set was kept as-is; the 9-role `RoleKey` enum from the superseded Prisma proposal was never adopted.
+5. `ApprovalHistoryEntry[]` on `Quote` stayed a JSON array field on the `quotes` document rather than becoming a separate `QuotationApproval` table — same reasoning as `Role.permissions` above; MongoDB's embedded-document model made a normalized join table unnecessary for this access pattern (approval history is always read together with its parent quote).
+6. `Notification` and `AuditLogEntry` mapped close to 1:1 onto their own MongoDB collections, as predicted.

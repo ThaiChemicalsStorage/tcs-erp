@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronRight, Plus, Pencil, Archive, ArchiveRestore, Check, X, Tags } from "lucide-react";
 import type { ProductCategory } from "../../lib/products";
-import { newId } from "../../lib/products";
+import { createCategory, updateCategory } from "../../lib/products";
 
 export function CategoriesManager({
   categories,
@@ -17,7 +17,7 @@ export function CategoriesManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
 
-  const addCategory = () => {
+  const addCategory = async () => {
     const trimmed = newName.trim();
     if (!trimmed) {
       setError("กรุณากรอกชื่อหมวดหมู่");
@@ -27,21 +27,34 @@ export function CategoriesManager({
       setError("มีหมวดหมู่นี้อยู่แล้ว");
       return;
     }
-    onChange([...categories, { id: newId("cat"), name: trimmed, archived: false }]);
-    setNewName("");
-    setError("");
+    try {
+      const created = await createCategory(trimmed);
+      onChange([...categories, created]);
+      setNewName("");
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "สร้างหมวดหมู่ไม่สำเร็จ");
+    }
   };
 
   const startEdit = (c: ProductCategory) => { setEditingId(c.id); setEditingName(c.name); };
-  const saveEdit = () => {
+  const saveEdit = async () => {
     const trimmed = editingName.trim();
-    if (!trimmed) return;
-    onChange(categories.map((c) => (c.id === editingId ? { ...c, name: trimmed } : c)));
-    setEditingId(null);
+    if (!trimmed || !editingId) return;
+    try {
+      const updated = await updateCategory(editingId, { name: trimmed });
+      onChange(categories.map((c) => (c.id === editingId ? updated : c)));
+      setEditingId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
+    }
   };
 
-  const toggleArchive = (id: string) => {
-    onChange(categories.map((c) => (c.id === id ? { ...c, archived: !c.archived } : c)));
+  const toggleArchive = async (id: string) => {
+    const target = categories.find((c) => c.id === id);
+    if (!target) return;
+    const updated = await updateCategory(id, { archived: !target.archived });
+    onChange(categories.map((c) => (c.id === id ? updated : c)));
   };
 
   return (

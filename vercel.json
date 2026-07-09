@@ -1,0 +1,18 @@
+{
+  "rewrites": [
+    { "source": "/api/auth", "destination": "/api/handlers/auth" },
+    { "source": "/api/auth/:path*", "destination": "/api/handlers/auth" },
+    { "source": "/api/users", "destination": "/api/handlers/users" },
+    { "source": "/api/users/:path*", "destination": "/api/handlers/users" },
+    { "source": "/api/roles", "destination": "/api/handlers/roles" },
+    { "source": "/api/roles/:path*", "destination": "/api/handlers/roles" },
+    { "source": "/api/products", "destination": "/api/handlers/products" },
+    { "source": "/api/products/:path*", "destination": "/api/handlers/products" },
+    { "source": "/api/categories", "destination": "/api/handlers/categories" },
+    { "source": "/api/categories/:path*", "destination": "/api/handlers/categories" },
+    { "source": "/api/notifications", "destination": "/api/handlers/notifications" },
+    { "source": "/api/notifications/:path*", "destination": "/api/handlers/notifications" },
+    { "source": "/api/quotes", "destination": "/api/handlers/quotes" },
+    { "source": "/api/quotes/:path*", "destination": "/api/handlers/quotes" }
+  ]
+}

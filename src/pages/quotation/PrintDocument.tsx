@@ -7,6 +7,7 @@ import {
   lineHasDetails, formatQuoteDateThai as fmtThaiDate, formatQuoteDateNumeric as fmtNumericDate,
 } from "../../lib/quotes";
 import { FormattedNotes } from "./notesFormat";
+import { BrandMark } from "../../components/BrandMark";
 
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   if (!value.trim()) return null;
@@ -93,9 +94,7 @@ export function PrintDocument({
                 {company.logoDataUrl ? (
                   <img src={company.logoDataUrl} alt={company.name} className="w-12 h-12 rounded-full object-contain border border-[#0b1d3a]/15 bg-white p-0.5 flex-shrink-0" />
                 ) : (
-                  <div className="w-12 h-12 rounded-full bg-[#0b1d3a] flex items-center justify-center flex-shrink-0">
-                    <span className="text-[#c9a84c] text-lg font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>ท</span>
-                  </div>
+                  <BrandMark size={48} variant="mark" theme="dark" className="flex-shrink-0" />
                 )}
                 <div>
                   <p className="font-bold text-[13px]">{company.name}</p>

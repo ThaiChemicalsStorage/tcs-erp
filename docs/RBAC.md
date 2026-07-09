@@ -1,14 +1,17 @@
 # RBAC (Role-Based Access Control)
 
-## Current State: Client-Side RBAC Simulation (Phase 1) — Not Real Security
+## Current State: Real, Server-Enforced RBAC — Deployed and Live
 
-As of 2026-07-08 this app has a full RBAC/user-management/approval-workflow/notification/audit-log system — **but it is entirely client-side**: every permission check, every workflow gate, and the audit log itself run in the browser and read/write `localStorage`. There is no server to be the source of truth, so:
+As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/audit-log system is **genuinely enforced server-side**, not a client-side simulation. The app is deployed at https://tcs-erp-nine.vercel.app on a real backend: Vercel Serverless Functions + MongoDB Atlas (see [ARCHITECTURE.md](./ARCHITECTURE.md), [API.md](./API.md), [DATABASE.md](./DATABASE.md)). The role/permission **model itself is unchanged** from the 2026-07-08 client-side build described further below — same 6 default roles, same 17-permission set, same UI. What changed is **where each check is enforced**:
 
-- Anyone with browser devtools can read/edit `localStorage` directly — grant themselves a different role, mark a quotation approved, or delete audit log entries.
-- `hashPassword()` (`src/lib/users.ts`) is **not** a real cryptographic hash — it's a simple checksum, chosen only so passwords aren't stored as literal plaintext strings. It offers no real protection.
-- All "multi-user" data (every account, every quote, every notification, the whole audit log) lives in **one browser's `localStorage`**. This simulates multi-user behavior for demo/testing purposes (log out, log back in as a different account), but there is no real multi-device or concurrent-session support.
+- Every mutating API route calls `requireUser()`/`requirePermission()` (`api/_lib/auth.ts`) server-side, using the exact same `roleHasPermission()` function from `src/lib/roles.ts`, value-imported into the API layer (not reimplemented, not just mirrored). A client can no longer grant itself a permission, approve its own quotation, or write an audit log entry claiming to be someone else — the server checks the caller's real role, fetched fresh from MongoDB on every request, and rejects anything not allowed.
+- Passwords are **real bcrypt hashes** (`bcryptjs`, cost 10) — the old `hashPassword()` non-cryptographic checksum is gone entirely, deleted, not just deprecated.
+- Sessions are a **JWT in an httpOnly, secure, `sameSite=lax` cookie** (`tcs_erp_session`, 7-day expiry) — not a bare `localStorage` string. It cannot be read or forged by client-side JavaScript/devtools (httpOnly), and every request re-verifies it server-side and re-fetches the user's current `status`/`roleKey` from MongoDB, so a deactivated account is locked out on its very next request.
+- All data (every account, every quote, every notification, the audit log) lives in a real shared MongoDB database, not one browser's `localStorage` — genuine multi-device, multi-session, multi-user support.
 
-**Treat this exactly like the rest of Phase 1: a correct, testable UI/UX and data-model simulation of the target system, not the target system itself.** Do not deploy this as if it were access-controlled. The "Proposed Future RBAC" section below (still not implemented) is what turns this into real security.
+**What client-side permission checks (`hasPermission()`, sidebar filtering, button gating) remain**: exactly what they always were — a UX layer that hides controls a user shouldn't see. They are **not** the security boundary anymore (they never should have been treated as one, and now genuinely aren't): the server independently re-checks every mutation regardless of what the UI shows or hides. This is the correct, standard shape for a web app's RBAC (client = UX, server = enforcement) — no longer a "simulation" positioned to become that shape someday.
+
+**Known, honest gaps** (not fixed, not hidden — see Known Gaps at the bottom of this file): no rate limiting on login attempts, no automated tests over the new API/permission layer, and no two-stage sequential approval (unchanged limitation from before, see Known Simplifications below).
 
 ### What's actually built
 
@@ -27,7 +30,7 @@ As of 2026-07-08 this app has a full RBAC/user-management/approval-workflow/noti
 | Approver Level 2 | — | — | Same rights as Level 1 in this build (see Known Simplifications below). Maps to "CEO." |
 | Viewer | — | — | `*:view` only. |
 
-Admins can create additional custom roles and edit any non-system role's permission checkboxes via Role Management (`src/pages/admin/RoleManagementPage.tsx`) — **Super Admin only**, and that page's own visibility plus every mutating action are gated by `userIsSuperAdmin()`, not just the `roles:manage` permission, so a misconfigured custom role can never accidentally grant itself role-management rights. `roles:manage` and `company:manage` are additionally hardcoded in `SUPER_ADMIN_ONLY_PERMISSIONS` (`permissions.ts`) — the permission-matrix checkboxes for those two are disabled/locked for every role except Super Admin itself, so there is no UI path to grant them elsewhere. Super Admin and Administrator rows are read-only in that same UI (can be viewed, not edited or deleted) to prevent an admin from locking everyone out — matching the design note this file already had before implementation.
+Admins can create additional custom roles and edit any non-system role's permission checkboxes via Role Management (`src/pages/admin/RoleManagementPage.tsx`) — gated client-side by `userIsSuperAdmin()`, and **independently re-enforced server-side**: `POST`/`PATCH`/`DELETE /api/roles*` all require the `roles:manage` permission (`api/handlers/roles.ts`), which only the Super Admin role holds (see below), and the server strips any `roles:manage`/`company:manage` permission from a submitted permission list regardless of what the client sent, so there is no way — UI or direct API call — to grant them elsewhere. `roles:manage` and `company:manage` are additionally hardcoded in `SUPER_ADMIN_ONLY_PERMISSIONS` (`permissions.ts`) and `isPermissionLockedToSuperAdmin()` (`src/lib/roles.ts`, the same function used both client- and server-side) — the permission-matrix checkboxes for those two are disabled/locked for every role except Super Admin itself in the UI, and the server independently refuses to persist them onto any other role even if a request is crafted by hand. Super Admin and Administrator rows are `isSystem` — read-only in the UI, and the server rejects `PATCH`/`DELETE` on any `isSystem` role with a `400` regardless of the caller's permissions — preventing an admin from locking everyone out via either the UI or a direct API call.
 
 ### Sidebar / Menu Visibility
 
@@ -35,7 +38,7 @@ Admins can create additional custom roles and edit any non-system role's permiss
 
 ### Quotation Approval Workflow
 
-`QuoteStatus` (`src/lib/quotes.tsx`) has 9 values: `ร่าง` (Draft) → `รออนุมัติ` (Pending Approval) → `อนุมัติแล้ว` (Approved) → `ส่งให้ลูกค้าแล้ว` (Sent to Customer) → `ลูกค้ายอมรับ` (Customer Accepted) → `ปิดการขายสำเร็จ` (Won), or `ลูกค้าปฏิเสธ` (Customer Rejected) → `เสียโอกาส` (Lost); plus a standalone `ยกเลิก` (Cancelled) reachable from Draft/Pending/Approved. `workflowTransitions` encodes the state machine (`{action: {from: QuoteStatus[], to: QuoteStatus}}`). `computeQuotePermissions(quote, isNew, currentUser, roles)` derives which action buttons a given user may see for a given quote, combining permission checks with an **ownership** check (`quote.createdByUserId === currentUser.id`, with approvers/admins allowed to touch quotes they don't own). Every transition appends an `ApprovalHistoryEntry` (`userId`, `userName`, `roleName`, `action`, `comment`, `createdAt`) to `Quote.approvalHistory` — **never removed, only appended**, rendered on the document as "ประวัติการอนุมัติ." Reject/Customer-Reject/Cancel require a non-empty comment via a modal; other transitions allow an optional one.
+`QuoteStatus` (`src/lib/quotes.tsx`) has 9 values: `ร่าง` (Draft) → `รออนุมัติ` (Pending Approval) → `อนุมัติแล้ว` (Approved) → `ส่งให้ลูกค้าแล้ว` (Sent to Customer) → `ลูกค้ายอมรับ` (Customer Accepted) → `ปิดการขายสำเร็จ` (Won), or `ลูกค้าปฏิเสธ` (Customer Rejected) → `เสียโอกาส` (Lost); plus a standalone `ยกเลิก` (Cancelled) reachable from Draft/Pending/Approved. `workflowTransitions` encodes the state machine (`{action: {from: QuoteStatus[], to: QuoteStatus}}`). `computeQuotePermissions(quote, isNew, currentUser, roles)` derives which action buttons a given user may see for a given quote, combining permission checks with an **ownership** check (`quote.createdByUserId === currentUser.id`, with approvers/admins allowed to touch quotes they don't own) — this remains client-side, display-only logic. `POST /api/quotes/:id/workflow` independently re-derives and re-checks the same permission + ownership rule server-side via `isWorkflowActionAllowed()` (`api/_lib/quoteWorkflow.ts`, a deliberately duplicated copy of `workflowTransitions`/`ApprovalAction` from `quotes.tsx` — see [ARCHITECTURE.md](./ARCHITECTURE.md) for why it's a duplicate, not an import) and validates the requested transition's `from` state against the quote's actual current status in MongoDB before applying it — a devtools-triggered call to approve a quote you don't have permission for, or to skip a status, is rejected with a `403`/`400` server-side, not just hidden client-side. Every transition appends an `ApprovalHistoryEntry` (`userId`, `userName`, `roleName`, `action`, `comment`, `createdAt`, all server-derived from the authenticated session) to `Quote.approvalHistory` — **never removed, only appended**, rendered on the document as "ประวัติการอนุมัติ." Reject/Customer-Reject/Cancel require a non-empty comment via a modal; other transitions allow an optional one.
 
 **Known simplification**: the two approver roles (Level 1/Level 2) are not sequenced — either can independently approve or reject a quote in "รออนุมัติ." A real two-stage gate (Level 1 must approve before Level 2 can) was not requested by name in the given status diagram (a single "Pending Approval" step) and was scoped out; see [TODO.md](./TODO.md).
 
@@ -45,68 +48,44 @@ Admins can create additional custom roles and edit any non-system role's permiss
 
 ### Notifications
 
-`src/lib/notifications.ts` + `src/components/NotificationBell.tsx`. The bell shows no badge at 0 unread, a red badge with the count otherwise (capped display at "99+"). Notifications are stored in one shared list (consistent with the single-`localStorage` simulation) and filtered by `recipientUserId` for display. Delivery is role-based, not broadcast: submitting a quote notifies every active user holding `quotations:approve` (plus every active `approver_2` user if the quote total is ≥ `HIGH_VALUE_THRESHOLD`, ฿500,000); approve/reject/customer-accept/customer-reject notify the quote's creator. Clicking a notification marks it read and navigates to the quotation module (not yet the specific record — see [TODO.md](./TODO.md)).
+`src/lib/notifications.ts` + `src/components/NotificationBell.tsx`. The bell shows no badge at 0 unread, a red badge with the count otherwise (capped display at "99+"). `GET /api/notifications` filters **server-side** to the caller's own notifications (`recipientUserId === ctx.user.id`) — a genuine fix over the pre-migration client-side-only filtering, where every user's notifications lived in every other user's browser memory. There is deliberately no generic "create notification" endpoint; creation only happens server-side, inside `POST /api/quotes/:id/workflow`, as a side effect of a status transition. Delivery is role-based, not broadcast: submitting a quote notifies every active user holding `quotations:approve` (plus every active `approver_2` user if the quote total is ≥ `HIGH_VALUE_THRESHOLD`, ฿500,000); approve/reject/customer-accept/customer-reject notify the quote's creator. Clicking a notification marks it read and navigates to the quotation module (not yet the specific record — see [TODO.md](./TODO.md)).
 
 ### Audit Log
 
-`src/lib/auditLog.ts` — `logAudit()` reads the current log, prepends a new entry, writes back; there is no update or delete function at all, so there is no code path for any user (including Super Admin) to alter history through the UI. Recorded actions include Login/Logout, User Created/Updated/Activated/Deactivated/Deleted, Password Reset, Profile Updated, Company Settings Updated, Role Changed/Permission Changed, and the full quotation lifecycle (Created/Submitted/Approved/Rejected/Status Changed). `AuditLogPage.tsx` is read-only — view (`auditLog:view`) is the only permission that touches it.
+`src/lib/auditLog.ts` calls `POST /api/audit-log`, which always derives `userId`/`userName`/`roleName` from the authenticated session server-side — **never** from the request body, so a client can describe what happened but can never forge who did it. There is no update or delete route at all, so there is no code path for any user (including Super Admin) to alter history, via the UI or a direct API call. Recorded actions include Login/Logout, User Created/Updated/Activated/Deactivated/Deleted, Password Reset, Profile Updated, Company Settings Updated, Role Changed/Permission Changed, and the full quotation lifecycle (Created/Submitted/Approved/Rejected/Status Changed). `AuditLogPage.tsx` self-fetches via `useEffect` (not part of the universal boot-time fetch) and is read-only — `GET /api/audit-log` requires `auditLog:view` server-side.
 
 ---
 
-## Proposed Future RBAC (real, server-enforced — design only, still not implemented)
+## What Was Achieved vs. the Old "Proposed Future RBAC" Design
 
-Everything below is the **Phase 2** design, unchanged in intent from before this session's client-side build, and still not started. The client-side model above was deliberately shaped to map onto it closely (see [DATABASE.md](./DATABASE.md) Migration Notes) so that migrating is "move this logic server-side," not "design RBAC twice."
+Before the 2026-07-09 migration, this file described a hypothetical "Phase 2" (Next.js/Prisma/Postgres/Auth.js) design as the only way to get real server-enforced RBAC. That specific stack was never built (see [ARCHITECTURE.md](./ARCHITECTURE.md) "Superseded" section) — but the *goal* it described (server-side enforcement, real password hashing, real session revocation) **was achieved**, via a different, simpler stack (Vercel Functions + MongoDB). Comparing point-by-point:
 
-### Roles
+| Old proposal | What actually shipped (2026-07-09) | Equivalent? |
+|---|---|---|
+| Roles: fixed 9-value `RoleKey` enum (`SUPER_ADMIN`, `ADMIN`, `MANAGER`, `SALES`, `ACCOUNTING`, `WAREHOUSE`, `PURCHASING`, `HR`, `EMPLOYEE`) | The existing 6-role set (Super Admin, Administrator, Sales User, Approver Level 1/2, Viewer) — unchanged, stored as MongoDB documents in the `roles` collection, seeded from `defaultRoles` | **Not adopted** — the 9-role enum was never built; the simpler 6-role set was kept as-is and migrated to MongoDB unchanged |
+| Permissions: granular DB-stored keys (e.g. `"admin.users.manage"`) via a `RolePermission` many-to-many join, admin-regrantable without a deploy | The existing flat 17-key `Permission` TypeScript union (`src/lib/permissions.ts`), with each role's `permissions: Permission[]` stored as an array field on its MongoDB document | **Partially equivalent** — permissions are admin-regrantable via Role Management without a deploy (the goal was met), but the permission *keys themselves* are still a hardcoded TypeScript union, not admin-creatable rows; adding a wholly new permission still requires a code change |
+| Protected routes: `middleware.ts` session check + `requirePermission()` in every server action, unbypassable by URL or devtools | `requireUser()`/`requirePermission()` (`api/_lib/auth.ts`) in every mutating API route handler, same effect | **Equivalent** — genuinely unbypassable server-side enforcement, just implemented as per-route guards in Vercel Functions instead of Next.js middleware + Server Actions |
+| Sidebar: one `can()` function imported both client- and server-side | Client: `hasPermission()`/`userIsSuperAdmin()` (`src/lib/roles.ts`) filters the sidebar, display-only. Server: `roleHasPermission()` (same file, same logic, different exported name) is value-imported into `api/_lib/auth.ts` and used for real enforcement | **Equivalent in spirit** — one shared source of truth for the permission-checking *logic*, imported into both the client bundle and the server functions, so the two can't drift out of sync — just two exported function names (`hasPermission` client-facing wrapper, `roleHasPermission` the shared core) rather than one identical `can()` |
+| Passwords: bcrypt, cost factor 12, server-side only | bcrypt (`bcryptjs`), **cost factor 10**, server-side only (`api/_lib/auth.ts`) | **Equivalent in kind, lower cost factor** — real bcrypt hashing either way; 10 vs. 12 is a deliberate-or-default tradeoff not explicitly revisited during migration, worth a look if login latency budget allows raising it |
+| Sessions: database-backed (Auth.js + Prisma adapter), chosen specifically so disabling a user force-invalidates their session immediately | **JWT** in an httpOnly/secure/`sameSite=lax` cookie, 7-day expiry — *not* database-backed | **Practically equivalent, mechanically different**: every request re-fetches the user fresh from MongoDB and checks `status === "active"` (`getAuthContext()`), so a deactivated user is locked out on their very next request, matching the old proposal's user-facing goal. But this is not true session revocation — the JWT itself remains cryptographically valid until its natural 7-day expiry; there is no server-side deny-list, so a scenario like "steal a valid JWT, then get the account deactivated" doesn't fully close that stolen token's window the way deleting a database `Session` row would. Low risk in practice (the token is httpOnly and never exposed to XSS-readable JS), but worth knowing this is a real, if narrow, gap vs. the original design intent. |
+| `SUPER_ADMIN`/`ADMIN` rows read-only in the permission-matrix UI | `isSystem` roles are read-only client-side **and** the server independently rejects `PATCH`/`DELETE` on them | **Exceeded** — the old proposal only specified the UI-level protection; the real implementation added an independent server-side guard the proposal didn't explicitly call for |
+| Every sensitive mutation writes an `AuditLog` row via a shared helper | `logAudit()` → `POST /api/audit-log`, server-derives the actor identity, append-only, no update/delete route | **Exceeded** — the old proposal didn't specify actor-spoofing protection; the real implementation added it (server never trusts client-claimed identity) |
 
-Fixed set, `RoleKey` enum:
+## Known Gaps (honest, current, not hidden)
 
-| Role | Notes |
-|---|---|
-| `SUPER_ADMIN` | Bypasses all permission checks |
-| `ADMIN` | Full access except super-admin-only actions |
-| `MANAGER` | Scoped to their department's data |
-| `SALES` | Leads, Customers, Quotations |
-| `ACCOUNTING` | Financial data |
-| `WAREHOUSE` | Inventory/warehouse data |
-| `PURCHASING` | Purchasing data |
-| `HR` | HR data |
-| `EMPLOYEE` | Baseline, minimal access |
+- **No rate limiting on `POST /api/auth/login`** — a scripted brute-force attempt against a known username isn't throttled. Should be closed before this app is exposed beyond a trusted internal network. See [TODO.md](./TODO.md).
+- **No true session revocation** — see the Sessions row above. A stolen, still-valid JWT is not immediately invalidated by an admin action (only future requests from a *deactivated* account are blocked; a still-active account's leaked token remains usable until natural expiry).
+- **No automated tests** over the new API/permission layer — every guard described above was manually verified during the migration, not covered by a test suite. See [TODO.md](./TODO.md).
+- **Sequential two-level approval** (Approver Level 1 must approve before Level 2 can) is still not implemented — unchanged limitation from the pre-migration build, see Known Simplifications above. This was never blocked on the backend migration; it's a product decision, not a security gap.
+- **bcrypt cost factor is 10**, not the 12 originally proposed — not necessarily wrong (10 is bcryptjs's own reasonable default), but not a value that was deliberately chosen during migration either; worth a conscious revisit.
+- **A MongoDB Atlas database-user password was pasted into an AI chat session** during this migration's development. A credential rotation was recommended to the user as a follow-up; whether it has been done cannot be verified from the codebase. Flagged in [PROJECT_STATUS.md](./PROJECT_STATUS.md) Known Risks and [TODO.md](./TODO.md) as an unresolved action item.
 
-Each role's `name` (display label) is admin-editable; the `key` enum value is fixed by business requirements. Note this 9-role Phase 2 set is a different shape than the 6-role client-side simulation above (which was built directly against this session's request); reconciling the two role lists is part of the eventual migration design work, not assumed to be 1:1.
+### Not carried over from the superseded proposal
 
-### Permissions
+A few pieces of the old Next.js/Prisma design were never built and have no equivalent today — listed here so a future reader doesn't assume they exist:
 
-Granular string keys grouped by module, e.g. `"admin.users.manage"`, `"leads.read"`, `"quotations.approve"`. Stored as `Permission` rows (admin-editable data), granted to roles via a `RolePermission` many-to-many join — **not hardcoded in code**, so an admin can regrant permissions without a deploy. (The client-side simulation's `Permission` type in `src/lib/permissions.ts` is a hardcoded TypeScript union instead, since there's no database to hold rows — the *shape* of the idea, module-grouped granular keys, is the same.)
+- **Per-module `manifest.ts` + `module-registry.ts` sidebar declaration pattern** — the sidebar is still the same flat `navItems` array in `App.tsx` filtered by `hasPermission()`, unchanged by the migration.
+- **`departmentScope(user)` data-level scoping for a `MANAGER` role** — no `Department` entity or manager-scoped query filtering exists. The only data-level scoping in this app remains the much narrower **ownership** check on quotations (`Quote.createdByUserId`), now enforced both client- and server-side (see Quotation Approval Workflow above).
+- **9-role `RoleKey` enum** and any notion of per-department role splits — the 6-role set was kept as-is (see the comparison table above).
 
-### Protected Routes
-
-Proposed enforcement is **server-side and unbypassable by typing a URL**:
-- `middleware.ts` — coarse "is there a session" check, redirects unauthenticated users.
-- Every protected page starts with `const session = await auth(); if (!can(session?.user, "some.permission")) redirect("/unauthorized")`.
-- Every server action starts with `requirePermission("some.permission")`, which throws before any mutation runs — this is what actually stops a devtools-triggered action call, not just a hidden button.
-
-### Sidebar / Menu Visibility
-
-Each module declares its nav entry + required permission in a `manifest.ts` (e.g. `{ label: "จัดการผู้ใช้", path: "/admin/users", permission: "admin.users.manage" }`). The sidebar filters the aggregated `module-registry.ts` list using the same `can()` function used server-side — **one implementation, imported both places**, so client-side hiding and server-side enforcement never drift out of sync. The client-side check is display-only and never trusted for security. (The client-side simulation's `hasPermission()` filtering of `navItems` in `App.tsx` is the same display-only pattern, just with no server-side counterpart to back it yet.)
-
-### CRUD Permissions
-
-Same `can(user, permission)` pattern wraps individual buttons: `{can(session.user, "admin.users.manage") && <Button>ลบผู้ใช้</Button>}`. Real enforcement still happens in the server action, not the button's presence.
-
-### Data-Level Scoping (Managers)
-
-Proposed `departmentScope(user)` helper: `SUPER_ADMIN`/`ADMIN` get no filter; `MANAGER` and regular roles get `{ departmentId: user.departmentId }`, applied inside `queries/*.ts` so a Manager's list views are automatically scoped to their department without each query re-implementing the filter. Not built client-side — the current simulation's "ownership" scoping (`Quote.createdByUserId`) is a much narrower version of this same idea, limited to quotations.
-
-### Future Roles
-
-The 9 roles above are the Phase-2 starting set. Additional roles (e.g. per-department finer splits) can be added as new `RoleKey` enum values + a migration, since permissions themselves are already data-driven.
-
-### Security Notes
-
-- Passwords: `bcryptjs`, cost factor 12, hashed only server-side, never logged. (Contrast with the client-side simulation's `hashPassword()` — a simple checksum, explicitly not real security.)
-- Sessions: database-backed (Auth.js + Prisma adapter), not JWT — chosen specifically so disabling a user can force-invalidate their session immediately (delete their `Session` rows) rather than needing a JWT revocation list. (Contrast with the simulation's `session.ts` — a plain `localStorage` string, no expiry, no server-side revocation possible.)
-- `SUPER_ADMIN`/`ADMIN` role rows should be **read-only in the permission-matrix UI** (not editable) to prevent an admin from accidentally locking everyone out, including themselves. (Already implemented client-side in `RoleManagementPage.tsx` for `isSystem` roles.)
-- Every sensitive mutation should write an `AuditLog` row (actor, action, entity, metadata, timestamp) via a shared `logAudit()` helper — not scattered ad hoc logging calls. (Already implemented client-side in `src/lib/auditLog.ts`, same shape, minus real tamper-resistance since it's just a `localStorage` array.)
-
-None of this Phase 2 section is implemented. Do not write code that assumes `can()`, `requirePermission()`, a server-side `Role`/`Permission` table, or any Auth.js integration exists — check [ARCHITECTURE.md](./ARCHITECTURE.md) for current status before building against this design. The client-side `hasPermission()`/`userIsSuperAdmin()`/`roleNameFor()` helpers in `src/lib/roles.ts` are the *real, working* equivalent for anything client-side today.
+None of the above exists in this repo. Do not write code that assumes a `Department` collection, a `manifest.ts`/`module-registry.ts` pattern, or a 9-role enum exists. `hasPermission()`/`userIsSuperAdmin()`/`roleNameFor()`/`roleHasPermission()` in `src/lib/roles.ts` are the real, working, shared-client-and-server implementation for everything RBAC-related today.

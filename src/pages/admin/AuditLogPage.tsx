@@ -1,9 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import type { AuditLogEntry } from "../../lib/auditLog";
+import { fetchAuditLog } from "../../lib/auditLog";
+import { useI18n } from "../../lib/i18n";
 
-export function AuditLogPage({ entries }: { entries: AuditLogEntry[] }) {
+export function AuditLogPage() {
+  const { t } = useI18n();
   const [search, setSearch] = useState("");
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchAuditLog().then(setEntries).finally(() => setLoading(false));
+  }, []);
 
   const filtered = entries.filter((e) => {
     const q = search.trim().toLowerCase();
@@ -45,7 +54,16 @@ export function AuditLogPage({ entries }: { entries: AuditLogEntry[] }) {
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="text-center text-xs text-muted-foreground py-10">ไม่พบบันทึกการใช้งาน</td></tr>
+              <tr>
+                <td colSpan={6} className="text-center text-xs text-muted-foreground py-10">
+                  {loading ? "กำลังโหลด..." : entries.length === 0 ? (
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="font-medium text-foreground">{t("empty.auditLog.title")}</span>
+                      <span>{t("empty.auditLog.sub")}</span>
+                    </div>
+                  ) : "ไม่พบบันทึกการใช้งานที่ตรงกับเงื่อนไข"}
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

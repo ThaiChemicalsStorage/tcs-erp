@@ -10,7 +10,7 @@ export interface SetupWizardFields {
   password: string;
 }
 
-export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWizardFields) => void }) {
+export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWizardFields) => Promise<string | null> }) {
   const [fullName, setFullName] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [username, setUsername] = useState("");
@@ -19,8 +19,9 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !employeeId.trim() || !username.trim() || !email.trim() || !password) {
       setError("กรุณากรอกข้อมูลให้ครบทุกช่อง");
@@ -35,7 +36,10 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
       return;
     }
     setError("");
-    onComplete({ fullName: fullName.trim(), employeeId: employeeId.trim(), username: username.trim(), email: email.trim(), password });
+    setSubmitting(true);
+    const result = await onComplete({ fullName: fullName.trim(), employeeId: employeeId.trim(), username: username.trim(), email: email.trim(), password });
+    setSubmitting(false);
+    setError(result ?? "");
   };
 
   const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors";
@@ -97,9 +101,10 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
 
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+          disabled={submitting}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60"
         >
-          <ShieldCheck size={15} /> สร้างบัญชี Super Admin
+          <ShieldCheck size={15} /> {submitting ? "กำลังสร้างบัญชี..." : "สร้างบัญชี Super Admin"}
         </button>
       </form>
     </AuthLayout>

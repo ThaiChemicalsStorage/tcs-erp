@@ -6,21 +6,24 @@ export function SignInPage({
   onSignIn,
 }: {
   /** Returns an error message on failure, or null on success. */
-  onSignIn: (identifier: string, password: string) => string | null;
+  onSignIn: (identifier: string, password: string) => Promise<string | null>;
 }) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifier.trim() || !password.trim()) {
       setError("กรุณากรอกชื่อผู้ใช้/อีเมลและรหัสผ่านให้ครบถ้วน");
       return;
     }
-    const result = onSignIn(identifier.trim(), password);
+    setSubmitting(true);
+    const result = await onSignIn(identifier.trim(), password);
+    setSubmitting(false);
     setError(result ?? "");
   };
 
@@ -78,9 +81,10 @@ export function SignInPage({
 
         <button
           type="submit"
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+          disabled={submitting}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60"
         >
-          <LogIn size={15} /> เข้าสู่ระบบ
+          <LogIn size={15} /> {submitting ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
         </button>
       </form>
 

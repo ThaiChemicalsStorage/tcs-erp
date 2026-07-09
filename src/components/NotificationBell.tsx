@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bell, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2 } from "lucide-react";
 import type { Notification, NotificationType } from "../lib/notifications";
+import { useI18n } from "../lib/i18n";
 
 const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   quotation_submitted: <Send size={14} />,
@@ -37,6 +38,7 @@ export function NotificationBell({
   onDelete: (id: string) => void;
   onNavigate: (n: Notification) => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const mine = notifications
     .filter((n) => n.recipientUserId === currentUserId)
@@ -72,7 +74,7 @@ export function NotificationBell({
             </div>
             <div className="flex-1 overflow-y-auto">
               {mine.length === 0 ? (
-                <p className="text-center text-xs text-muted-foreground py-10">ไม่มีการแจ้งเตือน</p>
+                <p className="text-center text-xs text-muted-foreground py-10">{t("empty.notifications.title")}</p>
               ) : (
                 mine.map((n) => (
                   <div

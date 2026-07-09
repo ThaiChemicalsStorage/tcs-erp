@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Product, ProductCategory } from "../../lib/products";
-import { newId, nowIso } from "../../lib/products";
+import { createProduct, updateProduct, deleteProduct } from "../../lib/products";
 import { ProductList } from "./ProductList";
 import { ProductForm, type ProductDraft } from "./ProductForm";
 import { CategoriesManager } from "./CategoriesManager";
@@ -23,38 +23,53 @@ export function ProductsPage({
 
   const editingProduct = products.find((p) => p.id === editingId);
 
-  const handleCreate = (draft: ProductDraft) => {
-    onProductsChange([
-      ...products,
-      { id: newId("prod"), ...draft, archived: false, createdAt: nowIso(), updatedAt: nowIso() },
-    ]);
-    setView("list");
+  const handleCreate = async (draft: ProductDraft): Promise<string | null> => {
+    try {
+      const created = await createProduct(draft);
+      onProductsChange([...products, created]);
+      setView("list");
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : "สร้างสินค้าไม่สำเร็จ";
+    }
   };
 
-  const handleUpdate = (draft: ProductDraft) => {
-    onProductsChange(products.map((p) => (p.id === editingId ? { ...p, ...draft, updatedAt: nowIso() } : p)));
-    setView("list");
-    setEditingId(null);
+  const handleUpdate = async (draft: ProductDraft): Promise<string | null> => {
+    if (!editingId) return null;
+    try {
+      const updated = await updateProduct(editingId, draft);
+      onProductsChange(products.map((p) => (p.id === editingId ? updated : p)));
+      setView("list");
+      setEditingId(null);
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : "บันทึกไม่สำเร็จ";
+    }
   };
 
-  const handleArchiveToggle = (id: string) => {
-    onProductsChange(products.map((p) => (p.id === id ? { ...p, archived: !p.archived, updatedAt: nowIso() } : p)));
+  const handleArchiveToggle = async (id: string) => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return;
+    const updated = await updateProduct(id, { archived: !target.archived });
+    onProductsChange(products.map((p) => (p.id === id ? updated : p)));
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    await deleteProduct(id);
     onProductsChange(products.filter((p) => p.id !== id));
   };
 
-  const handleDuplicate = (id: string) => {
+  const handleDuplicate = async (id: string) => {
     const source = products.find((p) => p.id === id);
     if (!source) return;
     let code = `${source.code}-COPY`;
     let n = 2;
     while (products.some((p) => p.code === code)) { code = `${source.code}-COPY${n}`; n++; }
-    onProductsChange([
-      ...products,
-      { ...source, id: newId("prod"), code, name: `${source.name} (สำเนา)`, archived: false, createdAt: nowIso(), updatedAt: nowIso() },
-    ]);
+    const created = await createProduct({
+      code, name: `${source.name} (สำเนา)`, categoryId: source.categoryId, unit: source.unit,
+      defaultPrice: source.defaultPrice, description: source.description, specifications: source.specifications,
+    });
+    onProductsChange([...products, created]);
   };
 
   if (view === "categories") {

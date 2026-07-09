@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Plus, Pencil, Trash2, Lock, ShieldCheck } from "lucide-react";
 import type { Role } from "../../lib/roles";
-import { isPermissionLockedToSuperAdmin } from "../../lib/roles";
+import { isPermissionLockedToSuperAdmin, createRole, updateRole, deleteRole } from "../../lib/roles";
 import { PERMISSION_GROUPS, PERMISSION_LABELS, type Permission } from "../../lib/permissions";
 import type { User } from "../../lib/users";
-import { newId } from "../../lib/products";
+import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -54,22 +54,27 @@ export function RoleManagementPage({
     setForm((f) => ({ ...f, permissions: f.permissions.includes(p) ? f.permissions.filter((x) => x !== p) : [...f.permissions, p] }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { setError("กรุณากรอกชื่อบทบาท"); return; }
     const nameTaken = roles.some((r) => r.name.trim().toLowerCase() === form.name.trim().toLowerCase() && r.key !== editingKey);
     if (nameTaken) { setError("มีบทบาทชื่อนี้อยู่แล้ว"); return; }
 
-    if (view === "create") {
-      const key = newId("role");
-      const created: Role = { key, name: form.name.trim(), description: form.description.trim(), permissions: form.permissions, isSuperAdmin: false, isSystem: false };
-      onRolesChange([...roles, created]);
-      onAudit("Role Changed", `สร้างบทบาทใหม่ "${created.name}"`);
-      show("สร้างบทบาทเรียบร้อยแล้ว");
-    } else if (editingKey) {
-      onRolesChange(roles.map((r) => (r.key === editingKey ? { ...r, name: form.name.trim(), description: form.description.trim(), permissions: form.permissions } : r)));
-      onAudit("Permission Changed", `แก้ไขสิทธิ์ของบทบาท "${form.name.trim()}"`);
-      show("บันทึกการเปลี่ยนแปลงแล้ว");
+    try {
+      if (view === "create") {
+        const created = await createRole({ name: form.name.trim(), description: form.description.trim(), permissions: form.permissions });
+        onRolesChange([...roles, created]);
+        onAudit("Role Changed", `สร้างบทบาทใหม่ "${created.name}"`);
+        show("สร้างบทบาทเรียบร้อยแล้ว");
+      } else if (editingKey) {
+        const updated = await updateRole(editingKey, { name: form.name.trim(), description: form.description.trim(), permissions: form.permissions });
+        onRolesChange(roles.map((r) => (r.key === editingKey ? updated : r)));
+        onAudit("Permission Changed", `แก้ไขสิทธิ์ของบทบาท "${form.name.trim()}"`);
+        show("บันทึกการเปลี่ยนแปลงแล้ว");
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      return;
     }
     setView("list");
     setEditingKey(null);
@@ -77,11 +82,16 @@ export function RoleManagementPage({
 
   const usersWithRole = (roleKey: string) => users.filter((u) => u.roleKey === roleKey).length;
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
-    onRolesChange(roles.filter((r) => r.key !== deleteTarget.key));
-    onAudit("Role Changed", `ลบบทบาท "${deleteTarget.name}"`);
-    show("ลบบทบาทแล้ว");
+    try {
+      await deleteRole(deleteTarget.key);
+      onRolesChange(roles.filter((r) => r.key !== deleteTarget.key));
+      onAudit("Role Changed", `ลบบทบาท "${deleteTarget.name}"`);
+      show("ลบบทบาทแล้ว");
+    } catch (err) {
+      show(err instanceof ApiError ? err.message : "ลบไม่สำเร็จ");
+    }
     setDeleteTarget(null);
   };
 

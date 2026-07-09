@@ -1,4 +1,4 @@
-import { newId, nowIso } from "./products";
+import { apiFetch } from "./apiClient.js";
 
 export interface AuditLogEntry {
   id: string;
@@ -11,46 +11,19 @@ export interface AuditLogEntry {
   createdAt: string;
 }
 
-const AUDIT_LOG_KEY = "tcs_erp_audit_log";
-
-export function loadAuditLog(): AuditLogEntry[] {
-  try {
-    const raw = localStorage.getItem(AUDIT_LOG_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-function saveAuditLog(entries: AuditLogEntry[]) {
-  localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(entries));
+export async function fetchAuditLog(): Promise<AuditLogEntry[]> {
+  const { entries } = await apiFetch<{ entries: AuditLogEntry[] }>("/audit-log");
+  return entries;
 }
 
 /**
- * Append-only: reads the current log fresh from localStorage, appends, and writes back — so
- * callers never need a stale in-memory copy and can never accidentally truncate/edit history.
+ * Server-side: userId/userName/roleName are always taken from the authenticated session, never
+ * from this payload — so a client can only describe what happened, not claim to be someone else.
  */
-export function logAudit(entry: {
-  userId: string;
-  userName: string;
-  roleName: string;
-  module: string;
-  action: string;
-  details?: string;
-}): AuditLogEntry[] {
-  const entries = loadAuditLog();
-  const next: AuditLogEntry[] = [
-    {
-      id: newId("audit"),
-      userId: entry.userId,
-      userName: entry.userName,
-      roleName: entry.roleName,
-      module: entry.module,
-      action: entry.action,
-      details: entry.details ?? "",
-      createdAt: nowIso(),
-    },
-    ...entries,
-  ];
-  saveAuditLog(next);
-  return next;
+export async function logAudit(entry: { module: string; action: string; details?: string }): Promise<AuditLogEntry> {
+  const { entry: created } = await apiFetch<{ entry: AuditLogEntry }>("/audit-log", {
+    method: "POST",
+    body: JSON.stringify(entry),
+  });
+  return created;
 }

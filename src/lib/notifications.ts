@@ -1,4 +1,5 @@
-import { newId, nowIso } from "./products";
+import { newId, nowIso } from "./products.js";
+import { apiFetch } from "./apiClient.js";
 
 export type NotificationType =
   | "quotation_submitted"
@@ -20,21 +21,8 @@ export interface Notification {
   read: boolean;
 }
 
-const NOTIFICATIONS_KEY = "tcs_erp_notifications";
 /** Quote total (THB) above which the CEO/Approver Level 2 is notified directly. */
 export const HIGH_VALUE_THRESHOLD = 500000;
-
-export function loadNotifications(): Notification[] {
-  try {
-    const raw = localStorage.getItem(NOTIFICATIONS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-export function saveNotifications(notifications: Notification[]) {
-  localStorage.setItem(NOTIFICATIONS_KEY, JSON.stringify(notifications));
-}
 
 export function unreadCountFor(notifications: Notification[], userId: string): number {
   return notifications.filter((n) => n.recipientUserId === userId && !n.read).length;
@@ -110,4 +98,19 @@ export function notifyQuotationCustomerRejected(recipientUserIds: string[], quot
     module: "ใบเสนอราคา",
     relatedQuoteId: quoteId,
   });
+}
+
+export async function fetchNotifications(): Promise<Notification[]> {
+  const { notifications } = await apiFetch<{ notifications: Notification[] }>("/notifications");
+  return notifications;
+}
+export async function markNotificationRead(id: string): Promise<Notification> {
+  const { notification } = await apiFetch<{ notification: Notification }>(`/notifications/${id}`, { method: "PATCH" });
+  return notification;
+}
+export async function markAllNotificationsRead(): Promise<void> {
+  await apiFetch<void>("/notifications/mark-all-read", { method: "POST" });
+}
+export async function deleteNotification(id: string): Promise<void> {
+  await apiFetch<void>(`/notifications/${id}`, { method: "DELETE" });
 }

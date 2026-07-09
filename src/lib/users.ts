@@ -1,4 +1,4 @@
-import { newId, nowIso } from "./products";
+import { apiFetch } from "./apiClient.js";
 
 export type UserStatus = "active" | "inactive";
 
@@ -8,8 +8,6 @@ export interface User {
   fullName: string;
   username: string;
   email: string;
-  /** Client-only simulation, not real security — see docs/RBAC.md. Never a real password hash. */
-  passwordHash: string;
   phone: string;
   department: string;
   position: string;
@@ -19,35 +17,6 @@ export interface User {
   signatureDataUrl: string;
   createdAt: string;
   updatedAt: string;
-}
-
-const USERS_KEY = "tcs_erp_users";
-
-export function loadUsers(): User[] {
-  try {
-    const raw = localStorage.getItem(USERS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-export function saveUsers(users: User[]) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
-/**
- * Not a real cryptographic hash. This app has no backend — anything client-side is inherently
- * inspectable/bypassable via devtools. This only avoids storing raw passwords as plaintext strings.
- */
-export function hashPassword(password: string): string {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    hash = (hash * 31 + password.charCodeAt(i)) | 0;
-  }
-  return `h${Math.abs(hash).toString(36)}_${password.length}`;
-}
-export function verifyPassword(password: string, hash: string): boolean {
-  return hashPassword(password) === hash;
 }
 
 export function findUserByLogin(users: User[], identifier: string): User | undefined {
@@ -66,38 +35,6 @@ export function isUsernameTaken(users: User[], username: string, excludeUserId?:
 export function isEmailTaken(users: User[], email: string, excludeUserId?: string): boolean {
   const needle = email.trim().toLowerCase();
   return users.some((u) => u.id !== excludeUserId && u.email.toLowerCase() === needle);
-}
-
-export function newUser(fields: {
-  employeeId: string;
-  fullName: string;
-  username: string;
-  email: string;
-  password: string;
-  phone?: string;
-  department?: string;
-  position?: string;
-  roleKey: string;
-  status?: UserStatus;
-}): User {
-  const now = nowIso();
-  return {
-    id: newId("user"),
-    employeeId: fields.employeeId.trim(),
-    fullName: fields.fullName.trim(),
-    username: fields.username.trim(),
-    email: fields.email.trim(),
-    passwordHash: hashPassword(fields.password),
-    phone: fields.phone?.trim() ?? "",
-    department: fields.department?.trim() ?? "",
-    position: fields.position?.trim() ?? "",
-    roleKey: fields.roleKey,
-    status: fields.status ?? "active",
-    profilePictureDataUrl: "",
-    signatureDataUrl: "",
-    createdAt: now,
-    updatedAt: now,
-  };
 }
 
 export function initials(name: string): string {
@@ -128,3 +65,49 @@ export const DEPARTMENT_SUGGESTIONS: string[] = [
   "คลังสินค้า",
   "ไอที",
 ];
+
+export interface CreateUserFields {
+  employeeId: string;
+  fullName: string;
+  username: string;
+  email: string;
+  password: string;
+  phone?: string;
+  department?: string;
+  position?: string;
+  roleKey: string;
+  status?: UserStatus;
+}
+
+export interface UpdateUserFields {
+  fullName?: string;
+  employeeId?: string;
+  username?: string;
+  email?: string;
+  phone?: string;
+  department?: string;
+  position?: string;
+  roleKey?: string;
+  status?: UserStatus;
+  profilePictureDataUrl?: string;
+  signatureDataUrl?: string;
+  password?: string;
+  /** Required alongside `password` when a non-admin is changing their own password. */
+  currentPassword?: string;
+}
+
+export async function fetchUsers(): Promise<User[]> {
+  const { users } = await apiFetch<{ users: User[] }>("/users");
+  return users;
+}
+export async function createUser(fields: CreateUserFields): Promise<User> {
+  const { user } = await apiFetch<{ user: User }>("/users", { method: "POST", body: JSON.stringify(fields) });
+  return user;
+}
+export async function updateUser(id: string, fields: UpdateUserFields): Promise<User> {
+  const { user } = await apiFetch<{ user: User }>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  return user;
+}
+export async function deleteUser(id: string): Promise<void> {
+  await apiFetch<void>(`/users/${id}`, { method: "DELETE" });
+}

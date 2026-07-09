@@ -4,21 +4,23 @@ import {
   Search, ChevronRight, Menu, X, ChevronDown,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText,
 } from "lucide-react";
-import { type Company, loadCompany, saveCompany } from "./lib/storage";
-import {
-  type Product, type ProductCategory,
-  loadProducts, saveProducts, loadCategories, saveCategories,
-} from "./lib/products";
-import { type Quote, loadQuotes, saveQuotes } from "./lib/quotes";
-import {
-  type User, loadUsers, saveUsers, findUserByLogin, verifyPassword, newUser, initials,
-} from "./lib/users";
-import { type Role, loadRoles, saveRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
+import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
+import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
+import { type Quote, fetchQuotes } from "./lib/quotes";
+import { type User, fetchUsers, initials } from "./lib/users";
+import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
 import type { Permission } from "./lib/permissions";
-import { loadSession, saveSession, clearSession } from "./lib/session";
-import { type Notification, loadNotifications, saveNotifications } from "./lib/notifications";
-import { type AuditLogEntry, loadAuditLog, logAudit } from "./lib/auditLog";
+import { fetchSession, setupSuperAdmin, login, logout } from "./lib/session";
+import { ApiError } from "./lib/apiClient";
+import {
+  type Notification, fetchNotifications,
+  markNotificationRead as apiMarkNotificationRead,
+  markAllNotificationsRead as apiMarkAllNotificationsRead,
+  deleteNotification as apiDeleteNotification,
+} from "./lib/notifications";
+import { logAudit } from "./lib/auditLog";
 import { NotificationBell } from "./components/NotificationBell";
+import { BrandMark } from "./components/BrandMark";
 import type { SetupWizardFields } from "./pages/SetupWizardPage";
 
 const SetupWizardPage = lazy(() => import("./pages/SetupWizardPage").then((m) => ({ default: m.SetupWizardPage })));
@@ -39,6 +41,14 @@ function PageLoading() {
           <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />
         ))}
       </div>
+    </div>
+  );
+}
+
+function BootLoading() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center">
+      <img src="/logo.png" alt="Thai Chemicals Storage ERP" className="h-14 w-auto object-contain animate-pulse" />
     </div>
   );
 }
@@ -70,114 +80,141 @@ function moduleForAction(action: string): string {
 
 // ─── Root App ──────────────────────────────────────────────────────────────────
 
+type BootStatus = "loading" | "needsSetup" | "signedOut" | "ready";
+
 export default function App() {
-  const [users, setUsers] = useState<User[]>(() => loadUsers());
-  const [roles, setRoles] = useState<Role[]>(() => loadRoles());
-  const [sessionUserId, setSessionUserId] = useState<string | null>(() => loadSession());
-  const [notifications, setNotifications] = useState<Notification[]>(() => loadNotifications());
-  const [auditEntries, setAuditEntries] = useState<AuditLogEntry[]>(() => loadAuditLog());
+  const [bootStatus, setBootStatus] = useState<BootStatus>("loading");
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeNav, setActiveNav] = useState("แดชบอร์ด");
-  const [quotes, setQuotes] = useState<Quote[]>(() => loadQuotes());
+  const [quotes, setQuotes] = useState<Quote[]>([]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const [company, setCompany] = useState<Company>(() => loadCompany());
-  const [products, setProducts] = useState<Product[]>(() => loadProducts());
-  const [categories, setCategories] = useState<ProductCategory[]>(() => loadCategories());
+  const [company, setCompany] = useState<Company>(defaultCompany);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
 
-  useEffect(() => { saveQuotes(quotes); }, [quotes]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const session = await fetchSession();
+      if (cancelled) return;
+      if (session.needsSetup) { setBootStatus("needsSetup"); return; }
+      if (!session.user) { setBootStatus("signedOut"); return; }
+      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList] = await Promise.all([
+        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(),
+      ]);
+      if (cancelled) return;
+      setUsers(userList);
+      setRoles(roleList);
+      setCompany(companyData);
+      setProducts(productList);
+      setCategories(categoryList);
+      setNotifications(notificationList);
+      setQuotes(quoteList);
+      setCurrentUser(session.user);
+      setBootStatus("ready");
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  const currentUser = users.find((u) => u.id === sessionUserId) ?? null;
-
-  const updateCompany = (next: Company) => { setCompany(next); saveCompany(next); };
-  const updateProducts = (next: Product[]) => { setProducts(next); saveProducts(next); };
-  const updateCategories = (next: ProductCategory[]) => { setCategories(next); saveCategories(next); };
-  const updateUsers = (next: User[]) => { setUsers(next); saveUsers(next); };
-  const updateRoles = (next: Role[]) => { setRoles(next); saveRoles(next); };
-  const updateCurrentUser = (next: User) => updateUsers(users.map((u) => (u.id === next.id ? next : u)));
-
-  const addNotifications = (newOnes: Notification[]) => {
-    if (newOnes.length === 0) return;
-    setNotifications((prev) => {
-      const next = [...prev, ...newOnes];
-      saveNotifications(next);
-      return next;
-    });
+  const updateCompany = (next: Company) => setCompany(next);
+  const updateProducts = (next: Product[]) => setProducts(next);
+  const updateCategories = (next: ProductCategory[]) => setCategories(next);
+  const updateUsers = (next: User[]) => {
+    setUsers(next);
+    setCurrentUser((prev) => (prev ? next.find((u) => u.id === prev.id) ?? prev : prev));
   };
+  const updateRoles = (next: Role[]) => setRoles(next);
+  const updateCurrentUser = (next: User) => {
+    setCurrentUser(next);
+    setUsers((prev) => prev.map((u) => (u.id === next.id ? next : u)));
+  };
+
+  const refreshNotifications = () => { fetchNotifications().then(setNotifications).catch(() => {}); };
   const markNotificationRead = (id: string) => {
-    setNotifications((prev) => {
-      const next = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
-      saveNotifications(next);
-      return next;
-    });
+    apiMarkNotificationRead(id).then((updated) => {
+      setNotifications((prev) => prev.map((n) => (n.id === id ? updated : n)));
+    }).catch(() => {});
   };
   const markAllNotificationsRead = () => {
-    if (!currentUser) return;
-    setNotifications((prev) => {
-      const next = prev.map((n) => (n.recipientUserId === currentUser.id ? { ...n, read: true } : n));
-      saveNotifications(next);
-      return next;
-    });
+    apiMarkAllNotificationsRead().then(() => {
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    }).catch(() => {});
   };
   const deleteNotification = (id: string) => {
-    setNotifications((prev) => {
-      const next = prev.filter((n) => n.id !== id);
-      saveNotifications(next);
-      return next;
-    });
+    apiDeleteNotification(id).then(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }).catch(() => {});
   };
 
   const handleAudit = (action: string, details: string) => {
     if (!currentUser) return;
-    setAuditEntries(logAudit({
-      userId: currentUser.id,
-      userName: currentUser.fullName,
-      roleName: roleNameFor(currentUser, roles),
-      module: moduleForAction(action),
-      action,
-      details,
-    }));
+    logAudit({ module: moduleForAction(action), action, details }).catch(() => {});
   };
 
-  const handleSetupComplete = (fields: SetupWizardFields) => {
-    const superAdminRole = roles.find((r) => r.isSuperAdmin) ?? roles[0];
-    const created = newUser({
-      employeeId: fields.employeeId, fullName: fields.fullName, username: fields.username,
-      email: fields.email, password: fields.password, roleKey: superAdminRole.key, status: "active",
-    });
-    updateUsers([created]);
-    updateRoles(roles);
-    saveSession(created.id);
-    setSessionUserId(created.id);
-    setAuditEntries(logAudit({
-      userId: created.id, userName: created.fullName, roleName: superAdminRole.name,
-      module: "ระบบ", action: "User Created", details: `ตั้งค่าเริ่มต้นระบบ — สร้างบัญชี Super Admin คนแรก (${created.username})`,
-    }));
+  const handleSetupComplete = async (fields: SetupWizardFields): Promise<string | null> => {
+    try {
+      const created = await setupSuperAdmin(fields);
+      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList] = await Promise.all([
+        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(),
+      ]);
+      setUsers(userList);
+      setRoles(roleList);
+      setCompany(companyData);
+      setProducts(productList);
+      setCategories(categoryList);
+      setNotifications(notificationList);
+      setQuotes(quoteList);
+      setCurrentUser(created);
+      setBootStatus("ready");
+      logAudit({
+        module: "ระบบ", action: "User Created", details: `ตั้งค่าเริ่มต้นระบบ — สร้างบัญชี Super Admin คนแรก (${created.username})`,
+      }).catch(() => {});
+      return null;
+    } catch (err) {
+      return err instanceof ApiError ? err.message : "ตั้งค่าเริ่มต้นระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
+    }
   };
 
-  const handleSignIn = (identifier: string, password: string): string | null => {
-    const found = findUserByLogin(users, identifier);
-    if (!found || !verifyPassword(password, found.passwordHash)) return "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
-    if (found.status === "inactive") return "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ";
-    saveSession(found.id);
-    setSessionUserId(found.id);
-    setAuditEntries(logAudit({
-      userId: found.id, userName: found.fullName, roleName: roleNameFor(found, roles),
-      module: "ระบบ", action: "Login", details: "เข้าสู่ระบบสำเร็จ",
-    }));
+  const handleSignIn = async (identifier: string, password: string): Promise<string | null> => {
+    const result = await login(identifier, password);
+    if (result.error || !result.user) return result.error;
+    const found = result.user;
+    const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList] = await Promise.all([
+      fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(),
+    ]);
+    setUsers(userList);
+    setRoles(roleList);
+    setCompany(companyData);
+    setProducts(productList);
+    setCategories(categoryList);
+    setNotifications(notificationList);
+    setQuotes(quoteList);
+    setCurrentUser(found);
+    setBootStatus("ready");
+    logAudit({ module: "ระบบ", action: "Login", details: "เข้าสู่ระบบสำเร็จ" }).catch(() => {});
     return null;
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (currentUser) {
-      setAuditEntries(logAudit({
-        userId: currentUser.id, userName: currentUser.fullName, roleName: roleNameFor(currentUser, roles),
-        module: "ระบบ", action: "Logout", details: "",
-      }));
+      await logAudit({ module: "ระบบ", action: "Logout", details: "" }).catch(() => {});
     }
-    clearSession();
-    setSessionUserId(null);
+    await logout();
+    setCurrentUser(null);
+    setUsers([]);
+    setRoles([]);
+    setCompany(defaultCompany);
+    setProducts([]);
+    setCategories([]);
+    setNotifications([]);
+    setQuotes([]);
+    setBootStatus("signedOut");
     setUserMenuOpen(false);
     setActiveNav("แดชบอร์ด");
   };
@@ -187,17 +224,21 @@ export default function App() {
   const activeNavAllowed = activeNav === "ตั้งค่า" || !activeNavItem?.permission || hasPermission(currentUser, roles, activeNavItem.permission);
   const effectiveNav = activeNavAllowed ? activeNav : "แดชบอร์ด";
 
-  if (users.length === 0) {
+  if (bootStatus === "loading") {
+    return <BootLoading />;
+  }
+
+  if (bootStatus === "needsSetup") {
     return (
-      <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <Suspense fallback={<BootLoading />}>
         <SetupWizardPage onComplete={handleSetupComplete} />
       </Suspense>
     );
   }
 
-  if (!currentUser) {
+  if (bootStatus === "signedOut" || !currentUser) {
     return (
-      <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <Suspense fallback={<BootLoading />}>
         <SignInPage onSignIn={handleSignIn} />
       </Suspense>
     );
@@ -210,16 +251,8 @@ export default function App() {
     <div className="flex h-screen bg-background overflow-hidden font-[Inter,sans-serif] text-foreground print:h-auto print:overflow-visible print:block">
       {/* Sidebar */}
       <aside className={`${sidebarOpen ? "w-64" : "w-16"} flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out overflow-hidden print:hidden`}>
-        <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border min-h-[68px]">
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-[#c9a84c] flex items-center justify-center">
-            <span className="text-[#0b1d3a] text-sm font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>ท</span>
-          </div>
-          {sidebarOpen && (
-            <div className="overflow-hidden">
-              <p className="text-white text-sm font-semibold whitespace-nowrap leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>TCS ERP</p>
-              <p className="text-[#c9a84c] text-[10px] font-mono uppercase tracking-widest">คลังเคมีภัณฑ์ไทย</p>
-            </div>
-          )}
+        <div className={`flex items-center border-b border-sidebar-border min-h-[68px] transition-all duration-300 ease-in-out ${sidebarOpen ? "gap-3 px-4 py-5" : "justify-center py-5"}`}>
+          <BrandMark size={32} variant={sidebarOpen ? "full" : "mark"} theme="dark" />
         </div>
         <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
           {visibleNavItems.map(({ icon: Icon, label }) => (
@@ -305,7 +338,7 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
           <Suspense fallback={<PageLoading />}>
             {effectiveNav === "ใบเสนอราคา"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} onNotify={addNotifications} onAudit={handleAudit} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} onNotify={refreshNotifications} onAudit={handleAudit} />
               : effectiveNav === "ตั้งค่า"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
               : effectiveNav === "คลังสินค้า"
@@ -315,7 +348,7 @@ export default function App() {
               : effectiveNav === "บทบาทและสิทธิ์" && isSuperAdmin
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} onAudit={handleAudit} />
               : effectiveNav === "บันทึกการใช้งาน"
-              ? <AuditLogPage entries={auditEntries} />
+              ? <AuditLogPage />
               : <DashboardPage quotes={quotes} />
             }
           </Suspense>

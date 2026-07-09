@@ -4,11 +4,17 @@
 
 ## High Priority
 
-- [ ] **Decide on Phase 2 backend migration** (Next.js + Prisma + PostgreSQL + Auth.js + RBAC) — architecture proposed, needs a go-ahead and a Neon Postgres connection string before any code can be written. See [ARCHITECTURE.md](./ARCHITECTURE.md). Now higher-leverage than before: the client-side `User`/`Role`/`Permission`/`Notification`/`AuditLog` model built 2026-07-08 maps closely onto the proposed Phase 2 schema (see [DATABASE.md](./DATABASE.md) Migration Notes) — this decision unlocks turning the existing simulation into real, server-enforced security rather than designing RBAC from scratch.
-- [ ] **Lead & Customer Management module** — original Phase-1 scope from the initial ERP spec, not yet built. Needs its own data model (separate from the free-text client name currently on `Quote`) and a decision on whether it's built client-side first (like Product) or waits for the real backend. Quotation's "customer selection" (pick an existing customer instead of typing a free-text name) is blocked on this.
+- [ ] **Rotate the MongoDB Atlas database-user password.** A real credential was pasted into an AI chat session during the 2026-07-09 backend migration's development — a rotation was recommended to the user as a follow-up, but whether it's actually been done can't be verified from the codebase. Treat as unresolved until explicitly confirmed. See [RBAC.md](./RBAC.md) Known Gaps and [PROJECT_STATUS.md](./PROJECT_STATUS.md) Known Risks.
+- [ ] **Set up CI** (typecheck + lint + build on push/PR) — there is now real risk without it: the GitHub repo is connected to the Vercel project for auto-deploy, so an untested push to `master` could reach production with no automated check in between.
+- [ ] **Verify GitHub → Vercel auto-deploy is actually wired.** `vercel link`'s output implied the connection during the migration, but it hasn't been confirmed by an actual push-and-observe cycle. Push a trivial change and watch the Vercel dashboard/CLI to confirm before relying on it.
+- [ ] **Add rate limiting to `POST /api/auth/login`** — currently unthrottled; a scripted brute-force attempt against a known username isn't blocked. See [RBAC.md](./RBAC.md) Known Gaps.
+- [ ] **Add automated tests, especially for the new API layer** (`api/handlers/*.ts`) — the server-side permission/ownership/workflow-state-machine logic (last-active-Super-Admin guards, quote ownership checks, `workflowTransitions` validation) currently has zero test coverage and was only manually verified during migration. At minimum, cover the permission-gating and ownership-check paths per route.
+- [ ] **Lead & Customer Management module — API routes + UI** — original Phase-1 scope, still the single largest untouched bucket. **Schema-level prep done 2026-07-09**: `customers`/`customer_contacts`/`leads`/`lead_activities` MongoDB collections + indexes exist (`api/_lib/collections.ts`), and the Dashboard's `totalCustomers`/`totalLeads` KPIs already query them (correctly `0` today). What's left: API routes (`api/handlers/customers.ts`/`leads.ts` following the established pattern) + UI (`src/lib/customers.ts`+`src/pages/customers/`, `src/lib/leads.ts`+`src/pages/leads/`, mirroring `products.ts`/`ProductsPage.tsx`). Quotation's "customer selection" (pick an existing customer instead of typing a free-text name) is still blocked on this.
 - [ ] Wire `Company.vatRate` (Settings → Company Info) into `computeTotals()` in `lib/quotes.tsx` — currently stored/editable but the actual 7% VAT calculation still uses the hardcoded `VAT_RATE` constant.
-- [ ] Add button-level (create/edit/delete) permission gating to Product Library — currently only the sidebar entry respects `products:view`; the create/edit/delete buttons inside `ProductsPage`/`ProductList` aren't gated by `products:create`/`products:edit`/`products:delete`.
+- [ ] Add button-level (create/edit/delete) permission gating to Product Library — currently only the sidebar entry respects `products:view`; the create/edit/delete buttons inside `ProductsPage`/`ProductList` aren't gated by `products:create`/`products:edit`/`products:delete`. (Note: this is a UX-only gap — the underlying `POST`/`PATCH`/`DELETE /api/products` routes are already properly permission-gated server-side.)
 - [ ] Lift `QuotationPage`'s `view`/`selectedId` state up to `App.tsx` so a notification click can deep-link straight to the specific quote's detail view — currently it only navigates to the quotation list module.
+- [ ] Consider raising bcrypt's cost factor from 10 (the `bcryptjs` default, not explicitly tuned during migration) if login latency budget allows — the originally-proposed design called for 12.
+- [x] ~~Add explicit MongoDB indexes~~ — **done 2026-07-09**: real indexes now exist across every collection, see [DATABASE.md](./DATABASE.md).
 
 ## Medium Priority — PDF / Quotation document polish (2026-07-08 request)
 
@@ -60,26 +66,34 @@
 ## Medium Priority — Other
 
 - [x] Persist the secondary quotation document fields (contact person, phone, address, tax ID, PO reference, issue/expiry dates, payment terms) — done as part of the PDF polish work above, now real fields on `Quote`
-- [ ] **Dashboard KPI rework** (2026-07-08 request): replace current KPIs (revenue, active orders, inventory value, headcount) with Total Customers / Active Leads / Quotations / Won-Lost Deals / Revenue / Recent Activities / Follow-ups / Pipeline — **blocked on Lead & Customer module existing first**, since most of these KPIs have no underlying data yet
+- [x] **Dashboard KPI rework** — **done 2026-07-09**: real KPIs (Total Customers, Total Leads, Total Quotations, Total Products, Revenue, Won Deals, Lost Deals) now come from `GET /api/dashboard`; Customers/Leads correctly show `0` until that module ships (see Lead & Customer item above), everything else is fully real. See [MODULES/Dashboard.md](./MODULES/Dashboard.md).
 - [ ] **Dashboard date-range filter** (Today/Last 3/7/14/30 days/This Month/This Year/Custom Range) driving all KPIs/charts — not built at all currently, every metric is hardcoded to "ธ.ค. 2567"
 - [ ] **Sidebar "Coming Soon" entries** for the remaining not-yet-built modules (Leads, Customers) so the roadmap is visible instead of those modules simply not appearing — needs a design decision on whether a "Coming Soon" nav item just shows a placeholder page or is hidden until closer to ready. (User Management, Role Management, Notifications, and Audit Logs are no longer in this bucket — all four shipped 2026-07-08 as real, permission-gated modules.)
 - [x] Notifications module — real feed behind the header bell (`src/components/NotificationBell.tsx`), correct unread-count badge, role-based delivery for quotation events
 - [x] Audit Logs module — now meaningful since real multi-user accounts exist; append-only, read-only
-- [ ] Decide the real behavior for Dashboard's "ส่งออกรายงาน" (export report) and "+ สร้างคำสั่งซื้อ" (create order) buttons — currently inert since there's no Reports/Orders module
+- [x] Decide the real behavior for Dashboard's "ส่งออกรายงาน"/"+ สร้างคำสั่งซื้อ" buttons — **decided and done 2026-07-09**: removed outright (no real Reports/Orders module exists to back them; a stub handler would just be a different kind of placeholder). Optional CSV export of real dashboard KPIs would be a reasonable low-risk future add if requested.
 - [ ] Wire the global header search (currently decorative on every page)
-- [ ] Add automated tests (none exist yet) — at minimum unit tests for `lib/quotes.tsx` totals math and `lib/products.ts` CRUD helpers
-- [ ] Add a CI pipeline (lint + typecheck + build on push)
+- [ ] Add automated tests (none exist yet) — at minimum unit tests for `lib/quotes.tsx` totals math and `lib/products.ts` CRUD helpers. See High Priority above for the (higher-urgency) API-layer testing gap.
+- [ ] Add a CI pipeline (lint + typecheck + build on push) — see High Priority above, now higher-urgency since GitHub is connected to Vercel for auto-deploy.
+
+## Medium Priority — Production-readiness follow-ups (2026-07-09 request)
+
+- [ ] **Translate the rest of the app's Thai UI.** The i18n infrastructure (`src/lib/i18n.tsx`, toggle in Settings) only covers strings this pass touched (Dashboard, empty states, the toggle itself) — every other page's Thai text (sidebar nav, Products, Quotations, Settings, User/Role Management, Audit Log) is still hardcoded and won't change when the language is switched to English. Deliberately deferred (user decision) as a much larger separate task.
+- [ ] **Confirm `product_templates` collection semantics.** Added as schema-only scaffolding with a starting interpretation (reusable presets for fast product creation) — not confirmed with the user, don't build UI against it without checking first. See [DATABASE.md](./DATABASE.md).
+- [ ] **Replace the generic department/position seed list** (ฝ่ายขาย/ฝ่ายจัดซื้อ/ฝ่ายคลังสินค้า/ฝ่ายบัญชี/ฝ่ายทรัพยากรบุคคล/ฝ่ายบริหาร/ฝ่ายไอที; พนักงาน/หัวหน้างาน/ผู้จัดการ/ผู้จัดการทั่วไป/กรรมการผู้จัดการ) with the company's real org structure once known, then build an admin UI for managing them and wire `User.department`/`User.position` (currently free text) to reference these collections instead.
+- [ ] Build API routes + UI on top of the other 2026-07-09 schema-prep collections as their features come up: `quotation_comments`, `quotation_tags`, `permissions` (admin-configurable permission registry), `sessions` (session revocation / "log out other devices"), `uploads`/`attachments` (real blob storage, would also fix the base64-in-document 16MB ceiling noted below).
+- [ ] Re-verify the MongoDB Atlas credential rotation item above is actually closed — it predates this pass and remains unconfirmed.
 
 ## Low Priority
 
 - [ ] Dark mode — `theme.css` only defines the light palette currently; Tailwind's `dark:` variant isn't wired up.
-- [ ] Revisit `DashboardPage` bundle size (~445KB gzipped ~119KB, mostly `recharts`) if more chart-heavy modules get added.
-- [ ] `salesTeam` sample data has no CRUD — fine for now, will need a real entity once HR/Sales-team management exists.
+- [ ] Revisit `DashboardPage` bundle size (~430KB gzipped ~116KB, mostly `recharts`) if more chart-heavy modules get added.
+- [ ] Base64-in-document uploads (logo/stamp/profile picture/signature) have a practical 16MB MongoDB document ceiling — the `uploads`/`attachments` collections (schema-only, 2026-07-09) are prep for a future real blob-storage migration.
 
 ## Completed
 
 - [x] Initial Vite + React + TS + Tailwind v4 scaffold, rebranded from Figma Make source to TCS ERP
-- [x] Dashboard module (KPIs, charts, leaderboard, orders, activity feed)
+- [x] Dashboard module (KPIs, charts, leaderboard, orders, activity feed) — **superseded 2026-07-09**: leaderboard/orders/activity-feed were fake sample data with no backing module and were removed, KPIs/charts rebuilt on real MongoDB data, see entry below
 - [x] Quotation module: list, create/edit, VAT/discount totals, print
 - [x] Sign in / Sign up / Settings pages, wired into a real (client-only) auth gate
 - [x] Product Library module: CRUD, categories, archive, duplicate, search/filter/sort/pagination
@@ -92,4 +106,6 @@
 - [x] Git repo initialized and pushed to GitHub (`Wisarutbuasumlee/tcs-erp`, private)
 - [x] Full documentation system under `/docs`
 - [x] Quotation PDF polish: company logo/stamp upload, real per-quote contact/document fields (no more hardcoded placeholder text), auto-hide-empty-fields in print, salesperson bound to the signed-in user, item tags, item specifications field
-- [x] RBAC / User Management / Approval Workflow / Notifications / Audit Log (client-side simulation, 2026-07-08): Setup Wizard, multi-user accounts, 6 roles / 17 permissions, permission-gated sidebar, User Management + Role Management admin pages, 9-status quotation approval workflow with history, signature-image integration, notification bell + role-based delivery, append-only audit log, quotes now persist to `localStorage`, Company gained bank/VAT/T&C fields (Super Admin only)
+- [x] RBAC / User Management / Approval Workflow / Notifications / Audit Log (originally a client-side simulation, 2026-07-08; migrated to real server-side enforcement 2026-07-09 — see below): Setup Wizard, multi-user accounts, 6 roles / 17 permissions, permission-gated sidebar, User Management + Role Management admin pages, 9-status quotation approval workflow with history, signature-image integration, notification bell + role-based delivery, append-only audit log, Company gained bank/VAT/T&C fields (Super Admin only)
+- [x] **Real backend migration (2026-07-09)**: Vercel Serverless Functions + MongoDB Atlas, deployed live at https://tcs-erp-nine.vercel.app — bcrypt password hashing, JWT httpOnly-cookie sessions, server-enforced RBAC on every mutating route, 8 MongoDB collections replacing `localStorage`, full REST API (`src/lib/apiClient.ts` + rewritten domain libs), superseding the never-built old "Phase 2" Next.js/Prisma/Postgres/Auth.js proposal. See [CHANGELOG.md](./CHANGELOG.md), [ARCHITECTURE.md](./ARCHITECTURE.md), [API.md](./API.md), [DATABASE.md](./DATABASE.md), [RBAC.md](./RBAC.md).
+- [x] **Production-readiness pass (2026-07-09)**: official logo + shared `BrandMark` component (sidebar/login/favicon/print/loading), Dashboard fully rebuilt on real MongoDB data (zero fake stats remain), 15 new schema-prepped MongoDB collections + indexes for planned CRM/org/files/settings modules, real indexes added to all 8 previously-live collections, idempotent system-data seeding (`api/_lib/systemSeed.ts`, zero business data), 25 confirmed-dead duplicate API files + the fake `salesTeam.ts` module deleted, basic Thai/English i18n infrastructure with a Settings toggle, professional empty states on 5 pages. See [CHANGELOG.md](./CHANGELOG.md), [PROJECT_STATUS.md](./PROJECT_STATUS.md), [DATABASE.md](./DATABASE.md), [MODULES/Dashboard.md](./MODULES/Dashboard.md), [MODULES/Customer.md](./MODULES/Customer.md), [MODULES/Lead.md](./MODULES/Lead.md).
