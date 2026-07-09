@@ -1,13 +1,15 @@
 import { Boxes, ShieldCheck, TrendingUp } from "lucide-react";
 import { BrandMark } from "../components/BrandMark";
+import { useI18n, type TranslationKey } from "../lib/i18n";
 
-const features = [
-  { icon: Boxes, text: "ติดตามคลังเคมีภัณฑ์แบบเรียลไทม์" },
-  { icon: TrendingUp, text: "แดชบอร์ดภาพรวมธุรกิจครบวงจร" },
-  { icon: ShieldCheck, text: "จัดการใบเสนอราคาอย่างปลอดภัย" },
+const features: { icon: typeof Boxes; key: TranslationKey }[] = [
+  { icon: Boxes, key: "auth.brand.feature1" },
+  { icon: TrendingUp, key: "auth.brand.feature2" },
+  { icon: ShieldCheck, key: "auth.brand.feature3" },
 ];
 
 export function AuthLayout({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   return (
     <div className="min-h-screen flex bg-background font-[Inter,sans-serif] text-foreground">
       {/* Branding panel */}
@@ -19,24 +21,24 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
 
         <div className="relative">
           <h1 className="text-white text-3xl font-semibold leading-snug mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
-            ระบบบริหารจัดการ<br />คลังเคมีภัณฑ์อุตสาหกรรม
+            {t("auth.brand.headline1")}<br />{t("auth.brand.headline2")}
           </h1>
           <p className="text-[#a8bed8] text-sm leading-relaxed mb-8 max-w-sm">
-            บริหารคำสั่งซื้อ ใบเสนอราคา และภาพรวมธุรกิจของบริษัท ไทย เคมิคอลส์ สโตเรจ จำกัด ไว้ในที่เดียว
+            {t("auth.brand.description")}
           </p>
           <div className="space-y-3.5">
             {features.map((f) => (
-              <div key={f.text} className="flex items-center gap-3">
+              <div key={f.key} className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-[#c9a84c]/15 border border-[#c9a84c]/25 flex items-center justify-center flex-shrink-0">
                   <f.icon size={15} className="text-[#c9a84c]" />
                 </div>
-                <span className="text-[#e8edf5] text-sm">{f.text}</span>
+                <span className="text-[#e8edf5] text-sm">{t(f.key)}</span>
               </div>
             ))}
           </div>
         </div>
 
-        <p className="relative text-[#5a7299] text-xs font-mono">© 2567 TCS ERP · บริษัท ไทย เคมิคอลส์ สโตเรจ จำกัด</p>
+        <p className="relative text-[#5a7299] text-xs font-mono">{t("auth.brand.copyright")}</p>
       </div>
 
       {/* Form panel */}

@@ -21,6 +21,7 @@ import {
 import { logAudit } from "./lib/auditLog";
 import { NotificationBell } from "./components/NotificationBell";
 import { BrandMark } from "./components/BrandMark";
+import { useI18n, type TranslationKey } from "./lib/i18n";
 import type { SetupWizardFields } from "./pages/SetupWizardPage";
 
 const SetupWizardPage = lazy(() => import("./pages/SetupWizardPage").then((m) => ({ default: m.SetupWizardPage })));
@@ -53,20 +54,34 @@ function BootLoading() {
   );
 }
 
+/** Stable routing identifiers — decoupled from the (now translatable) display label, so switching language never breaks navigation. */
+type NavKey = "dashboard" | "quotations" | "products" | "users" | "roles" | "auditLog" | "settings";
+
 interface NavItem {
+  key: NavKey;
   icon: LucideIcon;
-  label: string;
+  labelKey: TranslationKey;
   permission?: Permission;
 }
 
 const navItems: NavItem[] = [
-  { icon: LayoutDashboard, label: "แดชบอร์ด", permission: "dashboard:view" },
-  { icon: FileText, label: "ใบเสนอราคา", permission: "quotations:view" },
-  { icon: Package, label: "คลังสินค้า", permission: "products:view" },
-  { icon: UsersIcon, label: "จัดการผู้ใช้งาน", permission: "users:manage" },
-  { icon: ShieldCheck, label: "บทบาทและสิทธิ์", permission: "roles:manage" },
-  { icon: ScrollText, label: "บันทึกการใช้งาน", permission: "auditLog:view" },
+  { key: "dashboard", icon: LayoutDashboard, labelKey: "nav.dashboard", permission: "dashboard:view" },
+  { key: "quotations", icon: FileText, labelKey: "nav.quotations", permission: "quotations:view" },
+  { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
+  { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
+  { key: "roles", icon: ShieldCheck, labelKey: "nav.roles", permission: "roles:manage" },
+  { key: "auditLog", icon: ScrollText, labelKey: "nav.auditLog", permission: "auditLog:view" },
 ];
+
+const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
+  dashboard: "nav.dashboard",
+  quotations: "nav.quotations",
+  products: "nav.products",
+  users: "nav.users",
+  roles: "nav.roles",
+  auditLog: "nav.auditLog",
+  settings: "nav.settings",
+};
 
 function moduleForAction(action: string): string {
   if (action.startsWith("Quotation") || action === "Status Changed") return "ใบเสนอราคา";
@@ -83,6 +98,7 @@ function moduleForAction(action: string): string {
 type BootStatus = "loading" | "needsSetup" | "signedOut" | "ready";
 
 export default function App() {
+  const { t } = useI18n();
   const [bootStatus, setBootStatus] = useState<BootStatus>("loading");
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -90,7 +106,7 @@ export default function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeNav, setActiveNav] = useState("แดชบอร์ด");
+  const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -216,13 +232,13 @@ export default function App() {
     setQuotes([]);
     setBootStatus("signedOut");
     setUserMenuOpen(false);
-    setActiveNav("แดชบอร์ด");
+    setActiveNav("dashboard");
   };
 
   const visibleNavItems = navItems.filter((item) => !item.permission || hasPermission(currentUser, roles, item.permission));
-  const activeNavItem = navItems.find((n) => n.label === activeNav);
-  const activeNavAllowed = activeNav === "ตั้งค่า" || !activeNavItem?.permission || hasPermission(currentUser, roles, activeNavItem.permission);
-  const effectiveNav = activeNavAllowed ? activeNav : "แดชบอร์ด";
+  const activeNavItem = navItems.find((n) => n.key === activeNav);
+  const activeNavAllowed = activeNav === "settings" || !activeNavItem?.permission || hasPermission(currentUser, roles, activeNavItem.permission);
+  const effectiveNav = activeNavAllowed ? activeNav : "dashboard";
 
   if (bootStatus === "loading") {
     return <BootLoading />;
@@ -255,22 +271,22 @@ export default function App() {
           <BrandMark size={32} variant={sidebarOpen ? "full" : "mark"} theme="dark" />
         </div>
         <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-          {visibleNavItems.map(({ icon: Icon, label }) => (
-            <button key={label} onClick={() => setActiveNav(label)}
+          {visibleNavItems.map(({ key, icon: Icon, labelKey }) => (
+            <button key={key} onClick={() => setActiveNav(key)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 relative
-                ${activeNav === label ? "bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border border-transparent"}`}>
+                ${activeNav === key ? "bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border border-transparent"}`}>
               <Icon size={17} className="flex-shrink-0" />
-              {sidebarOpen && <span className="text-sm whitespace-nowrap overflow-hidden">{label}</span>}
+              {sidebarOpen && <span className="text-sm whitespace-nowrap overflow-hidden">{t(labelKey)}</span>}
             </button>
           ))}
         </nav>
         <div className="px-2 py-3 border-t border-sidebar-border">
-          <button onClick={() => setActiveNav("ตั้งค่า")}
+          <button onClick={() => setActiveNav("settings")}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 border ${
-              activeNav === "ตั้งค่า" ? "bg-[#c9a84c]/15 text-[#c9a84c] border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border-transparent"
+              activeNav === "settings" ? "bg-[#c9a84c]/15 text-[#c9a84c] border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border-transparent"
             }`}>
             <Settings size={17} className="flex-shrink-0" />
-            {sidebarOpen && <span className="text-sm">ตั้งค่า</span>}
+            {sidebarOpen && <span className="text-sm">{t("nav.settings")}</span>}
           </button>
         </div>
       </aside>
@@ -282,13 +298,13 @@ export default function App() {
             {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
           <div className="flex items-center gap-1.5 text-sm">
-            <span className="text-muted-foreground">องค์กร</span>
+            <span className="text-muted-foreground">{t("topbar.org")}</span>
             <ChevronRight size={13} className="text-muted-foreground" />
-            <span className="text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', serif" }}>{effectiveNav}</span>
+            <span className="text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', serif" }}>{t(NAV_LABEL_KEYS[effectiveNav])}</span>
           </div>
           <div className="ml-auto flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 focus-within:border-[#c9a84c]/40 transition-colors">
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
-            <input type="text" placeholder="ค้นหาคำสั่งซื้อ, SKU, ผู้จำหน่าย..." className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full" />
+            <input type="text" placeholder={t("topbar.searchPlaceholder")} className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full" />
           </div>
           <NotificationBell
             notifications={notifications}
@@ -296,7 +312,7 @@ export default function App() {
             onMarkRead={markNotificationRead}
             onMarkAllRead={markAllNotificationsRead}
             onDelete={deleteNotification}
-            onNavigate={(n) => { if (n.relatedQuoteId) setActiveNav("ใบเสนอราคา"); }}
+            onNavigate={(n) => { if (n.relatedQuoteId) setActiveNav("quotations"); }}
           />
           <div className="relative">
             <button onClick={() => setUserMenuOpen((v) => !v)} className="flex items-center gap-2.5 pl-3 border-l border-border">
@@ -318,16 +334,16 @@ export default function App() {
                 <div className="fixed inset-0 z-10" onClick={() => setUserMenuOpen(false)} />
                 <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-xl z-20 overflow-hidden py-1">
                   <button
-                    onClick={() => { setActiveNav("ตั้งค่า"); setUserMenuOpen(false); }}
+                    onClick={() => { setActiveNav("settings"); setUserMenuOpen(false); }}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-foreground hover:bg-secondary/60 transition-colors"
                   >
-                    <Settings size={14} className="text-muted-foreground" /> ตั้งค่า
+                    <Settings size={14} className="text-muted-foreground" /> {t("nav.settings")}
                   </button>
                   <button
                     onClick={handleLogout}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[#e05252] hover:bg-[#e05252]/10 transition-colors"
                   >
-                    <LogOut size={14} /> ออกจากระบบ
+                    <LogOut size={14} /> {t("topbar.logout")}
                   </button>
                 </div>
               </>
@@ -337,17 +353,17 @@ export default function App() {
 
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
           <Suspense fallback={<PageLoading />}>
-            {effectiveNav === "ใบเสนอราคา"
+            {effectiveNav === "quotations"
               ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} onNotify={refreshNotifications} onAudit={handleAudit} />
-              : effectiveNav === "ตั้งค่า"
+              : effectiveNav === "settings"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
-              : effectiveNav === "คลังสินค้า"
+              : effectiveNav === "products"
               ? <ProductsPage products={products} onProductsChange={updateProducts} categories={categories} onCategoriesChange={updateCategories} />
-              : effectiveNav === "จัดการผู้ใช้งาน"
+              : effectiveNav === "users"
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} />
-              : effectiveNav === "บทบาทและสิทธิ์" && isSuperAdmin
+              : effectiveNav === "roles" && isSuperAdmin
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} onAudit={handleAudit} />
-              : effectiveNav === "บันทึกการใช้งาน"
+              : effectiveNav === "auditLog"
               ? <AuditLogPage />
               : <DashboardPage quotes={quotes} />
             }

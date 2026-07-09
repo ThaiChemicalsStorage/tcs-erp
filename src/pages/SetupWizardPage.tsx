@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { AuthLayout } from "./AuthLayout";
+import { useI18n } from "../lib/i18n";
 
 export interface SetupWizardFields {
   fullName: string;
@@ -11,6 +12,7 @@ export interface SetupWizardFields {
 }
 
 export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWizardFields) => Promise<string | null> }) {
+  const { t } = useI18n();
   const [fullName, setFullName] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [username, setUsername] = useState("");
@@ -24,15 +26,15 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !employeeId.trim() || !username.trim() || !email.trim() || !password) {
-      setError("กรุณากรอกข้อมูลให้ครบทุกช่อง");
+      setError(t("setup.errorRequired"));
       return;
     }
     if (password.length < 6) {
-      setError("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");
+      setError(t("setup.errorPasswordLength"));
       return;
     }
     if (password !== confirm) {
-      setError("รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน");
+      setError(t("setup.errorPasswordMismatch"));
       return;
     }
     setError("");
@@ -48,43 +50,42 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
     <AuthLayout>
       <div className="flex items-center gap-2 mb-1">
         <ShieldCheck size={18} className="text-[#c9a84c]" />
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[#c9a84c]">การตั้งค่าเริ่มต้นระบบ</span>
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[#c9a84c]">{t("setup.badge")}</span>
       </div>
-      <h2 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>สร้างบัญชี Super Admin</h2>
+      <h2 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("setup.title")}</h2>
       <p className="text-sm text-muted-foreground mt-1 mb-7">
-        ยังไม่มีผู้ใช้งานในระบบ กรุณาสร้างบัญชีผู้ดูแลระบบสูงสุดคนแรก บัญชีนี้จะได้รับสิทธิ์การเข้าถึงทั้งหมดโดยอัตโนมัติ
-        ขั้นตอนนี้จะแสดงเพียงครั้งเดียวเท่านั้น
+        {t("setup.subtitle")}
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="text-xs font-medium text-foreground block mb-1.5">ชื่อ-นามสกุล</label>
-          <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} placeholder="เช่น นภา ลาเรนต์" />
+          <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.fullNameLabel")}</label>
+          <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} placeholder={t("setup.fullNamePlaceholder")} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-foreground block mb-1.5">รหัสพนักงาน</label>
+            <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.employeeIdLabel")}</label>
             <input type="text" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={inputCls} placeholder="EMP-0001" />
           </div>
           <div>
-            <label className="text-xs font-medium text-foreground block mb-1.5">ชื่อผู้ใช้ (Username)</label>
+            <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.usernameLabel")}</label>
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className={inputCls} placeholder="username" />
           </div>
         </div>
         <div>
-          <label className="text-xs font-medium text-foreground block mb-1.5">อีเมล</label>
+          <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.emailLabel")}</label>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="you@tcs-erp.co.th" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-foreground block mb-1.5">รหัสผ่าน</label>
+            <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.passwordLabel")}</label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className={`${inputCls} pr-9`}
-                placeholder="อย่างน้อย 6 ตัวอักษร"
+                placeholder={t("setup.passwordPlaceholder")}
               />
               <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                 {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -92,8 +93,8 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-foreground block mb-1.5">ยืนยันรหัสผ่าน</label>
-            <input type={showPassword ? "text" : "password"} value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputCls} placeholder="พิมพ์ซ้ำ" />
+            <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.confirmLabel")}</label>
+            <input type={showPassword ? "text" : "password"} value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputCls} placeholder={t("setup.confirmPlaceholder")} />
           </div>
         </div>
 
@@ -104,7 +105,7 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
           disabled={submitting}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60"
         >
-          <ShieldCheck size={15} /> {submitting ? "กำลังสร้างบัญชี..." : "สร้างบัญชี Super Admin"}
+          <ShieldCheck size={15} /> {submitting ? t("setup.submitting") : t("setup.submit")}
         </button>
       </form>
     </AuthLayout>

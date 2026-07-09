@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Bell, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2 } from "lucide-react";
 import type { Notification, NotificationType } from "../lib/notifications";
-import { useI18n } from "../lib/i18n";
+import { useI18n, type TranslationKey } from "../lib/i18n";
 
 const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   quotation_submitted: <Send size={14} />,
@@ -12,15 +12,15 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   quotation_customer_rejected: <Ban size={14} />,
 };
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, t: (key: TranslationKey) => string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "เมื่อสักครู่";
-  if (mins < 60) return `${mins} นาทีที่แล้ว`;
+  if (mins < 1) return t("notif.justNow");
+  if (mins < 60) return t("notif.minutesAgo").replace("{n}", String(mins));
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} ชั่วโมงที่แล้ว`;
+  if (hours < 24) return t("notif.hoursAgo").replace("{n}", String(hours));
   const days = Math.floor(hours / 24);
-  return `${days} วันที่แล้ว`;
+  return t("notif.daysAgo").replace("{n}", String(days));
 }
 
 export function NotificationBell({
@@ -51,7 +51,7 @@ export function NotificationBell({
       <button
         onClick={() => setOpen((v) => !v)}
         className="relative text-muted-foreground hover:text-foreground transition-colors p-2"
-        aria-label="การแจ้งเตือน"
+        aria-label={t("notif.bellAria")}
       >
         <Bell size={18} />
         {unread > 0 && (
@@ -65,10 +65,10 @@ export function NotificationBell({
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-2 w-96 max-w-[90vw] bg-card border border-border rounded-lg shadow-xl z-20 overflow-hidden flex flex-col max-h-[28rem]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>การแจ้งเตือน</p>
+              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("notif.title")}</p>
               {unread > 0 && (
                 <button onClick={onMarkAllRead} className="flex items-center gap-1 text-xs text-[#c9a84c] hover:text-[#a07830] transition-colors">
-                  <Check size={12} /> อ่านทั้งหมด
+                  <Check size={12} /> {t("notif.markAllRead")}
                 </button>
               )}
             </div>
@@ -96,13 +96,13 @@ export function NotificationBell({
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] font-mono text-muted-foreground">{n.module}</span>
                         <span className="text-[10px] text-muted-foreground">·</span>
-                        <span className="text-[10px] text-muted-foreground">{timeAgo(n.createdAt)}</span>
+                        <span className="text-[10px] text-muted-foreground">{timeAgo(n.createdAt, t)}</span>
                       </div>
                     </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); onDelete(n.id); }}
                       className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-[#e05252] transition-all flex-shrink-0 p-1"
-                      aria-label="ลบการแจ้งเตือน"
+                      aria-label={t("notif.deleteAria")}
                     >
                       <Trash2 size={13} />
                     </button>
