@@ -1,6 +1,5 @@
 import { apiFetch, ApiError } from "./apiClient.js";
 import type { User } from "./users";
-import { translate } from "./i18n";
 
 export interface SessionInfo {
   user: User | null;
@@ -31,7 +30,9 @@ export async function login(identifier: string, password: string): Promise<{ use
     return { user, error: null };
   } catch (err) {
     if (err instanceof ApiError) return { user: null, error: err.message };
-    return { user: null, error: translate("session.loginFailed") };
+    // Deliberately not importing from "./i18n" here — see apiClient.ts's comment on currentLangIsEnglish().
+    const isEnglish = typeof window !== "undefined" && window.localStorage.getItem("tcs_erp_lang") === "en";
+    return { user: null, error: isEnglish ? "Login failed. Please try again." : "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" };
   }
 }
 

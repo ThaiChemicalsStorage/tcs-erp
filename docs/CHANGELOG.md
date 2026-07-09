@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-09 — Incident: i18n follow-up briefly broke all authenticated API routes in production
+
+**What happened**: the "translate the rest of the app" follow-up added `import { translate } from "./i18n"` (a real value import, not `import type`) to `src/lib/apiClient.ts`, to translate two rare fallback error strings. `apiClient.ts` is transitively value-imported into the Vercel serverless bundle: `api/_lib/auth.ts` value-imports `roleHasPermission`/`findRole` from `src/lib/roles.ts` (used on **every** authenticated request via `getAuthContext()`), and `roles.ts` itself value-imports `apiFetch` from `apiClient.ts`. `i18n.tsx` is a JSX/React module that was never part of the Node function build output, so the moment this shipped, every authenticated route (`/api/auth/session`, `/api/products`, `/api/quotes`, everything) started returning `500 Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/var/task/src/lib/i18n'`. Caught within ~3 minutes via a Playwright console-error check, not by the build (both `tsc` projects compiled cleanly — TypeScript has no way to know a same-repo module is JSX-incompatible at the Node runtime target; this is a deploy-time/runtime-only failure mode).
+
+**Fix**: reverted `apiClient.ts` and `session.ts` to NOT import anything from `./i18n` — both now carry their own tiny inline bilingual string (reading `localStorage.tcs_erp_lang` directly), duplicated rather than shared, specifically to guarantee zero import-graph connection to the React/JSX module tree from any file reachable from `src/lib/roles.ts`, `src/lib/users.ts`, `src/lib/products.ts`, or any other `src/lib/*` file that's value-imported into `api/`.
+
+**Standing rule going forward**: any `src/lib/*.ts(x)` file may be transitively value-imported into the `api/` serverless bundle (the existing pattern for shared types/defaults/pure helpers — see `defaultRoles`, `ALL_PERMISSIONS`, `nowIso`, etc.). Before adding a new **value** import (not `import type`) to any `src/lib/*` file, check whether that file is reachable from `api/_lib/auth.ts`, `api/_lib/collections.ts`, `api/_lib/systemSeed.ts`, `api/_lib/rbacSeed.ts`, or any `api/handlers/*.ts` — if so, the new dependency must not itself pull in `src/lib/i18n.tsx`, `src/components/*`, or anything else JSX/React-only, even transitively. `import type` is always safe (erased at compile time); a plain `import { x }` is not.
+
+---
+
 ## 2026-07-09 — Translate the rest of the app's Thai UI (full i18n follow-up)
 
 **Scope**: the initial production-readiness pass explicitly scoped `src/lib/i18n.tsx` to only Dashboard + empty states + the toggle itself. This follow-up (user-requested, after the initial toggle appeared to "not do anything" outside Dashboard) wires essentially every remaining page's UI chrome to the same dictionary: sidebar nav + topbar + user menu (`App.tsx`), login/setup pages (`AuthLayout`/`SignInPage`/`SetupWizardPage`), `NotificationBell`, all 4 Settings tabs, the entire Products module (list/form/categories/picker modal), the entire Quotation module's screen editing UI (list/document/line-items/interest buttons — **not** `PrintDocument.tsx`, see below), and the entire Admin module (Users/Roles/Audit Log). ~450 dictionary keys total.
