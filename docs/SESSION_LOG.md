@@ -4,6 +4,84 @@
 
 ---
 
+## Session — 2026-07-09 (Quotation print/PDF redesign)
+
+### What was implemented
+- User provided photos of a real, 3-page printed quotation from another vendor's system and asked for this app's print output to match it
+- Built a new dedicated `src/pages/quotation/PrintDocument.tsx`: a single `<table>` with a repeating `<thead>` so the company/buyer/meta header and item-table column headers repeat on every printed page — verified by forcing a quote to 17 line items and confirming the header repeated correctly on page 2 while totals/signatures appeared only once at the true end
+- Added per-unit discount (amount + %) as its own printed column, pin-icon sub-detail bullets, a Thai-language amount-in-words line under the grand total (new `bahtText()` helper), and a three-column signature table (adds a blank customer-PO-confirmation column with no backing data)
+- Added four new real per-quote fields the reference document needed: buyer contact email, delivery method, delivery address, project name
+- Retired the old scattered print-markup approach in `QuoteDocument.tsx`/`LineItemsEditor.tsx` (interleaved `print:hidden`/`hidden print:table-row` pairs) in favor of: screen-only components marked `print:hidden` at their root, and one dedicated print-only component rendering everything from the same data
+
+### Files Modified
+`src/pages/quotation/PrintDocument.tsx` (new), `src/lib/quotes.tsx`, `src/pages/quotation/{QuoteDocument,LineItemsEditor}.tsx`, `docs/{DATABASE,MODULES/Quotation,UI_GUIDELINES}.md`. See [CHANGELOG.md](./CHANGELOG.md) for full detail.
+
+### Architectural Decisions
+- Chose the "one `<table>` with a repeating `<thead>`" technique specifically because browsers natively repeat `<thead>` content across print page breaks — the only reliable way to get a repeating header without a JavaScript pagination library. Documented as the new established pattern in [UI_GUIDELINES.md](./UI_GUIDELINES.md) for any future multi-page printed document.
+- Kept the reference document's separate "หมายเหตุ"/"Condition"/"Payment" sections as one free-text `remarks` field rather than splitting the data model further — the existing multi-line textarea already lets the user type the same structure, and a bigger schema change wasn't warranted for this pass.
+- Did not attempt to replicate the reference's page-1-only full header / condensed continuation-page header, or its "Page X/Y" numbering — both are effectively unsupported by browser-native print CSS without a heavier JS-driven pagination approach. Documented as accepted simplifications rather than silently deviating from the reference.
+
+### Problems Found
+- **Pre-existing bug surfaced by this work**: the "หมายเหตุ / เงื่อนไข" (remarks) textarea was `defaultValue`-only — a fully uncontrolled input, never wired to `onChange` or to the save payload. Anything a user typed was silently discarded on save and reset to the company default every time the document was reopened.
+
+### Problems Fixed
+Added a real `Quote.remarks` field, made the textarea controlled, and wired it through `save()` like every other document field — same treatment as the contactName/phone/address fields fixed in the 2026-07-08 PDF-polish pass. Verified via a scripted Playwright pass: filled the new fields on a seeded quote, saved, confirmed persistence, and inspected a real `page.pdf()` export directly (not just a screenshot) to confirm print fidelity, then forced 17 line items to confirm multi-page header repetition. Zero console errors; `tsc --noEmit`/`eslint .`/`npm run build` all clean before and after.
+
+### New TODO Items
+"Page X/Y" numbering and condensed continuation-page headers — both logged as known, deliberately-not-implemented items in [TODO.md](./TODO.md) rather than silent gaps.
+
+### Future Recommendations
+1. If a future request needs page numbers or a genuinely different first-page-vs-continuation-page header, that requires a JS-driven print/pagination approach (e.g. a headless-Chromium PDF generation step measuring page breaks) — flag this as a larger scope change up front rather than trying to force it via CSS alone.
+2. The Phase 2 backend decision and Lead/Customer Management remain the two largest untouched buckets — this session was a scoped, self-contained document-quality pass, not a dent in either of those.
+
+### Estimated Completion Percentage
+~27% of the full long-term ERP vision (a document-quality/correctness pass on an existing module, plus a real bug fix); ~93% of the currently-scoped Phase 1 frontend-only modules — unchanged from the prior session since this didn't add new module coverage. See [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+
+---
+
+## Session — 2026-07-08 (RBAC / User Management / Approval Workflow / Notifications)
+
+### What was implemented
+- Full client-side RBAC simulation: Initial Setup Wizard (first-run only, creates the Super Admin), multi-user accounts (`src/lib/users.ts`) with hashed passwords, Position vs. Role separation, active/inactive status; public self-signup removed
+- 6-role/17-permission model (`src/lib/roles.ts`, `src/lib/permissions.ts`) with a fully-hidden (not disabled) permission-gated sidebar
+- User Management page (create/edit/reset password/activate/deactivate/assign role-department-position, self-role-edit blocked) and Role Management page (Super-Admin-only hardcoded gate, permission matrix editor, system roles read-only)
+- Quotation approval workflow: `QuoteStatus` expanded 4 → 9 values, a `workflowTransitions` state machine, permission+ownership-computed action buttons, required-comment modal for reject/cancel, append-only approval history
+- Personal signature-image upload (Settings → Profile), auto-rendered on the quotation's preparer/approver signature blocks by looking up the creator and the latest "approved" history entry; empty line (no error) when unset
+- Notification bell + panel (`src/components/NotificationBell.tsx`): correct 0-unread/badge/99+ behavior, role-based delivery for submit/approve/reject/high-value/customer-accept/customer-reject events
+- Append-only audit log page, read-only, no edit/delete UI
+- Company Settings gained bank info/VAT rate/Terms & Conditions fields, restricted to Super Admin; quotes now persist to `localStorage` (previously in-memory only)
+- Full documentation pass across all `docs/` files per the standing rule
+
+### Files Modified
+`src/App.tsx`, `src/lib/{storage,quotes,permissions,roles,users,session,notifications,auditLog}.ts(x)`, `src/pages/{SignInPage,SettingsPage}.tsx`, `src/pages/quotation/{QuotationPage,QuoteDocument,QuoteList}.tsx`, `src/pages/SetupWizardPage.tsx`, `src/pages/admin/{UserManagementPage,RoleManagementPage,AuditLogPage}.tsx`, `src/components/NotificationBell.tsx`. `src/pages/SignUpPage.tsx` removed. See [CHANGELOG.md](./CHANGELOG.md) for full detail.
+
+### Architectural Decisions
+- Scoped to a **client-side simulation** rather than the real Phase 2 backend migration — confirmed explicitly with the user via a clarifying question at the start of the session (Phase 1 simulation vs. starting real Next.js/Prisma/Postgres backend), since the request's security language ("unbypassable," "tamper-proof") isn't achievable without a server, and building that server is a much larger, separately-scoped effort.
+- Flat 17-permission model (`module:action` keys) rather than a fully generic per-module CRUD matrix — matches the spec's literal permission list (View/Create/Edit/Delete/Approve/Reject/Export/Manage Users/Manage Roles/Manage Permissions/Manage Company Settings) while still giving real module-level sidebar differentiation.
+- `roles:manage`/`company:manage` are hardcoded to the Super Admin role in addition to being permission-gated, so a misconfigured custom role can never accidentally unlock them — directly implements the spec's "Only Super Admin may..." rules as code, not just convention.
+- No sequential two-level approval — the given workflow diagram has a single "Pending Approval" step; Approver Level 1 and Level 2 both get independent approve/reject rights from that state rather than a hard first-then-second gate. A deliberate scope cut, documented rather than silently skipped.
+- Reused every existing pattern rather than inventing new ones: `ImageUploadField` for the signature upload, `ConfirmDialog`/`Toast`/`useToast` for confirmations and feedback, the `load*`/`save*` + `update*` `localStorage` convention for every new domain, the `lib/<domain>.ts` + `pages/<module>/` folder convention for the new `pages/admin/` module.
+
+### Problems Found
+- **Status badge/toolbar froze after a workflow transition**: `QuoteDocument`'s `quoteStatus` was `useState`-initialized once at mount from the `quote` prop; since the component doesn't remount when only the quote's status changes (same `key`, same `selectedId`), approving/submitting a quote updated the underlying data but the visible status pill and available action buttons kept showing the pre-transition state. Found via the scripted Playwright pass (status stayed on "ร่าง" after a successful submit), not by `tsc`/`eslint` — a pure runtime/React-lifecycle bug.
+- Fresh-review during doc updates surfaced two intentionally-deferred gaps worth flagging clearly rather than silently leaving open: `Company.vatRate` is editable but not yet wired into `computeTotals()`, and Product Library only has sidebar-level (not button-level) permission gating.
+
+### Problems Fixed
+The status-badge bug — changed `quoteStatus` from local `useState` to a value derived directly from the `quote` prop on every render (see [CHANGELOG.md](./CHANGELOG.md)). Re-verified via the same Playwright script after the fix: status correctly shows "รออนุมัติ" then "อนุมัติแล้ว" at each step. `tsc --noEmit`, `eslint .`, `npm run build` all clean before and after.
+
+### New TODO Items
+Wire `Company.vatRate` into `computeTotals()`; add button-level (create/edit/delete) permission gating to Product Library; lift `QuotationPage`'s view/selectedId state to `App.tsx` so notification clicks can deep-link to the specific quote instead of just the list; consider sequential two-level approval if a real business need for it shows up. All added to [TODO.md](./TODO.md).
+
+### Future Recommendations
+1. The Phase 2 backend decision is even more clearly the highest-leverage next step now — the client-side `User`/`Role`/`Permission`/`Notification`/`AuditLog` shapes built this session map closely onto the already-proposed Prisma schema (see [DATABASE.md](./DATABASE.md) Migration Notes), so migrating this specific subsystem should be closer to "move the same logic server-side" than a redesign.
+2. Don't let this session's "RBAC" language create false confidence — it must be described accurately to any stakeholder as a UI/workflow simulation, not access control, until Phase 2 lands.
+3. Lead & Customer Management remains the other big untouched bucket from the original spec — still a reasonable next priority conversation with the user.
+
+### Estimated Completion Percentage
+~26% of the full long-term ERP vision (a genuinely large slice landed this session); ~93% of the currently-scoped Phase 1 frontend-only modules. See [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+
+---
+
 ## Session — 2026-07-08 (continued: master-prompt triage + PDF polish)
 
 ### What was implemented

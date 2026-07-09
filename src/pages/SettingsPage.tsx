@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  User, Building2, ShieldCheck, Bell, CheckCircle2, Hash, Mail, Phone, MapPin, type LucideIcon,
-  Image as ImageIcon, Stamp, Upload, X, AlertTriangle,
+  User as UserIcon, Building2, ShieldCheck, Bell, CheckCircle2, Hash, Mail, Phone, MapPin, type LucideIcon,
+  Image as ImageIcon, Stamp, Upload, X, AlertTriangle, PenTool, Landmark, FileText,
 } from "lucide-react";
-import type { Company, UserProfile } from "../lib/storage";
-import { initials } from "../lib/storage";
+import type { Company } from "../lib/storage";
+import type { User } from "../lib/users";
+import { initials, verifyPassword, hashPassword } from "../lib/users";
+import type { Role } from "../lib/roles";
 
 const MAX_IMAGE_BYTES = 1_000_000;
 
@@ -81,13 +83,6 @@ function ImageUploadField({
 
 type Tab = "profile" | "company" | "security" | "notifications";
 
-const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
-  { key: "profile", label: "โปรไฟล์", icon: User },
-  { key: "company", label: "ข้อมูลบริษัท", icon: Building2 },
-  { key: "security", label: "ความปลอดภัย", icon: ShieldCheck },
-  { key: "notifications", label: "การแจ้งเตือน", icon: Bell },
-];
-
 function SavedNote({ show }: { show: boolean }) {
   if (!show) return null;
   return (
@@ -123,22 +118,35 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
+const readOnlyCls = "w-full text-sm text-muted-foreground bg-muted border border-border rounded-lg px-3 py-2 outline-none cursor-not-allowed";
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
 
 export function SettingsPage({
   company,
   onCompanyChange,
-  user,
+  currentUser,
   onUserChange,
+  roles,
+  canManageCompany,
+  onAudit,
 }: {
   company: Company;
   onCompanyChange: (c: Company) => void;
-  user: UserProfile;
-  onUserChange: (u: UserProfile) => void;
+  currentUser: User;
+  onUserChange: (u: User) => void;
+  roles: Role[];
+  canManageCompany: boolean;
+  onAudit: (action: string, details: string) => void;
 }) {
+  const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
+    { key: "profile", label: "โปรไฟล์", icon: UserIcon },
+    ...(canManageCompany ? [{ key: "company" as const, label: "ข้อมูลบริษัท", icon: Building2 }] : []),
+    { key: "security", label: "ความปลอดภัย", icon: ShieldCheck },
+    { key: "notifications", label: "การแจ้งเตือน", icon: Bell },
+  ];
   const [tab, setTab] = useState<Tab>("profile");
 
-  const [profileDraft, setProfileDraft] = useState(user);
+  const [profileDraft, setProfileDraft] = useState(currentUser);
   const [profileSaved, flashProfileSaved] = useSavedFlash();
 
   const [companyDraft, setCompanyDraft] = useState(company);
@@ -150,25 +158,33 @@ export function SettingsPage({
   const [pwError, setPwError] = useState("");
   const [pwSaved, flashPwSaved] = useSavedFlash();
 
-  const [notifications, setNotifications] = useState({
+  const [notifPrefs, setNotifPrefs] = useState({
     quoteApproved: true,
     lowStock: true,
     weeklyDigest: false,
   });
 
+  const roleName = roles.find((r) => r.key === currentUser.roleKey)?.name ?? currentUser.roleKey;
+
   const saveProfile = () => {
-    onUserChange(profileDraft);
+    onUserChange({ ...currentUser, fullName: profileDraft.fullName, phone: profileDraft.phone, profilePictureDataUrl: profileDraft.profilePictureDataUrl, signatureDataUrl: profileDraft.signatureDataUrl, updatedAt: new Date().toISOString() });
+    onAudit("Profile Updated", `${profileDraft.fullName} แก้ไขข้อมูลโปรไฟล์ของตนเอง`);
     flashProfileSaved();
   };
 
   const saveCompany = () => {
     onCompanyChange(companyDraft);
+    onAudit("Company Settings Updated", `${currentUser.fullName} แก้ไขข้อมูลบริษัท`);
     flashCompanySaved();
   };
 
   const savePassword = () => {
     if (!currentPw || !newPw || !confirmPw) {
       setPwError("กรุณากรอกข้อมูลให้ครบถ้วน");
+      return;
+    }
+    if (!verifyPassword(currentPw, currentUser.passwordHash)) {
+      setPwError("รหัสผ่านปัจจุบันไม่ถูกต้อง");
       return;
     }
     if (newPw.length < 6) {
@@ -180,6 +196,8 @@ export function SettingsPage({
       return;
     }
     setPwError("");
+    onUserChange({ ...currentUser, passwordHash: hashPassword(newPw), updatedAt: new Date().toISOString() });
+    onAudit("Password Reset", `${currentUser.fullName} เปลี่ยนรหัสผ่านของตนเอง`);
     setCurrentPw("");
     setNewPw("");
     setConfirmPw("");
@@ -211,29 +229,68 @@ export function SettingsPage({
       {tab === "profile" && (
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#c9a84c] to-[#a07830] flex items-center justify-center text-white text-lg font-bold flex-shrink-0">
-              {initials(profileDraft.name || "?")}
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#c9a84c] to-[#a07830] flex items-center justify-center text-white text-lg font-bold flex-shrink-0 overflow-hidden">
+              {profileDraft.profilePictureDataUrl ? (
+                <img src={profileDraft.profilePictureDataUrl} alt={profileDraft.fullName} className="w-full h-full object-cover" />
+              ) : (
+                initials(profileDraft.fullName || "?")
+              )}
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground">{profileDraft.name || "—"}</p>
-              <p className="text-xs text-muted-foreground font-mono">{profileDraft.role}</p>
+              <p className="text-sm font-semibold text-foreground">{profileDraft.fullName || "—"}</p>
+              <p className="text-xs text-muted-foreground font-mono">{roleName}</p>
             </div>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>ชื่อ-นามสกุล</label>
-              <input className={inputCls} value={profileDraft.name} onChange={(e) => setProfileDraft((p) => ({ ...p, name: e.target.value }))} />
+              <input className={inputCls} value={profileDraft.fullName} onChange={(e) => setProfileDraft((p) => ({ ...p, fullName: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelCls}>เบอร์โทรศัพท์</label>
+              <input className={inputCls} value={profileDraft.phone} onChange={(e) => setProfileDraft((p) => ({ ...p, phone: e.target.value }))} />
+            </div>
+            <div>
+              <label className={labelCls}>รหัสพนักงาน</label>
+              <input className={readOnlyCls} value={profileDraft.employeeId} disabled />
             </div>
             <div>
               <label className={labelCls}>อีเมล</label>
-              <input className={inputCls} value={profileDraft.email} onChange={(e) => setProfileDraft((p) => ({ ...p, email: e.target.value }))} />
+              <input className={readOnlyCls} value={profileDraft.email} disabled />
+            </div>
+            <div>
+              <label className={labelCls}>แผนก</label>
+              <input className={readOnlyCls} value={profileDraft.department || "—"} disabled />
+            </div>
+            <div>
+              <label className={labelCls}>ตำแหน่งงาน</label>
+              <input className={readOnlyCls} value={profileDraft.position || "—"} disabled />
             </div>
             <div className="sm:col-span-2">
-              <label className={labelCls}>ตำแหน่ง</label>
-              <input className={inputCls} value={profileDraft.role} onChange={(e) => setProfileDraft((p) => ({ ...p, role: e.target.value }))} />
+              <label className={labelCls}>บทบาท (Role)</label>
+              <input className={readOnlyCls} value={roleName} disabled />
+              <p className="text-[10px] text-muted-foreground mt-1">บทบาทกำหนดโดยผู้ดูแลระบบเท่านั้น</p>
             </div>
           </div>
+
+          <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-border">
+            <ImageUploadField
+              label="รูปโปรไฟล์"
+              icon={ImageIcon}
+              value={profileDraft.profilePictureDataUrl}
+              onChange={(v) => setProfileDraft((p) => ({ ...p, profilePictureDataUrl: v }))}
+              aspect="square"
+            />
+            <ImageUploadField
+              label="ลายเซ็นส่วนตัว"
+              icon={PenTool}
+              value={profileDraft.signatureDataUrl}
+              onChange={(v) => setProfileDraft((p) => ({ ...p, signatureDataUrl: v }))}
+              aspect="wide"
+            />
+          </div>
+          <p className="text-[10px] text-muted-foreground -mt-3">ลายเซ็นนี้จะถูกใช้อัตโนมัติในใบเสนอราคาที่คุณสร้างหรืออนุมัติ</p>
 
           <div className="flex items-center gap-3 pt-1">
             <button onClick={saveProfile} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
@@ -245,10 +302,10 @@ export function SettingsPage({
       )}
 
       {/* Company */}
-      {tab === "company" && (
+      {tab === "company" && canManageCompany && (
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            ข้อมูลนี้จะแสดงบนหัวเอกสารใบเสนอราคาที่ออกให้ลูกค้า
+            ข้อมูลนี้จะแสดงบนหัวเอกสารใบเสนอราคาที่ออกให้ลูกค้า — เฉพาะ Super Admin เท่านั้นที่แก้ไขได้
           </p>
           <div className="grid sm:grid-cols-2 gap-4">
             <ImageUploadField label="โลโก้บริษัท" icon={ImageIcon} value={companyDraft.logoDataUrl} onChange={(v) => setCompanyDraft((c) => ({ ...c, logoDataUrl: v }))} aspect="wide" />
@@ -273,10 +330,31 @@ export function SettingsPage({
                 <input className={inputCls} value={companyDraft.email} onChange={(e) => setCompanyDraft((c) => ({ ...c, email: e.target.value }))} />
               </div>
             </div>
-            <div>
-              <label className={`${labelCls} flex items-center gap-1`}><Hash size={10} /> เลขประจำตัวผู้เสียภาษี</label>
-              <input className={`${inputCls} font-mono`} value={companyDraft.taxId} onChange={(e) => setCompanyDraft((c) => ({ ...c, taxId: e.target.value }))} />
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className={`${labelCls} flex items-center gap-1`}><Hash size={10} /> เลขประจำตัวผู้เสียภาษี</label>
+                <input className={`${inputCls} font-mono`} value={companyDraft.taxId} onChange={(e) => setCompanyDraft((c) => ({ ...c, taxId: e.target.value }))} />
+              </div>
+              <div>
+                <label className={labelCls}>อัตราภาษีมูลค่าเพิ่ม (VAT %)</label>
+                <input type="number" min={0} max={100} className={`${inputCls} font-mono`} value={companyDraft.vatRate} onChange={(e) => setCompanyDraft((c) => ({ ...c, vatRate: Number(e.target.value) }))} />
+              </div>
             </div>
+          </div>
+
+          <div className="space-y-4 pt-2 border-t border-border">
+            <p className={`${labelCls} flex items-center gap-1 text-foreground font-medium`}><Landmark size={12} /> ข้อมูลบัญชีธนาคาร</p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div><label className={labelCls}>ธนาคาร</label><input className={inputCls} value={companyDraft.bankName} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankName: e.target.value }))} /></div>
+              <div><label className={labelCls}>สาขา</label><input className={inputCls} value={companyDraft.bankBranch} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankBranch: e.target.value }))} /></div>
+              <div><label className={labelCls}>ชื่อบัญชี</label><input className={inputCls} value={companyDraft.bankAccountName} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankAccountName: e.target.value }))} /></div>
+              <div><label className={labelCls}>เลขที่บัญชี</label><input className={`${inputCls} font-mono`} value={companyDraft.bankAccountNumber} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankAccountNumber: e.target.value }))} /></div>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-border">
+            <label className={`${labelCls} flex items-center gap-1`}><FileText size={10} /> เงื่อนไขและข้อตกลง (Terms &amp; Conditions) เริ่มต้น</label>
+            <textarea rows={4} className={`${inputCls} resize-none`} value={companyDraft.termsAndConditions} onChange={(e) => setCompanyDraft((c) => ({ ...c, termsAndConditions: e.target.value }))} />
           </div>
 
           <div className="flex items-center gap-3 pt-1">
@@ -331,7 +409,7 @@ export function SettingsPage({
                 <p className="text-sm text-foreground font-medium">{n.label}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{n.sub}</p>
               </div>
-              <Toggle checked={notifications[n.key]} onChange={(v) => setNotifications((p) => ({ ...p, [n.key]: v }))} />
+              <Toggle checked={notifPrefs[n.key]} onChange={(v) => setNotifPrefs((p) => ({ ...p, [n.key]: v }))} />
             </div>
           ))}
         </div>

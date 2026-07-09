@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-**TCS ERP** (Thai Chemicals Storage ERP) is a Thai-language, internal business web app for a chemical storage/distribution company. It's being built incrementally toward a full multi-module ERP (per the long-term vision in [PROJECT_STATUS.md](./PROJECT_STATUS.md)), starting with **Quotation management** and a **Product library**, plus the supporting shell (auth, settings, dashboard).
+**TCS ERP** (Thai Chemicals Storage ERP) is a Thai-language, internal business web app for a single chemical storage/distribution company (not a multi-tenant SaaS product). It's being built incrementally toward a full multi-module ERP (per the long-term vision in [PROJECT_STATUS.md](./PROJECT_STATUS.md)), starting with **Quotation management** and a **Product library**, plus the supporting shell (auth, settings, dashboard) and — as of 2026-07-08 — a full **RBAC / user management / quotation approval workflow / notifications / audit log** system, simulated entirely client-side (see [RBAC.md](./RBAC.md) for what "simulated" means and why).
 
 - **Repo**: https://github.com/Wisarutbuasumlee/tcs-erp (private)
 - **Language**: Thai UI throughout, English code/comments
@@ -12,7 +12,7 @@
 
 ## Current Development Phase
 
-**Phase 1 — Frontend demo, client-only.** Everything currently runs as a Vite React SPA with **no backend, no database, and no real authentication**. Data lives in React state, some of it mirrored to `localStorage` (see [DATABASE.md](./DATABASE.md) for exactly what is and isn't persisted).
+**Phase 1 — Frontend demo, client-only.** Everything currently runs as a Vite React SPA with **no backend and no database**. Data lives in React state, most of it mirrored to `localStorage` (see [DATABASE.md](./DATABASE.md) for exactly what is and isn't persisted). As of 2026-07-08 the app has a real multi-user login (hashed passwords, active/inactive accounts), role-based permissions, a quotation approval workflow, notifications, and an audit log — but all of it is **enforced client-side only** (any check can be bypassed via devtools, since there's no server to be the source of truth). Treat it as a UI/UX simulation of enterprise RBAC, not a secure system — see [RBAC.md](./RBAC.md).
 
 A **Phase 2 architecture** (Next.js + Prisma + PostgreSQL + real RBAC) was designed and agreed on stack-wise, but **has not been started** — no Next.js project exists yet, no database is provisioned. See [ARCHITECTURE.md](./ARCHITECTURE.md) and [RBAC.md](./RBAC.md) for the proposed design, clearly marked as not-yet-implemented. Do not assume any backend/API/RBAC code exists until this migration actually happens.
 
@@ -43,26 +43,38 @@ ERP/
 │       ├── Lead.md                # not yet implemented
 │       ├── Customer.md            # not yet implemented
 │       ├── Auth.md
-│       └── Settings.md
+│       ├── Settings.md
+│       ├── UserManagement.md
+│       ├── RoleManagement.md
+│       ├── Notifications.md
+│       └── AuditLog.md
 ├── src/
-│   ├── App.tsx                    # root shell: sidebar, topbar, auth gate, page router (string switch, no react-router)
+│   ├── App.tsx                    # root shell: sidebar, topbar, bootstrap/auth gate, page router (string switch, no react-router)
 │   ├── main.tsx                   # entry point
 │   ├── components/                # generic, reusable, cross-module UI
 │   │   ├── ConfirmDialog.tsx
-│   │   └── Toast.tsx
+│   │   ├── Toast.tsx
+│   │   └── NotificationBell.tsx   # header bell + dropdown panel
 │   ├── hooks/
 │   │   └── useToast.ts
 │   ├── lib/                       # types + sample data + pure helpers + localStorage I/O, per domain
-│   │   ├── storage.ts             # Company, UserProfile
+│   │   ├── storage.ts             # Company (incl. bank/VAT/T&C fields)
+│   │   ├── users.ts               # User (employee + account record), password hashing, uniqueness checks
+│   │   ├── roles.ts               # Role, default role set, hasPermission()/userIsSuperAdmin()/roleNameFor()
+│   │   ├── permissions.ts         # Permission union, labels, grouping, Super-Admin-only permissions
+│   │   ├── session.ts             # current-session userId load/save/clear
+│   │   ├── notifications.ts       # Notification type + per-event builders (submitted/approved/rejected/high-value/...)
+│   │   ├── auditLog.ts            # append-only AuditLogEntry log + logAudit()
 │   │   ├── products.ts            # Product, ProductCategory
-│   │   ├── quotes.tsx             # Quote, QuoteLine, SubDetail (+ status maps, JSX icons)
+│   │   ├── quotes.tsx             # Quote (+ approval workflow: statuses, ApprovalHistoryEntry, computeQuotePermissions)
 │   │   └── salesTeam.ts           # shared sample sales-team data (Dashboard + Quotation)
 │   ├── pages/
-│   │   ├── SignInPage.tsx / SignUpPage.tsx / AuthLayout.tsx
+│   │   ├── SetupWizardPage.tsx / SignInPage.tsx / AuthLayout.tsx   # no public sign-up — see MODULES/Auth.md
 │   │   ├── SettingsPage.tsx
 │   │   ├── dashboard/DashboardPage.tsx
 │   │   ├── products/              # ProductsPage, ProductList, ProductForm, CategoriesManager, ProductPickerModal
-│   │   └── quotation/             # QuotationPage, QuoteList, QuoteDocument, LineItemsEditor, InterestButtons, notesFormat
+│   │   ├── quotation/             # QuotationPage, QuoteList, QuoteDocument, LineItemsEditor, InterestButtons, notesFormat
+│   │   └── admin/                 # UserManagementPage, RoleManagementPage, AuditLogPage
 │   └── styles/                    # fonts.css, tailwind.css, theme.css (design tokens), index.css
 ├── eslint.config.js
 ├── tsconfig.json
@@ -74,8 +86,8 @@ ERP/
 
 - **Vite 6 + React 18 + TypeScript 5.6 (strict) + Tailwind v4.** No UI kit dependency — all hand-rolled Tailwind utility classes matching the navy/gold design system.
 - **No router.** `App.tsx` holds an `activeNav` string and switches between page components directly. Pages are `React.lazy`-loaded so each module (and its dependencies, e.g. `recharts` for Dashboard) is a separate JS chunk.
-- **No backend.** All "APIs" are plain function calls in `lib/*.ts`. Some domains persist to `localStorage` (Product/Category/Company/User/auth-flag); **Quotes do not persist** — they reset to seed data on every page reload. This is tracked as a known gap in [PROJECT_STATUS.md](./PROJECT_STATUS.md).
-- **No real auth.** Sign-in/sign-up accept any input and just flip a `localStorage` flag. No password is ever checked or stored anywhere.
+- **No backend.** All "APIs" are plain function calls in `lib/*.ts`. Product/Category/Company/Users/Roles/Notifications/AuditLog/Quotes all persist to `localStorage` now (quotes gained persistence as part of the 2026-07-08 RBAC work — previously they didn't).
+- **Real-ish client-side auth.** A first-run Setup Wizard creates the one Super Admin account; every subsequent account is admin-created via User Management (no public self-signup). Sign-in checks username/email + password against a hashed (not cryptographically, see [RBAC.md](./RBAC.md)) password stored per user. Still not real security — it's all enforced and stored in the browser, trivially bypassable via devtools. No server exists to be the actual source of truth.
 
 Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
 
@@ -84,13 +96,17 @@ Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
 | Module | Status | Summary | Docs |
 |---|---|---|---|
 | Dashboard | ✅ Built | KPI cards, revenue/expense chart, category donut, sales leaderboard, orders table, activity feed — all static sample data | [MODULES/Dashboard.md](./MODULES/Dashboard.md) |
-| Quotation | ✅ Built | List + create/edit/duplicate quotes, line items with per-item notes and unlimited sub-details (add/edit/delete/drag-reorder), print/PDF export, product-library picker | [MODULES/Quotation.md](./MODULES/Quotation.md) |
+| Quotation | ✅ Built | List + create/edit/duplicate quotes, line items with per-item notes and unlimited sub-details, print/PDF export, product-library picker, **9-status approval workflow** (Draft → Pending Approval → Approved → Sent to Customer → Customer Accepted/Rejected → Won/Lost, plus Cancelled) with approval history and signature-image integration | [MODULES/Quotation.md](./MODULES/Quotation.md) |
 | Product Library | ✅ Built | Product + category CRUD, archive (soft-delete), search/filter/sort/pagination, duplicate, feeds the Quotation line-item picker as independent snapshots | [MODULES/Product.md](./MODULES/Product.md) |
-| Auth (Sign in/up) | ✅ Built (fake) | Client-only session flag, no real credential check | [MODULES/Auth.md](./MODULES/Auth.md) |
-| Settings | ✅ Built | Profile, company info (feeds the quotation document header), security (mock password change), notification toggles | [MODULES/Settings.md](./MODULES/Settings.md) |
+| Auth (Setup Wizard + Sign in) | ✅ Built (client-side, not secure) | First-run Setup Wizard creates the Super Admin; real (client-checked) username/password login; no public self-signup | [MODULES/Auth.md](./MODULES/Auth.md) |
+| Settings | ✅ Built | Self-service profile (incl. picture + signature upload), Super-Admin-only company info (incl. bank/VAT/T&C), security (real password change), notification toggles | [MODULES/Settings.md](./MODULES/Settings.md) |
+| User Management | ✅ Built | Create/edit users, reset password, activate/deactivate, assign role/department/position | [MODULES/UserManagement.md](./MODULES/UserManagement.md) |
+| Role Management | ✅ Built | Create/delete custom roles, edit permission matrix — Super Admin only | [MODULES/RoleManagement.md](./MODULES/RoleManagement.md) |
+| Notifications | ✅ Built | Header bell with unread badge + panel, role-based delivery for quotation events | [MODULES/Notifications.md](./MODULES/Notifications.md) |
+| Audit Log | ✅ Built | Append-only, read-only log of every sensitive action | [MODULES/AuditLog.md](./MODULES/AuditLog.md) |
 | Lead Management | ❌ Not started | Planned per original ERP spec | [MODULES/Lead.md](./MODULES/Lead.md) |
 | Customer Management | ❌ Not started | Planned per original ERP spec | [MODULES/Customer.md](./MODULES/Customer.md) |
-| RBAC / Admin | ❌ Not started | Full design proposed, pending Next.js migration decision | [RBAC.md](./RBAC.md) |
+| RBAC / Admin (server-enforced) | ❌ Not started | Client-side simulation built (see rows above); real server-enforced version still pending the Phase 2 Next.js migration decision | [RBAC.md](./RBAC.md) |
 
 ## Coding Standards
 

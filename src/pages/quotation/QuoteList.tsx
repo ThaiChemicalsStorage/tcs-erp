@@ -4,7 +4,17 @@ import { type Quote, type QuoteStatus, type QuoteInterest, statusStyle, statusIc
 import { salesTeam } from "../../lib/salesTeam";
 import { InterestButtons } from "./InterestButtons";
 
-const statuses: QuoteStatus[] = ["ร่าง", "รออนุมัติ", "อนุมัติแล้ว", "ยกเลิก"];
+const statuses: QuoteStatus[] = [
+  "ร่าง",
+  "รออนุมัติ",
+  "อนุมัติแล้ว",
+  "ส่งให้ลูกค้าแล้ว",
+  "ลูกค้ายอมรับ",
+  "ปิดการขายสำเร็จ",
+  "ลูกค้าปฏิเสธ",
+  "เสียโอกาส",
+  "ยกเลิก",
+];
 
 export function QuoteList({
   quotes,
@@ -51,7 +61,7 @@ export function QuoteList({
       </div>
 
       {/* Filter */}
-      <div className="flex items-center gap-1 bg-muted rounded-xl p-1 w-fit">
+      <div className="flex items-center gap-1 bg-muted rounded-xl p-1 w-fit flex-wrap">
         {["ทั้งหมด", ...statuses].map((s) => (
           <button key={s} onClick={() => setFilterStatus(s)}
             className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>

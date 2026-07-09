@@ -4,10 +4,11 @@
 
 ## High Priority
 
-- [ ] **Decide on Phase 2 backend migration** (Next.js + Prisma + PostgreSQL + Auth.js + RBAC) — architecture proposed, needs a go-ahead and a Neon Postgres connection string before any code can be written. See [ARCHITECTURE.md](./ARCHITECTURE.md).
-- [ ] **Persist `Quote[]` state** — currently in-memory only, resets on reload. At minimum mirror the existing `localStorage` pattern used by Product/Category/Company/User until a real DB exists.
+- [ ] **Decide on Phase 2 backend migration** (Next.js + Prisma + PostgreSQL + Auth.js + RBAC) — architecture proposed, needs a go-ahead and a Neon Postgres connection string before any code can be written. See [ARCHITECTURE.md](./ARCHITECTURE.md). Now higher-leverage than before: the client-side `User`/`Role`/`Permission`/`Notification`/`AuditLog` model built 2026-07-08 maps closely onto the proposed Phase 2 schema (see [DATABASE.md](./DATABASE.md) Migration Notes) — this decision unlocks turning the existing simulation into real, server-enforced security rather than designing RBAC from scratch.
 - [ ] **Lead & Customer Management module** — original Phase-1 scope from the initial ERP spec, not yet built. Needs its own data model (separate from the free-text client name currently on `Quote`) and a decision on whether it's built client-side first (like Product) or waits for the real backend. Quotation's "customer selection" (pick an existing customer instead of typing a free-text name) is blocked on this.
-- [ ] **User Management / RBAC module** — see [RBAC.md](./RBAC.md), fully designed, not started, blocked on the Phase 2 backend decision above (real RBAC needs server-side enforcement, which needs a backend).
+- [ ] Wire `Company.vatRate` (Settings → Company Info) into `computeTotals()` in `lib/quotes.tsx` — currently stored/editable but the actual 7% VAT calculation still uses the hardcoded `VAT_RATE` constant.
+- [ ] Add button-level (create/edit/delete) permission gating to Product Library — currently only the sidebar entry respects `products:view`; the create/edit/delete buttons inside `ProductsPage`/`ProductList` aren't gated by `products:create`/`products:edit`/`products:delete`.
+- [ ] Lift `QuotationPage`'s `view`/`selectedId` state up to `App.tsx` so a notification click can deep-link straight to the specific quote's detail view — currently it only navigates to the quotation list module.
 
 ## Medium Priority — PDF / Quotation document polish (2026-07-08 request)
 
@@ -20,26 +21,50 @@
 - [x] Quotation item **specifications** field (distinct from notes) — added to `QuoteLine`; copied from `Product.specifications` automatically when a line is added via the product picker
 - [ ] "Nested" sub-details — **decision made**: keeping the flat reorderable list. Re-open only if a concrete business case for sub-sub-details shows up; not building speculative tree UI for it now.
 
+## Medium Priority — Print/PDF redesign (2026-07-09 request)
+
+- [x] Repeating-header print document matching a real vendor quotation reference (`src/pages/quotation/PrintDocument.tsx`) — company/buyer/meta header + column headers repeat every page via `<thead>`, verified with a forced multi-page export
+- [x] Per-unit discount (amount + %) column on printed line items
+- [x] Pin-icon sub-detail bullets in print
+- [x] Thai-words amount line under the grand total (`bahtText()`)
+- [x] Three-column signature table (adds a blank "ผู้ยืนยันการสั่งซื้อ" customer-confirmation column)
+- [x] Buyer contact email, delivery method, delivery address, project fields
+- [x] Fixed: remarks/terms textarea was uncontrolled and never persisted — now a real `Quote.remarks` field
+- [ ] "Page X/Y" numbering — not implemented; no reliable cross-browser way to read total page count from CSS in a browser print/PDF context
+- [ ] Condensed header on continuation pages (page 2+) — not implemented; a browser print `<thead>` can't vary content by page number, only revisit if this becomes a real requirement (would need a JS-driven pagination approach, a bigger change)
+
 ## Medium Priority — User Profile (2026-07-08 request)
 
-- [ ] Profile picture upload
-- [ ] Signature **image** upload, auto-used in quotation PDFs — the *name* is now wired (see PDF polish above); the image itself still depends on file storage, which doesn't exist yet (no backend/object storage — client-only `localStorage` can't hold images at scale, needs the Phase 2 backend or a client-side size-limited data-URL approach as an interim, same pattern now proven out for company logo/stamp in `SettingsPage.tsx`'s `ImageUploadField`)
+- [x] Profile picture upload — `ImageUploadField` in Settings → Profile, saved on `User.profilePictureDataUrl`
+- [x] Signature **image** upload, auto-used in quotation PDFs — `User.signatureDataUrl`, rendered on the quote's preparer/approver signature block by looking up the creator and the most recent approval-history entry; falls back to a blank line if unset, never an error
 
 ## Medium Priority — Company Settings expansion (2026-07-08 request)
 
 - [x] Company logo + stamp management — done (see PDF polish above)
-- [ ] Bank account info field(s)
-- [ ] VAT rate as a configurable setting — currently hardcoded `VAT_RATE = 7` in `src/lib/quotes.tsx`
-- [ ] Terms & Conditions as an editable company-level default (currently hardcoded static text in `QuoteDocument.tsx`'s remarks textarea)
+- [x] Bank account info fields — `Company.bankName`/`bankAccountName`/`bankAccountNumber`/`bankBranch`, Super Admin only
+- [x] VAT rate as a configurable setting — `Company.vatRate` field exists and is editable, **but not yet read by the actual calculation** (see High Priority above — `computeTotals()` still uses the fixed `VAT_RATE` constant)
+- [x] Terms & Conditions as an editable company-level default — `Company.termsAndConditions`, used as the default value of the quotation remarks textarea when set
+
+## Medium Priority — RBAC / User Management / Approval Workflow / Notifications (2026-07-08 request)
+
+- [x] Initial Setup Wizard (first-run only, creates the Super Admin, never reappears once any user exists) — `src/pages/SetupWizardPage.tsx`
+- [x] Multi-user accounts with hashed passwords, Employee ID/Department/Position/Role, active/inactive status — `src/lib/users.ts`; public self-signup removed
+- [x] RBAC: 6 default roles, 17-permission model, fully-hidden (not disabled) permission-gated sidebar — `src/lib/{roles,permissions}.ts`
+- [x] User Management page (create/edit/reset password/activate/deactivate/assign role-department-position) — `src/pages/admin/UserManagementPage.tsx`
+- [x] Role Management page (Super-Admin-only hardcoded, create/delete custom roles, permission matrix editor, system roles read-only) — `src/pages/admin/RoleManagementPage.tsx`
+- [x] Quotation approval workflow (Draft → Pending Approval → Approved → Sent to Customer → Customer Accepted/Rejected → Won/Lost, + Cancelled), append-only approval history — `src/lib/quotes.tsx`, `src/pages/quotation/QuoteDocument.tsx`
+- [x] Notification bell (correct 0/badge/99+ behavior) + panel + role-based delivery for quotation events — `src/components/NotificationBell.tsx`, `src/lib/notifications.ts`
+- [x] Append-only, read-only audit log — `src/lib/auditLog.ts`, `src/pages/admin/AuditLogPage.tsx`
+- [ ] Sequential two-level approval (Approver Level 1 must approve before Level 2 can) — **not implemented**, both approver roles currently have independent approve/reject rights from "Pending Approval". Only revisit if a concrete business need surfaces.
 
 ## Medium Priority — Other
 
 - [x] Persist the secondary quotation document fields (contact person, phone, address, tax ID, PO reference, issue/expiry dates, payment terms) — done as part of the PDF polish work above, now real fields on `Quote`
 - [ ] **Dashboard KPI rework** (2026-07-08 request): replace current KPIs (revenue, active orders, inventory value, headcount) with Total Customers / Active Leads / Quotations / Won-Lost Deals / Revenue / Recent Activities / Follow-ups / Pipeline — **blocked on Lead & Customer module existing first**, since most of these KPIs have no underlying data yet
 - [ ] **Dashboard date-range filter** (Today/Last 3/7/14/30 days/This Month/This Year/Custom Range) driving all KPIs/charts — not built at all currently, every metric is hardcoded to "ธ.ค. 2567"
-- [ ] **Sidebar "Coming Soon" entries** for not-yet-built modules (Leads, Customers, User Management, Notifications, Audit Logs) so the roadmap is visible instead of those modules simply not appearing — needs a design decision on whether a "Coming Soon" nav item just shows a placeholder page or is hidden until closer to ready
-- [ ] Notifications module (real feed behind the header bell, currently a static badge)
-- [ ] Audit Logs module — meaningful once RBAC/multi-user exists (an audit log with one client-only fake user has limited value)
+- [ ] **Sidebar "Coming Soon" entries** for the remaining not-yet-built modules (Leads, Customers) so the roadmap is visible instead of those modules simply not appearing — needs a design decision on whether a "Coming Soon" nav item just shows a placeholder page or is hidden until closer to ready. (User Management, Role Management, Notifications, and Audit Logs are no longer in this bucket — all four shipped 2026-07-08 as real, permission-gated modules.)
+- [x] Notifications module — real feed behind the header bell (`src/components/NotificationBell.tsx`), correct unread-count badge, role-based delivery for quotation events
+- [x] Audit Logs module — now meaningful since real multi-user accounts exist; append-only, read-only
 - [ ] Decide the real behavior for Dashboard's "ส่งออกรายงาน" (export report) and "+ สร้างคำสั่งซื้อ" (create order) buttons — currently inert since there's no Reports/Orders module
 - [ ] Wire the global header search (currently decorative on every page)
 - [ ] Add automated tests (none exist yet) — at minimum unit tests for `lib/quotes.tsx` totals math and `lib/products.ts` CRUD helpers
@@ -67,3 +92,4 @@
 - [x] Git repo initialized and pushed to GitHub (`Wisarutbuasumlee/tcs-erp`, private)
 - [x] Full documentation system under `/docs`
 - [x] Quotation PDF polish: company logo/stamp upload, real per-quote contact/document fields (no more hardcoded placeholder text), auto-hide-empty-fields in print, salesperson bound to the signed-in user, item tags, item specifications field
+- [x] RBAC / User Management / Approval Workflow / Notifications / Audit Log (client-side simulation, 2026-07-08): Setup Wizard, multi-user accounts, 6 roles / 17 permissions, permission-gated sidebar, User Management + Role Management admin pages, 9-status quotation approval workflow with history, signature-image integration, notification bell + role-based delivery, append-only audit log, quotes now persist to `localStorage`, Company gained bank/VAT/T&C fields (Super Admin only)

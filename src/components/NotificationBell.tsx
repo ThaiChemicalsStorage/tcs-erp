@@ -1,0 +1,116 @@
+import { useState } from "react";
+import { Bell, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2 } from "lucide-react";
+import type { Notification, NotificationType } from "../lib/notifications";
+
+const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
+  quotation_submitted: <Send size={14} />,
+  quotation_approved: <CheckCircle2 size={14} />,
+  quotation_rejected: <XCircle size={14} />,
+  quotation_high_value: <AlertTriangle size={14} />,
+  quotation_customer_accepted: <CheckCheck size={14} />,
+  quotation_customer_rejected: <Ban size={14} />,
+};
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "เมื่อสักครู่";
+  if (mins < 60) return `${mins} นาทีที่แล้ว`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} ชั่วโมงที่แล้ว`;
+  const days = Math.floor(hours / 24);
+  return `${days} วันที่แล้ว`;
+}
+
+export function NotificationBell({
+  notifications,
+  currentUserId,
+  onMarkRead,
+  onMarkAllRead,
+  onDelete,
+  onNavigate,
+}: {
+  notifications: Notification[];
+  currentUserId: string;
+  onMarkRead: (id: string) => void;
+  onMarkAllRead: () => void;
+  onDelete: (id: string) => void;
+  onNavigate: (n: Notification) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const mine = notifications
+    .filter((n) => n.recipientUserId === currentUserId)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const unread = mine.filter((n) => !n.read).length;
+  const badgeText = unread > 99 ? "99+" : String(unread);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="relative text-muted-foreground hover:text-foreground transition-colors p-2"
+        aria-label="การแจ้งเตือน"
+      >
+        <Bell size={18} />
+        {unread > 0 && (
+          <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-[#e05252] text-white text-[9px] font-bold font-mono flex items-center justify-center leading-none">
+            {badgeText}
+          </span>
+        )}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 w-96 max-w-[90vw] bg-card border border-border rounded-lg shadow-xl z-20 overflow-hidden flex flex-col max-h-[28rem]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>การแจ้งเตือน</p>
+              {unread > 0 && (
+                <button onClick={onMarkAllRead} className="flex items-center gap-1 text-xs text-[#c9a84c] hover:text-[#a07830] transition-colors">
+                  <Check size={12} /> อ่านทั้งหมด
+                </button>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {mine.length === 0 ? (
+                <p className="text-center text-xs text-muted-foreground py-10">ไม่มีการแจ้งเตือน</p>
+              ) : (
+                mine.map((n) => (
+                  <div
+                    key={n.id}
+                    className={`group flex items-start gap-3 px-4 py-3 border-b border-border/60 last:border-0 cursor-pointer transition-colors ${
+                      n.read ? "hover:bg-secondary/40" : "bg-[#c9a84c]/[0.06] hover:bg-[#c9a84c]/10"
+                    }`}
+                    onClick={() => { if (!n.read) onMarkRead(n.id); onNavigate(n); setOpen(false); }}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${n.read ? "bg-secondary text-muted-foreground" : "bg-[#c9a84c]/15 text-[#c9a84c]"}`}>
+                      {TYPE_ICON[n.type]}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-[#c9a84c] flex-shrink-0" />}
+                        <p className={`text-xs truncate ${n.read ? "text-foreground" : "font-semibold text-foreground"}`}>{n.title}</p>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{n.description}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] font-mono text-muted-foreground">{n.module}</span>
+                        <span className="text-[10px] text-muted-foreground">·</span>
+                        <span className="text-[10px] text-muted-foreground">{timeAgo(n.createdAt)}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDelete(n.id); }}
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-[#e05252] transition-all flex-shrink-0 p-1"
+                      aria-label="ลบการแจ้งเตือน"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

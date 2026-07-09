@@ -1,29 +1,27 @@
 import { useState } from "react";
-import { Eye, EyeOff, LogIn, Mail } from "lucide-react";
+import { Eye, EyeOff, LogIn, User as UserIcon } from "lucide-react";
 import { AuthLayout } from "./AuthLayout";
 
 export function SignInPage({
   onSignIn,
-  onSwitchToSignUp,
 }: {
-  onSignIn: (email: string) => void;
-  onSwitchToSignUp: () => void;
+  /** Returns an error message on failure, or null on success. */
+  onSignIn: (identifier: string, password: string) => string | null;
 }) {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
-  const [resetSent, setResetSent] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) {
-      setError("กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน");
+    if (!identifier.trim() || !password.trim()) {
+      setError("กรุณากรอกชื่อผู้ใช้/อีเมลและรหัสผ่านให้ครบถ้วน");
       return;
     }
-    setError("");
-    onSignIn(email.trim());
+    const result = onSignIn(identifier.trim(), password);
+    setError(result ?? "");
   };
 
   return (
@@ -33,30 +31,21 @@ export function SignInPage({
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="text-xs font-medium text-foreground block mb-1.5">อีเมล</label>
+          <label className="text-xs font-medium text-foreground block mb-1.5">ชื่อผู้ใช้ หรือ อีเมล</label>
           <div className="relative">
-            <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <UserIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@tcs-erp.co.th"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="username หรือ you@tcs-erp.co.th"
               className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg pl-9 pr-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
             />
           </div>
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-medium text-foreground">รหัสผ่าน</label>
-            <button
-              type="button"
-              onClick={() => setResetSent(true)}
-              className="text-xs text-[#c9a84c] hover:text-[#a07830] transition-colors"
-            >
-              ลืมรหัสผ่าน?
-            </button>
-          </div>
+          <label className="text-xs font-medium text-foreground block mb-1.5">รหัสผ่าน</label>
           <div className="relative">
             <input
               type={showPassword ? "text" : "password"}
@@ -73,9 +62,6 @@ export function SignInPage({
               {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
           </div>
-          {resetSent && (
-            <p className="text-xs text-[#2aa36b] mt-1.5">ส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลของคุณแล้ว</p>
-          )}
         </div>
 
         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -98,11 +84,8 @@ export function SignInPage({
         </button>
       </form>
 
-      <p className="text-center text-sm text-muted-foreground mt-7">
-        ยังไม่มีบัญชี?{" "}
-        <button onClick={onSwitchToSignUp} className="text-[#c9a84c] font-medium hover:text-[#a07830] transition-colors">
-          สมัครสมาชิก
-        </button>
+      <p className="text-center text-xs text-muted-foreground mt-7">
+        ลืมรหัสผ่านหรือยังไม่มีบัญชี? ติดต่อผู้ดูแลระบบ (Administrator) เพื่อขอสิทธิ์เข้าใช้งาน
       </p>
     </AuthLayout>
   );

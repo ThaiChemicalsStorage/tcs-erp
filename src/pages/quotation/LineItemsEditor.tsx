@@ -5,7 +5,6 @@ import {
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
 import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
-import { FormattedNotes } from "./notesFormat";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 
 function insertAtCursor(textarea: HTMLTextAreaElement, prefix: string, value: string, onChange: (v: string) => void) {
@@ -214,8 +213,8 @@ export function LineItemsEditor({
   const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount);
 
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30 print:hidden">
+    <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
+      <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
         <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>รายการสินค้า / บริการ</p>
         <div className="flex items-center gap-2">
           <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
@@ -230,7 +229,7 @@ export function LineItemsEditor({
 
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="print:hidden">
+          <thead>
             <tr className="border-b border-border bg-muted/20">
               {["#", "รายละเอียด", "หน่วย", "จำนวน", "ราคา/หน่วย (฿)", "ส่วนลด (%)", "จำนวนเงิน (฿)", ""].map((h, i) => (
                 <th key={i} className={`px-4 py-2.5 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider ${i === 0 ? "w-10 text-center" : i === 1 ? "text-left" : "text-right"} ${i === 7 ? "w-10" : ""}`}>{h}</th>
@@ -243,7 +242,7 @@ export function LineItemsEditor({
               const hasDetails = line.notes.trim() !== "" || line.subDetails.length > 0 || line.specifications.trim() !== "" || line.tags.length > 0;
               return (
                 <Fragment key={line.id}>
-                  <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group print:hidden">
+                  <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
                     <td className="px-4 py-3 text-center text-xs font-mono text-muted-foreground align-top">{idx + 1}</td>
                     <td className="px-4 py-3 align-top">
                       <input className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.description} onChange={(e) => updateLine(line.id, "description", e.target.value)} placeholder="รายละเอียด" />
@@ -280,7 +279,7 @@ export function LineItemsEditor({
                   </tr>
 
                   {isExpanded && (
-                    <tr className="border-b border-border/50 bg-muted/10 print:hidden">
+                    <tr className="border-b border-border/50 bg-muted/10">
                       <td />
                       <td colSpan={7} className="px-4 pb-4 pt-1">
                         <div className="grid sm:grid-cols-2 gap-4 bg-card border border-border rounded-lg p-4">
@@ -299,36 +298,6 @@ export function LineItemsEditor({
                     </tr>
                   )}
 
-                  {/* Print-only static rendering: always in the DOM, visible only in print/PDF output */}
-                  <tr className="hidden print:table-row align-top">
-                    <td className="px-4 py-2 text-center text-xs font-mono text-muted-foreground">{idx + 1}</td>
-                    <td className="px-4 py-2" colSpan={4}>
-                      <p className="text-sm text-foreground">{line.description}</p>
-                      {line.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {line.tags.map((t) => (
-                            <span key={t} className="px-1.5 py-0.5 text-[9px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-full">{t}</span>
-                          ))}
-                        </div>
-                      )}
-                      {hasDetails && (
-                        <div className="mt-1 pl-3 border-l-2 border-[#c9a84c]/40 text-xs text-muted-foreground leading-relaxed">
-                          {line.specifications.trim() && (
-                            <p className="italic">{line.specifications}</p>
-                          )}
-                          <FormattedNotes text={line.notes} />
-                          {line.subDetails.length > 0 && (
-                            <ul className="list-disc pl-4 mt-1 space-y-0.5">
-                              {line.subDetails.filter((sd) => sd.text.trim()).map((sd) => <li key={sd.id}>{sd.text}</li>)}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-right font-mono text-muted-foreground">{line.qty} {line.unit}</td>
-                    <td className="px-4 py-2 text-xs text-right font-mono text-muted-foreground">{fmt(line.unitPrice)}</td>
-                    <td className="px-4 py-2 text-xs text-right font-mono font-semibold text-foreground">{fmt(lineSubtotal(line))}</td>
-                  </tr>
                 </Fragment>
               );
             })}
@@ -346,11 +315,10 @@ export function LineItemsEditor({
           <div className="flex justify-between text-sm text-muted-foreground items-center">
             <span className="flex items-center gap-2">
               ส่วนลดพิเศษ
-              <span className="flex items-center gap-1 bg-secondary border border-border rounded px-2 py-0.5 print:hidden">
+              <span className="flex items-center gap-1 bg-secondary border border-border rounded px-2 py-0.5">
                 <input type="number" className="w-10 text-xs font-mono text-foreground bg-transparent outline-none text-right" value={discount} onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)} min={0} max={100} />
                 <Percent size={10} className="text-muted-foreground" />
               </span>
-              <span className="hidden print:inline font-mono">({discount}%)</span>
             </span>
             <span className="font-mono text-[#e05252]">-฿{fmt(discountAmt)}</span>
           </div>
