@@ -1,5 +1,6 @@
 import { apiFetch, ApiError } from "./apiClient.js";
 import type { User } from "./users";
+import { translate } from "./i18n";
 
 export interface SessionInfo {
   user: User | null;
@@ -30,7 +31,7 @@ export async function login(identifier: string, password: string): Promise<{ use
     return { user, error: null };
   } catch (err) {
     if (err instanceof ApiError) return { user: null, error: err.message };
-    return { user: null, error: "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" };
+    return { user: null, error: translate("session.loginFailed") };
   }
 }
 

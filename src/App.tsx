@@ -193,7 +193,7 @@ export default function App() {
       }).catch(() => {});
       return null;
     } catch (err) {
-      return err instanceof ApiError ? err.message : "ตั้งค่าเริ่มต้นระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
+      return err instanceof ApiError ? err.message : t("setup.errorGeneric");
     }
   };
 

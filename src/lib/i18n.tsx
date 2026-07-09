@@ -468,6 +468,10 @@ const translations = {
     "auditLog.col.details": "รายละเอียด",
     "auditLog.loading": "กำลังโหลด...",
     "auditLog.noFilterResults": "ไม่พบบันทึกการใช้งานที่ตรงกับเงื่อนไข",
+
+    "apiClient.requestFailed": "คำขอไม่สำเร็จ ({status})",
+    "session.loginFailed": "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
+    "setup.errorGeneric": "ตั้งค่าเริ่มต้นระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
   },
   en: {
     "settings.language": "Language",
@@ -926,6 +930,10 @@ const translations = {
     "auditLog.col.details": "Details",
     "auditLog.loading": "Loading...",
     "auditLog.noFilterResults": "No audit log entries match the filter",
+
+    "apiClient.requestFailed": "Request failed ({status})",
+    "session.loginFailed": "Login failed. Please try again.",
+    "setup.errorGeneric": "Initial setup failed. Please try again.",
   },
 } satisfies Record<Lang, Record<string, string>>;
 
@@ -968,4 +976,10 @@ export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);
   if (!ctx) throw new Error("useI18n must be used within I18nProvider");
   return ctx;
+}
+
+/** Non-hook translation lookup for plain functions (e.g. apiClient.ts, session.ts) that can't call useI18n(). Reads the persisted language directly from localStorage. */
+export function translate(key: TranslationKey): string {
+  const lang = readStoredLang();
+  return translations[lang][key] ?? translations.th[key] ?? key;
 }

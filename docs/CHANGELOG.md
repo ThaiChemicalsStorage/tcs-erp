@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-09 — Translate the rest of the app's Thai UI (full i18n follow-up)
+
+**Scope**: the initial production-readiness pass explicitly scoped `src/lib/i18n.tsx` to only Dashboard + empty states + the toggle itself. This follow-up (user-requested, after the initial toggle appeared to "not do anything" outside Dashboard) wires essentially every remaining page's UI chrome to the same dictionary: sidebar nav + topbar + user menu (`App.tsx`), login/setup pages (`AuthLayout`/`SignInPage`/`SetupWizardPage`), `NotificationBell`, all 4 Settings tabs, the entire Products module (list/form/categories/picker modal), the entire Quotation module's screen editing UI (list/document/line-items/interest buttons — **not** `PrintDocument.tsx`, see below), and the entire Admin module (Users/Roles/Audit Log). ~450 dictionary keys total.
+
+**Real bug found and fixed along the way**: navigation state (`App.tsx`'s `activeNav`) was keyed off the display label text itself (`activeNav === "ใบเสนอราคา"`), not a stable identifier. Translating the labels without fixing this would have silently broken routing the moment a user switched language mid-session. Introduced a `NavKey` union (`"dashboard" | "quotations" | ...`) decoupled from the translated label, with a `NAV_LABEL_KEYS` lookup for display. The same category filter pattern (translated display text also used as internal comparison state) was found and fixed in `QuoteList.tsx` and `ProductList.tsx` (both now use a stable `"all"` sentinel instead of the localized "ทั้งหมด" string).
+
+**Design decision — deliberately still Thai-only, not a gap**:
+1. **Persisted data/seed content**: audit log entries, notification title/description/module text, default role/department/position descriptions, `Company` default values. These are business records or admin-editable content written once (often server-side) and read back later — translating them live would mean either re-translating historical records on every render (wrong — a Login event from last Tuesday shouldn't change wording retroactively) or storing translations for every record (real scope creep, not requested). Matches the same reasoning already applied to `App.tsx`'s `moduleForAction()` in the original pass.
+2. **`PrintDocument.tsx`**: the actual printed/PDF quotation handed to customers. Kept Thai regardless of the toggle — a real business document for Thai customers shouldn't silently switch language based on the preparer's own UI preference.
+
+**New**: `translate()` in `src/lib/i18n.tsx` — a non-hook lookup (reads `localStorage` directly) for the two genuinely user-facing error strings that live in plain functions rather than components (`apiClient.ts`'s generic HTTP-failure message, `session.ts`'s login-failure fallback). Confirmed neither file is ever imported by the `api/` serverless layer, so pulling in a `.tsx` module client-side only is safe.
+
+**Also added**: `PERMISSION_LABEL_KEY` + per-group `labelKey` to `permissions.ts` (translated display labels for the Role Management permission matrix; the Thai `PERMISSION_LABELS` used to seed the `permissions` collection is untouched).
+
+**Files Modified**: `src/lib/i18n.tsx` (dictionary + `translate()`), `src/App.tsx` (NavKey refactor), `src/pages/AuthLayout.tsx`, `src/pages/SignInPage.tsx`, `src/pages/SetupWizardPage.tsx`, `src/components/NotificationBell.tsx`, `src/components/ConfirmDialog.tsx`, `src/pages/SettingsPage.tsx`, `src/pages/products/{ProductsPage,ProductList,ProductForm,CategoriesManager,ProductPickerModal}.tsx`, `src/pages/quotation/{QuotationPage,QuoteList,QuoteDocument,LineItemsEditor,InterestButtons}.tsx`, `src/pages/admin/{UserManagementPage,RoleManagementPage,AuditLogPage}.tsx`, `src/pages/dashboard/DashboardPage.tsx` (interest widget), `src/lib/quotes.tsx` (`statusLabelKey`/`approvalActionLabelKey`/`interestLabelKey`), `src/lib/permissions.ts` (`PERMISSION_LABEL_KEY`), `src/lib/apiClient.ts`, `src/lib/session.ts`.
+
+---
+
 ## 2026-07-09 — Fix: Administrator role incorrectly locked read-only in Role Management
 
 **Bug**: `RoleManagementPage.tsx` routed to a fully read-only view whenever `role.isSystem` was true, and `api/handlers/roles.ts` rejected any `PATCH`/`DELETE` under the same `isSystem` check. Both "Super Admin" and "Administrator" have `isSystem: true`, so Administrator's permission checkboxes and description were locked identically to Super Admin — even though `Role`'s own doc comment says system roles should only have their name/Super-Admin-flag locked, not their permissions.

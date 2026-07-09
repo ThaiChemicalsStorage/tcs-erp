@@ -1,3 +1,5 @@
+import { translate } from "./i18n";
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -13,7 +15,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     credentials: "include",
   });
   if (!res.ok) {
-    let message = `คำขอไม่สำเร็จ (${res.status})`;
+    let message = translate("apiClient.requestFailed").replace("{status}", String(res.status));
     try {
       const body = await res.json();
       if (body?.error) message = body.error;

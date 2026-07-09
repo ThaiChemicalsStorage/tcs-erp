@@ -1,11 +1,12 @@
 import { AlertTriangle } from "lucide-react";
+import { useI18n } from "../lib/i18n";
 
 export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "ยืนยัน",
-  cancelLabel = "ยกเลิก",
+  confirmLabel,
+  cancelLabel,
   danger = false,
   onConfirm,
   onCancel,
@@ -19,6 +20,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -35,7 +37,7 @@ export function ConfirmDialog({
         </div>
         <div className="flex items-center justify-end gap-2">
           <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-            {cancelLabel}
+            {cancelLabel ?? t("common.cancel")}
           </button>
           <button
             onClick={onConfirm}
@@ -43,7 +45,7 @@ export function ConfirmDialog({
               danger ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"
             }`}
           >
-            {confirmLabel}
+            {confirmLabel ?? t("quotation.modal.confirm")}
           </button>
         </div>
       </div>
