@@ -7,8 +7,7 @@ import {
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
 import { type JobType, fetchJobTypes } from "./lib/jobTypes";
-import { type Quote, fetchQuotes } from "./lib/quotes";
-import type { QuotationListFilter } from "./pages/dashboard/DashboardPage";
+import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes";
 import { type User, fetchUsers, initials } from "./lib/users";
 import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
 import type { Permission } from "./lib/permissions";

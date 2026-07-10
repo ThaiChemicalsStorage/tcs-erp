@@ -1,7 +1,7 @@
 import { ClipboardCheck } from "lucide-react";
 import type { ApprovalDashboard as ApprovalDashboardData } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
-import { fmtDays } from "./format";
+import { fmtDaysOrDash } from "./format";
 
 export function ApprovalDashboard({ data }: { data: ApprovalDashboardData }) {
   const { t } = useI18n();
@@ -9,7 +9,7 @@ export function ApprovalDashboard({ data }: { data: ApprovalDashboardData }) {
     { label: t("dashboard.approval.pending"), value: data.pendingApprovals.toLocaleString("th-TH"), accent: "#c9a84c" },
     { label: t("dashboard.approval.approvedToday"), value: data.approvedToday.toLocaleString("th-TH"), accent: "#2aa36b" },
     { label: t("dashboard.approval.rejectedToday"), value: data.rejectedToday.toLocaleString("th-TH"), accent: "#e05252" },
-    { label: t("dashboard.kpi.averageApprovalTime"), value: data.averageApprovalTime > 0 ? fmtDays(data.averageApprovalTime, t("dashboard.unit.days")) : "—", accent: "#5a7299" },
+    { label: t("dashboard.kpi.averageApprovalTime"), value: fmtDaysOrDash(data.averageApprovalTime, t("dashboard.unit.days")), accent: "#5a7299" },
   ];
   return (
     <div className="bg-card border border-border rounded-xl p-5">

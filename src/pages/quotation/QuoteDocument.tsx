@@ -90,6 +90,11 @@ export function QuoteDocument({
   const [expiryDate, setExpiryDate] = useState(quote?.expiryDate ?? plusDaysIso(30));
   const [remarks, setRemarks] = useState(quote?.remarks ?? (company.termsAndConditions || DEFAULT_TERMS));
   const [jobTypeCode, setJobTypeCode] = useState(quote?.jobTypeCode ?? "");
+  // Seeded from the quote's own persisted snapshot, not re-derived from the live `jobTypes` list on
+  // every render — jobTypeCode/jobTypeName are a deliberate snapshot (see src/lib/quotes.tsx), so
+  // renaming or recoding a Job Type after this quote was saved must not silently change what this
+  // quote displays or re-save a different name the next time it's edited.
+  const [jobTypeName, setJobTypeName] = useState(quote?.jobTypeName ?? "");
   const [isPotentialOpportunity, setIsPotentialOpportunity] = useState(quote?.isPotentialOpportunity ?? false);
   const [followUpDate, setFollowUpDate] = useState(quote?.followUpDate ?? "");
 
@@ -99,15 +104,19 @@ export function QuoteDocument({
 
   const { total } = computeTotals(lines, discount);
   const disabled = !permissions.canEdit;
-  const selectedJobType = jobTypes.find((jt) => jt.code === jobTypeCode);
-  const jobTypeDisplay = selectedJobType ? `${selectedJobType.code} — ${selectedJobType.name}` : "";
+  const jobTypeDisplay = jobTypeCode ? `${jobTypeCode} — ${jobTypeName}` : "";
+
+  const handleJobTypeChange = (code: string) => {
+    setJobTypeCode(code);
+    setJobTypeName(jobTypes.find((jt) => jt.code === code)?.name ?? "");
+  };
 
   const currentDraft = (): QuoteDraftFields => ({
     client, status: quoteStatus, lines, discount, amount: total,
     salesperson, contactName, contactPhone, contactEmail, address, taxId,
     deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate, remarks,
     jobTypeCode,
-    jobTypeName: selectedJobType?.name ?? "",
+    jobTypeName,
     isPotentialOpportunity,
     followUpDate,
   });
@@ -342,7 +351,7 @@ export function QuoteDocument({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.jobType")}</label>
-                    <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => setJobTypeCode(e.target.value)}>
+                    <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
                       <option value="">{t("quotation.field.jobTypeUnclassified")}</option>
                       {jobTypes.filter((jt) => jt.isActive || jt.code === jobTypeCode).map((jt) => (
                         <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>

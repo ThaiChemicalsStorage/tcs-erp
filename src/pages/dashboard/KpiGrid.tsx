@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 import type { DashboardKpis } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
-import { fmtShort, fmtPercent, fmtDays } from "./format";
+import { fmtShort, fmtPercent, fmtDaysOrDash } from "./format";
 
 function KpiCard({ title, value, icon: Icon, accent }: { title: string; value: string; icon: LucideIcon; accent: string }) {
   return (
@@ -31,8 +31,8 @@ export function KpiGrid({ kpis }: { kpis: DashboardKpis }) {
     { title: t("dashboard.kpi.winRate"), value: fmtPercent(kpis.winRate), icon: Percent, accent: "#2aa36b" },
     { title: t("dashboard.kpi.loseRate"), value: fmtPercent(kpis.loseRate), icon: Percent, accent: "#e05252" },
     { title: t("dashboard.kpi.conversionRate"), value: fmtPercent(kpis.conversionRate), icon: Activity, accent: "#1f9d8a" },
-    { title: t("dashboard.kpi.averageApprovalTime"), value: fmtDays(kpis.averageApprovalTime, days), icon: Timer, accent: "#e08a3c" },
-    { title: t("dashboard.kpi.averageClosingTime"), value: fmtDays(kpis.averageClosingTime, days), icon: Clock, accent: "#e08a3c" },
+    { title: t("dashboard.kpi.averageApprovalTime"), value: fmtDaysOrDash(kpis.averageApprovalTime, days), icon: Timer, accent: "#e08a3c" },
+    { title: t("dashboard.kpi.averageClosingTime"), value: fmtDaysOrDash(kpis.averageClosingTime, days), icon: Clock, accent: "#e08a3c" },
     { title: t("dashboard.kpi.activeQuotations"), value: kpis.activeQuotations.toLocaleString("th-TH"), icon: FileText, accent: "#3b6fc9" },
     { title: t("dashboard.kpi.expiredQuotations"), value: kpis.expiredQuotations.toLocaleString("th-TH"), icon: AlertTriangle, accent: "#e05252" },
     { title: t("dashboard.kpi.overdueFollowups"), value: kpis.overdueFollowups.toLocaleString("th-TH"), icon: CalendarClock, accent: "#e05252" },

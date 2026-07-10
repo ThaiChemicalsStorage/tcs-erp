@@ -47,8 +47,22 @@ type QuoteCalcDoc = Pick<
   "isPotentialOpportunity" | "followUpDate" | "issueDate" | "expiryDate" | "approvalHistory"
 > & { _id: string };
 
+/**
+ * Thailand is UTC+7, no DST. Vercel's Node runtime has no guaranteed local timezone (typically
+ * UTC), and `issueDate`/`expiryDate`/`followUpDate` are Thailand-local business-date strings —
+ * so "today"/month-boundary math here must not use the server's ambient local `Date` getters
+ * (wrong timezone) or mix a local constructor with `.toISOString()` (shifts the boundary by a
+ * day for any positive-UTC-offset zone). Fix: shift by the fixed offset once, then always read
+ * back via UTC getters/`Date.UTC` only — correct regardless of the server's actual configured
+ * timezone.
+ */
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+function bangkokNow(): Date {
+  return new Date(Date.now() + BANGKOK_OFFSET_MS);
+}
 function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return bangkokNow().toISOString().slice(0, 10);
 }
 
 function queryString(req: VercelRequest, key: string): string {
@@ -57,20 +71,23 @@ function queryString(req: VercelRequest, key: string): string {
   return v ?? "";
 }
 
-/** Builds the last N "YYYY-MM" keys ending at the current calendar month, oldest first — used to zero-fill months with no real quotes so the chart never renders blank. */
+/** Builds the last N "YYYY-MM" keys ending at the current Bangkok calendar month, oldest first — used to zero-fill months with no real quotes so the chart never renders blank. */
 function lastNMonthKeys(n: number): string[] {
+  const now = bangkokNow();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
   const keys: string[] = [];
-  const now = new Date();
   for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    const d = new Date(Date.UTC(y, m - i, 1));
+    keys.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
   }
   return keys;
 }
 
-function avg(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((s, v) => s + v, 0) / values.length;
+/** Null (not 0) for an empty input — callers must not conflate "no data yet" with a genuine zero-day/zero-percent average. */
+function avg(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10;
 }
 
 function msToDays(ms: number): number {
@@ -99,12 +116,15 @@ function closingDurationDays(doc: QuoteCalcDoc): number | null {
   return msToDays(new Date(won.createdAt).getTime() - new Date(start).getTime());
 }
 
-function periodEnd(kind: "month" | "quarter" | "year", from: Date): string {
-  const d = new Date(from);
-  if (kind === "month") d.setMonth(d.getMonth() + 1, 0);
-  else if (kind === "quarter") d.setMonth(d.getMonth() - (d.getMonth() % 3) + 3, 0);
-  else d.setMonth(11, 31);
-  return d.toISOString().slice(0, 10);
+function periodEnd(kind: "month" | "quarter" | "year"): string {
+  const now = bangkokNow();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  let endDate: Date;
+  if (kind === "month") endDate = new Date(Date.UTC(y, m + 1, 0));
+  else if (kind === "quarter") endDate = new Date(Date.UTC(y, m - (m % 3) + 3, 0));
+  else endDate = new Date(Date.UTC(y, 11, 31));
+  return endDate.toISOString().slice(0, 10);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -126,6 +146,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const fullMatch: Record<string, unknown> = { ...dateMatch };
     if (salespersonFilter && salespersonFilter !== "all") fullMatch.salesperson = salespersonFilter;
+    /**
+     * Salesperson-only, deliberately WITHOUT the date-range filter — for the two trailing-12-month
+     * trend series (revenueByMonth, monthlyClosingRate). Applying `from`/`to` to a "last 12
+     * months" trend chart would collapse it to whatever narrow window the KPI filter picked (e.g.
+     * a single day for the "Today" preset), defeating the point of a trend chart. Same rationale
+     * already applied to the follow-ups query below.
+     */
+    const salespersonOnlyMatch: Record<string, unknown> = {};
+    if (salespersonFilter && salespersonFilter !== "all") salespersonOnlyMatch.salesperson = salespersonFilter;
 
     const [customers, leads, quotes, products, categories] = await Promise.all([
       customersCollection(), leadsCollection(), quotesCollection(), productsCollection(), categoriesCollection(),
@@ -137,15 +166,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } as const;
 
     const [
-      totalCustomers, totalLeads, totalProducts,
+      totalCustomers, totalLeads, totalProducts, totalQuotationsAllTime,
       revenueByMonthAgg, productsByCategoryAgg, categoryDocs,
       docsRaw, allClientCountsAgg, followUpDocsRaw, historicalOutcomeAgg, monthlyOutcomeAgg,
     ] = await Promise.all([
       customers.countDocuments({ deletedAt: null }),
       leads.countDocuments({ deletedAt: null }),
       products.countDocuments({ archived: false }),
+      // Deliberately unfiltered (no date/salesperson match) — this is what decides whether the page
+      // shows "no business data yet" at all, which must stay true regardless of the current filter
+      // selection. `kpis.totalQuotations` below is correctly filter-scoped for its own KPI card;
+      // conflating the two previously meant an empty-result filter (e.g. "Today" on a quiet day)
+      // could hide the entire dashboard behind the empty state even with years of real history.
+      quotes.estimatedDocumentCount(),
       quotes.aggregate<{ _id: string; revenue: number }>([
-        { $match: { status: WON_STATUS, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } } },
+        { $match: { ...salespersonOnlyMatch, status: WON_STATUS, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } } },
         { $group: { _id: { $substr: ["$issueDate", 0, 7] }, revenue: { $sum: "$amount" } } },
       ]).toArray(),
       products.aggregate<{ _id: string; count: number }>([
@@ -157,20 +192,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       quotes.aggregate<{ _id: string; count: number }>([{ $group: { _id: "$client", count: { $sum: 1 } } }]).toArray(),
       // Follow-ups ignore the date-range filter (they're about upcoming action items, not when the quote was issued) but still respect the salesperson filter.
       quotes.find(
-        { ...(salespersonFilter && salespersonFilter !== "all" ? { salesperson: salespersonFilter } : {}) },
+        salespersonOnlyMatch,
         { projection: { status: 1, client: 1, salesperson: 1, followUpDate: 1, amount: 1 } },
       ).toArray(),
+      // Deliberately company-wide only (no salesperson filter) — the forecast's weighting baseline is a
+      // trailing-12-month win rate meant to be a stable, low-noise reference; narrowing it to one
+      // salesperson's own (much smaller) win/loss sample would make the forecast noisier, not more accurate.
       quotes.aggregate<{ _id: string; count: number }>([
         { $match: { status: { $in: [WON_STATUS, LOST_STATUS] }, issueDate: { $gte: lastNMonthKeys(MONTHS_BACK)[0] } } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]).toArray(),
       quotes.aggregate<{ _id: { month: string; status: string }; count: number }>([
-        { $match: { status: { $in: [WON_STATUS, LOST_STATUS] }, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } } },
+        { $match: { ...salespersonOnlyMatch, status: { $in: [WON_STATUS, LOST_STATUS] }, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } } },
         { $group: { _id: { month: { $substr: ["$issueDate", 0, 7] }, status: "$status" }, count: { $sum: 1 } } },
       ]).toArray(),
     ]);
 
-    const docs = docsRaw as QuoteCalcDoc[];
+    // MongoDB enforces no schema — a doc predating a field (legacy/seed data) or written outside
+    // this app's own API could have `client`/`salesperson` missing entirely, and `.trim()`ing
+    // `undefined` throughout this file would 500 the whole dashboard for every user over one bad
+    // document. Normalize once here rather than defensively guarding every call site below.
+    const docs = (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "" }));
 
     // ── KPIs ──────────────────────────────────────────────────────────────
     const totalQuotations = docs.length;
@@ -193,7 +235,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const averageClosingTime = avg(closingDurations);
     const activeQuotations = docs.filter((q) => !TERMINAL_STATUSES.has(q.status)).length;
     const expiredQuotations = docs.filter((q) => !TERMINAL_STATUSES.has(q.status) && q.expiryDate && q.expiryDate < today).length;
-    const overdueFollowups = docs.filter((q) => !TERMINAL_STATUSES.has(q.status) && q.followUpDate && q.followUpDate < today).length;
+    // overdueFollowups is derived from `followUps.overdue` below (not recomputed from `docs`) so the KPI
+    // card and the Follow-Up Reminders panel can never disagree — they deliberately share the same
+    // date-filter-agnostic source, since a follow-up reminder shouldn't disappear just because the
+    // quote it's on falls outside the currently-selected reporting date range.
 
     const totalQuoteCountByClient = new Map(allClientCountsAgg.map((c) => [c._id, c.count]));
     const clientsInFilteredSet = new Set(docs.filter((q) => q.client.trim()).map((q) => q.client));
@@ -246,8 +291,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }).sort((a, b) => b.revenue - a.revenue);
 
     // ── Customer analytics ───────────────────────────────────────────────
-    const clientNames = [...new Set(docs.filter((q) => q.client.trim()).map((q) => q.client))];
-    const customerStats = clientNames.map((client) => {
+    const customerStats = [...clientsInFilteredSet].map((client) => {
       const mine = docs.filter((q) => q.client === client);
       const mineWon = mine.filter((q) => q.status === WON_STATUS);
       return { client, revenue: mineWon.reduce((s, q) => s + q.amount, 0), quotationCount: mine.length, wonCount: mineWon.length };
@@ -282,7 +326,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const historicalWinRate = wonLast12 + lostLast12 > 0 ? wonLast12 / (wonLast12 + lostLast12) : 0;
     const openOpportunities = docs.filter((q) => q.isPotentialOpportunity && !TERMINAL_STATUSES.has(q.status) && q.expiryDate);
     const forecastFor = (kind: "month" | "quarter" | "year") => {
-      const end = periodEnd(kind, new Date());
+      const end = periodEnd(kind);
       return Math.round(
         openOpportunities
           .filter((q) => q.expiryDate >= today && q.expiryDate <= end)
@@ -318,7 +362,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Approval dashboard — only for callers who can already approve quotations ──
     let approvalDashboard: {
-      pendingApprovals: number; approvedToday: number; rejectedToday: number; averageApprovalTime: number;
+      pendingApprovals: number; approvedToday: number; rejectedToday: number; averageApprovalTime: number | null;
     } | null = null;
     if (roleHasPermission(ctx.role, "quotations:approve")) {
       const approvedToday = docs.filter((q) => lastEntry(q.approvalHistory, "approved")?.createdAt.startsWith(today)).length;
@@ -330,17 +374,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── Notification summary — per-caller, same scoping as GET /api/notifications ──
+    // Also parallelized with the two independent queries below it (previously three sequential
+    // awaits in a row, none of which depend on each other or on anything computed above).
     const notifications = await notificationsCollection();
-    const [unreadCount, myNotifications] = await Promise.all([
-      notifications.countDocuments({ recipientUserId: ctx.user.id, read: false }),
-      notifications.find({ recipientUserId: ctx.user.id, read: false }).toArray(),
+    const [myNotifications, availableSalespeopleRaw] = await Promise.all([
+      // Only `read` docs' `.type` field is ever read below — no need to fetch full Notification
+      // documents (title/description/module/relatedQuoteId) just to count them by type.
+      notifications.find({ recipientUserId: ctx.user.id, read: false }, { projection: { type: 1 } }).toArray(),
+      // Available salespeople (for the filter dropdown) — respects the date filter only.
+      quotes.distinct("salesperson", dateMatch),
     ]);
     const notificationsByType: Record<string, number> = {};
     for (const n of myNotifications) notificationsByType[n.type] = (notificationsByType[n.type] ?? 0) + 1;
-    const notificationSummary = { unreadCount, byType: notificationsByType };
-
-    // ── Available salespeople (for the filter dropdown) — respects the date filter only ──
-    const availableSalespeople = (await quotes.distinct("salesperson", dateMatch)).filter((s): s is string => !!s && s.trim() !== "").sort();
+    // unreadCount is exactly myNotifications.length (same filter) — no separate countDocuments round trip.
+    const notificationSummary = { unreadCount: myNotifications.length, byType: notificationsByType };
+    const availableSalespeople = availableSalespeopleRaw.filter((s): s is string => !!s && s.trim() !== "").sort();
 
     // ── Monthly closing rate — win rate per calendar month, trailing 12 months ──
     const monthlyOutcomeMap = new Map<string, { won: number; lost: number }>();
@@ -351,7 +399,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const monthlyClosingRate = lastNMonthKeys(MONTHS_BACK).map((month) => {
       const { won, lost } = monthlyOutcomeMap.get(month) ?? { won: 0, lost: 0 };
-      return { month, winRate: won + lost > 0 ? Math.round((won / (won + lost)) * 1000) / 10 : 0 };
+      // null (not 0) when there were no won/lost deals that month — a real 0% win rate (deals that
+      // all lost) must render as a visible flat line, not be hidden behind the chart's empty state.
+      return { month, winRate: won + lost > 0 ? Math.round((won / (won + lost)) * 1000) / 10 : null };
     });
 
     // ── Legacy sections (unchanged shape, still needed by the existing revenue/category widgets) ──
@@ -369,11 +419,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .sort((a, b) => b.count - a.count);
 
     res.status(200).json({
+      hasAnyData: totalQuotationsAllTime > 0 || totalProducts > 0,
       kpis: {
         totalCustomers, totalLeads, totalProducts,
         totalQuotations, totalQuotationValue, closedSales, expectedSales,
         wonDeals, lostDeals, averageDealSize, winRate, loseRate, conversionRate,
-        averageApprovalTime, averageClosingTime, activeQuotations, expiredQuotations, overdueFollowups,
+        averageApprovalTime, averageClosingTime, activeQuotations, expiredQuotations,
+        overdueFollowups: followUps.overdue.length,
         newCustomers, repeatCustomers,
       },
       revenueByMonth,

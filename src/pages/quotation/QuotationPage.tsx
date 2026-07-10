@@ -5,11 +5,10 @@ import type { JobType } from "../../lib/jobTypes";
 import type { User } from "../../lib/users";
 import type { Role } from "../../lib/roles";
 import {
-  type Quote, type QuoteInterest, type QuoteDraftFields, type ApprovalAction,
+  type Quote, type QuoteInterest, type QuoteDraftFields, type ApprovalAction, type QuotationListFilter,
   createQuote, updateQuote, duplicateQuote, performWorkflowAction, approvalActionLabel, approvalActionLabelKey, computeQuotePermissions, nextQuoteId,
 } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
-import type { QuotationListFilter } from "../dashboard/DashboardPage";
 import { QuoteList } from "./QuoteList";
 import { QuoteDocument } from "./QuoteDocument";
 import { Toast } from "../../components/Toast";
@@ -50,10 +49,19 @@ export function QuotationPage({
   const [view, setView] = useState<"list" | "new" | "detail">("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Consumed exactly once per mount (a ref guard rather than a `[]` dep array, so this stays
-  // exhaustive-deps clean even though `onFilterConsumed` is a fresh function identity every
-  // App.tsx render). QuotationPage itself fully unmounts/remounts every time nav switches away
-  // from and back to "quotations", so "once per mount" already means "once per fresh visit".
+  // Snapshotted once via useState's lazy initializer — stable for QuotationPage's whole mount
+  // lifetime, independent of `initialFilter` going back to null once consumed (see the effect
+  // below). This matters because QuoteList (the actual consumer) remounts on every internal
+  // view toggle (list -> detail -> list is a plain conditional-render swap with no key, not a
+  // stable component instance) — if QuoteList seeded straight from the live `initialFilter` prop,
+  // opening any one quote and clicking Back would silently drop the filter the moment it remounts,
+  // since by then App.tsx's copy has already been nulled out by the effect below.
+  const [listFilterSnapshot] = useState(initialFilter);
+
+  // Tells App.tsx it can forget its copy — consumed exactly once per mount (a ref guard rather
+  // than a `[]` dep array, so this stays exhaustive-deps clean even though `onFilterConsumed` is
+  // a fresh function identity every App.tsx render). This is a separate concern from what
+  // QuoteList should keep seeding itself with above; conflating the two was the bug.
   const consumedInitialFilter = useRef(false);
   useEffect(() => {
     if (consumedInitialFilter.current) return;
@@ -127,7 +135,7 @@ export function QuotationPage({
         <QuoteList
           quotes={quotes}
           jobTypes={jobTypes}
-          initialFilter={initialFilter}
+          initialFilter={listFilterSnapshot}
           onOpen={(id) => { setSelectedId(id); setView("detail"); }}
           onCreateNew={() => { setSelectedId(null); setView("new"); }}
           onInterestChange={setInterest}

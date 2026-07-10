@@ -20,10 +20,18 @@ fields added to `Quote` in the same pass (see [Quotation.md](./Quotation.md)).
 3. **Filters** (`DashboardFilterBar.tsx`): date-range presets (Today/Yesterday/Last 7/14 Days/
    This Month/Last Month/This Quarter/This Year/Custom Range/All Time) plus a salesperson
    dropdown (populated from `availableSalespeople`, which only lists people who actually have
-   quotes). Every section on the page recomputes from the filtered result set — there's no
-   partially-filtered widget.
-4. If both `totalQuotations` and `totalProducts` are `0` (a genuinely empty database), the page
-   shows a single empty state instead of a wall of zeros. Every individual chart/table also has
+   quotes). Nearly every section respects the salesperson filter (fixed 2026-07-10 for the two
+   that initially didn't — see below). The date-range filter is deliberately **not** applied to
+   the two trailing-12-month trend series (Revenue Trend, Monthly Closing Rate) or the forecast's
+   historical win-rate baseline — collapsing a 12-month trend to a single selected day would
+   defeat its purpose, matching the same reasoning already used for the Follow-up Reminders
+   panel. Every other section respects both filters.
+4. If the database has `hasAnyData: false` (no quotations *at all*, in any filter, and no
+   products), the page shows a single empty state instead of a wall of zeros. This is a distinct
+   signal from the current filter matching zero results — the latter shows real zero-valued
+   KPIs/empty-per-widget-states rather than hiding the whole page (fixed 2026-07-10; a narrow
+   filter like "Today" used to incorrectly hide the entire dashboard even with years of real
+   history). Every individual chart/table also has
    its own inline "no business data" note if its specific slice of data is empty even when the
    overall database isn't (e.g. no follow-ups scheduled yet).
 5. Clicking a sales-pipeline stage or a follow-up reminder navigates to the Quotation module

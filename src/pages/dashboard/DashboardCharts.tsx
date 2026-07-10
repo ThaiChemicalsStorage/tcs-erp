@@ -244,9 +244,11 @@ export function ProductsByCategoryChart({ categoryBreakdown }: { categoryBreakdo
   );
 }
 
-export function MonthlyClosingRateChart({ data }: { data: { month: string; winRate: number }[] }) {
+export function MonthlyClosingRateChart({ data }: { data: { month: string; winRate: number | null }[] }) {
   const { t } = useI18n();
-  const hasData = data.some((d) => d.winRate > 0);
+  // null (not 0) means "no won/lost deals that month" — a real 0% month (deals that all lost)
+  // must still render as a visible flat line, not be hidden behind the empty state.
+  const hasData = data.some((d) => d.winRate !== null);
   return (
     <ChartCard title={t("dashboard.chart.closingRate.title")} sub={t("dashboard.chart.closingRate.sub")}>
       {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (

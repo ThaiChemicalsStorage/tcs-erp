@@ -14,6 +14,16 @@ export function fmtDays(n: number, unit: string): string {
   return `${n.toLocaleString("th-TH", { maximumFractionDigits: 1 })} ${unit}`;
 }
 
+/** "—" only for null (no data yet) — a genuine 0.0-day average renders as "0.0 <unit>", not a dash. */
+export function fmtDaysOrDash(n: number | null, unit: string): string {
+  return n === null ? "—" : fmtDays(n, unit);
+}
+
+/** "—" only for null — a genuine 0% rate renders as "0%", not a dash. */
+export function fmtPercentOrDash(n: number | null): string {
+  return n === null ? "—" : fmtPercent(n);
+}
+
 export function monthLabel(key: string): string {
   const [y, m] = key.split("-").map(Number);
   if (!y || !m) return key;

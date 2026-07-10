@@ -16,6 +16,12 @@ export type QuoteStatus =
   | "ยกเลิก";
 export type QuoteInterest = "น่าสนใจ" | "ไม่น่าสนใจ" | null;
 
+/** A list-view filter — e.g. built by the Dashboard's pipeline-stage/follow-up click-through and consumed by QuoteList. Lives here (not in a page component) since it's a Quote-domain concept any future caller could construct against, not something specific to the Dashboard page. */
+export interface QuotationListFilter {
+  status?: QuoteStatus;
+  client?: string;
+}
+
 export type ApprovalAction =
   | "submitted"
   | "approved"

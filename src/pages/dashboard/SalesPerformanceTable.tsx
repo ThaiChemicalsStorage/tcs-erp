@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowUpDown } from "lucide-react";
 import type { SalesPerformanceEntry } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
-import { fmtShort, fmtPercent, fmtDays } from "./format";
+import { fmtShort, fmtPercent, fmtDaysOrDash } from "./format";
 
 type SortKey = "revenue" | "quotationCount" | "won" | "conversionRate" | "avgClosingTime";
 
@@ -12,7 +12,10 @@ export function SalesPerformanceTable({ title, sub, entries, limit }: { title: s
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const days = t("dashboard.unit.days");
 
-  const sorted = [...entries].sort((a, b) => b[sortKey] - a[sortKey]);
+  // avgClosingTime can be null (no won deals yet) — coerce to -1 so "no data" always sinks to the
+  // bottom regardless of sort direction, rather than `null - number` silently coercing to 0 (which
+  // would misplace it among genuinely-fast closers).
+  const sorted = [...entries].sort((a, b) => (b[sortKey] ?? -1) - (a[sortKey] ?? -1));
   const rows = limit ? sorted.slice(0, limit) : sorted;
 
   const columns: { key: SortKey | null; label: string }[] = [
@@ -61,7 +64,7 @@ export function SalesPerformanceTable({ title, sub, entries, limit }: { title: s
                   <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{fmtShort(r.expectedRevenue)}</td>
                   <td className="px-3 py-2.5 text-xs font-mono text-[#157347]">{r.won}</td>
                   <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{fmtPercent(r.conversionRate)}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{r.avgClosingTime > 0 ? fmtDays(r.avgClosingTime, days) : "—"}</td>
+                  <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{fmtDaysOrDash(r.avgClosingTime, days)}</td>
                 </tr>
               ))}
             </tbody>

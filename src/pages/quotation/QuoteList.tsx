@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Plus, FileText, Target, X } from "lucide-react";
-import { type Quote, type QuoteStatus, type QuoteInterest, statusStyle, statusIcon, statusLabelKey } from "../../lib/quotes";
+import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusStyle, statusIcon, statusLabelKey } from "../../lib/quotes";
 import type { JobType } from "../../lib/jobTypes";
-import type { QuotationListFilter } from "../dashboard/DashboardPage";
 import { initials } from "../../lib/users";
 import { InterestButtons } from "./InterestButtons";
 import { useI18n } from "../../lib/i18n";

@@ -15,10 +15,10 @@ export interface DashboardKpis {
   winRate: number;
   loseRate: number;
   conversionRate: number;
-  /** Days, average of (approved timestamp - submitted timestamp) across quotes that reached "approved". */
-  averageApprovalTime: number;
-  /** Days, average of (marked-won timestamp - first approval-history entry) across won quotes. */
-  averageClosingTime: number;
+  /** Days, average of (approved timestamp - submitted timestamp) across quotes that reached "approved". Null when no quote in the filtered set has reached "approved" — distinct from a genuine same-day (0.0) average. */
+  averageApprovalTime: number | null;
+  /** Days, average of (marked-won timestamp - first approval-history entry) across won quotes. Null when there are no won quotes in the filtered set. */
+  averageClosingTime: number | null;
   activeQuotations: number;
   expiredQuotations: number;
   overdueFollowups: number;
@@ -44,7 +44,8 @@ export interface SalesPerformanceEntry {
   revenue: number;
   expectedRevenue: number;
   conversionRate: number;
-  avgClosingTime: number;
+  /** Null when this salesperson has no won deals in the filtered set. */
+  avgClosingTime: number | null;
   avgDealSize: number;
 }
 
@@ -97,7 +98,7 @@ export interface ApprovalDashboard {
   pendingApprovals: number;
   approvedToday: number;
   rejectedToday: number;
-  averageApprovalTime: number;
+  averageApprovalTime: number | null;
 }
 
 export interface NotificationSummary {
@@ -106,10 +107,13 @@ export interface NotificationSummary {
 }
 
 export interface DashboardStats {
+  /** True if the database has ANY quotations (any filter) or products — unfiltered, independent of `kpis.totalQuotations`. Drives the page-level empty state; a narrow filter matching zero results must not hide a database that actually has data. */
+  hasAnyData: boolean;
   kpis: DashboardKpis;
   revenueByMonth: { month: string; revenue: number }[];
   categoryBreakdown: { categoryId: string; categoryName: string; count: number; percentage: number }[];
-  monthlyClosingRate: { month: string; winRate: number }[];
+  /** winRate is null for a month with no won/lost deals — distinct from a genuine 0% (deals that all lost). */
+  monthlyClosingRate: { month: string; winRate: number | null }[];
   pipeline: PipelineStage[];
   salesPerformance: SalesPerformanceEntry[];
   customerAnalytics: CustomerAnalytics;

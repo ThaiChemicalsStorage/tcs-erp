@@ -108,12 +108,26 @@ const DEFAULT_JOB_TYPES = [
 /** Idempotent. The default Job Type master list from the 2026-07-10 Executive Dashboard/CRM request — editable afterward via Settings (company:manage). */
 export async function seedJobTypesIfEmpty(): Promise<void> {
   const jobTypes = await jobTypesCollection();
+  // Unlike the other seed*IfEmpty() functions here, this one is also called defensively from
+  // GET /api/jobtypes on every request (see api/handlers/jobtypes.ts) — because ensureIndexes()
+  // only ever runs from the one-time Setup Wizard path, which is already permanently blocked on
+  // any already-provisioned deployment. Creating the unique index here too (not just in
+  // ensureIndexes()) means it actually exists in production, and turns a concurrent-first-request
+  // double-seed race into a safe, ignorable duplicate-key error instead of silently inserting the
+  // same 13 defaults twice with nothing to reject the duplicates.
+  await jobTypes.createIndex({ code: 1 }, { unique: true });
   const count = await jobTypes.estimatedDocumentCount();
   if (count > 0) return;
   const now = nowIso();
-  await jobTypes.insertMany(
-    DEFAULT_JOB_TYPES.map((j) => ({ ...j, isActive: true, createdAt: now, updatedAt: now, createdBy: "system", updatedBy: "system" })),
-  );
+  try {
+    await jobTypes.insertMany(
+      DEFAULT_JOB_TYPES.map((j) => ({ ...j, isActive: true, createdAt: now, updatedAt: now, createdBy: "system", updatedBy: "system" })),
+      { ordered: false },
+    );
+  } catch {
+    // A concurrent request already seeded these codes between our count check and this insert —
+    // the unique index rejected our duplicates, which is the whole point; nothing left to do.
+  }
 }
 
 /** Idempotent upsert of the singleton system-settings doc. Defaults mirror current hardcoded behavior (SESSION_DAYS in api/_lib/auth.ts) so future wiring is a no-op migration. */
