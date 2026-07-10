@@ -154,6 +154,7 @@ See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the maintained completion perce
 | [CHANGELOG.md](./CHANGELOG.md) | Dated history of every implemented change |
 | [SESSION_LOG.md](./SESSION_LOG.md) | Higher-level retrospective per work session (problems found/fixed, recommendations, completion estimate) |
 | [TODO.md](./TODO.md) | Prioritized task backlog |
+| [IMPLEMENTATION_CHECKLIST.md](./IMPLEMENTATION_CHECKLIST.md) | Module-by-module Completed/In Progress/Missing/Blocked audit view — added 2026-07-10 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Frontend/backend/db/api architecture (Vite + React frontend, Vercel Functions + MongoDB backend), folder & component organization, refactor decisions |
 | [DATABASE.md](./DATABASE.md) | Real MongoDB collections and their shapes |
 | [API.md](./API.md) | Real REST API: every route, method, auth/permission requirement |

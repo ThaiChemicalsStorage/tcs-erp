@@ -87,6 +87,11 @@
 - [ ] Build API routes + UI on top of the other 2026-07-09 schema-prep collections as their features come up: `quotation_comments`, `quotation_tags`, `permissions` (admin-configurable permission registry), `sessions` (session revocation / "log out other devices"), `uploads`/`attachments` (real blob storage, would also fix the base64-in-document 16MB ceiling noted below).
 - [ ] Re-verify the MongoDB Atlas credential rotation item above is actually closed — it predates this pass and remains unconfirmed.
 
+## Medium Priority — Completion-audit follow-ups (2026-07-10 request)
+
+- [ ] **Activity Analytics** (period-grouped, multi-dimension) — a genuine gap surfaced by the 2026-07-10 completion audit (see [IMPLEMENTATION_CHECKLIST.md](./IMPLEMENTATION_CHECKLIST.md)). The Dashboard's Activity Timeline is a flat recent-N feed from `audit_log`; there's no weekly/monthly/quarterly/yearly grouping or salesperson/job-type filtering of activity counts (quotations created/edited/won/lost, status changes, approvals). Not yet scoped — reasonably buildable from existing `audit_log` + `quotes` data (audit log entries carry the actor's identity for a salesperson-style filter; job-type filtering of *activity* would need cross-referencing `details` text or isn't well-supported by the current audit log shape, worth scoping explicitly before building).
+- [ ] Build a Job Type admin management UI — the `POST`/`PATCH /api/jobtypes` routes exist (`company:manage`), but there's no page; only the 13 seeded defaults are usable today.
+
 ## Medium Priority — Executive Dashboard follow-ups (2026-07-10 request)
 
 - [ ] **Report Export** (PDF/Excel/CSV) for the Dashboard — explicitly deferred from the 2026-07-10 pass. CSV needs no new dependency (plain browser Blob download); Excel needs a new library (e.g. `xlsx`); PDF should extend the existing browser-print pattern (`PrintDocument.tsx` precedent) rather than adding a heavy new dependency. Build against the now-stable `GET /api/dashboard` response shape.
