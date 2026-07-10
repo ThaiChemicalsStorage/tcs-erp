@@ -350,9 +350,17 @@ export function QuoteDocument({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.jobType")}</label>
+                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.jobType")} {mode === "new" && <span className="text-[#e05252]">*</span>}</label>
                     <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
-                      <option value="">{t("quotation.field.jobTypeUnclassified")}</option>
+                      {/* A brand-new quote must be assigned a real Job Type — required server-side
+                          too (see api/_lib/quoteValidation.ts) — so the blank "unclassified" choice
+                          is only offered when editing an existing quote that already has one
+                          (legacy data predating this field, or explicitly cleared before). A
+                          disabled placeholder keeps the select non-blank-looking until a real
+                          choice is made, instead of silently defaulting to "unclassified." */}
+                      {mode === "new"
+                        ? <option value="" disabled>{t("quotation.field.jobTypeSelectPrompt")}</option>
+                        : <option value="">{t("quotation.field.jobTypeUnclassified")}</option>}
                       {jobTypes.filter((jt) => jt.isActive || jt.code === jobTypeCode).map((jt) => (
                         <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>
                       ))}

@@ -290,7 +290,20 @@ All document fields below `discount` were hardcoded placeholder text on the form
 
 Indexes added 2026-07-09 (`quotes` had none beyond default `_id` before this): `{ status: 1 }`, `{ createdByUserId: 1 }` (already used for ownership checks), `{ issueDate: 1 }` (needed for the Dashboard's monthly revenue aggregation — see below). Added 2026-07-10: `{ jobTypeCode: 1 }`, `{ salesperson: 1 }`, `{ followUpDate: 1 }`, serving the Dashboard filters/grouping; later the same day, `{ isPotentialOpportunity: 1 }` and `{ client: 1 }` (Expected Sales/forecast filtering and customer-analytics grouping, respectively — both already-hot query paths that had no supporting index). No soft-delete field — the `ยกเลิก` (Cancelled) terminal workflow status already serves that role, so a `createdAt`/`updatedAt`/`isDeleted`/`department` index (all requested by a generic Dashboard index checklist) would be moot: `Quote` has no `createdAt`/`updatedAt` fields (`issueDate`/`date`/`updatedBy` serve that role instead) and no `isDeleted`/`department` field at all (`User.department`, itself free text, is what Dashboard department filtering actually joins against — see below).
 
-**Local-dev index provisioning caveat**: `ensureIndexes()` in `api/_lib/collections.ts` only ever runs from the one-time Setup Wizard bootstrap (`api/handlers/auth.ts`), which is permanently unreachable on an already-provisioned deployment — so any index added there after go-live never actually gets created against a live production database. The two indexes added in the second 2026-07-10 pass are instead created defensively (idempotent `createIndex`, once per warm serverless instance) directly inside `GET /api/dashboard`'s handler — the same pattern `seedJobTypesIfEmpty()` already uses for the same reason (see its comment in `api/_lib/systemSeed.ts`). Any *new* Dashboard-only index should follow this pattern, not `ensureIndexes()`, unless a real re-provisioning path is built.
+**Compound indexes added 2026-07-10 (Codex review, third pass)**: `{ salesperson: 1, issueDate: 1 }`, `{ status: 1, issueDate: 1 }`, `{ followUpDate: 1, status: 1 }`, `{ isPotentialOpportunity: 1, status: 1, expiryDate: 1 }` on `quotes` — every real Dashboard query combines two or more of these fields, which the pre-existing single-field indexes couldn't serve efficiently on their own. Also `audit_log` gained `{ userName: 1, createdAt: -1 }`, supporting the newly filter-aware Activity Timeline query (see below).
+
+**Local-dev index provisioning caveat**: `ensureIndexes()` in `api/_lib/collections.ts` only ever runs from the one-time Setup Wizard bootstrap (`api/handlers/auth.ts`), which is permanently unreachable on an already-provisioned deployment — so any index added there after go-live never actually gets created against a live production database. Every index added in the second and third 2026-07-10 passes is instead created defensively (idempotent `createIndex`, once per warm serverless instance) directly inside `GET /api/dashboard`'s handler — the same pattern `seedJobTypesIfEmpty()` already uses for the same reason (see its comment in `api/_lib/systemSeed.ts`). Any *new* Dashboard-only index should follow this pattern, not `ensureIndexes()`, unless a real re-provisioning path is built.
+
+### `counters` — added 2026-07-10
+
+Backs atomic sequence generation (`nextQuoteId()` in `api/handlers/quotes.ts`), replacing the previous scan-all-`_id`s-then-max+1 approach flagged by the 2026-07-10 Codex review as race-prone under concurrent creates. One document per sequence, keyed by a literal string `_id` (e.g. `"quote_2567"`):
+```ts
+interface CounterFields {
+  _id: string;   // sequence name, e.g. "quote_2567"
+  seq: number;
+}
+```
+Lazily bootstrapped from the current max existing `_id` (via `$max`, idempotent under a concurrent-bootstrap race) the first time it's needed after this fix shipped — not backfilled by a migration script, since the bootstrap is self-healing on first use.
 
 ### Dashboard KPI/chart aggregation (`GET /api/dashboard`, added 2026-07-09, majorly expanded 2026-07-10, completed against the full business spec later the same day)
 
@@ -335,7 +348,7 @@ Summary of the superseded Phase-2-first-cut models (RBAC + auth foundation only 
 - `Account` / `Session` / `VerificationToken` — Auth.js/NextAuth-required tables (Credentials provider + Prisma adapter, database session strategy)
 - `AuditLog` — generic (`actorId`, `action`, `entityType`, `entityId`, `metadata`, `createdAt`), every future module's mutations write through this
 
-**Convention envisioned for future modules under that superseded plan**: every business table gets `createdAt`, `updatedAt`, `createdById → User`, and `departmentId → Department` where department-scoped. Not adopted verbatim by the real MongoDB schema (no `Department` collection exists), but `createdAt`/`updatedAt`/`createdByUserId`-style fields are already present on `Quote`/`Product` and are a reasonable convention to keep for any future collection.
+**Convention envisioned for future modules under that superseded plan**: every business table gets `createdAt`, `updatedAt`, `createdById → User`, and `departmentId → Department` where department-scoped. Not adopted verbatim by the real MongoDB schema, and — corrected 2026-07-10 after the Codex review flagged this line as inaccurate — not even partially: `Quote` has `createdByUserId`/`updatedBy` (both user-**id** references, not timestamps) and `Product`/`ProductCategory`/`Company` have real `createdAt`/`updatedAt`, but `Quote` itself has neither `createdAt` nor `updatedAt` (see the Indexes note above — `issueDate`/`date` are the closest business-date equivalents). Worth adding real audit timestamps to `Quote` as a small follow-up (see TODO.md), not present today.
 
 ## Migration Notes (historical — how the old client-side shapes informed the real 2026-07-09 migration)
 

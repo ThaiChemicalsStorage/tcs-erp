@@ -13,7 +13,20 @@ const LOST_STATUS = "เสียโอกาส";
 const CANCELLED_STATUS = "ยกเลิก";
 const PENDING_APPROVAL_STATUS = "รออนุมัติ";
 const CUSTOMER_REJECTED_STATUS = "ลูกค้าปฏิเสธ";
+/** State-machine-final statuses — no outgoing `workflowTransitions` entry reaches anywhere from these (see api/_lib/quoteWorkflow.ts). Used for pipeline/state-machine logic, not "is this still a genuinely open opportunity" checks — see CLOSED_STATUSES for that. */
 const TERMINAL_STATUSES = new Set([WON_STATUS, LOST_STATUS, CANCELLED_STATUS]);
+/**
+ * "Not a genuinely open sales opportunity anymore" — TERMINAL_STATUSES plus Customer Rejected.
+ * เสียโอกาส (Lost) is customer-rejected-and-formally-closed-out; ลูกค้าปฏิเสธ (Customer Rejected)
+ * itself is the step just before that close-out and can *only* transition to Lost from here (see
+ * `workflowTransitions`) — it can never become Won again, so treating it as "still active/open"
+ * (as an earlier version of this file did, via TERMINAL_STATUSES alone) let already-rejected
+ * quotes count as Active Jobs and as open forecast/expected-revenue pipeline. Found by the
+ * 2026-07-10 Codex review. Deliberately a *different* set from TERMINAL_STATUSES rather than
+ * folding Customer Rejected into it, since PIPELINE_PREDECESSOR/pipeline-stage logic genuinely
+ * does still need to treat Customer Rejected as its own live pipeline stage, not a terminal one.
+ */
+const CLOSED_STATUSES = new Set([...TERMINAL_STATUSES, CUSTOMER_REJECTED_STATUS]);
 /** "Closed without success," per the Dashboard spec's Non-Active Jobs definition — Lost, Customer Rejected, Cancelled. Won is a success and Active statuses are still in play, so neither belongs here. */
 const NON_ACTIVE_OUTCOME_STATUSES = new Set([LOST_STATUS, CUSTOMER_REJECTED_STATUS, CANCELLED_STATUS]);
 /** Display order — matches QuoteList.tsx's `statuses` array. */
@@ -52,11 +65,24 @@ const ACTIVITY_LIMIT = 30;
  * api/_lib/systemSeed.ts), scoped to once per warm serverless instance rather than every request.
  */
 let quoteAnalyticsIndexesEnsured = false;
-async function ensureQuoteAnalyticsIndexes(quotes: Awaited<ReturnType<typeof quotesCollection>>): Promise<void> {
+async function ensureQuoteAnalyticsIndexes(
+  quotes: Awaited<ReturnType<typeof quotesCollection>>,
+  auditLog: Awaited<ReturnType<typeof auditLogCollection>>,
+): Promise<void> {
   if (quoteAnalyticsIndexesEnsured) return;
   await Promise.all([
     quotes.createIndex({ isPotentialOpportunity: 1 }),
     quotes.createIndex({ client: 1 }),
+    // Compound indexes added per the 2026-07-10 Codex review's Medium finding — the single-field
+    // indexes on salesperson/status/issueDate/followUpDate/isPotentialOpportunity each individually
+    // exist, but every real Dashboard query combines two or more of them, which a single-field
+    // index can't serve efficiently on its own.
+    quotes.createIndex({ salesperson: 1, issueDate: 1 }),
+    quotes.createIndex({ status: 1, issueDate: 1 }),
+    quotes.createIndex({ followUpDate: 1, status: 1 }),
+    quotes.createIndex({ isPotentialOpportunity: 1, status: 1, expiryDate: 1 }),
+    // Supports the newly filter-aware Activity Timeline query above (userName + createdAt range).
+    auditLog.createIndex({ userName: 1, createdAt: -1 }),
   ]);
   quoteAnalyticsIndexesEnsured = true;
 }
@@ -64,7 +90,7 @@ async function ensureQuoteAnalyticsIndexes(quotes: Awaited<ReturnType<typeof quo
 type QuoteCalcDoc = Pick<
   QuoteFields,
   "status" | "amount" | "client" | "salesperson" | "jobTypeCode" | "jobTypeName" |
-  "isPotentialOpportunity" | "followUpDate" | "issueDate" | "expiryDate" | "approvalHistory"
+  "isPotentialOpportunity" | "followUpDate" | "issueDate" | "expiryDate" | "approvalHistory" | "interest"
 > & { _id: string };
 
 /**
@@ -83,6 +109,14 @@ function bangkokNow(): Date {
 }
 function todayIsoDate(): string {
   return bangkokNow().toISOString().slice(0, 10);
+}
+
+/** UTC instant range covering the Bangkok-local calendar day(s) `[from, to]` — for filtering real UTC timestamp fields (e.g. audit_log's `createdAt`) by the same Bangkok-local date-range preset used everywhere else, unlike `issueDate`/etc. which are already plain Bangkok-local date strings needing no conversion. */
+function bangkokDayBoundsUtc(from: string, to: string): { $gte?: string; $lt?: string } {
+  const range: { $gte?: string; $lt?: string } = {};
+  if (from) range.$gte = new Date(new Date(`${from}T00:00:00Z`).getTime() - BANGKOK_OFFSET_MS).toISOString();
+  if (to) range.$lt = new Date(new Date(`${to}T00:00:00Z`).getTime() - BANGKOK_OFFSET_MS + 86400000).toISOString();
+  return range;
 }
 
 function queryString(req: VercelRequest, key: string): string {
@@ -203,11 +237,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const departmentFilter = queryString(req, "department");
     const today = todayIsoDate();
 
-    const [customers, leads, quotes, products, categories, users, jobTypes] = await Promise.all([
+    const [customers, leads, quotes, products, categories, users, jobTypes, auditLog] = await Promise.all([
       customersCollection(), leadsCollection(), quotesCollection(), productsCollection(), categoriesCollection(),
-      usersCollection(), jobTypesCollection(),
+      usersCollection(), jobTypesCollection(), auditLogCollection(),
     ]);
-    await ensureQuoteAnalyticsIndexes(quotes);
+    await ensureQuoteAnalyticsIndexes(quotes, auditLog);
 
     // `User.department` is free text (no real Department entity yet — see DATABASE.md), joined here
     // to `Quote.salesperson` by exact name match, the same free-text-matching convention already
@@ -261,7 +295,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const projection = {
       status: 1, amount: 1, client: 1, salesperson: 1, jobTypeCode: 1, jobTypeName: 1,
-      isPotentialOpportunity: 1, followUpDate: 1, issueDate: 1, expiryDate: 1, approvalHistory: 1,
+      isPotentialOpportunity: 1, followUpDate: 1, issueDate: 1, expiryDate: 1, approvalHistory: 1, interest: 1,
     } as const;
 
     const [
@@ -270,6 +304,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       docsRaw, allClientCountsAgg, followUpDocsRaw, historicalOutcomeAgg, monthlyOutcomeAgg,
       activeJobTypes,
     ] = await Promise.all([
+      // Total Customers/Leads/Products, and `categoryBreakdown` below, are deliberately company-wide,
+      // all-time catalog/entity counts — NOT scoped by the date-range/salesperson/department filter.
+      // Flagged by the 2026-07-10 Codex review as an inconsistency against "every widget respects
+      // the filter"; the considered conclusion is that these are catalog metrics, not sales-activity
+      // metrics — a product or a CRM customer record doesn't have a meaningful "issued on this date
+      // by this salesperson" dimension to filter by (products aren't owned by a salesperson at all;
+      // Customer/Lead counts will be 0 until that module ships regardless). Documented explicitly
+      // here and in MODULES/Dashboard.md rather than forcing a filter that wouldn't mean anything.
       customers.countDocuments({ deletedAt: null }),
       leads.countDocuments({ deletedAt: null }),
       products.countDocuments({ archived: false }),
@@ -327,8 +369,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const wonDeals = wonDocs.length;
     const lostDeals = lostDocs.length;
     const closedSales = wonDocs.reduce((s, q) => s + q.amount, 0);
+    // Expected Sales — literally "sum of quotations where Potential Opportunity = true," per the
+    // documented business rule, with no additional status filtering. An earlier version excluded
+    // TERMINAL_STATUSES, which both deviated from the literal rule and (since Customer Rejected
+    // wasn't in that set) still let already-rejected quotes count — flagged by the 2026-07-10
+    // Codex review. A quote marked Won/Lost while still flagged `isPotentialOpportunity` will
+    // therefore also count here in addition to Closed Sales/etc. — an intentional, literal reading
+    // of the spec, not an oversight; see MODULES/Dashboard.md.
     const expectedSales = docs
-      .filter((q) => q.isPotentialOpportunity && !TERMINAL_STATUSES.has(q.status))
+      .filter((q) => q.isPotentialOpportunity)
       .reduce((s, q) => s + q.amount, 0);
     const averageDealSize = wonDeals > 0 ? closedSales / wonDeals : 0;
     const winRate = wonDeals + lostDeals > 0 ? (wonDeals / (wonDeals + lostDeals)) * 100 : 0;
@@ -341,8 +390,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Active Jobs: still genuinely in play — draft/pending/approved/sent/accepted *and not past its
     // own expiry date*. An expired-but-unclosed quote isn't really "active" anymore even though its
     // status hasn't changed, so it's carved out here and counted under Non-Active Jobs instead.
-    const isExpired = (q: QuoteCalcDoc) => !TERMINAL_STATUSES.has(q.status) && !!q.expiryDate && q.expiryDate < today;
-    const activeQuotations = docs.filter((q) => !TERMINAL_STATUSES.has(q.status) && !isExpired(q)).length;
+    const isExpired = (q: QuoteCalcDoc) => !CLOSED_STATUSES.has(q.status) && !!q.expiryDate && q.expiryDate < today;
+    const activeQuotations = docs.filter((q) => !CLOSED_STATUSES.has(q.status) && !isExpired(q)).length;
     const expiredQuotations = docs.filter(isExpired).length;
     // Non-Active Jobs: cancelled, expired, rejected, or closed without success (Lost) — Won is a
     // success and doesn't belong here; still-active-and-unexpired quotes don't either.
@@ -351,6 +400,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // overdueFollowups is derived from `followUps.overdue` below (not recomputed from `docs`) — the KPI
     // card and the Follow-Up Reminders panel share the exact same filtered follow-up set so they can
     // never disagree.
+
+    // Customer Interest breakdown — moved server-side and computed from the filtered `docs` set
+    // (2026-07-10 Codex review: `DashboardPage.tsx` previously computed this from the app-wide,
+    // entirely unfiltered `quotes` prop, silently ignoring every Dashboard filter).
+    const interestBreakdown = {
+      interested: docs.filter((q) => q.interest === "น่าสนใจ").length,
+      notInterested: docs.filter((q) => q.interest === "ไม่น่าสนใจ").length,
+      notEvaluated: docs.filter((q) => q.interest !== "น่าสนใจ" && q.interest !== "ไม่น่าสนใจ").length,
+    };
 
     const totalQuoteCountByClient = new Map(allClientCountsAgg.map((c) => [c._id, c.count]));
     const clientsInFilteredSet = new Set(docs.filter((q) => q.client.trim()).map((q) => q.client));
@@ -385,8 +443,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const mineLost = mine.filter((q) => q.status === LOST_STATUS);
       const revenue = mineWon.reduce((s, q) => s + q.amount, 0);
       const totalValue = mine.reduce((s, q) => s + q.amount, 0);
+      // Same literal `isPotentialOpportunity`-only predicate as the Expected Sales KPI — see the
+      // comment there. Kept as one shared rule rather than a per-widget variant.
       const expectedRevenue = mine
-        .filter((q) => q.isPotentialOpportunity && !TERMINAL_STATUSES.has(q.status))
+        .filter((q) => q.isPotentialOpportunity)
         .reduce((s, q) => s + q.amount, 0);
       const closingDays = mine.map(closingDurationDays).filter((v): v is number => v !== null);
       return {
@@ -460,7 +520,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const wonLast12 = historicalOutcomeAgg.find((o) => o._id === WON_STATUS)?.count ?? 0;
     const lostLast12 = historicalOutcomeAgg.find((o) => o._id === LOST_STATUS)?.count ?? 0;
     const historicalWinRate = wonLast12 + lostLast12 > 0 ? wonLast12 / (wonLast12 + lostLast12) : 0;
-    const openOpportunities = docs.filter((q) => q.isPotentialOpportunity && !TERMINAL_STATUSES.has(q.status) && q.expiryDate);
+    // Forecast is a genuinely different concept from the Expected Sales KPI (which is intentionally
+    // status-agnostic, see above) — this projects revenue from opportunities that could *still*
+    // close, so an already-closed-out quote (Won/Lost/Cancelled/Customer Rejected) never belongs
+    // here regardless of its `isPotentialOpportunity` flag.
+    const openOpportunities = docs.filter((q) => q.isPotentialOpportunity && !CLOSED_STATUSES.has(q.status) && q.expiryDate);
     const forecastFor = (kind: "month" | "quarter" | "year") => {
       const end = periodEnd(kind);
       return Math.round(
@@ -489,10 +553,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     // ── Activity timeline — only for callers who can already see the audit log ──
+    // Respects the date-range + salesperson/department filter (added 2026-07-10, second review
+    // pass — the 2026-07-10 Codex review flagged this as ignoring every Dashboard filter). Matched
+    // against `userName` — the actor's identity — using the same free-text-join convention as
+    // `Quote.salesperson`/`User.department` elsewhere in this file (see the caveat comment above).
+    // Not every audit entry is a quote-related action (RBAC/user-management events also land here),
+    // so a salesperson/department filter does legitimately narrow this to "things that person did,"
+    // not just "their quotes" — a reasonable, consistent interpretation of "activity" filtering.
     let activityTimeline: ReturnType<typeof withStringId>[] | null = null;
     if (roleHasPermission(ctx.role, "auditLog:view")) {
-      const auditLog = await auditLogCollection();
-      const entries = await auditLog.find({}).sort({ createdAt: -1 }).limit(ACTIVITY_LIMIT).toArray();
+      const auditMatch: Record<string, unknown> = {};
+      if (from || to) auditMatch.createdAt = bangkokDayBoundsUtc(from, to);
+      if (salespersonFilter && salespersonFilter !== "all") auditMatch.userName = salespersonFilter;
+      if (salespeopleInDepartment) {
+        const deptCond = { userName: { $in: [...salespeopleInDepartment] } };
+        if (auditMatch.userName) {
+          auditMatch.$and = [{ userName: auditMatch.userName }, deptCond];
+          delete auditMatch.userName;
+        } else {
+          Object.assign(auditMatch, deptCond);
+        }
+      }
+      const entries = await auditLog.find(auditMatch).sort({ createdAt: -1 }).limit(ACTIVITY_LIMIT).toArray();
       activityTimeline = entries.map(withStringId);
     }
 
@@ -525,6 +607,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── Notification summary — per-caller, same scoping as GET /api/notifications ──
+    // Deliberately unfiltered by date-range/salesperson/department, same conclusion as Total
+    // Customers/Products above: this is a personal, always-current operational widget ("my own
+    // unread notifications right now"), not a business report — filtering someone's own live inbox
+    // by a sales reporting date range doesn't correspond to anything the widget actually shows.
+    // Flagged by the 2026-07-10 Codex review; documented explicitly rather than silently unfiltered.
     // Also parallelized with the two independent queries below it (previously three sequential
     // awaits in a row, none of which depend on each other or on anything computed above).
     const notifications = await notificationsCollection();
@@ -602,6 +689,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         overdueFollowups: followUps.overdue.length,
         newCustomers, repeatCustomers,
       },
+      interestBreakdown,
       revenueByMonth,
       revenueTrend,
       categoryBreakdown,

@@ -4,6 +4,61 @@
 
 ---
 
+## 2026-07-10 — Codex review fix pass: quote validation, Dashboard filter honesty, RBAC/upload hardening, doc accuracy
+
+**Scope**: an independent Codex review (`docs/CODEX_REVIEW_REPORT.md`, archived at
+`docs/reviews/CODEX_REVIEW_2026-07-10.md`) audited the app end-to-end (source + docs, no live-data
+access in that environment either) and found 2 Critical, 6 High, 6 Medium, and several Low-priority
+issues. Fixed every Critical and High issue plus the Medium items that were safe, scoped fixes;
+the remaining items are genuine business decisions, documented in TODO.md rather than guessed at
+(see "Not fixed" below and CODEX_REVIEW_REPORT.md's new "Claude Fix Status" section for the full
+breakdown).
+
+**Critical — fixed**:
+1. **Unvalidated quote writes.** `api/handlers/quotes.ts` copied POST/PATCH/workflow-draft fields into MongoDB with no schema validation, no bounds checking, no date validation, no server-side `amount` recomputation, no `jobTypeCode` membership check. New `api/_lib/quoteValidation.ts`: type/length-checked free text, `lines[]` validated per-field (non-negative/bounded `qty`/`unitPrice`, 0–100 `discount`, array-length caps), `YYYY-MM-DD`-or-empty date validation, and `amount` is now **always** server-derived from the resulting effective `lines`/`discount` (never client-writable) using the same totals formula as `computeTotals()` in `src/lib/quotes.tsx` (duplicated, not imported, for the same JSX-in-that-file reason `quoteWorkflow.ts` already duplicates `workflowTransitions`).
+2. **Dashboard Customer Interest panel used the app-wide unfiltered quote list.** `DashboardPage.tsx` computed it client-side from the `quotes` prop (every quote ever loaded), ignoring the date/salesperson/department filter entirely — a real, silent filter-honesty bug. Moved server-side: `api/dashboard/index.ts` now returns `interestBreakdown` computed from the same filtered `docs` set as every other widget; the `quotes` prop was removed from `DashboardPage`/`App.tsx` entirely since nothing else needed it.
+
+**High — fixed**:
+3. **Expected Sales didn't match the literal business rule.** Previously excluded `TERMINAL_STATUSES` (Won/Lost/Cancelled) — deviating from the documented "sum of quotations where Potential Opportunity = true," and (since Customer Rejected wasn't in that set) still let already-rejected quotes count. Both `kpis.expectedSales` and `salesPerformance[].expectedRevenue` now use the literal `isPotentialOpportunity === true` predicate, no other condition. Introduced a new `CLOSED_STATUSES` set (`TERMINAL_STATUSES` + Customer Rejected) for the *different* concept of "still a genuinely open opportunity," now used by `activeQuotations`/`expiredQuotations`/`forecast.openOpportunities` — previously a Customer-Rejected-but-unexpired quote could wrongly count as an Active Job or an open forecast opportunity.
+4. **Job Type was optional and unenforced server-side.** `POST /api/quotes` now requires a non-blank `jobTypeCode` matching a real `job_types` master record; `jobTypeName` is always re-derived from that record, never trusted from the client. The create-quote form no longer offers the blank "unclassified" option (a disabled placeholder shows until a real selection is made); editing an *existing* quote still tolerates a blank Job Type (legacy data) so an unrelated field edit on an old unclassified quote isn't blocked — only a non-blank `jobTypeCode` is validated for membership on `PATCH`/workflow.
+5. **Activity Timeline and other Dashboard sections ignored every filter.** Activity Timeline now respects the date-range (via a new Bangkok-day-boundary-aware `bangkokDayBoundsUtc()` helper, converting the Bangkok-local preset into the right UTC range for `audit_log.createdAt`) and salesperson/department filter (matched against `userName`, same free-text join convention used elsewhere). Total Customers/Products/`categoryBreakdown` and `notificationSummary` remain deliberately unfiltered — re-assessed, not silently inconsistent: these are catalog/personal-operational metrics with no sales-date dimension to filter by, now documented explicitly in code and in MODULES/Dashboard.md rather than looking like an oversight.
+6. **No Dashboard report export existed at all.** Added client-side CSV export (`src/pages/dashboard/csvExport.ts`, no new dependency) of KPIs + Sales Performance/Top Customers/Job Type Analytics tables, built from the already-filtered `DashboardStats` already on screen (no new permission needed — it's a transform of data the caller is already authorized to see). PDF/Excel remain explicitly deferred (see TODO.md).
+7. **Notification click only opened the quotation list module, not the specific quote.** Added a `quotationDeepLinkId` (separate from the pre-existing `quotationListFilter`) lifted to `App.tsx`; `QuotationPage` applies it via React's "adjust state during rendering" pattern (not a bare `useEffect` setState call, which would trip `react-hooks/set-state-in-effect`) so it works whether the module is mounting fresh or already open.
+8. **Department/salesperson Dashboard filtering relies on a free-text name join** — re-assessed rather than partially patched: a proper fix needs `Quote` to store a real `salespersonUserId`, which requires deciding whether the Salesperson field stops being freely editable text — a product decision, not a code fix, tracked in TODO.md.
+
+**Medium — fixed**:
+9. **Quotation numbering was race-prone** (`nextQuoteId()` scanned every `_id` then computed max+1). Replaced with an atomic `counters` MongoDB collection (`findOneAndUpdate` with `$inc`, upsert) — lazily bootstrapped from the current max via `$max` (idempotent under a concurrent-bootstrap race) the first time it's needed.
+10. **Missing compound indexes for real Dashboard query patterns.** Added `{ salesperson: 1, issueDate: 1 }`, `{ status: 1, issueDate: 1 }`, `{ followUpDate: 1, status: 1 }`, `{ isPotentialOpportunity: 1, status: 1, expiryDate: 1 }` on `quotes`, and `{ userName: 1, createdAt: -1 }` on `audit_log` (supporting the newly filter-aware Activity Timeline) — created defensively at request time (same pattern as the previous pass's indexes), since `ensureIndexes()`'s one-time bootstrap never runs again post-provisioning.
+11. **Upload fields (profile picture, signature, company logo/stamp) had no server-side validation.** New `api/_lib/uploadValidation.ts`: must be a real `data:image/(png|jpeg|jpg|webp|gif);base64,...` data URL under 2MB, or empty to clear — wired into `PATCH /api/users/:id` and `PUT /api/company`.
+12. **`PrintDocument.tsx` rendered blank company labels.** Tax ID/phone/email/address lines now hide conditionally, matching the existing `Field` component's behavior for quote-side optional fields (which already hid correctly) — the company header block just wasn't using it for those three lines.
+13. **`GET /api/users`/`GET /api/roles` open-directory exposure** — re-assessed, not blindly restricted: role documents carry no PII (no privacy tradeoff), and the user directory's fields are relied on app-wide (printed-quote signatures visible to any `quotations:view` holder, salesperson pickers) in ways a naive field-strip would likely break without a full consumer trace. Strengthened the code comments explaining the tradeoff and logged it as a business-decision item in TODO.md instead of guessing.
+
+**Not fixed — genuine business decisions, tracked in TODO.md, not guessed at**: the `GET /api/users` privacy model (item 13 above); migrating `Quote.salesperson` to a real user reference (item 8 above); adding real `Quote.createdAt`/`updatedAt` timestamp fields (found while correcting a stale DATABASE.md claim during this pass — a real, scoped gap, not urgent); PDF/Excel export (CSV is done); sequential two-level approval (pre-existing, already tracked); automated tests/CI (pre-existing, already tracked).
+
+**Documentation accuracy** (Codex flagged several docs as contradicting the real 2026-07-09 backend
+migration): `MODULES/RoleManagement.md`, `MODULES/Settings.md`, `MODULES/UserManagement.md`, and
+`MODULES/Notifications.md` still said "no real DB," "client-side only, not real security,"
+"single-browser simulation," and referenced dead `localStorage` keys (`tcs_erp_*`) — all four
+corrected to describe the real MongoDB collections/API routes. `MODULES/Quotation.md`'s two
+stale "needs X once backend/deep-linking exists" Future Improvements items were resolved by this
+same pass (job type numbering + notification deep-link, items 7 and 9 above) and marked done.
+`DATABASE.md` incorrectly claimed `Quote` has `createdAt`/`updatedAt` fields in its
+superseded-Prisma-plan comparison section — corrected to state plainly that it doesn't (only
+`issueDate`/`date` business-date strings and `createdByUserId`/`updatedBy` user-id references).
+
+**Verification**: `npx tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run
+lint`, and `npm run build` all pass clean after every fix above (two real lint errors surfaced and
+were fixed along the way: a literal BOM byte sequence in `csvExport.ts` tripping
+`no-irregular-whitespace`, and a `react-hooks/set-state-in-effect` violation in the new
+notification-deep-link effect, both described above). **Live browser/API verification against
+real MongoDB data was attempted again and still could not be completed** — same root cause as the
+prior 2026-07-10 passes (the sandboxed session's Node process can't resolve MongoDB Atlas's
+`mongodb+srv://` SRV DNS record; reconfirmed via a fresh `vercel dev` instance against the
+pre-existing `GET /api/auth/session` route). See CODEX_REVIEW_REPORT.md's "Claude Fix Status"
+section for the full verification account.
+
+---
+
 ## 2026-07-10 — Dashboard completion pass: closed the gap against the full Executive Dashboard business spec
 
 **Scope**: an explicit request to complete the Dashboard against a detailed, ~15-section business

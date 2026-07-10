@@ -1,35 +1,78 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser, requirePermission } from "../_lib/auth.js";
-import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, withStringId, type QuoteFields } from "../_lib/collections.js";
+import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, countersCollection, withStringId, type QuoteFields } from "../_lib/collections.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, type ApprovalAction } from "../_lib/quoteWorkflow.js";
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
 import { PERMISSION_LABELS } from "../../src/lib/permissions.js";
+import {
+  validateLines, validateIsoDateOrEmpty, validateJobType, computeQuoteAmount,
+  sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeBoolean,
+} from "../_lib/quoteValidation.js";
 
 const QUOTE_YEAR = 2567;
 
-const EDITABLE_FIELDS: (keyof QuoteFields)[] = [
-  "client", "salesperson", "lines", "discount", "amount", "interest",
-  "contactName", "contactPhone", "contactEmail", "address", "taxId",
-  "deliveryMethod", "deliveryAddress", "project", "poRef", "paymentTerms",
-  "issueDate", "expiryDate", "remarks",
-  "jobTypeCode", "jobTypeName", "isPotentialOpportunity", "followUpDate",
-];
-// Workflow actions may not move `interest` — that's a plain-edit-only field.
-const WORKFLOW_EDITABLE_FIELDS = EDITABLE_FIELDS.filter((f) => f !== "interest");
+type JobTypeMasterEntry = { code: string; name: string; isActive: boolean };
+
+async function loadJobTypeMaster(): Promise<JobTypeMasterEntry[]> {
+  const jobTypes = await jobTypesCollection();
+  return jobTypes.find({}, { projection: { code: 1, name: 1, isActive: 1 } }).toArray();
+}
 
 function isApprovalAction(v: unknown): v is ApprovalAction {
   return typeof v === "string" && v in workflowTransitions;
 }
 
-async function nextQuoteId(quotes: Awaited<ReturnType<typeof quotesCollection>>): Promise<string> {
-  const docs = await quotes.find({}, { projection: { _id: 1 } }).toArray();
-  const maxNum = docs
-    .map((d) => parseInt(d._id.split("-").pop() ?? "0", 10))
-    .filter((n) => !Number.isNaN(n))
-    .reduce((max, n) => Math.max(max, n), 0);
-  return `QT-${QUOTE_YEAR}-${String(maxNum + 1).padStart(4, "0")}`;
+function isValidInterest(v: unknown): v is QuoteFields["interest"] {
+  return v === null || v === "น่าสนใจ" || v === "ไม่น่าสนใจ";
+}
+
+const QUOTE_COUNTER_ID = `quote_${QUOTE_YEAR}`;
+
+/**
+ * Bootstraps the atomic counter from the current max `_id` sequence number, exactly once per warm
+ * serverless instance — needed because this counter doc doesn't exist yet on an already-provisioned
+ * deployment (quotes created before this fix have no counter tracking their numbers). Uses `$max`
+ * (not `$set`) so a concurrent bootstrap racing this one can never regress the counter below the
+ * true current max, and a duplicate-key error from a genuinely concurrent first-insert race is
+ * swallowed as "someone else already bootstrapped it" rather than surfaced as a real failure.
+ */
+let quoteCounterBootstrapped = false;
+async function ensureQuoteCounterBootstrapped(
+  counters: Awaited<ReturnType<typeof countersCollection>>,
+  quotes: Awaited<ReturnType<typeof quotesCollection>>,
+): Promise<void> {
+  if (quoteCounterBootstrapped) return;
+  const existing = await counters.findOne({ _id: QUOTE_COUNTER_ID });
+  if (!existing) {
+    const docs = await quotes.find({}, { projection: { _id: 1 } }).toArray();
+    const maxNum = docs
+      .map((d) => parseInt(d._id.split("-").pop() ?? "0", 10))
+      .filter((n) => !Number.isNaN(n))
+      .reduce((max, n) => Math.max(max, n), 0);
+    try {
+      await counters.updateOne({ _id: QUOTE_COUNTER_ID }, { $max: { seq: maxNum } }, { upsert: true });
+    } catch (err) {
+      if (!(err instanceof Error) || !err.message.includes("E11000")) throw err;
+    }
+  }
+  quoteCounterBootstrapped = true;
+}
+
+/** Atomically reserves the next sequence number — replaces the previous scan-all-quotes-then-max+1 approach, which could race two concurrent creates into the same id (see the 2026-07-10 Codex review). */
+async function nextQuoteId(
+  counters: Awaited<ReturnType<typeof countersCollection>>,
+  quotes: Awaited<ReturnType<typeof quotesCollection>>,
+): Promise<string> {
+  await ensureQuoteCounterBootstrapped(counters, quotes);
+  const result = await counters.findOneAndUpdate(
+    { _id: QUOTE_COUNTER_ID },
+    { $inc: { seq: 1 } },
+    { returnDocument: "after", upsert: true },
+  );
+  const seq = result?.seq ?? 1;
+  return `QT-${QUOTE_YEAR}-${String(seq).padStart(4, "0")}`;
 }
 
 function thaiDate(d: Date): string {
@@ -46,6 +89,39 @@ function cloneLines(lines: QuoteFields["lines"]): QuoteFields["lines"] {
   }));
 }
 
+/**
+ * Validates and sanitizes whichever of `body`'s free-text/date/boolean fields are present, for a
+ * PATCH-style partial update — added per the 2026-07-10 Codex review's Critical finding that quote
+ * writes previously copied raw client fields into MongoDB with no schema validation. Each field is
+ * only included in the returned partial when present in `body` (so an omitted field never
+ * overwrites the stored value) — mirrors the previous generic "if (field in body)" copy loop, but
+ * validated per-field instead of copied blindly. `interest` is handled by the caller, since only
+ * plain edits (not workflow drafts) may move it.
+ */
+function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<QuoteFields> {
+  const update: Partial<QuoteFields> = {};
+  if ("client" in body) update.client = sanitizeShortText(body.client, "ชื่อลูกค้า", true);
+  if ("salesperson" in body) update.salesperson = sanitizeShortText(body.salesperson, "พนักงานขาย");
+  if ("lines" in body) update.lines = validateLines(body.lines);
+  if ("discount" in body) update.discount = sanitizeDiscountPct(body.discount);
+  if ("contactName" in body) update.contactName = sanitizeShortText(body.contactName, "ชื่อผู้ติดต่อ");
+  if ("contactPhone" in body) update.contactPhone = sanitizeShortText(body.contactPhone, "เบอร์โทรผู้ติดต่อ");
+  if ("contactEmail" in body) update.contactEmail = sanitizeShortText(body.contactEmail, "อีเมลผู้ติดต่อ");
+  if ("address" in body) update.address = sanitizeShortText(body.address, "ที่อยู่");
+  if ("taxId" in body) update.taxId = sanitizeShortText(body.taxId, "เลขประจำตัวผู้เสียภาษี");
+  if ("deliveryMethod" in body) update.deliveryMethod = sanitizeShortText(body.deliveryMethod, "วิธีจัดส่ง");
+  if ("deliveryAddress" in body) update.deliveryAddress = sanitizeShortText(body.deliveryAddress, "ที่อยู่จัดส่ง");
+  if ("project" in body) update.project = sanitizeShortText(body.project, "โครงการ");
+  if ("poRef" in body) update.poRef = sanitizeShortText(body.poRef, "เลขที่ใบสั่งซื้อ");
+  if ("paymentTerms" in body) update.paymentTerms = sanitizeShortText(body.paymentTerms, "เงื่อนไขการชำระเงิน");
+  if ("issueDate" in body) update.issueDate = validateIsoDateOrEmpty(body.issueDate, "วันที่ออกใบเสนอราคา");
+  if ("expiryDate" in body) update.expiryDate = validateIsoDateOrEmpty(body.expiryDate, "วันหมดอายุ");
+  if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
+  if ("isPotentialOpportunity" in body) update.isPotentialOpportunity = sanitizeBoolean(body.isPotentialOpportunity, "โอกาสในการขาย");
+  if ("followUpDate" in body) update.followUpDate = validateIsoDateOrEmpty(body.followUpDate, "วันที่ติดตาม");
+  return update;
+}
+
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     await requirePermission(req, "quotations:view");
@@ -57,40 +133,45 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "POST") {
     const ctx = await requirePermission(req, "quotations:create");
-    const body: Partial<QuoteFields> = req.body ?? {};
-    if (!body.client?.trim()) throw new HttpError(400, "กรุณากรอกชื่อลูกค้า");
+    const body: Record<string, unknown> = req.body ?? {};
+    const client = sanitizeShortText(body.client, "ชื่อลูกค้า", true);
 
-    const quotes = await quotesCollection();
-    const id = await nextQuoteId(quotes);
+    const jobTypeMaster = await loadJobTypeMaster();
+    const { jobTypeCode, jobTypeName } = validateJobType(body.jobTypeCode, jobTypeMaster, { required: true });
+    const lines = validateLines(body.lines);
+    const discount = sanitizeDiscountPct(body.discount);
+
+    const [quotes, counters] = await Promise.all([quotesCollection(), countersCollection()]);
+    const id = await nextQuoteId(counters, quotes);
     const today = new Date();
     const doc: QuoteFields & { _id: string } = {
       _id: id,
-      client: body.client.trim(),
+      client,
       date: thaiDate(today),
       valid: thaiDate(new Date(today.getTime() + 30 * 86400000)),
-      amount: typeof body.amount === "number" ? body.amount : 0,
+      amount: computeQuoteAmount(lines, discount),
       status: "ร่าง",
-      salesperson: body.salesperson ?? "",
+      salesperson: sanitizeShortText(body.salesperson, "พนักงานขาย"),
       interest: null,
-      lines: body.lines ?? [],
-      discount: body.discount ?? 0,
-      contactName: body.contactName ?? "",
-      contactPhone: body.contactPhone ?? "",
-      contactEmail: body.contactEmail ?? "",
-      address: body.address ?? "",
-      taxId: body.taxId ?? "",
-      deliveryMethod: body.deliveryMethod ?? "",
-      deliveryAddress: body.deliveryAddress ?? "",
-      project: body.project ?? "",
-      poRef: body.poRef ?? "",
-      paymentTerms: body.paymentTerms ?? "",
-      issueDate: body.issueDate ?? "",
-      expiryDate: body.expiryDate ?? "",
-      remarks: body.remarks ?? "",
-      jobTypeCode: body.jobTypeCode ?? "",
-      jobTypeName: body.jobTypeName ?? "",
-      isPotentialOpportunity: body.isPotentialOpportunity === true,
-      followUpDate: body.followUpDate ?? "",
+      lines,
+      discount,
+      contactName: sanitizeShortText(body.contactName, "ชื่อผู้ติดต่อ"),
+      contactPhone: sanitizeShortText(body.contactPhone, "เบอร์โทรผู้ติดต่อ"),
+      contactEmail: sanitizeShortText(body.contactEmail, "อีเมลผู้ติดต่อ"),
+      address: sanitizeShortText(body.address, "ที่อยู่"),
+      taxId: sanitizeShortText(body.taxId, "เลขประจำตัวผู้เสียภาษี"),
+      deliveryMethod: sanitizeShortText(body.deliveryMethod, "วิธีจัดส่ง"),
+      deliveryAddress: sanitizeShortText(body.deliveryAddress, "ที่อยู่จัดส่ง"),
+      project: sanitizeShortText(body.project, "โครงการ"),
+      poRef: sanitizeShortText(body.poRef, "เลขที่ใบสั่งซื้อ"),
+      paymentTerms: sanitizeShortText(body.paymentTerms, "เงื่อนไขการชำระเงิน"),
+      issueDate: validateIsoDateOrEmpty(body.issueDate, "วันที่ออกใบเสนอราคา"),
+      expiryDate: validateIsoDateOrEmpty(body.expiryDate, "วันหมดอายุ"),
+      remarks: sanitizeLongText(body.remarks, "หมายเหตุ"),
+      jobTypeCode,
+      jobTypeName,
+      isPotentialOpportunity: sanitizeBoolean(body.isPotentialOpportunity, "โอกาสในการขาย"),
+      followUpDate: validateIsoDateOrEmpty(body.followUpDate, "วันที่ติดตาม"),
       createdByUserId: ctx.user.id,
       updatedBy: ctx.user.id,
       approvalHistory: [],
@@ -116,16 +197,31 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   const hasApprove = roleHasPermission(ctx.role, "quotations:approve");
   if (!hasEdit || !(isOwner || hasApprove)) throw new HttpError(403, "Forbidden");
 
-  const body: Partial<QuoteFields> = req.body ?? {};
-  const update: Partial<QuoteFields> = {};
-  for (const field of EDITABLE_FIELDS) {
-    if (field in body) (update as Record<string, unknown>)[field] = body[field];
+  const body: Record<string, unknown> = req.body ?? {};
+  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(body);
+  if ("interest" in body) {
+    if (!isValidInterest(body.interest)) throw new HttpError(400, "ค่าความสนใจไม่ถูกต้อง");
+    update.interest = body.interest;
+  }
+  if ("jobTypeCode" in body) {
+    const jobTypeMaster = await loadJobTypeMaster();
+    // Not required on a plain edit — a legacy quote may already be blank, and forcing every save
+    // of some unrelated field to also assign a Job Type would be a real regression, not a fix.
+    // A non-blank code, however, must be real: this is the actual gap the review flagged.
+    const { jobTypeCode, jobTypeName } = validateJobType(body.jobTypeCode, jobTypeMaster, { required: false });
+    update.jobTypeCode = jobTypeCode;
+    update.jobTypeName = jobTypeName;
   }
 
-  if (Object.keys(update).length > 0) {
-    update.updatedBy = ctx.user.id;
-    await quotes.updateOne({ _id: id }, { $set: update });
-  }
+  // `amount` is never client-writable (see quoteValidation.ts) — always server-derived from the
+  // resulting effective lines/discount so the two can never drift apart, whether or not this
+  // particular PATCH touched either of them.
+  const effectiveLines = update.lines ?? target.lines;
+  const effectiveDiscount = update.discount ?? target.discount;
+  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount);
+
+  update.updatedBy = ctx.user.id;
+  await quotes.updateOne({ _id: id }, { $set: update });
   const updated = await quotes.findOne({ _id: id });
   if (!updated) throw new HttpError(404, "ไม่พบใบเสนอราคา");
   res.status(200).json({ quote: withStringId(updated) });
@@ -135,18 +231,22 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "quotations:create");
 
-  const quotes = await quotesCollection();
+  const [quotes, counters] = await Promise.all([quotesCollection(), countersCollection()]);
   const source = await quotes.findOne({ _id: id });
   if (!source) throw new HttpError(404, "ไม่พบใบเสนอราคา");
 
   const { _id: _sourceId, ...rest } = source;
-  const newId = await nextQuoteId(quotes);
+  const newId = await nextQuoteId(counters, quotes);
+  const lines = cloneLines(source.lines);
   const doc = {
     _id: newId,
     ...rest,
     status: "ร่าง" as const,
     interest: null,
-    lines: cloneLines(source.lines),
+    lines,
+    // Recomputed rather than copied from `source.amount` — cheap, and guarantees the invariant
+    // holds even if a past write (pre-dating this validation pass) ever left it inconsistent.
+    amount: computeQuoteAmount(lines, source.discount),
     createdByUserId: ctx.user.id,
     updatedBy: ctx.user.id,
     approvalHistory: [],
@@ -164,7 +264,7 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
   if (!isApprovalAction(rawAction)) throw new HttpError(400, "Invalid action");
   const action: ApprovalAction = rawAction;
   const comment: string = typeof body.comment === "string" ? body.comment : "";
-  const draft: Partial<QuoteFields> = body.draft ?? {};
+  const draft: Record<string, unknown> = typeof body.draft === "object" && body.draft !== null ? body.draft : {};
 
   const quotes = await quotesCollection();
   const target = await quotes.findOne({ _id: id });
@@ -185,10 +285,19 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
     throw new HttpError(403, `ต้องมีสิทธิ์ "${PERMISSION_LABELS[REQUIRED_PERMISSION_HINT[action]]}"`);
   }
 
-  const update: Partial<QuoteFields> = {};
-  for (const field of WORKFLOW_EDITABLE_FIELDS) {
-    if (field in draft) (update as Record<string, unknown>)[field] = draft[field];
+  // Workflow drafts may not move `interest` (plain-edit-only field) — `sanitizePartialQuoteFields`
+  // never looks at it, so it's already excluded without needing a second field allowlist.
+  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(draft);
+  if ("jobTypeCode" in draft) {
+    const jobTypeMaster = await loadJobTypeMaster();
+    const { jobTypeCode, jobTypeName } = validateJobType(draft.jobTypeCode, jobTypeMaster, { required: false });
+    update.jobTypeCode = jobTypeCode;
+    update.jobTypeName = jobTypeName;
   }
+  const effectiveLines = update.lines ?? target.lines;
+  const effectiveDiscount = update.discount ?? target.discount;
+  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount);
+
   update.status = transition.to;
   update.createdByUserId = target.createdByUserId || ctx.user.id;
   update.updatedBy = ctx.user.id;

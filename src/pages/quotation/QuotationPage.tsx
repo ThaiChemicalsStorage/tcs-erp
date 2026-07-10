@@ -27,6 +27,8 @@ export function QuotationPage({
   jobTypes,
   initialFilter,
   onFilterConsumed,
+  initialQuoteId,
+  onQuoteIdConsumed,
   onNotify,
   onAudit,
 }: {
@@ -42,6 +44,9 @@ export function QuotationPage({
   /** Set by the Dashboard's pipeline/follow-up click-through — consumed once on mount then cleared, see App.tsx. */
   initialFilter: QuotationListFilter | null;
   onFilterConsumed: () => void;
+  /** Set by a notification click with a `relatedQuoteId` — opens that quote's detail view directly, whether QuotationPage is mounting fresh or already on-screen (unlike `initialFilter`, this reacts to every change, not just the first one, since a second notification click while already here should still jump to the new quote). */
+  initialQuoteId: string | null;
+  onQuoteIdConsumed: () => void;
   onNotify: () => void;
   onAudit: (action: string, details: string) => void;
 }) {
@@ -68,6 +73,25 @@ export function QuotationPage({
     consumedInitialFilter.current = true;
     if (initialFilter) onFilterConsumed();
   }, [initialFilter, onFilterConsumed]);
+
+  // React's "adjust state during rendering" pattern (not an effect — a bare setState call at the
+  // top of an effect body trips react-hooks/set-state-in-effect, and this only touches this
+  // component's own local state, which is exactly what that pattern is for: not an effect
+  // synchronizing with an external system). Reacts to every change of `initialQuoteId`, not just
+  // once per mount like `initialFilter` above — a second notification click while QuotationPage is
+  // already open and showing some other quote must still jump straight to the newly-clicked one.
+  const [appliedQuoteId, setAppliedQuoteId] = useState<string | null>(null);
+  if (initialQuoteId && initialQuoteId !== appliedQuoteId) {
+    setAppliedQuoteId(initialQuoteId);
+    setSelectedId(initialQuoteId);
+    setView("detail");
+  }
+  // Telling App.tsx it can forget its copy genuinely is a synchronization-with-a-parent concern
+  // (not local state), so this part alone stays in an effect.
+  useEffect(() => {
+    if (initialQuoteId) onQuoteIdConsumed();
+  }, [initialQuoteId, onQuoteIdConsumed]);
+
   const toast = useToast();
 
   const selectedQuote = quotes.find((q) => q.id === selectedId);

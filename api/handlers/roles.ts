@@ -13,7 +13,11 @@ function escapeRegExp(s: string): string {
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
-    // Every authenticated user needs the full role set client-side to evaluate hasPermission().
+    // Every authenticated user needs the full role set client-side to evaluate hasPermission() —
+    // this is how UI-level gating (sidebar visibility, button visibility) decides what to render.
+    // Flagged by the 2026-07-10 Codex review alongside GET /api/users, but role documents contain
+    // no PII — just names/descriptions/permission keys — so unlike the user directory there's no
+    // privacy tradeoff here, only an architectural one the app already depends on; not restricted.
     await requireUser(req);
     await seedDefaultRolesIfEmpty();
     const roles = await rolesCollection();

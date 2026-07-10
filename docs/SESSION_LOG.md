@@ -4,6 +4,48 @@
 
 ---
 
+## Session — 2026-07-10, third pass (Codex review fix pass)
+
+### What was implemented
+- User provided an independent Codex review report (`docs/CODEX_REVIEW_REPORT.md` + archived copy) and asked for every issue to be understood and fixed, in priority order: Critical → High → Build/TS errors → Security → RBAC → MongoDB correctness → Dashboard calculations → Quotation/PDF → Notifications → UI/UX → doc mismatches.
+- Read the full report first (not selectively). It found 2 Critical, 6 High, 6 Medium, and several Low issues — genuinely substantive, not rubber-stamped: real gaps in quote-write validation, Dashboard filter honesty, Job Type enforcement, the Expected Sales formula, notification deep-linking, quotation numbering, and four stale module docs contradicting the real backend.
+- Fixed all Critical/High and the safely-scoped Medium items (see CHANGELOG for the itemized list — 13 numbered fixes). Declined to guess on 2 items that are genuine product decisions (`GET /api/users` field exposure, `Quote.salesperson`→real-user-reference migration) and logged them in TODO.md instead, per the task's own explicit instruction to do so rather than guess.
+- New files: `api/_lib/quoteValidation.ts` (quote payload validation + server-side amount derivation), `api/_lib/uploadValidation.ts` (image data-URL MIME/size validation), `src/pages/dashboard/csvExport.ts` (Dashboard CSV export).
+- Rewrote `api/handlers/quotes.ts`'s POST/PATCH/workflow handlers around the new validation module; added an atomic `counters` MongoDB collection for quotation numbering.
+- Fixed `api/dashboard/index.ts`: `interestBreakdown` (server-computed, filtered), `CLOSED_STATUSES` (separate from `TERMINAL_STATUSES`) fixing a real Customer-Rejected-counted-as-Active bug, literal `isPotentialOpportunity`-only Expected Sales predicate, filter-aware Activity Timeline (new `bangkokDayBoundsUtc()` helper), 5 new compound indexes.
+- Frontend: removed the now-unnecessary `quotes` prop from `DashboardPage`; added a `quotationDeepLinkId` mechanism (App.tsx → QuotationPage) for notification-click deep-linking; Job Type dropdown no longer offers a blank choice on new-quote creation; fixed `PrintDocument.tsx`'s blank-label bug.
+- Corrected 4 module docs (`RoleManagement.md`/`Settings.md`/`UserManagement.md`/`Notifications.md`) that still described the pre-2026-07-09 client-only/`localStorage` architecture — these predated this session's specific Codex findings but are the same class of problem and directly undermine the "production-ready" claims elsewhere, so fixed alongside the explicitly-flagged docs.
+
+### Files Modified
+`api/_lib/{quoteValidation (new),uploadValidation (new),collections}.ts`, `api/handlers/{quotes,users}.ts`, `api/company/index.ts`, `api/dashboard/index.ts`, `api/handlers/roles.ts` (comment only), `src/lib/{dashboard,i18n}.ts(x)`, `src/pages/dashboard/{DashboardPage,csvExport (new)}.ts(x)`, `src/pages/quotation/{QuoteDocument,QuotationPage,PrintDocument}.tsx`, `src/App.tsx`. Docs: `PROJECT_STATUS.md`, `CHANGELOG.md`, `TODO.md`, `DATABASE.md`, `API.md`, `RBAC.md`, `IMPLEMENTATION_CHECKLIST.md`, `CLAUDE.md`, `MODULES/{Dashboard,Quotation,Notifications,RoleManagement,Settings,UserManagement}.md`, `CODEX_REVIEW_REPORT.md` (new "Claude Fix Status" section), this file.
+
+### Architectural Decisions
+- **`CLOSED_STATUSES` (TERMINAL_STATUSES + Customer Rejected) introduced as a distinct concept from `TERMINAL_STATUSES` (state-machine-final only)** rather than just adding Customer Rejected to `TERMINAL_STATUSES` directly — the pipeline/conversion-rate logic genuinely still needs Customer Rejected treated as its own live pipeline stage (it can transition to Lost), while "is this still a pursuable opportunity" logic (Active Jobs, forecast, expected revenue) needs the broader set. Conflating the two would have been simpler code but semantically wrong in at least one of the two use sites.
+- **Expected Sales taken at face value from the original literal spec** ("sum of quotations where Potential Opportunity = true," no other condition) rather than treated as an open business-decision item, even though it means a Won quote still flagged `isPotentialOpportunity` double-counts into both Closed Sales and Expected Sales. The user's own original requirements text was unambiguous on this exact point; Codex's finding was that the code deviated from that already-authoritative spec, not that the spec itself was ambiguous — so this didn't need a guess, just a correction back to what was already specified.
+- **`GET /api/users`/`GET /api/roles` field exposure was investigated and deliberately NOT restricted** — traced enough call sites (printed-quote signature images, salesperson pickers) to conclude a naive field-strip risks breaking real, currently-working features without a full trace of every consumer, which wasn't feasible to complete safely in this pass. Chose to strengthen the documentation of the tradeoff and log it as an explicit business-decision item rather than guess at a field-level ACL that might silently break something. This is exactly the kind of call the task's own "Fix Rules" asked for.
+- **Job Type is required on *create* but not force-required on *edit*** — a literal "always required" enforcement would have broken saving unrelated field edits on any pre-existing quote with a blank Job Type (there are and will keep being some, by design — "" means unclassified/legacy, an intentional, documented state). Required going forward, tolerant of the past.
+
+### Problems Found
+- **A self-introduced bug caught before it shipped**: the first draft of the notification-deep-link `useEffect` called local `setSelectedId`/`setView` synchronously as the first statements in the effect body, which is exactly the `react-hooks/set-state-in-effect` anti-pattern this same codebase had already fixed once before (documented in the Dashboard's loading-state code, 2026-07-10 first pass). Caught by `npm run lint`, not by self-review this time — fixed using React's official "adjust state during rendering" pattern instead of an effect, splitting out only the genuinely-effect-appropriate parent-callback notification into a real `useEffect`.
+- **A genuinely tedious, repeated tooling failure**: writing a literal UTF-8 BOM character (`﻿`) into `csvExport.ts` as an escape sequence in source text kept producing the *actual* invisible Unicode character instead of the four-character textual escape, across several attempts via both the Edit tool and PowerShell string substitution (including once via a `-replace` call that itself re-introduced the real character). Root-caused as this session's own text generation consistently producing the character instead of the requested escape sequence — not a tool bug. Resolved by sidestepping the escape sequence entirely: `String.fromCharCode(0xfeff)`, which only requires plain ASCII in source.
+- **Live-data verification remains blocked**, same root cause as the prior 2026-07-10 pass: `vercel dev` (tried again, fresh instance) still can't resolve MongoDB Atlas's SRV DNS record in this sandboxed environment, reconfirmed against the pre-existing, untouched `GET /api/auth/session` route.
+
+### Problems Fixed
+Both bugs above, before this pass was considered complete — see the "Verification" note in the CHANGELOG entry for the exact `tsc`/`lint`/`build` results after every fix.
+
+### New TODO Items
+Two explicit business-decision items (`GET /api/users` privacy model, `Quote.salesperson`→real-reference migration) plus a small scoped gap found while correcting a stale DATABASE.md claim (`Quote` has no `createdAt`/`updatedAt` fields — worth adding). See [TODO.md](./TODO.md) High Priority.
+
+### Future Recommendations
+1. **Live-data verification is still the single most important open item**, now confirmed twice to be an environment limitation, not a code-quality gap — strongly recommend the next verification attempt use either an unrestricted network or a real Vercel preview deployment rather than another attempt in a similarly sandboxed environment.
+2. The two logged business-decision items (user-directory privacy model, salesperson-as-real-reference) are both genuinely worth a deliberate product conversation rather than another engineering guess — they trade off real UX/workflow flexibility (free-text salesperson credit, org-wide staff visibility) against stricter correctness/privacy, and reasonable teams could land on either side.
+3. Given this is now the third same-day Dashboard/Quotation-adjacent pass, a real live-data verification pass (not more code review) is the highest-leverage next step before any further feature work in this area — the code has been read and reasoned about carefully multiple times now; what's missing is empirical confirmation.
+
+### Estimated Completion Percentage
+~40% of the full long-term ERP vision (unchanged — this was a correctness/hardening pass, not new module scope). **~97%** of the currently-scoped modules (up from ~96%) — all Critical/High Codex findings closed; the remaining gap is pre-existing, already-tracked cross-cutting items plus two newly-explicit business-decision items, not anything left silently broken. See [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+
+---
+
 ## Session — 2026-07-10 (Executive Dashboard, Sales Analytics & Job Type)
 
 ### What was implemented

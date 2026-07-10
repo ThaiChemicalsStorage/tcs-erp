@@ -19,6 +19,7 @@ const translations = {
 
     "dashboard.title": "ภาพรวมผู้บริหาร",
     "dashboard.subtitle": "ข้อมูลแบบเรียลไทม์จากฐานข้อมูล",
+    "dashboard.export.csv": "ส่งออก CSV",
     "dashboard.kpi.totalCustomers": "ลูกค้าทั้งหมด",
     "dashboard.kpi.totalLeads": "ลูกค้าเป้าหมาย",
     "dashboard.kpi.totalQuotations": "ใบเสนอราคาทั้งหมด",
@@ -425,6 +426,7 @@ const translations = {
     "quotation.field.customerInterestLevel": "ระดับความสนใจของลูกค้า",
     "quotation.field.jobType": "ประเภทงาน",
     "quotation.field.jobTypeUnclassified": "ยังไม่ระบุประเภทงาน",
+    "quotation.field.jobTypeSelectPrompt": "-- กรุณาเลือกประเภทงาน --",
     "quotation.field.potentialOpportunity": "โอกาสในการขาย (คาดว่าจะปิดการขายได้)",
     "quotation.field.followUpDate": "วันที่ติดตามงาน",
     "quotation.section.remarks": "หมายเหตุ / เงื่อนไข",
@@ -608,6 +610,7 @@ const translations = {
     "settings.language.en": "English",
 
     "dashboard.title": "Executive Overview",
+    "dashboard.export.csv": "Export CSV",
     "dashboard.subtitle": "Live data from the database",
     "dashboard.kpi.totalCustomers": "Total Customers",
     "dashboard.kpi.totalLeads": "Total Leads",
@@ -1015,6 +1018,7 @@ const translations = {
     "quotation.field.customerInterestLevel": "Customer Interest Level",
     "quotation.field.jobType": "Job Type",
     "quotation.field.jobTypeUnclassified": "Unclassified",
+    "quotation.field.jobTypeSelectPrompt": "-- Select a job type --",
     "quotation.field.potentialOpportunity": "Potential Opportunity (likely to close)",
     "quotation.field.followUpDate": "Follow-up Date",
     "quotation.section.remarks": "Remarks / Terms",

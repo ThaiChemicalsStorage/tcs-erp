@@ -1,6 +1,6 @@
 # Module: Role Management
 
-> Added 2026-07-08 as part of the RBAC/approval-workflow/notification system — see [RBAC.md](../RBAC.md) for the full model and its "not real security" caveat.
+> Added 2026-07-08 as part of the RBAC/approval-workflow/notification system; migrated 2026-07-09 to real server-side enforcement (Vercel Functions + MongoDB Atlas) — see [RBAC.md](../RBAC.md) for the full model, which is genuinely unbypassable via devtools now, not a client-side simulation.
 
 ## Purpose
 
@@ -25,11 +25,11 @@ Reuses `ConfirmDialog`/`Toast`/`useToast`.
 
 ## Database Tables
 
-None (no real DB) — see [DATABASE.md](../DATABASE.md) for the `Role`/`Permission` shapes. Persists to `tcs_erp_roles`.
+`roles` (MongoDB collection) — see [DATABASE.md](../DATABASE.md) for the `Role`/`Permission` shapes.
 
 ## APIs
 
-None — see [API.md](../API.md) Company / Users / Roles section.
+`GET/POST /api/roles`, `PATCH/DELETE /api/roles/:key` — see [API.md](../API.md) Roles section.
 
 ## Permissions
 
@@ -50,4 +50,4 @@ Super Admin only, hardcoded (`userIsSuperAdmin()`), independent of whatever the 
 
 ## Known Issues
 
-None currently open beyond the shared "client-side only, not real security" caveat — see [RBAC.md](../RBAC.md).
+None functional. `GET /api/roles` is open to any authenticated user (not gated by `roles:manage`) — deliberate, since every client-side `hasPermission()` call needs the full role/permission list to decide what to render; role documents carry no PII, only names/descriptions/permission keys. See [API.md](../API.md) "Known Scope Limitations" and the 2026-07-10 Codex review response in [CODEX_REVIEW_REPORT.md](../CODEX_REVIEW_REPORT.md).

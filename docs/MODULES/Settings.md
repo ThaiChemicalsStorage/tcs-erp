@@ -26,11 +26,11 @@ None shared elsewhere — `Toggle`, `SavedNote`, `ImageUploadField` are defined 
 
 ## Database Tables
 
-None (no real DB) — see [DATABASE.md](../DATABASE.md). `Company` persists to `tcs_erp_company`; the signed-in `User`'s edits persist as part of `tcs_erp_users`; notification toggle state does not persist at all.
+`company` (single-document MongoDB collection) and `users` — see [DATABASE.md](../DATABASE.md). The signed-in `User`'s profile edits persist to their own `users` document; notification toggle state does not persist at all (still in-memory only).
 
 ## APIs
 
-None — see [API.md](../API.md).
+`GET/PUT /api/company` (Company tab), `PATCH /api/users/:id` (Profile/Security tabs) — see [API.md](../API.md).
 
 ## Permissions
 
@@ -47,9 +47,8 @@ None — see [API.md](../API.md).
 ## Future Improvements
 
 - Persist notification preferences
-- Real password hashing/verification once real auth exists (Phase 2) — current check is real logic but a weak, non-cryptographic hash
 - Wire `Company.vatRate` into the actual VAT calculation in `lib/quotes.tsx` (currently stored/editable but unused by `computeTotals()`)
 
 ## Known Issues
 
-None currently open beyond the documented "not real security" caveat shared by the whole RBAC system — see [RBAC.md](../RBAC.md).
+None functional. Password hashing/verification is real (bcrypt, server-side) as of the 2026-07-09 backend migration — the "weak hash" caveat that used to apply here no longer does. See [RBAC.md](../RBAC.md) for the current, real auth model.

@@ -148,10 +148,18 @@ export interface NotificationSummary {
   byType: Record<string, number>;
 }
 
+export interface InterestBreakdown {
+  interested: number;
+  notInterested: number;
+  notEvaluated: number;
+}
+
 export interface DashboardStats {
   /** True if the database has ANY quotations (any filter) or products — unfiltered, independent of `kpis.totalQuotations`. Drives the page-level empty state; a narrow filter matching zero results must not hide a database that actually has data. */
   hasAnyData: boolean;
   kpis: DashboardKpis;
+  /** Computed server-side from the same filtered quote set as every other widget — added 2026-07-10 (Codex review fix) so the Customer Interest panel respects the Dashboard filters instead of the app-wide unfiltered quote list. */
+  interestBreakdown: InterestBreakdown;
   revenueByMonth: { month: string; revenue: number }[];
   revenueTrend: RevenueTrend;
   categoryBreakdown: { categoryId: string; categoryName: string; count: number; percentage: number }[];

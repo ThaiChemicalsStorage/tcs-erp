@@ -6,6 +6,7 @@ import { usersCollection, rolesCollection, toObjectId, toPublicUser, type UserFi
 import { findRole, roleHasPermission } from "../../src/lib/roles.js";
 import type { Role } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
+import { validateImageDataUrl } from "../_lib/uploadValidation.js";
 
 async function activeSuperAdminCount(users: Collection<UserFields>, roleList: Role[]): Promise<number> {
   const superAdminKeys = roleList.filter((r) => r.isSuperAdmin).map((r) => r.key);
@@ -31,9 +32,19 @@ async function countUsersWithSuperAdminRole(users: Collection<UserFields>, roleL
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
-    // Any authenticated user can see the directory — matches Phase 1 behavior, where the
-    // full user list already lived in every signed-in user's browser (used for salesperson
-    // pickers, approval-history lookups, etc.), not a new permission surface.
+    // Any authenticated user can see the full directory (phone/email/department/position/profile
+    // picture/signature image, everything but passwordHash) — matches Phase 1 behavior, where the
+    // full user list already lived in every signed-in user's browser. Flagged as a Medium finding
+    // by the 2026-07-10 Codex review ("exposes broader data than a minimum-access model"). Not
+    // narrowed here: `users` is genuinely relied on app-wide for things that need real data from
+    // *any* user, not just admins — salesperson pickers, printed-quote preparer/approver signature
+    // images (any `quotations:view` holder can open/print any quote), avatar pictures in lists —
+    // and this is a single-company internal tool (not multi-tenant), where staff-directory
+    // visibility across the whole org is a defensible default, not obviously wrong. Restricting
+    // fields risks silently breaking one of those call sites without a full trace of every
+    // consumer. Marked in TODO.md as a privacy-model decision needing explicit sign-off (least-
+    // privilege field-level restriction vs. accept the current "any signed-in employee, no PII
+    // secrets" model) rather than guessed at here.
     await requireUser(req);
     const users = await usersCollection();
     const docs = await users.find({}).sort({ fullName: 1 }).toArray();
@@ -113,8 +124,8 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
     if (typeof body.phone === "string") update.phone = body.phone.trim();
     if (typeof body.department === "string") update.department = body.department.trim();
     if (typeof body.position === "string") update.position = body.position.trim();
-    if (typeof body.profilePictureDataUrl === "string") update.profilePictureDataUrl = body.profilePictureDataUrl;
-    if (typeof body.signatureDataUrl === "string") update.signatureDataUrl = body.signatureDataUrl;
+    if (typeof body.profilePictureDataUrl === "string") update.profilePictureDataUrl = validateImageDataUrl(body.profilePictureDataUrl, "รูปโปรไฟล์");
+    if (typeof body.signatureDataUrl === "string") update.signatureDataUrl = validateImageDataUrl(body.signatureDataUrl, "ลายเซ็น");
 
     if (typeof body.password === "string" && body.password) {
       if (body.password.length < 6) throw new HttpError(400, "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร");

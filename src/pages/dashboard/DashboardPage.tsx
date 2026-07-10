@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw } from "lucide-react";
-import { type Quote, type QuotationListFilter, interestLabelKey } from "../../lib/quotes";
+import { useEffect, useState } from "react";
+import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw, Download } from "lucide-react";
+import { type QuotationListFilter, interestLabelKey } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardStats } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
+import { buildDashboardCsv, downloadCsv } from "./csvExport";
 import { KpiGrid } from "./KpiGrid";
 import { PipelineFunnel } from "./PipelineFunnel";
 import { SalesPerformanceTable } from "./SalesPerformanceTable";
@@ -58,7 +59,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quote[]; onNavigateToQuotations: (filter: QuotationListFilter) => void }) {
+export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotations: (filter: QuotationListFilter) => void }) {
   const { t } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -89,22 +90,16 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
   // with the new pending-approvals count instead of only patching that one card in place.
   const refreshAfterAction = () => setRetryToken((n) => n + 1);
 
-  // Single pass over the app-wide quotes list instead of three separate .filter() scans — this
-  // reruns on every quotes/dashboard-filter-driven re-render, so it's worth the one-pass count.
-  const interestCounts = useMemo(() => {
-    const counts = { interested: 0, notInterested: 0, notEvaluated: 0 };
-    for (const q of quotes) {
-      if (q.interest === "น่าสนใจ") counts.interested++;
-      else if (q.interest === "ไม่น่าสนใจ") counts.notInterested++;
-      else counts.notEvaluated++;
-    }
-    return counts;
-  }, [quotes]);
-
   if (!stats && loadError) return <ErrorState onRetry={retry} />;
   if (!stats) return <DashboardSkeleton />;
 
-  const { hasAnyData, kpis, revenueByMonth, revenueTrend, categoryBreakdown, monthlyClosingRate, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast, followUps, activityTimeline, approvalDashboard, notificationSummary, availableSalespeople, availableDepartments } = stats;
+  const { hasAnyData, kpis, interestBreakdown, revenueByMonth, revenueTrend, categoryBreakdown, monthlyClosingRate, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast, followUps, activityTimeline, approvalDashboard, notificationSummary, availableSalespeople, availableDepartments } = stats;
+  const interestTotal = interestBreakdown.interested + interestBreakdown.notInterested + interestBreakdown.notEvaluated;
+
+  const exportCsv = () => {
+    const csv = buildDashboardCsv(stats, stats.filters);
+    downloadCsv(`dashboard-export-${new Date().toISOString().slice(0, 10)}.csv`, csv);
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -113,7 +108,14 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
           <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{t("dashboard.title")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("dashboard.subtitle")}</p>
         </div>
-        {loading && <div className="w-4 h-4 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" />}
+        <div className="flex items-center gap-3">
+          {loading && <div className="w-4 h-4 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" />}
+          {hasAnyData && (
+            <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+              <Download size={13} /> {t("dashboard.export.csv")}
+            </button>
+          )}
+        </div>
       </div>
 
       <DashboardFilterBar filters={filters} onChange={handleFiltersChange} availableSalespeople={availableSalespeople} availableDepartments={availableDepartments} />
@@ -174,9 +176,9 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
               <h2 className="text-base font-semibold text-foreground mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>{t("dashboard.interest.title")}</h2>
               <div className="space-y-3">
                 {[
-                  { label: t(interestLabelKey["น่าสนใจ"]), count: interestCounts.interested, color: "#2aa36b", icon: <ThumbsUp size={13} /> },
-                  { label: t(interestLabelKey["ไม่น่าสนใจ"]), count: interestCounts.notInterested, color: "#e05252", icon: <ThumbsDown size={13} /> },
-                  { label: t("quotation.interest.notEvaluated"), count: interestCounts.notEvaluated, color: "#5a7299", icon: <CircleDot size={13} /> },
+                  { label: t(interestLabelKey["น่าสนใจ"]), count: interestBreakdown.interested, color: "#2aa36b", icon: <ThumbsUp size={13} /> },
+                  { label: t(interestLabelKey["ไม่น่าสนใจ"]), count: interestBreakdown.notInterested, color: "#e05252", icon: <ThumbsDown size={13} /> },
+                  { label: t("quotation.interest.notEvaluated"), count: interestBreakdown.notEvaluated, color: "#5a7299", icon: <CircleDot size={13} /> },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${item.color}15` }}>
@@ -188,7 +190,7 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
                         <span className="text-xs font-mono font-semibold text-foreground">{item.count} {t("quotation.countUnit")}</span>
                       </div>
                       <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${quotes.length ? (item.count / quotes.length) * 100 : 0}%`, background: item.color }} />
+                        <div className="h-full rounded-full" style={{ width: `${interestTotal ? (item.count / interestTotal) * 100 : 0}%`, background: item.color }} />
                       </div>
                     </div>
                   </div>

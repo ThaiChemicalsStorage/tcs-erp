@@ -110,6 +110,8 @@ export default function App() {
   const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quotationListFilter, setQuotationListFilter] = useState<QuotationListFilter | null>(null);
+  /** Set by a notification click when it has a `relatedQuoteId` — opens that quote's detail view directly instead of just the module's list, consumed once by QuotationPage then cleared (see below). */
+  const [quotationDeepLinkId, setQuotationDeepLinkId] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const [company, setCompany] = useState<Company>(defaultCompany);
@@ -157,6 +159,10 @@ export default function App() {
 
   const navigateToQuotations = (filter: QuotationListFilter) => {
     setQuotationListFilter(filter);
+    setActiveNav("quotations");
+  };
+  const navigateToQuotation = (quoteId: string) => {
+    setQuotationDeepLinkId(quoteId);
     setActiveNav("quotations");
   };
 
@@ -324,7 +330,7 @@ export default function App() {
             onMarkRead={markNotificationRead}
             onMarkAllRead={markAllNotificationsRead}
             onDelete={deleteNotification}
-            onNavigate={(n) => { if (n.relatedQuoteId) setActiveNav("quotations"); }}
+            onNavigate={(n) => { if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId); }}
           />
           <div className="relative">
             <button onClick={() => setUserMenuOpen((v) => !v)} className="flex items-center gap-2.5 pl-3 border-l border-border">
@@ -366,7 +372,7 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
           <Suspense fallback={<PageLoading />}>
             {effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} onNotify={refreshNotifications} onAudit={handleAudit} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} onAudit={handleAudit} />
               : effectiveNav === "settings"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
               : effectiveNav === "products"
@@ -377,7 +383,7 @@ export default function App() {
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} onAudit={handleAudit} />
               : effectiveNav === "auditLog"
               ? <AuditLogPage />
-              : <DashboardPage quotes={quotes} onNavigateToQuotations={navigateToQuotations} />
+              : <DashboardPage onNavigateToQuotations={navigateToQuotations} />
             }
           </Suspense>
         </div>

@@ -4,6 +4,7 @@ import { requireUser, requirePermission } from "../_lib/auth.js";
 import { companyCollection } from "../_lib/collections.js";
 import { defaultCompany, type Company } from "../../src/lib/storage.js";
 import { nowIso } from "../../src/lib/products.js";
+import { validateImageDataUrl } from "../_lib/uploadValidation.js";
 
 const SINGLETON_ID = "singleton";
 
@@ -24,6 +25,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body: Partial<Company> = req.body ?? {};
       const next: Company = { ...defaultCompany, ...body, updatedAt: nowIso(), updatedBy: ctx.user.id };
       if (typeof next.vatRate !== "number" || Number.isNaN(next.vatRate)) next.vatRate = defaultCompany.vatRate;
+      next.logoDataUrl = validateImageDataUrl(next.logoDataUrl, "โลโก้บริษัท");
+      next.stampDataUrl = validateImageDataUrl(next.stampDataUrl, "ตราประทับบริษัท");
 
       const company = await companyCollection();
       await company.updateOne({ _id: SINGLETON_ID }, { $set: next }, { upsert: true });

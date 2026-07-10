@@ -99,9 +99,15 @@ export function PrintDocument({
                 )}
                 <div>
                   <p className="font-bold text-[13px]">{company.name}</p>
-                  <p className="text-[10px] text-[#5a7299] leading-snug">{company.address}</p>
-                  <p className="text-[10px] text-[#5a7299]">เลขประจำตัวผู้เสียภาษี : {company.taxId}</p>
-                  <p className="text-[10px] text-[#5a7299]">โทรศัพท์ : {company.phone}  E-mail : {company.email}</p>
+                  {company.address.trim() && <p className="text-[10px] text-[#5a7299] leading-snug">{company.address}</p>}
+                  {company.taxId.trim() && <p className="text-[10px] text-[#5a7299]">เลขประจำตัวผู้เสียภาษี : {company.taxId}</p>}
+                  {(company.phone.trim() || company.email.trim()) && (
+                    <p className="text-[10px] text-[#5a7299]">
+                      {company.phone.trim() && <>โทรศัพท์ : {company.phone}</>}
+                      {company.phone.trim() && company.email.trim() && "  "}
+                      {company.email.trim() && <>E-mail : {company.email}</>}
+                    </p>
+                  )}
                 </div>
               </div>
 

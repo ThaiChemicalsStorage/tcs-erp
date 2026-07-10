@@ -55,6 +55,16 @@ export async function auditLogCollection() {
   return db.collection<AuditLogFields>("audit_log");
 }
 
+/** Atomic per-key sequence counters (e.g. `_id: "quote_2567"`) — backs `nextQuoteId()` in api/handlers/quotes.ts. Added 2026-07-10 per the Codex review's Medium finding that the previous scan-all-then-max+1 approach was race-prone under concurrent creates. Keyed by a literal string `_id` (the counter's name), same singleton-style convention as `companyCollection()` below. */
+export interface CounterFields {
+  _id: string;
+  seq: number;
+}
+export async function countersCollection() {
+  const db = await getDb();
+  return db.collection<CounterFields>("counters");
+}
+
 export async function quotesCollection() {
   const db = await getDb();
   return db.collection<QuoteFields & { _id: string }>("quotes");
