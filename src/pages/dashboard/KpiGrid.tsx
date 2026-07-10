@@ -1,6 +1,6 @@
 import {
   TrendingUp, Boxes, Users, FileText, Trophy, Frown, Target, Percent, Timer,
-  Clock, AlertTriangle, CalendarClock, UserPlus, Repeat, Wallet, Activity, type LucideIcon,
+  Clock, AlertTriangle, CalendarClock, UserPlus, Repeat, Wallet, Activity, Ban, ClipboardCheck, type LucideIcon,
 } from "lucide-react";
 import type { DashboardKpis } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
@@ -34,7 +34,9 @@ export function KpiGrid({ kpis }: { kpis: DashboardKpis }) {
     { title: t("dashboard.kpi.averageApprovalTime"), value: fmtDaysOrDash(kpis.averageApprovalTime, days), icon: Timer, accent: "#e08a3c" },
     { title: t("dashboard.kpi.averageClosingTime"), value: fmtDaysOrDash(kpis.averageClosingTime, days), icon: Clock, accent: "#e08a3c" },
     { title: t("dashboard.kpi.activeQuotations"), value: kpis.activeQuotations.toLocaleString("th-TH"), icon: FileText, accent: "#3b6fc9" },
+    { title: t("dashboard.kpi.nonActiveQuotations"), value: kpis.nonActiveQuotations.toLocaleString("th-TH"), icon: Ban, accent: "#8a94a6" },
     { title: t("dashboard.kpi.expiredQuotations"), value: kpis.expiredQuotations.toLocaleString("th-TH"), icon: AlertTriangle, accent: "#e05252" },
+    { title: t("dashboard.kpi.pendingApprovals"), value: kpis.pendingApprovals.toLocaleString("th-TH"), icon: ClipboardCheck, accent: "#c9a84c" },
     { title: t("dashboard.kpi.overdueFollowups"), value: kpis.overdueFollowups.toLocaleString("th-TH"), icon: CalendarClock, accent: "#e05252" },
     { title: t("dashboard.kpi.newCustomers"), value: kpis.newCustomers.toLocaleString("th-TH"), icon: UserPlus, accent: "#2aa36b" },
     { title: t("dashboard.kpi.repeatCustomers"), value: kpis.repeatCustomers.toLocaleString("th-TH"), icon: Repeat, accent: "#7c4dbb" },

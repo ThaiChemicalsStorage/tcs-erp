@@ -21,6 +21,10 @@ export interface DashboardKpis {
   averageClosingTime: number | null;
   activeQuotations: number;
   expiredQuotations: number;
+  /** Cancelled, expired, Customer Rejected, or Lost — "closed without success." Won and still-active-unexpired quotes are excluded. */
+  nonActiveQuotations: number;
+  /** Count of quotations currently awaiting approval — visible regardless of `quotations:approve` (unlike the actionable `ApprovalDashboard.pendingList`, this is just a count). */
+  pendingApprovals: number;
   overdueFollowups: number;
   /** Distinct `client` free-text values whose only quote is this one — see Dashboard docs for the free-text-matching caveat. */
   newCustomers: number;
@@ -41,36 +45,61 @@ export interface SalesPerformanceEntry {
   won: number;
   lost: number;
   pending: number;
+  /** Closed Sales — sum of Won quotations' amount only. */
   revenue: number;
+  /** Total Quotation Value — sum of every quotation's amount regardless of outcome. */
+  totalValue: number;
   expectedRevenue: number;
   conversionRate: number;
-  /** Null when this salesperson has no won deals in the filtered set. */
+  /** Null when this salesperson has no closed (Won or Lost) deals in the filtered set. */
   avgClosingTime: number | null;
   avgDealSize: number;
 }
 
 export interface CustomerStat {
   client: string;
+  /** Won Value — sum of this customer's Won quotations' amount only. */
   revenue: number;
+  /** Total Value — sum of every quotation's amount regardless of outcome. */
+  totalValue: number;
   quotationCount: number;
   wonCount: number;
+  /** "" if this customer has no quotations with a set issueDate in the filtered set. */
+  lastQuotationDate: string;
 }
 
 export interface CustomerAnalytics {
   topByRevenue: CustomerStat[];
   topByQuotationCount: CustomerStat[];
   topByWonCount: CustomerStat[];
+  /** Customers with more than one quotation in the filtered set, ranked by quotation count. */
+  topByRepeat: CustomerStat[];
   repeatCustomerPercentage: number;
 }
 
 export interface JobTypeStat {
   jobTypeCode: string;
   jobTypeName: string;
+  /** Won Value — sum of this job type's Won quotations' amount only. */
   revenue: number;
+  /** Total Value — sum of every quotation's amount regardless of outcome. */
+  totalValue: number;
   count: number;
   won: number;
   winRate: number;
   avgDealSize: number;
+}
+
+export interface RevenuePeriod {
+  period: string;
+  revenue: number;
+}
+
+export interface RevenueTrend {
+  weekly: RevenuePeriod[];
+  monthly: RevenuePeriod[];
+  quarterly: RevenuePeriod[];
+  yearly: RevenuePeriod[];
 }
 
 export interface Forecast {
@@ -94,11 +123,24 @@ export interface FollowUps {
   upcoming: FollowUpSummary[];
 }
 
+export interface PendingApprovalItem {
+  id: string;
+  client: string;
+  salesperson: string;
+  amount: number;
+  /** Null if this quote's approval-history has no "submitted" entry (legacy data). */
+  submittedDate: string | null;
+  status: string;
+}
+
 export interface ApprovalDashboard {
   pendingApprovals: number;
   approvedToday: number;
   rejectedToday: number;
   averageApprovalTime: number | null;
+  /** Whether the caller also has `quotations:reject` (viewing this section already implies `quotations:approve`). */
+  canReject: boolean;
+  pendingList: PendingApprovalItem[];
 }
 
 export interface NotificationSummary {
@@ -111,6 +153,7 @@ export interface DashboardStats {
   hasAnyData: boolean;
   kpis: DashboardKpis;
   revenueByMonth: { month: string; revenue: number }[];
+  revenueTrend: RevenueTrend;
   categoryBreakdown: { categoryId: string; categoryName: string; count: number; percentage: number }[];
   /** winRate is null for a month with no won/lost deals — distinct from a genuine 0% (deals that all lost). */
   monthlyClosingRate: { month: string; winRate: number | null }[];
@@ -126,13 +169,16 @@ export interface DashboardStats {
   approvalDashboard: ApprovalDashboard | null;
   notificationSummary: NotificationSummary;
   availableSalespeople: string[];
-  filters: { from: string; to: string; salesperson: string };
+  /** Distinct `User.department` free-text values across all users — see Dashboard docs for the free-text-matching caveat (no real Department entity yet). */
+  availableDepartments: string[];
+  filters: { from: string; to: string; salesperson: string; department: string };
 }
 
 export interface DashboardFilters {
   from?: string;
   to?: string;
   salesperson?: string;
+  department?: string;
 }
 
 export async function fetchDashboardStats(filters?: DashboardFilters): Promise<DashboardStats> {
@@ -140,6 +186,7 @@ export async function fetchDashboardStats(filters?: DashboardFilters): Promise<D
   if (filters?.from) params.set("from", filters.from);
   if (filters?.to) params.set("to", filters.to);
   if (filters?.salesperson && filters.salesperson !== "all") params.set("salesperson", filters.salesperson);
+  if (filters?.department && filters.department !== "all") params.set("department", filters.department);
   const qs = params.toString();
   return apiFetch<DashboardStats>(`/dashboard${qs ? `?${qs}` : ""}`);
 }

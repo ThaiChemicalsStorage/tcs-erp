@@ -355,6 +355,8 @@ export async function ensureIndexes() {
     quotes.createIndex({ jobTypeCode: 1 }),
     quotes.createIndex({ salesperson: 1 }),
     quotes.createIndex({ followUpDate: 1 }),
+    quotes.createIndex({ isPotentialOpportunity: 1 }),
+    quotes.createIndex({ client: 1 }),
     notifications.createIndex({ recipientUserId: 1, createdAt: -1 }),
     auditLog.createIndex({ createdAt: -1 }),
 

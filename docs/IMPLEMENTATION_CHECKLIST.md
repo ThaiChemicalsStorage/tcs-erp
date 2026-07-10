@@ -17,7 +17,7 @@ file is the audit view (what exists vs. not, module by module); TODO.md is the a
 | Module | Status | Notes |
 |---|---|---|
 | Auth (Setup Wizard + Sign in) | **Completed** | bcrypt + JWT httpOnly cookie, server-verified, no public self-signup. No login rate limiting (see Security Hardening below). |
-| Dashboard | **Completed**, verification **In Progress** | Full Executive BI rebuild 2026-07-10 (~20 KPIs, pipeline, filters, rankings, forecast, follow-ups, approvals, activity feed, 9 charts) — real MongoDB aggregation throughout. Went through a full code-review pass (10 real bugs found and fixed, see CHANGELOG). Not yet exercised against live data in a browser — see [PROJECT_STATUS.md](./PROJECT_STATUS.md) "In Progress." |
+| Dashboard | **Completed against the full business spec**, verification **In Progress** | Full Executive BI rebuild 2026-07-10 (~20 KPIs, pipeline, filters, rankings, forecast, follow-ups, approvals, activity feed, 9 charts), code-reviewed (10 real bugs found and fixed), then a same-day completion pass closed every remaining gap against the detailed business spec: Pending Approvals list with inline Approve/Reject, Non-Active Jobs KPI, Won+Lost-aware Average Closing Time, Total Value alongside Won Value on every ranking table, full 11/5/7-column sortable Sales/Customer/Job Type tables, Revenue Trend weekly/quarterly/yearly grouping, Job Type Distribution chart, Department filter, date-filter propagation to Follow-ups, 2 new indexes. See CHANGELOG for the itemized list. Not yet exercised against live data in a browser — see [PROJECT_STATUS.md](./PROJECT_STATUS.md) "Known Risks" for the specific, reproducible environment limitation (MongoDB Atlas SRV DNS resolution blocked in the sandboxed session), not a defect. |
 | Quotation | **Completed** | List/create/edit/duplicate, 9-status approval workflow, print/PDF, product-library picker, Job Type/Potential Opportunity/Follow-up Date (added 2026-07-10). |
 | Product Library | **Completed**, one gap | CRUD, categories, archive, search/filter/sort/pagination all real. **Missing**: button-level (create/edit/delete) permission gating in the UI — only the sidebar entry respects `products:view` today; the underlying API routes are already properly permission-gated server-side, this is a UX-only gap. |
 | Job Type master data | **Completed**, one gap | 13 seeded defaults, `GET/POST/PATCH /api/jobtypes`, wired into Quotation form/list/PDF/Dashboard. **Missing**: no dedicated admin UI to add/edit job types beyond the 13 seeded defaults — the API exists (`company:manage`), the page doesn't. |
@@ -28,7 +28,7 @@ file is the audit view (what exists vs. not, module by module); TODO.md is the a
 | Settings (Profile/Company/Security) | **Completed** | Profile picture + signature upload, company logo/stamp/bank/VAT/T&C, real password change. `Company.vatRate` is stored/editable but **not wired into `computeTotals()`** — see Known Gaps below. |
 | Lead Management | **Schema only — deliberately not built out further** | `leads`/`lead_activities` collections + indexes exist. No API routes/UI. Explicitly re-confirmed 2026-07-10 as out of scope for the current phase (see PROJECT_STATUS.md) — the single largest genuinely-missing piece of the long-term ERP vision, tracked as its own future undertaking, not silently forgotten. |
 | Customer Management | **Schema only — deliberately not built out further** | Same status as Lead Management. Quotations still carry only a free-text `client` name, not a real Customer reference; Dashboard customer analytics approximate via that free-text field (documented caveat in MODULES/Dashboard.md). |
-| Department-based filtering | **Missing, blocked on Customer/Lead** | `User.department` is free text, not a real reference — there's no department entity to filter by. Would need the same foundational work as Lead/Customer Management. |
+| Department-based filtering | **Completed on Dashboard (free-text join), still blocked elsewhere** | 2026-07-10: Dashboard gained a real Department filter, resolved server-side to "every salesperson whose free-text `User.department` matches" — works today, but inherits the same name-variation caveat as customer-name matching until a real `Department` entity exists. No other module filters by department yet; that would need the same foundational work as Lead/Customer Management. |
 | Activity Analytics (period-grouped, multi-dimension) | **Missing** | The Dashboard's Activity Timeline is a flat recent-N feed from `audit_log`, not grouped by week/month/quarter/year or filterable by salesperson/job type. A real gap against the request's section 7 — not yet scoped or built. |
 | Report Export (PDF/Excel/CSV) | **Missing — explicitly deferred twice** | No CSV/Excel/PDF export exists anywhere in the app beyond the existing browser-print quotation PDF. Deferred by explicit user choice both when the Dashboard was originally scoped and again in this pass, to be built against the now-stable dashboard response shape. |
 
@@ -44,7 +44,7 @@ file is the audit view (what exists vs. not, module by module); TODO.md is the a
 | Automated tests | **Missing** | Zero test coverage anywhere in the repo — frontend or the API layer. Flagged as high-priority since day one of the backend migration, still not started. |
 | CI pipeline | **Missing** | No typecheck/lint/build gate on push — real risk since GitHub auto-deploys to production on push to `master`. |
 | GitHub → Vercel auto-deploy | **Completed, verified** | Confirmed via Vercel MCP tooling — the production deployment matches the latest `master` commit. |
-| Live-data verification of 2026-07-10 work | **In Progress** | See Dashboard row above — `tsc`/`lint`/`build` clean, code-reviewed, not yet browser-tested against real data. |
+| Live-data verification of 2026-07-10 work | **In Progress, environment-blocked** | See Dashboard row above — `tsc`/`lint`/`build` clean across both 2026-07-10 passes, code-reviewed, not yet browser-tested against real data. The second pass's session confirmed why: its sandboxed network can't resolve MongoDB Atlas's SRV DNS record (`querySrv ECONNREFUSED`), reproduced on an untouched pre-existing route, so no session running in that same environment can close this out — needs either a different network environment or a Vercel preview-deployment click-through. |
 
 ## Explicitly out of scope for this phase (not bugs, not oversights)
 
@@ -57,9 +57,10 @@ file is the audit view (what exists vs. not, module by module); TODO.md is the a
 ## Estimated completion
 
 ~40% of the full long-term ERP vision (HR/Accounting/Inventory/Warehouse/Purchasing/Project
-Management not started; Lead/Customer schema-only). **~95%** of the currently-scoped modules
+Management not started; Lead/Customer schema-only). **~96%** of the currently-scoped modules
 (Dashboard/Quotation/Product/Auth/Settings/User Mgmt/Role Mgmt/Notifications/Audit Log) —
-the remaining 5% is the specific gaps listed above (button-level Product gating, VAT wiring,
-full notification deep-link, Job Type admin UI, Activity Analytics, Report Export), not
-placeholder or fake functionality. See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the maintained
-narrative version of this number.
+the Dashboard's remaining gaps against its business spec were closed in the second 2026-07-10
+pass (see CHANGELOG); the remaining ~4% is the specific gaps listed above (button-level Product
+gating, VAT wiring, full notification deep-link, Job Type admin UI, Activity Analytics grouping,
+Report Export), not placeholder or fake functionality. See [PROJECT_STATUS.md](./PROJECT_STATUS.md)
+for the maintained narrative version of this number.

@@ -7,16 +7,18 @@ export interface DashboardFilterState {
   from: string;
   to: string;
   salesperson: string;
+  department: string;
 }
 
 const PRESETS: DateRangePreset[] = ["all", "today", "yesterday", "last7", "last14", "thisMonth", "lastMonth", "thisQuarter", "thisYear", "custom"];
 
 export function DashboardFilterBar({
-  filters, onChange, availableSalespeople,
+  filters, onChange, availableSalespeople, availableDepartments,
 }: {
   filters: DashboardFilterState;
   onChange: (next: DashboardFilterState) => void;
   availableSalespeople: string[];
+  availableDepartments: string[];
 }) {
   const { t } = useI18n();
   const [preset, setPreset] = useState<DateRangePreset>("all");
@@ -62,9 +64,18 @@ export function DashboardFilterBar({
       )}
 
       <select
+        value={filters.department}
+        onChange={(e) => onChange({ ...filters, department: e.target.value })}
+        className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors ml-auto"
+      >
+        <option value="all">{t("dashboard.filter.department.all")}</option>
+        {availableDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
+      </select>
+
+      <select
         value={filters.salesperson}
         onChange={(e) => onChange({ ...filters, salesperson: e.target.value })}
-        className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors ml-auto"
+        className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
       >
         <option value="all">{t("dashboard.filter.salesperson.all")}</option>
         {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}

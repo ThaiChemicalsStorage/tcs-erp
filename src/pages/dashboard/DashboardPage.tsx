@@ -14,7 +14,7 @@ import { FollowUpReminders } from "./FollowUpReminders";
 import { ApprovalDashboard } from "./ApprovalDashboard";
 import { NotificationSummary } from "./NotificationSummary";
 import {
-  RevenueTrendChart, QuotationTrendChart, SalesByEmployeeChart, RevenueByJobTypeChart,
+  RevenueTrendChart, QuotationTrendChart, SalesByEmployeeChart, RevenueByJobTypeChart, JobTypeDistributionChart,
   QuotationStatusDonut, WinLoseDonut, ExpectedSalesForecastChart, MonthlyClosingRateChart, ProductsByCategoryChart,
 } from "./DashboardCharts";
 
@@ -63,7 +63,7 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [filters, setFilters] = useState<DashboardFilterState>({ from: "", to: "", salesperson: "all" });
+  const [filters, setFilters] = useState<DashboardFilterState>({ from: "", to: "", salesperson: "all", department: "all" });
   const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
@@ -84,6 +84,10 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
     setFilters(next);
   };
   const retry = () => { setLoading(true); setLoadError(false); setRetryToken((n) => n + 1); };
+  // Approve/Reject from the Approval Dashboard widget mutates a quote's status server-side —
+  // silently re-fetch (no loading skeleton) so every other filter-scoped widget stays consistent
+  // with the new pending-approvals count instead of only patching that one card in place.
+  const refreshAfterAction = () => setRetryToken((n) => n + 1);
 
   // Single pass over the app-wide quotes list instead of three separate .filter() scans — this
   // reruns on every quotes/dashboard-filter-driven re-render, so it's worth the one-pass count.
@@ -100,7 +104,7 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
   if (!stats && loadError) return <ErrorState onRetry={retry} />;
   if (!stats) return <DashboardSkeleton />;
 
-  const { hasAnyData, kpis, revenueByMonth, categoryBreakdown, monthlyClosingRate, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast, followUps, activityTimeline, approvalDashboard, notificationSummary, availableSalespeople } = stats;
+  const { hasAnyData, kpis, revenueByMonth, revenueTrend, categoryBreakdown, monthlyClosingRate, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast, followUps, activityTimeline, approvalDashboard, notificationSummary, availableSalespeople, availableDepartments } = stats;
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -112,7 +116,7 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
         {loading && <div className="w-4 h-4 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" />}
       </div>
 
-      <DashboardFilterBar filters={filters} onChange={handleFiltersChange} availableSalespeople={availableSalespeople} />
+      <DashboardFilterBar filters={filters} onChange={handleFiltersChange} availableSalespeople={availableSalespeople} availableDepartments={availableDepartments} />
 
       {!hasAnyData ? (
         <EmptyState title={t("empty.dashboard.title")} sub={t("empty.dashboard.sub")} />
@@ -121,7 +125,7 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
           <KpiGrid kpis={kpis} />
 
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <RevenueTrendChart data={revenueByMonth} />
+            <RevenueTrendChart trend={revenueTrend} />
             <ProductsByCategoryChart categoryBreakdown={categoryBreakdown} />
           </div>
 
@@ -144,18 +148,23 @@ export function DashboardPage({ quotes, onNavigateToQuotations }: { quotes: Quot
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <RevenueByJobTypeChart jobTypeAnalytics={jobTypeAnalytics} />
-            <MonthlyClosingRateChart data={monthlyClosingRate} />
+            <JobTypeDistributionChart jobTypeAnalytics={jobTypeAnalytics} />
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <QuotationStatusDonut pipeline={pipeline} />
-            <WinLoseDonut won={kpis.wonDeals} lost={kpis.lostDeals} />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <MonthlyClosingRateChart data={monthlyClosingRate} />
             <ExpectedSalesForecastChart forecast={forecast} />
           </div>
 
-          <div className={`grid grid-cols-1 ${approvalDashboard ? "xl:grid-cols-3" : "xl:grid-cols-2"} gap-4`}>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <QuotationStatusDonut pipeline={pipeline} />
+            <WinLoseDonut won={kpis.wonDeals} lost={kpis.lostDeals} />
+          </div>
+
+          {approvalDashboard && <ApprovalDashboard data={approvalDashboard} onRefresh={refreshAfterAction} />}
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <FollowUpReminders followUps={followUps} onOpenClient={(client) => onNavigateToQuotations({ client })} />
-            {approvalDashboard && <ApprovalDashboard data={approvalDashboard} />}
             <NotificationSummary summary={notificationSummary} />
           </div>
 

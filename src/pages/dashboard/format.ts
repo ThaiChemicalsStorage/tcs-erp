@@ -29,3 +29,11 @@ export function monthLabel(key: string): string {
   if (!y || !m) return key;
   return new Date(y, m - 1, 1).toLocaleDateString("th-TH", { month: "short" });
 }
+
+/** Short display label for a revenue-trend period key — "YYYY-MM" (month), "YYYY-Www" (week), "YYYY-Qn" (quarter), or "YYYY" (year). */
+export function periodLabel(period: string): string {
+  if (/^\d{4}-W\d{2}$/.test(period)) return period.slice(5);
+  if (/^\d{4}-Q\d$/.test(period)) return `${period.slice(5)} '${period.slice(2, 4)}`;
+  if (/^\d{4}-\d{2}$/.test(period)) return monthLabel(period);
+  return period;
+}

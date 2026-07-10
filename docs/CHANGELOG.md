@@ -4,6 +4,54 @@
 
 ---
 
+## 2026-07-10 — Dashboard completion pass: closed the gap against the full Executive Dashboard business spec
+
+**Scope**: an explicit request to complete the Dashboard against a detailed, ~15-section business
+requirements spec, on top of the same-day Executive Dashboard/Job Type rebuild + code-review pass
+below. Rather than trusting the prior pass's own summary, ran a read-only audit (`Explore` agent,
+reading every Dashboard component/API file directly) comparing the actual code against every
+numbered requirement in the spec, then implemented every real, verifiable gap it found. Did not
+rebuild anything that already worked.
+
+**Gaps found and fixed** (all in `api/dashboard/index.ts`, `src/lib/dashboard.ts`, and
+`src/pages/dashboard/*`, plus dictionary keys in `src/lib/i18n.tsx`):
+1. **Pending Approvals had no visible count outside the approvers-only widget, and no actionable list at all** — added a general `kpis.pendingApprovals` KPI card, and expanded `ApprovalDashboard.tsx` from 4 read-only stat tiles into stat tiles + a real list (Quotation No./Customer/Salesperson/Amount/Submitted Date) with inline Approve/Reject, calling the same `performWorkflowAction()` (`POST /api/quotes/:id/workflow`) the Quotation module's own approval UI already uses. Reject requires a comment (inline textarea, matching the existing workflow rule); the Reject button is additionally gated by a new server-computed `approvalDashboard.canReject` (`quotations:reject`), since that permission isn't guaranteed to travel with `quotations:approve` on a custom role.
+2. **Active/Non-Active Jobs didn't match the spec's definitions**: `activeQuotations` previously included expired-but-unclosed quotes; there was no "Non-Active" bucket at all (only the narrower "Expired" one). Fixed: Active now excludes expired quotes, and a new `nonActiveQuotations` KPI covers Cancelled/Customer Rejected/Lost/expired-and-still-open — kept alongside (not replacing) the existing Expired KPI.
+3. **Average Closing Time only measured Won outcomes**, undercounting the spec's literal "average time between quotation creation and Won/Lost status." `closingDurationDays()` now matches `marked_won` **or** `marked_lost`; `salesPerformance[].avgClosingTime` was updated the same way.
+4. **`salesPerformance`/`customerAnalytics`/`jobTypeAnalytics` only ever exposed the Won-only value**, silently under-reporting "Total Quotation Value" everywhere the spec asks for both figures side by side. All three now return `totalValue` (every quotation, any outcome) alongside the existing Won-only `revenue` field.
+5. **Sales Ranking table was missing 4 of 11 spec columns** (Lost, Pending, Avg. Deal Size, Total Value — the first two were already computed server-side but never rendered) **and only 4 of 7 columns were sortable**. `SalesPerformanceTable.tsx` now renders and sorts on all 11.
+6. **Top Customers table only ever showed one metric per tab and had no Last Quotation Date column.** Rewrote `CustomerAnalytics.tsx` as a real 5-column table (Customer/Quotations/Total Value/Won Value/Last Quotation Date) with 4 ranking tabs (added "Most Repeat" — customers with >1 quotation, ranked by count); `lastQuotationDate` computed server-side from the already-fetched `issueDate` field.
+7. **Top Job Types wasn't a table at all** (a progress-bar list, no Avg. Deal Size, not sortable) **and silently dropped job types with zero quotes in the current filter.** Rewrote `JobTypeAnalytics.tsx` as a full sortable table; the server now zero-fills against the active `job_types` master list (13 seeded defaults) instead of only codes present in the filtered doc set, and still appends any code on a real quote that isn't in that active list (deactivated job type, legacy data) so nothing historical is dropped.
+8. **Revenue Trend was fixed to a single trailing-12-month monthly series** — no weekly/quarterly/yearly grouping existed despite the spec explicitly requiring it. Added `revenueTrend` (four bucketings from the same underlying won-quote rows) plus a grouping toggle in `RevenueTrendChart` (`ChartCard.tsx` gained an `actions` slot to host it).
+9. **No Job Type Distribution (count) chart existed** — `RevenueByJobTypeChart` showed revenue, not count, and only the top 10 of 13 job types (silently hiding 3 real ones). Added `JobTypeDistributionChart`; `RevenueByJobTypeChart` now shows Total + Won Value as grouped horizontal bars for every active job type, no cutoff.
+10. **Follow-up Reminders deliberately ignored the date-range filter**, and the trend/forecast-baseline queries' trailing window never moved with the date filter at all — both contradicted the spec's explicit "the date filter must actually change every widget's query, not be visual only." Follow-ups now use the same `fullMatch` as every other date-filtered widget. The trend/forecast windows still can't be *narrowed* to a single day without defeating their purpose as trend charts, but their trailing window's *end* now anchors to the selected `to` date (or today) instead of always "now" — a real, verifiable query change, documented as a deliberate partial application rather than left looking like an oversight.
+11. **No Department filter existed at all**, not even a disabled placeholder, despite being explicitly required. Added — `User.department` is free text (no real `Department` entity), so it's resolved server-side to "every salesperson whose `User.department` matches" and composed with an also-selected individual salesperson via `$and` (composing them naively via a second `salesperson` key would have silently discarded one or the other — caught and fixed during implementation, see `api/dashboard/index.ts`'s `fullMatch`/`salespersonOnlyMatch` construction).
+12. **Two required MongoDB indexes were missing** (`isPotentialOpportunity`, `client` on `quotes` — both are hot query paths for Expected Sales/forecast and customer-analytics grouping respectively). Added — but since `ensureIndexes()`'s one-time Setup Wizard bootstrap is unreachable on an already-provisioned deployment (same issue `seedJobTypesIfEmpty()` already had to work around), these are instead created defensively inside `GET /api/dashboard` itself, once per warm serverless instance, so they actually get created in production. (`createdAt`/`updatedAt`/`department`/`isDeleted` — also on the original requested index list — don't exist as fields on `Quote` at all, so indexing them would be a no-op; documented as such rather than added blindly.)
+
+**Not changed**: the 9-stage real workflow pipeline (no "Lead" or "Negotiating" stage — no backing
+entity/status exists for either; inventing one would itself be fake data), `QuotationTrendChart`'s
+reuse of the revenue series as a count proxy, Report Export (still explicitly deferred, no dead
+buttons anywhere), and Activity Timeline's flat (non-period-grouped) feed — all pre-existing,
+already-documented, deliberate scope decisions, re-confirmed rather than silently left as gaps.
+
+**Verification**: `npx tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run
+lint`, and `npm run build` all pass clean. **Live browser/API verification against real MongoDB
+data could not be completed in this session**: `vercel dev` was started locally (twice — once via
+Git Bash, once via native PowerShell, to rule out a shell-specific cause) using real credentials
+already pulled to `.vercel/.env.development.local` from a prior `vercel link`, and the frontend
+served correctly, but every MongoDB-touching API route (including the pre-existing, untouched
+`GET /api/auth/session`) failed with `querySrv ECONNREFUSED
+_mongodb._tcp.tcsdb.zdnus3w.mongodb.net` — the sandboxed environment's Node process cannot resolve
+MongoDB Atlas's `mongodb+srv://` DNS SRV record, even though the OS-level `nslookup` resolves that
+exact record fine and a raw TCP connection to the resolved shard host on port 27017 succeeds. This
+is an environment/network limitation, reproduced identically on code this session never touched,
+not a defect in any change above. (A workaround — reconstructing a non-SRV direct connection
+string from the resolved shard hosts — was considered and correctly blocked by the session's own
+safety guardrails as unwarranted handling of live database credentials; abandoned rather than
+worked around.) See PROJECT_STATUS.md "Known Risks" for the recommended follow-up.
+
+---
+
 ## 2026-07-10 — Code review pass on the Executive Dashboard/Job Type commit: 10 real bugs found and fixed
 
 **Scope**: a mandatory full-codebase review of the previous commit (`d38bf61`, the Executive Dashboard/Job Type feature), requested before treating that feature as done. Ran a 10-angle multi-agent review (line-by-line, removed-behavior, cross-file, language-pitfall, wrapper-correctness, reuse, simplification, efficiency, altitude, CLAUDE.md-conventions) against `git diff @{upstream}...HEAD`, verified the highest-signal candidates directly against the actual code, and fixed everything confirmed as a real correctness or regression bug. `npx tsc --noEmit` (both configs), `npm run lint`, and `npm run build` all pass clean after every fix below.

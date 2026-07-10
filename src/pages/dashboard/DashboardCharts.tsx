@@ -1,13 +1,14 @@
+import { useState } from "react";
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import type { SalesPerformanceEntry, JobTypeStat, PipelineStage, Forecast } from "../../lib/dashboard";
+import type { SalesPerformanceEntry, JobTypeStat, PipelineStage, Forecast, RevenueTrend } from "../../lib/dashboard";
 import { statusLabelKey } from "../../lib/quotes";
 import type { QuoteStatus } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
-import { fmtShort, monthLabel } from "./format";
+import { fmtShort, monthLabel, periodLabel } from "./format";
 
 const PALETTE = ["#c9a84c", "#1a5fb4", "#2aa36b", "#7c4dbb", "#e05252", "#1f9d8a", "#e08a3c", "#3b6fc9"];
 
@@ -26,14 +27,39 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
   return <p className="text-xs text-muted-foreground text-center py-10">{children}</p>;
 }
 
-export function RevenueTrendChart({ data }: { data: { month: string; revenue: number }[] }) {
+type TrendGrouping = "weekly" | "monthly" | "quarterly" | "yearly";
+const TREND_GROUPINGS: TrendGrouping[] = ["weekly", "monthly", "quarterly", "yearly"];
+
+export function RevenueTrendChart({ trend }: { trend: RevenueTrend }) {
   const { t } = useI18n();
+  const [grouping, setGrouping] = useState<TrendGrouping>("monthly");
+  const groupingLabel: Record<TrendGrouping, string> = {
+    weekly: t("dashboard.chart.revenue.grouping.week"),
+    monthly: t("dashboard.chart.revenue.grouping.month"),
+    quarterly: t("dashboard.chart.revenue.grouping.quarter"),
+    yearly: t("dashboard.chart.revenue.grouping.year"),
+  };
+  const data = trend[grouping];
   const hasData = data.some((d) => d.revenue > 0);
   return (
-    <ChartCard title={t("dashboard.chart.revenue.title")} sub={t("dashboard.chart.revenue.sub")} className="xl:col-span-2">
+    <ChartCard
+      title={t("dashboard.chart.revenue.title")}
+      sub={t("dashboard.chart.revenue.sub")}
+      className="xl:col-span-2"
+      actions={
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+          {TREND_GROUPINGS.map((g) => (
+            <button key={g} onClick={() => setGrouping(g)}
+              className={`px-2 py-1 text-[10px] rounded-md font-medium transition-all ${grouping === g ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              {groupingLabel[g]}
+            </button>
+          ))}
+        </div>
+      }
+    >
       {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
         <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={data.map((r) => ({ ...r, label: monthLabel(r.month) }))} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <AreaChart data={data.map((r) => ({ ...r, label: periodLabel(r.period) }))} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#c9a84c" stopOpacity={0.3} /><stop offset="95%" stopColor="#c9a84c" stopOpacity={0} />
@@ -99,23 +125,53 @@ export function SalesByEmployeeChart({ salesPerformance }: { salesPerformance: S
   );
 }
 
+/** All active job types are shown (not top-N) — a job type with zero quotes this period is a real, meaningful zero, not noise to hide. */
 export function RevenueByJobTypeChart({ jobTypeAnalytics }: { jobTypeAnalytics: JobTypeStat[] }) {
   const { t } = useI18n();
-  const data = jobTypeAnalytics.slice(0, 10);
+  const data = jobTypeAnalytics;
+  const hasData = data.some((d) => d.totalValue > 0);
   return (
     <ChartCard title={t("dashboard.chart.revenueByJobType.title")} sub={t("dashboard.chart.revenueByJobType.sub")}>
-      {data.length === 0 ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-            <XAxis dataKey="jobTypeCode" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
+      {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" horizontal={false} />
+            <XAxis type="number" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
+            <YAxis type="category" dataKey="jobTypeCode" width={60} tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
-            <Bar dataKey="revenue" name={t("dashboard.ranking.col.revenue")} radius={[4, 4, 0, 0]}>
-              {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-            </Bar>
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="totalValue" name={t("dashboard.chart.revenueByJobType.totalValue")} fill="#5a7299" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="revenue" name={t("dashboard.chart.revenueByJobType.wonValue")} fill="#c9a84c" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      )}
+    </ChartCard>
+  );
+}
+
+export function JobTypeDistributionChart({ jobTypeAnalytics }: { jobTypeAnalytics: JobTypeStat[] }) {
+  const { t } = useI18n();
+  const data = jobTypeAnalytics.filter((j) => j.count > 0).map((j) => ({ name: j.jobTypeCode, value: j.count }));
+  return (
+    <ChartCard title={t("dashboard.chart.jobTypeDistribution.title")} sub={t("dashboard.chart.jobTypeDistribution.sub")}>
+      {data.length === 0 ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
+        <>
+          <div className="flex justify-center mb-4">
+            <PieChart width={160} height={160}>
+              <Pie data={data} cx={75} cy={75} innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="value" strokeWidth={0}>
+                {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+              </Pie>
+            </PieChart>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            {data.map((d, i) => (
+              <div key={d.name} className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 min-w-0"><div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} /><span className="text-muted-foreground font-mono truncate">{d.name}</span></div>
+                <span className="font-mono text-foreground">{d.value}</span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </ChartCard>
   );
