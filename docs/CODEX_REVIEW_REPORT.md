@@ -5,7 +5,7 @@
 
 ## Executive Summary
 
-**Not production-ready.** The Dashboard has substantial real MongoDB-backed implementation: core quotation KPIs, pipeline, job-type analytics, approval workflow, notification counts, and permission checks are implemented. However, the stated requirement that date/salesperson/department filters affect *all* Dashboard data is not met, Dashboard report export is explicitly deferred, quote APIs accept unvalidated business payloads, and documentation contains contradictory obsolete claims.
+**Not production-ready.** This report was independently re-reviewed after the same-day remediation work recorded below. The current source now has server-side quotation validation, filtered Customer Interest/activity data, CSV Dashboard export, and improved UI organization. Remaining production blockers are lack of automated/live verification, a forgeable client-facing audit-event API, no authoritative audit events from quotation mutations, and unresolved identity/data-model limitations for salesperson/department reporting.
 
 No hardcoded dashboard business statistics, demo quotations, demo customers, demo products, or random dashboard values were found in application code. Master-data seeding is limited to system configuration and the required Job Types.
 
@@ -184,6 +184,58 @@ Attempted command: `npm run lint && npm run build`.
 
 Result: neither script executed. The environment failed before Node started with: `WSL 1 is not supported. Please upgrade to WSL 2 or above. Could not determine Node.js install directory.` This is an environment/toolchain limitation, not evidence that lint/build currently pass or fail. Run the same commands in a supported Node/WSL2 or CI environment.
 
+## Independent Re-review Addendum
+
+This addendum is the current-code assessment and supersedes earlier findings that were remediated in the later source revision. `api/_lib/quoteValidation.ts` now validates quote data and recomputes totals; `api/dashboard/index.ts` returns filtered interest/activity data; `DashboardPage.tsx` has CSV export and a reorganized KPI layout.
+
+## Dashboard UI / UX Review
+
+The revised Dashboard has improved hierarchy: primary KPI cards, secondary summary, status/forecast, analytics, pipeline steps, activity analytics, rankings, and workflow widgets are separate sections. This is materially better than the former 20+ undifferentiated-card grid. `PipelineSteps.tsx` should still be manually tested with Thai labels and narrow screens; source review cannot prove chart label collision or horizontal overflow. Pipeline values remain current-state stage ratios, not cohort conversion; label them accordingly.
+
+## Sales Activity Analytics Review
+
+The current Dashboard includes `SalesActivityAnalytics` and the API builds weekly/monthly/quarterly/yearly series for users permitted to view audit logs. It is filter-aware for date, salesperson, and department. However, the source of these metrics is not authoritative: quotation handlers do not write audit events themselves, and any authenticated user can submit arbitrary `module`, `action`, and `details` through `POST /api/audit-log`. Thus the UI exists but cannot be relied on for compliance-grade created/edited quotation reporting.
+
+## Quotation Workflow Review
+
+Status transition validation and permission checks are server-side and the revised quote validation prevents client-supplied total amounts. Remaining defects: reject/customer-reject/cancel comments are only enforced in the UI, not in `api/handlers/quotes.ts`; quote create/edit/workflow actions do not atomically create audit records; and workflow notifications omit cancellation/Won/Lost events. Atomic numbering is now implemented with a counter collection.
+
+## User-Friendly UX Review
+
+Shared page headers, empty states, metric tooltips, guided-tour components, confirmation dialogs, and toasts improve first-use experience. Verify the new guided tour in a real browser before release. The global header search remains a visible non-functional control, and notification navigation needs live verification despite the new deep-link state.
+
+## Empty State Review
+
+Source review finds no demo business records or static Dashboard statistics. Empty Dashboard/notification/audit states are implemented and zero-valued aggregate paths are present. This remains unverified against an actual empty MongoDB instance.
+
+## Current Critical Issues
+
+- **Audit integrity:** any authenticated caller may manufacture arbitrary audit text; server-side quotation mutations do not create their own immutable audit entries.
+- **Verification gap:** no automated tests/CI and no live MongoDB/browser/PDF validation are available to substantiate the claimed clean build or workflow behavior.
+- **Reporting identity model:** Department filtering still maps a free-text department to free-text salesperson names. Renames, duplicates, and manually edited salesperson strings can misclassify reporting.
+
+## Current Missing Requirements Checklist
+
+- [x] MongoDB-backed Dashboard KPIs and Job Type master data
+- [x] Server-side quotation total, date, numeric, and Job Type validation
+- [x] Date presets, CSV export, filter-aware Customer Interest and activity timeline
+- [x] Sales activity UI with weekly/monthly/quarterly/yearly grouping
+- [!] All Dashboard widgets have a meaningful salesperson/department/date dimension
+- [!] Expected Sales uses the required Boolean predicate; forecast separately excludes closed opportunities
+- [!] Audit logs are append-only in storage but not authoritative/non-forgeable business events
+- [!] Rejection-reason enforcement is UI-only
+- [ ] Automated API/workflow/RBAC/browser/PDF tests and CI
+- [ ] Live-data, empty-database, responsive, and print-layout verification
+
+## Current Suggested Fix Plan for Claude Code
+
+1. Make audit creation internal to quote/product/user mutation handlers; remove or narrowly whitelist generic client audit writes and use structured event fields.
+2. Enforce required rejection/cancellation comments in the workflow API and define notifications for every terminal workflow event.
+3. Replace quote salesperson display text with a stable salesperson user ID and department reference, then migrate existing records.
+4. Add API integration tests for validation, permissions, comments, workflow transitions, aggregates, and filter propagation; add CI.
+5. Run browser tests with seeded and empty MongoDB databases, including responsive Dashboard, CSV, notification deep links, PDF multipage/empty-field/image behavior.
+6. Measure MongoDB explain plans and Dashboard bundle/render performance on representative production volumes before declaring production readiness.
+
 ---
 
 ## Claude Fix Status
@@ -360,3 +412,141 @@ effect (see SESSION_LOG.md "Problems Found" for the detail on both).
 - Dashboard department/salesperson filtering remains a free-text join — accurate only as long as
   names don't collide, typo, or get renamed after the fact; unchanged risk profile from before
   this pass, now more precisely documented.
+
+---
+
+## Claude Fix Status — Addendum Follow-up (2026-07-10, fifth pass)
+
+**Fix date**: 2026-07-10. This pass responds specifically to the **"Independent Re-review
+Addendum"** above — its "Current Critical Issues" (audit integrity, verification gap, reporting
+identity model) and "Current Suggested Fix Plan for Claude Code" (items 1–2 concretely, items
+3–6 assessed) — per an explicit instruction to fix Critical and High priority issues first and
+preserve existing functionality. The Dashboard UI/UX redesign pass that immediately preceded this
+one (see the CHANGELOG "fourth pass" entry) is unrelated and already separately documented.
+
+### Fixed issues
+
+**Critical (1/3 fixed in code; 2/3 are process/data-model gaps, not code defects — see below)**
+
+1. **Audit integrity — quotation audit events were forgeable.** Every quotation audit-log entry
+   (Created/Updated/Submitted/Approved/Rejected/Status Changed) used to be written by the
+   *client* calling the generic `POST /api/audit-log` after a successful API call — meaning any
+   authenticated caller could bypass the UI and POST that same endpoint directly with fabricated
+   `module`/`action`/`details` text, and the Dashboard's Sales Activity Analytics counts exactly
+   those `action` strings from `audit_log`. Fixed by making `api/handlers/quotes.ts` write its
+   own audit-log entries directly (`writeQuoteAuditEntry()`, identity always taken from the
+   already-authenticated `ctx`, never the request body) for create, update (any `PATCH` except a
+   pure interest-flag toggle, which the client never audited either — preserving the exact prior
+   granularity), duplicate, and every workflow transition. `QuotationPage.tsx`'s 4 client-side
+   `onAudit(...)` calls for these same events were removed (the server now does it, so keeping
+   both would double-log). `POST /api/audit-log` now rejects `module === "ใบเสนอราคา"` outright
+   with a 403 — quotation events can only ever be written by the quote handlers themselves now,
+   closing the forgery hole completely rather than just moving where the honest path writes from.
+2. **Verification gap** (no automated tests/CI, no live-data verification) — a pre-existing,
+   already-tracked process gap, not something fixable by editing application code in this pass;
+   see "Unfixed issues" below, unchanged from the prior pass's assessment.
+3. **Reporting identity model** (free-text salesperson/department join) — already logged as an
+   explicit business decision in `TODO.md` (two concrete options spelled out) in the prior pass;
+   re-confirmed still accurate, not re-solved by guessing.
+
+**High Priority (2 concretely fixed from the addendum's checklist; others already closed or
+correctly assessed as not-a-defect in the prior pass — see below)**
+
+4. **Rejection/cancellation comment enforcement was UI-only.** `QuoteDocument.tsx` already
+   refused to submit a Reject/Customer-Reject/Cancel action without a non-empty comment, but
+   `api/handlers/quotes.ts`'s `handleWorkflow` accepted an empty one — a direct API call bypassed
+   the check entirely. Fixed: `handleWorkflow` now throws `400 "กรุณาระบุเหตุผล"` (the same message
+   the UI already shows) when `COMMENT_REQUIRED_ACTIONS` (`rejected`/`customer_rejected`/
+   `cancelled`, new in `api/_lib/quoteWorkflow.ts`) is attempted with a blank/whitespace-only
+   comment.
+5. **Workflow notifications omitted cancellation/Won/Lost events.** `createWorkflowNotifications`
+   in `api/handlers/quotes.ts` notified the quote's creator on submitted/approved/rejected/
+   customer_accepted/customer_rejected, but silently did nothing on `marked_won`, `marked_lost`,
+   or `cancelled` — three real terminal workflow events a salesperson would reasonably expect to
+   be notified about. Added all three, following the exact same creator-notification pattern as
+   the existing ones. Required adding `quotation_won`/`quotation_lost`/`quotation_cancelled` to
+   `NotificationType` (`src/lib/notifications.ts`), a matching icon each in
+   `NotificationBell.tsx`'s `TYPE_ICON` map (Trophy/TrendingDown/XOctagon), and a matching label
+   entry in `api/_lib/systemSeed.ts`'s `NOTIFICATION_TYPE_LABELS` (TypeScript's `Record<
+   NotificationType, ...>` caught both of these at compile time — a new union member can't be
+   silently forgotten in either map).
+6. **Expected Sales / forecast baseline predicate consistency** — re-checked against the
+   addendum's checklist item ("forecast separately excludes closed opportunities"). Confirmed
+   already correct, not a live bug: `api/dashboard/index.ts`'s `expectedSales` KPI and the Sales
+   Ranking table's `expectedRevenue` column both intentionally use the literal
+   `isPotentialOpportunity === true` predicate with no status filtering (per the prior pass's
+   fix), while the separate Sales Forecast calculation (`openOpportunities`, further down the
+   same file) additionally excludes `CLOSED_STATUSES` — exactly the two-tier distinction the
+   checklist item asks for, already in place with an explanatory code comment. No change made;
+   documenting that this was verified rather than silently assumed correct.
+
+### Not fixed / re-assessed (with reasoning, not silently dropped)
+
+- **Salesperson-as-real-user-reference** (addendum's "reporting identity model" Critical item,
+  and Suggested Fix Plan item 3). Unchanged from the prior pass's assessment — still logged in
+  `TODO.md` as an explicit business decision (accept the free-text model, or lock the Salesperson
+  field to real `User` records and add `salespersonUserId` to `Quote`). Nothing new to add; a
+  second review flagging the same open decision doesn't make it less of one.
+- **Automated API/workflow/RBAC tests + CI** (Suggested Fix Plan item 4). Not attempted — this is
+  a standalone infrastructure effort (test framework choice, CI provider/config, fixture/seed
+  strategy for a MongoDB-backed API), not a bug fix, and was explicitly out of scope for a
+  "fix Critical/High issues" pass. Remains the single largest tracked gap.
+- **Explain-plan/production performance measurement** (Suggested Fix Plan item 6). Not attempted
+  — needs production-representative data volume and an actual `explain()` run against the real
+  cluster, neither available in this sandboxed session.
+
+### Files changed
+
+`api/_lib/quoteWorkflow.ts` (`approvalActionLabel`, `COMMENT_REQUIRED_ACTIONS`), `api/handlers/
+quotes.ts` (`writeQuoteAuditEntry()`, audit writes on create/update/duplicate/workflow, required-
+comment check, three new notification branches), `api/audit-log/index.ts` (reject `module ===
+"ใบเสนอราคา"` on `POST`), `api/_lib/systemSeed.ts` (`NOTIFICATION_TYPE_LABELS` extended),
+`src/lib/notifications.ts` (`NotificationType` extended), `src/components/NotificationBell.tsx`
+(`TYPE_ICON` extended), `src/pages/quotation/QuotationPage.tsx` (removed the 4 now-redundant
+client-side `onAudit()` calls and the `onAudit` prop), `src/App.tsx` (removed the `onAudit`
+pass-through to `QuotationPage` only — Settings/User Management/Role Management keep their
+own, unchanged, lower-stakes client-side audit calls, which this review didn't flag). Docs:
+this file, `CHANGELOG.md`, `PROJECT_STATUS.md`, `TODO.md`, `IMPLEMENTATION_CHECKLIST.md`,
+`CLAUDE.md`, `MODULES/{Quotation,Notifications,AuditLog,Dashboard}.md`.
+
+### Build result
+
+`npm run build` (`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`) — **clean**, no
+errors (one expected error surfaced mid-pass and was fixed before considering it done: adding
+the 3 new `NotificationType` members initially broke `api/_lib/systemSeed.ts`'s
+`Record<NotificationType, ...>` map, exactly as strict TypeScript should catch it). `DashboardPage`
+chunk unchanged at ~478KB; `QuotationPage` chunk shrank slightly (~64.5KB → ~64.0KB) from removing
+the client-side audit-call code.
+
+### Lint result
+
+`npm run lint` (`eslint .`) — **clean**, 0 errors. Same 2 pre-existing `react-refresh/only-export-
+components` warnings in `src/lib/i18n.tsx`, unrelated to this pass.
+
+### Browser verification
+
+`vercel dev` started successfully on `localhost:3000` (via `npx vercel dev`, since the Vercel CLI
+isn't globally installed in this session). `GET /api/auth/session` still 500s with the same
+`querySrv ECONNREFUSED _mongodb._tcp.tcsdb.zdnus3w.mongodb.net` error as every prior 2026-07-10
+pass — confirmed via the dev-server log, not just the HTTP response, so this is definitively the
+same pre-existing DNS/network limitation and not a regression introduced by this pass's changes.
+A Playwright check against the running dev server found exactly one class of console error (the
+expected `/api/auth/session` 500), nothing new. The app's own boot sequence has a pre-existing,
+unrelated gap surfaced by this check: `App.tsx`'s session-fetch `useEffect` has no `catch` around
+`fetchSession()`, so a thrown network error leaves `bootStatus` stuck at `"loading"` (a spinner
+that never resolves to the sign-in screen) instead of falling back to `"signedOut"` — this is a
+pre-existing gap unrelated to any change in this pass (not introduced by it, and not part of the
+Critical/High findings this pass targeted), noted here rather than silently observed and dropped;
+see `TODO.md`. Full workflow-UI verification (the reject/cancel comment modal, the new
+notification icons, the Audit Log page rendering server-written entries) could not be exercised
+end-to-end against real data for the same reason as every prior pass — reproduced a fourth time.
+
+### Remaining risks
+
+- Live-data/browser verification is still outstanding, for the same reproducible reason as every
+  2026-07-10 pass before it.
+- The `App.tsx` stuck-loading-spinner-on-session-fetch-failure gap (found during this pass's
+  browser check) is real but out of scope for a Critical/High fix pass focused on the Codex
+  report's findings — logged in `TODO.md`, not fixed here.
+- The two remaining open business-decision items (user-directory privacy model, salesperson-as-
+  real-reference) are unchanged and still require a product decision, not a guess.

@@ -69,6 +69,22 @@ export function isWorkflowActionAllowed(action: ApprovalAction, isOwner: boolean
   }
 }
 
+/** Duplicated from src/lib/quotes.tsx's `approvalActionLabel` (see file header) — used to build server-authoritative audit-log entries for workflow actions. */
+export const approvalActionLabel: Record<ApprovalAction, string> = {
+  submitted: "ส่งขออนุมัติ",
+  approved: "อนุมัติ",
+  rejected: "ปฏิเสธ (ส่งกลับแก้ไข)",
+  sent_to_customer: "ส่งให้ลูกค้า",
+  customer_accepted: "ลูกค้ายอมรับ",
+  customer_rejected: "ลูกค้าปฏิเสธ",
+  marked_won: "ปิดการขายสำเร็จ",
+  marked_lost: "ปิดการขายไม่สำเร็จ",
+  cancelled: "ยกเลิกใบเสนอราคา",
+};
+
+/** Actions where a comment/reason is mandatory, not optional — enforced server-side since the UI-only check (QuoteDocument.tsx) can be bypassed by calling the API directly. */
+export const COMMENT_REQUIRED_ACTIONS: ReadonlySet<ApprovalAction> = new Set(["rejected", "customer_rejected", "cancelled"]);
+
 export const REQUIRED_PERMISSION_HINT: Record<ApprovalAction, Permission> = {
   submitted: "quotations:edit",
   approved: "quotations:approve",

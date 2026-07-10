@@ -1,15 +1,39 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
-import { requireUser, requirePermission } from "../_lib/auth.js";
-import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, countersCollection, withStringId, type QuoteFields } from "../_lib/collections.js";
+import { requireUser, requirePermission, type AuthContext } from "../_lib/auth.js";
+import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, countersCollection, auditLogCollection, withStringId, type QuoteFields } from "../_lib/collections.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
-import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, type ApprovalAction } from "../_lib/quoteWorkflow.js";
+import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
 import { PERMISSION_LABELS } from "../../src/lib/permissions.js";
+import { nowIso } from "../../src/lib/products.js";
 import {
   validateLines, validateIsoDateOrEmpty, validateJobType, computeQuoteAmount,
   sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeBoolean,
 } from "../_lib/quoteValidation.js";
+
+/**
+ * Writes an authoritative, server-side audit-log entry for a quotation mutation — identity
+ * (userId/userName/roleName) always comes from the already-verified `ctx`, never the request
+ * body. Added per the 2026-07-10 Codex review's Critical finding: quotation audit events
+ * (Created/Updated/workflow transitions) used to be written by the *client* calling the generic
+ * `POST /api/audit-log`, which any authenticated caller could forge with arbitrary text — and
+ * these exact events are what `salesActivity` on the Dashboard counts from. `POST /api/audit-log`
+ * now rejects the `"ใบเสนอราคา"` module outright (see api/audit-log/index.ts), so this is the
+ * only path quotation audit entries can be written through.
+ */
+async function writeQuoteAuditEntry(ctx: AuthContext, action: string, details: string): Promise<void> {
+  const auditLog = await auditLogCollection();
+  await auditLog.insertOne({
+    userId: ctx.user.id,
+    userName: ctx.user.fullName,
+    roleName: ctx.role?.name ?? ctx.user.roleKey,
+    module: "ใบเสนอราคา",
+    action,
+    details,
+    createdAt: nowIso(),
+  });
+}
 
 const QUOTE_YEAR = 2567;
 
@@ -177,6 +201,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       approvalHistory: [],
     };
     await quotes.insertOne(doc);
+    await writeQuoteAuditEntry(ctx, "Quotation Created", `สร้างใบเสนอราคา ${id} (${client})`);
     res.status(201).json({ quote: withStringId(doc) });
     return;
   }
@@ -224,6 +249,17 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   await quotes.updateOne({ _id: id }, { $set: update });
   const updated = await quotes.findOne({ _id: id });
   if (!updated) throw new HttpError(404, "ไม่พบใบเสนอราคา");
+
+  // Only an "interest" toggle (the list-view น่าสนใจ/ไม่น่าสนใจ buttons) skips the audit entry —
+  // mirrors the client's previous behavior exactly (only the full edit form's save called
+  // onAudit("Quotation Updated", ...); the interest toggle never did), now enforced server-side
+  // instead of trusted from the client.
+  const bodyKeys = Object.keys(body);
+  const isInterestOnlyUpdate = bodyKeys.length > 0 && bodyKeys.every((k) => k === "interest");
+  if (!isInterestOnlyUpdate) {
+    await writeQuoteAuditEntry(ctx, "Quotation Updated", `แก้ไขใบเสนอราคา ${id}`);
+  }
+
   res.status(200).json({ quote: withStringId(updated) });
 }
 
@@ -252,6 +288,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
     approvalHistory: [],
   };
   await quotes.insertOne(doc);
+  await writeQuoteAuditEntry(ctx, "Quotation Created", `คัดลอกใบเสนอราคาเป็น ${newId} จาก ${id}`);
   res.status(201).json({ quote: withStringId(doc) });
 }
 
@@ -263,8 +300,15 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
   const rawAction = body.action;
   if (!isApprovalAction(rawAction)) throw new HttpError(400, "Invalid action");
   const action: ApprovalAction = rawAction;
-  const comment: string = typeof body.comment === "string" ? body.comment : "";
+  const comment: string = typeof body.comment === "string" ? body.comment.trim() : "";
   const draft: Record<string, unknown> = typeof body.draft === "object" && body.draft !== null ? body.draft : {};
+
+  // The UI (QuoteDocument.tsx) already requires a comment for these actions and refuses to submit
+  // without one, but that's only a client-side check — calling this API directly bypasses it.
+  // Flagged by the 2026-07-10 Codex review ("rejection/reject/cancel comments enforced only in UI").
+  if (COMMENT_REQUIRED_ACTIONS.has(action) && !comment) {
+    throw new HttpError(400, "กรุณาระบุเหตุผล");
+  }
 
   const quotes = await quotesCollection();
   const target = await quotes.findOne({ _id: id });
@@ -319,6 +363,20 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
   if (!updated) throw new HttpError(404, "ไม่พบใบเสนอราคา");
 
   await createWorkflowNotifications(action, updated, ctx.user.fullName, comment);
+
+  // Matches the exact audit-action naming the client used to send from QuotationPage.tsx's
+  // handleWorkflowAction — moved server-side so it can no longer be forged or omitted, not
+  // changed in shape (the Audit Log page and Sales Activity Analytics should see identical text).
+  const auditAction =
+    action === "submitted" ? "Quotation Submitted" :
+    action === "approved" ? "Quotation Approved" :
+    action === "rejected" ? "Quotation Rejected" :
+    "Status Changed";
+  await writeQuoteAuditEntry(
+    ctx,
+    auditAction,
+    `${approvalActionLabel[action]} ใบเสนอราคา ${id}${comment ? ` — ${comment}` : ""}`,
+  );
 
   res.status(200).json({ quote: withStringId(updated) });
 }
@@ -391,6 +449,27 @@ async function createWorkflowNotifications(
       add([creatorId], {
         type: "quotation_customer_rejected", title: "ลูกค้าปฏิเสธใบเสนอราคา",
         description: `ลูกค้าปฏิเสธใบเสนอราคา ${quote._id} (${quote.client})${comment ? ` — เหตุผล: ${comment}` : ""}`,
+        module: "ใบเสนอราคา", relatedQuoteId: quote._id,
+      });
+    } else if (action === "marked_won") {
+      // Added per the 2026-07-10 Codex review ("workflow notifications omit cancellation/Won/Lost
+      // events") — submitted/approved/rejected/customer_accepted/customer_rejected already
+      // notified the creator; the three terminal actions below silently didn't.
+      add([creatorId], {
+        type: "quotation_won", title: "ปิดการขายสำเร็จ",
+        description: `${actorName} ทำเครื่องหมายใบเสนอราคา ${quote._id} (${quote.client}) เป็นปิดการขายสำเร็จ`,
+        module: "ใบเสนอราคา", relatedQuoteId: quote._id,
+      });
+    } else if (action === "marked_lost") {
+      add([creatorId], {
+        type: "quotation_lost", title: "ปิดการขายไม่สำเร็จ",
+        description: `${actorName} ทำเครื่องหมายใบเสนอราคา ${quote._id} (${quote.client}) เป็นปิดการขายไม่สำเร็จ`,
+        module: "ใบเสนอราคา", relatedQuoteId: quote._id,
+      });
+    } else if (action === "cancelled") {
+      add([creatorId], {
+        type: "quotation_cancelled", title: "ใบเสนอราคาถูกยกเลิก",
+        description: `${actorName} ยกเลิกใบเสนอราคา ${quote._id} (${quote.client})${comment ? ` — เหตุผล: ${comment}` : ""}`,
         module: "ใบเสนอราคา", relatedQuoteId: quote._id,
       });
     }

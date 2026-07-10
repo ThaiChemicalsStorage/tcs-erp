@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import {
   LayoutDashboard, Settings, Package,
   Search, ChevronRight, Menu, X, ChevronDown,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -20,8 +20,10 @@ import {
   deleteNotification as apiDeleteNotification,
 } from "./lib/notifications";
 import { logAudit } from "./lib/auditLog";
+import { hasTourCompleted, markTourCompleted } from "./lib/tour";
 import { NotificationBell } from "./components/NotificationBell";
 import { BrandMark } from "./components/BrandMark";
+import { useGuidedTour } from "./components/GuidedTour";
 import { useI18n, type TranslationKey } from "./lib/i18n";
 import type { SetupWizardFields } from "./pages/SetupWizardPage";
 
@@ -74,6 +76,20 @@ const navItems: NavItem[] = [
   { key: "auditLog", icon: ScrollText, labelKey: "nav.auditLog", permission: "auditLog:view" },
 ];
 
+/**
+ * Sidebar grouping (2026-07-10 UI/UX redesign) — purely a display grouping over the same flat
+ * `navItems`/`NavKey` list above, not a new data model. Only reflects modules that actually exist
+ * today: no "Leads"/"Customers" group (schema-only, no UI yet, see MODULES/Lead.md and
+ * MODULES/Customer.md) and no separate "Approvals" group (approval actions live inside the
+ * Quotation module's own workflow, there's no dedicated Pending Approvals/Approval History page).
+ */
+const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
+  { labelKey: "nav.group.main", keys: ["dashboard"] },
+  { labelKey: "nav.group.sales", keys: ["quotations"] },
+  { labelKey: "nav.group.inventory", keys: ["products"] },
+  { labelKey: "nav.group.admin", keys: ["users", "roles", "auditLog"] },
+];
+
 const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   dashboard: "nav.dashboard",
   quotations: "nav.quotations",
@@ -119,6 +135,12 @@ export default function App() {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
 
+  const [showTourPrompt, setShowTourPrompt] = useState(false);
+  const tour = useGuidedTour(() => {
+    setShowTourPrompt(false);
+    if (currentUser) markTourCompleted(currentUser.id);
+  });
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -143,6 +165,19 @@ export default function App() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Offers the guided tour once per user, the first time they land on a "ready" session — not
+  // forced (see `showTourPrompt`'s Start/Skip banner below), and never shown again once they've
+  // either finished or explicitly skipped it (tracked in localStorage, see src/lib/tour.ts).
+  // React's "adjust state during rendering" pattern (not an effect — a bare setState call in an
+  // effect body trips react-hooks/set-state-in-effect): reacts to `currentUser` changing (i.e.
+  // sign-in completing), checked against state (not a ref — refs can't be read/written during
+  // render) so it only evaluates once per sign-in, not on every unrelated re-render.
+  const [tourCheckedForUserId, setTourCheckedForUserId] = useState<string | null>(null);
+  if (bootStatus === "ready" && currentUser && tourCheckedForUserId !== currentUser.id) {
+    setTourCheckedForUserId(currentUser.id);
+    if (!hasTourCompleted(currentUser.id)) setShowTourPrompt(true);
+  }
 
   const updateCompany = (next: Company) => setCompany(next);
   const updateProducts = (next: Product[]) => setProducts(next);
@@ -288,15 +323,26 @@ export default function App() {
         <div className={`flex items-center border-b border-sidebar-border min-h-[68px] transition-all duration-300 ease-in-out ${sidebarOpen ? "gap-3 px-4 py-5" : "justify-center py-5"}`}>
           <BrandMark size={32} variant={sidebarOpen ? "full" : "mark"} theme="dark" />
         </div>
-        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-          {visibleNavItems.map(({ key, icon: Icon, labelKey }) => (
-            <button key={key} onClick={() => setActiveNav(key)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 relative
-                ${activeNav === key ? "bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border border-transparent"}`}>
-              <Icon size={17} className="flex-shrink-0" />
-              {sidebarOpen && <span className="text-sm whitespace-nowrap overflow-hidden">{t(labelKey)}</span>}
-            </button>
-          ))}
+        <nav data-tour="sidebar-nav" className="flex-1 px-2 py-4 space-y-3 overflow-y-auto">
+          {NAV_GROUPS.map((group) => {
+            const items = visibleNavItems.filter((item) => group.keys.includes(item.key));
+            if (items.length === 0) return null;
+            return (
+              <div key={group.labelKey} className="space-y-0.5">
+                {sidebarOpen && (
+                  <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">{t(group.labelKey)}</p>
+                )}
+                {items.map(({ key, icon: Icon, labelKey }) => (
+                  <button key={key} onClick={() => setActiveNav(key)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 relative
+                      ${activeNav === key ? "bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border border-transparent"}`}>
+                    <Icon size={17} className="flex-shrink-0" />
+                    {sidebarOpen && <span className="text-sm whitespace-nowrap overflow-hidden">{t(labelKey)}</span>}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </nav>
         <div className="px-2 py-3 border-t border-sidebar-border">
           <button onClick={() => setActiveNav("settings")}
@@ -324,15 +370,17 @@ export default function App() {
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
             <input type="text" placeholder={t("topbar.searchPlaceholder")} className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full" />
           </div>
-          <NotificationBell
-            notifications={notifications}
-            currentUserId={currentUser.id}
-            onMarkRead={markNotificationRead}
-            onMarkAllRead={markAllNotificationsRead}
-            onDelete={deleteNotification}
-            onNavigate={(n) => { if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId); }}
-          />
-          <div className="relative">
+          <div data-tour="notification-bell">
+            <NotificationBell
+              notifications={notifications}
+              currentUserId={currentUser.id}
+              onMarkRead={markNotificationRead}
+              onMarkAllRead={markAllNotificationsRead}
+              onDelete={deleteNotification}
+              onNavigate={(n) => { if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId); }}
+            />
+          </div>
+          <div className="relative" data-tour="user-menu">
             <button onClick={() => setUserMenuOpen((v) => !v)} className="flex items-center gap-2.5 pl-3 border-l border-border">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#c9a84c] to-[#a07830] flex items-center justify-center text-white text-xs font-bold overflow-hidden">
                 {currentUser.profilePictureDataUrl ? (
@@ -358,6 +406,12 @@ export default function App() {
                     <Settings size={14} className="text-muted-foreground" /> {t("nav.settings")}
                   </button>
                   <button
+                    onClick={() => { setUserMenuOpen(false); setActiveNav("dashboard"); setTimeout(() => tour.start(), 150); }}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-foreground hover:bg-secondary/60 transition-colors"
+                  >
+                    <HelpCircle size={14} className="text-muted-foreground" /> {t("topbar.help")}
+                  </button>
+                  <button
                     onClick={handleLogout}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[#e05252] hover:bg-[#e05252]/10 transition-colors"
                   >
@@ -372,7 +426,7 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
           <Suspense fallback={<PageLoading />}>
             {effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} onAudit={handleAudit} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} />
               : effectiveNav === "settings"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
               : effectiveNav === "products"
@@ -388,6 +442,27 @@ export default function App() {
           </Suspense>
         </div>
       </div>
+
+      {showTourPrompt && (
+        <div className="fixed bottom-6 right-6 z-50 w-80 bg-card border border-border rounded-xl shadow-2xl p-4 print:hidden">
+          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("onboarding.welcome.title")}</p>
+          <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{t("onboarding.welcome.message")}</p>
+          <div className="flex items-center justify-end gap-2 mt-3">
+            <button
+              onClick={() => { setShowTourPrompt(false); if (currentUser) markTourCompleted(currentUser.id); }}
+              className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {t("onboarding.welcome.skip")}
+            </button>
+            <button
+              onClick={() => { setActiveNav("dashboard"); setShowTourPrompt(false); setTimeout(() => tour.start(), 150); }}
+              className="px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+            >
+              {t("onboarding.welcome.start")}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,118 @@
 
 ---
 
+## 2026-07-10 — Audit integrity + workflow gap fix pass (fifth same-day pass)
+
+**Scope**: fix the Critical and High Priority issues raised by the independent Codex re-review's
+"Independent Re-review Addendum" (see `docs/CODEX_REVIEW_REPORT.md`), preserving existing
+functionality, without guessing on the two items that are genuine business decisions (both were
+already logged in `TODO.md` by a prior pass and remain open, not re-solved here).
+
+1. **Quotation audit-log entries are now server-authoritative, not client-forgeable.** Previously,
+   `QuotationPage.tsx` called the generic `POST /api/audit-log` after a successful create/update/
+   duplicate/workflow API call to record what happened — but any authenticated caller could bypass
+   the UI and call that same endpoint directly with fabricated `module`/`action`/`details` text,
+   and the Dashboard's Sales Activity Analytics counts exactly those `action` strings out of
+   `audit_log`. Fixed: `api/handlers/quotes.ts` now writes its own audit-log entry directly inside
+   each mutation handler (`writeQuoteAuditEntry()`), using only the already-verified session
+   identity — never anything from the request body. This covers create, update (any `PATCH` except
+   a pure interest-flag toggle, matching the exact granularity the client used to log), duplicate,
+   and every workflow transition (Submitted/Approved/Rejected/Status Changed, same wording as
+   before). `QuotationPage.tsx`'s 4 client-side `onAudit(...)` calls for these events were removed
+   (server does it now; keeping both would double-log), and its now-unused `onAudit` prop was
+   removed along with the pass-through in `App.tsx` (Settings/User Management/Role Management keep
+   their own unrelated, unchanged client-side audit calls). `POST /api/audit-log` now rejects the
+   `"ใบเสนอราคา"` module with a 403 — quotation audit events can only be written by the server now.
+2. **Reject/Customer-Reject/Cancel now require a comment server-side, not just in the UI.**
+   `QuoteDocument.tsx` already refused to submit these actions without a comment, but
+   `api/handlers/quotes.ts`'s workflow endpoint accepted an empty one from a direct API call. Fixed
+   with a new `COMMENT_REQUIRED_ACTIONS` set (`api/_lib/quoteWorkflow.ts`) and a `400` check.
+3. **Added the 3 missing terminal-workflow notifications.** `marked_won`, `marked_lost`, and
+   `cancelled` never notified the quote's creator, unlike every other workflow transition. Added,
+   following the existing per-action notification pattern. Required extending `NotificationType`
+   (`quotation_won`/`quotation_lost`/`quotation_cancelled`), a matching icon in
+   `NotificationBell.tsx` (Trophy/TrendingDown/XOctagon), and a matching seed-label entry in
+   `api/_lib/systemSeed.ts` — TypeScript's `Record<NotificationType, ...>` maps caught both places
+   at compile time when the union grew.
+4. **Re-verified Expected Sales vs. Sales Forecast predicate consistency** (an addendum checklist
+   item) — confirmed already correct from the prior pass (KPI/ranking use the literal
+   `isPotentialOpportunity` predicate; the separate forecast additionally excludes
+   `CLOSED_STATUSES`), not a live bug. No code change; documented as verified rather than assumed.
+
+**Not fixed / re-assessed**: the two remaining addendum "Current Critical Issues" — automated
+tests/CI/live-data verification, and the free-text salesperson/department reporting-identity model
+— are unchanged from the prior pass's assessment (the latter already logged as an explicit
+business decision in `TODO.md`; the former is a standalone infrastructure effort, not a bug fix).
+
+**Found, not fixed** (out of scope for this pass, logged in `TODO.md`): `App.tsx`'s session-fetch
+boot `useEffect` has no error handling, so a thrown network error (including the pre-existing
+sandboxed-session MongoDB DNS issue) leaves the app stuck on its loading spinner forever instead of
+falling back to the sign-in screen — found during this pass's browser verification, pre-existing,
+not introduced by any change here.
+
+**Verification**: `npx tsc -b && npx tsc --noEmit -p tsconfig.api.json && npx vite build` — clean.
+`npm run lint` — clean (same 2 pre-existing unrelated warnings). `npx vercel dev` started
+successfully; `GET /api/auth/session` still 500s with the identical, previously-documented
+`querySrv ECONNREFUSED _mongodb._tcp.tcsdb.zdnus3w.mongodb.net` (confirmed via the dev-server log,
+not just the HTTP response) — the same reproducible sandboxed-environment DNS limitation as every
+prior 2026-07-10 pass, now reproduced a fourth time, not a regression from this pass's changes. A
+Playwright check against the running dev server found no console errors beyond that one expected
+network failure.
+
+**Files changed**: `api/_lib/quoteWorkflow.ts`, `api/handlers/quotes.ts`, `api/audit-log/index.ts`,
+`api/_lib/systemSeed.ts`, `src/lib/notifications.ts`, `src/components/NotificationBell.tsx`,
+`src/pages/quotation/QuotationPage.tsx`, `src/App.tsx`. Docs: this file, `PROJECT_STATUS.md`,
+`TODO.md`, `IMPLEMENTATION_CHECKLIST.md`, `CLAUDE.md`, `CODEX_REVIEW_REPORT.md` (new "Claude Fix
+Status — Addendum Follow-up" section), `MODULES/{Quotation,Notifications,AuditLog,Dashboard}.md`.
+
+---
+
+## 2026-07-10 — Dashboard UI/UX redesign + app-wide UX enhancement pass
+
+**Scope**: two combined requests — (1) a full visual/layout redesign of the Dashboard (the previous
+flat ~20-card KPI grid plus a `recharts` `FunnelChart` pipeline that overlapped its own Thai labels
+and read as unprofessional), and (2) a broader "make the whole ERP easier for a first-time,
+non-technical employee to use" pass (onboarding tour, shared UX components, form clarity, sidebar
+grouping). Given the size of request (2), this pass covers a real, working, appropriately-scoped
+subset rather than every item in the brief — see "Not done / explicitly out of scope" below.
+
+**Dashboard redesign**:
+1. **Replaced the Sales Pipeline funnel** (`PipelineFunnel.tsx`, deleted) with `PipelineSteps.tsx` — horizontal connected step cards (stage badge/count/value/conversion %) instead of a `FunnelChart` squeezing 9 Thai labels into a shrinking silhouette. The 3 "left the pipeline" outcomes (Customer Rejected/Lost/Cancelled) render as a separate row, since they're branches, not sequential steps.
+2. **Split the flat ~20-card KPI grid** (`KpiGrid.tsx`, deleted) into `PrimaryKpiCards.tsx` (6 headline metrics: Total Quotations, Total Quotation Value, Closed Sales, Expected Sales, Win Rate, Active Quotations — larger cards, helper captions, info tooltips) and `SecondaryKpiSummary.tsx` (Won/Lost/Non-Active/Avg Deal Size/Avg Closing Time/Pending Approvals/Overdue Follow-ups/Total Customers/Total Products — small dense mini-cards under their own section label).
+3. **New `QuotationStatusSummary.tsx`**: a single Win/Lose/Active/Non-Active donut + table, replacing the redundant `QuotationStatusDonut` (all 9 raw statuses) + `WinLoseDonut` pair — counts come straight from the same KPI numbers shown elsewhere (never disagree), value-per-bucket is a documented approximation from the filtered pipeline's per-stage totals.
+4. **New `SalesActivityAnalytics.tsx` section**: quotation Created/Updated counts by week/month/quarter/year (tabbed, like the existing Revenue Trend grouping), filterable by the existing salesperson/department controls. New `salesActivity` aggregation in `api/dashboard/index.ts` reading `audit_log`'s `"Quotation Created"`/`"Quotation Updated"` entries, bucketed with the same `isoWeekKey`/`quarterKey`/`lastN*Keys` helpers `revenueTrend` already uses. New `bangkokDayBoundsUtc()`-adjacent Bangkok-anchored bucketing, gated by the same `auditLog:view` permission as Activity Timeline (both read the same collection).
+5. **Reordered the whole page** into the requested section order (header/filters → primary KPIs → secondary KPI summary → status summary + forecast → revenue/job-type charts → pipeline → sales activity → rankings → top customers/job types → approvals/follow-ups → recent activity) and **removed** `QuotationTrendChart` (a documented revenue-series approximation), `SalesByEmployeeChart` (redundant with the ranking table directly below it), and `MonthlyClosingRateChart` (redundant with the new status summary) — decluttering, not just reordering, per the explicit "do not just add more cards" instruction. Net effect: the `DashboardPage` bundle chunk shrank from ~505KB to ~478KB raw (below Vite's 500KB warning threshold for the first time).
+
+**UX enhancement (bounded subset — see "Not done" below for the rest)**:
+6. **`src/components/EmptyState.tsx`** (new, shared) — consolidates markup previously copy-pasted across `ProductList.tsx`/`QuoteList.tsx`/`DashboardPage.tsx`; wired into all three plus a real "create your first X" action button where one already existed.
+7. **`src/components/PageHeader.tsx`** (new, shared) — title + plain-language description + actions slot; wired into the Dashboard (Quotation/Products/other pages not yet migrated — see TODO.md).
+8. **`src/components/MetricInfoTooltip.tsx`** (new) — click-to-toggle (i) icon explaining a non-obvious metric in one sentence; applied to Expected Sales/Win Rate/Active Jobs/Non-Active Jobs/Average Deal Size/Average Closing Time/Pending Approvals on the Dashboard.
+9. **Sidebar regrouped** (`App.tsx`'s new `NAV_GROUPS`) into Main/Sales/Inventory/Administration section labels — a pure display grouping over the existing flat `navItems`, not a new page or data model; a group is hidden entirely if none of its items survive the existing RBAC filter.
+10. **Guided onboarding tour** — added `driver.js` (chosen over React Joyride: no React-specific tour state machine was needed, so the smaller framework-agnostic dependency was preferred). `src/components/GuidedTour.tsx` (`useGuidedTour()` hook) walks the sidebar, Dashboard title/filters/KPIs, notification bell, and user menu — scoped to elements that are on-screen together, not choreographed cross-page navigation (a separately-scoped, bigger undertaking). Offered once via a Start/Skip banner the first time a user reaches a "ready" session (`App.tsx`); always re-launchable from the user-menu's new "Help" item. Completion tracked per-user in `localStorage` (`src/lib/tour.ts`) — a UI preference, not business data, so deliberately not a MongoDB field.
+11. **Quotation form**: required-field asterisk + inline client-side check on Client Name and (for new quotes) Job Type before hitting the server, an unsaved-changes `beforeunload` browser warning (covers accidental tab close/refresh — does not yet cover in-app sidebar navigation mid-edit, which this app's flat `activeNav` state doesn't currently intercept).
+12. **Required-field asterisks** added to Product Form (code/category/name) and the User Management create form (full name/employee ID/username/email/role/password) — both already had or now have their existing inline per-field error messages surfaced, just weren't visually marked as required beforehand.
+
+**Not done / explicitly out of scope this pass** (a genuinely large brief — see TODO.md for tracking):
+- Full onboarding tour across every module (Leads/Customers/Approvals steps weren't added — those modules don't have dedicated pages yet, see IMPLEMENTATION_CHECKLIST.md).
+- `PageHeader`/breadcrumb rollout to every page (only Dashboard uses it so far).
+- Full accessibility audit (aria-label pass, contrast audit, keyboard-nav audit) — not attempted beyond what already existed plus the new components' own basic `aria-label`/`aria-expanded`/focus-visible handling.
+- In-app (non-browser) unsaved-changes interception when navigating away from the Quotation form via the sidebar.
+- Customer/Lead form UX — those modules are schema-only, no UI exists yet (see MODULES/Customer.md, MODULES/Lead.md).
+
+**Verification**: `npx tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+Two real lint errors surfaced mid-pass and were fixed: a `react-hooks/set-state-in-effect`
+violation in the tour-prompt trigger (fixed via React's "adjust state during rendering" pattern,
+using `useState` not `useRef` — refs can't be read/written during render either, a stricter rule
+than expected) and a duplicate of the same pattern in `QuoteDocument.tsx`'s dirty-check effect
+(false alarm, no fix needed — that one was already inside a real `useEffect`). Attempted live
+browser verification a third time (fresh `vercel dev` instance) — the same, now three-times-
+reproduced sandboxed-environment limitation (MongoDB Atlas SRV DNS resolution) blocked getting
+past the login gate with real data, but a Playwright pass confirmed the client bundle itself
+(including the new dashboard components and `driver.js`) loads and initializes with zero
+unrelated console errors, only the expected session-fetch network failure.
+
+---
+
 ## 2026-07-10 — Codex review fix pass: quote validation, Dashboard filter honesty, RBAC/upload hardening, doc accuracy
 
 **Scope**: an independent Codex review (`docs/CODEX_REVIEW_REPORT.md`, archived at

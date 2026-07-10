@@ -195,12 +195,12 @@ export function UserManagementPage({
           </h2>
           <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-5 space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div><label className={labelCls}>{t("users.field.fullName")}</label><input className={inputCls} value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} /></div>
-              <div><label className={labelCls}>{t("users.field.employeeId")}</label><input className={inputCls} value={form.employeeId} onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))} /></div>
+              <div><label className={labelCls}>{t("users.field.fullName")} <span className="text-[#e05252]">*</span></label><input className={inputCls} value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} /></div>
+              <div><label className={labelCls}>{t("users.field.employeeId")} <span className="text-[#e05252]">*</span></label><input className={inputCls} value={form.employeeId} onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div><label className={labelCls}>{t("users.field.username")}</label><input className={inputCls} value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} /></div>
-              <div><label className={labelCls}>{t("users.field.email")}</label><input type="email" className={inputCls} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
+              <div><label className={labelCls}>{t("users.field.username")} <span className="text-[#e05252]">*</span></label><input className={inputCls} value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} /></div>
+              <div><label className={labelCls}>{t("users.field.email")} <span className="text-[#e05252]">*</span></label><input type="email" className={inputCls} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div><label className={labelCls}>{t("users.field.phone")}</label><input className={inputCls} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
@@ -217,7 +217,7 @@ export function UserManagementPage({
                 <datalist id="position-suggestions">{POSITION_SUGGESTIONS.map((p) => <option key={p} value={p} />)}</datalist>
               </div>
               <div>
-                <label className={labelCls}>{t("users.field.role")}</label>
+                <label className={labelCls}>{t("users.field.role")} <span className="text-[#e05252]">*</span></label>
                 <select
                   className={inputCls}
                   value={form.roleKey}
@@ -240,8 +240,8 @@ export function UserManagementPage({
             )}
             {view === "create" && (
               <div className="grid grid-cols-2 gap-4">
-                <div><label className={labelCls}>{t("users.field.initialPassword")}</label><input type="password" className={inputCls} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} /></div>
-                <div><label className={labelCls}>{t("users.field.confirmPassword")}</label><input type="password" className={inputCls} value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} /></div>
+                <div><label className={labelCls}>{t("users.field.initialPassword")} <span className="text-[#e05252]">*</span></label><input type="password" className={inputCls} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} /></div>
+                <div><label className={labelCls}>{t("users.field.confirmPassword")} <span className="text-[#e05252]">*</span></label><input type="password" className={inputCls} value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} /></div>
               </div>
             )}
             {error && <p className="text-xs text-[#e05252]">{error}</p>}

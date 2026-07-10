@@ -23,6 +23,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const action = typeof body.action === "string" ? body.action : "";
       const details = typeof body.details === "string" ? body.details : "";
       if (!action) throw new HttpError(400, "Missing action");
+      // Quotation events are written authoritatively by api/handlers/quotes.ts itself (create/
+      // update/duplicate/every workflow transition) — never from this generic client-facing
+      // endpoint. Before this, any authenticated caller could POST an arbitrary "Quotation
+      // Created"/"Quotation Updated" entry here, which the Dashboard's Sales Activity Analytics
+      // counts from `audit_log`, making that report forgeable. Flagged by the 2026-07-10 Codex
+      // review ("Audit integrity" Critical finding).
+      if (module === "ใบเสนอราคา") {
+        throw new HttpError(403, "เหตุการณ์ใบเสนอราคาถูกบันทึกโดยระบบโดยอัตโนมัติ ไม่สามารถบันทึกผ่าน API นี้ได้");
+      }
 
       const auditLog = await auditLogCollection();
       const insertResult = await auditLog.insertOne({

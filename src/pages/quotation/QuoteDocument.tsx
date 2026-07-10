@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight, Printer, Copy, Save, Send, CheckCircle2, Building2, Hash, CalendarDays,
   ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History,
@@ -121,7 +121,27 @@ export function QuoteDocument({
     followUpDate,
   });
 
+  // Warn on an accidental tab close/refresh while there are unsaved edits — a plain JSON diff
+  // against the form's state at mount is a cheap, good-enough "is this dirty" check for a leave-
+  // page guard; it doesn't need to be a precise field-by-field diff. Covers real browser
+  // navigation (`beforeunload`) only — switching sidebar sections is a React state change, not a
+  // browser navigation event, so this doesn't catch that case; a further enhancement, not done here.
+  const initialDraftJson = useRef(JSON.stringify(currentDraft()));
+  useEffect(() => {
+    if (disabled) return;
+    const isDirty = JSON.stringify(currentDraft()) !== initialDraftJson.current;
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  });
+
+  // Client-side check for the two most common save failures — instant, clear Thai feedback
+  // instead of a round trip to the server just to learn the same thing (the server still
+  // validates both regardless; this only saves a request in the common case).
   const save = (message: string) => {
+    if (!client.trim()) { showToast(t("quotation.errorClientRequired")); return; }
+    if (mode === "new" && !jobTypeCode) { showToast(t("quotation.errorJobTypeRequired")); return; }
     onSave(currentDraft());
     showToast(message);
   };
@@ -274,7 +294,7 @@ export function QuoteDocument({
               <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</p>
               <div className="space-y-2.5">
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.clientName")}</label>
+                  <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.clientName")} <span className="text-[#e05252]">*</span></label>
                   <input disabled={disabled} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={client} onChange={(e) => setClient(e.target.value)} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">

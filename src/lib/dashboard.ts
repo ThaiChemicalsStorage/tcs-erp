@@ -102,6 +102,19 @@ export interface RevenueTrend {
   yearly: RevenuePeriod[];
 }
 
+export interface SalesActivityPeriod {
+  period: string;
+  created: number;
+  edited: number;
+}
+
+export interface SalesActivityTrend {
+  weekly: SalesActivityPeriod[];
+  monthly: SalesActivityPeriod[];
+  quarterly: SalesActivityPeriod[];
+  yearly: SalesActivityPeriod[];
+}
+
 export interface Forecast {
   thisMonth: number;
   thisQuarter: number;
@@ -173,6 +186,8 @@ export interface DashboardStats {
   followUps: FollowUps;
   /** Null when the caller lacks auditLog:view — the frontend hides the Activity Timeline section entirely in that case. */
   activityTimeline: AuditLogEntry[] | null;
+  /** Null when the caller lacks auditLog:view (same gate as activityTimeline, both read audit_log). Quotation Created/Updated counts per period, trailing window ending at the date filter's `to` (or today) — same rolling-window rationale as `revenueTrend`. */
+  salesActivity: SalesActivityTrend | null;
   /** Null when the caller lacks quotations:approve — the frontend hides the Approval Dashboard section entirely in that case. */
   approvalDashboard: ApprovalDashboard | null;
   notificationSummary: NotificationSummary;

@@ -7,7 +7,10 @@ export type NotificationType =
   | "quotation_rejected"
   | "quotation_high_value"
   | "quotation_customer_accepted"
-  | "quotation_customer_rejected";
+  | "quotation_customer_rejected"
+  | "quotation_won"
+  | "quotation_lost"
+  | "quotation_cancelled";
 
 export interface Notification {
   id: string;

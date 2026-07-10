@@ -93,12 +93,12 @@ export function ProductForm({
         <div className="bg-card border border-border rounded-xl p-6 space-y-4">
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>{t("products.form.codeLabel")}</label>
+              <label className={labelCls}>{t("products.form.codeLabel")} <span className="text-[#e05252]">*</span></label>
               <input className={`${inputCls} font-mono`} value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("products.form.codePlaceholder")} />
               {errors.code && <p className="text-xs text-[#e05252] mt-1">{errors.code}</p>}
             </div>
             <div>
-              <label className={labelCls}>{t("products.col.category")}</label>
+              <label className={labelCls}>{t("products.col.category")} <span className="text-[#e05252]">*</span></label>
               <select className={`${inputCls} appearance-none`} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                 {activeCategories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}{c.archived ? t("products.categoryArchivedSuffix") : ""}</option>
@@ -109,7 +109,7 @@ export function ProductForm({
           </div>
 
           <div>
-            <label className={labelCls}>{t("products.col.name")}</label>
+            <label className={labelCls}>{t("products.col.name")} <span className="text-[#e05252]">*</span></label>
             <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("products.form.namePlaceholder")} />
             {errors.name && <p className="text-xs text-[#e05252] mt-1">{errors.name}</p>}
           </div>

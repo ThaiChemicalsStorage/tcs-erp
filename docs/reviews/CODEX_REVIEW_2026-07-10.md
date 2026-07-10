@@ -1,5 +1,7 @@
 # Archived Codex Review — 2026-07-10
 
-This is the dated archive of the current review report.
+This is the dated archive of the independent review. It tracks the current re-review after same-day remediation changes.
 
-See [CODEX_REVIEW_REPORT.md](../CODEX_REVIEW_REPORT.md) for the complete findings, required checklist, and suggested fix plan. The implementation is **not production-ready** because Dashboard filters are not universally applied, Dashboard export is missing, quote API payloads are insufficiently validated, and documentation conflicts with the codebase.
+The ERP remains **not production-ready**. Verified improvements include server-side quote validation/recalculated totals, valid Job Type enforcement on create, CSV Dashboard export, filter-aware Customer Interest/activity analytics, atomic numbering, upload validation, and improved Dashboard layout. Critical residual risks are audit-event forgery through the generic authenticated audit endpoint, quotation mutations not writing authoritative audit events, free-text salesperson/department reporting identity, and absence of automated or live browser/MongoDB/PDF verification.
+
+The complete source-evidenced report, required checklist, and fix plan are in [CODEX_REVIEW_REPORT.md](../CODEX_REVIEW_REPORT.md).

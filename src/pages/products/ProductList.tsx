@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { EmptyState } from "../../components/EmptyState";
 import { useI18n } from "../../lib/i18n";
 
 type SortKey = "code" | "name" | "category" | "unit" | "defaultPrice" | "status" | "updatedAt";
@@ -146,16 +147,7 @@ export function ProductList({
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         {products.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <Package size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm font-medium text-foreground">{t("empty.products.title")}</p>
-            <p className="text-xs text-muted-foreground max-w-xs text-center">{t("empty.products.sub")}</p>
-            <button onClick={onCreateNew} className="mt-1 flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
-              <Plus size={15} /> {t("empty.products.action")}
-            </button>
-          </div>
+          <EmptyState icon={Package} title={t("empty.products.title")} description={t("empty.products.sub")} actionLabel={t("empty.products.action")} onAction={onCreateNew} compact />
         ) : sorted.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, FileText, Target, X } from "lucide-react";
+import { EmptyState } from "../../components/EmptyState";
 import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusStyle, statusIcon, statusLabelKey } from "../../lib/quotes";
 import type { JobType } from "../../lib/jobTypes";
 import { initials } from "../../lib/users";
@@ -126,16 +127,7 @@ export function QuoteList({
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         {quotes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-              <FileText size={20} className="text-muted-foreground" />
-            </div>
-            <p className="text-sm font-medium text-foreground">{t("empty.quotations.title")}</p>
-            <p className="text-xs text-muted-foreground max-w-xs text-center">{t("empty.quotations.sub")}</p>
-            <button onClick={onCreateNew} className="mt-1 flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
-              <Plus size={15} /> {t("empty.quotations.action")}
-            </button>
-          </div>
+          <EmptyState icon={FileText} title={t("empty.quotations.title")} description={t("empty.quotations.sub")} actionLabel={t("empty.quotations.action")} onAction={onCreateNew} compact />
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">

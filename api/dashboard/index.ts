@@ -578,6 +578,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       activityTimeline = entries.map(withStringId);
     }
 
+    // ── Sales activity analytics — quotation Created/Updated counts, trailing week/month/quarter/year ──
+    // Same gate as Activity Timeline (both read `audit_log`); same userName-based salesperson/
+    // department match as everywhere else in this file, but deliberately unbounded by the date-range
+    // filter — a rolling trend window, same rationale as `revenueTrend` above.
+    let salesActivity: {
+      weekly: { period: string; created: number; edited: number }[];
+      monthly: { period: string; created: number; edited: number }[];
+      quarterly: { period: string; created: number; edited: number }[];
+      yearly: { period: string; created: number; edited: number }[];
+    } | null = null;
+    if (roleHasPermission(ctx.role, "auditLog:view")) {
+      const activityMatch: Record<string, unknown> = { action: { $in: ["Quotation Created", "Quotation Updated"] } };
+      if (salespersonFilter && salespersonFilter !== "all") activityMatch.userName = salespersonFilter;
+      if (salespeopleInDepartment) {
+        const deptCond = { userName: { $in: [...salespeopleInDepartment] } };
+        if (activityMatch.userName) {
+          activityMatch.$and = [{ userName: activityMatch.userName }, deptCond];
+          delete activityMatch.userName;
+        } else {
+          Object.assign(activityMatch, deptCond);
+        }
+      }
+      const activityDocs = await auditLog.find(activityMatch, { projection: { action: 1, createdAt: 1 } }).toArray();
+      const bucket = <T extends string>(keyFn: (d: Date) => T) => {
+        const map = new Map<T, { created: number; edited: number }>();
+        for (const d of activityDocs) {
+          const key = keyFn(new Date(d.createdAt));
+          const entry = map.get(key) ?? { created: 0, edited: 0 };
+          if (d.action === "Quotation Created") entry.created += 1; else entry.edited += 1;
+          map.set(key, entry);
+        }
+        return map;
+      };
+      const weekMap = bucket((d) => isoWeekKey(d) as string);
+      const monthMap = bucket((d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+      const quarterMap = bucket((d) => quarterKey(d.getUTCFullYear(), d.getUTCMonth()));
+      const yearMap = bucket((d) => String(d.getUTCFullYear()));
+      const zeroFill = <T extends string>(keys: T[], map: Map<T, { created: number; edited: number }>) =>
+        keys.map((period) => ({ period, ...(map.get(period) ?? { created: 0, edited: 0 }) }));
+      salesActivity = {
+        weekly: zeroFill(lastNWeekKeys(12, trendAnchor), weekMap),
+        monthly: zeroFill(lastNMonthKeys(MONTHS_BACK, trendAnchor), monthMap),
+        quarterly: zeroFill(lastNQuarterKeys(8, trendAnchor), quarterMap),
+        yearly: zeroFill(lastNYearKeys(5, trendAnchor), yearMap),
+      };
+    }
+
     // ── Approval dashboard — only for callers who can already approve quotations ──
     // The detailed, actionable pending-approvals list (with id/client/amount/salesperson/submitted
     // date, plus Approve/Reject affordance) is gated the same way — Approve/Reject buttons render
@@ -701,6 +748,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       forecast,
       followUps,
       activityTimeline,
+      salesActivity,
       approvalDashboard,
       notificationSummary,
       availableSalespeople,

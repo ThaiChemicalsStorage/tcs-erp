@@ -6,7 +6,7 @@ import type { User } from "../../lib/users";
 import type { Role } from "../../lib/roles";
 import {
   type Quote, type QuoteInterest, type QuoteDraftFields, type ApprovalAction, type QuotationListFilter,
-  createQuote, updateQuote, duplicateQuote, performWorkflowAction, approvalActionLabel, approvalActionLabelKey, computeQuotePermissions, nextQuoteId,
+  createQuote, updateQuote, duplicateQuote, performWorkflowAction, approvalActionLabelKey, computeQuotePermissions, nextQuoteId,
 } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import { QuoteList } from "./QuoteList";
@@ -30,7 +30,6 @@ export function QuotationPage({
   initialQuoteId,
   onQuoteIdConsumed,
   onNotify,
-  onAudit,
 }: {
   quotes: Quote[];
   setQuotes: React.Dispatch<React.SetStateAction<Quote[]>>;
@@ -48,7 +47,6 @@ export function QuotationPage({
   initialQuoteId: string | null;
   onQuoteIdConsumed: () => void;
   onNotify: () => void;
-  onAudit: (action: string, details: string) => void;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<"list" | "new" | "detail">("list");
@@ -101,18 +99,20 @@ export function QuotationPage({
     setQuotes((prev) => prev.map((q) => (q.id === id ? updated : q)));
   };
 
+  // Audit-log entries for create/update/duplicate/workflow are written server-side now (see the
+  // 2026-07-10 Codex review's "Audit integrity" Critical finding + api/handlers/quotes.ts) — this
+  // page no longer calls onAudit() for any of them, since a client-forgeable audit trail (with the
+  // exact same action text Sales Activity Analytics counts from) was the actual defect.
   const handleSave = async (data: QuoteDraftFields) => {
     try {
       if (view === "new") {
         const created = await createQuote(data);
         setQuotes((prev) => [created, ...prev]);
-        onAudit("Quotation Created", `สร้างใบเสนอราคา ${created.id} (${created.client})`);
         setSelectedId(created.id);
         setView("detail");
       } else if (selectedQuote) {
         const updated = await updateQuote(selectedQuote.id, data);
         setQuotes((prev) => prev.map((q) => (q.id === selectedQuote.id ? updated : q)));
-        onAudit("Quotation Updated", `แก้ไขใบเสนอราคา ${selectedQuote.id}`);
       }
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("quotation.saveErrorToast"));
@@ -125,7 +125,6 @@ export function QuotationPage({
       const created = await duplicateQuote(selectedQuote.id);
       setQuotes((prev) => [created, ...prev]);
       setSelectedId(created.id);
-      onAudit("Quotation Created", `คัดลอกใบเสนอราคาเป็น ${created.id} จาก ${selectedQuote.id}`);
       toast.show(t("quotation.duplicateSuccessToast"));
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("quotation.duplicateErrorToast"));
@@ -140,13 +139,6 @@ export function QuotationPage({
       const updated = await performWorkflowAction(selectedQuote.id, action, comment, draft);
       setQuotes((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
       onNotify();
-
-      const auditAction =
-        action === "submitted" ? "Quotation Submitted" :
-        action === "approved" ? "Quotation Approved" :
-        action === "rejected" ? "Quotation Rejected" :
-        "Status Changed";
-      onAudit(auditAction, `${approvalActionLabel[action]} ใบเสนอราคา ${updated.id}${comment ? ` — ${comment}` : ""}`);
       toast.show(t("quotation.actionCompletedToast").replace("{action}", t(approvalActionLabelKey[action])));
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("quotation.workflowErrorToast"));

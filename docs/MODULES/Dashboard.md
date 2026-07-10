@@ -3,15 +3,19 @@
 ## Purpose
 
 Executive Business Intelligence dashboard — the landing view after sign-in. Gives real-time
-read on sales performance: KPIs, a sales pipeline funnel, rankings, forecasts, follow-up
+read on sales performance: KPIs, a sales pipeline, rankings, forecasts, follow-up
 reminders, and activity/approval feeds. **Every number on this page comes from a real MongoDB
 query** (`GET /api/dashboard`) — no hardcoded/sample/template data anywhere. Originally shipped
 2026-07-09 as a 7-KPI/2-chart page; majorly rebuilt 2026-07-10 into a ~20-KPI Executive
-Dashboard; **completed against the full Executive Dashboard business spec later the same day**
-(second 2026-07-10 pass) — Pending Approvals list with inline Approve/Reject, Non-Active Jobs
+Dashboard; completed against the full Executive Dashboard business spec later the same day
+(second pass) — Pending Approvals list with inline Approve/Reject, Non-Active Jobs
 KPI, Department filter, Revenue Trend weekly/quarterly/yearly grouping, Job Type Distribution
 chart, full Sales/Customer/Job Type ranking tables (Total Value alongside Won Value everywhere,
-Last Quotation Date, full sortability), and Won/Lost-aware Average Closing Time. Driven by the
+Last Quotation Date, full sortability), and Won/Lost-aware Average Closing Time; fixed against an
+independent Codex review (third pass, same day) — see CHANGELOG.md for that pass's detail; then
+**visually redesigned** (fourth pass, same day) — the flat KPI grid and the funnel-shaped
+pipeline chart (labels overlapping, reading as unprofessional) were replaced with a tiered KPI
+hierarchy and horizontal pipeline step cards, described in full below. Driven by the
 Job Type/Potential Opportunity/Follow-up Date fields added to `Quote` earlier the same day (see
 [Quotation.md](./Quotation.md)).
 
@@ -88,15 +92,40 @@ documented rather than silently assumed:
 `src/pages/dashboard/` was split from a single file into:
 
 - `DashboardPage.tsx` — top-level: filter state, fetch orchestration, empty-state/loading gate,
-  composes every section below.
+  composes every section below in the order described in "Section Order" below.
 - `DashboardFilterBar.tsx` — date-range presets + Department filter + salesperson filter.
-- `KpiGrid.tsx` — KPI cards (see Current Features), incl. Pending Approvals and Non-Active Jobs.
-- `PipelineFunnel.tsx` — recharts `FunnelChart` + a clickable per-stage table (count/value/
-  conversion %). Conversion % uses an explicit predecessor map (`PIPELINE_PREDECESSOR` in
-  `api/dashboard/index.ts`) mirroring the real workflow state machine, **not** simple
-  array-adjacency — the workflow branches (Sent to Customer → Accepted *or* Rejected), so a
-  naive "previous row in the table" comparison would produce a nonsensical percentage for the
-  Customer Rejected/Lost branch.
+- `PrimaryKpiCards.tsx` (added 2026-07-10, UI/UX redesign, replaces `KpiGrid.tsx`) — the 6
+  headline metrics (Total Quotations, Total Quotation Value, Closed Sales, Expected Sales, Win
+  Rate, Active Quotations), larger cards with a helper caption and a `MetricInfoTooltip` where
+  the metric isn't self-explanatory.
+- `SecondaryKpiSummary.tsx` (added 2026-07-10, replaces the rest of `KpiGrid.tsx`) — Won/Lost/
+  Non-Active Jobs, Average Deal Size, Average Closing Time, Pending Approvals, Overdue
+  Follow-ups, Total Customers, Total Products as small, dense mini-cards under their own section
+  label — deliberately lower visual weight than the primary tier.
+- `QuotationStatusSummary.tsx` (added 2026-07-10, replaces `DashboardCharts.tsx`'s
+  `QuotationStatusDonut` + `WinLoseDonut`) — one Win/Lose/Active/Non-Active donut + table. Counts
+  are the same numbers as the KPI cards (can never visually disagree); per-bucket value is a
+  documented approximation summed from the filtered pipeline's per-stage totals.
+- `PipelineSteps.tsx` (added 2026-07-10, **replaces `PipelineFunnel.tsx`**, deleted) — horizontal
+  connected step cards (stage badge, count, value, conversion % from the previous stage) instead
+  of a `recharts` `FunnelChart`, which squeezed 9 Thai status labels into a shrinking silhouette
+  and read as broken/unprofessional. The 3 "left the pipeline" outcomes (Customer Rejected/Lost/
+  Cancelled) render as a separate row below the main Draft→...→Won flow, since they're branches
+  off the main path, not sequential steps in it. Conversion % still uses the same explicit
+  predecessor map (`PIPELINE_PREDECESSOR` in `api/dashboard/index.ts`) mirroring the real
+  workflow state machine, **not** simple array-adjacency — the workflow branches (Sent to
+  Customer → Accepted *or* Rejected), so a naive "previous stage in the list" comparison would
+  produce a nonsensical percentage for the Customer Rejected/Lost branch.
+- `SalesActivityAnalytics.tsx` (added 2026-07-10, new section) — quotation Created/Updated
+  counts, tabbed by week/month/quarter/year (same grouping UX as Revenue Trend), backed by a new
+  `salesActivity` field in the API response (see Database Tables / APIs below). Chart + a compact
+  trailing-8-period table. Counts come from `audit_log` entries with `action: {$in: ["Quotation
+  Created", "Quotation Updated"]}` — when this section was first built, those entries were still
+  client-written (forgeable via a direct `POST /api/audit-log` call), which an independent Codex
+  re-review flagged as making this data non-authoritative for compliance-grade reporting. **Fixed
+  2026-07-10 (fifth pass)**: those exact entries are now written server-side by `api/handlers/
+  quotes.ts` itself, and `POST /api/audit-log` rejects the quotation module outright — this
+  section's data is now genuinely trustworthy, not just displayed. See [AuditLog.md](./AuditLog.md).
 - `SalesPerformanceTable.tsx` — one table component, two uses: the full "Sales Performance"
   section (every salesperson) and the "Executive Ranking" (top 10 by revenue, sortable) — same
   underlying `salesPerformance` array from the API, sorted/sliced client-side. 11 columns, all
@@ -121,12 +150,18 @@ documented rather than silently assumed:
   (`approvalDashboard.canReject`, server-computed).
 - `NotificationSummary.tsx` — the caller's own unread count + breakdown by type.
 - `DashboardCharts.tsx` — shared `ChartCard` wrapper (`ChartCard.tsx`, now supports an `actions`
-  slot for the Revenue Trend grouping toggle) plus every named chart: `RevenueTrendChart`
+  slot for the Revenue Trend grouping toggle) plus the remaining named charts: `RevenueTrendChart`
   (weekly/monthly/quarterly/yearly toggle, backed by `revenueTrend` in the API response),
-  `QuotationTrendChart`, `SalesByEmployeeChart`, `RevenueByJobTypeChart` (horizontal grouped bar,
-  Total Value + Won Value, all active job types — no top-N cutoff), `JobTypeDistributionChart`
-  (new — quotation *count* donut by job type), `QuotationStatusDonut`, `WinLoseDonut`,
-  `ExpectedSalesForecastChart`, `MonthlyClosingRateChart`, `ProductsByCategoryChart`.
+  `RevenueByJobTypeChart` (horizontal grouped bar, Total Value + Won Value, all active job types —
+  no top-N cutoff), `JobTypeDistributionChart` (quotation *count* donut by job type),
+  `ExpectedSalesForecastChart`, `ProductsByCategoryChart`. **2026-07-10 UI/UX redesign**:
+  `QuotationTrendChart`, `SalesByEmployeeChart`, `QuotationStatusDonut`, `WinLoseDonut`, and
+  `MonthlyClosingRateChart` were removed from this file — their information now lives in
+  `QuotationStatusSummary.tsx` (Win/Lose/Active/Non-Active) and `SalesActivityAnalytics.tsx`
+  (Created/Updated trend), and `SalesByEmployeeChart`'s data is still available in the unchanged
+  Sales Performance table below. This shrank the Dashboard's own JS chunk from ~505KB to ~478KB
+  (back under Vite's 500KB raw-size warning), since the redesign removed more chart code than the
+  new components added.
 - `format.ts` / `dateRanges.ts` — number/date/period-label formatting helpers and date-range-
   preset math, extracted since they're now used across many of the files above.
 
@@ -153,7 +188,9 @@ None owned by this page — it's a read-only aggregation over `customers`, `lead
 ## APIs
 
 - `GET /api/dashboard?from=&to=&salesperson=&department=` (`api/dashboard/index.ts`) — gated by
-  `dashboard:view`. See [API.md](../API.md).
+  `dashboard:view`. See [API.md](../API.md). **2026-07-10**: response gained a `salesActivity`
+  field (weekly/monthly/quarterly/yearly Created vs. Updated counts, aggregated from `audit_log`,
+  filter-aware) backing `SalesActivityAnalytics.tsx`.
 - Approve/Reject actions from the Pending Approvals widget reuse the existing
   `POST /api/quotes/:id/workflow` route (same one the Quotation module's own approval buttons
   call) — no new API route was added for this.
@@ -169,13 +206,22 @@ by `quotations:approve`; the list's Reject button additionally by `quotations:re
 
 ## Current Features
 
-- KPI cards: Total Quotations, Total Quotation Value, Closed Sales, Expected Sales, Average
-  Deal Size, Win Rate, Lose Rate, Conversion Rate, Average Approval Time, Average Closing Time
-  (Won- and Lost-aware), Active/Non-Active/Expired Quotations, Pending Approvals, Overdue
-  Follow-ups, New/Repeat Customers, plus Total Customers/Leads/Products, Won/Lost Deals
+- **Primary KPI Cards** (`PrimaryKpiCards.tsx`, tier 1): Total Quotations, Total Quotation Value,
+  Closed Sales, Expected Sales, Win Rate, Active Quotations — larger cards, helper captions,
+  `MetricInfoTooltip` on the metrics that need explaining.
+- **Secondary KPI Summary** (`SecondaryKpiSummary.tsx`, tier 2, visually distinct from tier 1):
+  Won, Lost, Non-Active Jobs, Average Deal Size, Average Closing Time, Pending Approvals,
+  Overdue Follow-ups, Total Customers, Total Products, as compact mini-cards.
 - Date-range + Department + salesperson filters, applied server-side, driving every widget on
   the page (see the date-filter propagation note above for the one deliberate exception)
-- Sales Pipeline funnel (recharts `FunnelChart`) + clickable per-stage breakdown table
+- **Sales Pipeline** as horizontal step cards (`PipelineSteps.tsx`) — Draft → Pending Approval →
+  Approved → Sent to Customer → Customer Accepted → Won as one connected flow, with Customer
+  Rejected/Lost/Cancelled broken out as a separate off-ramp row below it (replaces the old
+  `FunnelChart`, whose 9 overlapping Thai labels read as broken/unprofessional).
+- **Quotation Status Summary** (`QuotationStatusSummary.tsx`) — Win/Lose/Active/Non-Active donut
+  + table, counts always match the KPI cards exactly.
+- **Sales Activity Analytics** (`SalesActivityAnalytics.tsx`) — quotation Created vs. Edited
+  counts, weekly/monthly/quarterly/yearly tabs, respects the salesperson/department filters.
 - Sales Performance table (every salesperson, all 11 spec columns) + Executive Ranking (top 10,
   sortable)
 - Job Type Analytics — sortable table, all active job types (zero-quote types included)
@@ -187,12 +233,22 @@ by `quotations:approve`; the list's Reject button additionally by `quotations:re
   an actionable Pending Approvals list with inline Approve/Reject — approvers only
 - Notification Summary (the caller's own unread count + by-type breakdown)
 - Activity Timeline (recent audit log entries) — `auditLog:view` holders only
-- 10 charts total: Revenue Trend (weekly/monthly/quarterly/yearly toggle), Quotation Trend,
-  Sales by Employee, Revenue by Job Type (Total + Won Value, grouped bars), Job Type
-  Distribution (quotation count), Quotation Status donut, Win/Lose donut, Expected Sales
-  forecast, Monthly Closing Rate, Products by Category donut — every chart has its own empty
-  state
-- Full page-level empty state when there's no quotation or product data at all
+- 5 remaining charts in `DashboardCharts.tsx`: Revenue Trend (weekly/monthly/quarterly/yearly
+  toggle), Revenue by Job Type (Total + Won Value, grouped bars), Job Type Distribution
+  (quotation count), Expected Sales forecast, Products by Category donut — every chart has its
+  own empty state. (Quotation Trend/Sales by Employee/Quotation Status/Win-Lose/Monthly Closing
+  Rate charts were retired in the 2026-07-10 redesign — see "Pages / Components" above for where
+  each one's data lives now.)
+- Full page-level empty state when there's no quotation or product data at all, via the shared
+  `EmptyState.tsx` component
+- Shared `PageHeader.tsx` for the page title/description/actions row
+- `MetricInfoTooltip.tsx` click-to-toggle info popovers on KPIs that need a one-line explanation
+  (Expected Sales, Win Rate, Non-Active Jobs, Average Deal Size, Average Closing Time, Pending
+  Approvals)
+- Optional Driver.js guided tour (`GuidedTour.tsx`, `useGuidedTour()`), first-time-only via
+  `src/lib/tour.ts`'s localStorage-backed `hasTourCompleted()`/`markTourCompleted()`; steps cover
+  the sidebar, dashboard title, filters, KPI cards, notification bell, and profile menu — see
+  [UI_GUIDELINES.md](../UI_GUIDELINES.md) "Guided Tour" for how to add a step.
 - Thai/English via `useI18n()` — dictionary keys added for every new label/column in this pass
 
 ## Future Improvements
@@ -205,14 +261,18 @@ by `quotations:approve`; the list's Reject button additionally by `quotations:re
   No dead/placeholder button exists for it anywhere in the UI.
 - Real Customer/Lead/Department entities would fix the free-text-matching caveats above (customer
   grouping, department filtering) and let the pipeline start at "Lead" instead of "Draft."
-- A dedicated monthly quotation-count aggregation would make `QuotationTrendChart` show real
-  count-over-time instead of reusing the revenue series.
 - Activity Timeline is a flat recent-N feed from `audit_log`, not grouped by period or
-  filterable by salesperson/job type — a real gap against a fully general "Activity Analytics"
-  requirement, not scoped into this pass.
+  filterable by salesperson/job type — the new Sales Activity Analytics section (this pass)
+  covers the Created/Edited-count part of this gap, but Activity Timeline itself is unchanged.
 - Once RBAC scoping is desired, cross-salesperson rankings/performance data could be restricted
   for the Sales User role (currently visible to any `dashboard:view` holder, same as every other
   KPI) — not built, no requirement for it yet, would need a new permission.
+- `PageHeader.tsx` is only used on the Dashboard so far — rolling it out to every other page
+  (Quotation, Product, User Management, Settings) is tracked in [TODO.md](../TODO.md) but not
+  done this pass.
+- The guided tour only covers Dashboard-visible elements (sidebar, filters, KPIs, bell, profile
+  menu) — a full cross-page onboarding flow (create a quotation, submit for approval, etc.) is
+  explicitly out of scope for this pass, tracked in TODO.md.
 
 ## Known Issues
 
@@ -230,3 +290,18 @@ by `quotations:approve`; the list's Reject button additionally by `quotations:re
   defect introduced by this pass. **Recommend a follow-up manual pass** (or CI/preview-deployment
   run) clicking through every filter/table/chart/action described above against real production
   data before considering this fully verified end-to-end.
+- **2026-07-10 UI/UX redesign pass**: same live-data verification limitation applies (reproduced
+  a third time). As a partial substitute, a Playwright-driven check confirmed the client bundle —
+  including the new `PrimaryKpiCards`/`SecondaryKpiSummary`/`PipelineSteps`/
+  `QuotationStatusSummary`/`SalesActivityAnalytics`/`GuidedTour` components and the new `driver.js`
+  dependency — initializes with zero unrelated console errors (only the expected
+  session-fetch network failure from the DNS issue above). Full rendered-with-real-data visual
+  review is still outstanding; recommend Codex or a follow-up session with working MongoDB
+  connectivity review the actual rendered Dashboard against the redesign spec.
+- **2026-07-10 audit-integrity/workflow-gap fix pass (fifth pass)**: same live-data verification
+  limitation, reproduced a fourth time (confirmed via the `vercel dev` server log itself, not just
+  the HTTP response, to rule out a regression). A Playwright check again found zero new console
+  errors. This pass also surfaced a real, pre-existing, unrelated gap: `App.tsx`'s session-fetch
+  boot effect has no error handling, so the app's loading spinner never resolves to the sign-in
+  screen when that fetch throws — logged in [TODO.md](../TODO.md), not fixed here (out of scope
+  for a Critical/High Codex-findings fix pass). Doesn't affect the Dashboard's own code.

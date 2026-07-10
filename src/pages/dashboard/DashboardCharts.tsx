@@ -1,14 +1,12 @@
 import { useState } from "react";
 import {
-  AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import type { SalesPerformanceEntry, JobTypeStat, PipelineStage, Forecast, RevenueTrend } from "../../lib/dashboard";
-import { statusLabelKey } from "../../lib/quotes";
-import type { QuoteStatus } from "../../lib/quotes";
+import type { JobTypeStat, Forecast, RevenueTrend } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
-import { fmtShort, monthLabel, periodLabel } from "./format";
+import { fmtShort, periodLabel } from "./format";
 
 const PALETTE = ["#c9a84c", "#1a5fb4", "#2aa36b", "#7c4dbb", "#e05252", "#1f9d8a", "#e08a3c", "#3b6fc9"];
 
@@ -77,54 +75,6 @@ export function RevenueTrendChart({ trend }: { trend: RevenueTrend }) {
   );
 }
 
-/**
- * Approximation: quotation *count* over time isn't tracked per-month server-side (only won
- * revenue is, via `revenueByMonth`) — this reuses that same monthly series as the closest
- * available real-data proxy for a trend line, rather than adding a dedicated monthly-count
- * aggregation for a chart the plan explicitly scoped as best-effort. Revisit if a true
- * quotation-count-per-month series becomes a real requirement.
- */
-export function QuotationTrendChart({ revenueByMonth }: { revenueByMonth: { month: string; revenue: number }[] }) {
-  const { t } = useI18n();
-  const data = revenueByMonth.map((r) => ({ label: monthLabel(r.month), revenue: r.revenue }));
-  const hasData = revenueByMonth.some((d) => d.revenue > 0);
-  return (
-    <ChartCard title={t("dashboard.chart.quotationTrend.title")} sub={t("dashboard.chart.quotationTrend.sub")}>
-      {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
-            <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
-            <Line type="monotone" dataKey="revenue" name={t("dashboard.kpi.closedSales")} stroke="#1a5fb4" strokeWidth={2} dot={{ r: 3, fill: "#1a5fb4" }} />
-          </LineChart>
-        </ResponsiveContainer>
-      )}
-    </ChartCard>
-  );
-}
-
-export function SalesByEmployeeChart({ salesPerformance }: { salesPerformance: SalesPerformanceEntry[] }) {
-  const { t } = useI18n();
-  const data = [...salesPerformance].sort((a, b) => b.revenue - a.revenue).slice(0, 8);
-  return (
-    <ChartCard title={t("dashboard.chart.salesByEmployee.title")} sub={t("dashboard.chart.salesByEmployee.sub")}>
-      {data.length === 0 ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" horizontal={false} />
-            <XAxis type="number" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
-            <YAxis type="category" dataKey="salesperson" width={90} tick={{ fill: "#5a7299", fontSize: 11 }} axisLine={false} tickLine={false} />
-            <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
-            <Bar dataKey="revenue" name={t("dashboard.ranking.col.revenue")} fill="#c9a84c" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      )}
-    </ChartCard>
-  );
-}
-
 /** All active job types are shown (not top-N) — a job type with zero quotes this period is a real, meaningful zero, not noise to hide. */
 export function RevenueByJobTypeChart({ jobTypeAnalytics }: { jobTypeAnalytics: JobTypeStat[] }) {
   const { t } = useI18n();
@@ -172,64 +122,6 @@ export function JobTypeDistributionChart({ jobTypeAnalytics }: { jobTypeAnalytic
             ))}
           </div>
         </>
-      )}
-    </ChartCard>
-  );
-}
-
-export function QuotationStatusDonut({ pipeline }: { pipeline: PipelineStage[] }) {
-  const { t } = useI18n();
-  const data = pipeline.filter((p) => p.count > 0).map((p) => ({ name: t(statusLabelKey[p.stage as QuoteStatus]), value: p.count }));
-  return (
-    <ChartCard title={t("dashboard.chart.statusDonut.title")} sub={t("dashboard.chart.statusDonut.sub")}>
-      {data.length === 0 ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <>
-          <div className="flex justify-center mb-4">
-            <PieChart width={160} height={160}>
-              <Pie data={data} cx={75} cy={75} innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="value" strokeWidth={0}>
-                {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-              </Pie>
-            </PieChart>
-          </div>
-          <div className="space-y-1.5">
-            {data.map((d, i) => (
-              <div key={d.name} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 min-w-0"><div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} /><span className="text-muted-foreground truncate">{d.name}</span></div>
-                <span className="font-mono text-foreground">{d.value}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </ChartCard>
-  );
-}
-
-export function WinLoseDonut({ won, lost }: { won: number; lost: number }) {
-  const { t } = useI18n();
-  const data = [
-    { name: t("dashboard.kpi.wonDeals"), value: won, color: "#157347" },
-    { name: t("dashboard.kpi.lostDeals"), value: lost, color: "#e05252" },
-  ].filter((d) => d.value > 0);
-  return (
-    <ChartCard title={t("dashboard.chart.winLose.title")} sub={t("dashboard.chart.winLose.sub")}>
-      {data.length === 0 ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <div className="flex items-center gap-6">
-          <PieChart width={140} height={140}>
-            <Pie data={data} cx={65} cy={65} innerRadius={42} outerRadius={64} paddingAngle={3} dataKey="value" strokeWidth={0}>
-              {data.map((d) => <Cell key={d.name} fill={d.color} />)}
-            </Pie>
-          </PieChart>
-          <div className="space-y-2">
-            {data.map((d) => (
-              <div key={d.name} className="flex items-center gap-2 text-xs">
-                <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
-                <span className="text-muted-foreground">{d.name}</span>
-                <span className="font-mono text-foreground font-semibold">{d.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
       )}
     </ChartCard>
   );
@@ -295,28 +187,6 @@ export function ProductsByCategoryChart({ categoryBreakdown }: { categoryBreakdo
             ))}
           </div>
         </>
-      )}
-    </ChartCard>
-  );
-}
-
-export function MonthlyClosingRateChart({ data }: { data: { month: string; winRate: number | null }[] }) {
-  const { t } = useI18n();
-  // null (not 0) means "no won/lost deals that month" — a real 0% month (deals that all lost)
-  // must still render as a visible flat line, not be hidden behind the empty state.
-  const hasData = data.some((d) => d.winRate !== null);
-  return (
-    <ChartCard title={t("dashboard.chart.closingRate.title")} sub={t("dashboard.chart.closingRate.sub")}>
-      {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={data.map((d) => ({ ...d, label: monthLabel(d.month) }))} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} unit="%" />
-            <Tooltip content={<SimpleTooltip formatter={(v) => `${v}%`} />} />
-            <Line type="monotone" dataKey="winRate" name={t("dashboard.kpi.winRate")} stroke="#2aa36b" strokeWidth={2} dot={{ r: 3, fill: "#2aa36b" }} />
-          </LineChart>
-        </ResponsiveContainer>
       )}
     </ChartCard>
   );

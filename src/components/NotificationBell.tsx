@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2 } from "lucide-react";
+import { Bell, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2, Trophy, TrendingDown, XOctagon } from "lucide-react";
 import type { Notification, NotificationType } from "../lib/notifications";
 import { useI18n, type TranslationKey } from "../lib/i18n";
 
@@ -10,6 +10,9 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   quotation_high_value: <AlertTriangle size={14} />,
   quotation_customer_accepted: <CheckCheck size={14} />,
   quotation_customer_rejected: <Ban size={14} />,
+  quotation_won: <Trophy size={14} />,
+  quotation_lost: <TrendingDown size={14} />,
+  quotation_cancelled: <XOctagon size={14} />,
 };
 
 function timeAgo(iso: string, t: (key: TranslationKey) => string): string {

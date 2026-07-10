@@ -74,6 +74,9 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   quotation_high_value: { label: "ใบเสนอราคามูลค่าสูงรออนุมัติ", module: "ใบเสนอราคา" },
   quotation_customer_accepted: { label: "ลูกค้ายอมรับใบเสนอราคา", module: "ใบเสนอราคา" },
   quotation_customer_rejected: { label: "ลูกค้าปฏิเสธใบเสนอราคา", module: "ใบเสนอราคา" },
+  quotation_won: { label: "ปิดการขายสำเร็จ", module: "ใบเสนอราคา" },
+  quotation_lost: { label: "ปิดการขายไม่สำเร็จ", module: "ใบเสนอราคา" },
+  quotation_cancelled: { label: "ใบเสนอราคาถูกยกเลิก", module: "ใบเสนอราคา" },
 };
 
 /** Idempotent. Mirrors the NotificationType union in src/lib/notifications.ts — scaffolding, not read by any live code path yet. */

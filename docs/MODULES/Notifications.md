@@ -15,6 +15,7 @@ Tell each user, specifically, when a quotation event relevant to them happens �
    - Submit → every **active** user holding `quotations:approve`
    - Submit, and quote total ≥ `HIGH_VALUE_THRESHOLD` (฿500,000) → also every active `approver_2` user, as a separate high-value notification
    - Approve/Reject/Customer Accepted/Customer Rejected → the quote's creator (`createdByUserId`)
+   - **Won/Lost/Cancelled** (added 2026-07-10, fifth pass) → the quote's creator — previously these three terminal transitions silently notified no one, unlike every other transition; found by an independent Codex re-review
 5. Real cross-user, cross-device delivery — another user's browser sees the new notification (and updated unread badge) the next time it fetches `GET /api/notifications`, no same-browser/same-session limitation.
 
 ## Pages
@@ -44,6 +45,7 @@ None of its own — delivery is inherently role-based (see Business Flow), but r
 - Mark read / mark all read / delete
 - Click-to-navigate — deep-links to the specific quotation when `relatedQuoteId` is set (2026-07-10)
 - Role-based delivery tied to the quotation approval workflow, server-enforced
+- **9 notification types** (added `quotation_won`/`quotation_lost`/`quotation_cancelled` 2026-07-10, fifth pass, each with its own `NotificationBell.tsx` icon — Trophy/TrendingDown/XOctagon) covering every workflow transition, not just the original 6
 
 ## Future Improvements
 

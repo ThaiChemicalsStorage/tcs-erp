@@ -12,6 +12,7 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cookie": "^2.0.1",
+    "driver.js": "^1.6.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "0.487.0",
     "mongodb": "^7.5.0",
