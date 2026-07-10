@@ -8,7 +8,7 @@ This supersedes the pre-2026-07-09 "no backend, plain function calls" state and 
 
 ### Routing mechanics (read [ARCHITECTURE.md](./ARCHITECTURE.md) for the full gotcha writeup)
 
-Routes are consolidated into 9 function files to stay under Vercel Hobby's 12-function cap: `api/company/index.ts` and `api/audit-log/index.ts` dispatch on `req.method` directly; `api/handlers/{auth,users,roles,products,categories,notifications,quotes}.ts` each dispatch on parsed URL path segments. `vercel.json` `rewrites` map every `/api/<resource>` and `/api/<resource>/:path*` request to its one handler file — this is the real, tested routing mechanism in production, not Vercel's own dynamic-route folder convention.
+Routes are consolidated into 10 function files (added `api/handlers/jobtypes.ts` 2026-07-10) to stay under Vercel Hobby's 12-function cap: `api/company/index.ts`, `api/audit-log/index.ts`, and `api/dashboard/index.ts` dispatch on `req.method` directly; `api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes}.ts` each dispatch on parsed URL path segments. `vercel.json` `rewrites` map every `/api/<resource>` and `/api/<resource>/:path*` request to its one handler file — this is the real, tested routing mechanism in production, not Vercel's own dynamic-route folder convention. Two function slots remain before the cap.
 
 ### Auth model (every route below)
 
@@ -72,6 +72,16 @@ Routes are consolidated into 9 function files to stay under Vercel Hobby's 12-fu
 
 No `DELETE /api/categories/:id` route exists — matches the pre-migration UI, which only ever supported archive/unarchive for categories, never permanent delete.
 
+## Job Types (`api/handlers/jobtypes.ts`, mounted at `/api/jobtypes` — added 2026-07-10)
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/jobtypes` | `quotations:view` | Sorted by `code`. Defensively calls `seedJobTypesIfEmpty()` before listing — see [DATABASE.md](./DATABASE.md) "`JobType`" for why this route (unlike other seed functions) needs to self-heal on every call rather than only at Setup Wizard time. |
+| `POST /api/jobtypes` | `company:manage` | `409` on duplicate `code` (case-insensitive). No new `Permission` was added for this — Job Types are treated as company-wide configuration data, matching the precedent already used for bank/VAT/T&C settings. |
+| `PATCH /api/jobtypes/:id` | `company:manage` | Rename and/or toggle `isActive`. `409` on duplicate `code`. |
+
+No `DELETE` route — soft-deactivate only (`isActive: false`), same pattern as Categories.
+
 ## Notifications (`api/handlers/notifications.ts`, mounted at `/api/notifications`)
 
 | Method & Path | Auth | Notes |
@@ -92,13 +102,13 @@ There is deliberately **no** `POST /api/notifications` (create-arbitrary-notific
 
 `AuditLogPage.tsx` self-fetches via `useEffect` on mount (not part of the universal boot-time `Promise.all` fetch in `App.tsx`), since this route is permission-gated and shouldn't be called for every signed-in user regardless of whether they can see the page.
 
-## Dashboard (`api/dashboard/index.ts`, mounted at `/api/dashboard` — added 2026-07-09)
+## Dashboard (`api/dashboard/index.ts`, mounted at `/api/dashboard` — added 2026-07-09, majorly expanded 2026-07-10)
 
 | Method & Path | Auth | Notes |
 |---|---|---|
-| `GET /api/dashboard` | `dashboard:view` | Returns `{ kpis, revenueByMonth, categoryBreakdown }` — real MongoDB counts/aggregations, no client-side computation. See [DATABASE.md](./DATABASE.md) "Dashboard KPI/chart aggregation" for exactly what each field means and how it's computed. |
+| `GET /api/dashboard?from=&to=&salesperson=` | `dashboard:view` | All three query params optional. Returns `{ kpis, revenueByMonth, categoryBreakdown, monthlyClosingRate, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast, followUps, activityTimeline, approvalDashboard, notificationSummary, availableSalespeople, filters }` — real MongoDB counts/aggregations, no client-side computation, no hardcoded/template values. `activityTimeline` is `null` unless the caller has `auditLog:view`; `approvalDashboard` is `null` unless the caller has `quotations:approve` (both checked via `roleHasPermission()`, not a second `requirePermission()` call — the rest of the dashboard is still returned either way). See [DATABASE.md](./DATABASE.md) "Dashboard KPI/chart aggregation" and [MODULES/Dashboard.md](./MODULES/Dashboard.md) for exactly what each field means and how it's computed. |
 
-`DashboardPage.tsx` self-fetches on mount via `src/lib/dashboard.ts`'s `fetchDashboardStats()`, same pattern as `AuditLogPage.tsx` above — not part of the universal boot-time fetch, since it's the only page that needs this particular aggregate.
+`DashboardPage.tsx` self-fetches via `src/lib/dashboard.ts`'s `fetchDashboardStats(filters)`, re-fetching whenever the on-screen date-range/salesperson filter changes — not part of the universal boot-time fetch, since it's the only page that needs this particular aggregate.
 
 ## Quotations (`api/handlers/quotes.ts`, mounted at `/api/quotes`)
 
@@ -106,7 +116,7 @@ There is deliberately **no** `POST /api/notifications` (create-arbitrary-notific
 |---|---|---|
 | `GET /api/quotes` | `quotations:view` | Returns every quote (no server-side ownership filtering — matches the pre-migration UI, which always showed the full list with client-side status filters). |
 | `POST /api/quotes` | `quotations:create` | Creates a new quote, ID generated server-side via `nextQuoteId()` (scans existing `_id`s for the highest `QT-<year>-NNNN` sequence number). `createdByUserId` is always the authenticated caller — never trusted from the request body. Status always starts at `"ร่าง"` (Draft), `approvalHistory: []`. |
-| `PATCH /api/quotes/:id` | `quotations:edit` + ownership (or `quotations:approve`) | General field edit (client/lines/discount/contact fields/etc. — an explicit allowlist, `EDITABLE_FIELDS`; `status` and `approvalHistory` are **not** in it, so this route can never sneak a status change through). Ownership: the caller must be the quote's creator, **or** hold `quotations:approve` (matches the client-side `computeQuotePermissions()` ownership model, now enforced server-side, not just hidden client-side). Legacy/seed quotes with an empty `createdByUserId` are treated as ownerless — any editor with `quotations:edit` passes the ownership check. |
+| `PATCH /api/quotes/:id` | `quotations:edit` + ownership (or `quotations:approve`) | General field edit (client/lines/discount/contact fields/`jobTypeCode`/`jobTypeName`/`isPotentialOpportunity`/`followUpDate`/etc. — an explicit allowlist, `EDITABLE_FIELDS`; `status` and `approvalHistory` are **not** in it, so this route can never sneak a status change through). Ownership: the caller must be the quote's creator, **or** hold `quotations:approve` (matches the client-side `computeQuotePermissions()` ownership model, now enforced server-side, not just hidden client-side). Legacy/seed quotes with an empty `createdByUserId` are treated as ownerless — any editor with `quotations:edit` passes the ownership check. |
 | `POST /api/quotes/:id/duplicate` | `quotations:create` | Clones the quote: fresh `_id` (new sequence number), fresh line/sub-detail IDs (`cloneLines()`), status reset to `"ร่าง"`, `interest: null`, `createdByUserId` set to the duplicating caller, `approvalHistory: []`. |
 | `POST /api/quotes/:id/workflow` | Varies per `action` — see below | Body: `{ action: ApprovalAction, comment?: string, draft?: Partial<Quote> }`. Validates `action` against `workflowTransitions` (`api/_lib/quoteWorkflow.ts` — a duplicated copy of the state machine in `src/lib/quotes.tsx`, see [ARCHITECTURE.md](./ARCHITECTURE.md) for why) and that the quote's current status is a valid `from` state for that action (`400` otherwise). Merges any in-flight `draft` field edits (the on-screen unsaved state) into the quote **before** applying the status transition, closing the same "workflow action discards unsaved edits" bug documented in [CHANGELOG.md](./CHANGELOG.md) 2026-07-09 — now enforced this way server-side too. Appends an `ApprovalHistoryEntry` stamped with the authenticated caller's identity (never client-supplied). Fires `createWorkflowNotifications()` as a side effect: `submitted` notifies every active user holding `quotations:approve` (plus every active `approver_2`-keyed user if `quote.amount >= HIGH_VALUE_THRESHOLD`, ฿500,000); `approved`/`rejected`/`customer_accepted`/`customer_rejected` notify the quote's creator. Permission-per-action is checked via `isWorkflowActionAllowed()` combining `roleHasPermission()` for the relevant permission (`create`/`edit`/`approve`/`reject`/`delete`, mapped per action) with the same ownership rule as `PATCH` above; a `403` includes the Thai label of the specific permission that was missing. |
 

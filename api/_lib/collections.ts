@@ -296,6 +296,20 @@ export async function uploadsCollection() {
   return db.collection<UploadFields>("uploads");
 }
 
+export interface JobTypeFields {
+  code: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}
+export async function jobTypesCollection() {
+  const db = await getDb();
+  return db.collection<JobTypeFields>("job_types");
+}
+
 export interface AttachmentFields {
   entityType: "quote" | "lead" | "customer" | "product";
   entityId: string;
@@ -315,7 +329,7 @@ export async function ensureIndexes() {
     users, roles, products, categories, quotes, notifications, auditLog,
     permissions, departments, positions, customers, customerContacts,
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
-    notificationTypes,
+    notificationTypes, jobTypes,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -323,6 +337,7 @@ export async function ensureIndexes() {
     customersCollection(), customerContactsCollection(),
     leadsCollection(), leadActivitiesCollection(), productTemplatesCollection(),
     quotationCommentsCollection(), quotationTagsCollection(), notificationTypesCollection(),
+    jobTypesCollection(),
   ]);
 
   await Promise.all([
@@ -337,6 +352,9 @@ export async function ensureIndexes() {
     quotes.createIndex({ status: 1 }),
     quotes.createIndex({ createdByUserId: 1 }),
     quotes.createIndex({ issueDate: 1 }),
+    quotes.createIndex({ jobTypeCode: 1 }),
+    quotes.createIndex({ salesperson: 1 }),
+    quotes.createIndex({ followUpDate: 1 }),
     notifications.createIndex({ recipientUserId: 1, createdAt: -1 }),
     auditLog.createIndex({ createdAt: -1 }),
 
@@ -357,6 +375,8 @@ export async function ensureIndexes() {
     quotationComments.createIndex({ quoteId: 1, createdAt: 1 }),
     quotationTags.createIndex({ name: 1 }, { unique: true }),
     notificationTypes.createIndex({ key: 1 }, { unique: true }),
+    jobTypes.createIndex({ code: 1 }, { unique: true }),
+    jobTypes.createIndex({ isActive: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

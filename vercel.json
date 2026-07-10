@@ -13,6 +13,8 @@
     { "source": "/api/notifications", "destination": "/api/handlers/notifications" },
     { "source": "/api/notifications/:path*", "destination": "/api/handlers/notifications" },
     { "source": "/api/quotes", "destination": "/api/handlers/quotes" },
-    { "source": "/api/quotes/:path*", "destination": "/api/handlers/quotes" }
+    { "source": "/api/quotes/:path*", "destination": "/api/handlers/quotes" },
+    { "source": "/api/jobtypes", "destination": "/api/handlers/jobtypes" },
+    { "source": "/api/jobtypes/:path*", "destination": "/api/handlers/jobtypes" }
   ]
 }

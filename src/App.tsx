@@ -6,7 +6,9 @@ import {
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
+import { type JobType, fetchJobTypes } from "./lib/jobTypes";
 import { type Quote, fetchQuotes } from "./lib/quotes";
+import type { QuotationListFilter } from "./pages/dashboard/DashboardPage";
 import { type User, fetchUsers, initials } from "./lib/users";
 import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
 import type { Permission } from "./lib/permissions";
@@ -108,11 +110,13 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
   const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [quotationListFilter, setQuotationListFilter] = useState<QuotationListFilter | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const [company, setCompany] = useState<Company>(defaultCompany);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [jobTypes, setJobTypes] = useState<JobType[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,8 +125,8 @@ export default function App() {
       if (cancelled) return;
       if (session.needsSetup) { setBootStatus("needsSetup"); return; }
       if (!session.user) { setBootStatus("signedOut"); return; }
-      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList] = await Promise.all([
-        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(),
+      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList] = await Promise.all([
+        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(),
       ]);
       if (cancelled) return;
       setUsers(userList);
@@ -132,6 +136,7 @@ export default function App() {
       setCategories(categoryList);
       setNotifications(notificationList);
       setQuotes(quoteList);
+      setJobTypes(jobTypeList);
       setCurrentUser(session.user);
       setBootStatus("ready");
     })();
@@ -149,6 +154,11 @@ export default function App() {
   const updateCurrentUser = (next: User) => {
     setCurrentUser(next);
     setUsers((prev) => prev.map((u) => (u.id === next.id ? next : u)));
+  };
+
+  const navigateToQuotations = (filter: QuotationListFilter) => {
+    setQuotationListFilter(filter);
+    setActiveNav("quotations");
   };
 
   const refreshNotifications = () => { fetchNotifications().then(setNotifications).catch(() => {}); };
@@ -176,8 +186,8 @@ export default function App() {
   const handleSetupComplete = async (fields: SetupWizardFields): Promise<string | null> => {
     try {
       const created = await setupSuperAdmin(fields);
-      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList] = await Promise.all([
-        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(),
+      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList] = await Promise.all([
+        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(),
       ]);
       setUsers(userList);
       setRoles(roleList);
@@ -186,6 +196,7 @@ export default function App() {
       setCategories(categoryList);
       setNotifications(notificationList);
       setQuotes(quoteList);
+      setJobTypes(jobTypeList);
       setCurrentUser(created);
       setBootStatus("ready");
       logAudit({
@@ -201,8 +212,8 @@ export default function App() {
     const result = await login(identifier, password);
     if (result.error || !result.user) return result.error;
     const found = result.user;
-    const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList] = await Promise.all([
-      fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(),
+    const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList] = await Promise.all([
+      fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(),
     ]);
     setUsers(userList);
     setRoles(roleList);
@@ -211,6 +222,7 @@ export default function App() {
     setCategories(categoryList);
     setNotifications(notificationList);
     setQuotes(quoteList);
+    setJobTypes(jobTypeList);
     setCurrentUser(found);
     setBootStatus("ready");
     logAudit({ module: "ระบบ", action: "Login", details: "เข้าสู่ระบบสำเร็จ" }).catch(() => {});
@@ -228,6 +240,7 @@ export default function App() {
     setCompany(defaultCompany);
     setProducts([]);
     setCategories([]);
+    setJobTypes([]);
     setNotifications([]);
     setQuotes([]);
     setBootStatus("signedOut");
@@ -354,7 +367,7 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
           <Suspense fallback={<PageLoading />}>
             {effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} onNotify={refreshNotifications} onAudit={handleAudit} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} onNotify={refreshNotifications} onAudit={handleAudit} />
               : effectiveNav === "settings"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
               : effectiveNav === "products"
@@ -365,7 +378,7 @@ export default function App() {
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} onAudit={handleAudit} />
               : effectiveNav === "auditLog"
               ? <AuditLogPage />
-              : <DashboardPage quotes={quotes} />
+              : <DashboardPage quotes={quotes} onNavigateToQuotations={navigateToQuotations} />
             }
           </Suspense>
         </div>

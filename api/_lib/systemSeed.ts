@@ -1,6 +1,6 @@
 import {
   permissionsCollection, departmentsCollection, positionsCollection,
-  notificationTypesCollection, systemSettingsCollection,
+  notificationTypesCollection, systemSettingsCollection, jobTypesCollection,
 } from "./collections.js";
 import { ALL_PERMISSIONS, PERMISSION_LABELS, PERMISSION_GROUPS, SUPER_ADMIN_ONLY_PERMISSIONS } from "../../src/lib/permissions.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
@@ -89,6 +89,33 @@ export async function seedNotificationTypesIfEmpty(): Promise<void> {
   );
 }
 
+const DEFAULT_JOB_TYPES = [
+  { code: "TA", name: "Fiberglass Tank" },
+  { code: "STA", name: "Steel Tank / Stainless Steel Tank" },
+  { code: "LI", name: "FRP Lining" },
+  { code: "SC", name: "Wet Scrubber / Activated Carbon System" },
+  { code: "BF", name: "Dust Collector System" },
+  { code: "GA", name: "FRP Grating" },
+  { code: "BI", name: "Bio Scrubber" },
+  { code: "VT", name: "Ventilation System" },
+  { code: "WTP", name: "Water Treatment System" },
+  { code: "OTHER TA", name: "Other Fiberglass Tank Related Work" },
+  { code: "OTHER SC", name: "Other Wet Scrubber Related Work" },
+  { code: "OTHER BF", name: "Other Dust Collector Related Work" },
+  { code: "OTHER", name: "Other Jobs" },
+];
+
+/** Idempotent. The default Job Type master list from the 2026-07-10 Executive Dashboard/CRM request — editable afterward via Settings (company:manage). */
+export async function seedJobTypesIfEmpty(): Promise<void> {
+  const jobTypes = await jobTypesCollection();
+  const count = await jobTypes.estimatedDocumentCount();
+  if (count > 0) return;
+  const now = nowIso();
+  await jobTypes.insertMany(
+    DEFAULT_JOB_TYPES.map((j) => ({ ...j, isActive: true, createdAt: now, updatedAt: now, createdBy: "system", updatedBy: "system" })),
+  );
+}
+
 /** Idempotent upsert of the singleton system-settings doc. Defaults mirror current hardcoded behavior (SESSION_DAYS in api/_lib/auth.ts) so future wiring is a no-op migration. */
 export async function seedSystemSettingsIfEmpty(): Promise<void> {
   const systemSettings = await systemSettingsCollection();
@@ -112,6 +139,7 @@ export async function seedSystemDataIfEmpty(): Promise<void> {
     seedDepartmentsIfEmpty(),
     seedPositionsIfEmpty(),
     seedNotificationTypesIfEmpty(),
+    seedJobTypesIfEmpty(),
   ]);
   await seedSystemSettingsIfEmpty();
 }

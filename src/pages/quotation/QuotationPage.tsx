@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Company } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
+import type { JobType } from "../../lib/jobTypes";
 import type { User } from "../../lib/users";
 import type { Role } from "../../lib/roles";
 import {
@@ -8,6 +9,7 @@ import {
   createQuote, updateQuote, duplicateQuote, performWorkflowAction, approvalActionLabel, approvalActionLabelKey, computeQuotePermissions, nextQuoteId,
 } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
+import type { QuotationListFilter } from "../dashboard/DashboardPage";
 import { QuoteList } from "./QuoteList";
 import { QuoteDocument } from "./QuoteDocument";
 import { Toast } from "../../components/Toast";
@@ -23,6 +25,9 @@ export function QuotationPage({
   roles,
   products,
   categories,
+  jobTypes,
+  initialFilter,
+  onFilterConsumed,
   onNotify,
   onAudit,
 }: {
@@ -34,12 +39,27 @@ export function QuotationPage({
   roles: Role[];
   products: Product[];
   categories: ProductCategory[];
+  jobTypes: JobType[];
+  /** Set by the Dashboard's pipeline/follow-up click-through — consumed once on mount then cleared, see App.tsx. */
+  initialFilter: QuotationListFilter | null;
+  onFilterConsumed: () => void;
   onNotify: () => void;
   onAudit: (action: string, details: string) => void;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<"list" | "new" | "detail">("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Consumed exactly once per mount (a ref guard rather than a `[]` dep array, so this stays
+  // exhaustive-deps clean even though `onFilterConsumed` is a fresh function identity every
+  // App.tsx render). QuotationPage itself fully unmounts/remounts every time nav switches away
+  // from and back to "quotations", so "once per mount" already means "once per fresh visit".
+  const consumedInitialFilter = useRef(false);
+  useEffect(() => {
+    if (consumedInitialFilter.current) return;
+    consumedInitialFilter.current = true;
+    if (initialFilter) onFilterConsumed();
+  }, [initialFilter, onFilterConsumed]);
   const toast = useToast();
 
   const selectedQuote = quotes.find((q) => q.id === selectedId);
@@ -106,6 +126,8 @@ export function QuotationPage({
       <>
         <QuoteList
           quotes={quotes}
+          jobTypes={jobTypes}
+          initialFilter={initialFilter}
           onOpen={(id) => { setSelectedId(id); setView("detail"); }}
           onCreateNew={() => { setSelectedId(null); setView("new"); }}
           onInterestChange={setInterest}
@@ -129,6 +151,7 @@ export function QuotationPage({
         users={users}
         products={products}
         categories={categories}
+        jobTypes={jobTypes}
         permissions={permissions}
         onBack={() => setView("list")}
         onSave={handleSave}

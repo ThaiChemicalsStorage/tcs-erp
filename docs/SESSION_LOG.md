@@ -4,6 +4,47 @@
 
 ---
 
+## Session — 2026-07-10 (Executive Dashboard, Sales Analytics & Job Type)
+
+### What was implemented
+- User requested a full BI rebuild of the Dashboard plus a Job Type classification and "Potential Opportunity" flag on every quotation — an intentionally huge request (new KPIs, sales pipeline, filters, rankings, forecast, follow-ups, activity feed, report export, and more).
+- Given the scope, wrote and got sign-off on an implementation plan before touching code: scoped to (1) Job Type + Potential Opportunity + Follow-up Date on `Quote`, (2) the dashboard backend, (3) the dashboard frontend — explicitly deferring Report Export and real Lead/Customer entities as separate follow-ups, per the user's own choice among presented options.
+- New `job_types` MongoDB collection (13 seeded defaults), `GET/POST/PATCH /api/jobtypes` (no new `Permission` — reused `quotations:view`/`company:manage`), `src/lib/jobTypes.ts`.
+- `Quote` gained `jobTypeCode`/`jobTypeName`/`isPotentialOpportunity`/`followUpDate`, wired into the form/list/print.
+- `api/dashboard/index.ts` rebuilt in place: date-range + salesperson filters, and a large set of new response sections computed by fetching the filtered quote set once and reducing it in JS (deliberately, not a dozen fragile aggregation pipelines — appropriate at this data volume; no new cache collections built).
+- `DashboardPage.tsx` split from one file into 13 files under `src/pages/dashboard/`; 9 charts total.
+- A lightweight `quotationListFilter` lifted to `App.tsx` so Dashboard pipeline/follow-up clicks open a pre-filtered quotation list (not full per-quote deep-linking — a separately tracked, larger gap).
+
+### Files Modified
+`api/_lib/{collections,systemSeed}.ts`, `api/handlers/{jobtypes (new),quotes}.ts`, `api/dashboard/index.ts`, `vercel.json`, `src/lib/{quotes,jobTypes (new),dashboard,i18n}.ts(x)`, `src/App.tsx`, `src/pages/quotation/{QuotationPage,QuoteList,QuoteDocument,PrintDocument}.tsx`, `src/pages/dashboard/*` (13 files, mostly new). See [CHANGELOG.md](./CHANGELOG.md) for full detail.
+
+### Architectural Decisions
+- **No new MongoDB collections beyond `job_types`** — `sales_pipeline`/`sales_activities`/`dashboard_cache`/`analytics_cache`/`forecast`, all mentioned as "examples" in the original request, were deliberately not built; computed live via aggregation / read from the existing `audit_log` instead. Building parallel collections for data that's a `$group` away would be a sync-maintenance burden with no benefit at this data volume — a conscious "don't over-engineer" call, not an oversight.
+- **No new `Permission`** — Job Type CRUD and every new dashboard section reuse permissions the relevant roles already hold (`quotations:view`, `company:manage`, `dashboard:view`, plus per-caller gating on `auditLog:view`/`quotations:approve` for two sections), rather than growing the 17-key union for a need that wasn't explicitly requested.
+- **One new serverless function, not several** — `api/handlers/jobtypes.ts` is the only new function file (10/12 against Vercel Hobby's cap); every new dashboard aggregation was added to the *existing* `api/dashboard/index.ts` instead.
+- **Sales pipeline starts at "Draft," not "Lead"** and **customer analytics group by the free-text `client` string** — both explicitly documented data-model simplifications (no Lead/Customer entity exists yet), not silently assumed.
+
+### Problems Found
+- **Self-caught during review** (not found by `tsc`/`lint`, since it was a logic bug, not a type error): the sales pipeline's stage-to-stage "conversion from previous" initially used array-adjacency (each stage compared to the row above it in a fixed display list). The real workflow branches at "Sent to Customer" (→ either Accepted or Rejected), so array-adjacency would have shown a nonsensical conversion % for the Customer Rejected/Lost branch, since Lost isn't actually downstream of Won. Caught by manually re-deriving the real predecessor relationships from `workflowTransitions` and comparing.
+- **A real `react-hooks/set-state-in-effect` lint error** (not a style nit — it flags an avoidable render-cascade footgun): calling `setLoading(true)` synchronously at the top of the dashboard's data-fetching `useEffect` (to show a spinner during filter-driven refetches).
+- **No safe way to verify end-to-end against live data in this session**: no local MongoDB credential was available, and the only real backend is the production database serving actual users — writing a test quote via the UI to verify the feature would have polluted real business data. Vercel CLI is also not installed, ruling out a quick `vercel dev` + `vercel env pull` local loop.
+
+### Problems Fixed
+Both bugs above, before considering the pass complete — see CHANGELOG for the exact fixes (`PIPELINE_PREDECESSOR` explicit map; moved `setLoading(true)` into the filter-change event handler instead of the effect body).
+
+### New TODO Items
+Verify the pass against live data (High Priority — see [TODO.md](./TODO.md)); Report Export (PDF/Excel/CSV); a dedicated monthly quotation-count aggregation for a more accurate Quotation Trend chart; a Job Type admin management UI (the API exists, no dedicated page); confirming whether cross-salesperson dashboard data should be role-restricted.
+
+### Future Recommendations
+1. **Live-data verification is the immediate next step** before this pass can be considered fully done — the code is implemented and self-reviewed, but "implemented" and "verified working" are different claims, and this session could only honestly make the first one. See [TODO.md](./TODO.md) High Priority for what's needed (either a safe non-production test path, or explicit sign-off to test against production with cleanup).
+2. Consider setting up a genuine dev/staging MongoDB Atlas cluster (separate from production) if UI-driven local testing is going to be a recurring need — right now the only real backend is the one serving live users, which structurally blocks safe local verification for any change that needs to write data.
+3. Report Export is the natural next scoped follow-up once live verification closes out — build it against this now-stable dashboard response shape rather than in parallel with it.
+
+### Estimated Completion Percentage
+~40% of the full long-term ERP vision (up from ~38% — a BI layer on top of existing Quotation data, not a new module, hence the smaller increment than the 2026-07-09 jump). ~94% of the currently-scoped modules — the Dashboard rebuild closed several depth gaps but Report Export and live verification remain open. See [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+
+---
+
 ## Session — 2026-07-09 (Real backend migration: Vercel Serverless Functions + MongoDB Atlas)
 
 ### What was implemented

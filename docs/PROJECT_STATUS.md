@@ -4,9 +4,9 @@
 
 ## Overall ERP Progress
 
-**~38%** of the full long-term vision (Lead/Quotation/Customer/Product now, then HR/Accounting/Inventory/Warehouse/Purchasing/Project Management later, all on a real multi-user backend with RBAC). The jump from ~34% reflects the 2026-07-09 production-readiness pass: real branding, a fully real (no fake data) Dashboard, and — critically — MongoDB schema/indexes now exist for every collection the long-term vision needs (CRM, org, files, settings), even though most don't have API routes/UI yet. Lead/Customer management moved from "not started" to "schema only," which is real progress but not the same as "built."
+**~40%** of the full long-term vision (Lead/Quotation/Customer/Product now, then HR/Accounting/Inventory/Warehouse/Purchasing/Project Management later, all on a real multi-user backend with RBAC). The jump from ~38% reflects the 2026-07-10 Executive Dashboard/Job Type pass — a real BI layer on top of Quotation data, not a new module, so the increment is smaller than the 2026-07-09 jump.
 
-Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth, Settings, User Management, Role Management, Notifications, Audit Log), functional completeness is **~93%**, unchanged by the backend migration — the migration changed *where* logic runs (server vs. browser), not what any module does or looks like.
+Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth, Settings, User Management, Role Management, Notifications, Audit Log), functional completeness is **~94%** — the Dashboard rebuild closed several long-standing gaps (KPI depth, filters, follow-up tracking) but Report Export and full per-quote deep-linking remain open, and the whole pass still needs a live-data browser verification pass (see Known Risks).
 
 ## Current Phase
 
@@ -14,6 +14,13 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-10] Executive Dashboard, Sales Analytics & Job Type pass** — implemented and passing `tsc`/`lint`/`build` clean; **not yet verified against live data in a browser** (see Known Risks below for why, and what's needed to close that out):
+  - **Job Type master data**: new `job_types` MongoDB collection (13 seeded defaults — TA, STA, LI, SC, BF, GA, BI, VT, WTP, OTHER TA, OTHER SC, OTHER BF, OTHER), `GET/POST/PATCH /api/jobtypes` (`quotations:view` to read, `company:manage` to manage — no new `Permission` added), `src/lib/jobTypes.ts`. Every quotation now carries `jobTypeCode`/`jobTypeName` (snapshotted, not a live reference), shown/edited on the form, filterable/searchable in the list, printed on the PDF.
+  - **Potential Opportunity** checkbox and **Follow-up Date** field added to `Quote` — feed the Dashboard's Expected Sales KPI/forecast and Today/Overdue/Upcoming follow-up reminders respectively.
+  - **Dashboard fully rebuilt** into a real Executive BI page: ~20 KPIs (up from 7), a sales pipeline funnel with click-through to a filtered quotation list, date-range + salesperson filters, Sales Performance table + Executive Ranking (top 10, sortable), Job Type and Customer analytics, a live-computed sales forecast, follow-up reminders, an approval dashboard (approvers only), a notification summary, an activity timeline (`auditLog:view` holders only), and 9 charts (revenue trend, quotation trend, sales-by-employee, revenue-by-job-type, status donut, win/lose donut, expected-sales forecast, monthly closing rate, products-by-category) — all live MongoDB aggregation, zero hardcoded/template values, `DashboardPage.tsx` split into 13 subcomponents under `src/pages/dashboard/`. See [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full breakdown and the documented data-model simplifications (pipeline starts at "Draft" not "Lead"; customer analytics group by free-text client name; a couple of charts are best-effort approximations) — these were deliberate scoping decisions, not oversights.
+  - **Deliberately deferred**: Report Export (PDF/Excel/CSV — needs a new dependency, should be built against this now-stable shape) and real Lead/Customer entities (already a separately tracked, much larger backlog item) — both explicitly scoped out of this pass rather than attempted and left half-done.
+  - A lightweight `quotationListFilter` was lifted to `App.tsx` so Dashboard pipeline/follow-up clicks open a pre-filtered quotation list — full per-quote deep-linking (the pre-existing `QuotationPage` view/selectedId gap) is still not done.
+  - Docs updated per the standing rule: this file, CHANGELOG.md, TODO.md, DATABASE.md, API.md, RBAC.md, MODULES/Quotation.md, MODULES/Dashboard.md (full rewrite), CLAUDE.md.
 - ✅ **[2026-07-09] Production-readiness pass**: branding, real Dashboard, MongoDB schema prep, dead-code removal, Thai/English i18n infrastructure:
   - Official logo (`public/logo.png`) + one shared `components/BrandMark.tsx` replacing 6 copy-pasted inline "ท" placeholder blocks — sidebar (incl. fixed collapsed-state centering), login page (desktop + mobile), browser favicon, quote/print document fallback headers, and 3 previously-blank loading screens
   - Dashboard rebuilt from 100% static sample data to 100% real MongoDB-backed data — see the Dashboard entry below and [MODULES/Dashboard.md](./MODULES/Dashboard.md)
@@ -62,7 +69,7 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## In Progress
 
-- Nothing actively in progress as of this writing — see Next Sprint below for what's queued.
+- **Live-data verification of the 2026-07-10 Executive Dashboard/Job Type pass** — `tsc`/`lint`/`build` all pass clean and the code was carefully self-reviewed (one real bug already found and fixed: the sales pipeline's "conversion from previous stage" originally used array-adjacency instead of the real workflow predecessor, which would have shown a nonsensical percentage for the Customer Rejected/Lost branch), but it has not yet been exercised in a browser against real data — no local MongoDB credential and no safe non-production environment were available in that session. Needs either the user to test locally/on a preview deploy, or explicit sign-off to test against production with cleanup.
 
 ## Pending Features
 
@@ -73,7 +80,8 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 - Departments/positions seed list (ฝ่ายขาย/ฝ่ายจัดซื้อ/etc.) is a generic placeholder, not the real org structure — not yet wired into `User.department`/`User.position` (still free text)
 - Company bank account info, VAT rate, and Terms & Conditions are now editable fields on `Company` (Settings → Company Info, Super Admin only), but `Company.vatRate` is **not yet wired into the actual tax calculation** — `lib/quotes.tsx`'s `computeTotals()` still uses a fixed 7% constant. Low-risk, deliberately deferred (see [TODO.md](./TODO.md)).
 - Two-level sequential approval (Approver Level 1 must approve before Level 2 can) is **not implemented** — both approver roles can independently approve/reject from "Pending Approval"; they're differentiated by seniority/assignment, not an enforced sequence.
-- Notification click only navigates to the quotation **list**, not the specific quote's detail view — `QuotationPage`'s `view`/`selectedId` state isn't lifted to `App.tsx`, so deep-linking to a record isn't wired yet.
+- Notification click only navigates to the quotation **list**, not the specific quote's detail view — `QuotationPage`'s `view`/`selectedId` state isn't lifted to `App.tsx`, so deep-linking to a record isn't wired yet. (A narrower `quotationListFilter` **was** lifted 2026-07-10 for the Dashboard's pipeline/follow-up click-through — that only pre-applies a list filter, not a specific-record deep link; the notification-click gap itself is unchanged.)
+- Report Export (PDF/Excel/CSV) for the Dashboard — explicitly deferred from the 2026-07-10 pass; needs a new dependency for Excel and a new print layout for PDF, should be built against the now-stable dashboard response shape.
 - Product Library has module-level (sidebar) permission gating but **not** button-level gating (create/edit/delete buttons inside Products aren't yet hidden per `products:create`/`products:edit`/`products:delete` — only the sidebar entry respects `products:view`).
 - Dashboard's "ส่งออกรายงาน" (export report), "+ สร้างคำสั่งซื้อ" (create order), "ดูทั้งหมด" (view all orders) — reference an Orders/Reports module that doesn't exist yet, left inert by design
 - Global header search — decorative, not wired to any data
@@ -101,6 +109,8 @@ Not yet planned.
 - **No automated tests, no CI pipeline**: nothing in this repo (frontend or the new API layer) is covered by tests, and nothing runs `tsc`/`eslint`/`build` automatically on push. A regression could reach `master` — and, since the GitHub repo is connected to Vercel for auto-deploy, potentially production — unnoticed. See [TODO.md](./TODO.md).
 - **RBAC permission model is real but hardcoded**: the 17-key `Permission` union is still a TypeScript union, not admin-creatable rows — adding a genuinely new permission still requires a code change and redeploy, even though roles/permission-assignment are fully admin-editable at runtime. Not a security risk, but a scaling limitation worth knowing. See [RBAC.md](./RBAC.md).
 - **Scope ambiguity**: the long-term ERP vision (multi-department, many more modules) is far larger than what exists today. Expectations should be managed against [CLAUDE.md](./CLAUDE.md)'s "Current Development Phase" section.
+- **2026-07-10 Executive Dashboard/Job Type pass is unverified against live data**: `tsc`/`lint`/`build` pass clean and the code was carefully self-reviewed, but no browser pass against real MongoDB data has happened yet (no local DB credential, no safe non-production test environment available in that session). Treat the new Dashboard/Job Type functionality as implemented-but-not-yet-battle-tested until a live pass confirms it.
+- **Customer analytics (Dashboard) group by the free-text `Quote.client` string**, not a real Customer entity — name variations/typos will undercount repeat customers and split one real customer across rows. Documented in [MODULES/Dashboard.md](./MODULES/Dashboard.md), not silently assumed; will resolve once real Lead/Customer entities exist.
 
 ## Technical Debt
 
@@ -116,6 +126,6 @@ Not yet planned.
 - ~~`salesTeam` (sales leaderboard data) is shared, static sample data~~ — **removed 2026-07-09** along with the fake Dashboard sales leaderboard that used it; `QuoteList.tsx`'s salesperson avatar now uses a deterministic hash-based color, no fake roster.
 - No automated tests exist anywhere in the project.
 - No CI pipeline configured.
-- Bundle: `DashboardPage` chunk is ~430KB (mostly `recharts`, largely unchanged by the 2026-07-09 rewrite since the fake data itself was tiny) — acceptable now that it's lazy-loaded and isolated from the main chunk, but worth revisiting if more chart-heavy modules are added.
+- Bundle: `DashboardPage` chunk grew to ~490KB gzipped ~130KB after the 2026-07-10 rebuild (13 subcomponents, 9 charts, up from ~430KB) — still acceptable since it's lazy-loaded and isolated from the main chunk, but the growth trend is worth watching if more BI features are added.
 - Base64-in-document uploads (logo/stamp/profile picture/signature) have a practical 16MB MongoDB document ceiling — the new `uploads`/`attachments` collections (schema-only, 2026-07-09) are forward-looking scaffolding for a real blob-storage migration, not yet wired to anything.
 - ~~`i18n.tsx` only covers strings the 2026-07-09 pass touched~~ — **resolved same day**: essentially all UI chrome now translated. Persisted data/seed content and the printed quotation document remain Thai-only, deliberately.

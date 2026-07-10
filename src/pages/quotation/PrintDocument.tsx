@@ -26,7 +26,7 @@ export function PrintDocument({
   company,
   client, contactName, contactPhone, contactEmail, address, taxId,
   deliveryMethod, deliveryAddress, project,
-  poRef, paymentTerms, issueDate, expiryDate,
+  poRef, paymentTerms, issueDate, expiryDate, jobTypeName,
   lines, discount, remarks,
   preparerUser, approverUser, preparerName, preparerDate, approverName, approverDate,
 }: {
@@ -47,6 +47,7 @@ export function PrintDocument({
   paymentTerms: string;
   issueDate: string;
   expiryDate: string;
+  jobTypeName: string;
   lines: QuoteLine[];
   discount: number;
   remarks: string;
@@ -122,6 +123,7 @@ export function PrintDocument({
                   <Field label="เลขที่" value={quoteId} mono />
                   <Field label="วันที่" value={fmtThaiDate(issueDate)} />
                   <Field label="วันที่ยืนราคา" value={fmtThaiDate(expiryDate)} />
+                  <Field label="ประเภทงาน" value={jobTypeName} />
                   <Field label="อ้างอิง PO" value={poRef} mono />
                   <Field label="เงื่อนไขการชำระเงิน" value={paymentTerms} />
                   <Field label="Salesperson" value={preparerName} />

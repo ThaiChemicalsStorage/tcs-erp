@@ -18,7 +18,8 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `notifications` | MongoDB `ObjectId` | `Notification` minus `id` | `GET /api/notifications` filters server-side to `recipientUserId === <the caller>` — the collection holds every user's notifications, but a user can only ever read their own via the API. |
 | `audit_log` | MongoDB `ObjectId` | `AuditLogEntry` minus `id` | `POST /api/audit-log` always derives `userId`/`userName`/`roleName` from the authenticated session, never trusting those fields from the request body. |
 | `quotes` | **the business ID string itself** (e.g. `"QT-2567-0041"`), not an `ObjectId` | `Quote` minus `id` (the business ID is `_id`) | `nextQuoteId()` in `api/handlers/quotes.ts` scans existing `_id`s to compute the next sequence number. |
-| `dashboard` (virtual — no collection) | — | — | `GET /api/dashboard` (`api/dashboard/index.ts`) is a read-only aggregation over `customers`/`leads`/`quotes`/`products`/`categories` — it doesn't own or write any collection of its own. See Dashboard KPI section below. |
+| `job_types` | MongoDB `ObjectId` | `code: string; name: string; isActive: boolean` + audit fields | **Added 2026-07-10** for the Executive Dashboard/CRM pass — Job Type master data, one per quotation. See "Job Type" entity section below. |
+| `dashboard` (virtual — no collection) | — | — | `GET /api/dashboard` (`api/dashboard/index.ts`) is a read-only aggregation over `customers`/`leads`/`quotes`/`products`/`categories`/`audit_log`/`notifications`/`job_types`-derived fields already embedded on `quotes` — it doesn't own or write any collection of its own. See Dashboard KPI section below and [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full breakdown. |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
 
@@ -189,6 +190,24 @@ interface Product {
 ```
 Indexes added 2026-07-09: `products` gets `{ categoryId: 1 }` and `{ archived: 1 }`; `categories` gets `{ name: 1 }` (non-unique — existing data wasn't verified duplicate-free before adding it, so it's not enforced as a constraint).
 
+### `JobType` (`src/lib/jobTypes.ts`) — added 2026-07-10
+
+```ts
+interface JobType {
+  id: string;
+  code: string;     // e.g. "TA", "STA", "OTHER" — the value stored on Quote.jobTypeCode
+  name: string;
+  isActive: boolean; // soft-deactivate only, same pattern as ProductCategory.archived
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;  // → User.id
+  updatedBy: string;  // → User.id
+}
+```
+Master data for classifying every quotation by the kind of work it represents. Seeded with 13 defaults on first use (`DEFAULT_JOB_TYPES` in `api/_lib/systemSeed.ts`: TA, STA, LI, SC, BF, GA, BI, VT, WTP, OTHER TA, OTHER SC, OTHER BF, OTHER) via `seedJobTypesIfEmpty()`. Unlike the other 2026-07-09 seed functions, this one is **also** called defensively from `GET /api/jobtypes` itself (not only from the Setup Wizard's one-time bootstrap) — since `ensureIndexes()`/seeding only run from `handleSetup()`, which is permanently blocked once any user exists, a collection added after the production database was already provisioned needs its own self-healing seed path, following the same precedent `GET /api/roles` already uses for `seedDefaultRolesIfEmpty()`. `POST`/`PATCH /api/jobtypes` require `company:manage` (Super Admin only, matching the "company-wide configuration data" precedent used for bank/VAT/T&C settings); `GET` only requires `quotations:view`. No new `Permission` was added — see [RBAC.md](./RBAC.md).
+
+`Quote.jobTypeCode`/`jobTypeName` are a **snapshot**, not a live reference — same rationale as `QuoteLine` never referencing `Product` live: renaming a Job Type later must not rewrite historical quotes.
+
 ### `Quote` / `QuoteLine` / `SubDetail` (`src/lib/quotes.tsx`)
 ```ts
 type QuoteStatus =
@@ -258,6 +277,10 @@ interface Quote {
   issueDate: string;    // yyyy-mm-dd
   expiryDate: string;   // yyyy-mm-dd
   remarks: string;       // real per-quote field now (see Known Issues below) — defaults to Company.termsAndConditions only for brand-new quotes
+  jobTypeCode: string;               // added 2026-07-10, → JobType.code, "" = unclassified (incl. every quote created before this field existed)
+  jobTypeName: string;               // added 2026-07-10, snapshot of JobType.name at save time
+  isPotentialOpportunity: boolean;   // added 2026-07-10 — sales-marked "likely to close", feeds Dashboard's Expected Sales KPI/forecast
+  followUpDate: string;              // added 2026-07-10, yyyy-mm-dd, "" = no follow-up scheduled
   createdByUserId: string;             // → User.id, "" for legacy/seed quotes (any editor treated as owner)
   updatedBy: string;                   // → User.id, added 2026-07-09 — set server-side on every plain edit or workflow action, "" until first edit
   approvalHistory: ApprovalHistoryEntry[];  // append-only
@@ -265,16 +288,21 @@ interface Quote {
 ```
 All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session.
 
-Indexes added 2026-07-09 (`quotes` had none beyond default `_id` before this): `{ status: 1 }`, `{ createdByUserId: 1 }` (already used for ownership checks), `{ issueDate: 1 }` (needed for the Dashboard's monthly revenue aggregation — see below). No soft-delete field — the `ยกเลิก` (Cancelled) terminal workflow status already serves that role.
+Indexes added 2026-07-09 (`quotes` had none beyond default `_id` before this): `{ status: 1 }`, `{ createdByUserId: 1 }` (already used for ownership checks), `{ issueDate: 1 }` (needed for the Dashboard's monthly revenue aggregation — see below). Added 2026-07-10: `{ jobTypeCode: 1 }`, `{ salesperson: 1 }`, `{ followUpDate: 1 }`, serving the new Dashboard filters/grouping. No soft-delete field — the `ยกเลิก` (Cancelled) terminal workflow status already serves that role.
 
-### Dashboard KPI/chart aggregation (`GET /api/dashboard`, added 2026-07-09)
+### Dashboard KPI/chart aggregation (`GET /api/dashboard`, added 2026-07-09, majorly expanded 2026-07-10)
 
-Read-only, no collection of its own — see [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full widget-by-widget breakdown. Summary of what each number is:
+Read-only, no collection of its own — see [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full widget-by-widget breakdown of the 2026-07-10 Executive Dashboard rebuild (KPIs, sales pipeline, rankings, forecast, follow-ups, activity feed, etc.). Key data-model notes:
+- Accepts `?from=yyyy-mm-dd&to=yyyy-mm-dd&salesperson=<name|all>` query params — `from`/`to` filter against `Quote.issueDate` (lexicographic string comparison, same approach as the pre-existing monthly revenue aggregation), `salesperson` is an exact match against the free-text `Quote.salesperson` field.
+- Almost every new section is computed by fetching the filtered `quotes` set **once** (a small projection, no `lines`) and reducing it in plain JS, rather than a dozen separate fine-grained aggregation pipelines — deliberate, matching the pre-existing `revenueByMonth`/`categoryBreakdown` post-processing style, and appropriate at this data volume (one internal company's quotations, not big-data scale). Revisit if data volume ever justifies moving this to pure `$group` pipelines or a cache layer.
 - `totalCustomers`/`totalLeads`: `countDocuments({ deletedAt: null })` on `customers`/`leads` — always `0` today (module not built yet), which is correct per the "empty database → display 0" requirement, not a placeholder.
-- `totalQuotations`/`totalProducts`: real counts (`quotes.countDocuments({})`, `products.countDocuments({ archived: false })`).
-- `wonDeals`/`lostDeals`: `quotes.countDocuments({ status: "ปิดการขายสำเร็จ" })` / `{ status: "เสียโอกาส" })`. Note: `ลูกค้าปฏิเสธ` (Customer Rejected) is a distinct terminal status and is **not** counted as "lost" — only quotes actually marked `เสียโอกาส` are.
-- `totalRevenue`: `$sum` of `amount` over quotes with `status: "ปิดการขายสำเร็จ"` — the only unambiguous "closed revenue" signal in the current data model.
-- `revenueByMonth`: groups won quotes by `$substr(issueDate, 0, 7)` (`issueDate` is a plain `yyyy-mm-dd` string, not a real Mongo `Date`), then zero-fills the last 12 calendar months server-side so the chart never renders blank on an empty database.
+- `wonDeals`/`lostDeals`: quotes with `status: "ปิดการขายสำเร็จ"` / `"เสียโอกาส"`. `ลูกค้าปฏิเสธ` (Customer Rejected) is a distinct terminal status and is **not** counted as "lost" — only quotes actually marked `เสียโอกาส` are.
+- `newCustomers`/`repeatCustomers`, and the Customer Analytics section generally, group by the free-text `Quote.client` string — **name variations/typos will undercount repeat customers** until a real `Customer` entity exists that quotes reference by ID instead of free text (tracked in TODO.md). Documented, not silently assumed.
+- The sales pipeline's stage-to-stage `conversionFromPrevious` uses an explicit predecessor map (`PIPELINE_PREDECESSOR` in `api/dashboard/index.ts`) mirroring `workflowTransitions` in `api/_lib/quoteWorkflow.ts` — **not** simple array-adjacency, since the workflow branches (Sent to Customer → either Customer Accepted or Customer Rejected) and array-adjacent stages aren't always true predecessors.
+- `forecast` (thisMonth/thisQuarter/thisYear) is a **live weighted estimate** — open `isPotentialOpportunity` quote value falling in each period, multiplied by the trailing-12-month win rate — recomputed on every request, never stored. No `forecast` collection.
+- `activityTimeline` reads from `audit_log`; `approvalDashboard` is derived from the filtered quotes' `approvalHistory`. Both are `null` in the response (and hidden entirely by the frontend) when the caller lacks `auditLog:view` / `quotations:approve` respectively — a permission check via `roleHasPermission()`, not a second `requirePermission()` call, layered the same way ownership checks already are elsewhere in the API.
+- `revenueByMonth`: groups won quotes by `$substr(issueDate, 0, 7)`, zero-filled over the last 12 calendar months.
+- `monthlyClosingRate` (added 2026-07-10): win rate (`won / (won + lost)`) per calendar month, trailing 12 months, same zero-fill treatment.
 - `categoryBreakdown`: real `products` grouped by `categoryId` (archived excluded) — intentionally **not** "revenue by category," since `QuoteLine` has no `categoryId` reference back to `Product` (see Relationships below) and there's no reliable way to compute that without unreliable string-matching.
 
 **`id` → `_id` mapping**: `Quote.id` (the client-facing field, e.g. `"QT-2567-0041"`) is stored as the literal MongoDB `_id` for the `quotes` collection — not an `ObjectId`. This is deliberate: quote IDs are already unique, human-meaningful business identifiers (generated by `nextQuoteId()` in `api/handlers/quotes.ts`, which scans existing `_id`s for the highest sequence number), so there was no reason to also carry a separate `ObjectId`. Every other collection (`users`, `products`, `categories`, `notifications`, `audit_log`) uses a real MongoDB `ObjectId` as `_id`, mapped to a string `id` field for the client via `withStringId()`/`toPublicUser()` (`api/_lib/collections.ts`).

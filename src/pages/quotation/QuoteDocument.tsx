@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import type { Company } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
+import type { JobType } from "../../lib/jobTypes";
 import type { User } from "../../lib/users";
 import {
   type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type ApprovalAction, type QuotePermissions,
@@ -39,6 +40,7 @@ export function QuoteDocument({
   users,
   products,
   categories,
+  jobTypes,
   permissions,
   onBack,
   onSave,
@@ -55,6 +57,7 @@ export function QuoteDocument({
   users: User[];
   products: Product[];
   categories: ProductCategory[];
+  jobTypes: JobType[];
   permissions: QuotePermissions;
   onBack: () => void;
   onSave: (data: QuoteDraftFields) => void;
@@ -86,6 +89,9 @@ export function QuoteDocument({
   const [issueDate, setIssueDate] = useState(quote?.issueDate ?? todayIso());
   const [expiryDate, setExpiryDate] = useState(quote?.expiryDate ?? plusDaysIso(30));
   const [remarks, setRemarks] = useState(quote?.remarks ?? (company.termsAndConditions || DEFAULT_TERMS));
+  const [jobTypeCode, setJobTypeCode] = useState(quote?.jobTypeCode ?? "");
+  const [isPotentialOpportunity, setIsPotentialOpportunity] = useState(quote?.isPotentialOpportunity ?? false);
+  const [followUpDate, setFollowUpDate] = useState(quote?.followUpDate ?? "");
 
   const [pendingAction, setPendingAction] = useState<ApprovalAction | null>(null);
   const [actionComment, setActionComment] = useState("");
@@ -93,11 +99,17 @@ export function QuoteDocument({
 
   const { total } = computeTotals(lines, discount);
   const disabled = !permissions.canEdit;
+  const selectedJobType = jobTypes.find((jt) => jt.code === jobTypeCode);
+  const jobTypeDisplay = selectedJobType ? `${selectedJobType.code} — ${selectedJobType.name}` : "";
 
   const currentDraft = (): QuoteDraftFields => ({
     client, status: quoteStatus, lines, discount, amount: total,
     salesperson, contactName, contactPhone, contactEmail, address, taxId,
     deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate, remarks,
+    jobTypeCode,
+    jobTypeName: selectedJobType?.name ?? "",
+    isPotentialOpportunity,
+    followUpDate,
   });
 
   const save = (message: string) => {
@@ -327,6 +339,31 @@ export function QuoteDocument({
                     {paymentTermsOptions.map((opt) => <option key={opt}>{opt}</option>)}
                   </select>
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.jobType")}</label>
+                    <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => setJobTypeCode(e.target.value)}>
+                      <option value="">{t("quotation.field.jobTypeUnclassified")}</option>
+                      {jobTypes.filter((jt) => jt.isActive || jt.code === jobTypeCode).map((jt) => (
+                        <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
+                    <input disabled={disabled} type="date" className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-foreground">
+                  <input
+                    type="checkbox"
+                    disabled={disabled}
+                    checked={isPotentialOpportunity}
+                    onChange={(e) => setIsPotentialOpportunity(e.target.checked)}
+                    className="w-4 h-4 rounded border-border accent-[#c9a84c] disabled:opacity-60"
+                  />
+                  {t("quotation.field.potentialOpportunity")}
+                </label>
                 {isDetail && permissions.canEdit && (
                   <div>
                     <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.customerInterestLevel")}</label>
@@ -429,6 +466,7 @@ export function QuoteDocument({
           paymentTerms={paymentTerms}
           issueDate={issueDate}
           expiryDate={expiryDate}
+          jobTypeName={jobTypeDisplay}
           lines={lines}
           discount={discount}
           remarks={remarks}

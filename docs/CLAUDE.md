@@ -52,10 +52,10 @@ ERP/
 │       ├── Notifications.md
 │       └── AuditLog.md
 ├── api/                           # Vercel Serverless Functions backend (Node.js) — see ARCHITECTURE.md
-│   ├── handlers/                  # api/handlers/{auth,users,roles,products,categories,notifications,quotes}.ts — one file per resource, dispatches on parsed URL path, reached via vercel.json rewrites (the live routing)
+│   ├── handlers/                  # api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes}.ts — one file per resource, dispatches on parsed URL path, reached via vercel.json rewrites (the live routing)
 │   ├── company/index.ts           # plain single-route file (GET/PUT)
 │   ├── audit-log/index.ts         # plain single-route file (GET/POST)
-│   ├── dashboard/index.ts         # plain single-route file (GET) — real KPI/chart aggregation, added 2026-07-09 prod-readiness pass
+│   ├── dashboard/index.ts         # plain single-route file (GET) — real KPI/chart aggregation, added 2026-07-09, majorly expanded 2026-07-10 (Executive Dashboard/CRM pass)
 │   └── _lib/                      # shared server-only code: mongodb.ts, http.ts, auth.ts, collections.ts, rbacSeed.ts, systemSeed.ts, quoteWorkflow.ts
 │       # Note: a duplicate `api/{auth,users,roles,products,categories,notifications,quotes}/[[...segments]].ts` catch-all layer existed
 │       # pre-2026-07-09 but was confirmed dead (shadowed by vercel.json's rewrites — see ARCHITECTURE.md) and deleted.
@@ -81,13 +81,14 @@ ERP/
 │   │   ├── notifications.ts       # Notification type + per-event builders (submitted/approved/rejected/high-value/...)
 │   │   ├── auditLog.ts            # append-only AuditLogEntry log + logAudit()
 │   │   ├── products.ts            # Product, ProductCategory (now incl. createdBy/updatedBy)
-│   │   ├── quotes.tsx             # Quote (+ approval workflow: statuses, ApprovalHistoryEntry, computeQuotePermissions)
-│   │   ├── dashboard.ts           # fetchDashboardStats() — real KPI/chart data, added 2026-07-09
-│   │   └── i18n.tsx               # Thai/English translation context — added 2026-07-09, covers only strings this pass touched, see TODO.md
+│   │   ├── quotes.tsx             # Quote (+ approval workflow: statuses, ApprovalHistoryEntry, computeQuotePermissions; +jobTypeCode/jobTypeName/isPotentialOpportunity/followUpDate, added 2026-07-10)
+│   │   ├── jobTypes.ts            # JobType master data + fetch/create/update — added 2026-07-10
+│   │   ├── dashboard.ts           # fetchDashboardStats(filters) — real KPI/chart/pipeline/forecast/etc. data, added 2026-07-09, majorly expanded 2026-07-10
+│   │   └── i18n.tsx               # Thai/English translation context — added 2026-07-09, extended same day and again 2026-07-10 to cover the Executive Dashboard/Job Type pass, see TODO.md
 │   ├── pages/
 │   │   ├── SetupWizardPage.tsx / SignInPage.tsx / AuthLayout.tsx   # no public sign-up — see MODULES/Auth.md
 │   │   ├── SettingsPage.tsx       # incl. language toggle (profile tab)
-│   │   ├── dashboard/DashboardPage.tsx   # real MongoDB-backed KPIs/charts — see MODULES/Dashboard.md
+│   │   ├── dashboard/              # DashboardPage + ~13 subcomponents (KpiGrid, PipelineFunnel, SalesPerformanceTable, JobTypeAnalytics, CustomerAnalytics, ActivityTimeline, FollowUpReminders, ApprovalDashboard, NotificationSummary, DashboardFilterBar, DashboardCharts, ChartCard, format/dateRanges helpers) — real MongoDB-backed Executive Dashboard, rebuilt 2026-07-10, see MODULES/Dashboard.md
 │   │   ├── products/              # ProductsPage, ProductList, ProductForm, CategoriesManager, ProductPickerModal
 │   │   ├── quotation/             # QuotationPage, QuoteList, QuoteDocument, LineItemsEditor, InterestButtons, notesFormat
 │   │   └── admin/                 # UserManagementPage, RoleManagementPage, AuditLogPage
@@ -102,7 +103,7 @@ ERP/
 
 - **Vite 6 + React 18 + TypeScript 5.6 (strict) + Tailwind v4.** No UI kit dependency — all hand-rolled Tailwind utility classes matching the navy/gold design system.
 - **No router.** `App.tsx` holds an `activeNav` string and switches between page components directly. Pages are `React.lazy`-loaded so each module (and its dependencies, e.g. `recharts` for Dashboard) is a separate JS chunk.
-- **Real backend: Vercel Serverless Functions + MongoDB Atlas.** Every domain lib (`users.ts`, `roles.ts`, `products.ts`, `notifications.ts`, `auditLog.ts`, `quotes.tsx`, `storage.ts`, `session.ts`, `dashboard.ts`) calls a REST API (`src/lib/apiClient.ts`'s `apiFetch()`) instead of reading/writing `localStorage`. Data lives in MongoDB: 8 fully-wired collections (`users`, `roles`, `company`, `products`, `categories`, `notifications`, `audit_log`, `quotes`) plus 15 schema-prepped collections added 2026-07-09 (CRM, org, files, settings scaffolding — no API routes/UI on top of most of them yet) — see [DATABASE.md](./DATABASE.md) for the full list and which is which.
+- **Real backend: Vercel Serverless Functions + MongoDB Atlas.** Every domain lib (`users.ts`, `roles.ts`, `products.ts`, `notifications.ts`, `auditLog.ts`, `quotes.tsx`, `storage.ts`, `session.ts`, `dashboard.ts`, `jobTypes.ts`) calls a REST API (`src/lib/apiClient.ts`'s `apiFetch()`) instead of reading/writing `localStorage`. Data lives in MongoDB: 9 fully-wired collections (`users`, `roles`, `company`, `products`, `categories`, `notifications`, `audit_log`, `quotes`, `job_types` — the last added 2026-07-10) plus 15 schema-prepped collections added 2026-07-09 (CRM, org, files, settings scaffolding — no API routes/UI on top of most of them yet) — see [DATABASE.md](./DATABASE.md) for the full list and which is which.
 - **Real auth.** A first-run Setup Wizard creates the one Super Admin account; every subsequent account is admin-created via User Management (no public self-signup). Sign-in checks username/email + password via `bcrypt.compare()` against a real bcrypt hash (cost 10) stored per user, server-side. Sessions are a JWT in an httpOnly, secure, `sameSite=lax` cookie (`tcs_erp_session`, 7-day expiry); every request re-fetches the user from MongoDB and checks `status === "active"`, so a deactivated user is locked out on their next request even though the JWT itself is still technically valid. RBAC permission checks run server-side on every mutating route — genuinely unbypassable via devtools now. See [RBAC.md](./RBAC.md).
 
 Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
@@ -111,8 +112,8 @@ Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 | Module | Status | Summary | Docs |
 |---|---|---|---|
-| Dashboard | ✅ Built (real data) | 7 KPI cards (customers/leads/quotations/products/revenue/won/lost), monthly revenue chart, products-by-category donut, quotation interest summary — all from real MongoDB queries via `GET /api/dashboard`; empty states when there's no business data yet. Rebuilt 2026-07-09, replacing the previous all-static-sample-data version (no more fake orders table/activity feed/sales leaderboard — those had no real backing collection and were removed rather than empty-stated) | [MODULES/Dashboard.md](./MODULES/Dashboard.md) |
-| Quotation | ✅ Built | List + create/edit/duplicate quotes, line items with per-item notes and unlimited sub-details, print/PDF export, product-library picker, **9-status approval workflow** (Draft → Pending Approval → Approved → Sent to Customer → Customer Accepted/Rejected → Won/Lost, plus Cancelled) with approval history and signature-image integration | [MODULES/Quotation.md](./MODULES/Quotation.md) |
+| Dashboard | ✅ Built (real data) | **Executive BI dashboard, rebuilt 2026-07-10**: ~20 KPI cards, sales pipeline funnel, date/salesperson filters, sales performance + executive ranking tables, job type/customer analytics, forecast, follow-up reminders, approval dashboard, activity timeline, notification summary, 9 charts — all from real MongoDB aggregation via `GET /api/dashboard`, no hardcoded values, empty states throughout. Supersedes the 2026-07-09 7-KPI/2-chart version. | [MODULES/Dashboard.md](./MODULES/Dashboard.md) |
+| Quotation | ✅ Built | List + create/edit/duplicate quotes, line items with per-item notes and unlimited sub-details, print/PDF export, product-library picker, **9-status approval workflow** (Draft → Pending Approval → Approved → Sent to Customer → Customer Accepted/Rejected → Won/Lost, plus Cancelled) with approval history and signature-image integration. **2026-07-10**: added Job Type classification (13-entry master list), Potential Opportunity flag, and Follow-up Date — feed the rebuilt Dashboard above. | [MODULES/Quotation.md](./MODULES/Quotation.md) |
 | Product Library | ✅ Built | Product + category CRUD, archive (soft-delete), search/filter/sort/pagination, duplicate, feeds the Quotation line-item picker as independent snapshots | [MODULES/Product.md](./MODULES/Product.md) |
 | Auth (Setup Wizard + Sign in) | ✅ Built (server-verified) | First-run Setup Wizard creates the Super Admin; bcrypt+JWT login verified server-side; no public self-signup | [MODULES/Auth.md](./MODULES/Auth.md) |
 | Settings | ✅ Built | Self-service profile (incl. picture + signature upload), Super-Admin-only company info (incl. bank/VAT/T&C), security (real password change), notification toggles | [MODULES/Settings.md](./MODULES/Settings.md) |

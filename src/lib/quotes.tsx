@@ -91,6 +91,14 @@ export interface Quote {
   issueDate: string;
   expiryDate: string;
   remarks: string;
+  /** Empty string = unclassified (incl. every quote created before this field existed). */
+  jobTypeCode: string;
+  /** Snapshot of the job type's display name at save time, same snapshot rationale as Product Library line items — renaming a job type later doesn't rewrite historical quotes. */
+  jobTypeName: string;
+  /** Sales-marked "likely to close" flag, feeds the Dashboard's Expected Sales KPI/forecast. */
+  isPotentialOpportunity: boolean;
+  /** Empty string = no follow-up scheduled. */
+  followUpDate: string;
   /** User id of the creator, used for ownership-scoped edit permission. Empty string for legacy/seed quotes. */
   createdByUserId: string;
   /** User id of whoever last edited the quote (plain edit or workflow action). Empty string until first edit. */
@@ -104,6 +112,7 @@ export type QuoteDraftFields = Pick<
   | "contactName" | "contactPhone" | "contactEmail" | "address" | "taxId"
   | "deliveryMethod" | "deliveryAddress" | "project"
   | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks"
+  | "jobTypeCode" | "jobTypeName" | "isPotentialOpportunity" | "followUpDate"
 > & { amount: number };
 
 /** Fields the server accepts on general quote edits — everything except id/status/date/valid/createdByUserId/updatedBy/approvalHistory, which only the server (or the workflow endpoint) sets. */

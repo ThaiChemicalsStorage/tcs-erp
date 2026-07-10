@@ -14,6 +14,7 @@ const EDITABLE_FIELDS: (keyof QuoteFields)[] = [
   "contactName", "contactPhone", "contactEmail", "address", "taxId",
   "deliveryMethod", "deliveryAddress", "project", "poRef", "paymentTerms",
   "issueDate", "expiryDate", "remarks",
+  "jobTypeCode", "jobTypeName", "isPotentialOpportunity", "followUpDate",
 ];
 // Workflow actions may not move `interest` — that's a plain-edit-only field.
 const WORKFLOW_EDITABLE_FIELDS = EDITABLE_FIELDS.filter((f) => f !== "interest");
@@ -86,6 +87,10 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       issueDate: body.issueDate ?? "",
       expiryDate: body.expiryDate ?? "",
       remarks: body.remarks ?? "",
+      jobTypeCode: body.jobTypeCode ?? "",
+      jobTypeName: body.jobTypeName ?? "",
+      isPotentialOpportunity: body.isPotentialOpportunity === true,
+      followUpDate: body.followUpDate ?? "",
       createdByUserId: ctx.user.id,
       updatedBy: ctx.user.id,
       approvalHistory: [],
