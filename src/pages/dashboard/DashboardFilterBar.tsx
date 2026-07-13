@@ -43,33 +43,33 @@ export function DashboardFilterBar({
   };
 
   return (
-    <div className="flex items-center gap-3 flex-wrap bg-card border border-border rounded-xl p-3">
-      <div className="flex items-center gap-1.5 text-muted-foreground pl-1"><CalendarRange size={14} /></div>
+    <div className="flex items-center gap-2.5 flex-wrap bg-card border border-border rounded-lg px-3 py-2">
+      <div className="flex items-center gap-1.5 text-muted-foreground pl-1"><CalendarRange size={13} /></div>
       <select
         value={preset}
         onChange={(e) => applyPreset(e.target.value as DateRangePreset)}
-        className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+        className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
       >
         {PRESETS.map((p) => <option key={p} value={p}>{presetLabel[p]}</option>)}
       </select>
 
       {preset === "custom" && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <input type="date" value={filters.from} onChange={(e) => onChange({ ...filters, from: e.target.value })}
-            className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors font-mono" />
+            className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors font-mono" />
           <span className="text-xs text-muted-foreground">—</span>
           <input type="date" value={filters.to} onChange={(e) => onChange({ ...filters, to: e.target.value })}
-            className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors font-mono" />
+            className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors font-mono" />
         </div>
       )}
 
       {/* Grouped so department+salesperson wrap together as a unit instead of `ml-auto` on a lone
           select detaching it from the row it was meant to stay aligned with once the bar wraps. */}
-      <div className="flex items-center gap-3 flex-wrap sm:ml-auto">
+      <div className="flex items-center gap-2.5 flex-wrap sm:ml-auto">
         <select
           value={filters.department}
           onChange={(e) => onChange({ ...filters, department: e.target.value })}
-          className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+          className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
         >
           <option value="all">{t("dashboard.filter.department.all")}</option>
           {availableDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -78,7 +78,7 @@ export function DashboardFilterBar({
         <select
           value={filters.salesperson}
           onChange={(e) => onChange({ ...filters, salesperson: e.target.value })}
-          className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+          className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
         >
           <option value="all">{t("dashboard.filter.salesperson.all")}</option>
           {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}

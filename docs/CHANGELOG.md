@@ -4,6 +4,66 @@
 
 ---
 
+## 2026-07-13 — Simplify the Dashboard overview into 5 compact sections (fourth same-day pass)
+
+**Scope**: further direct user feedback — even the flat 22-card `KpiGrid.tsx` from the previous
+same-day pass "is still too cluttered and hard to understand... everything looks equally
+important... feels like a generated template." Explicit request: reduce to 4 primary KPI cards
+and reorganize everything else into compact panels/lists across exactly 5 named sections
+(Executive Summary, Quotation Status, Sales Performance, Activity & Follow-up, Recent Work), with
+an explicit "do not remove existing business logic or API logic" constraint and a detailed list
+of every KPI field that must stay computed and visible somewhere.
+
+1. **`KpiGrid.tsx` (22 uniform cards) deleted entirely**, replaced by 3 new compact components,
+   each holding a subset of `DashboardKpis` in a different, non-card shape:
+   - **`ExecutiveSummaryCards.tsx`** — exactly 4 cards (Total Quotations, Total Quotation Value,
+     Closed Sales, Expected Sales), shorter/tighter padding than the old `KpiCard`, one info
+     tooltip only where genuinely useful (Expected Sales' calculation isn't obvious).
+   - **`SalesPerformancePanel.tsx`** (new) — Win Rate, Lose Rate, Conversion Rate, Average Deal
+     Size, Average Approval Time, Average Closing Time as a compact label/value grid inside one
+     `ChartCard`, not 6 more cards.
+   - **`ActivityFollowUpSummary.tsx`** (new) — Pending Approvals, Overdue Follow-ups, Expired
+     Quotations, New Customers as a compact 4-tile row inside one `ChartCard`. Pending Approvals
+     is clickable (navigates to the quotation list filtered to that status, reusing the same
+     filter the Pipeline Steps stage cards already call); the other 3 stay informational since
+     there's no equivalent single-status filter for date-derived metrics (Overdue Follow-ups/
+     Expired Quotations) or a Customer module page to link to yet (New Customers).
+2. **`QuotationStatusSummary.tsx` gained a Percentage column** (each row's share of the combined
+   Won/Lost/Active/Non-Active count) — matches the exact status/count/value/% table shape
+   requested. Donut chart and existing count/value columns unchanged.
+3. **4 KPI fields dropped from individual display**: `totalCustomers`, `totalLeads`,
+   `totalProducts`, `repeatCustomers` no longer get their own dashboard tile — they weren't named
+   in the requested 5-section spec, and were exactly the kind of secondary metric competing for
+   attention that this whole pass exists to fix. **Not removed from the data/API layer** — `GET
+   /api/dashboard` still computes all of them unchanged; total/repeat customer detail remains
+   visible in the richer `CustomerAnalytics.tsx` table further down the page, and total products
+   on the Products page itself. All 16 other fields the user's "keep this data" list named are
+   still shown somewhere (see the 3 components above + the existing `QuotationStatusSummary`).
+4. **Page reorganized into the requested top-to-bottom order**: title + compact filters →
+   `ExecutiveSummaryCards` → `QuotationStatusSummary` + forecast chart → `SalesPerformancePanel` →
+   `ActivityFollowUpSummary` → `ActivityTimeline` ("Recent Work"). Everything else that already
+   existed (revenue/job-type charts, `PipelineSteps`, `SalesActivityAnalytics`, ranking tables,
+   `CustomerAnalytics`/`JobTypeAnalytics`, the actionable `ApprovalDashboard`/`FollowUpReminders`
+   lists — distinct from the compact *counts* in `ActivityFollowUpSummary` above, since those are
+   real clickable line-item lists — `NotificationSummary`, the interest breakdown) moved below a
+   new "In-Depth Detail" divider, unchanged in content. This wasn't part of the "too many large
+   KPI cards" complaint, so it wasn't touched or removed, per the explicit "do not remove existing
+   business logic" instruction.
+5. **`DashboardFilterBar.tsx` tightened**: `p-3`→`px-3 py-2`, `gap-3`→`gap-2.5`, each select/input
+   `py-2`→`py-1.5` — a visibly slimmer single-row bar, addressing "the filter area is too large
+   compared to the content" now that the content above it is much more compact.
+6. **Verification**: same environment constraint as the prior 3 same-day passes (no local
+   backend). Built a throwaway isolated preview composing the real `ExecutiveSummaryCards` /
+   `QuotationStatusSummary` / `SalesPerformancePanel` / `ActivityFollowUpSummary` /
+   `DashboardFilterBar` components with representative mock data (deleted before finishing),
+   verified via Playwright at 1440px and 390px — confirmed exactly 4 cards in the first row, the
+   Quotation Status donut+table+percentage layout, the compact Sales Performance grid, the 4-tile
+   Activity & Follow-up row, and clean 2-column mobile stacking with no overflow. `npx tsc -b`,
+   `npm run lint`, and `npm run build` all pass clean.
+7. Docs updated: this file, PROJECT_STATUS.md, UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md.
+
+---
+
 ## 2026-07-13 — Revert Dashboard KPI hierarchy to a flat grid (third same-day pass)
 
 **Scope**: direct user feedback that the 2026-07-10 Dashboard redesign's KPI cards "does not look

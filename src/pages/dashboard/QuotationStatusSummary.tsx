@@ -4,7 +4,7 @@ import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 import { EmptyState } from "../../components/EmptyState";
 import { PieChart as PieChartIcon } from "lucide-react";
-import { fmtShort } from "./format";
+import { fmtShort, fmtPercent } from "./format";
 
 const OFF_RAMP_STAGES = new Set(["ลูกค้าปฏิเสธ", "เสียโอกาส", "ยกเลิก"]);
 const ACTIVE_STAGES = new Set(["ร่าง", "รออนุมัติ", "อนุมัติแล้ว", "ส่งให้ลูกค้าแล้ว", "ลูกค้ายอมรับ"]);
@@ -24,6 +24,9 @@ const LOST_STAGE = "เสียโอกาส";
  * slightly differs from the KPI cards' exact Active/Non-Active *counts* (which additionally carve
  * out expired-but-unclosed quotes by expiry date, not just status) — a deliberate, documented
  * approximation for the value figure only, not the displayed count.
+ *
+ * 2026-07-13 (third Dashboard simplification pass): added a Percentage column (each row's count
+ * ÷ the sum of all 4 rows' counts) per a user request for this exact status/count/value/% shape.
  */
 export function QuotationStatusSummary({ kpis, pipeline }: { kpis: DashboardKpis; pipeline: PipelineStage[] }) {
   const { t } = useI18n();
@@ -39,6 +42,7 @@ export function QuotationStatusSummary({ kpis, pipeline }: { kpis: DashboardKpis
   ];
   const hasData = rows.some((r) => r.count > 0);
   const donutData = rows.filter((r) => r.count > 0);
+  const totalCount = rows.reduce((s, r) => s + r.count, 0);
 
   return (
     <ChartCard title={t("dashboard.statusSummary.title")} sub={t("dashboard.statusSummary.sub")}>
@@ -58,6 +62,7 @@ export function QuotationStatusSummary({ kpis, pipeline }: { kpis: DashboardKpis
                   <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.statusSummary.col.status")}</th>
                   <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.statusSummary.col.count")}</th>
                   <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.statusSummary.col.value")}</th>
+                  <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.statusSummary.col.percentage")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -68,6 +73,7 @@ export function QuotationStatusSummary({ kpis, pipeline }: { kpis: DashboardKpis
                     </td>
                     <td className="px-2 py-2 text-xs font-mono text-foreground text-right">{r.count.toLocaleString("th-TH")}</td>
                     <td className="px-2 py-2 text-xs font-mono text-muted-foreground text-right">{fmtShort(r.value)}</td>
+                    <td className="px-2 py-2 text-xs font-mono text-muted-foreground text-right">{totalCount ? fmtPercent((r.count / totalCount) * 100) : "—"}</td>
                   </tr>
                 ))}
               </tbody>

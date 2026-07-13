@@ -7,7 +7,9 @@ import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
 import { buildDashboardCsv, downloadCsv } from "./csvExport";
-import { KpiGrid } from "./KpiGrid";
+import { ExecutiveSummaryCards } from "./ExecutiveSummaryCards";
+import { SalesPerformancePanel } from "./SalesPerformancePanel";
+import { ActivityFollowUpSummary } from "./ActivityFollowUpSummary";
 import { QuotationStatusSummary } from "./QuotationStatusSummary";
 import { PipelineSteps } from "./PipelineSteps";
 import { SalesActivityAnalytics } from "./SalesActivityAnalytics";
@@ -52,19 +54,31 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 /**
- * Executive Dashboard. Section order: header/filters, KPI grid, status summary + forecast,
- * revenue/job-type charts, pipeline, sales activity, rankings, top customers/job types,
- * approvals/follow-ups, recent activity.
+ * Executive Dashboard.
  *
- * 2026-07-10 (UI/UX redesign pass) split the single KPI grid into a tiered "primary hero cards +
- * dense secondary mini-cards" layout and removed 5 charts as redundant with the new
- * `QuotationStatusSummary`. 2026-07-13 (revert pass, see CHANGELOG.md): the tiered KPI split read
- * as too "template-like" for this internal ERP and was reverted back to a single flat `KpiGrid` —
- * every section the redesign *added* (QuotationStatusSummary, PipelineSteps, SalesActivityAnalytics)
- * stays, since those aren't the "huge hero card" complaint, just the KPI presentation was. The 5
- * removed charts (`QuotationTrendChart`, `SalesByEmployeeChart`, `MonthlyClosingRateChart`,
- * `QuotationStatusDonut`, `WinLoseDonut`) were not restored — they were genuinely redundant with
- * `QuotationStatusSummary`/`SalesPerformanceTable` below, not a layout-style complaint.
+ * **Top of page — the "answer in 5 seconds" overview** (2026-07-13, third simplification pass,
+ * direct user request for exactly this 5-section shape): page title + compact filters,
+ * `ExecutiveSummaryCards` (4 cards only — Total Quotations/Value, Closed/Expected Sales),
+ * `QuotationStatusSummary` (Won/Lost/Active/Non-Active, one panel not 4 cards) + the forecast
+ * chart, `SalesPerformancePanel` (rates + cycle times, a compact label/value grid not 6 cards),
+ * `ActivityFollowUpSummary` (pending approvals/overdue follow-ups/expired/new customers, a
+ * compact clickable-where-possible tile row not 4 more cards), then `ActivityTimeline` ("Recent
+ * Work"). This replaces the flat 22-card `KpiGrid.tsx` (removed) — user feedback was that even a
+ * single-tier 22-card grid still read as "a generated template" with no visual hierarchy.
+ *
+ * **Below that — supporting detail, unchanged**: revenue/job-type charts, the sales pipeline step
+ * cards, the sales-activity trend, ranking tables, top customers/job types, the actionable
+ * Pending Approvals + Follow-up Reminders lists (distinct from the compact *counts* in
+ * `ActivityFollowUpSummary` above — those are real clickable/actionable line-item lists), the
+ * notification summary, and the customer-interest breakdown. None of this was the "too many large
+ * KPI cards" complaint, so none of it was removed — see CHANGELOG.md for the full reasoning.
+ *
+ * History: 2026-07-10 (UI/UX redesign) split the original flat KPI grid into a tiered "primary
+ * hero cards + dense secondary mini-cards" layout and added `QuotationStatusSummary`/
+ * `PipelineSteps`/`SalesActivityAnalytics`, removing 5 now-redundant charts. 2026-07-13 (first
+ * revert pass) merged the tiered KPI cards back into one flat `KpiGrid`. 2026-07-13 (this pass)
+ * replaced that flat grid with the 4-section compact overview described above, after further user
+ * feedback that even the flat 22-card version still felt cluttered and template-like.
  */
 export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotations: (filter: QuotationListFilter) => void }) {
   const { t } = useI18n();
@@ -139,9 +153,11 @@ export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotatio
         <EmptyState icon={LayoutDashboard} title={t("empty.dashboard.title")} description={t("empty.dashboard.sub")} />
       ) : (
         <>
-          {/* 1. KPIs */}
+          {/* ── The 5-second overview ── */}
+
+          {/* 1. Executive summary — 4 cards only */}
           <div data-tour="dashboard-kpis">
-            <KpiGrid kpis={kpis} />
+            <ExecutiveSummaryCards kpis={kpis} />
           </div>
 
           {/* 2. Quotation status summary + forecast */}
@@ -150,45 +166,49 @@ export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotatio
             <ExpectedSalesForecastChart forecast={forecast} />
           </div>
 
-          {/* 3. Revenue trend + job type distribution */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <RevenueTrendChart trend={revenueTrend} />
-            <ProductsByCategoryChart categoryBreakdown={categoryBreakdown} />
-          </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <RevenueByJobTypeChart jobTypeAnalytics={jobTypeAnalytics} />
-            <JobTypeDistributionChart jobTypeAnalytics={jobTypeAnalytics} />
-          </div>
+          {/* 3. Sales performance — compact rates/cycle-time panel, not more cards */}
+          <SalesPerformancePanel kpis={kpis} />
 
-          {/* 4. Sales pipeline */}
-          <PipelineSteps pipeline={pipeline} onStageClick={(status) => onNavigateToQuotations({ status })} />
+          {/* 4. Activity & follow-up — compact counts, clickable where a real filter exists */}
+          <ActivityFollowUpSummary kpis={kpis} onPendingApprovalsClick={() => onNavigateToQuotations({ status: "รออนุมัติ" })} />
 
-          {/* 5. Sales activity analytics */}
-          {salesActivity && <SalesActivityAnalytics data={salesActivity} />}
+          {/* 5. Recent work */}
+          {activityTimeline && <ActivityTimeline entries={activityTimeline} />}
 
-          {/* 6. Top sales ranking */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} />
-          </div>
-          <SalesPerformanceTable title={t("dashboard.salesPerformance.title")} sub={t("dashboard.salesPerformance.sub")} entries={salesPerformance} />
+          {/* ── Supporting detail — unchanged content, just below the overview above ── */}
+          <div className="pt-2 border-t border-border space-y-6">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.section.detail")}</p>
 
-          {/* 7. Top customers / top job types */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <CustomerAnalytics data={customerAnalytics} />
-            <JobTypeAnalytics jobTypeAnalytics={jobTypeAnalytics} />
-          </div>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              <RevenueTrendChart trend={revenueTrend} />
+              <ProductsByCategoryChart categoryBreakdown={categoryBreakdown} />
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <RevenueByJobTypeChart jobTypeAnalytics={jobTypeAnalytics} />
+              <JobTypeDistributionChart jobTypeAnalytics={jobTypeAnalytics} />
+            </div>
 
-          {/* 8. Pending approvals + follow-up reminders */}
-          {approvalDashboard && <ApprovalDashboard data={approvalDashboard} onRefresh={refreshAfterAction} />}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <FollowUpReminders followUps={followUps} onOpenClient={(client) => onNavigateToQuotations({ client })} />
-            <NotificationSummary summary={notificationSummary} />
-          </div>
+            <PipelineSteps pipeline={pipeline} onStageClick={(status) => onNavigateToQuotations({ status })} />
 
-          {/* 9. Recent activities */}
-          <div className={`grid grid-cols-1 ${activityTimeline ? "xl:grid-cols-3" : "xl:grid-cols-1"} gap-4`}>
-            {activityTimeline && <div className="xl:col-span-2"><ActivityTimeline entries={activityTimeline} /></div>}
-            <div className="bg-card border border-border rounded-xl p-5">
+            {salesActivity && <SalesActivityAnalytics data={salesActivity} />}
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} />
+            </div>
+            <SalesPerformanceTable title={t("dashboard.salesPerformance.title")} sub={t("dashboard.salesPerformance.sub")} entries={salesPerformance} />
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <CustomerAnalytics data={customerAnalytics} />
+              <JobTypeAnalytics jobTypeAnalytics={jobTypeAnalytics} />
+            </div>
+
+            {approvalDashboard && <ApprovalDashboard data={approvalDashboard} onRefresh={refreshAfterAction} />}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <FollowUpReminders followUps={followUps} onOpenClient={(client) => onNavigateToQuotations({ client })} />
+              <NotificationSummary summary={notificationSummary} />
+            </div>
+
+            <div className="bg-card border border-border rounded-xl p-5 max-w-xl">
               <h2 className="text-base font-semibold text-foreground mb-4" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.interest.title")}</h2>
               <div className="space-y-3">
                 {[

@@ -24,6 +24,7 @@ const translations = {
     "dashboard.section.overview": "ภาพรวมยอดขาย",
     "dashboard.section.overview.sub": "ตัวชี้วัดหลักที่สำคัญที่สุด ณ ช่วงเวลาที่เลือก",
     "dashboard.section.secondaryKpi": "ข้อมูลสรุปเพิ่มเติม",
+    "dashboard.section.detail": "รายละเอียดเชิงลึก",
     "dashboard.section.pipelineStatus": "ขั้นตอนและสถานะใบเสนอราคา",
 
     "dashboard.kpi.help.expectedSales": "ยอดรวมของใบเสนอราคาที่เซลส์ติ๊กว่างานนี้มีโอกาสปิดได้ (Potential Opportunity) ไม่ว่าใบเสนอราคานั้นจะอยู่ในสถานะใดก็ตาม",
@@ -45,6 +46,13 @@ const translations = {
     "dashboard.statusSummary.col.status": "สถานะ",
     "dashboard.statusSummary.col.count": "จำนวนงาน",
     "dashboard.statusSummary.col.value": "มูลค่ารวม",
+    "dashboard.statusSummary.col.percentage": "สัดส่วน",
+
+    "dashboard.salesEfficiency.title": "ประสิทธิภาพการขาย",
+    "dashboard.salesEfficiency.sub": "อัตราการปิดการขายและระยะเวลาดำเนินการ",
+
+    "dashboard.actionItems.title": "งานที่ต้องดำเนินการ",
+    "dashboard.actionItems.sub": "รายการที่ควรติดตามในตอนนี้",
 
     "dashboard.salesActivity.title": "กิจกรรมของฝ่ายขาย",
     "dashboard.salesActivity.sub": "จำนวนใบเสนอราคาที่สร้างใหม่และแก้ไข แยกตามช่วงเวลา",
@@ -688,6 +696,7 @@ const translations = {
     "dashboard.section.overview": "Sales Overview",
     "dashboard.section.overview.sub": "The most important metrics for the selected period",
     "dashboard.section.secondaryKpi": "Additional Summary",
+    "dashboard.section.detail": "In-Depth Detail",
     "dashboard.section.pipelineStatus": "Quotation Pipeline & Status",
 
     "dashboard.kpi.help.expectedSales": "Total value of quotations sales has flagged as a likely-to-close opportunity (Potential Opportunity), regardless of current status.",
@@ -709,6 +718,13 @@ const translations = {
     "dashboard.statusSummary.col.status": "Status",
     "dashboard.statusSummary.col.count": "Jobs",
     "dashboard.statusSummary.col.value": "Total Value",
+    "dashboard.statusSummary.col.percentage": "Share",
+
+    "dashboard.salesEfficiency.title": "Sales Performance",
+    "dashboard.salesEfficiency.sub": "Close rates and cycle times",
+
+    "dashboard.actionItems.title": "Needs Attention",
+    "dashboard.actionItems.sub": "Items worth following up on right now",
 
     "dashboard.salesActivity.title": "Sales Activity",
     "dashboard.salesActivity.sub": "New and edited quotations, by period",
