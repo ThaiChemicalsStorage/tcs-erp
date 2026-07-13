@@ -267,7 +267,7 @@ export function SettingsPage({
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{t("settings.pageTitle")}</h1>
+        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("settings.pageTitle")}</h1>
         <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("settings.pageSubtitle")}</p>
       </div>
 
@@ -435,7 +435,7 @@ export function SettingsPage({
       {/* Security */}
       {tab === "security" && (
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
-          <p className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("settings.security.title")}</p>
+          <p className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("settings.security.title")}</p>
           <div className="space-y-4">
             <div>
               <label className={labelCls}>{t("settings.security.currentLabel")}</label>

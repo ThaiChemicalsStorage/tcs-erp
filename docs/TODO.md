@@ -4,6 +4,13 @@
 
 ## High Priority
 
+- [ ] **Medium/Low Priority UI items deferred from the 2026-07-13 Codex review** (`docs/CODEX_REVIEW_REPORT.md`) — the Critical + High items were fixed the same day (see CHANGELOG.md), these were explicitly scoped out:
+  - Topbar search is decorative (no state/filtering/results) — either wire it up or remove the input to stop implying it works.
+  - Notification delete button is hover-only (`opacity-0 group-hover:opacity-100`) — no persistent affordance for touch/keyboard users.
+  - Notification rows are `<div onClick>`, not semantic `<button>`/`<a>` — no keyboard activation.
+  - Login page's "Remember me" checkbox is UI-only and doesn't change session behavior — make it functional or remove it (currently misleading).
+  - No `focus-visible` ring audit across icon-only buttons (many rely on `title` alone, not an accessible name for all assistive tech).
+  - Chart cards use fixed pixel heights (200–260px) not re-tuned per breakpoint; Dashboard tables/legends have no compact-card mobile alternative, only horizontal scroll.
 - [ ] **Roll out `PageHeader`/`EmptyState` beyond the Dashboard.** Added 2026-07-10 (UI/UX pass) as shared components (`src/components/PageHeader.tsx`/`EmptyState.tsx`) and wired into the Dashboard (both) plus Products/Quotations (`EmptyState` only); Quotation/Products/Settings/User Management/Role Management/Audit Log pages still use their own hand-rolled `<h1>`/description header markup. Mechanical, page-by-page work — low risk, no new design decisions needed, just needs the time.
 - [ ] **Extend the guided tour to other modules.** `src/components/GuidedTour.tsx` currently only covers elements visible together (sidebar, topbar, Dashboard) — added 2026-07-10. Natural next steps once there's a page to point at: a Quotation-creation step (once `PageHeader` lands there, or targeting the "+ create" button directly), a Products step. Leads/Customers/Approvals steps can't be added until those modules get real pages (see IMPLEMENTATION_CHECKLIST.md) — don't add tour steps for UI that doesn't exist.
 - [ ] **In-app unsaved-changes interception for the Quotation form.** The 2026-07-10 UX pass added a `beforeunload` browser warning (tab close/refresh/browser back), but this app has no router — switching sidebar sections mid-edit is a plain React state change, not a browser navigation event, so it isn't currently intercepted. Would need `QuotationPage`'s `onBack`/`App.tsx`'s `setActiveNav` calls to check a "is the form dirty" flag and show a `ConfirmDialog` before discarding, threaded up from `QuoteDocument.tsx`.

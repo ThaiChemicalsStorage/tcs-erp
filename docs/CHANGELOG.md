@@ -4,6 +4,190 @@
 
 ---
 
+## 2026-07-13 — Codex UI/UX review: Critical + High Priority fixes (second same-day pass)
+
+**Scope**: `docs/CODEX_REVIEW_REPORT.md` (an independent Codex review of the Sidebar-overflow/
+typography pass earlier the same day) found the sidebar overflow bug itself fixed, but flagged 3
+Critical and 5 High Priority UI issues on top of it — no responsive mobile shell, a topbar that
+doesn't degrade gracefully below ~900px, unqualified two-column form grids, overly dense/mono-heavy
+typography, truncated text with no recovery path, and non-wrapping page headers. This pass fixes
+every Critical and High Priority item; Medium/Low items (decorative search, hover-only delete,
+`Remember me` no-op, semantic-HTML notification rows, focus-visible styling) are logged in TODO.md,
+not attempted here — see "Not done" below.
+
+1. **[Critical] Mobile off-canvas sidebar drawer.** `App.tsx`'s `<aside>` previously always
+   reserved 256px or 64px of width with no responsive behavior at all — on a phone it permanently
+   ate a quarter of the screen. Now: below the `md` (768px) breakpoint the sidebar is a `fixed`
+   off-canvas panel (`-translate-x-full` when closed, `translate-x-0` when open) behind a
+   click-to-close backdrop, toggled by a new hamburger button in the topbar (`md:hidden`,
+   `aria-label`d via new `nav.openMenu`/`nav.closeMenu` dictionary keys); closes on nav-item click,
+   backdrop click, or Escape (new `mobileNavOpen`-scoped `keydown` listener). At `md`+ it reverts to
+   the existing static-column expand/collapse behavior, unchanged. New `navExpanded` derived value
+   (`sidebarOpen || mobileNavOpen`) decides whether the sidebar renders labels/group headers —
+   decoupled from `sidebarOpen` itself, which now only ever controls desktop width.
+2. **[Critical] Topbar no longer overflows/clips below desktop width.** The always-visible `w-72`
+   search box and org breadcrumb, plus fixed `px-6`/`gap-4` padding, were competing for width with a
+   permanently-reserved sidebar on any screen under ~900px — `App.tsx`'s root `overflow-hidden`
+   would have clipped the loser rather than let it wrap. Fixed: header padding/gaps now scale
+   (`px-3 md:px-6`, `gap-2 md:gap-4`, `min-h-[60px] md:min-h-[68px]`); the breadcrumb is `hidden
+   sm:flex` with `truncate`; the search box and the user's name/role/chevron are now `hidden
+   lg:flex`/`hidden lg:block` (was `md:`) — a Codex-flagged real-device check found `md:` (768px)
+   still too cramped for the fixed-width search box plus a Thai full name, causing the name to wrap
+   into an ugly 4-line stack; `lg:` (1024px) is where there's genuinely enough room. The user
+   name/role block also gained `max-w-[140px] truncate` as a hard backstop. The notification bell's
+   `ml-auto` breakpoint moved to match (`lg:ml-0`, was `md:ml-0`) so it still right-aligns correctly
+   whenever the search box is hidden.
+3. **[Critical] Quotation editor no longer forces two columns on phone widths.**
+   `QuoteDocument.tsx` had 7 unqualified `grid grid-cols-2` layouts (the customer-info/doc-details
+   split, and 5 inner field-pairs — contact name/phone, delivery method/project, quote number/PO
+   ref, issue/expiry date, job type/interest) plus the remarks/signatures split — all now
+   `grid-cols-1 sm:grid-cols-2` (stacks under 640px). The customer-info panel's `border-r` divider
+   (meaningless once stacked) becomes `border-b sm:border-b-0 sm:border-r`. The navy document-header
+   band (company info left, quotation title right) gained `flex-wrap gap-4` and responsive padding
+   (`px-4 sm:px-7`) instead of a rigid `justify-between` that would compress both sides. Applied the
+   same `grid-cols-1 sm:grid-cols-2` fix to `UserManagementPage.tsx`'s create/edit form (5 grids),
+   `RoleManagementPage.tsx`'s name/description fields and permission-checkbox grid, and
+   `SetupWizardPage.tsx`'s two field-pair grids (employee ID/username, password/confirm) — the same
+   unqualified-grid pattern Codex flagged as a Medium finding for these files, fixed alongside the
+   Critical quotation-editor fix since it's the identical, cheap, low-risk change.
+4. **[High] Sidebar brand title tightened for narrow-width safety.** `BrandMark.tsx`'s wordmark
+   dropped from `text-[13px]` to `text-xs` (12px) — Codex calculated only ~182px of available text
+   width at the sidebar's fixed 256px expanded width and flagged the smaller margin as needing
+   verification; the smaller size gives more headroom before `break-words`' mid-word-break fallback
+   could ever trigger. Verified visually (see Verification below) at the sidebar's expanded,
+   collapsed, and mobile-drawer-open states — wraps cleanly to 2 lines via `line-clamp-2`, no
+   mid-word breaks, no overflow.
+5. **[High] Typography consolidated and de-densified.**
+   - New centralized `--font-sans` design token (`styles/theme.css`, wired through Tailwind v4's
+     `@theme inline` so the standard `font-sans` utility resolves to it) replaces 2 separate
+     hand-repeated `font-['Inter','Noto_Sans_Thai',sans-serif]` arbitrary-value classes
+     (`App.tsx`, `AuthLayout.tsx`) and the `body` rule in `index.css` — one definition instead of
+     three copies that could drift.
+   - **Fixed a latent bug found while doing the above**: JetBrains Mono was imported in
+     `fonts.css` but never actually wired to the `font-mono` utility (no `--font-mono` theme
+     override existed anywhere) — every `font-mono` number/code/date span in the app (quotation
+     numbers, currency, dates — the entire documented "numbers use JetBrains Mono" convention in
+     UI_GUIDELINES.md) was silently rendering in the browser's generic system monospace font the
+     whole time. Added a matching `--font-mono` token so `font-mono` now actually renders JetBrains
+     Mono as designed.
+   - `QuoteDocument.tsx`'s 19 form-field `<label>`s bumped from `text-[10px]` to `text-xs` (12px) —
+     Codex's specific "at least 12px for dense supporting text" ask, applied to the one file it
+     named that has real fill-in-a-form reading load (not the uppercase section-eyebrow labels
+     elsewhere, which stay at their existing size — that's a deliberate, documented, different
+     reading mode, not the same finding).
+6. **[High] Dashboard density reduced.** `SecondaryKpiSummary.tsx` (the 9-tile `xl:grid-cols-9`
+   secondary-metrics row) is now collapsible — a new chevron-toggle header, default expanded
+   (unchanged desktop behavior) but user-collapsible on any screen size, addressing Codex's "put
+   secondary metrics in an optional section" suggestion without hiding anything by default. Its
+   mini-card value/title `<p>` tags gained `title=` tooltips (were `truncate` with no fallback) and
+   the title text bumped `text-[10px]` → `text-[11px]`. `DashboardFilterBar.tsx`'s department filter
+   no longer carries its own `ml-auto` (which detached it from the salesperson filter once the bar
+   wrapped on a narrow screen) — department + salesperson are now grouped in one `flex flex-wrap
+   sm:ml-auto` wrapper so they wrap together as a pair. `RevenueTrendChart`'s X-axis gained
+   `minTickGap={24}` so many weekly data points auto-skip overlapping tick labels instead of
+   colliding (Medium-priority chart-collision finding, fixed alongside the density work since it's
+   a one-line prop).
+7. **[High] Truncated text now has a full-value fallback.** Added `title=` attributes to every
+   Codex-named truncation-with-no-recovery spot: `DashboardCharts.tsx`'s job-type and product-
+   category legend labels, `ActivityTimeline.tsx`'s audit-entry detail line, `NotificationBell.tsx`'s
+   notification title. (`SecondaryKpiSummary.tsx` covered under point 6.)
+8. **[High] Page headers wrap on narrow screens instead of clipping.** `QuoteList.tsx`,
+   `ProductList.tsx`, `AuditLogPage.tsx`, and `UserManagementPage.tsx`'s title/action-button header
+   rows gained `flex-wrap gap-3` (were unqualified `justify-between`); `RoleManagementPage.tsx`'s
+   hint/create-button row got the same treatment. `AuditLogPage.tsx` and `UserManagementPage.tsx`'s
+   `w-72` fixed-width search boxes became `w-full sm:w-72` so they don't force row overflow before
+   wrapping kicks in. `AuditLogPage.tsx` also gained a real `<h1>` page title (previously the only
+   page in the app with no visible title/description at all — a separate Codex page-by-page finding
+   fixed opportunistically since the header row was already being touched).
+9. **Verification**: same constraint as the first same-day pass — `npm run dev` has no backend
+   behind it in this sandboxed session (`fetchSession()` never resolves, so the real authenticated
+   app can't be reached past the boot spinner). Built a second throwaway isolated preview harness
+   (real `BrandMark`/`NotificationBell`/i18n components, the exact new sidebar+topbar JSX copied
+   verbatim, deleted before finishing — not part of the app) and drove it with Playwright across
+   390px (mobile, drawer closed and open, Escape-to-close), 768/820px (the `md` boundary — this is
+   what caught the user-name-wrapping bug fixed in point 2), 1280/1440px (desktop). `npx tsc -b`,
+   `npm run lint`, and `npm run build` all pass clean. The quotation-editor grid fix (point 3) and
+   the admin-form grid fixes were verified by code inspection against the identical, already-proven
+   `sm:grid-cols-2` pattern (`ProductForm.tsx` already used it successfully per Codex's own review)
+   rather than a redundant mockup, since reproducing the full authenticated quotation form's
+   permissions/workflow state outside the real app wasn't a good use of the same session's limited
+   verification budget.
+10. **Not done** (Medium/Low priority, logged for a future pass, not attempted here): decorative
+    non-functional topbar search (still a "false affordance"); notification delete button still
+    hover-only (no persistent touch affordance); `Remember me` checkbox on login still doesn't
+    change session behavior; notification rows are still `div onClick`, not semantic
+    buttons/links (keyboard activation gap); no `focus-visible` ring audit; no full accessibility
+    pass (icon-only buttons beyond the ones touched here still rely on `title` alone in places).
+    Docs updated: this file, PROJECT_STATUS.md, UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md.
+
+---
+
+## 2026-07-13 — Sidebar header overflow fix + app-wide typography/overflow pass
+
+**Scope**: a reported UI bug (the "Thai Chemicals Storage ERP" sidebar title overflowing outside
+the sidebar) plus the broader typography/overflow audit requested alongside it.
+
+1. **Fixed the actual bug**: `components/BrandMark.tsx`'s wordmark (`<p>` for "Thai Chemicals
+   Storage ERP") used `whitespace-nowrap` inside a container with only `overflow-hidden` (no
+   `truncate`/ellipsis and no wrapping) — at the sidebar's fixed 256px width, the single-line text
+   simply got clipped past the container edge instead of wrapping or shrinking. Replaced with
+   `break-words line-clamp-2 leading-snug` (wraps to at most 2 lines, no overflow) plus `min-w-0`
+   on the wrapping flex containers so the text column can actually shrink instead of forcing its
+   parent wider. The Thai subtitle ("ระบบองค์กร") now uses `truncate` (was `whitespace-nowrap`
+   with no ellipsis fallback). Verified visually (see Verification below) at the sidebar's expanded
+   (256px) and collapsed (64px) widths and down to a 390px mobile viewport.
+2. **Sidebar polish**: nav item labels now `truncate` (were `whitespace-nowrap overflow-hidden`
+   with no ellipsis) with `min-w-0` on their flex containers so a long translated label can't push
+   the row wider than the sidebar; added `title` tooltips on nav/settings buttons when the sidebar
+   is collapsed (icon-only) so the label is still discoverable via hover; slightly tightened header
+   padding/logo size (`size 32→30`, `min-h-[68px]→[72px]`) for a less cramped brand-mark area.
+   Active/hover states, spacing, and border-radius were already consistent with
+   [UI_GUIDELINES.md](./UI_GUIDELINES.md) and were left as-is.
+3. **Sidebar now defaults to collapsed on narrow viewports** (`window.innerWidth < 768` at mount,
+   `App.tsx`'s `sidebarOpen` initializer) — the expanded 256px sidebar left only ~130px for content
+   on a 390px-wide mobile viewport, wrapping the topbar/breadcrumb awkwardly. This is a minimal,
+   low-risk default-state fix, **not** a mobile drawer/overlay nav — the app remains desktop/tablet-
+   primary by design (see UI_GUIDELINES.md "Responsive Rules", unchanged), and a real off-canvas
+   mobile nav is still explicitly out of scope (tracked in TODO.md, not attempted here).
+4. **Thai-aware font stack, applied globally**: added `Noto Sans Thai` (400/500/600/700) to the
+   Google Fonts import in `styles/fonts.css` and to every `font-family` declaration in the app
+   (`body` in `styles/index.css`, the two `font-[Inter,sans-serif]` root-shell classes in
+   `App.tsx`/`AuthLayout.tsx`, and — via a repo-wide replace — all 31 call sites of the
+   `'Playfair Display', serif` heading style). Previously Thai text inside a Playfair Display
+   heading (page titles, topbar breadcrumb, dialog titles — all translated, so Thai by default)
+   silently fell back to whatever generic serif the browser had for unsupported glyphs, rendering
+   in a different weight/style than the surrounding Noto Sans Thai body text. Now: Latin characters
+   render in Inter (body) / Playfair Display (headings) exactly as before — the brand identity is
+   unchanged — and Thai characters within the *same* text node automatically render in Noto Sans
+   Thai instead of an arbitrary fallback, since browsers resolve font-family per-codepoint.
+5. **Readability**: base `body` line-height raised to `1.6` (from the browser default, effectively
+   ~1.2) in `styles/theme.css`, plus an explicit `1.6` on bare `<p>` tags; `-webkit-font-smoothing:
+   antialiased` + `text-rendering: optimizeLegibility` added to `body`.
+6. **Table overflow bug sweep**: 4 tables (`QuoteList.tsx`, `ProductList.tsx`, `AuditLogPage.tsx`,
+   `UserManagementPage.tsx`) were missing the `overflow-x-auto` wrapper every other table in the
+   app already uses (`ApprovalDashboard.tsx`, `SalesPerformanceTable.tsx`, etc.) — on a narrow
+   viewport these would have squeezed columns instead of scrolling horizontally. Also added
+   `truncate`/`max-w-[…]`/`title=` tooltips to the long free-text columns most likely to overflow
+   in practice — quotation client name, product name — matching the pattern `UserManagementPage.tsx`
+   already used for its user-name column.
+7. **Verification**: the full authenticated app (Dashboard/Quotations/Products/Admin pages) could
+   not be exercised live in this sandboxed session — `npm run dev` has no backend behind it
+   (no `vercel dev`/MongoDB), so the app hangs on its boot spinner past the sign-in gate, the same
+   `fetchSession()`-never-resolves limitation every prior session has hit (see PROJECT_STATUS.md
+   "Known Risks"). Instead, built a throwaway isolated preview harness (a second Vite HTML entry
+   importing the real `BrandMark`/`I18nProvider`/nav components, deleted before finishing — not
+   part of the app) to visually confirm the fix with Playwright: sidebar header no longer overflows
+   at expanded/collapsed/390px-mobile widths, Thai nav labels/subtitle render cleanly, the Thai+
+   Latin mixed-script sample renders consistently. `npx tsc -b`, `npm run lint`, and `npm run build`
+   all pass clean.
+8. **Not done / remaining**: no real off-canvas mobile drawer nav (see point 3); no full
+   accessibility audit; Dashboard/table visual polish at very narrow (<390px) widths not manually
+   walked page-by-page (the table `overflow-x-auto` fix covers the mechanism, not a full visual
+   pass per page). Docs updated: this file, PROJECT_STATUS.md, UI_GUIDELINES.md,
+   IMPLEMENTATION_CHECKLIST.md.
+
+---
+
 ## 2026-07-10 — Audit integrity + workflow gap fix pass (fifth same-day pass)
 
 **Scope**: fix the Critical and High Priority issues raised by the independent Codex re-review's

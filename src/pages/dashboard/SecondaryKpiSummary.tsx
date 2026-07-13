@@ -1,4 +1,5 @@
-import { Trophy, Frown, Ban, Wallet, Clock, ClipboardCheck, CalendarClock, Users, Boxes, type LucideIcon } from "lucide-react";
+import { useState } from "react";
+import { Trophy, Frown, Ban, Wallet, Clock, ClipboardCheck, CalendarClock, Users, Boxes, ChevronDown, type LucideIcon } from "lucide-react";
 import type { DashboardKpis } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
@@ -11,9 +12,9 @@ function MiniCard({ title, value, icon: Icon, accent, help }: { title: string; v
         <Icon size={15} style={{ color: accent }} />
       </div>
       <div className="min-w-0">
-        <p className="text-sm font-bold text-foreground font-mono leading-none truncate">{value}</p>
+        <p className="text-sm font-bold text-foreground font-mono leading-none truncate" title={value}>{value}</p>
         <div className="flex items-center gap-1 mt-0.5">
-          <p className="text-[10px] text-muted-foreground truncate">{title}</p>
+          <p className="text-[11px] text-muted-foreground truncate" title={title}>{title}</p>
           {help && <MetricInfoTooltip label={title} text={help} />}
         </div>
       </div>
@@ -30,20 +31,30 @@ function MiniCard({ title, value, icon: Icon, accent, help }: { title: string; v
 export function SecondaryKpiSummary({ kpis }: { kpis: DashboardKpis }) {
   const { t } = useI18n();
   const days = t("dashboard.unit.days");
+  const [expanded, setExpanded] = useState(true);
   return (
     <div>
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("dashboard.section.secondaryKpi")}</h3>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
-        <MiniCard title={t("dashboard.kpi.wonDeals")} value={kpis.wonDeals.toLocaleString("th-TH")} icon={Trophy} accent="#157347" />
-        <MiniCard title={t("dashboard.kpi.lostDeals")} value={kpis.lostDeals.toLocaleString("th-TH")} icon={Frown} accent="#e05252" />
-        <MiniCard title={t("dashboard.kpi.nonActiveQuotations")} value={kpis.nonActiveQuotations.toLocaleString("th-TH")} icon={Ban} accent="#8a94a6" help={t("dashboard.kpi.help.nonActiveQuotations")} />
-        <MiniCard title={t("dashboard.kpi.averageDealSize")} value={fmtShort(kpis.averageDealSize)} icon={Wallet} accent="#7c4dbb" help={t("dashboard.kpi.help.averageDealSize")} />
-        <MiniCard title={t("dashboard.kpi.averageClosingTime")} value={fmtDaysOrDash(kpis.averageClosingTime, days)} icon={Clock} accent="#e08a3c" help={t("dashboard.kpi.help.averageClosingTime")} />
-        <MiniCard title={t("dashboard.kpi.pendingApprovals")} value={kpis.pendingApprovals.toLocaleString("th-TH")} icon={ClipboardCheck} accent="#c9a84c" help={t("dashboard.kpi.help.pendingApprovals")} />
-        <MiniCard title={t("dashboard.kpi.overdueFollowups")} value={kpis.overdueFollowups.toLocaleString("th-TH")} icon={CalendarClock} accent="#e05252" />
-        <MiniCard title={t("dashboard.kpi.totalCustomers")} value={kpis.totalCustomers.toLocaleString("th-TH")} icon={Users} accent="#7c4dbb" />
-        <MiniCard title={t("dashboard.kpi.totalProducts")} value={kpis.totalProducts.toLocaleString("th-TH")} icon={Boxes} accent="#2aa36b" />
-      </div>
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+        aria-expanded={expanded}
+      >
+        {t("dashboard.section.secondaryKpi")}
+        <ChevronDown size={13} className={`transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+      {expanded && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-2.5">
+          <MiniCard title={t("dashboard.kpi.wonDeals")} value={kpis.wonDeals.toLocaleString("th-TH")} icon={Trophy} accent="#157347" />
+          <MiniCard title={t("dashboard.kpi.lostDeals")} value={kpis.lostDeals.toLocaleString("th-TH")} icon={Frown} accent="#e05252" />
+          <MiniCard title={t("dashboard.kpi.nonActiveQuotations")} value={kpis.nonActiveQuotations.toLocaleString("th-TH")} icon={Ban} accent="#8a94a6" help={t("dashboard.kpi.help.nonActiveQuotations")} />
+          <MiniCard title={t("dashboard.kpi.averageDealSize")} value={fmtShort(kpis.averageDealSize)} icon={Wallet} accent="#7c4dbb" help={t("dashboard.kpi.help.averageDealSize")} />
+          <MiniCard title={t("dashboard.kpi.averageClosingTime")} value={fmtDaysOrDash(kpis.averageClosingTime, days)} icon={Clock} accent="#e08a3c" help={t("dashboard.kpi.help.averageClosingTime")} />
+          <MiniCard title={t("dashboard.kpi.pendingApprovals")} value={kpis.pendingApprovals.toLocaleString("th-TH")} icon={ClipboardCheck} accent="#c9a84c" help={t("dashboard.kpi.help.pendingApprovals")} />
+          <MiniCard title={t("dashboard.kpi.overdueFollowups")} value={kpis.overdueFollowups.toLocaleString("th-TH")} icon={CalendarClock} accent="#e05252" />
+          <MiniCard title={t("dashboard.kpi.totalCustomers")} value={kpis.totalCustomers.toLocaleString("th-TH")} icon={Users} accent="#7c4dbb" />
+          <MiniCard title={t("dashboard.kpi.totalProducts")} value={kpis.totalProducts.toLocaleString("th-TH")} icon={Boxes} accent="#2aa36b" />
+        </div>
+      )}
     </div>
   );
 }

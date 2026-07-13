@@ -24,7 +24,7 @@ export function JobTypeAnalytics({ jobTypeAnalytics }: { jobTypeAnalytics: JobTy
   return (
     <div className="bg-card border border-border rounded-xl p-5">
       <div className="mb-4">
-        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("dashboard.jobType.title")}</h2>
+        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.jobType.title")}</h2>
         <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("dashboard.jobType.sub")}</p>
       </div>
       {sorted.length === 0 ? (

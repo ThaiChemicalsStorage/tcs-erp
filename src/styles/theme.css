@@ -2,6 +2,14 @@
 
 :root {
   --font-size: 15px;
+  /* Single source of truth for the app's bilingual body stack — Inter renders Latin glyphs,
+     Noto Sans Thai is the explicit (not just glyph-fallback) Thai font. Referenced via the
+     `font-sans` utility everywhere instead of each call site repeating its own font stack. */
+  --font-sans: 'Inter', 'Noto Sans Thai', sans-serif;
+  /* JetBrains Mono is imported in fonts.css but was never actually wired to the `font-mono`
+     utility (no --font-mono override existed) — every "font-mono" numbers/codes/dates span in
+     the app was silently rendering in the browser's generic system monospace font instead. */
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --background: #f4f6fb;
   --foreground: #0b1d3a;
   --card: #ffffff;
@@ -42,6 +50,8 @@
 }
 
 @theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -89,10 +99,15 @@
 
   body {
     @apply bg-background text-foreground;
+    line-height: 1.6;
   }
 
   html {
     font-size: var(--font-size);
+  }
+
+  p {
+    line-height: 1.6;
   }
 
   h1 {

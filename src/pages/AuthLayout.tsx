@@ -11,7 +11,7 @@ const features: { icon: typeof Boxes; key: TranslationKey }[] = [
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   return (
-    <div className="min-h-screen flex bg-background font-[Inter,sans-serif] text-foreground">
+    <div className="min-h-screen flex bg-background font-sans text-foreground">
       {/* Branding panel */}
       <div className="hidden lg:flex lg:w-[42%] bg-[#0b1d3a] flex-col justify-between p-12 relative overflow-hidden">
         <div className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: "radial-gradient(circle at 20% 20%, #c9a84c 0%, transparent 45%), radial-gradient(circle at 80% 70%, #c9a84c 0%, transparent 40%)" }} />
@@ -20,7 +20,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="relative">
-          <h1 className="text-white text-3xl font-semibold leading-snug mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <h1 className="text-white text-3xl font-semibold leading-snug mb-4" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
             {t("auth.brand.headline1")}<br />{t("auth.brand.headline2")}
           </h1>
           <p className="text-[#a8bed8] text-sm leading-relaxed mb-8 max-w-sm">

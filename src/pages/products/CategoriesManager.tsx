@@ -66,12 +66,12 @@ export function CategoriesManager({
           <ChevronRight size={14} className="rotate-180" /> {t("products.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', serif" }}>{t("products.manageCategories")}</span>
+        <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("products.manageCategories")}</span>
       </div>
 
       <div className="p-6 max-w-2xl mx-auto space-y-5">
         <div className="bg-card border border-border rounded-xl p-5">
-          <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
             <Tags size={13} /> {t("products.categories.addNewTitle")}
           </p>
           <div className="flex items-center gap-2">

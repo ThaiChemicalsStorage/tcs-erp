@@ -68,7 +68,7 @@ export function NotificationBell({
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-2 w-96 max-w-[90vw] bg-card border border-border rounded-lg shadow-xl z-20 overflow-hidden flex flex-col max-h-[28rem]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("notif.title")}</p>
+              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("notif.title")}</p>
               {unread > 0 && (
                 <button onClick={onMarkAllRead} className="flex items-center gap-1 text-xs text-[#c9a84c] hover:text-[#a07830] transition-colors">
                   <Check size={12} /> {t("notif.markAllRead")}
@@ -93,7 +93,7 @@ export function NotificationBell({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-[#c9a84c] flex-shrink-0" />}
-                        <p className={`text-xs truncate ${n.read ? "text-foreground" : "font-semibold text-foreground"}`}>{n.title}</p>
+                        <p className={`text-xs truncate ${n.read ? "text-foreground" : "font-semibold text-foreground"}`} title={n.title}>{n.title}</p>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{n.description}</p>
                       <div className="flex items-center gap-2 mt-1">

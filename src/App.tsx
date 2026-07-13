@@ -122,7 +122,11 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window === "undefined" ? true : window.innerWidth >= 768));
+  /** Off-canvas drawer state for narrow (<768px, the `md` breakpoint) viewports — decoupled from
+   * `sidebarOpen` (the desktop 256px/64px width toggle) since on mobile the sidebar is either fully
+   * open as an overlay or fully hidden, never a persistent icon rail. See NAV_EXPANDED below. */
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quotationListFilter, setQuotationListFilter] = useState<QuotationListFilter | null>(null);
@@ -165,6 +169,15 @@ export default function App() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Mobile drawer: Escape closes it, and it never survives a nav change made some other way
+  // (e.g. browser back) since it's plain UI state, not routed — no cleanup needed there.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileNavOpen(false); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileNavOpen]);
 
   // Offers the guided tour once per user, the first time they land on a "ready" session — not
   // forced (see `showTourPrompt`'s Start/Skip banner below), and never shown again once they've
@@ -315,13 +328,35 @@ export default function App() {
 
   const canManageCompany = hasPermission(currentUser, roles, "company:manage");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
+  /** Whether the sidebar should render its expanded content (group labels, nav text, full brand
+   * wordmark) — true on desktop when the user hasn't collapsed it, and always true inside the
+   * mobile off-canvas drawer (there's no icon-only state for an overlay, it's open-and-full or
+   * closed). Kept separate from `sidebarOpen` itself, which only ever controls desktop width. */
+  const navExpanded = sidebarOpen || mobileNavOpen;
+  const closeMobileNav = () => setMobileNavOpen(false);
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden font-[Inter,sans-serif] text-foreground print:h-auto print:overflow-visible print:block">
-      {/* Sidebar */}
-      <aside className={`${sidebarOpen ? "w-64" : "w-16"} flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out overflow-hidden print:hidden`}>
-        <div className={`flex items-center border-b border-sidebar-border min-h-[68px] transition-all duration-300 ease-in-out ${sidebarOpen ? "gap-3 px-4 py-5" : "justify-center py-5"}`}>
-          <BrandMark size={32} variant={sidebarOpen ? "full" : "mark"} theme="dark" />
+    <div className="flex h-screen bg-background overflow-hidden font-sans text-foreground print:h-auto print:overflow-visible print:block">
+      {/* Mobile drawer backdrop */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 bg-[#0b1d3a]/50 z-30 md:hidden" onClick={closeMobileNav} aria-hidden="true" />
+      )}
+
+      {/* Sidebar — static column on desktop (md+), off-canvas overlay drawer below md */}
+      <aside
+        role={mobileNavOpen ? "dialog" : undefined}
+        aria-modal={mobileNavOpen ? true : undefined}
+        aria-label={mobileNavOpen ? t("nav.openMenu") : undefined}
+        className={`fixed inset-y-0 left-0 z-40 w-64 md:static md:z-auto md:translate-x-0
+          ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}
+          ${sidebarOpen ? "md:w-64" : "md:w-16"}
+          flex-shrink-0 flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out overflow-hidden print:hidden`}
+      >
+        <div className={`flex items-center border-b border-sidebar-border min-h-[72px] transition-all duration-300 ease-in-out ${navExpanded ? "gap-3 px-4 py-4" : "justify-center py-4"}`}>
+          <BrandMark size={30} variant={navExpanded ? "full" : "mark"} theme="dark" />
+          <button onClick={closeMobileNav} aria-label={t("nav.closeMenu")} className="md:hidden ml-auto text-sidebar-foreground hover:text-white transition-colors flex-shrink-0">
+            <X size={18} />
+          </button>
         </div>
         <nav data-tour="sidebar-nav" className="flex-1 px-2 py-4 space-y-3 overflow-y-auto">
           {NAV_GROUPS.map((group) => {
@@ -329,15 +364,15 @@ export default function App() {
             if (items.length === 0) return null;
             return (
               <div key={group.labelKey} className="space-y-0.5">
-                {sidebarOpen && (
-                  <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">{t(group.labelKey)}</p>
+                {navExpanded && (
+                  <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">{t(group.labelKey)}</p>
                 )}
                 {items.map(({ key, icon: Icon, labelKey }) => (
-                  <button key={key} onClick={() => setActiveNav(key)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 relative
+                  <button key={key} onClick={() => { setActiveNav(key); closeMobileNav(); }} title={navExpanded ? undefined : t(labelKey)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-150 relative min-w-0
                       ${activeNav === key ? "bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border border-transparent"}`}>
                     <Icon size={17} className="flex-shrink-0" />
-                    {sidebarOpen && <span className="text-sm whitespace-nowrap overflow-hidden">{t(labelKey)}</span>}
+                    {navExpanded && <span className="text-sm truncate min-w-0">{t(labelKey)}</span>}
                   </button>
                 ))}
               </div>
@@ -345,32 +380,35 @@ export default function App() {
           })}
         </nav>
         <div className="px-2 py-3 border-t border-sidebar-border">
-          <button onClick={() => setActiveNav("settings")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 border ${
+          <button onClick={() => { setActiveNav("settings"); closeMobileNav(); }} title={navExpanded ? undefined : t("nav.settings")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-150 border min-w-0 ${
               activeNav === "settings" ? "bg-[#c9a84c]/15 text-[#c9a84c] border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border-transparent"
             }`}>
             <Settings size={17} className="flex-shrink-0" />
-            {sidebarOpen && <span className="text-sm">{t("nav.settings")}</span>}
+            {navExpanded && <span className="text-sm truncate min-w-0">{t("nav.settings")}</span>}
           </button>
         </div>
       </aside>
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible print:block">
-        <header className="flex items-center gap-4 px-6 py-4 border-b border-border bg-card min-h-[68px] relative print:hidden">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-muted-foreground hover:text-foreground transition-colors">
+        <header className="flex items-center gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 border-b border-border bg-card min-h-[60px] md:min-h-[68px] relative print:hidden">
+          <button onClick={() => setMobileNavOpen(true)} aria-label={t("nav.openMenu")} className="md:hidden text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+            <Menu size={20} />
+          </button>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} aria-label={sidebarOpen ? t("nav.collapseSidebar") : t("nav.expandSidebar")} className="hidden md:block text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
             {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <div className="flex items-center gap-1.5 text-sm">
-            <span className="text-muted-foreground">{t("topbar.org")}</span>
-            <ChevronRight size={13} className="text-muted-foreground" />
-            <span className="text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', serif" }}>{t(NAV_LABEL_KEYS[effectiveNav])}</span>
+          <div className="hidden sm:flex items-center gap-1.5 text-sm min-w-0">
+            <span className="text-muted-foreground flex-shrink-0">{t("topbar.org")}</span>
+            <ChevronRight size={13} className="text-muted-foreground flex-shrink-0" />
+            <span className="text-[#c9a84c] font-medium truncate" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t(NAV_LABEL_KEYS[effectiveNav])}</span>
           </div>
-          <div className="ml-auto flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 focus-within:border-[#c9a84c]/40 transition-colors">
+          <div className="hidden lg:flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 ml-auto focus-within:border-[#c9a84c]/40 transition-colors">
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
             <input type="text" placeholder={t("topbar.searchPlaceholder")} className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full" />
           </div>
-          <div data-tour="notification-bell">
+          <div data-tour="notification-bell" className="ml-auto lg:ml-0 flex-shrink-0">
             <NotificationBell
               notifications={notifications}
               currentUserId={currentUser.id}
@@ -389,11 +427,11 @@ export default function App() {
                   initials(currentUser.fullName || "?")
                 )}
               </div>
-              <div className="text-left hidden md:block">
-                <p className="text-xs font-semibold text-foreground leading-tight">{currentUser.fullName}</p>
-                <p className="text-[10px] text-muted-foreground font-mono">{roleNameFor(currentUser, roles)}</p>
+              <div className="text-left hidden lg:block max-w-[140px]">
+                <p className="text-xs font-semibold text-foreground leading-tight truncate">{currentUser.fullName}</p>
+                <p className="text-[10px] text-muted-foreground font-mono truncate">{roleNameFor(currentUser, roles)}</p>
               </div>
-              <ChevronDown size={14} className="text-muted-foreground hidden md:block" />
+              <ChevronDown size={14} className="text-muted-foreground hidden lg:block" />
             </button>
             {userMenuOpen && (
               <>
@@ -445,7 +483,7 @@ export default function App() {
 
       {showTourPrompt && (
         <div className="fixed bottom-6 right-6 z-50 w-80 bg-card border border-border rounded-xl shadow-2xl p-4 print:hidden">
-          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("onboarding.welcome.title")}</p>
+          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("onboarding.welcome.title")}</p>
           <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{t("onboarding.welcome.message")}</p>
           <div className="flex items-center justify-end gap-2 mt-3">
             <button

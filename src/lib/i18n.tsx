@@ -238,10 +238,17 @@ const translations = {
     "nav.roles": "บทบาทและสิทธิ์",
     "nav.auditLog": "บันทึกการใช้งาน",
     "nav.settings": "ตั้งค่า",
+    "nav.openMenu": "เปิดเมนู",
+    "nav.closeMenu": "ปิดเมนู",
+    "nav.collapseSidebar": "ย่อแถบเมนู",
+    "nav.expandSidebar": "ขยายแถบเมนู",
 
     "topbar.org": "องค์กร",
     "topbar.searchPlaceholder": "ค้นหาคำสั่งซื้อ, SKU, ผู้จำหน่าย...",
     "topbar.logout": "ออกจากระบบ",
+
+    "dashboard.showMoreMetrics": "แสดงตัวชี้วัดเพิ่มเติม",
+    "dashboard.showLessMetrics": "ซ่อนตัวชี้วัดเพิ่มเติม",
 
     "auth.brand.headline1": "ระบบบริหารจัดการ",
     "auth.brand.headline2": "คลังเคมีภัณฑ์อุตสาหกรรม",
@@ -896,6 +903,13 @@ const translations = {
     "nav.roles": "Roles & Permissions",
     "nav.auditLog": "Audit Log",
     "nav.settings": "Settings",
+    "nav.openMenu": "Open menu",
+    "nav.closeMenu": "Close menu",
+    "nav.collapseSidebar": "Collapse sidebar",
+    "nav.expandSidebar": "Expand sidebar",
+
+    "dashboard.showMoreMetrics": "Show more metrics",
+    "dashboard.showLessMetrics": "Hide additional metrics",
 
     "topbar.org": "Organization",
     "topbar.searchPlaceholder": "Search orders, SKU, vendor...",

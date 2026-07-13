@@ -108,7 +108,7 @@ export function RoleManagementPage({
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-2xl mx-auto">
           <div className="flex items-center gap-2 mb-5">
-            <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>
+            <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
               {view === "create" ? t("roles.createNew") : view === "view" ? `${t("roles.viewTitlePrefix")}${editingRole?.name}` : t("roles.editTitle")}
             </h2>
             {readOnly && (
@@ -123,7 +123,7 @@ export function RoleManagementPage({
             )}
           </div>
           <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-5 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-medium text-foreground block mb-1.5">{t("roles.nameLabel")}</label>
                 <input disabled={nameLocked} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
@@ -140,7 +140,7 @@ export function RoleManagementPage({
                 {PERMISSION_GROUPS.map((group) => (
                   <div key={group.label} className="border border-border rounded-lg p-3">
                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">{t(group.labelKey)}</p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {group.permissions.map((p) => {
                         const locked = isPermissionLockedToSuperAdmin(p);
                         return (
@@ -184,7 +184,7 @@ export function RoleManagementPage({
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <p className="text-xs text-muted-foreground">{t("roles.pageHint")}</p>
         <button onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
           <Plus size={15} /> {t("roles.createNew")}
@@ -197,7 +197,7 @@ export function RoleManagementPage({
             <div className="flex items-start justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 {r.isSuperAdmin && <ShieldCheck size={14} className="text-[#c9a84c]" />}
-                <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{r.name}</p>
+                <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{r.name}</p>
               </div>
               <div className="flex items-center gap-1">
                 <button onClick={() => startEdit(r)} title={r.isSuperAdmin ? t("roles.viewDetails") : t("common.edit")} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><Pencil size={13} /></button>

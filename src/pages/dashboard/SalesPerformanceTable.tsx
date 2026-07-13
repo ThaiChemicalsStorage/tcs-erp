@@ -35,7 +35,7 @@ export function SalesPerformanceTable({ title, sub, entries, limit }: { title: s
   return (
     <div className="bg-card border border-border rounded-xl p-5">
       <div className="mb-4">
-        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{title}</h2>
+        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</h2>
         <p className="text-xs text-muted-foreground font-mono mt-0.5">{sub}</p>
       </div>
       {rows.length === 0 ? (

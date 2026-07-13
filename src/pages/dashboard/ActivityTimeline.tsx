@@ -6,7 +6,7 @@ export function ActivityTimeline({ entries }: { entries: AuditLogEntry[] }) {
   const { t } = useI18n();
   return (
     <div className="bg-card border border-border rounded-xl p-5">
-      <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', serif" }}>
+      <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
         <History size={15} /> {t("dashboard.activity.title")}
       </h2>
       {entries.length === 0 ? (
@@ -21,7 +21,7 @@ export function ActivityTimeline({ entries }: { entries: AuditLogEntry[] }) {
                   <span className="font-semibold">{e.userName}</span>
                   <span className="text-muted-foreground"> ({e.roleName}) — {e.action}</span>
                 </p>
-                {e.details && <p className="text-muted-foreground mt-0.5 truncate">{e.details}</p>}
+                {e.details && <p className="text-muted-foreground mt-0.5 truncate" title={e.details}>{e.details}</p>}
                 <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{new Date(e.createdAt).toLocaleString("th-TH")}</p>
               </div>
             </div>

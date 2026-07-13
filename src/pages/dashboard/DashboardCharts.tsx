@@ -64,7 +64,7 @@ export function RevenueTrendChart({ trend }: { trend: RevenueTrend }) {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} minTickGap={24} />
             <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
             <Area type="monotone" dataKey="revenue" name={t("dashboard.kpi.closedSales")} stroke="#c9a84c" strokeWidth={2} fill="url(#revGrad)" dot={false} activeDot={{ r: 4, fill: "#c9a84c" }} />
@@ -116,7 +116,7 @@ export function JobTypeDistributionChart({ jobTypeAnalytics }: { jobTypeAnalytic
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
             {data.map((d, i) => (
               <div key={d.name} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 min-w-0"><div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} /><span className="text-muted-foreground font-mono truncate">{d.name}</span></div>
+                <div className="flex items-center gap-2 min-w-0"><div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} /><span className="text-muted-foreground font-mono truncate" title={d.name}>{d.name}</span></div>
                 <span className="font-mono text-foreground">{d.value}</span>
               </div>
             ))}
@@ -175,7 +175,7 @@ export function ProductsByCategoryChart({ categoryBreakdown }: { categoryBreakdo
               <div key={c.categoryId} className="flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: PALETTE[i % PALETTE.length] }} />
-                  <span className="text-xs text-muted-foreground truncate">{c.categoryName}</span>
+                  <span className="text-xs text-muted-foreground truncate" title={c.categoryName}>{c.categoryName}</span>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <div className="w-16 h-1 bg-muted rounded-full overflow-hidden">

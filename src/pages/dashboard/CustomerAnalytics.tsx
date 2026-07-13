@@ -21,7 +21,7 @@ export function CustomerAnalytics({ data }: { data: CustomerAnalyticsData }) {
     <div className="bg-card border border-border rounded-xl p-5">
       <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("dashboard.customer.title")}</h2>
+          <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.customer.title")}</h2>
           <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("dashboard.customer.sub")} · {t("dashboard.customer.repeatRate")}: {fmtPercent(data.repeatCustomerPercentage)}</p>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-wrap">

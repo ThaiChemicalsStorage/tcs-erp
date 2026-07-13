@@ -125,7 +125,7 @@ export function PrintDocument({
                   <Field label="โครงการ" value={project} />
                 </div>
                 <div className="space-y-0.5">
-                  <p className="text-[#1a5fb4] font-bold text-[17px] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>ใบเสนอราคา</p>
+                  <p className="text-[#1a5fb4] font-bold text-[17px] mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ใบเสนอราคา</p>
                   <Field label="เลขที่" value={quoteId} mono />
                   <Field label="วันที่" value={fmtThaiDate(issueDate)} />
                   <Field label="วันที่ยืนราคา" value={fmtThaiDate(expiryDate)} />

@@ -63,23 +63,27 @@ export function DashboardFilterBar({
         </div>
       )}
 
-      <select
-        value={filters.department}
-        onChange={(e) => onChange({ ...filters, department: e.target.value })}
-        className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors ml-auto"
-      >
-        <option value="all">{t("dashboard.filter.department.all")}</option>
-        {availableDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
-      </select>
+      {/* Grouped so department+salesperson wrap together as a unit instead of `ml-auto` on a lone
+          select detaching it from the row it was meant to stay aligned with once the bar wraps. */}
+      <div className="flex items-center gap-3 flex-wrap sm:ml-auto">
+        <select
+          value={filters.department}
+          onChange={(e) => onChange({ ...filters, department: e.target.value })}
+          className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+        >
+          <option value="all">{t("dashboard.filter.department.all")}</option>
+          {availableDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
 
-      <select
-        value={filters.salesperson}
-        onChange={(e) => onChange({ ...filters, salesperson: e.target.value })}
-        className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
-      >
-        <option value="all">{t("dashboard.filter.salesperson.all")}</option>
-        {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}
-      </select>
+        <select
+          value={filters.salesperson}
+          onChange={(e) => onChange({ ...filters, salesperson: e.target.value })}
+          className="text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+        >
+          <option value="all">{t("dashboard.filter.salesperson.all")}</option>
+          {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
     </div>
   );
 }

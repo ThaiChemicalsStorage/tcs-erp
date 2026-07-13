@@ -61,9 +61,9 @@ export function QuoteList({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{t("quotation.pageTitle")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("quotation.pageSubtitle")}</p>
         </div>
         <button onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
@@ -136,21 +136,22 @@ export function QuoteList({
             <p className="text-sm text-muted-foreground">{t("quotation.noFilterResults")}</p>
           </div>
         ) : (
+        <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40">
               {columns.map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{h}</th>
+                <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.map((q) => (
               <tr key={q.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold cursor-pointer" onClick={() => onOpen(q.id)}>
+                <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold cursor-pointer whitespace-nowrap" onClick={() => onOpen(q.id)}>
                   {q.id}
                 </td>
-                <td className="px-4 py-3.5 text-sm text-foreground font-medium cursor-pointer" onClick={() => onOpen(q.id)}>
+                <td className="px-4 py-3.5 text-sm text-foreground font-medium cursor-pointer max-w-[220px] truncate" onClick={() => onOpen(q.id)} title={q.client}>
                   {q.client}
                 </td>
                 <td className="px-4 py-3.5 text-xs">
@@ -196,6 +197,7 @@ export function QuoteList({
             ))}
           </tbody>
         </table>
+        </div>
         )}
       </div>
     </div>

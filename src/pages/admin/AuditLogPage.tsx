@@ -22,15 +22,19 @@ export function AuditLogPage() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("nav.auditLog")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("auditLog.totalCount").replace("{n}", String(entries.length))}</p>
+        </div>
+        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full sm:w-72">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("auditLog.searchPlaceholder")} className="bg-transparent text-sm outline-none w-full text-foreground placeholder-muted-foreground" />
         </div>
-        <p className="text-xs text-muted-foreground">{t("auditLog.totalCount").replace("{n}", String(entries.length))}</p>
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-secondary/40 text-xs text-muted-foreground">
@@ -67,6 +71,7 @@ export function AuditLogPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

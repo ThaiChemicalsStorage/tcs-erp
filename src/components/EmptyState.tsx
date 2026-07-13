@@ -24,7 +24,7 @@ export function EmptyState({
         <Icon size={22} className="text-muted-foreground" />
       </div>
       <div>
-        <p className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{title}</p>
+        <p className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</p>
         <p className="text-sm text-muted-foreground mt-1.5 max-w-sm">{description}</p>
       </div>
       {actionLabel && onAction && (

@@ -227,7 +227,7 @@ export function LineItemsEditor({
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
-        <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("quotation.lineItems.title")}</p>
+        <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.lineItems.title")}</p>
         <div className="flex items-center gap-2">
           <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
             <PackageSearch size={12} /> {t("quotation.lineItems.pickFromCatalog")}
@@ -343,7 +343,7 @@ export function LineItemsEditor({
             <span className="font-mono">฿{fmt(vatAmt)}</span>
           </div>
           <div className="flex justify-between text-base font-bold text-foreground pt-2 border-t border-border">
-            <span style={{ fontFamily: "'Playfair Display', serif" }}>{t("quotation.totals.grandTotal")}</span>
+            <span style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.totals.grandTotal")}</span>
             <span className="font-mono text-[#c9a84c] text-lg">฿{fmt(total)}</span>
           </div>
         </div>

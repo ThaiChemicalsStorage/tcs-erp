@@ -52,7 +52,7 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
         <ShieldCheck size={18} className="text-[#c9a84c]" />
         <span className="text-[10px] font-mono uppercase tracking-widest text-[#c9a84c]">{t("setup.badge")}</span>
       </div>
-      <h2 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("setup.title")}</h2>
+      <h2 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("setup.title")}</h2>
       <p className="text-sm text-muted-foreground mt-1 mb-7">
         {t("setup.subtitle")}
       </p>
@@ -62,7 +62,7 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
           <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.fullNameLabel")}</label>
           <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} placeholder={t("setup.fullNamePlaceholder")} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.employeeIdLabel")}</label>
             <input type="text" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={inputCls} placeholder="EMP-0001" />
@@ -76,7 +76,7 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
           <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.emailLabel")}</label>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} placeholder="you@tcs-erp.co.th" />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-foreground block mb-1.5">{t("setup.passwordLabel")}</label>
             <div className="relative">

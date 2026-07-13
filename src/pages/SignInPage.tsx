@@ -31,7 +31,7 @@ export function SignInPage({
 
   return (
     <AuthLayout>
-      <h2 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{t("signin.title")}</h2>
+      <h2 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("signin.title")}</h2>
       <p className="text-sm text-muted-foreground mt-1 mb-7">{t("signin.subtitle")}</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">

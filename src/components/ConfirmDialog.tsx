@@ -31,7 +31,7 @@ export function ConfirmDialog({
             <AlertTriangle size={17} className={danger ? "text-[#e05252]" : "text-[#c9a84c]"} />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', serif" }}>{title}</p>
+            <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</p>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{message}</p>
           </div>
         </div>

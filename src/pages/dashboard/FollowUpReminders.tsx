@@ -26,7 +26,7 @@ export function FollowUpReminders({ followUps, onOpenClient }: { followUps: Foll
 
   return (
     <div className="bg-card border border-border rounded-xl p-5">
-      <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', serif" }}>
+      <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
         <CalendarClock size={15} /> {t("dashboard.followUps.title")}
       </h2>
       {total === 0 ? (

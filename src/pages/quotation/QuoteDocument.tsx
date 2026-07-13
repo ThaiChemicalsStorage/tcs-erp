@@ -181,7 +181,7 @@ export function QuoteDocument({
           <ChevronRight size={14} className="rotate-180" /> {t("quotation.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', serif" }}>
+        <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
           {isDetail ? quote!.id : t("quotation.newDoc")}
         </span>
 
@@ -263,11 +263,11 @@ export function QuoteDocument({
         </div>
       </div>
 
-      <div className="p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
+      <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
         {/* Document header band */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="bg-[#0b1d3a] px-7 py-5 flex items-start justify-between print:hidden">
-            <div>
+          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 flex flex-wrap items-start justify-between gap-4 print:hidden">
+            <div className="min-w-0">
               <div className="flex items-center gap-2.5 mb-1">
                 {company.logoDataUrl ? (
                   <img src={company.logoDataUrl} alt={company.name} className="h-8 max-w-[140px] object-contain" />
@@ -289,48 +289,48 @@ export function QuoteDocument({
           </div>
 
           {/* Meta fields — editable on screen */}
-          <div className="grid grid-cols-2 gap-0 border-b border-border print:hidden">
-            <div className="p-6 border-r border-border">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-b border-border print:hidden">
+            <div className="p-6 border-b sm:border-b-0 sm:border-r border-border">
               <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</p>
               <div className="space-y-2.5">
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.clientName")} <span className="text-[#e05252]">*</span></label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.clientName")} <span className="text-[#e05252]">*</span></label>
                   <input disabled={disabled} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={client} onChange={(e) => setClient(e.target.value)} />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.contactName")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactName")}</label>
                     <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder={t("quotation.field.contactNamePlaceholder")} />
                   </div>
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.contactPhone")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactPhone")}</label>
                     <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="0XX-XXX-XXXX" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.contactEmail")}</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactEmail")}</label>
                   <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="name@company.com" />
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.address")}</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.address")}</label>
                   <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t("quotation.field.addressPlaceholder")} />
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.taxId")}</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.taxId")}</label>
                   <input disabled={disabled} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder={t("quotation.field.taxIdPlaceholder")} />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.deliveryMethod")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryMethod")}</label>
                     <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder={t("quotation.field.deliveryMethodPlaceholder")} />
                   </div>
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.project")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.project")}</label>
                     <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={project} onChange={(e) => setProject(e.target.value)} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.deliveryAddress")}</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryAddress")}</label>
                   <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t("quotation.field.deliveryAddressPlaceholder")} />
                 </div>
               </div>
@@ -338,39 +338,39 @@ export function QuoteDocument({
             <div className="p-6">
               <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Hash size={10} /> {t("quotation.section.docDetails")}</p>
               <div className="space-y-2.5">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.quoteNumber")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.quoteNumber")}</label>
                     <input readOnly className="w-full text-xs font-mono text-[#c9a84c] font-semibold bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
                   </div>
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.poRef")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.poRef")}</label>
                     <input disabled={disabled} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</label>
                     <input disabled={disabled} type="date" className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
                   </div>
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</label>
                     <input disabled={disabled} type="date" className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.salesperson")}</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.salesperson")}</label>
                   <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={salesperson} onChange={(e) => setSalesperson(e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.paymentTerms")}</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.paymentTerms")}</label>
                   <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
                     {paymentTermsOptions.map((opt) => <option key={opt}>{opt}</option>)}
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.jobType")} {mode === "new" && <span className="text-[#e05252]">*</span>}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.jobType")} {mode === "new" && <span className="text-[#e05252]">*</span>}</label>
                     <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
                       {/* A brand-new quote must be assigned a real Job Type — required server-side
                           too (see api/_lib/quoteValidation.ts) — so the blank "unclassified" choice
@@ -387,7 +387,7 @@ export function QuoteDocument({
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
                     <input disabled={disabled} type="date" className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
                   </div>
                 </div>
@@ -403,7 +403,7 @@ export function QuoteDocument({
                 </label>
                 {isDetail && permissions.canEdit && (
                   <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">{t("quotation.field.customerInterestLevel")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.customerInterestLevel")}</label>
                     <InterestButtons value={quote!.interest} onChange={onInterestChange} />
                   </div>
                 )}
@@ -416,14 +416,14 @@ export function QuoteDocument({
         <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} />
 
         {/* Remarks + Signature — screen preview only; print output is PrintDocument below */}
-        <div className="grid grid-cols-2 gap-4 print:hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
           <div className="bg-card border border-border rounded-xl p-5">
-            <p className="text-xs font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>{t("quotation.section.remarks")}</p>
+            <p className="text-xs font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.section.remarks")}</p>
             <textarea rows={5} disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed disabled:opacity-60"
               value={remarks} onChange={(e) => setRemarks(e.target.value)} />
           </div>
           <div className="bg-card border border-border rounded-xl p-5">
-            <p className="text-xs font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>{t("quotation.section.signatures")}</p>
+            <p className="text-xs font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.section.signatures")}</p>
             <div className="space-y-3">
               {signatureRoles.map(({ key, label }) => {
                 const isPreparer = key === "preparer";
@@ -457,7 +457,7 @@ export function QuoteDocument({
         {/* Approval history */}
         {isDetail && quote!.approvalHistory.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-            <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', serif" }}>
+            <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
               <History size={13} /> {t("quotation.section.approvalHistory")}
             </p>
             <div className="space-y-2.5">
@@ -520,7 +520,7 @@ export function QuoteDocument({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
           <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setPendingAction(null)} />
           <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-            <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>{t(approvalActionLabelKey[pendingAction])}</p>
+            <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t(approvalActionLabelKey[pendingAction])}</p>
             <p className="text-xs text-muted-foreground mb-4">{t("quotation.modal.forQuote").replace("{id}", isDetail ? quote!.id : "").replace("{client}", client)}</p>
             <label className="text-xs text-muted-foreground block mb-1.5">
               {t("quotation.modal.commentLabel")} {commentRequired ? t("quotation.modal.commentRequired") : t("quotation.modal.commentOptional")}

@@ -32,7 +32,7 @@ export function PrimaryKpiCards({ kpis }: { kpis: DashboardKpis }) {
   const { t } = useI18n();
   return (
     <div>
-      <h2 className="text-base font-semibold text-foreground mb-0.5" style={{ fontFamily: "'Playfair Display', serif" }}>{t("dashboard.section.overview")}</h2>
+      <h2 className="text-base font-semibold text-foreground mb-0.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.section.overview")}</h2>
       <p className="text-xs text-muted-foreground font-mono mb-3">{t("dashboard.section.overview.sub")}</p>
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <PrimaryCard title={t("dashboard.kpi.totalQuotations")} value={kpis.totalQuotations.toLocaleString("th-TH")} helper={t("dashboard.kpi.helper.totalQuotations")} icon={FileText} accent="#1a5fb4" />
