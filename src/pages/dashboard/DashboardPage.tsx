@@ -7,8 +7,7 @@ import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
 import { buildDashboardCsv, downloadCsv } from "./csvExport";
-import { PrimaryKpiCards } from "./PrimaryKpiCards";
-import { SecondaryKpiSummary } from "./SecondaryKpiSummary";
+import { KpiGrid } from "./KpiGrid";
 import { QuotationStatusSummary } from "./QuotationStatusSummary";
 import { PipelineSteps } from "./PipelineSteps";
 import { SalesActivityAnalytics } from "./SalesActivityAnalytics";
@@ -53,14 +52,19 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 /**
- * Executive Dashboard — reorganized 2026-07-10 (UI/UX redesign pass) into clearly-scannable
- * sections instead of one long, undifferentiated stack of ~20 same-size KPI cards and charts.
- * Section order matches the redesign request exactly: header/filters, primary KPIs, secondary KPI
- * summary, status summary + forecast, revenue/job-type charts, pipeline, sales activity, rankings,
- * top customers/job types, approvals/follow-ups, recent activity. `QuotationTrendChart` (a
- * documented approximation reusing the revenue series), `SalesByEmployeeChart` (redundant with the
- * ranking table below), `MonthlyClosingRateChart`, `QuotationStatusDonut`, and `WinLoseDonut` were
- * removed as redundant with the new `QuotationStatusSummary` — decluttering, not just reordering.
+ * Executive Dashboard. Section order: header/filters, KPI grid, status summary + forecast,
+ * revenue/job-type charts, pipeline, sales activity, rankings, top customers/job types,
+ * approvals/follow-ups, recent activity.
+ *
+ * 2026-07-10 (UI/UX redesign pass) split the single KPI grid into a tiered "primary hero cards +
+ * dense secondary mini-cards" layout and removed 5 charts as redundant with the new
+ * `QuotationStatusSummary`. 2026-07-13 (revert pass, see CHANGELOG.md): the tiered KPI split read
+ * as too "template-like" for this internal ERP and was reverted back to a single flat `KpiGrid` —
+ * every section the redesign *added* (QuotationStatusSummary, PipelineSteps, SalesActivityAnalytics)
+ * stays, since those aren't the "huge hero card" complaint, just the KPI presentation was. The 5
+ * removed charts (`QuotationTrendChart`, `SalesByEmployeeChart`, `MonthlyClosingRateChart`,
+ * `QuotationStatusDonut`, `WinLoseDonut`) were not restored — they were genuinely redundant with
+ * `QuotationStatusSummary`/`SalesPerformanceTable` below, not a layout-style complaint.
  */
 export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotations: (filter: QuotationListFilter) => void }) {
   const { t } = useI18n();
@@ -135,21 +139,18 @@ export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotatio
         <EmptyState icon={LayoutDashboard} title={t("empty.dashboard.title")} description={t("empty.dashboard.sub")} />
       ) : (
         <>
-          {/* 1. Primary KPIs */}
+          {/* 1. KPIs */}
           <div data-tour="dashboard-kpis">
-            <PrimaryKpiCards kpis={kpis} />
+            <KpiGrid kpis={kpis} />
           </div>
 
-          {/* 2. Secondary KPI summary */}
-          <SecondaryKpiSummary kpis={kpis} />
-
-          {/* 3. Quotation status summary + forecast */}
+          {/* 2. Quotation status summary + forecast */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <QuotationStatusSummary kpis={kpis} pipeline={pipeline} />
             <ExpectedSalesForecastChart forecast={forecast} />
           </div>
 
-          {/* 4. Revenue trend + job type distribution */}
+          {/* 3. Revenue trend + job type distribution */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <RevenueTrendChart trend={revenueTrend} />
             <ProductsByCategoryChart categoryBreakdown={categoryBreakdown} />
@@ -159,32 +160,32 @@ export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotatio
             <JobTypeDistributionChart jobTypeAnalytics={jobTypeAnalytics} />
           </div>
 
-          {/* 5. Sales pipeline */}
+          {/* 4. Sales pipeline */}
           <PipelineSteps pipeline={pipeline} onStageClick={(status) => onNavigateToQuotations({ status })} />
 
-          {/* 6. Sales activity analytics */}
+          {/* 5. Sales activity analytics */}
           {salesActivity && <SalesActivityAnalytics data={salesActivity} />}
 
-          {/* 7. Top sales ranking */}
+          {/* 6. Top sales ranking */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} />
           </div>
           <SalesPerformanceTable title={t("dashboard.salesPerformance.title")} sub={t("dashboard.salesPerformance.sub")} entries={salesPerformance} />
 
-          {/* 8. Top customers / top job types */}
+          {/* 7. Top customers / top job types */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <CustomerAnalytics data={customerAnalytics} />
             <JobTypeAnalytics jobTypeAnalytics={jobTypeAnalytics} />
           </div>
 
-          {/* 9. Pending approvals + follow-up reminders */}
+          {/* 8. Pending approvals + follow-up reminders */}
           {approvalDashboard && <ApprovalDashboard data={approvalDashboard} onRefresh={refreshAfterAction} />}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <FollowUpReminders followUps={followUps} onOpenClient={(client) => onNavigateToQuotations({ client })} />
             <NotificationSummary summary={notificationSummary} />
           </div>
 
-          {/* 10. Recent activities */}
+          {/* 9. Recent activities */}
           <div className={`grid grid-cols-1 ${activityTimeline ? "xl:grid-cols-3" : "xl:grid-cols-1"} gap-4`}>
             {activityTimeline && <div className="xl:col-span-2"><ActivityTimeline entries={activityTimeline} /></div>}
             <div className="bg-card border border-border rounded-xl p-5">

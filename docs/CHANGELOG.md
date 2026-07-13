@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-07-13 — Revert Dashboard KPI hierarchy to a flat grid (third same-day pass)
+
+**Scope**: direct user feedback that the 2026-07-10 Dashboard redesign's KPI cards "does not look
+good... feels strange, too template-like, and not suitable for this ERP," with an explicit
+instruction not to continue redesigning the Dashboard and to restore the previous layout while
+keeping every current section/feature working. Clarified with the user first (two real options —
+a full technical revert that would have dropped the newer sections like Sales Activity Analytics
+and Quotation Status Summary entirely, vs. restyling the KPI cards only while keeping every
+section): user chose **restyle only, keep all sections**.
+
+1. **Merged `PrimaryKpiCards.tsx` + `SecondaryKpiSummary.tsx` back into one flat `KpiGrid.tsx`.**
+   The 2026-07-10 redesign had split the single KPI grid into a two-tier hierarchy: 6 large "hero"
+   cards (`text-[28px]` values, bigger padding) followed immediately by 9 small, dense mini-cards
+   in a collapsible row — a visual pattern common to generic SaaS dashboard templates, not this
+   app's editorial navy/gold design language. Restored the original single-tier `KpiCard` (uniform
+   `text-2xl` value, consistent `w-10 h-10` icon badge, one card size throughout,
+   `grid-cols-2 xl:grid-cols-4`) used by the pre-redesign `KpiGrid.tsx`.
+2. **Restored 7 KPIs that had quietly stopped rendering anywhere.** While merging, found that
+   `DashboardKpis` (`GET /api/dashboard`'s response shape) still computes and returns Lose Rate,
+   Conversion Rate, Average Approval Time, Expired Quotations, New Customers, Repeat Customers, and
+   Total Leads — none of which `PrimaryKpiCards`/`SecondaryKpiSummary` ever rendered after the
+   redesign, even though the API never stopped returning them. The new flat `KpiGrid.tsx` shows all
+   22 fields again, matching the original pre-redesign card count.
+3. **Kept the small `MetricInfoTooltip` (i)-icon affordance** the redesign added on the metrics
+   whose definition isn't obvious (Expected Sales, Average Deal Size, Win Rate, Average Closing
+   Time, Active/Non-Active Quotations, Pending Approvals) — a tiny, non-layout-affecting addition,
+   not part of the "huge template card" complaint, so it stayed rather than being stripped for the
+   sake of a purist revert.
+4. **Did NOT touch**: `QuotationStatusSummary.tsx` (Win/Lose/Active/Non-Active donut+table),
+   `PipelineSteps.tsx` (the pipeline step cards — replaced a genuinely broken, overlapping-label
+   funnel chart, not a stylistic complaint), `SalesActivityAnalytics.tsx`, the revenue/job-type
+   charts, rankings, customer/job-type analytics, approvals, follow-ups, or activity timeline — the
+   user explicitly listed these as sections to keep working, and none of them were the "huge KPI
+   card" complaint. `DashboardPage.tsx`'s section composition and comment header updated to reflect
+   the new single-KPI-section flow (renumbered the section comments); no data-fetching, filter, or
+   business logic touched.
+5. **Sidebar overflow, mobile drawer, and font/typography fixes from the prior two same-day passes
+   were already correct and are untouched by this pass** — confirmed via `git diff --stat` showing
+   zero changes to `BrandMark.tsx`, `App.tsx`, or `styles/{theme,index,fonts}.css` since the last
+   commit. The task's "UI Problems to Fix Only" list (sidebar overflow, logo/title alignment, font
+   readability, Thai/English typography, text overflow, responsive issues) was already addressed by
+   those passes; nothing needed to be redone.
+6. **Verification**: same environment constraint as prior passes (no local backend, `npm run dev`
+   never reaches `bootStatus: "ready"`). Built a throwaway isolated preview rendering the real
+   `KpiGrid` component with representative mock `DashboardKpis` data (deleted before finishing),
+   confirmed via Playwright at 1440px (uniform flat grid, no hero-card tier, all 22 cards same
+   size) and 390px (clean 2-column stack, no horizontal scroll, no overflow). `npx tsc -b`,
+   `npm run lint`, and `npm run build` all pass clean.
+7. Docs updated: this file, PROJECT_STATUS.md, UI_GUIDELINES.md ("Dashboard KPI Hierarchy" →
+   renamed "Dashboard KPI Grid"), IMPLEMENTATION_CHECKLIST.md, MODULES/Dashboard.md.
+
+---
+
 ## 2026-07-13 — Codex UI/UX review: Critical + High Priority fixes (second same-day pass)
 
 **Scope**: `docs/CODEX_REVIEW_REPORT.md` (an independent Codex review of the Sidebar-overflow/
