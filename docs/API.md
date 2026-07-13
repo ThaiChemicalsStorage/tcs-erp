@@ -8,7 +8,7 @@ This supersedes the pre-2026-07-09 "no backend, plain function calls" state and 
 
 ### Routing mechanics (read [ARCHITECTURE.md](./ARCHITECTURE.md) for the full gotcha writeup)
 
-Routes are consolidated into 10 function files (added `api/handlers/jobtypes.ts` 2026-07-10) to stay under Vercel Hobby's 12-function cap: `api/company/index.ts`, `api/audit-log/index.ts`, and `api/dashboard/index.ts` dispatch on `req.method` directly; `api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes}.ts` each dispatch on parsed URL path segments. `vercel.json` `rewrites` map every `/api/<resource>` and `/api/<resource>/:path*` request to its one handler file — this is the real, tested routing mechanism in production, not Vercel's own dynamic-route folder convention. Two function slots remain before the cap.
+Routes are consolidated into 12 function files (added `api/handlers/company-profiles.ts` 2026-07-13, `api/handlers/jobtypes.ts` 2026-07-10) to stay under Vercel Hobby's 12-function cap: `api/company/index.ts`, `api/audit-log/index.ts`, and `api/dashboard/index.ts` dispatch on `req.method` directly; `api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes,company-profiles}.ts` each dispatch on parsed URL path segments. `vercel.json` `rewrites` map every `/api/<resource>` and `/api/<resource>/:path*` request to its one handler file — this is the real, tested routing mechanism in production, not Vercel's own dynamic-route folder convention. **This is now the cap** — 12 of 12 function slots used. Any future new resource must be added as a new dispatch branch inside an existing handler file, not a new file, unless the project moves off Vercel Hobby.
 
 ### Auth model (every route below)
 
@@ -82,6 +82,27 @@ No `DELETE /api/categories/:id` route exists — matches the pre-migration UI, w
 
 No `DELETE` route — soft-deactivate only (`isActive: false`), same pattern as Categories.
 
+## Company Profiles (`api/handlers/company-profiles.ts`, mounted at `/api/company-profiles` — added 2026-07-13)
+
+**This is the 12th and final function file under Vercel Hobby's 12-function cap** — any future new
+resource must be folded into an existing handler (a new `parts[N]` branch), not a new file, unless
+the project moves to a paid Vercel plan. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/company-profiles` | `companyProfiles:view` | Returns every profile, including archived/inactive ones (sorted default-first, then by Thai name) — the list page filters client-side, same "show archived" toggle convention as `ProductList.tsx`. No pagination/server-side filtering/projection yet (flagged Medium by a 2026-07-13 Codex review, acceptable at today's real scale — see TODO.md). |
+| `POST /api/company-profiles` | `companyProfiles:create` | `409` on duplicate `companyCode` (case-insensitive). Body validated by `api/_lib/companyProfileValidation.ts` — Company Name (Thai) and Company Code are the only required fields; blank bank-account rows are dropped before storing (2026-07-13 fix). The very first profile ever created is forced `isDefault: true` **and `isActive: true`** server-side (the `isActive: true` force added 2026-07-13 — a prior version could create an inactive default), regardless of the request body (the client-facing draft type has no `isDefault` field). A concurrent "first create" race is caught (partial unique index on `isDefault`, see DATABASE.md) and the loser retries once as non-default rather than 500ing. `logoDataUrl`/`stampDataUrl` go through the existing `validateImageDataUrl()` (same rule as Company/User uploads) — no separate upload endpoint. Writes a server-side `"Company Profile Created"` audit entry (`writeCompanyProfileAuditEntry()`, see below). |
+| `GET /api/company-profiles/:id` | `companyProfiles:view` | `404` if not found. |
+| `PATCH /api/company-profiles/:id` | `companyProfiles:edit` | General field edit, including toggling `isActive`. **Never accepts `isDefault` or `isDeleted`** — those have their own dedicated, invariant-checked actions below, precisely so a plain field edit can't bypass "only one default" or "can't archive the default." `409` if the new `companyCode` collides with another profile. **`400` if the request would set `isActive: false` on the profile that's currently `isDefault: true`** (added 2026-07-13, Codex High Priority fix — previously this route let an admin deactivate the current default outright, leaving no active default at all; same "reassign default first" rule the archive action already enforced). Writes a server-side `"Company Profile Updated"` audit entry describing which fields changed (only when at least one field actually changed). |
+| `POST /api/company-profiles/:id/archive` | `companyProfiles:archive` | Body `{ isDeleted: boolean }` — this module's only "delete," always reversible. `400` if setting `isDeleted: true` on the profile that's currently `isDefault: true` ("Do not allow deleting default company profile directly" — reassign default first). Writes a server-side `"Company Profile Archived"`/`"Company Profile Restored"` audit entry. |
+| `POST /api/company-profiles/:id/set-default` | `companyProfiles:setDefault` | Unsets every other profile's `isDefault`, then sets this one. `400` if the target is archived (`isDeleted: true`) or inactive (`isActive: false`). **`409` if a concurrent set-default request on a different profile won the race** (added 2026-07-13 — the second `updateOne` hits the partial unique index's duplicate-key constraint; surfaced as a clear "someone else just changed the default, try again" message, not a raw 500). Writes a server-side `"Default Company Changed"` audit entry. |
+
+**Audit logging** (added 2026-07-13, tenth same-day pass, Codex High Priority fix): every mutating route above writes its own audit entry server-side via `writeCompanyProfileAuditEntry()`, stamped with the already-authenticated session identity and `relatedCompanyProfileId`/`relatedCompanyProfileName` — not by the client calling the generic `POST /api/audit-log` after the fact (that path now rejects the `"โปรไฟล์บริษัท"` module outright, see the Audit Log section below). Same integrity pattern as the 2026-07-10 quotation audit-trail fix.
+
+No `DELETE` route exists — `companyProfiles:delete` is defined as a permission (matching the
+originally requested permission list) but this module's only removal mechanism is the reversible
+archive action above, same precedent as Categories/Job Types having no hard-delete route either.
+
 ## Notifications (`api/handlers/notifications.ts`, mounted at `/api/notifications`)
 
 | Method & Path | Auth | Notes |
@@ -98,7 +119,7 @@ There is deliberately **no** `POST /api/notifications` (create-arbitrary-notific
 | Method & Path | Auth | Notes |
 |---|---|---|
 | `GET /api/audit-log` | `auditLog:view` | Newest-first, capped at 1000 entries. |
-| `POST /api/audit-log` | Any authenticated user | `userId`/`userName`/`roleName` are **always** derived from the authenticated session server-side, never taken from the request body — a client can describe what happened (`module`/`action`/`details`) but can never claim to be a different user. This is why the route itself has no permission gate beyond "must be signed in": every signed-in user is allowed to log their own actions (login, profile edit, etc.), and the server, not the client, controls who gets credited. Rejects the `"ใบเสนอราคา"` module outright (2026-07-10, fifth pass) — those entries, including their `relatedQuoteId`/`relatedCustomerName` fields (2026-07-13, seventh pass), can only be written by `writeQuoteAuditEntry()` inside `api/handlers/quotes.ts` itself. |
+| `POST /api/audit-log` | Any authenticated user | `userId`/`userName`/`roleName` are **always** derived from the authenticated session server-side, never taken from the request body — a client can describe what happened (`module`/`action`/`details`) but can never claim to be a different user. This is why the route itself has no permission gate beyond "must be signed in": every signed-in user is allowed to log their own actions (login, profile edit, etc.), and the server, not the client, controls who gets credited. Rejects the `"ใบเสนอราคา"` module outright (2026-07-10, fifth pass) — those entries, including their `relatedQuoteId`/`relatedCustomerName` fields (2026-07-13, seventh pass), can only be written by `writeQuoteAuditEntry()` inside `api/handlers/quotes.ts` itself. **Also rejects the `"โปรไฟล์บริษัท"` module outright (2026-07-13, tenth same-day pass, Codex High Priority fix)** — those entries, including `relatedCompanyProfileId`/`relatedCompanyProfileName`, can only be written by `writeCompanyProfileAuditEntry()` inside `api/handlers/company-profiles.ts` itself; same forgery-prevention reasoning as the quotation lockout. |
 
 `AuditLogPage.tsx` self-fetches via `useEffect` on mount (not part of the universal boot-time `Promise.all` fetch in `App.tsx`), since this route is permission-gated and shouldn't be called for every signed-in user regardless of whether they can see the page.
 

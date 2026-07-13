@@ -8,6 +8,7 @@ import type { Product, ProductCategory } from "../../src/lib/products.js";
 import type { Notification } from "../../src/lib/notifications.js";
 import type { AuditLogEntry } from "../../src/lib/auditLog.js";
 import type { Quote } from "../../src/lib/quotes.js";
+import type { CompanyProfile } from "../../src/lib/companyProfiles.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits. */
 export type UserFields = Omit<User, "id"> & { passwordHash: string };
@@ -333,13 +334,24 @@ export async function attachmentsCollection() {
   return db.collection<AttachmentFields>("attachments");
 }
 
+/**
+ * Company Profiles (added 2026-07-13) — the official business identities a quotation can
+ * (eventually) be issued under, distinct from the single `company` singleton above which remains
+ * the app's own branding/settings record. See docs/MODULES/CompanyProfiles.md.
+ */
+export type CompanyProfileFields = Omit<CompanyProfile, "id">;
+export async function companyProfilesCollection() {
+  const db = await getDb();
+  return db.collection<CompanyProfileFields>("company_profiles");
+}
+
 /** Creates required indexes across every collection. Idempotent — safe to call repeatedly, but only worth calling from setup/cold paths, not every request. */
 export async function ensureIndexes() {
   const [
     users, roles, products, categories, quotes, notifications, auditLog,
     permissions, departments, positions, customers, customerContacts,
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
-    notificationTypes, jobTypes,
+    notificationTypes, jobTypes, companyProfiles,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -347,7 +359,7 @@ export async function ensureIndexes() {
     customersCollection(), customerContactsCollection(),
     leadsCollection(), leadActivitiesCollection(), productTemplatesCollection(),
     quotationCommentsCollection(), quotationTagsCollection(), notificationTypesCollection(),
-    jobTypesCollection(),
+    jobTypesCollection(), companyProfilesCollection(),
   ]);
 
   await Promise.all([
@@ -389,6 +401,16 @@ export async function ensureIndexes() {
     notificationTypes.createIndex({ key: 1 }, { unique: true }),
     jobTypes.createIndex({ code: 1 }, { unique: true }),
     jobTypes.createIndex({ isActive: 1 }),
+    companyProfiles.createIndex({ companyCode: 1 }, { unique: true }),
+    // Partial unique index, not a plain one — at most one document may have isDefault: true at
+    // the database level. See the matching, more defensive createIndex call (handles an
+    // IndexOptionsConflict from an already-existing plain index) in
+    // api/handlers/company-profiles.ts's ensureCompanyProfileIndexes(), which is the one that
+    // actually runs in production (this ensureIndexes() path is Setup-Wizard-only, effectively
+    // unreachable post-launch — see its own doc comment below).
+    companyProfiles.createIndex({ isDefault: 1 }, { unique: true, partialFilterExpression: { isDefault: true } }),
+    companyProfiles.createIndex({ isActive: 1 }),
+    companyProfiles.createIndex({ isDeleted: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

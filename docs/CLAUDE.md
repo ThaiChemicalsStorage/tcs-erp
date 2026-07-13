@@ -50,9 +50,10 @@ ERP/
 │       ├── UserManagement.md
 │       ├── RoleManagement.md
 │       ├── Notifications.md
-│       └── AuditLog.md
+│       ├── AuditLog.md
+│       └── CompanyProfiles.md     # added 2026-07-13
 ├── api/                           # Vercel Serverless Functions backend (Node.js) — see ARCHITECTURE.md
-│   ├── handlers/                  # api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes}.ts — one file per resource, dispatches on parsed URL path, reached via vercel.json rewrites (the live routing)
+│   ├── handlers/                  # api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes,company-profiles}.ts — one file per resource, dispatches on parsed URL path, reached via vercel.json rewrites (the live routing). company-profiles.ts (added 2026-07-13) is the 12th and final function file — Vercel Hobby's cap is now reached, see ARCHITECTURE.md.
 │   ├── company/index.ts           # plain single-route file (GET/PUT)
 │   ├── audit-log/index.ts         # plain single-route file (GET/POST)
 │   ├── dashboard/index.ts         # plain single-route file (GET) — real KPI/chart aggregation, added 2026-07-09, majorly expanded 2026-07-10 (Executive Dashboard/CRM pass)
@@ -95,7 +96,7 @@ ERP/
 │   │   ├── dashboard/              # DashboardPage + ~17 subcomponents (ExecutiveSummaryCards, PipelineSteps, QuotationStatusSummary, SalesActivityAnalytics, SalesPerformancePanel, ActivityFollowUpSummary, JobTypeAnalytics, CustomerAnalytics, ActivityTimeline, FollowUpReminders, ApprovalDashboard, NotificationSummary, DashboardFilterBar, DashboardCharts, ChartCard, format/dateRanges helpers) — real MongoDB-backed Executive Dashboard, rebuilt 2026-07-10, completed against the full business spec, fixed against Codex review, then visually redesigned, then reorganized 2026-07-13 against the P'Keng/P'Kee requirement, see MODULES/Dashboard.md
 │   │   ├── products/              # ProductsPage, ProductList, ProductForm, CategoriesManager, ProductPickerModal
 │   │   ├── quotation/             # QuotationPage, QuoteList, QuoteDocument, LineItemsEditor, InterestButtons, notesFormat
-│   │   └── admin/                 # UserManagementPage, RoleManagementPage, AuditLogPage
+│   │   └── admin/                 # UserManagementPage, RoleManagementPage, AuditLogPage, companyProfiles/ (CompanyProfilesPage, CompanyProfileList, CompanyProfileForm, CompanyProfileDetail — added 2026-07-13)
 │   └── styles/                    # fonts.css, tailwind.css, theme.css (design tokens), index.css
 ├── eslint.config.js
 ├── tsconfig.json
@@ -128,6 +129,7 @@ Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
 | Lead Management | ⚠️ Schema only | MongoDB collections (`leads`, `lead_activities`) + indexes exist as of 2026-07-09 prod-readiness pass; no API routes or UI yet | [MODULES/Lead.md](./MODULES/Lead.md) |
 | Customer Management | ⚠️ Schema only | MongoDB collections (`customers`, `customer_contacts`) + indexes exist as of 2026-07-09 prod-readiness pass; no API routes or UI yet | [MODULES/Customer.md](./MODULES/Customer.md) |
 | RBAC / Admin (server-enforced) | ✅ Built | 2026-07-09: migrated from client-side simulation to real server-side enforcement (Vercel Functions + MongoDB, bcrypt + JWT auth, `requirePermission()` on every mutating route) — see rows above for the UI/UX, unchanged by the migration | [RBAC.md](./RBAC.md) |
+| Company Profiles | ✅ Built (master-data management only), Critical/High Codex findings fixed | **Added 2026-07-13** — multi-company quotation-issuer master data (name/logo/address/tax ID/branch/bank accounts/quotation prefix-terms-footer/stamp), add/edit/view/activate-deactivate/archive/set-default, 6 new permissions (not Super-Admin-locked, unlike `company:manage`). No fake data — starts empty. **Tenth same-day pass**: an independent review found zero Critical (RBAC correctly enforced everywhere) and 3 High Priority issues, all fixed — a current default could be deactivated without reassignment (now blocked), the one-default invariant had no database-level guarantee (now a MongoDB partial unique index on `isDefault`), and audit entries were client-authored/forgeable (now written server-side with structured linkage, mirroring the quotation audit-integrity fix). Also fixed a more severe bug the review only hedged as Medium: the app's boot sequence broke sign-in entirely for every role except Super Admin/Administrator. **Not yet wired into the Quotation module** — `Quote.issuerCompanyId`/`issuerCompanySnapshot` are prepared, non-breaking, optional fields with nothing setting them yet; the `company` singleton (Settings → Company Info) remains the live source for the printed document until that integration is built. This pass also brought the API layer to Vercel Hobby's 12-function cap. | [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) |
 
 ## Coding Standards
 
@@ -164,7 +166,7 @@ See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the maintained completion perce
 | [API.md](./API.md) | Real REST API: every route, method, auth/permission requirement |
 | [UI_GUIDELINES.md](./UI_GUIDELINES.md) | Design tokens and component patterns |
 | [RBAC.md](./RBAC.md) | Roles/permissions model and where each check is enforced (server-side, real) |
-| [MODULES/](./MODULES/) | Per-module deep dive (Dashboard, Quotation, Product, Lead, Customer, Auth, Settings) |
+| [MODULES/](./MODULES/) | Per-module deep dive (Dashboard, Quotation, Product, Lead, Customer, Auth, Settings, CompanyProfiles) |
 
 ---
 

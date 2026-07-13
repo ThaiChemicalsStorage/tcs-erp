@@ -42,6 +42,8 @@ The preparer's signature is looked up via `quote.createdByUserId`; the approver'
 
 The `quotes` MongoDB collection (see [DATABASE.md](../DATABASE.md) for the `Quote`/`QuoteLine`/`SubDetail`/`ApprovalHistoryEntry` shapes) — keyed by the human-readable business ID (e.g. `"QT-2567-0041"`) as the literal MongoDB `_id`, not an `ObjectId`. Migrated 2026-07-09 from `localStorage` (`tcs_erp_quotes`, fixed 2026-07-08) to real server-side persistence. The `job_types` collection (added 2026-07-10, see [DATABASE.md](../DATABASE.md) "`JobType`") backs the Job Type dropdown.
 
+**2026-07-13**: `Quote` gained two optional, currently-unused fields, `issuerCompanyId`/`issuerCompanySnapshot`, preparing for future multi-company quotation issuance — see [CompanyProfiles.md](./CompanyProfiles.md) "Future Quotation Integration" for the full plan and open product decisions. Nothing in this module's form, handler, or validation currently reads or writes them; every existing and newly-created quote is unaffected.
+
 ## APIs
 
 `GET/POST /api/quotes`, `PATCH /api/quotes/:id`, `POST /api/quotes/:id/duplicate`, `POST /api/quotes/:id/workflow` — see [API.md](../API.md) Quotations section for the full route table, auth requirements, and server-side ownership/workflow validation. `GET/POST/PATCH /api/jobtypes` (added 2026-07-10) — see [API.md](../API.md) Job Types section.

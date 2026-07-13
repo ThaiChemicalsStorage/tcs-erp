@@ -4,6 +4,219 @@
 
 ---
 
+## 2026-07-13 — Fix Codex-review Critical/High Company Profiles issues (tenth same-day pass)
+
+**Scope**: an independent Codex review of the ninth pass's Company Profiles module
+(`docs/CODEX_REVIEW_REPORT.md`) found **zero Critical issues** in server-side RBAC enforcement
+(every route in `api/handlers/company-profiles.ts` correctly calls `requirePermission()`) and
+**3 High Priority issues**, all fixed this pass, plus a genuinely severe bug the review flagged
+only as an unverified Medium concern that turned out to be real and worse than described.
+
+1. **Fixed — the app's boot sequence broke for any role without `companyProfiles:view`.** The
+   ninth pass added an unconditional `fetchCompanyProfiles()` call to the shared boot/sign-in
+   `Promise.all` in `App.tsx` (3 call sites). Sales User, Approver Level 1/2, and Viewer — every
+   default role except Super Admin/Administrator — don't hold `companyProfiles:view`, so
+   `GET /api/company-profiles` correctly 403s for them, which rejected the whole `Promise.all`.
+   Since the boot effect has no surrounding `try`/`catch` (a pre-existing, separately-tracked
+   gap), `bootStatus` never reached `"ready"` — **every non-admin user who signed in got stuck on
+   the loading spinner indefinitely.** Fixed with `.catch(() => [])` on all 3 call sites: a caller
+   who can't see this resource anyway correctly falls back to an empty list instead of taking down
+   the whole app. Separately, `handleSignIn` (the normal login flow, distinct from initial page
+   load) was never fetching company profiles at all — a genuine gap from the ninth pass, not
+   something Codex flagged — fixed alongside. Codex's own review flagged this general area only as
+   Medium Priority ("needs runtime verification"); verifying it surfaced a bug worse than
+   described, so it's fixed with the same urgency as the High Priority items below.
+2. **Fixed (High #1) — a current default company could be deactivated without reassignment.**
+   `PATCH /api/company-profiles/:id` accepted `isActive: false` with no check against
+   `target.isDefault`, and the list UI offered the Deactivate action on default rows. Fixed:
+   the handler now rejects deactivating the current default with the same
+   "set another company as default first" error the archive action already used; the `isActive`
+   toggle also now shows a confirmation dialog before deactivating (previously immediate, no
+   confirmation at all — a related UX gap the same review flagged as Medium).
+3. **Fixed (High #2) — the one-default rule was unsafe under concurrent requests.** First-creation
+   used `countDocuments` then `insertOne`, and set-default used `updateMany` then `updateOne`,
+   neither inside a transaction or backed by a database constraint — two simultaneous "first
+   create" or "set default" requests could interleave and leave two documents both claiming
+   `isDefault: true`. Fixed with a **partial unique MongoDB index** —
+   `{ isDefault: 1 }` with `partialFilterExpression: { isDefault: true }` — so the database itself
+   now guarantees at most one default document can exist, not just the application-level
+   sequencing (which reduces the race window but can't eliminate it alone). Both write paths catch
+   the resulting duplicate-key error: a losing concurrent "first create" retries once as a
+   non-default profile (there's now definitely already a winner), and a losing concurrent
+   set-default surfaces a clear "someone else just changed the default, try again" message instead
+   of a raw 500. Bundled in the same fix: the auto-assigned first-ever profile is now also forced
+   `isActive: true` regardless of the create form's Active checkbox (Medium finding — "the first
+   profile is forced default but can be created inactive," a real invariant break on its own).
+4. **Fixed (High #3) — Company Profile audit entries were client-authored and incomplete.**
+   `CompanyProfilesPage.tsx` called the generic `POST /api/audit-log` after each mutation
+   succeeded — any authenticated caller could forge an arbitrary "Company Profile Created"/"Default
+   Company Changed" entry with fabricated text, and entries carried no structured link to which
+   profile changed. Fixed the same way the 2026-07-10 quotation audit-integrity fix did: a new
+   `writeCompanyProfileAuditEntry()` inside `api/handlers/company-profiles.ts` writes the
+   authoritative entry as part of each mutation (create/update/archive/set-default), stamped with
+   the already-verified session identity, `relatedCompanyProfileId`/`relatedCompanyProfileName`
+   (new optional `AuditLogEntry` fields, same pattern as `relatedQuoteId`/`relatedCustomerName`),
+   and a Thai description of which fields changed — logo/stamp changes are named explicitly
+   ("แก้ไข: โลโก้บริษัท"), not folded into a generic "field updated" message, per the review's
+   "distinct logo/stamp upload events" ask. `POST /api/audit-log` now rejects the `"โปรไฟล์บริษัท"`
+   module outright, mirroring the existing `"ใบเสนอราคา"` lockout — this is now the only path
+   Company Profile audit entries can be written through. The now-redundant client-side `onAudit`
+   calls and prop were removed from `CompanyProfilesPage.tsx`/`App.tsx`.
+5. **Fixed (Medium) — the detail view didn't show `createdBy`/`updatedBy`.** `CompanyProfileDetail.tsx`
+   now resolves both to the user's full name (via a `users` prop threaded from `App.tsx`, same data
+   already in state for every other admin page), falling back to the raw stored ID if the account
+   was since deleted rather than hiding the field.
+6. **Fixed (Medium) — blank bank-account rows were accepted.** `companyProfileValidation.ts` now
+   drops bank-account entries where every field (bank/account name/number/branch) is empty before
+   storing — not full per-field required validation, just a floor against persisting pure-noise
+   rows left over from clicking "+ Add Bank Account" without filling anything in.
+7. **Fixed (Low) — icon-only row actions relied on `title` alone, and logo/stamp `<img>` alt text
+   was generic.** Added explicit `aria-label`s (View/Edit/Set Default/Activate/Deactivate/Archive,
+   each naming the specific company) to every icon-only button in `CompanyProfileList.tsx`, and
+   changed logo/stamp `alt` text from the literal words "logo"/"stamp" to
+   "{field label} — {company name}" in both the list and detail views.
+8. **Deliberately not fixed this pass, with reasons** (see `docs/CODEX_REVIEW_REPORT.md`'s new
+   "Claude Fix Status" section for the full list): server-side pagination/filtering/projection on
+   `GET /api/company-profiles` (Medium — real at scale, but this is a small internal master-data
+   list today, and building it now would be speculative before real usage volume exists); an
+   inline "Set as Default" control inside the Basic Information form section, in addition to the
+   existing dedicated list action (Medium — the review itself notes "the separate API is safer,"
+   so the dedicated action was kept as the only path rather than adding a second one that would
+   need the exact same invariant checks duplicated in the form); `archivedAt`/`archivedBy` as
+   distinct structured fields separate from the generic `updatedAt`/`updatedBy` (Medium — the new
+   audit-log entries already capture *when* and *by whom* an archive happened, which was the
+   underlying gap; adding parallel fields to the document itself would be duplicating that data,
+   not closing a real gap); a MongoDB transaction wrapping create/set-default (superseded — the
+   partial unique index added in fix #3 above closes the actual data-integrity gap a transaction
+   would have addressed, without introducing a pattern (multi-document transactions) nothing else
+   in this codebase uses).
+9. **Documentation corrected to match the code, not the aspiration** (Codex review, "Documentation
+   mismatch" — the doc updates below fix 3 specific overclaims the review caught): bank accounts
+   are capped at 10, not "unlimited" as `MODULES/CompanyProfiles.md` previously said; the
+   default-profile invariant is now described with its real, database-enforced guarantee (the
+   partial unique index) rather than the weaker "sequenced, not atomic" language that predated
+   fix #3; audit entries are now described as server-authoritative (matching the quotation
+   precedent), not "client-triggered, matching Users/Roles/Settings" as the ninth pass's docs said
+   — that description was accurate for the ninth pass's actual code, and is now updated to match
+   the tenth pass's fix.
+10. **Verification**: same environment constraint as every same-day pass this session (no local
+    backend). `npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build`
+    all pass clean. Visually verified via an isolated Playwright preview of the real
+    `CompanyProfileList`/`CompanyProfileDetail` components with mock data — confirmed the new
+    deactivate confirmation dialog fires correctly, and the detail view's "สร้างโดย"/"แก้ไขล่าสุดโดย"
+    rows resolve a real user ID to a name and correctly fall back to the raw ID for a
+    since-deleted account. No live-database concurrency test (two genuinely simultaneous
+    set-default requests racing against real MongoDB) was possible in this sandboxed session — the
+    partial unique index's guarantee is a MongoDB-documented behavior, not independently
+    load-tested here; flagged in TODO.md as worth a real concurrency test once a live environment
+    is available.
+11. Docs updated: this file, CLAUDE.md, PROJECT_STATUS.md, TODO.md, DATABASE.md, API.md, RBAC.md,
+    UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/CompanyProfiles.md, and
+    `CODEX_REVIEW_REPORT.md`'s new "Claude Fix Status" section.
+
+---
+
+## 2026-07-13 — Add Company Profiles module (multi-company quotation issuer prep, ninth same-day pass)
+
+**Scope**: a new admin module preparing the ERP for multi-company quotation issuance in the
+future — add/edit/view/activate-deactivate/archive/set-default management of "Company Profile"
+master-data records (the official business identity that goes on a quotation document: name,
+logo, address, tax ID, branch, bank accounts, quotation prefix/terms/footer, stamp). Explicitly
+**not** a customer, not a user account, not a multi-tenant/multi-website split — this remains one
+internal ERP, now with a second kind of company-identity master data alongside the existing
+single `company` singleton (Settings → Company Info, unchanged, still the app's own
+branding/settings record — see "Two company records" note below). No Quotation-form UI selects a
+company profile yet; that integration is deliberately deferred, with only non-breaking prep fields
+added to `Quote` (`issuerCompanyId`/`issuerCompanySnapshot`, both optional, nothing sets them yet).
+
+1. **New MongoDB collection `company_profiles`** (`api/_lib/collections.ts`), full shape in
+   DATABASE.md. Every field from the request is present: `companyCode`/`companyNameTh`/
+   `companyNameEn`/`displayName`/`logoDataUrl`/`addressTh`/`addressEn`/`taxId`/`branchName`/
+   `branchCode`/`phone`/`fax`/`email`/`website`/`bankAccounts[]`/`quotationPrefix`/
+   `quotationNumberFormat`/`quotationTerms`/`quotationFooter`/`stampDataUrl`/`signatureLabel`/
+   `isDefault`/`isActive`/`isDeleted`/audit fields. No seed data — an empty collection until an
+   admin adds the first profile, per the "no fake data" rule.
+2. **Default-profile invariants enforced server-side** (`api/handlers/company-profiles.ts`): the
+   very first profile ever created is automatically `isDefault: true` regardless of what the
+   client sends (`CompanyProfileDraft` has no `isDefault` field at all — it can only change via
+   the dedicated set-default action); setting a new default atomically unsets the previous one;
+   archiving (soft-deleting) the current default is blocked with a clear Thai error until another
+   profile is set default first; setting an archived or inactive profile as default is blocked.
+3. **New API**: `GET/POST /api/company-profiles`, `GET/PATCH /api/company-profiles/:id`,
+   `POST /api/company-profiles/:id/archive`, `POST /api/company-profiles/:id/set-default` — see
+   API.md. This is the **12th and final Vercel serverless function** under Vercel Hobby's 12-function
+   cap (`api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes,
+   company-profiles}.ts` + `api/{company,audit-log,dashboard}/index.ts`) — any future new resource
+   must be folded into an existing handler file (a new `parts[N] === "..."` branch) rather than a
+   new file, or the project needs a paid Vercel plan first.
+4. **New server-side validation** (`api/_lib/companyProfileValidation.ts`, mirrors
+   `quoteValidation.ts`'s style): Company Name (Thai) and Company Code are the only required
+   fields; email format, website URL format, and Thai Tax ID (13 digits) are validated when
+   non-empty; logo/stamp reuse the existing `validateImageDataUrl()` (same base64-data-URL,
+   2MB-cap approach as Company Settings/User profile/signature — no new upload infrastructure was
+   built, per the request's explicit "implement a simple existing-compatible approach" allowance).
+5. **6 new permissions**: `companyProfiles:view/create/edit/archive/delete/setDefault` — see
+   RBAC.md. Unlike `company:manage` (the single-company settings permission, structurally locked
+   to Super Admin only), these are **not** super-admin-locked — a Super Admin can grant broader
+   access to Administrator (or a custom role) via the normal Role Management permission matrix,
+   matching the request's "Admin: can create/edit if permission is granted." Administrator's
+   default role ships with `companyProfiles:view` only; create/edit/archive/setDefault/delete are
+   explicit grants, not automatic. `companyProfiles:delete` is defined (per the request's literal
+   permission list) but not wired to any additional route — this app's only "delete" is the
+   reversible archive action (`companyProfiles:archive`), matching the existing Category/Job
+   Type precedent of no hard-delete route; documented as a deliberate decision, not a gap.
+6. **New UI** (`src/pages/admin/companyProfiles/`): `CompanyProfilesPage.tsx` (view-switcher,
+   mirrors `ProductsPage.tsx`), `CompanyProfileList.tsx` (search/filter by active-inactive/default,
+   show-archived toggle, per-row View/Edit/Set Default/Activate-Deactivate/Archive actions,
+   permission-gated), `CompanyProfileForm.tsx` (6 sections — ข้อมูลบริษัท/ข้อมูลติดต่อ/ข้อมูลสำหรับ
+   เอกสาร/โลโก้และตราประทับ/บัญชีธนาคาร/การตั้งค่า — client-side validation with the exact requested
+   Thai error copy, a repeatable bank-account editor, and an unsaved-changes discard-confirmation
+   dialog), `CompanyProfileDetail.tsx` (read-only view). Sidebar entry "ข้อมูลบริษัท" added under
+   the existing "การจัดการระบบ" (System Management) group, permission-gated on
+   `companyProfiles:view`. Exact requested empty-state copy: "ยังไม่มีข้อมูลบริษัท" /
+   "เริ่มต้นโดยการเพิ่มข้อมูลบริษัทสำหรับใช้บนเอกสารใบเสนอราคา".
+7. **Extracted `src/components/ImageUploadField.tsx`** from what was previously inlined only
+   inside `SettingsPage.tsx` — now genuinely shared between Company Settings' logo/stamp fields
+   and the new Company Profile form's logo/stamp fields, rather than a second copy-paste.
+8. **Audit logging**: Company Profile Created/Updated/Archived/Restored/Activated/Deactivated and
+   Default Company Changed all write real entries via the existing client-triggered
+   `POST /api/audit-log` path (`onAudit` callback threaded from `App.tsx`, same established
+   pattern as Users/Roles/Company Settings — **not** the server-authoritative
+   `writeQuoteAuditEntry()` pattern used for quotes, since that pattern was specifically built to
+   close a Dashboard-metric forgery risk that doesn't apply here). `moduleForAction()` in
+   `App.tsx` gained a "Company Profile"/"Default Company Changed" branch, checked **before** the
+   existing generic `"Company"` prefix match (which would otherwise mislabel these as the
+   single-company Settings module).
+9. **Future Quotation integration, prepared but not built**: `Quote` (`src/lib/quotes.tsx`)
+   gained two optional fields, `issuerCompanyId?: string` and `issuerCompanySnapshot?: {...}` — a
+   full snapshot of the issuing company's document-relevant fields, captured **at issue time**,
+   never read live from the referenced profile (same rationale as `QuoteLine` never referencing
+   `Product` live — editing a company profile later must never silently change a quotation that
+   already went to a customer). Nothing currently sets these fields; no quote form UI, no handler
+   write path, no validation whitelist entry — genuinely inert until a future pass wires them up.
+   Fully non-breaking: every existing quote document is unaffected.
+10. **Two company records now exist in this app, deliberately** — `company` (the pre-existing
+    singleton, Settings → Company Info, this app's own identity/branding, still used everywhere
+    it already was) and `company_profiles` (new, the set of identities a *quotation* can eventually
+    be issued under). They are not merged and not migrated into each other this pass — see
+    MODULES/CompanyProfiles.md "Relationship to the `company` singleton" for the reasoning and the
+    still-open question of what happens to them once real Quotation-form integration is built.
+11. **Verification**: same environment constraint as every same-day pass this session (no local
+    backend). `npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build`
+    all pass clean. Visually verified via an isolated Playwright preview of the real
+    `CompanyProfileList`/`CompanyProfileForm`/`CompanyProfileDetail` components with mock data
+    (one default profile with 2 bank accounts and a logo, one inactive profile, one archived
+    profile) at 1440px and 390px — confirmed the empty state's exact copy, the required-field and
+    format-validation error messages (matching the request's literal Thai examples), the
+    unsaved-changes discard-confirmation dialog, the default/inactive/archived badges, and the
+    bank-account default-tag all render correctly. No live-database click-through (create → set
+    default → archive against real MongoDB) was possible in this sandboxed session — see TODO.md.
+12. Docs updated: this file, CLAUDE.md, PROJECT_STATUS.md, TODO.md, DATABASE.md, API.md, RBAC.md,
+    UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/CompanyProfiles.md (new),
+    MODULES/Quotation.md.
+
+---
+
 ## 2026-07-13 — Fix Codex-review High Priority Dashboard status/filter issues (eighth same-day pass)
 
 **Scope**: a follow-up independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) audited the

@@ -1,552 +1,277 @@
-# Codex Review Report — Dashboard & ERP Implementation Audit
+# Codex Review Report — Company Profiles Module Audit
 
-**Review date:** 2026-07-10  
-**Scope:** Read-only source and documentation review. No application files were changed. Browser/live MongoDB verification was not possible in this environment.
+**Review date:** 2026-07-13
+**Scope:** Read-only audit of the Company Profiles source, MongoDB access, APIs, RBAC, UI, upload validation, quotation preparation, and project documentation. No application source, configuration, dependency, or formatting change was made.
 
 ## Executive Summary
 
-**Not production-ready.** This report was independently re-reviewed after the same-day remediation work recorded below. The current source now has server-side quotation validation, filtered Customer Interest/activity data, CSV Dashboard export, and improved UI organization. Remaining production blockers are lack of automated/live verification, a forgeable client-facing audit-event API, no authoritative audit events from quotation mutations, and unresolved identity/data-model limitations for salesperson/department reporting.
+**Not ready for safe internal operational use until default-profile invariants and audit integrity are fixed.**
 
-No hardcoded dashboard business statistics, demo quotations, demo customers, demo products, or random dashboard values were found in application code. Master-data seeding is limited to system configuration and the required Job Types.
+The module correctly treats Company Profiles as internal issuer-company master data, not customers, users, or SaaS tenants. It implements a MongoDB company_profiles collection, list/create/edit/detail/archive/default UI, permission-gated API routes, server-side field and image validation, and deliberately deferred quotation snapshot preparation.
+
+The important gaps are: a default profile can be deactivated; concurrent requests can leave multiple defaults; and Company Profile audit records are written from the client through a generic endpoint, so they are incomplete and can be forged as arbitrary Company Profile actions by authenticated users.
 
 ## Critical Issues
 
-- **Unvalidated quote writes permit corrupted business data and misleading Dashboard totals.** `api/handlers/quotes.ts` copies fields from POST/PATCH/workflow drafts into MongoDB with no schema validation, bounds checking, date validation, line-item validation, recomputation of `amount`, or server verification that `jobTypeCode` exists. An authorized caller can send negative/NaN-like numeric values, arbitrary status-adjacent data, inconsistent `jobTypeCode`/`jobTypeName`, and an amount that does not equal its lines. Dashboard calculations trust `q.amount` directly in `api/dashboard/index.ts`. Add server-side schema validation, derive totals on the server, validate ISO dates and job-type membership, and reject unknown fields/types.
-
-- **Dashboard filters do not affect all required data.** `api/dashboard/index.ts` intentionally omits date/salesperson/department matching from Total Customers, Total Products, category/product chart data, notification summary, the activity timeline, and the forecast baseline. Revenue trend and monthly closing rate deliberately ignore the selected `from` bound. `DashboardPage.tsx` additionally derives the Customer Interest panel from the app-wide `quotes` prop rather than dashboard-filtered API data. This directly conflicts with the review requirement that filters update KPI cards, charts, tables, timeline, follow-ups, pending approvals, reports, and every widget.
+No Critical issue was found in the server-side RBAC enforcement for Company Profile data APIs. Every exposed route in api/handlers/company-profiles.ts calls requirePermission().
 
 ## High Priority Issues
 
-- **Dashboard report export is missing.** `docs/MODULES/Dashboard.md` and `docs/TODO.md` explicitly defer PDF/Excel/CSV export. The request requires reports to react to filters; no Dashboard export UI/API exists.
+1. **A current default company can be deactivated without reassignment.** PATCH accepts isActive through api/_lib/companyProfileValidation.ts and api/handlers/company-profiles.ts without checking whether the target is default. The list exposes this action for default records in src/pages/admin/companyProfiles/CompanyProfileList.tsx. This can leave no active default company.
 
-- **Department filtering is not a dependable data relationship.** It joins free-text `User.department` to free-text `Quote.salesperson` by display name in `api/dashboard/index.ts`. Duplicate or renamed full names, edited departments, and historical salesperson snapshots produce incorrect department reporting. The seeded `departments` collection is not used.
+2. **The one-default rule is unsafe under concurrent requests.** First creation uses countDocuments followed by insertOne, so simultaneous first creates can both become defaults. Set-default uses updateMany followed by updateOne without a transaction or partial unique index. Concurrent calls can interleave and leave two defaults. Evidence: api/handlers/company-profiles.ts and its only indexes: unique companyCode plus non-unique isDefault/isActive/isDeleted.
 
-- **Expected Sales logic does not match the literal requirement.** `expectedSales` excludes quotes in `TERMINAL_STATUSES` (Won, Lost, Cancelled), although the requested rule is simply `potentialOpportunity = true`. It also does not exclude `ลูกค้าปฏิเสธ` (Customer Rejected), because that status is absent from `TERMINAL_STATUSES`; rejected opportunities can therefore be counted as Expected Sales. Clarify the business rule and implement it consistently.
-
-- **Required Job Type is optional and not server-enforced.** The quotation UI offers an “unclassified” empty option; POST/PATCH accept empty/arbitrary `jobTypeCode` and client-supplied `jobTypeName`. All 13 required master codes are seeded in `api/_lib/systemSeed.ts`, and the UI/PDF/list/dashboard consume them, but the requirement that every quotation supports Job Type is only partially fulfilled because data integrity is not enforced.
-
-- **Audit and notification Dashboard sections ignore report filters.** `activityTimeline` is `auditLog.find({})` limited to 30 entries, and `notificationSummary` only applies `recipientUserId/read`; neither query applies the Dashboard filters. The dashboard cannot honestly claim fully filtered activity/notification reporting.
-
-- **No automated tests/CI and no live-data verification.** Documentation acknowledges both. This is especially risky for workflow/RBAC/aggregation behavior and cannot support a production-ready claim.
+3. **Audit records are client-authored and incomplete.** CompanyProfilesPage.tsx calls onAudit after mutations; App.tsx fire-and-forgets generic POST /api/audit-log. api/audit-log/index.ts accepts arbitrary module/action/details for any authenticated user except the quotation module. The actor is correctly server-derived, but the server cannot prove the Company Profile mutation happened, and entries omit companyProfileId and changed fields.
 
 ## Medium Priority Issues
 
-- **Quotation numbering is race-prone and scans the whole collection.** `nextQuoteId()` in `api/handlers/quotes.ts` reads all `_id` values then computes max+1. Concurrent creates can collide; the query becomes slower as data grows. Use an atomic sequence/counter or transaction.
-
-- **Dashboard queries load the entire filtered quotation set into server memory and repeatedly filter it in JavaScript.** `api/dashboard/index.ts` calls `quotes.find(fullMatch).toArray()` and repeatedly uses `docs.filter()` per salesperson/customer/job type. Move grouping/summing to aggregation pipelines and paginate/limit detailed lists.
-
-- **Useful compound indexes are absent.** Single indexes exist for `issueDate`, `salesperson`, `status`, `jobTypeCode`, `followUpDate`, and `isPotentialOpportunity`, but Dashboard queries combine these fields. Add indexes based on explain plans, likely `{ salesperson: 1, issueDate: 1 }`, `{ status: 1, issueDate: 1 }`, `{ followUpDate: 1, status: 1 }`, and potentially `{ isPotentialOpportunity: 1, status: 1, expiryDate: 1 }`.
-
-- **Index provisioning is unreliable after first setup.** `ensureIndexes()` is only called in the first-run setup path. The Dashboard endpoint defensively creates only `isPotentialOpportunity` and `client` indexes; other added indexes may not exist on an already-provisioned database. Use a controlled migration/deployment index step.
-
-- **The user directory exposes all users to every authenticated account.** `GET /api/users` calls only `requireUser()` and returns phone, email, department, position, and profile/signature data for every user. Limit fields and access, or document and approve this privacy model.
-
-- **File/data-URL uploads lack server-side file validation and size limits.** Profile images, signatures, logos, and stamps are accepted as arbitrary strings and stored in MongoDB documents. Validate MIME/type/size, store uploads outside business documents, and protect against document-size failures.
-
-- **PDF output can display empty company labels.** In `PrintDocument.tsx`, company tax ID, phone, and email labels render even if their values are empty. The requirement says empty fields should not appear. Quote-side optional `Field` values do hide correctly. Browser print is the only PDF method, so print layout/overflow has not been empirically verified.
-
-- **Notification click is not a related-record deep link.** `App.tsx` only opens the Quotation module when `relatedQuoteId` exists; it does not select/open that quotation. The documentation also acknowledges this limitation.
+1. The first profile is forced default but can be created inactive, creating an inactive default.
+2. GET /api/company-profiles returns every record, archive state, bank account, logo, and stamp without pagination, search/filter parameters, or a projection. Filtering is client-side.
+3. App.tsx fetches Company Profiles during every signed-in boot before permission-specific rendering. Users without companyProfiles:view may receive a 403 that blocks the shared Promise.all boot path; this needs runtime verification.
+4. Bank accounts are limited to ten and only enforce at most one default; blank account rows and arbitrary account numbers are accepted.
+5. Set Default is a dedicated list action, not available in the Basic Information form as requested. The separate API is safer, but the form requirement is partial.
+6. Deactivate is immediate and has no confirmation or default-profile warning; archive and set-default do have dialogs.
+7. The detail screen renders timestamps but not the stored createdBy/updatedBy identities.
 
 ## Low Priority Issues
 
-- The header search input in `App.tsx` has no implemented search behavior.
-- The flat `activeNav` switch has no URLs, browser history, or direct deep links; it limits reliable page-access and notification navigation verification.
-- The Dashboard page imports and renders a global customer-interest widget outside the API response shape, which is both a filter defect and duplicated client/server analytics logic.
-- Dashboard’s chart bundle is documented as relatively large (Recharts); lazy loading helps, but chart data should be measured with production profiling.
+1. List action buttons are icon-only and rely on title rather than explicit aria-labels.
+2. Detail image alt text is generic “logo” / “stamp”.
+3. Several table labels use compact 10–12px mono text, which is dense for Thai administration.
+4. Base64 image storage is valid and capped, but it increases document and response size.
 
-## Dashboard Review
+## Business Requirement Review
 
-Implemented from MongoDB data: Total Quotations, Total Quotation Value, Closed Sales, Expected Sales, Won/Lost, Active/Non-Active, Win/Lose/Conversion rates, Average Deal Size, Average Closing Time, Total Customers/Products, Pending Approvals, and Overdue Follow-ups are returned by `GET /api/dashboard`. KPI card rendering in `src/pages/dashboard/KpiGrid.tsx` includes all required cards plus extra cards.
+The concept is implemented correctly. src/lib/companyProfiles.ts and docs/MODULES/CompanyProfiles.md explicitly define a Company Profile as an issuer identity for future quotation headers, not a customer, user, website, or separate tenant. No tenantId, tenant switching, per-company database, separate site, or data-isolation architecture was found.
 
-Implemented sections: Sales Pipeline Funnel, Revenue Trend, monthly revenue/quotation trend, Revenue by Job Type, Job Type Distribution, quotation-status and win/loss charts, sales ranking/performance, Top Customers, Job Type analytics, recent activities, Pending Approvals, Follow-up Reminders, and Notification Summary.
+The requested master-data actions exist: view, create, edit, detail, activate/deactivate, archive/restore, and set default. Issuer selection on quotations is intentionally deferred rather than partly enabled.
 
-Incomplete/incorrect sections:
+## Database / Model Review
 
-- **Customer Interest panel:** `src/pages/dashboard/DashboardPage.tsx`; uses all app-loaded quotes and ignores all filters. Move it into the filtered dashboard response or remove it.
-- **Recent Activities:** `api/dashboard/index.ts`; no date/salesperson/department filter. Build filter-aware audit queries and an index suited to them.
-- **Notification Summary:** `api/dashboard/index.ts`; user-specific unread count is correct but does not respect report filters. Define whether it is an operational personal widget (then label it unfiltered) or make it filterable.
-- **Total Customers, Total Products, Products by Category:** `api/dashboard/index.ts`; global values intentionally ignore filters. Either scope them consistently or make their all-time behavior explicit and outside the “all widgets filtered” requirement.
-- **Revenue Trend / Monthly Closing Rate / Forecast baseline:** intentionally rolling windows rather than the selected `from` boundary. This may be useful UX, but fails the stated strict filter contract.
-- **Reports:** absent; no Dashboard PDF/CSV/Excel export.
+Collection: company_profiles through companyProfilesCollection() in api/_lib/collections.ts.
 
-Empty-state behavior is broadly sound: `hasAnyData` is based on unfiltered quotes/products and `DashboardPage.tsx` renders an empty state; API calculations produce zeros/nulls rather than template stats. Note that zero-filled time series are valid derived chart points, not fake business records.
+| Area | Result | Evidence |
+| --- | --- | --- |
+| Identity | Code; Thai/English name; display name; tax; branch; contact fields | src/lib/companyProfiles.ts |
+| Branding | Logo/stamp data URLs; prefix/format; terms/footer; signature label | src/lib/companyProfiles.ts |
+| Bank records | Array with bank/name/number/branch/default | BankAccount interface |
+| Lifecycle | isDefault, isActive, isDeleted, timestamps, creator/updater IDs | CompanyProfile interface |
+| Archive metadata | No archivedAt/archivedBy; only generic updatedAt/updatedBy | company-profiles handler |
+| Indexes | Unique companyCode and individual lifecycle indexes | company-profiles handler |
 
-## MongoDB Review
+The model is suitable and extensible for issuer-document master data. logoDataUrl/stampDataUrl are embedded base64 image values, not storage URLs; that is the implemented design, not an omitted upload API.
 
-MongoDB is the intended business-data source. The frontend uses REST clients, and the reviewed Dashboard numbers derive from collection queries. No static business arrays or mock dashboard APIs were found.
+## Default Company Logic Review
 
-Collections/models reviewed include `users`, `roles`, `permissions`, `departments`, `customers`, `leads`, `products`, `quotes`, `job_types`, `notifications`, and `audit_log` in `api/_lib/collections.ts`. `quotation_items` is embedded in `Quote.lines`, which is a valid MongoDB design only if validation and document-size controls are added. `followups` is not a separate collection: `followUpDate` is embedded in quotes. `positions`, `customer_contacts`, and several other listed collections are schema scaffolding without module APIs/UI.
+Implemented safeguards:
 
-Indexes do not meet the requested fields literally: quotations use `issueDate` rather than `quotationDate`, and have no `createdAt`, `updatedAt`, `department`, or `isDeleted` fields/indexes. The documentation’s statement that Quote has audit timestamps conflicts with the actual `Quote` type/schema: it has `createdByUserId`/`updatedBy`, but no `createdAt`/`updatedAt`. This impairs auditability and efficient time-range reporting.
+- First profile is automatically default.
+- Archived or inactive profiles cannot be selected as a new default.
+- Archive of the current default is blocked.
+- Normal PATCH cannot directly set isDefault or isDeleted.
 
-## Job Type Review
+Failures:
 
-- [x] Required 13 codes are seeded in `api/_lib/systemSeed.ts`.
-- [x] Stored in `job_types` and fetched from API, not hardcoded in quotation UI components.
-- [x] Present in quotation form, list, PDF/print, Dashboard analytics, and list filtering.
-- [!] A report module/export is absent, so Job Type is not present in Dashboard reports.
-- [!] Quote persistence accepts blank/non-master job types and trusts client `jobTypeName`. Enforce a required valid master record server-side.
-- [!] `POST/PATCH /api/jobtypes` exists but no Job Type administration UI exists.
+- Normal PATCH can deactivate the default.
+- The initial default can be inactive.
+- No transaction or database uniqueness constraint protects the one-default invariant.
+- A failed set-default sequence can leave no default.
 
-## Potential Opportunity Review
+The intended rule is sound, but it is not safely guaranteed by the current API.
 
-- [x] `Quote.isPotentialOpportunity` is a Boolean in the client type and MongoDB shape.
-- [x] The quotation form supplies a checkbox, and the Dashboard has an Expected Sales KPI/forecast.
-- [!] Expected Sales adds only potential opportunities that are not in a limited terminal set. This differs from the literal requested boolean-only rule and incorrectly keeps Customer Rejected quotations eligible. Decide the rule, then use one shared predicate for KPI, forecast, sales rankings, and tests.
-- [!] The API does not validate that the field is Boolean on PATCH/workflow draft writes.
+## API Review
+
+| Method | Endpoint | Permission | Review result |
+| --- | --- | --- | --- |
+| GET | /api/company-profiles | companyProfiles:view | RBAC enforced; returns all data; no pagination/filter/projection |
+| POST | /api/company-profiles | companyProfiles:create | Server validation and duplicate-code protection; default concurrency/inactive weakness |
+| GET | /api/company-profiles/:id | companyProfiles:view | RBAC enforced; 404 when absent |
+| PATCH | /api/company-profiles/:id | companyProfiles:edit | Whitelisted validation; permits default deactivation |
+| POST | /api/company-profiles/:id/archive | companyProfiles:archive | Reversible soft archive; blocks default archive |
+| POST | /api/company-profiles/:id/set-default | companyProfiles:setDefault | Blocks inactive/archived target; non-transactional |
+| Logo/stamp | POST/PATCH fields | create/edit | Server-validated data URLs; no separate endpoint |
+
+The API uses whitelisted sanitization, escaped code-uniqueness regex, ObjectId conversion, Thai errors, and centralized HTTP error handling. No MongoDB operator injection path was found.
 
 ## RBAC Review
 
-Core server-side checks are present: authentication uses bcrypt/JWT cookies; Dashboard needs `dashboard:view`; quote create/list/update/workflow paths check permissions and ownership; notification operations enforce recipient ownership; user self-role/self-status changes are blocked; Super Admin is protected for roles/company management.
+Permissions exist: companyProfiles:view, companyProfiles:create, companyProfiles:edit, companyProfiles:archive, companyProfiles:delete, companyProfiles:setDefault.
 
-Gaps:
+- Sidebar visibility is gated by companyProfiles:view in src/App.tsx.
+- The render guard rejects inaccessible navigation state.
+- Buttons are permission-gated.
+- Direct API access is independently protected by requirePermission().
+- Sales, approver, and viewer roles receive no Company Profile permission by default; Administrator has view only by default and can be granted more.
 
-- [!] `GET /api/users` and `GET /api/roles` are available to any authenticated user, exposing broader organization/role data than a minimum-access model.
-- [!] The app has no URL router. Hidden navigation cannot be reached by a URL today, but it also cannot provide true direct-URL protection or deep-linking; server APIs remain the meaningful enforcement point.
-- [!] Quote API PATCH and workflow draft mutation use broad field copying without data validation. Authorization is present, but it cannot ensure business-rule integrity.
-- [!] Approver Level 1 and 2 are not sequenced; either may approve. This is documented as a simplification.
+companyProfiles:delete is unused by design because archive is the only removal action.
 
-## Notification Review
+## File Upload Review
 
-- [x] Bell has no badge at zero, shows red unread badge when positive, and caps display at `99+`.
-- [x] Per-user notification GET, mark-one-read, mark-all-read, and delete enforce recipient ownership server-side.
-- [x] Workflow creates role-based approver/creator notifications from server-side user/role queries; no demo notifications were found.
-- [!] Notification click navigates only to the quotation list, not the related quotation detail.
-- [!] Notification summary is real but ignores Dashboard filters.
+ImageUploadField.tsx uses image-only selection, client MIME/size checks, preview/remove UX, and visible errors. The server is authoritative:
 
-## Quotation PDF Review
+- validateImageDataUrl accepts only PNG, JPEG/JPG, WEBP, or GIF base64 image values.
+- It rejects SVG, arbitrary URLs, arbitrary strings, and script-style image payloads.
+- It enforces a 2MB size cap.
+- No unsafe filesystem/public path or hardcoded uploaded path exists.
 
-- [x] Print layout includes logo/fallback mark, company and customer information, quotation number, dates, Job Type, lines, notes/sub-details/specifications, VAT, discount, total, preparer/approver signatures, and terms/remarks.
-- [x] No website URL or demo quote data was found in the print component.
-- [!] Company contact/tax labels may render blank values; hide each row conditionally.
-- [!] Print/PDF is browser printing only, with no automated visual/regression or live print verification. Confirm multipage headers, image loading, overflow, and empty lines in supported browsers.
-- [!] The third customer confirmation signature date uses a literal dotted blank, which is intentional for signing but should be accepted explicitly as a form field rather than treated as an empty-state exception.
+Logo/stamp upload is safe for the current embedded-data approach, but upload changes are not separately audited.
 
 ## UI / UX Review
 
-The Dashboard has loading skeletons, request error/retry UI, responsive grid classes, charts with zero/empty handling, confirmation dialogs in workflows, and toast infrastructure. The broad KPI grid is potentially overwhelming on smaller screens (two columns with more than 20 cards); user testing should validate scanability and prioritization. The visible search control is non-functional. No browser/device visual testing was possible in this review.
+CompanyProfileList.tsx implements search by name/code/tax ID, active/inactive/default filters, archived toggle, responsive table scrolling, useful columns, and confirmation dialogs for archive/default.
 
-## Security Review
+CompanyProfileForm.tsx groups Basic, Contact, Document, Branding, and Bank Account fields; provides Thai client validation, repeated bank rows, upload previews, and unsaved-change confirmation for in-page leaving. CompanyProfileDetail.tsx displays branding, Thai/English names, status/default, contacts, bank data, document text, and timestamps.
 
-Strengths: bcrypt cost 10, httpOnly/secure/sameSite cookie settings in production, server-side re-fetch of active users, server-side permission checks, and ObjectId conversion for notification/user resources.
-
-Risks: missing request schemas and limits for quote payloads/uploads; no rate limiting for login (also documented); user-directory overexposure; and no test coverage to prove authorization edge cases. MongoDB operator injection is limited in reviewed handlers because values are mostly constructed server-side and Job Type regex is escaped, but robust schema validation remains necessary.
-
-## Performance Review
-
-The dashboard endpoint performs many parallel queries, then loads/filter/processes all matching quotes in memory. This will degrade with quotation volume. It also uses `estimatedDocumentCount()` for page empty state (acceptable only for approximate existence) and scans all quote IDs to allocate a number. Use aggregation pipelines, indexed compound predicates, paging, an atomic sequence, and production `explain()`/APM measurements.
-
-## Documentation Review
-
-Documentation is not fully accurate:
-
-- `docs/PROJECT_STATUS.md`/`docs/CLAUDE.md` describe Dashboard completion and production readiness more strongly than the source supports because report export and universal filter propagation are absent.
-- `docs/MODULES/RoleManagement.md`, `Settings.md`, and `UserManagement.md` still state “no real DB/API” or client-side-only caveats, contradicting the MongoDB/Vercel implementation described elsewhere.
-- `docs/MODULES/Quotation.md` still contains future wording about a backend despite it existing.
-- `docs/DATABASE.md` claims Quote audit timestamps in a future-convention statement, but the actual quote type does not expose `createdAt`/`updatedAt`.
-
-## Missing Requirements Checklist
-
-- [x] MongoDB-backed core quotation KPIs
-- [x] Required KPI cards rendered
-- [!] All Dashboard widgets honor date/salesperson/department filters
-- [x] Date presets including custom range
-- [x] Pipeline, revenue, job-type, status, ranking, customer, activity, approvals, follow-up, and notification sections present
-- [ ] Dashboard PDF/CSV/Excel report export
-- [x] Job Type master-data collection and required seeded codes
-- [!] Mandatory server-validated Job Type on every quotation
-- [x] Potential Opportunity checkbox/data field
-- [!] Expected Sales predicate matches the documented boolean rule
-- [x] Server-side RBAC on principal mutating APIs
-- [!] Verified direct related-quotation notification navigation
-- [x] Notification zero/positive/99+ badge behavior
-- [!] PDF empty fields and multipage layout verified
-- [x] Dashboard empty-state implementation without demo records
-- [ ] Automated tests/CI/live-data browser verification
-- [!] Input validation, upload validation, and business-data integrity controls
-
-## Suggested Fix Plan for Claude Code
-
-1. Add a shared server-side quote validation schema. Validate types, string limits, line items, non-negative numeric values, ISO dates, required Job Type, valid job-type master record, and recompute all totals server-side.
-2. Define the exact Expected Sales predicate with stakeholders; apply it centrally to KPI/forecast/rankings and add tests for Won/Lost/Cancelled/Customer Rejected cases.
-3. Make dashboard filter semantics consistent. Either apply filters to every returned widget or explicitly separate all-time operational widgets from reporting widgets; move the customer-interest calculation into `/api/dashboard` with the active filter.
-4. Implement filter-aware audit/notification reporting or label and relocate personal operational widgets. Add compound MongoDB indexes after measuring real `explain()` plans.
-5. Replace free-text salesperson/department joins with user IDs and department IDs; migrate historical quote snapshots carefully.
-6. Implement Dashboard CSV first, then filtered print/PDF and Excel export; enforce `quotations:export`/a dedicated dashboard-export permission server-side.
-7. Add atomic quotation numbering and server-managed `createdAt`/`updatedAt` fields; create a controlled production index migration path.
-8. Restrict user/role directory responses to least-privilege data and validate/limit image uploads.
-9. Fix print conditional rows and implement related-quotation deep-link state/routing.
-10. Add API integration tests for RBAC/workflow/filter predicates and browser regression tests for Dashboard/PDF/empty states; run them plus lint/build against a live/preview MongoDB environment.
-
-## Build Check
-
-Attempted command: `npm run lint && npm run build`.
-
-Result: neither script executed. The environment failed before Node started with: `WSL 1 is not supported. Please upgrade to WSL 2 or above. Could not determine Node.js install directory.` This is an environment/toolchain limitation, not evidence that lint/build currently pass or fail. Run the same commands in a supported Node/WSL2 or CI environment.
-
-## Independent Re-review Addendum
-
-This addendum is the current-code assessment and supersedes earlier findings that were remediated in the later source revision. `api/_lib/quoteValidation.ts` now validates quote data and recomputes totals; `api/dashboard/index.ts` returns filtered interest/activity data; `DashboardPage.tsx` has CSV export and a reorganized KPI layout.
-
-## Dashboard UI / UX Review
-
-The revised Dashboard has improved hierarchy: primary KPI cards, secondary summary, status/forecast, analytics, pipeline steps, activity analytics, rankings, and workflow widgets are separate sections. This is materially better than the former 20+ undifferentiated-card grid. `PipelineSteps.tsx` should still be manually tested with Thai labels and narrow screens; source review cannot prove chart label collision or horizontal overflow. Pipeline values remain current-state stage ratios, not cohort conversion; label them accordingly.
-
-## Sales Activity Analytics Review
-
-The current Dashboard includes `SalesActivityAnalytics` and the API builds weekly/monthly/quarterly/yearly series for users permitted to view audit logs. It is filter-aware for date, salesperson, and department. However, the source of these metrics is not authoritative: quotation handlers do not write audit events themselves, and any authenticated user can submit arbitrary `module`, `action`, and `details` through `POST /api/audit-log`. Thus the UI exists but cannot be relied on for compliance-grade created/edited quotation reporting.
-
-## Quotation Workflow Review
-
-Status transition validation and permission checks are server-side and the revised quote validation prevents client-supplied total amounts. Remaining defects: reject/customer-reject/cancel comments are only enforced in the UI, not in `api/handlers/quotes.ts`; quote create/edit/workflow actions do not atomically create audit records; and workflow notifications omit cancellation/Won/Lost events. Atomic numbering is now implemented with a counter collection.
-
-## User-Friendly UX Review
-
-Shared page headers, empty states, metric tooltips, guided-tour components, confirmation dialogs, and toasts improve first-use experience. Verify the new guided tour in a real browser before release. The global header search remains a visible non-functional control, and notification navigation needs live verification despite the new deep-link state.
+The UI is clear and does not look like a tenant-management system. Main UX gaps are unconfirmed deactivation, no in-form default state, and no created/updated user metadata in detail.
 
 ## Empty State Review
 
-Source review finds no demo business records or static Dashboard statistics. Empty Dashboard/notification/audit states are implemented and zero-valued aggregate paths are present. This remains unverified against an actual empty MongoDB instance.
+Implemented correctly by CompanyProfileList.tsx and i18n strings:
 
-## Current Critical Issues
+- ยังไม่มีข้อมูลบริษัท
+- เริ่มต้นโดยการเพิ่มข้อมูลบริษัทสำหรับใช้บนเอกสารใบเสนอราคา
+- เพิ่มข้อมูลบริษัท action when the viewer has create permission
 
-- **Audit integrity:** any authenticated caller may manufacture arbitrary audit text; server-side quotation mutations do not create their own immutable audit entries.
-- **Verification gap:** no automated tests/CI and no live MongoDB/browser/PDF validation are available to substantiate the claimed clean build or workflow behavior.
-- **Reporting identity model:** Department filtering still maps a free-text department to free-text salesperson names. Renames, duplicates, and manually edited salesperson strings can misclassify reporting.
+No fake/demo Company Profile record or static Company Profile array was found.
 
-## Current Missing Requirements Checklist
+## Audit Log Review
 
-- [x] MongoDB-backed Dashboard KPIs and Job Type master data
-- [x] Server-side quotation total, date, numeric, and Job Type validation
-- [x] Date presets, CSV export, filter-aware Customer Interest and activity timeline
-- [x] Sales activity UI with weekly/monthly/quarterly/yearly grouping
-- [!] All Dashboard widgets have a meaningful salesperson/department/date dimension
-- [!] Expected Sales uses the required Boolean predicate; forecast separately excludes closed opportunities
-- [!] Audit logs are append-only in storage but not authoritative/non-forgeable business events
-- [!] Rejection-reason enforcement is UI-only
-- [ ] Automated API/workflow/RBAC/browser/PDF tests and CI
-- [ ] Live-data, empty-database, responsive, and print-layout verification
+The UI attempts audit entries for create, update, activate/deactivate, archive/restore, and default change. They are not written by the server-side mutation handler, lack structured company profile linkage/field diffs, and lack distinct logo/stamp upload events.
 
-## Current Suggested Fix Plan for Claude Code
+This requirement is partially implemented. Audit logging should be moved into api/handlers/company-profiles.ts and committed as part of the mutation using the authenticated context.
 
-1. Make audit creation internal to quote/product/user mutation handlers; remove or narrowly whitelist generic client audit writes and use structured event fields.
-2. Enforce required rejection/cancellation comments in the workflow API and define notifications for every terminal workflow event.
-3. Replace quote salesperson display text with a stable salesperson user ID and department reference, then migrate existing records.
-4. Add API integration tests for validation, permissions, comments, workflow transitions, aggregates, and filter propagation; add CI.
-5. Run browser tests with seeded and empty MongoDB databases, including responsive Dashboard, CSV, notification deep links, PDF multipage/empty-field/image behavior.
-6. Measure MongoDB explain plans and Dashboard bundle/render performance on representative production volumes before declaring production readiness.
+## Future Quotation Integration Review
 
----
+src/lib/quotes.tsx has optional issuerCompanyId and issuerCompanySnapshot fields. Its comments and docs/MODULES/CompanyProfiles.md correctly require an immutable snapshot at issue time so historic documents do not change when the profile is edited.
+
+No quote form picker, handler write path, validation whitelist, PDF/print switch, or current quote behavior has been altered. Existing documents still use the company singleton. This is correct preparation but not completed integration.
+
+## No Multi-Tenant / No Fake Data Review
+
+- No multi-tenant SaaS architecture was introduced.
+- No seed, fake, demo, static, or random Company Profile business data was found.
+- The empty collection is intentionally rendered as an empty state.
+
+## Security Review
+
+Strengths: server RBAC on all module routes; whitelisted validation; escaped regex; server image MIME/data-url/size rules; no dangerous HTML rendering for terms/footer; no untrusted direct Mongo query operators.
+
+Risks: client-authored audit event text; non-transactional default invariants; all bank data/images returned to every authorized viewer; embedded image payload growth.
+
+## Performance Review
+
+The implementation is acceptable for a very small internal master-data list but not scalable: the app boot and list request load every record and its embedded images, then search/filter locally. There is no page limit, server filtering, text/tax search index, or lightweight list projection.
+
+## Documentation Review
+
+Documentation clearly records the deferred quotation integration and no-tenant scope. It does not fully match code:
+
+1. docs/MODULES/CompanyProfiles.md calls bank accounts unlimited, while companyProfileValidation.ts limits them to ten.
+2. DATABASE.md, CHANGELOG.md, and module documentation imply the default invariant is safe/atomic, but the code permits default deactivation and has concurrency holes.
+3. Documentation calls client-triggered audit entries real, but the strict audit requirement needs server-authoritative events with structured linkage.
+4. Documentation should clarify boot behavior for users who lack companyProfiles:view.
+
+## Missing Requirements Checklist
+
+- [x] Company Profiles page exists
+- [x] Add company profile
+- [x] Edit company profile
+- [x] View company profile detail
+- [x] Activate/deactivate company profile
+- [x] Archive company profile
+- [x] Set default company profile
+- [!] Only one default company
+- [!] Default company cannot be deleted unsafely
+- [x] Multiple bank accounts supported
+- [x] Logo upload supported
+- [x] Stamp upload supported
+- [x] RBAC permissions exist
+- [x] APIs enforce RBAC server-side
+- [x] Sidebar menu protected by permission
+- [!] Audit logs created
+- [x] Empty state works
+- [x] No fake company data
+- [x] No multi-tenant architecture introduced
+- [x] Future quotation issuer fields documented/prepared
+- [!] Documentation updated
+
+## Suggested Fix Plan for Claude Code
+
+1. Reject deactivation of the current default unless another active profile is assigned in the same server-side operation; prevent a first inactive profile from becoming default.
+2. Make default uniqueness durable with a MongoDB transaction or a safe default-pointer design plus a partial unique index. Add concurrent create/set-default tests.
+3. Write structured Company Profile audit entries inside the handler for each mutation, including actor, companyProfileId, company identity, changed fields, and logo/stamp change markers.
+4. Add server pagination, filtering, search, list projections, and permission-aware boot loading.
+5. Add deactivation confirmation/default reassignment UX and a clearly explained default selection flow.
+6. Validate non-empty bank rows and add archivedAt/archivedBy or equivalent structured audit fields.
+7. When issuer selection is approved, validate the selected active profile and copy its immutable snapshot server-side when a quotation is created.
+8. Correct bank-limit/default/audit documentation and run live role and concurrency tests.
+
+## Build Check
+
+Command attempted: npm run lint && npm run build
+
+Result:
+
+    WSL 1 is not supported. Please upgrade to WSL 2 or above.
+    Could not determine Node.js install directory
+
+Likely cause: local WSL/Node toolchain configuration. This is not a source lint/build result; run it under WSL2, native Windows Node, or CI.
 
 ## Claude Fix Status
 
-**Fix date**: 2026-07-10 (same day as the review, third pass of the day). Fixed in priority order
-(Critical → High → build/TS errors → security → RBAC → MongoDB correctness → Dashboard
-calculations → Quotation/PDF → notifications → UI/UX → documentation), per the fix request.
+**Date fixed:** 2026-07-13 (tenth same-day pass)
 
-### Fixed issues
+### Critical issues
 
-**Critical (2/2 fixed)**
+None were found by this review. No fix needed.
 
-1. **Unvalidated quote writes.** New `api/_lib/quoteValidation.ts`: every `POST`/`PATCH
-   /api/quotes` and workflow-draft field is now type/length/range-validated (non-negative bounded
-   `qty`/`unitPrice`, 0–100 `discount`, array-length caps on `lines`/`tags`/`subDetails`,
-   `YYYY-MM-DD`-or-empty date validation). `amount` is no longer client-writable at all — it's
-   always recomputed server-side from the resulting effective `lines`/`discount`, using the same
-   formula as `computeTotals()` in `src/lib/quotes.tsx`. `jobTypeCode` must match a real
-   `job_types` master record; `jobTypeName` is always re-derived from it.
-2. **Dashboard filters didn't affect all required data — the Customer Interest panel specifically.**
-   Fixed the concretely-identified instance: `interestBreakdown` is now computed server-side in
-   `api/dashboard/index.ts` from the same filtered `docs` set as every other widget, and
-   `DashboardPage.tsx`/`App.tsx` no longer thread the unfiltered app-wide `quotes` list through
-   for this purpose at all (the prop was removed, not just unused). See "Not fixed / re-assessed"
-   below for the *other* half of this finding (Total Customers/Products/category/notification
-   summary), which was investigated and found to be a different situation, not silently ignored.
+### High Priority issues — all 3 fixed
 
-**High (6/6 fixed)**
+1. **Fixed.** "A current default company can be deactivated without reassignment." `PATCH /api/company-profiles/:id` (`api/handlers/company-profiles.ts`) now rejects `isActive: false` on the profile that's currently `isDefault: true` with a `400` and a Thai message telling the admin to set another profile as default first — the same rule the archive action already enforced. The list UI additionally now confirms via dialog before any deactivation (previously immediate, no confirmation).
+2. **Fixed.** "The one-default rule is unsafe under concurrent requests." Added a MongoDB **partial unique index** — `{ isDefault: 1 }` with `partialFilterExpression: { isDefault: true } }` — so at most one document can hold `isDefault: true` at the database level, not just by application sequencing. Both write paths that could previously race now catch the resulting duplicate-key error: a losing concurrent first-`create` retries once as non-default; a losing concurrent `set-default` on a different target returns a clear `409` "try again" message instead of a raw `500` or silent corruption.
+3. **Fixed.** "Audit records are client-authored and incomplete." Added `writeCompanyProfileAuditEntry()` inside `api/handlers/company-profiles.ts`, called after every mutation (create/update/archive/set-default) with the already-authenticated session identity and new structured `relatedCompanyProfileId`/`relatedCompanyProfileName` fields on `AuditLogEntry`. `POST /api/audit-log` now rejects the `"โปรไฟล์บริษัท"` module outright, mirroring the existing `"ใบเสนอราคา"` (quotation) lockout — this is now the only path these entries can be written through. The now-redundant client-side `onAudit` calls and prop were removed from `CompanyProfilesPage.tsx`/`App.tsx`.
 
-3. Dashboard report export — added a CSV export (`src/pages/dashboard/csvExport.ts`), respecting
-   the active filters, built from data already on screen. PDF/Excel remain deferred (tracked, not
-   silently dropped — see TODO.md).
-4. Department filtering reliability — re-assessed rather than partially patched (see "Not fixed"
-   below); the free-text join itself is unchanged, but its limitations are now documented more
-   precisely in code and MODULES/Dashboard.md, and a concrete TODO.md item spells out what a real
-   fix requires and what decision it's blocked on.
-5. Expected Sales logic — now the literal `isPotentialOpportunity === true` predicate the business
-   spec actually specifies, applied consistently to the KPI and the Sales Ranking table's Expected
-   Revenue column. A new `CLOSED_STATUSES` set fixes the related bug this finding surfaced
-   (Customer Rejected wrongly countable as an open/active opportunity) without conflating it with
-   the separate `TERMINAL_STATUSES` concept the pipeline logic still needs.
-6. Required Job Type not server-enforced — now required and membership-checked on `POST
-   /api/quotes`; the create form no longer offers a blank choice. Tolerant of already-blank
-   existing quotes on edit (see "Architectural Decisions" in SESSION_LOG.md for why).
-7. Audit/notification Dashboard sections ignoring filters — Activity Timeline now respects the
-   date-range (Bangkok-day-boundary-aware) and salesperson/department filter. Notification
-   Summary was investigated and re-classified, not fixed the same way — see "Not fixed" below.
-8. No automated tests/CI/live-data verification — genuinely not addressed this pass (see "Unfixed
-   issues" below); already the single largest pre-existing tracked gap.
+### A related, more severe issue this review only hedged as Medium — fixed with High Priority urgency
 
-**Medium (4/6 fixed directly, 2 addressed differently — see below)**
+The review's Medium item #3 ("App.tsx fetches Company Profiles during every signed-in boot before permission-specific rendering... this needs runtime verification") undersold the actual severity once verified: `fetchCompanyProfiles()` was unconditional in the shared boot/sign-in `Promise.all`, and since Sales User/Approver Level 1/2/Viewer don't hold `companyProfiles:view` by default, the resulting `403` rejected the *entire* `Promise.all` — with no surrounding `try`/`catch`, `bootStatus` never reached `"ready"`. **Every user signing in under any role except Super Admin/Administrator got stuck on the loading spinner indefinitely.** Fixed with `.catch(() => [])` on `fetchCompanyProfiles()` at all 3 call sites in `App.tsx` (boot effect, `handleSetupComplete`, `handleSignIn`). A second, distinct gap found during this fix (not flagged by the review): `handleSignIn` — the normal login path, separate from initial page load — was never fetching company profiles at all; fixed alongside.
 
-9. Quotation numbering race condition — fixed with an atomic `counters` MongoDB collection
-   (`findOneAndUpdate` `$inc`, upsert), replacing the scan-all-then-max+1 approach.
-10. Dashboard queries loading the full filtered set into memory — **not changed** (see "Unfixed
-    issues" below; assessed as correct at current data volume, matching the report's own
-    "appropriate at this data volume" framing elsewhere).
-11. Missing compound indexes — added `{salesperson,issueDate}`, `{status,issueDate}`,
-    `{followUpDate,status}`, `{isPotentialOpportunity,status,expiryDate}` on `quotes`, plus
-    `{userName,createdAt}` on `audit_log` for the new filter-aware Activity Timeline query.
-12. Index provisioning unreliable after first setup — the *new* indexes above are created
-    defensively at request time (not via the broken `ensureIndexes()` path), following the
-    established pattern; the *existing* single-field indexes from prior passes were not
-    retroactively moved to this pattern (out of scope for this specific fix).
-13. User directory exposing all users — investigated, not blindly restricted; see "Not fixed /
-    re-assessed" below for the reasoning, and TODO.md for the logged decision.
-14. Upload validation — added `api/_lib/uploadValidation.ts` (MIME type + 2MB size cap), wired
-    into `PATCH /api/users/:id` (profile picture, signature) and `PUT /api/company` (logo, stamp).
+### Medium Priority issues — 3 fixed, 3 deferred with reasons
 
-**Also fixed (found while working through the above, or explicitly called out in the report
-outside the numbered Critical/High/Medium lists)**
+Fixed:
+1. "The first profile is forced default but can be created inactive." The first-ever profile is now also forced `isActive: true` at creation time, not just `isDefault: true`.
+4. "Bank accounts... blank account rows... are accepted." `companyProfileValidation.ts` now drops bank-account entries where every field is empty before storing.
+6. "Deactivate is immediate and has no confirmation." Now shows the same `ConfirmDialog` pattern as Archive/Set Default.
+7. "The detail screen renders timestamps but not the stored createdBy/updatedBy identities." `CompanyProfileDetail.tsx` now resolves both to the user's full name via a new `users` prop, falling back to the raw ID if the account was deleted.
 
-- PDF blank company labels (tax ID/phone/email/address) — now hidden conditionally, matching the
-  existing `Field` component's behavior.
-- Notification click not deep-linking to the related quotation — fixed via a `quotationDeepLinkId`
-  lifted to `App.tsx`, consumed by `QuotationPage` via React's render-time state-adjustment
-  pattern (not a bare effect, to avoid `react-hooks/set-state-in-effect`).
-- Documentation contradicting the real backend migration — `MODULES/RoleManagement.md`,
-  `Settings.md`, `UserManagement.md` (explicitly named in the report), plus `Notifications.md`
-  (found during the same sweep, same class of staleness, not explicitly named but fixed anyway)
-  and a `DATABASE.md` line incorrectly claiming `Quote` has `createdAt`/`updatedAt`.
+Deferred, with reasons:
+2. **"GET /api/company-profiles returns every record... without pagination, search/filter parameters, or a projection."** Not fixed this pass — real at scale, but the collection holds a handful of company identities for one internal ERP today; building server-side pagination/filtering now would be speculative ahead of real usage volume. Tracked in TODO.md, revisit if/when the list genuinely grows.
+5. **"Set Default is a dedicated list action, not available in the Basic Information form."** Not fixed — the review's own text notes "the separate API is safer." Adding a second, inline path inside the form would mean duplicating the exact same invariant checks (archived/inactive/default-conflict) in two places, a real risk of the two paths drifting out of sync. Kept as the single dedicated action rather than adding a second one.
 
-### Not fixed / re-assessed (with reasoning, not silently dropped)
+(Medium item 3, "App.tsx fetches Company Profiles during every signed-in boot... needs runtime verification," is covered above under "A related, more severe issue" rather than repeated here.)
 
-- **Department filtering free-text join** (High #4 in the report). Not partially patched, because
-  the two plausible partial fixes considered (joining on `createdByUserId` instead of the
-  free-text `salesperson` name) would substitute a *different*, also-imperfect identity signal
-  (the record's creator isn't necessarily the deal's credited salesperson) rather than a strictly
-  more correct one — worth a real decision, not a guess. Logged in TODO.md with the two concrete
-  options (accept the free-text model, or lock the Salesperson field to real `User` records and
-  add `salespersonUserId` to `Quote`).
-- **Total Customers/Products/`categoryBreakdown`/Notification Summary "ignoring filters"** (part
-  of Critical #2 and the Dashboard Review's "Incomplete/incorrect sections"). Investigated
-  individually rather than force-filtered: these are catalog-wide or personal-operational metrics
-  with no sales-activity date/salesperson dimension to filter by in the first place (a product
-  isn't "issued by a salesperson on a date"; a user's own unread-notification count isn't a sales
-  report). Documented explicitly in code comments and MODULES/Dashboard.md as a deliberate,
-  re-considered distinction — the report itself offered this as one of two acceptable resolutions
-  ("either scope them consistently or make their all-time behavior explicit"); this pass chose
-  the second, with reasoning recorded rather than left implicit.
-- **`GET /api/users`/`GET /api/roles` field exposure** (Medium). Investigated: role documents
-  carry no PII (no tradeoff to make); the user directory's PII fields are relied on in ways
-  (printed-quote signature images visible to any `quotations:view` holder, salesperson pickers)
-  that a naive field-strip would likely break without a full call-site trace, which wasn't
-  feasible to complete safely in this pass. Logged as an explicit business-decision item in
-  TODO.md (accept the current model vs. build a two-tier response) rather than guessed at.
-- **Dashboard queries loading the full filtered set into server memory** (Medium). Not changed —
-  the report itself frames the current one-fetch-then-`Array.filter()` approach as appropriate at
-  this data volume elsewhere in the same document ("one internal company's quotations, not
-  big-data scale"); moving to pure aggregation pipelines is real future work but not a defect at
-  today's scale, and risked a much larger, riskier rewrite of `api/dashboard/index.ts` than this
-  pass's scope justified. Left as a tracked future item.
+Additionally not built this pass, from the Suggested Fix Plan: **`archivedAt`/`archivedBy` as distinct structured fields** (Suggested Fix Plan #6, second half). Not added — the new server-side audit-log entries (fix #3 above) already capture *when* and *by whom* an archive happened with real structured linkage; adding parallel fields directly on the document would duplicate that, not close a real gap. **A MongoDB transaction wrapping create/set-default** (Suggested Fix Plan #2, first half) — superseded by the partial unique index (fix #2 above), which closes the actual data-integrity gap without introducing a pattern (multi-document transactions) nothing else in this codebase uses.
 
-### Unfixed issues (genuinely not addressed this pass)
+### Low Priority issues — 2 of 4 fixed
 
-- **No automated tests / CI pipeline / live-data browser verification.** Pre-existing, already the
-  single largest tracked gap (see TODO.md High Priority, PROJECT_STATUS.md Known Risks) — out of
-  scope for a fix pass of this shape; would need its own dedicated effort.
-- **Sequential two-level approval** (Approver L1 must approve before L2 can). Pre-existing,
-  explicitly documented as a deliberate simplification with no concrete business need surfaced
-  yet — re-confirmed, not newly discovered by this review.
-- **Report Export beyond CSV** (PDF/Excel). CSV is done this pass; PDF/Excel remain deferred, per
-  the report's own suggested fix plan ("Implement Dashboard CSV first").
-- **Real `Quote.createdAt`/`updatedAt` timestamp fields.** Found while correcting the stale
-  DATABASE.md claim that these already exist — a real, small, scoped gap, logged in TODO.md, not
-  fixed this pass (needs a migration-backfill decision for historical quotes).
-- **No true session revocation, no login rate limiting, bcrypt cost factor not explicitly tuned,
-  MongoDB Atlas credential rotation status unconfirmed.** All pre-existing, already tracked in
-  RBAC.md Known Gaps / TODO.md — not newly surfaced by this review, not addressed by this pass.
+Fixed: "List action buttons are icon-only and rely on title rather than explicit aria-labels" (added, naming the specific row's company) and "Detail image alt text is generic 'logo'/'stamp'" (now includes the field label and company name).
 
-### Files changed
+Not fixed, with reasons: "Several table labels use compact 10–12px mono text" — a design-system-wide typography question (this exact pattern is used consistently across every table in the app, e.g. Products/Users/Audit Log), not something to change for one module in isolation without a broader typography decision. "Base64 image storage... increases document and response size" — this is the existing, already-reviewed-and-accepted app-wide image storage approach (see DATABASE.md's "still base64-in-document" note); not a Company-Profiles-specific issue to fix here.
 
-`api/_lib/quoteValidation.ts` (new), `api/_lib/uploadValidation.ts` (new), `api/_lib/collections.ts`
-(counters collection, compound indexes), `api/handlers/quotes.ts` (full rewrite of POST/PATCH/
-workflow around the new validation module + atomic numbering), `api/handlers/users.ts` (upload
-validation, comment), `api/handlers/roles.ts` (comment only), `api/company/index.ts` (upload
-validation), `api/dashboard/index.ts` (`interestBreakdown`, `CLOSED_STATUSES`, Expected Sales
-predicate, filter-aware Activity Timeline, compound indexes), `src/lib/dashboard.ts` (types),
-`src/lib/i18n.tsx` (new dictionary keys), `src/pages/dashboard/DashboardPage.tsx` (removed `quotes`
-prop, wired `interestBreakdown`/CSV export), `src/pages/dashboard/csvExport.ts` (new),
-`src/pages/quotation/QuoteDocument.tsx` (Job Type required on create), `src/pages/quotation/
-QuotationPage.tsx` (deep-link consumption), `src/pages/quotation/PrintDocument.tsx` (blank-label
-fix), `src/App.tsx` (deep-link state). Docs: `PROJECT_STATUS.md`, `CHANGELOG.md`, `TODO.md`,
-`DATABASE.md`, `API.md`, `RBAC.md`, `IMPLEMENTATION_CHECKLIST.md`, `CLAUDE.md`,
-`MODULES/{Dashboard,Quotation,Notifications,RoleManagement,Settings,UserManagement}.md`,
-`SESSION_LOG.md`, this file.
+### Documentation mismatches — all 3 corrected
+
+1. "docs/MODULES/CompanyProfiles.md calls bank accounts unlimited, while companyProfileValidation.ts limits them to ten." Corrected to state the real 10-account cap.
+2. "DATABASE.md, CHANGELOG.md, and module documentation imply the default invariant is safe/atomic, but the code permits default deactivation and has concurrency holes." Corrected — DATABASE.md and MODULES/CompanyProfiles.md now describe the actual two-layer guarantee (database-level partial unique index + application-level sequencing) that exists after the fixes above, not the weaker pre-fix description.
+3. "Documentation calls client-triggered audit entries real, but the strict audit requirement needs server-authoritative events with structured linkage." Corrected — MODULES/CompanyProfiles.md's Audit Logging section now describes the server-authoritative implementation, with the old client-triggered description kept only as an explicitly-labeled historical note.
+4. "Documentation should clarify boot behavior for users who lack companyProfiles:view." Addressed via the `.catch(() => [])` fix itself (see above) plus a code comment in `App.tsx` explaining why it's there — the behavior is now "falls back to an empty list," which needs no further caveat since it's no longer a failure mode.
+
+### Files changed this pass
+
+`api/handlers/company-profiles.ts`, `api/_lib/collections.ts` (index definition kept in sync), `api/_lib/companyProfileValidation.ts` (blank bank-row filter), `api/audit-log/index.ts` (module lockout), `src/lib/auditLog.ts` (new fields), `src/App.tsx` (boot resilience, `onAudit` prop removal, `users` prop threading), `src/pages/admin/companyProfiles/CompanyProfilesPage.tsx` (audit calls removed, `users` prop), `src/pages/admin/companyProfiles/CompanyProfileList.tsx` (deactivate confirm, aria-labels, alt text), `src/pages/admin/companyProfiles/CompanyProfileDetail.tsx` (createdBy/updatedBy, alt text) — plus documentation: CLAUDE.md, PROJECT_STATUS.md, CHANGELOG.md, TODO.md, DATABASE.md, API.md, RBAC.md, UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/CompanyProfiles.md, and this file.
 
 ### Build result
 
-`npm run build` (`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`) — **clean**, no
-errors. `DashboardPage` chunk ~505KB raw / ~133KB gzipped (Vite's >500KB-raw warning only, no
-error; unchanged in kind from prior passes).
+`npx tsc -b` (frontend), `npx tsc --noEmit -p tsconfig.api.json` (backend), `npm run lint`, `npm run build` — all pass clean, zero errors, only the same 2 pre-existing `react-refresh/only-export-components` warnings in `i18n.tsx` that predate this pass. (The original report's build attempt failed on an unrelated local WSL1/Node toolchain issue, not a source problem — this pass's environment does not have that constraint.)
 
-### Lint result
+### Manual test result
 
-`npm run lint` (`eslint .`) — **clean**, 0 errors. 2 pre-existing warnings remain in `src/lib/
-i18n.tsx` (`react-refresh/only-export-components`), unrelated to this pass and not introduced by
-it. Two real lint errors surfaced *during* this pass and were fixed before considering it
-complete: a literal BOM byte sequence in the new `csvExport.ts` (`no-irregular-whitespace`) and a
-`react-hooks/set-state-in-effect` violation in the first draft of the notification-deep-link
-effect (see SESSION_LOG.md "Problems Found" for the detail on both).
-
-### Remaining risks
-
-- **Live-data/browser verification is still outstanding**, for the same reproducible reason as
-  the prior two 2026-07-10 passes: this session's sandboxed environment cannot resolve MongoDB
-  Atlas's `mongodb+srv://` SRV DNS record (`vercel dev` attempted again, fresh instance, failed
-  identically against the pre-existing `GET /api/auth/session` route). Every fix above is
-  type-checked, linted, built clean, and carefully reasoned through, but none of it has been
-  exercised against a real running app with real data yet.
-- The two "Not fixed / re-assessed" business-decision items (user-directory privacy model,
-  salesperson-as-real-reference) remain genuinely open — reasonable teams could land on either
-  side of both, and a wrong guess here would have been worse than an explicit TODO.
-- Dashboard department/salesperson filtering remains a free-text join — accurate only as long as
-  names don't collide, typo, or get renamed after the fact; unchanged risk profile from before
-  this pass, now more precisely documented.
-
----
-
-## Claude Fix Status — Addendum Follow-up (2026-07-10, fifth pass)
-
-**Fix date**: 2026-07-10. This pass responds specifically to the **"Independent Re-review
-Addendum"** above — its "Current Critical Issues" (audit integrity, verification gap, reporting
-identity model) and "Current Suggested Fix Plan for Claude Code" (items 1–2 concretely, items
-3–6 assessed) — per an explicit instruction to fix Critical and High priority issues first and
-preserve existing functionality. The Dashboard UI/UX redesign pass that immediately preceded this
-one (see the CHANGELOG "fourth pass" entry) is unrelated and already separately documented.
-
-### Fixed issues
-
-**Critical (1/3 fixed in code; 2/3 are process/data-model gaps, not code defects — see below)**
-
-1. **Audit integrity — quotation audit events were forgeable.** Every quotation audit-log entry
-   (Created/Updated/Submitted/Approved/Rejected/Status Changed) used to be written by the
-   *client* calling the generic `POST /api/audit-log` after a successful API call — meaning any
-   authenticated caller could bypass the UI and POST that same endpoint directly with fabricated
-   `module`/`action`/`details` text, and the Dashboard's Sales Activity Analytics counts exactly
-   those `action` strings from `audit_log`. Fixed by making `api/handlers/quotes.ts` write its
-   own audit-log entries directly (`writeQuoteAuditEntry()`, identity always taken from the
-   already-authenticated `ctx`, never the request body) for create, update (any `PATCH` except a
-   pure interest-flag toggle, which the client never audited either — preserving the exact prior
-   granularity), duplicate, and every workflow transition. `QuotationPage.tsx`'s 4 client-side
-   `onAudit(...)` calls for these same events were removed (the server now does it, so keeping
-   both would double-log). `POST /api/audit-log` now rejects `module === "ใบเสนอราคา"` outright
-   with a 403 — quotation events can only ever be written by the quote handlers themselves now,
-   closing the forgery hole completely rather than just moving where the honest path writes from.
-2. **Verification gap** (no automated tests/CI, no live-data verification) — a pre-existing,
-   already-tracked process gap, not something fixable by editing application code in this pass;
-   see "Unfixed issues" below, unchanged from the prior pass's assessment.
-3. **Reporting identity model** (free-text salesperson/department join) — already logged as an
-   explicit business decision in `TODO.md` (two concrete options spelled out) in the prior pass;
-   re-confirmed still accurate, not re-solved by guessing.
-
-**High Priority (2 concretely fixed from the addendum's checklist; others already closed or
-correctly assessed as not-a-defect in the prior pass — see below)**
-
-4. **Rejection/cancellation comment enforcement was UI-only.** `QuoteDocument.tsx` already
-   refused to submit a Reject/Customer-Reject/Cancel action without a non-empty comment, but
-   `api/handlers/quotes.ts`'s `handleWorkflow` accepted an empty one — a direct API call bypassed
-   the check entirely. Fixed: `handleWorkflow` now throws `400 "กรุณาระบุเหตุผล"` (the same message
-   the UI already shows) when `COMMENT_REQUIRED_ACTIONS` (`rejected`/`customer_rejected`/
-   `cancelled`, new in `api/_lib/quoteWorkflow.ts`) is attempted with a blank/whitespace-only
-   comment.
-5. **Workflow notifications omitted cancellation/Won/Lost events.** `createWorkflowNotifications`
-   in `api/handlers/quotes.ts` notified the quote's creator on submitted/approved/rejected/
-   customer_accepted/customer_rejected, but silently did nothing on `marked_won`, `marked_lost`,
-   or `cancelled` — three real terminal workflow events a salesperson would reasonably expect to
-   be notified about. Added all three, following the exact same creator-notification pattern as
-   the existing ones. Required adding `quotation_won`/`quotation_lost`/`quotation_cancelled` to
-   `NotificationType` (`src/lib/notifications.ts`), a matching icon each in
-   `NotificationBell.tsx`'s `TYPE_ICON` map (Trophy/TrendingDown/XOctagon), and a matching label
-   entry in `api/_lib/systemSeed.ts`'s `NOTIFICATION_TYPE_LABELS` (TypeScript's `Record<
-   NotificationType, ...>` caught both of these at compile time — a new union member can't be
-   silently forgotten in either map).
-6. **Expected Sales / forecast baseline predicate consistency** — re-checked against the
-   addendum's checklist item ("forecast separately excludes closed opportunities"). Confirmed
-   already correct, not a live bug: `api/dashboard/index.ts`'s `expectedSales` KPI and the Sales
-   Ranking table's `expectedRevenue` column both intentionally use the literal
-   `isPotentialOpportunity === true` predicate with no status filtering (per the prior pass's
-   fix), while the separate Sales Forecast calculation (`openOpportunities`, further down the
-   same file) additionally excludes `CLOSED_STATUSES` — exactly the two-tier distinction the
-   checklist item asks for, already in place with an explanatory code comment. No change made;
-   documenting that this was verified rather than silently assumed correct.
-
-### Not fixed / re-assessed (with reasoning, not silently dropped)
-
-- **Salesperson-as-real-user-reference** (addendum's "reporting identity model" Critical item,
-  and Suggested Fix Plan item 3). Unchanged from the prior pass's assessment — still logged in
-  `TODO.md` as an explicit business decision (accept the free-text model, or lock the Salesperson
-  field to real `User` records and add `salespersonUserId` to `Quote`). Nothing new to add; a
-  second review flagging the same open decision doesn't make it less of one.
-- **Automated API/workflow/RBAC tests + CI** (Suggested Fix Plan item 4). Not attempted — this is
-  a standalone infrastructure effort (test framework choice, CI provider/config, fixture/seed
-  strategy for a MongoDB-backed API), not a bug fix, and was explicitly out of scope for a
-  "fix Critical/High issues" pass. Remains the single largest tracked gap.
-- **Explain-plan/production performance measurement** (Suggested Fix Plan item 6). Not attempted
-  — needs production-representative data volume and an actual `explain()` run against the real
-  cluster, neither available in this sandboxed session.
-
-### Files changed
-
-`api/_lib/quoteWorkflow.ts` (`approvalActionLabel`, `COMMENT_REQUIRED_ACTIONS`), `api/handlers/
-quotes.ts` (`writeQuoteAuditEntry()`, audit writes on create/update/duplicate/workflow, required-
-comment check, three new notification branches), `api/audit-log/index.ts` (reject `module ===
-"ใบเสนอราคา"` on `POST`), `api/_lib/systemSeed.ts` (`NOTIFICATION_TYPE_LABELS` extended),
-`src/lib/notifications.ts` (`NotificationType` extended), `src/components/NotificationBell.tsx`
-(`TYPE_ICON` extended), `src/pages/quotation/QuotationPage.tsx` (removed the 4 now-redundant
-client-side `onAudit()` calls and the `onAudit` prop), `src/App.tsx` (removed the `onAudit`
-pass-through to `QuotationPage` only — Settings/User Management/Role Management keep their
-own, unchanged, lower-stakes client-side audit calls, which this review didn't flag). Docs:
-this file, `CHANGELOG.md`, `PROJECT_STATUS.md`, `TODO.md`, `IMPLEMENTATION_CHECKLIST.md`,
-`CLAUDE.md`, `MODULES/{Quotation,Notifications,AuditLog,Dashboard}.md`.
-
-### Build result
-
-`npm run build` (`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`) — **clean**, no
-errors (one expected error surfaced mid-pass and was fixed before considering it done: adding
-the 3 new `NotificationType` members initially broke `api/_lib/systemSeed.ts`'s
-`Record<NotificationType, ...>` map, exactly as strict TypeScript should catch it). `DashboardPage`
-chunk unchanged at ~478KB; `QuotationPage` chunk shrank slightly (~64.5KB → ~64.0KB) from removing
-the client-side audit-call code.
-
-### Lint result
-
-`npm run lint` (`eslint .`) — **clean**, 0 errors. Same 2 pre-existing `react-refresh/only-export-
-components` warnings in `src/lib/i18n.tsx`, unrelated to this pass.
-
-### Browser verification
-
-`vercel dev` started successfully on `localhost:3000` (via `npx vercel dev`, since the Vercel CLI
-isn't globally installed in this session). `GET /api/auth/session` still 500s with the same
-`querySrv ECONNREFUSED _mongodb._tcp.tcsdb.zdnus3w.mongodb.net` error as every prior 2026-07-10
-pass — confirmed via the dev-server log, not just the HTTP response, so this is definitively the
-same pre-existing DNS/network limitation and not a regression introduced by this pass's changes.
-A Playwright check against the running dev server found exactly one class of console error (the
-expected `/api/auth/session` 500), nothing new. The app's own boot sequence has a pre-existing,
-unrelated gap surfaced by this check: `App.tsx`'s session-fetch `useEffect` has no `catch` around
-`fetchSession()`, so a thrown network error leaves `bootStatus` stuck at `"loading"` (a spinner
-that never resolves to the sign-in screen) instead of falling back to `"signedOut"` — this is a
-pre-existing gap unrelated to any change in this pass (not introduced by it, and not part of the
-Critical/High findings this pass targeted), noted here rather than silently observed and dropped;
-see `TODO.md`. Full workflow-UI verification (the reject/cancel comment modal, the new
-notification icons, the Audit Log page rendering server-written entries) could not be exercised
-end-to-end against real data for the same reason as every prior pass — reproduced a fourth time.
-
-### Remaining risks
-
-- Live-data/browser verification is still outstanding, for the same reproducible reason as every
-  2026-07-10 pass before it.
-- The `App.tsx` stuck-loading-spinner-on-session-fetch-failure gap (found during this pass's
-  browser check) is real but out of scope for a Critical/High fix pass focused on the Codex
-  report's findings — logged in `TODO.md`, not fixed here.
-- The two remaining open business-decision items (user-directory privacy model, salesperson-as-
-  real-reference) are unchanged and still require a product decision, not a guess.
+No live MongoDB/backend was reachable in this sandboxed session (a recurring, previously-documented environment limitation — see PROJECT_STATUS.md "Known Risks"), so the requested 13-step manual verification checklist (login as Super Admin, create/edit/set-default/deactivate/archive a profile, confirm normal-user access is blocked, check the browser console, etc.) could not be run end-to-end against a real database. Verified instead via an isolated Playwright preview harness rendering the real `CompanyProfileList`/`CompanyProfileDetail` components with representative mock data: confirmed the new deactivate-confirmation dialog fires correctly before any deactivation, and the detail view's "สร้างโดย"/"แก้ไขล่าสุดโดย" rows correctly resolve a real user ID to a name and correctly fall back to the raw ID for a since-deleted account. The concurrency fix (partial unique index) was verified by code inspection and type-checking only — not load-tested against real MongoDB, since that requires a live database this session doesn't have access to. Flagged as an explicit open item in TODO.md.

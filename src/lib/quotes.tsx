@@ -3,6 +3,7 @@ import type { User } from "./users";
 import { type Role, hasPermission } from "./roles";
 import { apiFetch } from "./apiClient.js";
 import type { TranslationKey } from "./i18n";
+import type { BankAccount } from "./companyProfiles";
 
 export type QuoteStatus =
   | "ร่าง"
@@ -110,6 +111,34 @@ export interface Quote {
   /** User id of whoever last edited the quote (plain edit or workflow action). Empty string until first edit. */
   updatedBy: string;
   approvalHistory: ApprovalHistoryEntry[];
+  /**
+   * **Prep only, not yet wired to any UI or API write path** — added 2026-07-13 alongside the
+   * Company Profiles module (`src/lib/companyProfiles.ts`) so multi-company quotation issuance has
+   * a landing spot on the schema before the actual feature is built. Both fields are optional and
+   * nothing currently sets them, so every existing quote (and every quote created through today's
+   * single-company flow) is unaffected. `issuerCompanyId` will eventually be a live reference to
+   * `CompanyProfile.id`; `issuerCompanySnapshot` must always be captured **at issue time** (not
+   * read live from the referenced profile) so editing a company profile later never silently
+   * changes the header/terms/bank details on a quotation that already went out to a customer —
+   * same snapshot-not-live-reference rationale as `QuoteLine` never referencing `Product` live.
+   * See docs/MODULES/CompanyProfiles.md "Future Quotation Integration" for the full plan.
+   */
+  issuerCompanyId?: string;
+  issuerCompanySnapshot?: {
+    companyCode: string;
+    companyNameTh: string;
+    companyNameEn: string;
+    displayName: string;
+    logoDataUrl: string;
+    addressTh: string;
+    taxId: string;
+    phone: string;
+    email: string;
+    bankAccounts: BankAccount[];
+    quotationTerms: string;
+    quotationFooter: string;
+    stampDataUrl: string;
+  };
 }
 
 export type QuoteDraftFields = Pick<

@@ -41,6 +41,7 @@ export const defaultRoles: Role[] = [
       "products:export",
       "users:manage",
       "auditLog:view",
+      "companyProfiles:view",
     ],
     isSuperAdmin: false,
     isSystem: true,

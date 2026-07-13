@@ -32,6 +32,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (module === "ใบเสนอราคา") {
         throw new HttpError(403, "เหตุการณ์ใบเสนอราคาถูกบันทึกโดยระบบโดยอัตโนมัติ ไม่สามารถบันทึกผ่าน API นี้ได้");
       }
+      // Company Profile events are written authoritatively by api/handlers/company-profiles.ts
+      // itself (create/update/archive/set-default) — never from this generic client-facing
+      // endpoint. Same reasoning and precedent as the quotation-module lockout above: before this,
+      // any authenticated caller could POST an arbitrary "Company Profile Created"/"Default
+      // Company Changed" entry here with no real linkage to what actually happened. Flagged by the
+      // 2026-07-13 Codex review of the Company Profiles module (High Priority, "Audit integrity").
+      if (module === "โปรไฟล์บริษัท") {
+        throw new HttpError(403, "เหตุการณ์โปรไฟล์บริษัทถูกบันทึกโดยระบบโดยอัตโนมัติ ไม่สามารถบันทึกผ่าน API นี้ได้");
+      }
 
       const auditLog = await auditLogCollection();
       const insertResult = await auditLog.insertOne({

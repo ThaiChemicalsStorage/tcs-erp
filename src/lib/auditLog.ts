@@ -17,6 +17,14 @@ export interface AuditLogEntry {
   relatedQuoteId?: string;
   /** Customer/client name this entry relates to — same provenance/caveats as `relatedQuoteId`. */
   relatedCustomerName?: string;
+  /** Company Profile `id` this entry relates to — only present on entries written server-side by
+   * `writeCompanyProfileAuditEntry()` (api/handlers/company-profiles.ts), added 2026-07-13 per a
+   * Codex review finding that Company Profile audit entries were previously client-authored via
+   * the generic endpoint with no structured linkage. Same absent-on-older-entries caveat as
+   * `relatedQuoteId`. */
+  relatedCompanyProfileId?: string;
+  /** Company name (Thai) this entry relates to — same provenance/caveats as `relatedCompanyProfileId`. */
+  relatedCompanyProfileName?: string;
 }
 
 export async function fetchAuditLog(): Promise<AuditLogEntry[]> {

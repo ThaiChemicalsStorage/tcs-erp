@@ -19,6 +19,7 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `audit_log` | MongoDB `ObjectId` | `AuditLogEntry` minus `id` | `POST /api/audit-log` always derives `userId`/`userName`/`roleName` from the authenticated session, never trusting those fields from the request body. |
 | `quotes` | **the business ID string itself** (e.g. `"QT-2567-0041"`), not an `ObjectId` | `Quote` minus `id` (the business ID is `_id`) | `nextQuoteId()` in `api/handlers/quotes.ts` scans existing `_id`s to compute the next sequence number. |
 | `job_types` | MongoDB `ObjectId` | `code: string; name: string; isActive: boolean` + audit fields | **Added 2026-07-10** for the Executive Dashboard/CRM pass — Job Type master data, one per quotation. See "Job Type" entity section below. |
+| `company_profiles` | MongoDB `ObjectId` | `CompanyProfile` minus `id` (see below) | **Added 2026-07-13** — the official business identities a quotation can (eventually) be issued under, distinct from the `company` singleton above. See "`CompanyProfile`" entity section below and [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md). |
 | `dashboard` (virtual — no collection) | — | — | `GET /api/dashboard` (`api/dashboard/index.ts`) is a read-only aggregation over `customers`/`leads`/`quotes`/`products`/`categories`/`audit_log`/`notifications`/`job_types`-derived fields already embedded on `quotes` — it doesn't own or write any collection of its own. See Dashboard KPI section below and [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full breakdown. |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
@@ -156,11 +157,15 @@ interface AuditLogEntry {
   action: string;
   details: string;
   createdAt: string;
-  relatedQuoteId?: string;       // added 2026-07-13, seventh same-day pass
-  relatedCustomerName?: string;  // added 2026-07-13, seventh same-day pass
+  relatedQuoteId?: string;              // added 2026-07-13, seventh same-day pass
+  relatedCustomerName?: string;         // added 2026-07-13, seventh same-day pass
+  relatedCompanyProfileId?: string;     // added 2026-07-13, tenth same-day pass
+  relatedCompanyProfileName?: string;   // added 2026-07-13, tenth same-day pass
 }
 ```
 Append-only — `logAudit()` has no corresponding update/delete function, so there is no code path to alter history from the UI (including for Super Admin). `POST /api/audit-log` (`api/audit-log/index.ts`) always derives `userId`/`userName`/`roleName` from the authenticated session server-side, never trusting those fields from the request body — a genuine integrity improvement over the pre-migration `localStorage` array, where a client could have written an entry claiming to be any user. Index added 2026-07-09: `{ createdAt: -1 }` (was previously an unindexed `find().sort().limit(1000)`). Index added 2026-07-13 (seventh same-day pass): `{ action: 1, createdAt: -1 }`, serving the Sales Activity Analytics query (now scans all 5 tracked `action` values, commonly with no `userName` filter — "All Sales" selected — which the existing `{ userName: 1, createdAt: -1 }` index can't serve alone).
+
+`relatedCompanyProfileId`/`relatedCompanyProfileName` (2026-07-13, tenth same-day pass): same provenance/caveat pattern as `relatedQuoteId`/`relatedCustomerName` — only present on entries written by `writeCompanyProfileAuditEntry()` (`api/handlers/company-profiles.ts`). Added per an independent Codex review's High Priority finding: Company Profile audit entries were previously written by the *client* calling the generic `POST /api/audit-log`, forgeable and lacking structured linkage to which profile changed. `POST /api/audit-log` now rejects the `"โปรไฟล์บริษัท"` module outright, the same lockout pattern as `"ใบเสนอราคา"`.
 
 `relatedQuoteId`/`relatedCustomerName` (2026-07-13, seventh same-day pass): optional structured fields, set only by `writeQuoteAuditEntry()` (`api/handlers/quotes.ts`) on quote-workflow entries (Created/Updated/Duplicated/every workflow transition) — the quotation number and customer name were already present in the entry's free-text `details` string, but the Dashboard's Recent Activity table needs them as real fields to render as a clickable link/column instead of parsing prose. Backward-compatible: older entries and every non-quote module (Users/Roles/Settings/Login) simply lack these fields, and `ActivityTimeline.tsx` renders "—" when absent.
 
@@ -211,6 +216,115 @@ interface JobType {
 Master data for classifying every quotation by the kind of work it represents. Seeded with 13 defaults on first use (`DEFAULT_JOB_TYPES` in `api/_lib/systemSeed.ts`: TA, STA, LI, SC, BF, GA, BI, VT, WTP, OTHER TA, OTHER SC, OTHER BF, OTHER) via `seedJobTypesIfEmpty()`. Unlike the other 2026-07-09 seed functions, this one is **also** called defensively from `GET /api/jobtypes` itself (not only from the Setup Wizard's one-time bootstrap) — since `ensureIndexes()`/seeding only run from `handleSetup()`, which is permanently blocked once any user exists, a collection added after the production database was already provisioned needs its own self-healing seed path, following the same precedent `GET /api/roles` already uses for `seedDefaultRolesIfEmpty()`. `POST`/`PATCH /api/jobtypes` require `company:manage` (Super Admin only, matching the "company-wide configuration data" precedent used for bank/VAT/T&C settings); `GET` only requires `quotations:view`. No new `Permission` was added — see [RBAC.md](./RBAC.md).
 
 `Quote.jobTypeCode`/`jobTypeName` are a **snapshot**, not a live reference — same rationale as `QuoteLine` never referencing `Product` live: renaming a Job Type later must not rewrite historical quotes.
+
+### `CompanyProfile` (`src/lib/companyProfiles.ts`) — added 2026-07-13
+
+```ts
+interface BankAccount {
+  id: string;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  branch: string;
+  isDefault: boolean;  // at most one true per profile, enforced server-side
+}
+
+interface CompanyProfile {
+  id: string;
+  companyCode: string;       // unique, required
+  companyNameTh: string;     // required
+  companyNameEn: string;
+  displayName: string;       // shown in lists/badges when set, falls back to companyNameTh
+  logoDataUrl: string;       // base64 data URL, same convention as Company.logoDataUrl
+  addressTh: string;
+  addressEn: string;
+  taxId: string;             // 13-digit format checked when non-empty, not required
+  branchName: string;
+  branchCode: string;
+  phone: string;
+  fax: string;
+  email: string;             // format checked when non-empty
+  website: string;           // format checked when non-empty
+  bankAccounts: BankAccount[];
+  quotationPrefix: string;
+  quotationNumberFormat: string;
+  quotationTerms: string;
+  quotationFooter: string;
+  stampDataUrl: string;
+  signatureLabel: string;
+  isDefault: boolean;        // exactly one true among active, non-deleted profiles — see below
+  isActive: boolean;         // Activate/Deactivate toggle, independent of isDefault/isDeleted
+  isDeleted: boolean;        // soft-delete/archive — this module's only "delete," always reversible
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;         // → User.id
+  updatedBy: string;         // → User.id
+}
+```
+
+Master data for the business identities a quotation can (eventually) be issued under — see
+[MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) for the full module writeup and its
+relationship to the pre-existing `company` singleton (unmerged, deliberately — both exist side by
+side for now).
+
+**Default-profile invariant** — "at most one active, non-archived profile is `isDefault: true`" —
+is enforced at **two layers**, not application logic alone (corrected 2026-07-13, tenth same-day
+pass, after an independent Codex review found the original application-only sequencing left real
+concurrency and deactivation holes):
+
+- **Database-level (the real guarantee)**: a **partial unique index** on
+  `company_profiles` — `{ isDefault: 1 }` with `partialFilterExpression: { isDefault: true }`.
+  MongoDB itself now rejects any write that would result in two documents simultaneously holding
+  `isDefault: true`, regardless of application-code bugs or races. This is the layer that actually
+  closes the "concurrent set-default/first-create can leave two defaults" gap — sequencing alone
+  (below) only narrows the race window, it can't eliminate it without a database-level constraint.
+- **Application-level (server-side in `api/handlers/company-profiles.ts`)**:
+  - The very first profile ever created is automatically `isDefault: true` **and forced
+    `isActive: true`** (`existingCount === 0` at insert time, added 2026-07-13 — a prior version
+    could leave an *inactive* default, which is its own invariant break) — the client-facing
+    `CompanyProfileDraft` type has no `isDefault` field at all. If a genuinely concurrent "first
+    create" race hits the partial unique index, the losing request retries once as a non-default
+    profile instead of surfacing a raw 500.
+  - `POST /api/company-profiles/:id/set-default` unsets every other `isDefault: true` document
+    (`updateMany`) then sets the target (`updateOne`) — two sequential writes, not a single Mongo
+    transaction (this app doesn't use transactions anywhere else at this scale). A crash between
+    them leaves at most a *missing* default (safe, re-settable); a genuine race between two
+    concurrent set-default calls on different targets is caught via the partial unique index's
+    duplicate-key error on the second `updateOne` and surfaced as a clear "try again" message, not
+    silently producing two defaults.
+  - `POST /api/company-profiles/:id/archive` (the `isDeleted` toggle) rejects setting
+    `isDeleted: true` on the current default with a `400` — an admin must reassign default first.
+  - `PATCH /api/company-profiles/:id` rejects `isActive: false` on the current default with the
+    same `400` (added 2026-07-13 — a prior version allowed deactivating the default outright,
+    leaving no active default at all).
+  - Setting an archived (`isDeleted: true`) or inactive (`isActive: false`) profile as default is
+    also rejected with a `400`.
+
+`companyCode` has its own separate unique index (case-insensitive uniqueness additionally checked
+in the handler, same `escapeRegExp()` + case-insensitive-regex pattern as
+`Product.code`/`JobType.code`).
+
+**No hard delete exists for this collection** — `isDeleted` (toggled via the archive action) is
+the only removal mechanism, always reversible, matching the Category/Job Type precedent. The
+`companyProfiles:delete` permission is defined (per the original request's literal permission
+list) but isn't wired to any additional route for this reason — see [RBAC.md](./RBAC.md).
+
+**No seed data** — the collection starts empty; an admin must add the first profile manually, per
+the "no fake/demo company data" requirement.
+
+Indexes (created defensively inside `api/handlers/company-profiles.ts` itself — same
+`ensureIndexes()`-never-reaches-production reasoning as `job_types`'s indexes, since this
+collection was added after the deployment was already provisioned): `{ companyCode: 1 }` (unique),
+`{ isDefault: 1 }` (**partial unique**, `partialFilterExpression: { isDefault: true }`, added
+2026-07-13 — see above), `{ isActive: 1 }`, `{ isDeleted: 1 }`. The index-creation call is wrapped
+defensively to drop-and-recreate on an `IndexOptionsConflict` (e.g. if a plain, non-unique
+`isDefault` index from an earlier local run already exists) rather than crashing every cold start.
+
+**Future Quotation integration (prepared, not built)**: `Quote` gained two optional fields,
+`issuerCompanyId`/`issuerCompanySnapshot` — see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md)
+"Future Quotation Integration" for the full plan, open questions, and the snapshot-not-live-reference
+rule (same rationale as `Quote.jobTypeCode`/`jobTypeName` above). Nothing currently sets these
+fields; every existing and newly-created quote is unaffected.
 
 ### `Quote` / `QuoteLine` / `SubDetail` (`src/lib/quotes.tsx`)
 ```ts
@@ -288,6 +402,8 @@ interface Quote {
   createdByUserId: string;             // → User.id, "" for legacy/seed quotes (any editor treated as owner)
   updatedBy: string;                   // → User.id, added 2026-07-09 — set server-side on every plain edit or workflow action, "" until first edit
   approvalHistory: ApprovalHistoryEntry[];  // append-only
+  issuerCompanyId?: string;             // added 2026-07-13, → CompanyProfile.id — prep only, nothing sets this yet
+  issuerCompanySnapshot?: { /* subset of CompanyProfile, captured at issue time */ };  // added 2026-07-13 — prep only, see MODULES/CompanyProfiles.md
 }
 ```
 All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session.
