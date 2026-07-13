@@ -4,6 +4,143 @@
 
 ---
 
+## 2026-07-13 — Fix Codex-review issues in Company Profile header integration (twelfth same-day pass)
+
+**Scope**: an independent Codex review of the eleventh pass's Quotation-issuer integration
+(`docs/CODEX_REVIEW_REPORT.md`) found **zero Critical** and **zero High Priority** issues — the
+requested selector/snapshot/RBAC/audit/PDF flow was already correctly implemented end-to-end. It
+found 4 Medium and 3 Low Priority items, one of which (Medium #1) was a concrete, safely-scoped
+code defect in exactly the header-integration area this task covers; the rest are either
+already-documented business decisions, speculative future work, or explicitly out of this task's
+scope (full print redesign, live-database integration tests).
+
+1. **Fixed (Medium #1) — the issuer display fallback chain skipped the default active profile.**
+   `QuoteDocument.tsx` previously resolved `issuerDisplay` as: quote's own snapshot → the live
+   profile the quote references (only if still active/not-deleted) → straight to the legacy
+   `company` singleton. A quote with `issuerCompanyId` set but no `issuerCompanySnapshot` (rare
+   partial/legacy data), whose referenced profile has since been deactivated or archived, would
+   incorrectly jump to the legacy singleton instead of showing the real default active company
+   profile. Fixed by inserting the default active profile as an intermediate fallback step, exactly
+   matching the review's requested order (snapshot → referenced profile → default active profile →
+   legacy singleton). `hasIssuerProfile` (which drives the no-issuer warning banner) now also
+   treats this fallback as a genuinely resolved issuer, since it's real, non-fake company data.
+2. **Fixed (documentation mismatch)** — `src/lib/quotes.tsx`'s `issuerCompanyId` doc comment and
+   `src/lib/companyProfiles.ts`'s `CompanyProfile` doc comment both still said the Quotation
+   integration was unbuilt ("prep only, not yet wired" / "no Quotation-form UI selects one yet"),
+   left over from before the eleventh pass wired it in. Both corrected.
+   `docs/MODULES/CompanyProfiles.md`'s introductory sections had the same stale claim, directly
+   contradicting its own later "Quotation Integration" section — corrected, and the "Display
+   resolution" fallback description (there and in `MODULES/Quotation.md`) expanded to the accurate
+   4-step chain including the new default-profile fallback step.
+3. **Not changed, with reason** (see `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status" for the full
+   itemized reasoning): Medium #2 (issuer still optional on Draft — an existing, documented business
+   decision, not a defect); Medium #3 (full Company Profile payload returned to the selector — a
+   real but non-urgent payload-size optimization, out of this task's header-integration scope);
+   Medium #4 (header preview is a selector-panel card rather than a persistent document-header band
+   — an intentional, already-reviewed layout, not a functional gap); Low #1/#3 (English-address print
+   variant, no dedicated default-profile endpoint — speculative future work); print-layout expansion
+   for fax/website/branch/English name (explicitly out of scope per this task's own instructions);
+   live-database integration tests (no network path to MongoDB Atlas in this sandboxed session).
+
+**Verification**: `npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run
+build` all clean. Verified via an isolated Playwright preview mounting the real `QuoteDocument`
+component with a quote reproducing the exact Medium #1 scenario (references a deactivated profile,
+no snapshot, alongside a separate default active profile) — confirmed the header now shows the
+default active profile's real data (not the legacy singleton), no warning banner, and the customer
+form below still works, at 1440px and 390px with no console errors or layout overflow.
+
+Docs updated: this file, PROJECT_STATUS.md, CLAUDE.md, TODO.md, DATABASE.md, API.md,
+UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/CompanyProfiles.md, MODULES/Quotation.md,
+and `CODEX_REVIEW_REPORT.md`'s new "Claude Fix Status" section.
+
+---
+
+## 2026-07-13 — Wire Company Profiles into Quotation creation (eleventh same-day pass)
+
+**Scope**: close the gap the ninth pass deliberately left open — "Company Profiles is master-data
+management only... nothing sets `Quote.issuerCompanyId`/`issuerCompanySnapshot` yet." This pass
+wires company-profile selection all the way through the Quotation form, the server, and the
+printed document.
+
+1. **`IssuerCompanySelector.tsx` (new)** — a presentational component shown above the customer
+   section on the create/edit Quotation form: "ออกใบเสนอราคาในนามบริษัท." Renders an empty state
+   (zero active profiles, with a permission-gated link to Company Profiles), a `<select>` of
+   active/non-deleted profiles (with a "ค่าเริ่มต้น" badge on the default), a header preview panel
+   (logo/name TH+EN/address/phone/fax/email/website/tax ID/branch — blank fields hidden, never
+   placeholder text), a locked-with-tooltip state when the quote has left Draft, and an
+   independent warning banner ("ใบเสนอราคานี้ยังไม่มีข้อมูลบริษัทผู้ออกเอกสาร") when no real
+   issuer company is resolved.
+2. **`src/lib/companyProfiles.ts`** — added `IssuerCompanySnapshot` (the frozen-at-issue-time
+   shape stored on `Quote.issuerCompanySnapshot`) and `IssuerCompanyDisplay` (a unified rendering
+   shape used by both the on-screen preview and the printed document, regardless of whether the
+   data came from a live profile, a frozen snapshot, or the legacy `company` singleton), plus
+   `issuerDisplayFromProfile()`/`issuerDisplayFromSnapshot()` pure mapping functions.
+3. **`src/lib/quotes.tsx`** — `Quote.issuerCompanySnapshot` widened to reference the shared
+   `IssuerCompanySnapshot` type (previously an inline, narrower placeholder object type);
+   `issuerCompanyId` added to `QuoteDraftFields`.
+4. **`api/handlers/company-profiles.ts`** — `GET /api/company-profiles` relaxed to accept either
+   `companyProfiles:view` (full list) or `quotations:create` (server-filtered to
+   active-and-not-deleted only) — a Sales user who can create quotations but has no Company
+   Profile management permission can still populate the selector, without seeing archived/inactive
+   profiles or gaining any management capability.
+5. **`api/handlers/quotes.ts`** — added `resolveIssuerCompanyUpdate(rawValue)`: validates a
+   client-sent `issuerCompanyId` against a real, active, non-deleted `company_profiles` document
+   (`400` if missing/inactive/archived), then builds `issuerCompanySnapshot` from that profile at
+   that instant, server-side — the client never constructs or sends a snapshot itself. Wired into
+   `POST /api/quotes` (create), `PATCH /api/quotes/:id` (Draft-only — `400` if the quote has left
+   `"ร่าง"`), and `POST /api/quotes/:id/workflow` (same Draft-only gate, checked against the
+   quote's *pre-transition* status since a workflow action like Submit moves it out of Draft in the
+   same request). An explicit empty `issuerCompanyId` clears both fields via a MongoDB `$unset`,
+   not just an empty-string `$set`. `PATCH` writes a distinct `"Quotation Issuer Company Changed"`
+   audit entry (reusing `relatedCompanyProfileId`/`relatedCompanyProfileName`, the same structured
+   fields `writeCompanyProfileAuditEntry()` already uses) whenever the issuer specifically changed,
+   instead of the generic `"Quotation Updated"` entry.
+6. **`src/pages/quotation/QuoteDocument.tsx`** — computes `issuerDisplay` via
+   `useSnapshotForDisplay = isDetail && !issuerChanged && !!quote?.issuerCompanySnapshot`, falling
+   back to the live-selected profile, then to the legacy `company` singleton (never `undefined`) —
+   so the header band and `PrintDocument` never need a "what if there's nothing" branch of their
+   own. `hasIssuerProfile` is tracked as an independent signal (decoupled from what's rendered) to
+   drive the warning banner. `canChangeIssuer` gates the selector to Draft (`mode === "new"` or
+   `status === "ร่าง"`), mirroring the server-side lock.
+7. **`src/pages/quotation/PrintDocument.tsx`** — `company: Company` prop replaced with
+   `issuer: IssuerCompanyDisplay`; every header/stamp reference (`company.logoDataUrl`/`.name`/
+   `.address`/`.taxId`/`.phone`/`.email`/`.stampDataUrl`) renamed to the `issuer.*` equivalent. No
+   hardcoded company header remains in the printed document.
+8. **`src/pages/quotation/QuotationPage.tsx` / `src/App.tsx`** — `companyProfiles`,
+   `canViewCompanyProfiles` (`hasPermission(..., "companyProfiles:view")`), and
+   `onNavigateToCompanyProfiles` (`() => setActiveNav("companyProfiles")`) threaded through to
+   `QuoteDocument`.
+9. **`src/lib/i18n.tsx`** — 8 new keys (`quotation.issuer.title/emptyTitle/emptySub/
+   goToCompanyProfiles/selectLabel/selectPrompt/warningNoIssuer/lockedNotDraft`) in both Thai and
+   English dictionaries.
+
+**Old quotations are unaffected**: both fields are simply unset on any quote created before this
+pass; display falls back through the same chain to the legacy `company` singleton, exactly as it
+rendered before this change — no migration/backfill was run or needed.
+
+**Verification**: `npx tsc -b` and `npx tsc --noEmit -p tsconfig.api.json` both clean, `npm run
+lint` clean (pre-existing warnings only), `npm run build` clean. Verified via an isolated
+Playwright preview harness (`preview.html` + `src/previewMain.tsx`, deleted after use per this
+session's established pattern) mounting the real `IssuerCompanySelector` component with mock
+`CompanyProfile` data across 5 scenarios — 0 active profiles (empty state), 1 (auto-selected
+default), 2+ (explicit selection, default badge), locked/not-Draft (disabled + tooltip), and no
+issuer resolved (warning banner) — at 1440px and 390px; all rendered correctly with no console
+errors beyond a harmless missing-favicon 404. No live-database manual walkthrough was possible —
+same sandboxed-session network limitation as every other pass this session (see PROJECT_STATUS.md
+"Known Risks").
+
+**Known limitations, left deliberately undone this pass** (see TODO.md/MODULES/CompanyProfiles.md
+for the full reasoning): `quotationPrefix`/`quotationNumberFormat` per company profile don't
+compose with `nextQuoteId()`'s single global atomic sequence; no hard block on saving a Draft with
+no issuer company selected (a warning is shown instead); `handleWorkflow` doesn't write its own
+distinct issuer-change audit entry the way `PATCH` does (the workflow's own transition entry still
+fires either way).
+
+Docs updated: this file, PROJECT_STATUS.md, CLAUDE.md, TODO.md, DATABASE.md, API.md, RBAC.md,
+UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/CompanyProfiles.md, MODULES/Quotation.md.
+
+---
+
 ## 2026-07-13 — Fix Codex-review Critical/High Company Profiles issues (tenth same-day pass)
 
 **Scope**: an independent Codex review of the ninth pass's Company Profiles module

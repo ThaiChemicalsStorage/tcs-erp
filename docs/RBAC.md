@@ -55,6 +55,22 @@ isn't wired to any additional route: this module's only "delete" is the reversib
 (`companyProfiles:archive`), matching the pre-existing Category/Job Type precedent of no
 hard-delete route — see API.md/DATABASE.md for the full reasoning.
 
+**Quotation-issuer selection (added 2026-07-13, Quotation integration pass)**: a Sales user holds
+`quotations:create` but not `companyProfiles:view` by default (see above), yet the Quotation
+form's "ออกใบเสนอราคาในนามบริษัท" selector needs to read the list of active companies to populate
+its dropdown. Rather than granting `companyProfiles:view` to Sales by default (which would also
+unlock the Company Profiles management page itself, not just quotation issuer selection),
+`GET /api/company-profiles` was relaxed to accept **either** `companyProfiles:view` **or**
+`quotations:create` — see [API.md](./API.md). A caller with only `quotations:create` gets a
+narrower, server-filtered response (active and not-deleted profiles only, no archived/inactive
+ones), so a Sales user can select an issuing company without being able to see or manage anything
+they couldn't already see via the selector itself. Selecting a company profile on a quote does not
+require any of the six Company Profile management permissions — only `quotations:create`/`edit`
+(whichever already gates the quote itself) plus this relaxed read access. Changing which company a
+quote is issued under is further restricted to quotes still in Draft status — see
+[MODULES/Quotation.md](./MODULES/Quotation.md) "Issuer Company" and [API.md](./API.md)'s
+`PATCH /api/quotes/:id` row — enforced server-side, not just hidden client-side.
+
 **Independently confirmed 2026-07-13 (tenth same-day pass)**: a follow-up Codex review of this
 module found **zero Critical issues** in this RBAC enforcement — every exposed route was already
 correctly gated. Its 3 High Priority findings were data-integrity/audit-integrity gaps, not RBAC

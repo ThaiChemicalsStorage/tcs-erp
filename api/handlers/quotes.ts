@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser, requirePermission, type AuthContext } from "../_lib/auth.js";
-import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, countersCollection, auditLogCollection, withStringId, type QuoteFields } from "../_lib/collections.js";
+import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, countersCollection, auditLogCollection, companyProfilesCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
@@ -31,7 +31,11 @@ async function writeQuoteAuditEntry(
   // Dashboard's Recent Activities list needs them as real fields to render as their own
   // columns/link instead of parsing prose. Optional so this stays backward-compatible with older
   // entries (audit_log has no schema, missing fields just render as blank in the UI).
-  related?: { quoteId?: string; customerName?: string },
+  // `companyProfileId`/`companyProfileName` (added 2026-07-13, Quotation integration pass) reuse
+  // the same `relatedCompanyProfileId`/`relatedCompanyProfileName` `AuditLogEntry` fields the
+  // Company Profiles module itself writes — a quote-issuer-company link is the same kind of fact
+  // as a company-profile-management link, no reason for a second pair of field names.
+  related?: { quoteId?: string; customerName?: string; companyProfileId?: string; companyProfileName?: string },
 ): Promise<void> {
   const auditLog = await auditLogCollection();
   await auditLog.insertOne({
@@ -44,7 +48,70 @@ async function writeQuoteAuditEntry(
     createdAt: nowIso(),
     ...(related?.quoteId ? { relatedQuoteId: related.quoteId } : {}),
     ...(related?.customerName ? { relatedCustomerName: related.customerName } : {}),
+    ...(related?.companyProfileId ? { relatedCompanyProfileId: related.companyProfileId } : {}),
+    ...(related?.companyProfileName ? { relatedCompanyProfileName: related.companyProfileName } : {}),
   });
+}
+
+/**
+ * Resolves a client-sent `issuerCompanyId` into the fields to actually persist — added 2026-07-13
+ * (Quotation integration pass). The client only ever sends the id (`QuoteDraftFields` has no
+ * `issuerCompanySnapshot` field at all); the snapshot is always built here, server-side, from the
+ * company profile's *current* data, the same "never trust a client-supplied derived value" rule
+ * `amount`/`jobTypeName` already follow.
+ *
+ * Returns `undefined` when the field wasn't present in the request at all (caller should leave the
+ * quote's existing issuer untouched) — mirrors the "only touch what's in body" convention
+ * `sanitizePartialQuoteFields` uses for every other field. Returns `{ clear: true }` when the
+ * client explicitly sent an empty string (un-assigning the issuer — e.g. retrofitting a legacy
+ * quote back to "no issuer selected," which falls back to the singleton `Company` on screen/print
+ * — see MODULES/CompanyProfiles.md). Otherwise validates the referenced profile exists, is active,
+ * and isn't archived, throwing a clear Thai `400` if not, and returns the fields to `$set`.
+ */
+async function resolveIssuerCompanyUpdate(
+  rawValue: unknown,
+): Promise<
+  | { clear: true }
+  | { clear: false; issuerCompanyId: string; issuerCompanySnapshot: NonNullable<QuoteFields["issuerCompanySnapshot"]> }
+  | undefined
+> {
+  if (rawValue === undefined) return undefined;
+  if (typeof rawValue !== "string") throw new HttpError(400, "รหัสบริษัทผู้ออกใบเสนอราคาไม่ถูกต้อง");
+  const trimmed = rawValue.trim();
+  if (!trimmed) return { clear: true };
+
+  const objectId = toObjectId(trimmed); // throws HttpError(400) on a malformed id
+  const companyProfiles = await companyProfilesCollection();
+  const profile = await companyProfiles.findOne({ _id: objectId });
+  if (!profile) throw new HttpError(400, "ไม่พบข้อมูลบริษัทที่เลือก");
+  if (profile.isDeleted) throw new HttpError(400, "บริษัทที่เลือกถูกเก็บถาวรแล้ว กรุณาเลือกบริษัทอื่น");
+  if (!profile.isActive) throw new HttpError(400, "บริษัทที่เลือกถูกปิดใช้งาน กรุณาเลือกบริษัทอื่น");
+
+  return {
+    clear: false,
+    issuerCompanyId: trimmed,
+    issuerCompanySnapshot: {
+      companyCode: profile.companyCode,
+      companyNameTh: profile.companyNameTh,
+      companyNameEn: profile.companyNameEn,
+      displayName: profile.displayName,
+      logoDataUrl: profile.logoDataUrl,
+      addressTh: profile.addressTh,
+      addressEn: profile.addressEn,
+      taxId: profile.taxId,
+      branchName: profile.branchName,
+      branchCode: profile.branchCode,
+      phone: profile.phone,
+      fax: profile.fax,
+      email: profile.email,
+      website: profile.website,
+      bankAccounts: profile.bankAccounts,
+      quotationPrefix: profile.quotationPrefix,
+      quotationTerms: profile.quotationTerms,
+      quotationFooter: profile.quotationFooter,
+      stampDataUrl: profile.stampDataUrl,
+    },
+  };
 }
 
 const QUOTE_YEAR = 2567;
@@ -176,6 +243,12 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     const { jobTypeCode, jobTypeName } = validateJobType(body.jobTypeCode, jobTypeMaster, { required: true });
     const lines = validateLines(body.lines);
     const discount = sanitizeDiscountPct(body.discount);
+    // Not required — "do not allow quotation creation without an issuer company unless business
+    // explicitly allows it... if current workflow must allow draft creation, show a warning
+    // clearly" (2026-07-13 request). This app's Draft workflow already allows creating a quote
+    // with plenty of other fields blank, so the client shows a persistent warning banner instead
+    // of hard-blocking the save — see IssuerCompanySelector.tsx/MODULES/CompanyProfiles.md.
+    const issuerResolution = await resolveIssuerCompanyUpdate(body.issuerCompanyId);
 
     const [quotes, counters] = await Promise.all([quotesCollection(), countersCollection()]);
     const id = await nextQuoteId(counters, quotes);
@@ -211,9 +284,26 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       createdByUserId: ctx.user.id,
       updatedBy: ctx.user.id,
       approvalHistory: [],
+      ...(issuerResolution && !issuerResolution.clear
+        ? { issuerCompanyId: issuerResolution.issuerCompanyId, issuerCompanySnapshot: issuerResolution.issuerCompanySnapshot }
+        : {}),
     };
     await quotes.insertOne(doc);
-    await writeQuoteAuditEntry(ctx, "Quotation Created", `สร้างใบเสนอราคา ${id} (${client})`, { quoteId: id, customerName: client });
+    const issuerNote = !issuerResolution?.clear && issuerResolution?.issuerCompanySnapshot
+      ? ` — ออกในนามบริษัท: ${issuerResolution.issuerCompanySnapshot.displayName || issuerResolution.issuerCompanySnapshot.companyNameTh}`
+      : "";
+    await writeQuoteAuditEntry(
+      ctx,
+      "Quotation Created",
+      `สร้างใบเสนอราคา ${id} (${client})${issuerNote}`,
+      {
+        quoteId: id,
+        customerName: client,
+        ...(issuerResolution && !issuerResolution.clear
+          ? { companyProfileId: issuerResolution.issuerCompanyId, companyProfileName: issuerResolution.issuerCompanySnapshot.displayName || issuerResolution.issuerCompanySnapshot.companyNameTh }
+          : {}),
+      },
+    );
     res.status(201).json({ quote: withStringId(doc) });
     return;
   }
@@ -250,6 +340,31 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
     update.jobTypeName = jobTypeName;
   }
 
+  // Issuer company can only change while the quote is still a Draft (2026-07-13, Quotation
+  // integration pass, a deliberate business rule — see MODULES/CompanyProfiles.md "Future
+  // Quotation Integration" for the alternatives considered). Once submitted, the issuer identity
+  // is part of what an approver is approving; letting it silently shift underneath an in-flight
+  // approval would be a real integrity gap, not a convenience. `"issuerCompanyId" in body` (not
+  // `update.issuerCompanyId`) so an explicit clear (empty string) is still detected.
+  let issuerChanged = false;
+  let unsetIssuerSnapshot = false;
+  if ("issuerCompanyId" in body) {
+    if (target.status !== "ร่าง") {
+      throw new HttpError(400, "ไม่สามารถเปลี่ยนบริษัทผู้ออกใบเสนอราคาได้ เนื่องจากใบเสนอราคานี้ไม่ได้อยู่ในสถานะร่างแล้ว");
+    }
+    const resolution = await resolveIssuerCompanyUpdate(body.issuerCompanyId);
+    if (resolution) {
+      issuerChanged = true;
+      if (resolution.clear) {
+        update.issuerCompanyId = "";
+        unsetIssuerSnapshot = true;
+      } else {
+        update.issuerCompanyId = resolution.issuerCompanyId;
+        update.issuerCompanySnapshot = resolution.issuerCompanySnapshot;
+      }
+    }
+  }
+
   // `amount` is never client-writable (see quoteValidation.ts) — always server-derived from the
   // resulting effective lines/discount so the two can never drift apart, whether or not this
   // particular PATCH touched either of them.
@@ -258,7 +373,10 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount);
 
   update.updatedBy = ctx.user.id;
-  await quotes.updateOne({ _id: id }, { $set: update });
+  await quotes.updateOne(
+    { _id: id },
+    { $set: update, ...(unsetIssuerSnapshot ? { $unset: { issuerCompanySnapshot: "" } } : {}) },
+  );
   const updated = await quotes.findOne({ _id: id });
   if (!updated) throw new HttpError(404, "ไม่พบใบเสนอราคา");
 
@@ -269,7 +387,24 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   const bodyKeys = Object.keys(body);
   const isInterestOnlyUpdate = bodyKeys.length > 0 && bodyKeys.every((k) => k === "interest");
   if (!isInterestOnlyUpdate) {
-    await writeQuoteAuditEntry(ctx, "Quotation Updated", `แก้ไขใบเสนอราคา ${id}`, { quoteId: id, customerName: updated.client });
+    // A dedicated action name when the issuer company specifically changed (2026-07-13 request:
+    // "Quotation issuer company changed") — one audit entry per PATCH call either way, not a
+    // second entry stacked on top of "Quotation Updated" for the same request.
+    if (issuerChanged) {
+      const issuerName = updated.issuerCompanySnapshot?.displayName || updated.issuerCompanySnapshot?.companyNameTh || "";
+      await writeQuoteAuditEntry(
+        ctx,
+        "Quotation Issuer Company Changed",
+        issuerName ? `เปลี่ยนบริษัทผู้ออกใบเสนอราคา ${id} เป็น: ${issuerName}` : `ยกเลิกบริษัทผู้ออกใบเสนอราคา ${id}`,
+        {
+          quoteId: id,
+          customerName: updated.client,
+          ...(updated.issuerCompanyId ? { companyProfileId: updated.issuerCompanyId, companyProfileName: issuerName } : {}),
+        },
+      );
+    } else {
+      await writeQuoteAuditEntry(ctx, "Quotation Updated", `แก้ไขใบเสนอราคา ${id}`, { quoteId: id, customerName: updated.client });
+    }
   }
 
   res.status(200).json({ quote: withStringId(updated) });
@@ -350,6 +485,28 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
     update.jobTypeCode = jobTypeCode;
     update.jobTypeName = jobTypeName;
   }
+
+  // Same Draft-only issuer-change rule as the plain PATCH above — `target.status` here is the
+  // quote's status *before* this transition applies (e.g. still "ร่าง" for a "submitted" action),
+  // so bundling a last-second issuer change with the Submit click is fine; any later transition
+  // (approve/send/etc.) locks it.
+  let unsetIssuerSnapshot = false;
+  if ("issuerCompanyId" in draft) {
+    if (target.status !== "ร่าง") {
+      throw new HttpError(400, "ไม่สามารถเปลี่ยนบริษัทผู้ออกใบเสนอราคาได้ เนื่องจากใบเสนอราคานี้ไม่ได้อยู่ในสถานะร่างแล้ว");
+    }
+    const resolution = await resolveIssuerCompanyUpdate(draft.issuerCompanyId);
+    if (resolution) {
+      if (resolution.clear) {
+        update.issuerCompanyId = "";
+        unsetIssuerSnapshot = true;
+      } else {
+        update.issuerCompanyId = resolution.issuerCompanyId;
+        update.issuerCompanySnapshot = resolution.issuerCompanySnapshot;
+      }
+    }
+  }
+
   const effectiveLines = update.lines ?? target.lines;
   const effectiveDiscount = update.discount ?? target.discount;
   update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount);
@@ -370,7 +527,10 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
     },
   ];
 
-  await quotes.updateOne({ _id: id }, { $set: update });
+  await quotes.updateOne(
+    { _id: id },
+    { $set: update, ...(unsetIssuerSnapshot ? { $unset: { issuerCompanySnapshot: "" } } : {}) },
+  );
   const updated = await quotes.findOne({ _id: id });
   if (!updated) throw new HttpError(404, "ไม่พบใบเสนอราคา");
 

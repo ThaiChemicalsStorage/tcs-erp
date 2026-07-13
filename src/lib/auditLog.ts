@@ -17,11 +17,14 @@ export interface AuditLogEntry {
   relatedQuoteId?: string;
   /** Customer/client name this entry relates to — same provenance/caveats as `relatedQuoteId`. */
   relatedCustomerName?: string;
-  /** Company Profile `id` this entry relates to — only present on entries written server-side by
-   * `writeCompanyProfileAuditEntry()` (api/handlers/company-profiles.ts), added 2026-07-13 per a
-   * Codex review finding that Company Profile audit entries were previously client-authored via
-   * the generic endpoint with no structured linkage. Same absent-on-older-entries caveat as
-   * `relatedQuoteId`. */
+  /** Company Profile `id` this entry relates to — present on Company Profile module entries
+   * written by `writeCompanyProfileAuditEntry()` (api/handlers/company-profiles.ts, added
+   * 2026-07-13 per a Codex review finding that those entries were previously client-authored
+   * with no structured linkage), **and** (added the same day, Quotation integration pass) on
+   * quotation entries where an issuer company was set/changed, written by `writeQuoteAuditEntry()`
+   * (api/handlers/quotes.ts) — the same fact ("which company profile") in both cases, so one pair
+   * of fields serves both modules rather than duplicating a second pair of names. Absent on older
+   * entries and on entries unrelated to a company profile. */
   relatedCompanyProfileId?: string;
   /** Company name (Thai) this entry relates to — same provenance/caveats as `relatedCompanyProfileId`. */
   relatedCompanyProfileName?: string;

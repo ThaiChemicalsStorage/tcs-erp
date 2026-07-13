@@ -101,6 +101,30 @@ When a field/button should only be interactive for users with the right permissi
 
 **Confirm before any state-changing row action, not just destructive ones** (added 2026-07-13, Codex review fix): `CompanyProfileList.tsx` originally only confirmed Set Default and Archive, leaving Deactivate as a single-click, no-confirmation action — flagged as a real UX gap (deactivating is reversible, but still consequential enough to warrant a pause, especially once the server-side rule "can't deactivate the current default" can itself surface as an error the user didn't expect). Deactivate now shows the same `ConfirmDialog` pattern as Archive/Set Default; Activate stays a single click (re-enabling something is lower-stakes than disabling it). Icon-only row actions should carry both `title` (hover tooltip) and an `aria-label` naming the specific row's record (e.g. `` `${t("common.edit")} ${company.companyNameTh}` ``) — `title` alone isn't an accessible name for every assistive technology.
 
+### Reference-Picker + Live Preview (Quotation's Issuer Company selector, added 2026-07-13)
+`IssuerCompanySelector.tsx` (`src/pages/quotation/`) is the reference pattern for "pick one saved
+master-data record to attach to the thing you're creating, and show what it'll actually look like
+once picked" — a `<select>` immediately followed by a preview card that re-renders the instant the
+selection changes, rather than only showing the picked value's name/id. Preview fields are shown
+only when non-empty (no `"[ที่อยู่บริษัท]"`-style placeholder text for missing data — an omitted
+field, not a fake one). An empty state (zero eligible records) replaces the selector entirely with
+an explanation + a permission-gated link to where the record can be created, rather than showing a
+disabled/empty dropdown. Where the referenced record is not editable in a particular context (here,
+once a quotation has left Draft status), the selector is `disabled` with a `title` tooltip
+explaining why — not hidden, so the user can still see what's currently selected. An independent
+warning banner (`AlertTriangle`, muted amber `#e08a3c`) signals "no real record resolved yet"
+decoupled from what the preview happens to render — this matters when a legacy fallback (here, the
+old single-`company` singleton) can make the preview look populated even when no real
+Company-Profile-equivalent record was actually selected.
+
+**Fallback ordering, corrected 2026-07-13 (twelfth same-day pass, Codex review Medium #1)**: when a
+picked record's live source is stale (here, the referenced Company Profile was later
+deactivated/archived), prefer the nearest *real* record that still applies (the default active
+profile) before dropping all the way to the legacy singleton — don't collapse "the exact record is
+gone" straight to "show the pre-this-feature fallback." This is the general shape to copy for any
+future reference-picker with more than one fallback tier: order fallbacks from most-specific-still-real
+to least-specific, not most-specific-real-or-nothing.
+
 ### Spacing
 Page containers: `p-6 space-y-5`/`space-y-6`. Card internal padding: `p-4`–`p-6`. Grid gaps: `gap-4`. Consistent `rounded-xl` on cards/panels, `rounded-lg` on buttons/inputs, `rounded-full` on pills/badges/avatars.
 

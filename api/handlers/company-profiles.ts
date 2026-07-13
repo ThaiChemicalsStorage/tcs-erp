@@ -1,9 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { Collection } from "mongodb";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
-import { requirePermission, type AuthContext } from "../_lib/auth.js";
+import { requirePermission, requireUser, type AuthContext } from "../_lib/auth.js";
 import { companyProfilesCollection, auditLogCollection, toObjectId, withStringId, type CompanyProfileFields } from "../_lib/collections.js";
 import { validateCompanyProfileDraft } from "../_lib/companyProfileValidation.js";
+import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 import type { CompanyProfileDraft } from "../../src/lib/companyProfiles.js";
 
@@ -102,11 +103,22 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   await ensureCompanyProfileIndexes(companyProfiles);
 
   if (req.method === "GET") {
-    await requirePermission(req, "companyProfiles:view");
-    // Returns every profile, including archived/inactive ones — the list page filters client-side
-    // (same "show archived" toggle pattern as ProductList.tsx) rather than the server silently
-    // hiding rows the admin might specifically be looking for.
-    const docs = await companyProfiles.find({}).sort({ isDefault: -1, companyNameTh: 1 }).toArray();
+    // Two legitimate reasons to read this list, added 2026-07-13 (Quotation integration pass):
+    // an admin managing profiles (`companyProfiles:view`), or a Sales User picking which company
+    // to issue a quotation under (`quotations:create`) — the latter doesn't hold and shouldn't
+    // need the former just to read active issuer options. A caller with neither is rejected.
+    const ctx = await requireUser(req);
+    const canManage = roleHasPermission(ctx.role, "companyProfiles:view");
+    const canReadForQuotation = roleHasPermission(ctx.role, "quotations:create");
+    if (!canManage && !canReadForQuotation) throw new HttpError(403, "Forbidden");
+
+    // An admin sees every profile, including archived/inactive ones — the list page filters
+    // client-side (same "show archived" toggle pattern as ProductList.tsx) rather than the server
+    // silently hiding rows the admin might specifically be looking for. A quotations:create-only
+    // caller only ever needs, and only ever gets, the active/non-deleted options they're allowed
+    // to issue a quote under.
+    const filter = canManage ? {} : { isActive: true, isDeleted: false };
+    const docs = await companyProfiles.find(filter).sort({ isDefault: -1, companyNameTh: 1 }).toArray();
     res.status(200).json({ companyProfiles: docs.map(withStringId) });
     return;
   }

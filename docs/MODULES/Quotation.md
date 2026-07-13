@@ -16,6 +16,52 @@ Create, edit, duplicate, and print professional quotation documents for customer
 7a. **Job Type, Potential Opportunity, Follow-up Date** (added 2026-07-10, for the Executive Dashboard/CRM pass): every quote carries a `jobTypeCode`/`jobTypeName` (picked from the Job Type master list — `src/lib/jobTypes.ts`, `GET/POST/PATCH /api/jobtypes`, 13 seeded defaults: TA/STA/LI/SC/BF/GA/BI/VT/WTP/OTHER TA/OTHER SC/OTHER BF/OTHER — snapshotted at save time, same non-live-reference rationale as the Product picker), an `isPotentialOpportunity` checkbox ("sales thinks this is likely to close" — feeds the Dashboard's Expected Sales KPI/forecast, literally `isPotentialOpportunity = true` with no other condition, per the business spec), and a `followUpDate` (feeds the Dashboard's Today/Overdue/Upcoming follow-up reminders). All three are shown/edited in the same meta-fields grid as Payment Terms, filterable/searchable in the list view (Job Type dropdown filter + column, Potential Opportunity summary card), and printed on the PDF (`ประเภทงาน` field, auto-hidden if unclassified — Potential Opportunity/Follow-up Date are internal-only, not printed on the customer-facing document). **Job Type is required on every new quote as of 2026-07-10 (Codex review fix)**: the create form no longer offers a blank "unclassified" choice (a disabled placeholder is shown until a real selection is made), and `POST /api/quotes` rejects a missing/blank `jobTypeCode` server-side, matching a valid `job_types` master record (`jobTypeName` is always re-derived from that record, never trusted from the client). Editing an *existing* quote still tolerates a blank Job Type (legacy data predating this field) — only a non-blank value is validated for membership, so an unrelated field edit on an old unclassified quote isn't blocked.
 8. **Print/PDF**: "พิมพ์ / PDF" calls `window.print()`. The printed document (`src/pages/quotation/PrintDocument.tsx`, added 2026-07-09, modeled on a real customer-facing quotation template) is a single `<table>` with a repeating `<thead>` — the company header (logo, name, address, tax ID), the blue "QUOTATION" ribbon, the full "ผู้ซื้อ" (buyer) block, the "ใบเสนอราคา" meta block (quote number/dates/payment terms/salesperson), and the item-table column headers all re-render on every printed page automatically via the browser's native thead-repeat behavior — verified via a forced 2-page print (see [CHANGELOG.md](../CHANGELOG.md)). Each line shows unit price and **per-unit discount (amount + %)** as separate columns, with notes/sub-details/specifications/tags indented beneath (sub-details as a pin-icon bullet list). Totals include a **Thai-words amount line** under the grand total (`bahtText()`, see [DATABASE.md](../DATABASE.md)). A three-column signature table (ผู้เสนอราคา / ผู้อนุมัติใบเสนอราคา / ผู้ยืนยันการสั่งซื้อ) closes the document — the third (customer PO confirmation) column has no backing data and is always blank for hand-signing. **Any document field left empty is automatically omitted from the printed output** rather than printing a blank row (see [UI_GUIDELINES.md](../UI_GUIDELINES.md) Print/PDF section). Known simplification: the repeating header is identical on every page (the reference design this was modeled on shrinks it on continuation pages); browser print has no reliable way to vary `<thead>` content by page number, so a fuller, consistent header was kept on all pages instead. Page numbers ("Page X/Y") are also omitted — browser print/PDF has no supported way to read total page count from CSS.
 
+## Issuer Company (added 2026-07-13, Quotation integration pass)
+
+An `IssuerCompanySelector` panel sits above the customer-information section on the create/edit
+form — "ออกใบเสนอราคาในนามบริษัท" ("Issue quotation as company") — letting the user pick which
+saved [Company Profile](./CompanyProfiles.md) issues this specific quotation, instead of retyping
+company name/address/phone/tax ID per quote. Populated from `GET /api/company-profiles` (active,
+non-archived only — see [RBAC.md](../RBAC.md) for the relaxed read access that lets a Sales user,
+who doesn't hold any Company Profile management permission, still read this list). Selection
+rules: the default active profile (or the sole active profile, if only one exists) preselects
+automatically; 2+ active profiles require an explicit choice; zero active profiles shows an empty
+state with a permission-gated link to Company Profiles instead of a dropdown.
+
+Picking a profile updates the on-screen header preview immediately (logo, name, address,
+phone/fax/email, website, tax ID, branch — blank fields hidden, never a placeholder). On save,
+`issuerCompanyId` is sent to the server; `api/handlers/quotes.ts`'s `resolveIssuerCompanyUpdate()`
+validates the profile (rejects if missing/inactive/archived) and builds `issuerCompanySnapshot` —
+a frozen copy of the profile's fields at that instant — server-side, never trusting a
+client-supplied snapshot. **Editing a company profile's master data later never changes what an
+already-saved quotation displays**, since display always prefers the quotation's own snapshot over
+the live profile — same non-live-reference guarantee this app already gives `QuoteLine`/`Product`
+and `jobTypeCode`/`jobTypeName`/`JobType`.
+
+**Changing the issuer is Draft-only.** Both `PATCH /api/quotes/:id` and
+`POST /api/quotes/:id/workflow` reject (`400`) a request that tries to change `issuerCompanyId`
+once `quote.status !== "ร่าง"` — a submitted/approved/sent/etc. quotation's issuer identity is
+frozen, matching the snapshot's own "don't silently change an already-communicated document"
+principle. The selector itself is disabled in the UI once a quote has left Draft, with a Thai
+"เปลี่ยนบริษัทผู้ออกเอกสารได้เฉพาะสถานะร่างเท่านั้น" tooltip explaining why.
+
+A quote with no issuer company resolved at all (no snapshot, no live selection, nothing) shows a
+distinct warning — "ใบเสนอราคานี้ยังไม่มีข้อมูลบริษัทผู้ออกเอกสาร" — but **is not blocked from
+saving**; this app's Draft workflow already tolerates other missing fields, and hard-requiring an
+issuer was left as a deliberate, documented choice rather than silently assumed — see
+[MODULES/CompanyProfiles.md](./CompanyProfiles.md) "Known Limitations."
+
+`PrintDocument.tsx` (the actual printed/PDF document) now takes an `issuer: IssuerCompanyDisplay`
+prop instead of the old `company: Company` prop — resolved by `QuoteDocument.tsx` in the same
+4-step fallback order as the on-screen preview: the quote's own `issuerCompanySnapshot` first, then
+the live-selected profile the quote actually references, then (added 2026-07-13, Codex review
+Medium #1 fix) the default active company profile — covers a saved quote whose `issuerCompanyId`
+points to a profile that's since been deactivated/archived with no snapshot to fall back on — then
+the legacy Settings → Company Info `company` singleton (for quotes created before this feature
+existed, or when no company profile has ever been set up) — so the printed header is never
+hardcoded and never blank. See [CompanyProfiles.md](./CompanyProfiles.md) "Quotation Integration"
+for the full chain.
+
 ## Approval Workflow (added 2026-07-08 — see [RBAC.md](../RBAC.md) for the full model)
 
 `QuoteStatus` has 9 values: **Draft** (ร่าง) → **Pending Approval** (รออนุมัติ) → **Approved** (อนุมัติแล้ว) → **Sent to Customer** (ส่งให้ลูกค้าแล้ว) → **Customer Accepted** (ลูกค้ายอมรับ) → **Won** (ปิดการขายสำเร็จ), or **Customer Rejected** (ลูกค้าปฏิเสธ) → **Lost** (เสียโอกาส); plus a standalone **Cancelled** (ยกเลิก) reachable from Draft/Pending/Approved. Toolbar action buttons (Submit/Approve/Reject/Send to Customer/Customer Accepted/Customer Rejected/Won/Lost/Cancel) are rendered only when `computeQuotePermissions()` grants them — combining the signed-in user's RBAC permission (`quotations:create/edit/approve/reject/delete`) with **ownership** (`quote.createdByUserId === currentUser.id`, with approvers/admins able to act on quotes they don't own). Reject/Customer-Reject/Cancel open a modal requiring a comment; other transitions allow an optional one — **as of 2026-07-10 (fifth pass) this is also enforced server-side** (`COMMENT_REQUIRED_ACTIONS` in `api/_lib/quoteWorkflow.ts`, checked in `handleWorkflow`), not just by the modal's own client-side check, since a direct API call previously bypassed it. Every transition appends an `ApprovalHistoryEntry` (never removed) rendered as "ประวัติการอนุมัติ" beneath the document, and fires the relevant role-based notification (see [Notifications.md](./Notifications.md); as of 2026-07-10 fifth pass, `marked_won`/`marked_lost`/`cancelled` notify the creator too, previously silently didn't). **Known simplification**: Approver Level 1 and Level 2 are not sequenced — either can approve/reject independently from Pending Approval; there is no enforced two-stage gate.
@@ -42,7 +88,7 @@ The preparer's signature is looked up via `quote.createdByUserId`; the approver'
 
 The `quotes` MongoDB collection (see [DATABASE.md](../DATABASE.md) for the `Quote`/`QuoteLine`/`SubDetail`/`ApprovalHistoryEntry` shapes) — keyed by the human-readable business ID (e.g. `"QT-2567-0041"`) as the literal MongoDB `_id`, not an `ObjectId`. Migrated 2026-07-09 from `localStorage` (`tcs_erp_quotes`, fixed 2026-07-08) to real server-side persistence. The `job_types` collection (added 2026-07-10, see [DATABASE.md](../DATABASE.md) "`JobType`") backs the Job Type dropdown.
 
-**2026-07-13**: `Quote` gained two optional, currently-unused fields, `issuerCompanyId`/`issuerCompanySnapshot`, preparing for future multi-company quotation issuance — see [CompanyProfiles.md](./CompanyProfiles.md) "Future Quotation Integration" for the full plan and open product decisions. Nothing in this module's form, handler, or validation currently reads or writes them; every existing and newly-created quote is unaffected.
+**2026-07-13**: `Quote.issuerCompanyId`/`issuerCompanySnapshot` (added the same day, initially unused) are now fully wired — see "Issuer Company" above and [CompanyProfiles.md](./CompanyProfiles.md) "Quotation Integration" for the full flow. Existing quotations created before this pass simply have both fields unset; they display via the legacy `company` singleton fallback and are otherwise completely unaffected — no backfill/migration was run or needed.
 
 ## APIs
 
@@ -71,6 +117,7 @@ Client-side RBAC (see [RBAC.md](../RBAC.md)) via `computeQuotePermissions(quote,
 - **Job Type classification** (added 2026-07-10) — dropdown from a 13-entry master list, searchable/filterable in the list view, printed on the PDF, feeds the Dashboard's Job Type Analytics
 - **Potential Opportunity checkbox** (added 2026-07-10) — sales-marked "likely to close," feeds the Dashboard's Expected Sales KPI/forecast
 - **Follow-up Date field** (added 2026-07-10) — feeds the Dashboard's Today/Overdue/Upcoming follow-up reminders; clicking a reminder opens the quotation list pre-filtered to that customer
+- **Issuer Company selection** (added 2026-07-13) — pick which saved [Company Profile](./CompanyProfiles.md) issues each quotation instead of retyping company info; server-frozen snapshot at issue time, Draft-only changes, live header preview and print/PDF integration — see "Issuer Company" above
 
 ## Future Improvements
 

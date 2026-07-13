@@ -11,8 +11,10 @@ import {
   type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type ApprovalAction, type QuotePermissions,
   statusIcon, statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
 } from "../../lib/quotes";
+import { type CompanyProfile, type IssuerCompanyDisplay, issuerDisplayFromProfile, issuerDisplayFromSnapshot } from "../../lib/companyProfiles";
 import { InterestButtons } from "./InterestButtons";
 import { LineItemsEditor } from "./LineItemsEditor";
+import { IssuerCompanySelector } from "./IssuerCompanySelector";
 import { PrintDocument } from "./PrintDocument";
 import { BrandMark } from "../../components/BrandMark";
 import { useI18n } from "../../lib/i18n";
@@ -41,6 +43,9 @@ export function QuoteDocument({
   products,
   categories,
   jobTypes,
+  companyProfiles,
+  canViewCompanyProfiles,
+  onNavigateToCompanyProfiles,
   permissions,
   onBack,
   onSave,
@@ -58,6 +63,9 @@ export function QuoteDocument({
   products: Product[];
   categories: ProductCategory[];
   jobTypes: JobType[];
+  companyProfiles: CompanyProfile[];
+  canViewCompanyProfiles: boolean;
+  onNavigateToCompanyProfiles: () => void;
   permissions: QuotePermissions;
   onBack: () => void;
   onSave: (data: QuoteDraftFields) => void;
@@ -97,13 +105,59 @@ export function QuoteDocument({
   const [jobTypeName, setJobTypeName] = useState(quote?.jobTypeName ?? "");
   const [isPotentialOpportunity, setIsPotentialOpportunity] = useState(quote?.isPotentialOpportunity ?? false);
   const [followUpDate, setFollowUpDate] = useState(quote?.followUpDate ?? "");
+  const disabled = !permissions.canEdit;
+
+  // ── Issuer company (added 2026-07-13, Quotation integration pass) ──────────────────────────
+  // "Save company info once in Company Profiles, pick which one issues this quote" — see
+  // IssuerCompanySelector.tsx and MODULES/CompanyProfiles.md "Quotation Integration" for
+  // the full design (snapshot-vs-live resolution, the Draft-only change rule, fallback order).
+  const activeProfiles = companyProfiles.filter((p) => p.isActive && !p.isDeleted);
+  const defaultActiveProfile = activeProfiles.find((p) => p.isDefault) ?? (activeProfiles.length === 1 ? activeProfiles[0] : undefined);
+  const originalIssuerCompanyId = quote?.issuerCompanyId ?? "";
+  const [issuerCompanyId, setIssuerCompanyId] = useState(originalIssuerCompanyId || defaultActiveProfile?.id || "");
+  const issuerChanged = issuerCompanyId !== originalIssuerCompanyId;
+  const selectedLiveProfile = activeProfiles.find((p) => p.id === issuerCompanyId);
+  // A saved quote's own frozen snapshot is authoritative for display as long as the user hasn't
+  // touched the selector this session — editing the referenced profile later must never silently
+  // change what a customer already received. The moment the user picks a different company (even
+  // back to the same live one), the preview switches to live data, since a fresh snapshot will be
+  // taken at save time anyway.
+  const useSnapshotForDisplay = isDetail && !issuerChanged && !!quote?.issuerCompanySnapshot;
+  // Fallback-to-default-profile (below) still resolves to a real, active Company Profile — not
+  // fabricated data — so it counts toward "a real issuer was resolved" the same as the other two.
+  const hasIssuerProfile = useSnapshotForDisplay || !!selectedLiveProfile || !!defaultActiveProfile;
+  // Always resolves to a real object, never `undefined` — even in the "nothing at all" case this
+  // falls back to the legacy Settings -> Company Info singleton (possibly its own blank defaults),
+  // so QuoteDocument's header band / PrintDocument never need an extra "what if there's nothing to
+  // show" branch of their own; `hasIssuerProfile` (above) is the independent signal for whether a
+  // *real* Company Profile was resolved, which is what actually drives the warning banner.
+  //
+  // Fallback order, per the 2026-07-13 Codex review (Medium #1): snapshot -> the live profile the
+  // quote actually references -> the default active profile -> the legacy singleton. The third
+  // step matters for a partial-data edge case: a saved quote can have `issuerCompanyId` set but no
+  // `issuerCompanySnapshot` (e.g. very old data, or a future migration), and if the profile it
+  // references has since been deactivated/archived, `selectedLiveProfile` won't find it (it only
+  // searches `activeProfiles`). Previously this jumped straight to the legacy singleton; it should
+  // try the default active profile first, since that's still real, non-fake company data — not
+  // fabricated, just not the specific company this particular quote originally pointed to.
+  const issuerDisplay: IssuerCompanyDisplay = useSnapshotForDisplay
+    ? issuerDisplayFromSnapshot(quote!.issuerCompanySnapshot!)
+    : selectedLiveProfile
+    ? issuerDisplayFromProfile(selectedLiveProfile)
+    : defaultActiveProfile
+    ? issuerDisplayFromProfile(defaultActiveProfile)
+    : { name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address, phone: company.phone, fax: "", email: company.email, website: "", taxId: company.taxId, branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl };
+  // "If quotation is Draft, allow changing issuer company... if already approved/sent/won/lost,
+  // block issuer company change" — a deliberate business rule (documented in
+  // MODULES/CompanyProfiles.md), enforced again server-side (api/handlers/quotes.ts) since this is
+  // only the UI convenience layer.
+  const canChangeIssuer = !disabled && (mode === "new" || quoteStatus === "ร่าง");
 
   const [pendingAction, setPendingAction] = useState<ApprovalAction | null>(null);
   const [actionComment, setActionComment] = useState("");
   const [actionError, setActionError] = useState("");
 
   const { total } = computeTotals(lines, discount);
-  const disabled = !permissions.canEdit;
   const jobTypeDisplay = jobTypeCode ? `${jobTypeCode} — ${jobTypeName}` : "";
 
   const handleJobTypeChange = (code: string) => {
@@ -119,6 +173,11 @@ export function QuoteDocument({
     jobTypeName,
     isPotentialOpportunity,
     followUpDate,
+    // Only sent when it actually changed from what the quote already had — avoids tripping the
+    // server's Draft-only guard on every unrelated save of an already-non-Draft quote (see
+    // api/handlers/quotes.ts's resolveIssuerCompanyUpdate()). A brand-new quote always sends it
+    // (issuerChanged is trivially true against the empty original).
+    ...(issuerChanged ? { issuerCompanyId } : {}),
   });
 
   // Warn on an accidental tab close/refresh while there are unsaved edits — a plain JSON diff
@@ -264,19 +323,33 @@ export function QuoteDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
+        <div className="print:hidden">
+          <IssuerCompanySelector
+            activeProfiles={activeProfiles}
+            value={issuerCompanyId}
+            onChange={setIssuerCompanyId}
+            disabled={!canChangeIssuer}
+            lockedMessage={!disabled && mode !== "new" && quoteStatus !== "ร่าง" ? t("quotation.issuer.lockedNotDraft") : undefined}
+            issuerDisplay={issuerDisplay}
+            hasIssuerProfile={hasIssuerProfile}
+            canViewCompanyProfiles={canViewCompanyProfiles}
+            onNavigateToCompanyProfiles={onNavigateToCompanyProfiles}
+          />
+        </div>
+
         {/* Document header band */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 flex flex-wrap items-start justify-between gap-4 print:hidden">
             <div className="min-w-0">
               <div className="flex items-center gap-2.5 mb-1">
-                {company.logoDataUrl ? (
-                  <img src={company.logoDataUrl} alt={company.name} className="h-8 max-w-[140px] object-contain" />
+                {issuerDisplay?.logoDataUrl ? (
+                  <img src={issuerDisplay.logoDataUrl} alt={issuerDisplay.name} className="h-8 max-w-[140px] object-contain" />
                 ) : (
                   <BrandMark size={28} variant="full" theme="dark" />
                 )}
               </div>
-              <p className="text-[#a8bed8] text-xs mt-1">{company.name} · {company.address}</p>
-              <p className="text-[#a8bed8] text-xs">{t("quotation.field.contactPhone")}: {company.phone} · {t("settings.company.emailLabel")}: {company.email}</p>
+              <p className="text-[#a8bed8] text-xs mt-1">{issuerDisplay?.name ?? company.name} · {issuerDisplay?.address ?? company.address}</p>
+              <p className="text-[#a8bed8] text-xs">{t("quotation.field.contactPhone")}: {issuerDisplay?.phone ?? company.phone} · {t("settings.company.emailLabel")}: {issuerDisplay?.email ?? company.email}</p>
             </div>
             <div className="text-right">
               <p className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("quotation.pageTitle")}</p>
@@ -439,8 +512,8 @@ export function QuoteDocument({
                       ) : (
                         <div className="w-full border-b border-border/60" />
                       )}
-                      {!isPreparer && company.stampDataUrl && (
-                        <img src={company.stampDataUrl} alt="" className="absolute right-2 top-1 h-12 w-12 object-contain opacity-80 pointer-events-none" />
+                      {!isPreparer && (issuerDisplay?.stampDataUrl ?? company.stampDataUrl) && (
+                        <img src={issuerDisplay?.stampDataUrl ?? company.stampDataUrl} alt="" className="absolute right-2 top-1 h-12 w-12 object-contain opacity-80 pointer-events-none" />
                       )}
                     </div>
                     <div className="flex justify-between mt-1">
@@ -489,7 +562,7 @@ export function QuoteDocument({
           isDetail={isDetail}
           quote={quote}
           nextId={nextId}
-          company={company}
+          issuer={issuerDisplay}
           client={client}
           contactName={contactName}
           contactPhone={contactPhone}

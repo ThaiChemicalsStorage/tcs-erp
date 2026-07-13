@@ -3,7 +3,7 @@ import type { User } from "./users";
 import { type Role, hasPermission } from "./roles";
 import { apiFetch } from "./apiClient.js";
 import type { TranslationKey } from "./i18n";
-import type { BankAccount } from "./companyProfiles";
+import type { IssuerCompanySnapshot } from "./companyProfiles";
 
 export type QuoteStatus =
   | "ร่าง"
@@ -112,33 +112,26 @@ export interface Quote {
   updatedBy: string;
   approvalHistory: ApprovalHistoryEntry[];
   /**
-   * **Prep only, not yet wired to any UI or API write path** — added 2026-07-13 alongside the
-   * Company Profiles module (`src/lib/companyProfiles.ts`) so multi-company quotation issuance has
-   * a landing spot on the schema before the actual feature is built. Both fields are optional and
-   * nothing currently sets them, so every existing quote (and every quote created through today's
-   * single-company flow) is unaffected. `issuerCompanyId` will eventually be a live reference to
-   * `CompanyProfile.id`; `issuerCompanySnapshot` must always be captured **at issue time** (not
-   * read live from the referenced profile) so editing a company profile later never silently
+   * → `CompanyProfile.id` — which saved Company Profile issues this quote, set server-side from
+   * the client-sent id via `resolveIssuerCompanyUpdate()` in `api/handlers/quotes.ts` (added
+   * 2026-07-13 alongside the Company Profiles module, wired into the Quotation form the same day).
+   * Optional — every quote created before this feature existed simply has it unset and is
+   * otherwise unaffected. `issuerCompanySnapshot` (below) is always captured **at issue time**, not
+   * read live from the referenced profile, so editing a company profile later never silently
    * changes the header/terms/bank details on a quotation that already went out to a customer —
    * same snapshot-not-live-reference rationale as `QuoteLine` never referencing `Product` live.
-   * See docs/MODULES/CompanyProfiles.md "Future Quotation Integration" for the full plan.
+   * Changing this on an existing quote is restricted server-side to Draft status. See
+   * docs/MODULES/CompanyProfiles.md "Quotation Integration" and docs/MODULES/Quotation.md "Issuer
+   * Company" for the full design.
    */
   issuerCompanyId?: string;
-  issuerCompanySnapshot?: {
-    companyCode: string;
-    companyNameTh: string;
-    companyNameEn: string;
-    displayName: string;
-    logoDataUrl: string;
-    addressTh: string;
-    taxId: string;
-    phone: string;
-    email: string;
-    bankAccounts: BankAccount[];
-    quotationTerms: string;
-    quotationFooter: string;
-    stampDataUrl: string;
-  };
+  /**
+   * Widened 2026-07-13 (Quotation integration pass) to the full `IssuerCompanySnapshot` shape
+   * (`src/lib/companyProfiles.ts`) — the original prep-only shape (added alongside the Company
+   * Profiles module the same day) only covered a subset. Still server-derived only, see the
+   * field-by-field doc above and `resolveIssuerCompanyUpdate()` in `api/handlers/quotes.ts`.
+   */
+  issuerCompanySnapshot?: IssuerCompanySnapshot;
 }
 
 export type QuoteDraftFields = Pick<
@@ -148,6 +141,10 @@ export type QuoteDraftFields = Pick<
   | "deliveryMethod" | "deliveryAddress" | "project"
   | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks"
   | "jobTypeCode" | "jobTypeName" | "isPotentialOpportunity" | "followUpDate"
+  // Client only ever sends the id — the server always re-derives `issuerCompanySnapshot` itself
+  // from the live company_profiles record, the same "never trust a client-supplied derived value"
+  // rule `amount`/`jobTypeName` already follow. See api/handlers/quotes.ts.
+  | "issuerCompanyId"
 > & { amount: number };
 
 /** Fields the server accepts on general quote edits — everything except id/status/date/valid/createdByUserId/updatedBy/approvalHistory, which only the server (or the workflow endpoint) sets. */

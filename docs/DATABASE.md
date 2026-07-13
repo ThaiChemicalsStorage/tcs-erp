@@ -320,11 +320,23 @@ collection was added after the deployment was already provisioned): `{ companyCo
 defensively to drop-and-recreate on an `IndexOptionsConflict` (e.g. if a plain, non-unique
 `isDefault` index from an earlier local run already exists) rather than crashing every cold start.
 
-**Future Quotation integration (prepared, not built)**: `Quote` gained two optional fields,
-`issuerCompanyId`/`issuerCompanySnapshot` — see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md)
-"Future Quotation Integration" for the full plan, open questions, and the snapshot-not-live-reference
-rule (same rationale as `Quote.jobTypeCode`/`jobTypeName` above). Nothing currently sets these
-fields; every existing and newly-created quote is unaffected.
+**Quotation integration — wired 2026-07-13**: `Quote.issuerCompanyId`/`issuerCompanySnapshot` (added
+the same day as this collection, initially unused) are now set by `POST /api/quotes` and (Draft-only)
+`PATCH /api/quotes/:id`/`POST /api/quotes/:id/workflow` — see
+[MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) "Quotation Integration" and
+[MODULES/Quotation.md](./MODULES/Quotation.md) "Issuer Company" for the full flow. Same
+snapshot-not-live-reference rule as `Quote.jobTypeCode`/`jobTypeName` above: `issuerCompanySnapshot`
+is built server-side from the live `CompanyProfile` at the instant it's selected and never re-derived
+afterward, so editing a company profile's master data later cannot silently change what an
+already-issued quotation displays.
+
+**Display fallback, corrected 2026-07-13 (twelfth same-day pass, Codex review Medium #1)**: for a
+quote where `issuerCompanyId` is set but `issuerCompanySnapshot` is missing (rare partial/legacy
+data) and the referenced `CompanyProfile` document has since had `isActive`/`isDeleted` changed so
+it no longer appears in the active list, `QuoteDocument.tsx` now falls back to the default active
+`CompanyProfile` before falling back further to the legacy `company` singleton — previously it
+skipped straight to the singleton. This is a client-side display/read concern only; no schema or
+stored-document change was needed.
 
 ### `Quote` / `QuoteLine` / `SubDetail` (`src/lib/quotes.tsx`)
 ```ts
@@ -402,8 +414,18 @@ interface Quote {
   createdByUserId: string;             // → User.id, "" for legacy/seed quotes (any editor treated as owner)
   updatedBy: string;                   // → User.id, added 2026-07-09 — set server-side on every plain edit or workflow action, "" until first edit
   approvalHistory: ApprovalHistoryEntry[];  // append-only
-  issuerCompanyId?: string;             // added 2026-07-13, → CompanyProfile.id — prep only, nothing sets this yet
-  issuerCompanySnapshot?: { /* subset of CompanyProfile, captured at issue time */ };  // added 2026-07-13 — prep only, see MODULES/CompanyProfiles.md
+  issuerCompanyId?: string;             // added 2026-07-13, → CompanyProfile.id; server-set from the client-sent id, see api/handlers/quotes.ts's resolveIssuerCompanyUpdate()
+  issuerCompanySnapshot?: IssuerCompanySnapshot;  // added 2026-07-13 — server-built copy of the CompanyProfile at issue time, never client-constructed; shape below
+}
+
+// The frozen-at-issue-time copy stored on Quote.issuerCompanySnapshot (src/lib/companyProfiles.ts) —
+// same field set as CompanyProfile minus id/isDefault/isActive/isDeleted/timestamps/audit fields.
+interface IssuerCompanySnapshot {
+  companyCode: string; companyNameTh: string; companyNameEn: string; displayName: string;
+  logoDataUrl: string; addressTh: string; addressEn: string; taxId: string;
+  branchName: string; branchCode: string; phone: string; fax: string; email: string; website: string;
+  bankAccounts: BankAccount[]; quotationPrefix: string; quotationTerms: string; quotationFooter: string;
+  stampDataUrl: string;
 }
 ```
 All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session.

@@ -350,6 +350,7 @@ export default function App() {
   }
 
   const canManageCompany = hasPermission(currentUser, roles, "company:manage");
+  const canViewCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:view");
   const canCreateCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:create");
   const canEditCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:edit");
   const canArchiveCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:archive");
@@ -491,7 +492,7 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
           <Suspense fallback={<PageLoading />}>
             {effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} companyProfiles={companyProfiles} canViewCompanyProfiles={canViewCompanyProfiles} onNavigateToCompanyProfiles={() => setActiveNav("companyProfiles")} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} />
               : effectiveNav === "settings"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
               : effectiveNav === "products"

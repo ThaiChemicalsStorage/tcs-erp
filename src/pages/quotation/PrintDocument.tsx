@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { Pin } from "lucide-react";
-import type { Company } from "../../lib/storage";
+import type { IssuerCompanyDisplay } from "../../lib/companyProfiles";
 import type { User } from "../../lib/users";
 import {
   type Quote, type QuoteLine, fmt, lineSubtotal, computeTotals, bahtText, VAT_RATE,
@@ -23,7 +23,7 @@ export function PrintDocument({
   isDetail,
   quote,
   nextId,
-  company,
+  issuer,
   client, contactName, contactPhone, contactEmail, address, taxId,
   deliveryMethod, deliveryAddress, project,
   poRef, paymentTerms, issueDate, expiryDate, jobTypeName,
@@ -33,7 +33,11 @@ export function PrintDocument({
   isDetail: boolean;
   quote?: Quote;
   nextId: string;
-  company: Company;
+  /** Resolved once by QuoteDocument.tsx from either the quote's frozen `issuerCompanySnapshot`,
+   * the live-selected Company Profile, or the legacy single-company fallback — see
+   * `src/lib/companyProfiles.ts`'s `IssuerCompanyDisplay`. Replaces the old `company: Company`
+   * prop (2026-07-13, Quotation integration pass) — no hardcoded company header remains here. */
+  issuer: IssuerCompanyDisplay;
   client: string;
   contactName: string;
   contactPhone: string;
@@ -92,20 +96,20 @@ export function PrintDocument({
               </div>
 
               <div className="flex items-start gap-3 mt-1 pr-8">
-                {company.logoDataUrl ? (
-                  <img src={company.logoDataUrl} alt={company.name} className="w-12 h-12 rounded-full object-contain border border-[#0b1d3a]/15 bg-white p-0.5 flex-shrink-0" />
+                {issuer.logoDataUrl ? (
+                  <img src={issuer.logoDataUrl} alt={issuer.name} className="w-12 h-12 rounded-full object-contain border border-[#0b1d3a]/15 bg-white p-0.5 flex-shrink-0" />
                 ) : (
                   <BrandMark size={48} variant="mark" theme="dark" className="flex-shrink-0" />
                 )}
                 <div>
-                  <p className="font-bold text-[13px]">{company.name}</p>
-                  {company.address.trim() && <p className="text-[10px] text-[#5a7299] leading-snug">{company.address}</p>}
-                  {company.taxId.trim() && <p className="text-[10px] text-[#5a7299]">เลขประจำตัวผู้เสียภาษี : {company.taxId}</p>}
-                  {(company.phone.trim() || company.email.trim()) && (
+                  <p className="font-bold text-[13px]">{issuer.name}</p>
+                  {issuer.address.trim() && <p className="text-[10px] text-[#5a7299] leading-snug">{issuer.address}</p>}
+                  {issuer.taxId.trim() && <p className="text-[10px] text-[#5a7299]">เลขประจำตัวผู้เสียภาษี : {issuer.taxId}</p>}
+                  {(issuer.phone.trim() || issuer.email.trim()) && (
                     <p className="text-[10px] text-[#5a7299]">
-                      {company.phone.trim() && <>โทรศัพท์ : {company.phone}</>}
-                      {company.phone.trim() && company.email.trim() && "  "}
-                      {company.email.trim() && <>E-mail : {company.email}</>}
+                      {issuer.phone.trim() && <>โทรศัพท์ : {issuer.phone}</>}
+                      {issuer.phone.trim() && issuer.email.trim() && "  "}
+                      {issuer.email.trim() && <>E-mail : {issuer.email}</>}
                     </p>
                   )}
                 </div>
@@ -230,8 +234,8 @@ export function PrintDocument({
                 <tr>
                   {signatureColumns.map((col, i) => (
                     <td key={col.label} className={`px-3 py-2 align-bottom h-20 relative ${i < 2 ? "border-r border-[#0b1d3a]/20" : ""}`}>
-                      {i === 1 && company.stampDataUrl && (
-                        <img src={company.stampDataUrl} alt="ตราประทับ" className="absolute right-2 top-1 h-12 w-12 object-contain opacity-80 pointer-events-none" />
+                      {i === 1 && issuer.stampDataUrl && (
+                        <img src={issuer.stampDataUrl} alt="ตราประทับ" className="absolute right-2 top-1 h-12 w-12 object-contain opacity-80 pointer-events-none" />
                       )}
                       <div className="h-10 flex items-end justify-center">
                         {col.user?.signatureDataUrl && (
