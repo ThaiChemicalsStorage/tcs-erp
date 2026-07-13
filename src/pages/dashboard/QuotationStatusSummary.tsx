@@ -24,6 +24,14 @@ import { fmtShort, fmtPercent } from "./format";
  *
  * 2026-07-13 (third Dashboard simplification pass): added a Percentage column (each row's count
  * ÷ the sum of all 4 rows' counts) per a user request for this exact status/count/value/% shape.
+ *
+ * **2026-07-13 fix (independent review)**: the 4 rows are now a true partition of every quote —
+ * every quote counts in exactly one row, so the 4 percentages always sum to 100%. Previously a
+ * Lost quote (`เสียโอกาส`) was counted in *both* the Lose row and the Non-Active row (Non-Active's
+ * server-side predicate included Lost as one of its "closed without success" statuses), so the
+ * 4-row total exceeded `docs.length` and the percentage column didn't add up — misleading for an
+ * executive-facing summary. Fixed at the source: `NON_ACTIVE_OUTCOME_STATUSES` in
+ * `api/dashboard/index.ts` no longer includes Lost, since Lost already has its own row here.
  */
 export function QuotationStatusSummary({ kpis }: { kpis: DashboardKpis }) {
   const { t } = useI18n();

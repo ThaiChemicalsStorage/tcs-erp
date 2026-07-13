@@ -22,7 +22,17 @@ import {
  * now rejects the `"ใบเสนอราคา"` module outright (see api/audit-log/index.ts), so this is the
  * only path quotation audit entries can be written through.
  */
-async function writeQuoteAuditEntry(ctx: AuthContext, action: string, details: string): Promise<void> {
+async function writeQuoteAuditEntry(
+  ctx: AuthContext,
+  action: string,
+  details: string,
+  // Structured related-record fields (2026-07-13, P'Keng/P'Kee business requirement) — the
+  // quotation number and customer name were already embedded in `details` as free text, but the
+  // Dashboard's Recent Activities list needs them as real fields to render as their own
+  // columns/link instead of parsing prose. Optional so this stays backward-compatible with older
+  // entries (audit_log has no schema, missing fields just render as blank in the UI).
+  related?: { quoteId?: string; customerName?: string },
+): Promise<void> {
   const auditLog = await auditLogCollection();
   await auditLog.insertOne({
     userId: ctx.user.id,
@@ -32,6 +42,8 @@ async function writeQuoteAuditEntry(ctx: AuthContext, action: string, details: s
     action,
     details,
     createdAt: nowIso(),
+    ...(related?.quoteId ? { relatedQuoteId: related.quoteId } : {}),
+    ...(related?.customerName ? { relatedCustomerName: related.customerName } : {}),
   });
 }
 
@@ -201,7 +213,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       approvalHistory: [],
     };
     await quotes.insertOne(doc);
-    await writeQuoteAuditEntry(ctx, "Quotation Created", `สร้างใบเสนอราคา ${id} (${client})`);
+    await writeQuoteAuditEntry(ctx, "Quotation Created", `สร้างใบเสนอราคา ${id} (${client})`, { quoteId: id, customerName: client });
     res.status(201).json({ quote: withStringId(doc) });
     return;
   }
@@ -257,7 +269,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   const bodyKeys = Object.keys(body);
   const isInterestOnlyUpdate = bodyKeys.length > 0 && bodyKeys.every((k) => k === "interest");
   if (!isInterestOnlyUpdate) {
-    await writeQuoteAuditEntry(ctx, "Quotation Updated", `แก้ไขใบเสนอราคา ${id}`);
+    await writeQuoteAuditEntry(ctx, "Quotation Updated", `แก้ไขใบเสนอราคา ${id}`, { quoteId: id, customerName: updated.client });
   }
 
   res.status(200).json({ quote: withStringId(updated) });
@@ -288,7 +300,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
     approvalHistory: [],
   };
   await quotes.insertOne(doc);
-  await writeQuoteAuditEntry(ctx, "Quotation Created", `คัดลอกใบเสนอราคาเป็น ${newId} จาก ${id}`);
+  await writeQuoteAuditEntry(ctx, "Quotation Created", `คัดลอกใบเสนอราคาเป็น ${newId} จาก ${id}`, { quoteId: newId, customerName: doc.client });
   res.status(201).json({ quote: withStringId(doc) });
 }
 
@@ -376,6 +388,7 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
     ctx,
     auditAction,
     `${approvalActionLabel[action]} ใบเสนอราคา ${id}${comment ? ` — ${comment}` : ""}`,
+    { quoteId: id, customerName: updated.client },
   );
 
   res.status(200).json({ quote: withStringId(updated) });

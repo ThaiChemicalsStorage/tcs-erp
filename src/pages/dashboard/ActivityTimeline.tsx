@@ -2,7 +2,16 @@ import { History } from "lucide-react";
 import type { AuditLogEntry } from "../../lib/auditLog";
 import { useI18n } from "../../lib/i18n";
 
-export function ActivityTimeline({ entries }: { entries: AuditLogEntry[] }) {
+/**
+ * "Recent Activities" (กิจกรรมล่าสุด) — a compact table, not a card list, per the P'Keng/P'Kee
+ * business requirement's explicit column set: date/time, salesperson, activity, quotation number,
+ * customer. **2026-07-13**: the quotation number/customer columns are real fields
+ * (`relatedQuoteId`/`relatedCustomerName`, written by `writeQuoteAuditEntry()` in
+ * api/handlers/quotes.ts) rather than parsed out of the free-text `details` string — only present
+ * on quote-workflow entries (not User/Role/Settings/Login audit events), so both render as "—"
+ * when absent. The quotation number is a link (`onOpenQuote`) when present.
+ */
+export function ActivityTimeline({ entries, onOpenQuote }: { entries: AuditLogEntry[]; onOpenQuote: (quoteId: string) => void }) {
   const { t } = useI18n();
   return (
     <div className="bg-card border border-border rounded-xl p-5">
@@ -10,22 +19,40 @@ export function ActivityTimeline({ entries }: { entries: AuditLogEntry[] }) {
         <History size={15} /> {t("dashboard.activity.title")}
       </h2>
       {entries.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>
+        <p className="text-xs text-muted-foreground text-center py-10">{t("dashboard.activity.empty")}</p>
       ) : (
-        <div className="space-y-3 max-h-96 overflow-y-auto">
-          {entries.map((e) => (
-            <div key={e.id} className="flex items-start gap-3 text-xs">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#c9a84c] flex-shrink-0 mt-1.5" />
-              <div className="min-w-0 flex-1">
-                <p className="text-foreground">
-                  <span className="font-semibold">{e.userName}</span>
-                  <span className="text-muted-foreground"> ({e.roleName}) — {e.action}</span>
-                </p>
-                {e.details && <p className="text-muted-foreground mt-0.5 truncate" title={e.details}>{e.details}</p>}
-                <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{new Date(e.createdAt).toLocaleString("th-TH")}</p>
-              </div>
-            </div>
-          ))}
+        <div className="max-h-96 overflow-y-auto overflow-x-auto">
+          <table className="w-full">
+            <thead className="sticky top-0 bg-card">
+              <tr className="border-b border-border">
+                <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.activity.col.date")}</th>
+                <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.activity.col.salesperson")}</th>
+                <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.activity.col.action")}</th>
+                <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.activity.col.quotation")}</th>
+                <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.activity.col.customer")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e) => (
+                <tr key={e.id} className="border-b border-border/40 last:border-0">
+                  <td className="px-2 py-2 text-[10px] text-muted-foreground font-mono whitespace-nowrap">{new Date(e.createdAt).toLocaleString("th-TH")}</td>
+                  <td className="px-2 py-2 text-xs text-foreground whitespace-nowrap">
+                    {e.userName}
+                    <span className="text-muted-foreground"> ({e.roleName})</span>
+                  </td>
+                  <td className="px-2 py-2 text-xs text-foreground max-w-[220px] truncate" title={e.details || e.action}>{e.action}</td>
+                  <td className="px-2 py-2 text-xs font-mono whitespace-nowrap">
+                    {e.relatedQuoteId ? (
+                      <button onClick={() => onOpenQuote(e.relatedQuoteId!)} className="text-[#c9a84c] hover:underline">{e.relatedQuoteId}</button>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2 text-xs text-foreground max-w-[160px] truncate" title={e.relatedCustomerName}>{e.relatedCustomerName || <span className="text-muted-foreground">—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

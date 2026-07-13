@@ -24,11 +24,24 @@ with pipeline step cards/`SalesActivityAnalytics`/rankings/actionable approval-f
 moved below an "In-Depth Detail" divider (second pass); a fully-specified 7-section order then
 promoted `SalesActivityAnalytics` back into the top overview (between `SalesPerformancePanel` and
 `ActivityFollowUpSummary`) and added Active/Non-Active Quotations to `SalesPerformancePanel`
-(third pass). Pipeline step cards, rankings, actionable approval/follow-up lists, and the
-remaining charts stayed below the divider throughout. See "Pages / Components" below for the
-current shape, and CHANGELOG.md for all three passes' full writeup. Driven by the Job Type/
-Potential Opportunity/Follow-up Date fields added
-to `Quote` earlier the same day (see [Quotation.md](./Quotation.md)).
+(third pass). A **fourth same-day pass** (sixth overall) fixed 4 High Priority data/filter-
+correctness issues an independent review found: Sales Activity expanded from 2 to all 5 tracked
+event categories, filter-exception widgets gained explicit "not filtered"/"rolling trend" labels,
+and `QuotationStatusSummary`'s count/value population mismatch was fixed at the source. A **fifth
+same-day pass** (seventh overall) then completed the Dashboard against a detailed P'Keng/P'Kee
+business-stakeholder requirement: the top overview was reordered to the requirement's exact
+5-row layout (`ExecutiveSummaryCards` → `QuotationStatusSummary` → `SalesActivityAnalytics` →
+`ActivityTimeline`), with `SalesPerformancePanel`/`ActivityFollowUpSummary`/the forecast chart
+moved into supporting detail below; all 4 KPI cards gained a helper caption; `SalesActivityAnalytics`
+gained a per-salesperson breakdown table (`bySalesperson`, period × salesperson); `ActivityTimeline`
+was rebuilt as a table with clickable quotation-number links (new `relatedQuoteId`/
+`relatedCustomerName` audit-log fields); and the Win/Lose/Active/Non-Active mapping was
+reconfirmed unchanged after the requirement doc proposed a conflicting one (user decision — see
+UI_GUIDELINES.md). Pipeline step cards, rankings, actionable approval/follow-up lists, and the
+remaining charts stayed below the divider throughout all five passes. See "Pages / Components"
+below for the current shape, and CHANGELOG.md for the full writeup of every pass. Driven by the
+Job Type/Potential Opportunity/Follow-up Date fields added to `Quote` earlier on 2026-07-10 (see
+[Quotation.md](./Quotation.md)).
 
 ## Business Flow
 
@@ -106,23 +119,9 @@ documented rather than silently assumed:
   composes every section below in the order described in "Section Order" below.
 - `DashboardFilterBar.tsx` — date-range presets + Department filter + salesperson filter.
 - `ExecutiveSummaryCards.tsx` — exactly 4 cards (Total Quotations, Total Quotation Value, Closed
-  Sales, Expected Sales), the only "KPI card" tier on the page. `MetricInfoTooltip` only on
+  Sales, Expected Sales), the only "KPI card" tier on the page. Each card gained a one-line helper
+  caption under its value (added 2026-07-13, seventh pass); `MetricInfoTooltip` still only on
   Expected Sales (the one non-obvious calculation among the 4).
-- `SalesPerformancePanel.tsx` — Win/Lose/Conversion Rate, Average Deal Size, Average
-  Approval/Closing Time, and (added 2026-07-13, third pass) Active/Non-Active Quotations — 8
-  metrics as a compact label/value grid inside one `ChartCard`, not individual cards.
-- `SalesActivityAnalytics.tsx` — quotation activity as a **stacked** bar chart + period table,
-  week/month/quarter/year tabs, filtered server-side by salesperson/department (not the date
-  filter's start — see "Filter Honesty" in UI_GUIDELINES.md). Positioned right after
-  `SalesPerformancePanel` in the top overview (moved here 2026-07-13, fifth pass — previously
-  below the "In-Depth Detail" divider). **2026-07-13, sixth pass**: expanded from 2 tracked
-  categories (Created/Edited) to all 5 an independent review flagged as required — Created,
-  Edited, Status Changed, Approval Requested, Approval Completed — via `categoryForAction()` in
-  `api/dashboard/index.ts`, mapping every audit action `writeQuoteAuditEntry()` can write.
-- `ActivityFollowUpSummary.tsx` — Pending Approvals, Overdue Follow-ups, Expired Quotations, New
-  Customers as a compact 4-tile row inside one `ChartCard`; only Pending Approvals is clickable
-  (navigates to the quotation list filtered to that status) since it's the only one with a real
-  single-status filter to jump to.
 - `QuotationStatusSummary.tsx` (added 2026-07-10, replaces `DashboardCharts.tsx`'s
   `QuotationStatusDonut` + `WinLoseDonut`) — one Win/Lose/Active/Non-Active donut + table (Status/
   Count/Value/Percentage columns, the last added 2026-07-13). Takes only a `kpis` prop (no
@@ -132,7 +131,46 @@ documented rather than silently assumed:
   matching count — **previously** the value column was approximated by summing the `pipeline`
   prop's per-stage totals, which didn't carve out expired-but-unclosed quotes the way the counts
   did (an independent review correctly flagged this as a count/value population mismatch); now
-  fixed at the source, no approximation left to document.
+  fixed at the source, no approximation left to document. **2026-07-13, eighth pass**: fixed a
+  second review-flagged bug — the 4 rows previously double-counted Lost quotations (`เสียโอกาส`
+  was in both the Lose row and the Non-Active row), so the Percentage column didn't sum to 100%.
+  `NON_ACTIVE_OUTCOME_STATUSES` (`api/dashboard/index.ts`) no longer includes Lost; the 4 rows are
+  now a true partition of every quote status. Full width in the top overview as of
+  2026-07-13 (seventh pass) — no longer paired side-by-side with the forecast chart.
+- `SalesActivityAnalytics.tsx` — quotation activity as a **stacked** bar chart + period table,
+  week/month/quarter/year tabs, filtered server-side by salesperson/department (not the date
+  filter's start — see "Filter Honesty" in UI_GUIDELINES.md). Third row of the top overview as of
+  2026-07-13 (seventh pass), full width. **2026-07-13, sixth pass**: expanded from 2 tracked
+  categories (Created/Edited) to all 5 an independent review flagged as required — Created,
+  Edited, Status Changed, Approval Requested, Approval Completed — via `categoryForAction()` in
+  `api/dashboard/index.ts`, mapping every audit action `writeQuoteAuditEntry()` can write.
+  **2026-07-13, eighth pass**: the "rolling trend, not limited by the filter's start date" caption
+  now also states the actual anchor date it ends on ("— ending [date]") — an `anchorDate` prop
+  computed in `DashboardPage.tsx` (`stats.filters.to`, or today via the new `todayIsoBangkok()` in
+  `dateRanges.ts`) and formatted via the new `fmtDateShort()` in `format.ts`. `RevenueTrendChart`
+  (in supporting detail, see below) got the identical treatment in the same pass.
+  **2026-07-13, seventh pass**: gained a second table below the chart, "สรุปตามพนักงานขาย" —
+  ช่วงเวลา/พนักงานขาย/เปิดใบเสนอราคาใหม่/แก้ไขใบเสนอราคาเก่า/กิจกรรมรวม, sourced from the API's
+  new `salesActivity.bySalesperson.{weekly,monthly,quarterly,yearly}`, Created/Edited only
+  (matching the business requirement's named event types — distinct from the 5-category chart
+  above it, which also tracks Status Changed/Approval Requested/Approval Completed).
+- `ActivityTimeline.tsx` (rebuilt 2026-07-13, seventh pass) — "กิจกรรมล่าสุด" (Recent Activity
+  Details), the 4th and final row of the top overview. Rebuilt from a card list into a table:
+  วันที่/พนักงานขาย/กิจกรรม/ใบเสนอราคา/ลูกค้า columns. The quotation-number cell is a clickable
+  gold link (`onOpenQuote`, wired to `App.tsx`'s existing `navigateToQuotation()`) when the entry
+  carries a `relatedQuoteId`, else "—"; same for the customer-name cell and `relatedCustomerName`.
+  **Only rendered when the API response's `activityTimeline` is non-null**, i.e. only for callers
+  with `auditLog:view`.
+- `SalesPerformancePanel.tsx` — Win/Lose/Conversion Rate, Average Deal Size, Average
+  Approval/Closing Time, and (added 2026-07-13, third pass) Active/Non-Active Quotations — 8
+  metrics as a compact label/value grid inside one `ChartCard`, not individual cards. Moved into
+  supporting detail (below the top overview) as of 2026-07-13, seventh pass — real, still
+  filter-aware data, just not named in the business requirement's required-5 list.
+- `ActivityFollowUpSummary.tsx` — Pending Approvals, Overdue Follow-ups, Expired Quotations, New
+  Customers as a compact 4-tile row inside one `ChartCard`; only Pending Approvals is clickable
+  (navigates to the quotation list filtered to that status) since it's the only one with a real
+  single-status filter to jump to. Moved into supporting detail as of 2026-07-13, seventh pass,
+  same reasoning as `SalesPerformancePanel` above.
 
   **KPI presentation history**: originally a single flat `KpiGrid.tsx` (22 uniform cards). 2026-07-10
   (UI/UX redesign) split it into two tiers — `PrimaryKpiCards.tsx` (6 hero cards) +
@@ -155,16 +193,9 @@ documented rather than silently assumed:
   workflow state machine, **not** simple array-adjacency — the workflow branches (Sent to
   Customer → Accepted *or* Rejected), so a naive "previous stage in the list" comparison would
   produce a nonsensical percentage for the Customer Rejected/Lost branch.
-- `SalesActivityAnalytics.tsx` (added 2026-07-10, new section) — quotation Created/Updated
-  counts, tabbed by week/month/quarter/year (same grouping UX as Revenue Trend), backed by a new
-  `salesActivity` field in the API response (see Database Tables / APIs below). Chart + a compact
-  trailing-8-period table. Counts come from `audit_log` entries with `action: {$in: ["Quotation
-  Created", "Quotation Updated"]}` — when this section was first built, those entries were still
-  client-written (forgeable via a direct `POST /api/audit-log` call), which an independent Codex
-  re-review flagged as making this data non-authoritative for compliance-grade reporting. **Fixed
-  2026-07-10 (fifth pass)**: those exact entries are now written server-side by `api/handlers/
-  quotes.ts` itself, and `POST /api/audit-log` rejects the quotation module outright — this
-  section's data is now genuinely trustworthy, not just displayed. See [AuditLog.md](./AuditLog.md).
+  (`SalesActivityAnalytics.tsx`'s full current description, incl. the audit-integrity history for
+  why its underlying `audit_log` counts are trustworthy, is documented above where the top-overview
+  section order is described — not repeated here to avoid the two going out of sync.)
 - `SalesPerformanceTable.tsx` — one table component, two uses: the full "Sales Performance"
   section (every salesperson) and the "Executive Ranking" (top 10 by revenue, sortable) — same
   underlying `salesPerformance` array from the API, sorted/sliced client-side. 11 columns, all
@@ -177,8 +208,8 @@ documented rather than silently assumed:
 - `CustomerAnalytics.tsx` — sortable-by-tab table (Customer/Quotations/Total Value/Won Value/
   Last Quotation Date), 4 ranking tabs: Top Revenue, Most Quotations, Most Won, Most Repeat
   (customers with >1 quotation, ranked by count).
-- `ActivityTimeline.tsx` — recent `audit_log` entries. **Only rendered when the API response's
-  `activityTimeline` is non-null**, i.e. only for callers with `auditLog:view`.
+  (`ActivityTimeline.tsx`'s full current description is documented above alongside the top-overview
+  section order, not repeated here.)
 - `FollowUpReminders.tsx` — Today/Overdue/Upcoming, each item clickable.
 - `ApprovalDashboard.tsx` — pending/approved-today/rejected-today/avg approval time stat tiles,
   **plus** a Pending Approvals list (Quotation No./Customer/Salesperson/Amount/Submitted Date)
@@ -229,7 +260,11 @@ None owned by this page — it's a read-only aggregation over `customers`, `lead
 - `GET /api/dashboard?from=&to=&salesperson=&department=` (`api/dashboard/index.ts`) — gated by
   `dashboard:view`. See [API.md](../API.md). **2026-07-10**: response gained a `salesActivity`
   field (weekly/monthly/quarterly/yearly Created vs. Updated counts, aggregated from `audit_log`,
-  filter-aware) backing `SalesActivityAnalytics.tsx`.
+  filter-aware) backing `SalesActivityAnalytics.tsx`. **2026-07-13, sixth pass**: `salesActivity`
+  expanded to 5 categories; `kpis` gained `lostValue`/`activeQuotationsValue`/
+  `nonActiveQuotationsValue`. **2026-07-13, seventh pass**: `salesActivity` gained
+  `bySalesperson.{weekly,monthly,quarterly,yearly}` (period × salesperson, Created/Edited only);
+  `activityTimeline` entries may now carry `relatedQuoteId`/`relatedCustomerName`.
 - Approve/Reject actions from the Pending Approvals widget reuse the existing
   `POST /api/quotes/:id/workflow` route (same one the Quotation module's own approval buttons
   call) — no new API route was added for this.
@@ -259,8 +294,12 @@ by `quotations:approve`; the list's Reject button additionally by `quotations:re
   `FunnelChart`, whose 9 overlapping Thai labels read as broken/unprofessional).
 - **Quotation Status Summary** (`QuotationStatusSummary.tsx`) — Win/Lose/Active/Non-Active donut
   + table, counts always match the KPI cards exactly.
-- **Sales Activity Analytics** (`SalesActivityAnalytics.tsx`) — quotation Created vs. Edited
-  counts, weekly/monthly/quarterly/yearly tabs, respects the salesperson/department filters.
+- **Sales Activity Analytics** (`SalesActivityAnalytics.tsx`) — 5-category stacked activity chart
+  (Created/Edited/Status Changed/Approval Requested/Approval Completed) plus a per-salesperson
+  Created-vs-Edited breakdown table, weekly/monthly/quarterly/yearly tabs, respects the
+  salesperson/department filters.
+- **Recent Activity Details** (`ActivityTimeline.tsx`) — table of recent audit-log entries with
+  clickable quotation-number links and customer names — `auditLog:view` holders only.
 - Sales Performance table (every salesperson, all 11 spec columns) + Executive Ranking (top 10,
   sortable)
 - Job Type Analytics — sortable table, all active job types (zero-quote types included)
@@ -271,7 +310,6 @@ by `quotations:approve`; the list's Reject button additionally by `quotations:re
 - Approval Dashboard — pending/approved-today/rejected-today/avg approval time stat tiles, plus
   an actionable Pending Approvals list with inline Approve/Reject — approvers only
 - Notification Summary (the caller's own unread count + by-type breakdown)
-- Activity Timeline (recent audit log entries) — `auditLog:view` holders only
 - 5 remaining charts in `DashboardCharts.tsx`: Revenue Trend (weekly/monthly/quarterly/yearly
   toggle), Revenue by Job Type (Total + Won Value, grouped bars), Job Type Distribution
   (quotation count), Expected Sales forecast, Products by Category donut — every chart has its

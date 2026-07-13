@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Activity } from "lucide-react";
-import type { SalesActivityTrend } from "../../lib/dashboard";
+import type { SalesActivityTrend, SalesActivityBySalespersonRow } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 import { EmptyState } from "../../components/EmptyState";
-import { periodLabel } from "./format";
+import { periodLabel, fmtDateShort } from "./format";
 
 type Grouping = "weekly" | "monthly" | "quarterly" | "yearly";
 const GROUPINGS: Grouping[] = ["weekly", "monthly", "quarterly", "yearly"];
@@ -34,8 +34,8 @@ const CATEGORIES: { key: ActivityCategory; color: string }[] = [
  * date — the previous silence on that was flagged as misleading (the date-range filter visibly
  * has a "from" control that doesn't affect this chart).
  */
-export function SalesActivityAnalytics({ data }: { data: SalesActivityTrend }) {
-  const { t } = useI18n();
+export function SalesActivityAnalytics({ data, anchorDate }: { data: SalesActivityTrend; anchorDate: string }) {
+  const { t, lang } = useI18n();
   const [grouping, setGrouping] = useState<Grouping>("monthly");
   const groupingLabel: Record<Grouping, string> = {
     weekly: t("dashboard.chart.revenue.grouping.week"),
@@ -53,11 +53,14 @@ export function SalesActivityAnalytics({ data }: { data: SalesActivityTrend }) {
   const rows = data[grouping];
   const hasData = rows.some((r) => CATEGORIES.some((c) => r[c.key] > 0));
   const chartData = rows.map((r) => ({ ...r, label: periodLabel(r.period) }));
+  const bySalespersonRows: (SalesActivityBySalespersonRow & { total: number })[] = data.bySalesperson[grouping]
+    .map((r) => ({ ...r, total: r.created + r.edited }))
+    .slice(0, 12);
 
   return (
     <ChartCard
       title={t("dashboard.salesActivity.title")}
-      sub={t("dashboard.salesActivity.sub")}
+      sub={`${t("dashboard.salesActivity.sub")} — ${t("dashboard.trend.endingOn")} ${fmtDateShort(anchorDate, lang)}`}
       actions={
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
           {GROUPINGS.map((g) => (
@@ -106,6 +109,41 @@ export function SalesActivityAnalytics({ data }: { data: SalesActivityTrend }) {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Per-salesperson breakdown (2026-07-13, P'Keng/P'Kee business requirement) — a
+              distinct table from the one above: that one is period-only totals across everyone in
+              scope, this one is (period, salesperson) rows, Created/Edited only. */}
+          <div className="mt-5 pt-4 border-t border-border">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("dashboard.salesActivity.bySalesperson.title")}</p>
+            {bySalespersonRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">{t("dashboard.salesActivity.bySalesperson.empty")}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.salesActivity.col.period")}</th>
+                      <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.salesActivity.col.salesperson")}</th>
+                      <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.salesActivity.created")}</th>
+                      <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.salesActivity.edited")}</th>
+                      <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.salesActivity.col.total")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bySalespersonRows.map((r) => (
+                      <tr key={`${r.period}-${r.salesperson}`} className="border-b border-border/40 last:border-0">
+                        <td className="px-2 py-1.5 text-xs text-foreground font-mono whitespace-nowrap">{periodLabel(r.period)}</td>
+                        <td className="px-2 py-1.5 text-xs text-foreground truncate max-w-[160px]" title={r.salesperson}>{r.salesperson}</td>
+                        <td className="px-2 py-1.5 text-xs font-mono text-[#c9a84c] text-right">{r.created}</td>
+                        <td className="px-2 py-1.5 text-xs font-mono text-[#5a7299] text-right">{r.edited}</td>
+                        <td className="px-2 py-1.5 text-xs font-mono font-semibold text-foreground text-right">{r.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

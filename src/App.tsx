@@ -475,7 +475,7 @@ export default function App() {
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} onAudit={handleAudit} />
               : effectiveNav === "auditLog"
               ? <AuditLogPage />
-              : <DashboardPage onNavigateToQuotations={navigateToQuotations} />
+              : <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
             }
           </Suspense>
         </div>

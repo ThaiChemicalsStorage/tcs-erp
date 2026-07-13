@@ -6,7 +6,7 @@ import {
 import type { JobTypeStat, Forecast, RevenueTrend } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
-import { fmtShort, periodLabel } from "./format";
+import { fmtShort, periodLabel, fmtDateShort } from "./format";
 
 const PALETTE = ["#c9a84c", "#1a5fb4", "#2aa36b", "#7c4dbb", "#e05252", "#1f9d8a", "#e08a3c", "#3b6fc9"];
 
@@ -28,8 +28,8 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 type TrendGrouping = "weekly" | "monthly" | "quarterly" | "yearly";
 const TREND_GROUPINGS: TrendGrouping[] = ["weekly", "monthly", "quarterly", "yearly"];
 
-export function RevenueTrendChart({ trend }: { trend: RevenueTrend }) {
-  const { t } = useI18n();
+export function RevenueTrendChart({ trend, anchorDate }: { trend: RevenueTrend; anchorDate: string }) {
+  const { t, lang } = useI18n();
   const [grouping, setGrouping] = useState<TrendGrouping>("monthly");
   const groupingLabel: Record<TrendGrouping, string> = {
     weekly: t("dashboard.chart.revenue.grouping.week"),
@@ -42,7 +42,7 @@ export function RevenueTrendChart({ trend }: { trend: RevenueTrend }) {
   return (
     <ChartCard
       title={t("dashboard.chart.revenue.title")}
-      sub={t("dashboard.chart.revenue.sub")}
+      sub={`${t("dashboard.chart.revenue.sub")} — ${t("dashboard.trend.endingOn")} ${fmtDateShort(anchorDate, lang)}`}
       className="xl:col-span-2"
       actions={
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1">

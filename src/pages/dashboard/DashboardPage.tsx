@@ -6,6 +6,7 @@ import { useI18n } from "../../lib/i18n";
 import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
+import { todayIsoBangkok } from "./dateRanges";
 import { buildDashboardCsv, downloadCsv } from "./csvExport";
 import { ExecutiveSummaryCards } from "./ExecutiveSummaryCards";
 import { SalesPerformancePanel } from "./SalesPerformancePanel";
@@ -56,36 +57,40 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 /**
  * Executive Dashboard.
  *
- * **Top of page — the "answer in 5 seconds" overview**, in the exact order requested 2026-07-13
- * (fifth same-day pass): page title + compact filters, `ExecutiveSummaryCards` (4 cards only —
- * Total Quotations/Value, Closed/Expected Sales), `QuotationStatusSummary` (Won/Lost/Active/
- * Non-Active, one panel not 4 cards) + the forecast chart, `SalesPerformancePanel` (rates +
- * cycle times + Active/Non-Active counts, a compact label/value grid not 8 cards),
- * `SalesActivityAnalytics` (Created/Edited trend, filter-aware — promoted up from the "supporting
- * detail" section below to its own named top-level section per this pass), `ActivityFollowUpSummary`
- * (pending approvals/overdue follow-ups/expired/new customers, a compact clickable-where-possible
- * tile row), then `ActivityTimeline` ("Recent Activities"). This replaces the flat 22-card
- * `KpiGrid.tsx` (removed 2026-07-13) — user feedback was that even a single-tier 22-card grid
- * still read as "a generated template" with no visual hierarchy.
+ * **Top of page — the 4 sections P'Keng/P'Kee's business requirement names, in the exact
+ * requested order** (2026-07-13, sixth/seventh same-day passes): page title + compact filters,
+ * `ExecutiveSummaryCards` (4 cards only — Total Quotations/Value, Closed/Expected Sales),
+ * `QuotationStatusSummary` (Won/Lost/Active/Non-Active donut+table, full width — the forecast
+ * chart used to sit alongside it but was moved to supporting detail, see below),
+ * `SalesActivityAnalytics` (5-category trend chart + period table + a per-salesperson breakdown
+ * table, full width), then `ActivityTimeline` ("Recent Activity Details" — date/salesperson/
+ * activity/quotation-number/customer-name columns, quotation number links to the quote). This
+ * replaces the flat 22-card `KpiGrid.tsx` (removed 2026-07-13 in an earlier pass) — the business
+ * requirement explicitly names only these 4 sections as required, with an instruction to "focus
+ * first on the exact required business information" and move anything else lower.
  *
- * **Below that — supporting detail, unchanged**: revenue/job-type charts, the sales pipeline step
- * cards (`PipelineSteps.tsx` — already the non-overlapping horizontal-step-card replacement for
- * the old broken `recharts` `FunnelChart`, not touched this pass), ranking tables, top customers/
- * job types, the actionable Pending Approvals + Follow-up Reminders lists (distinct from the
- * compact *counts* in `ActivityFollowUpSummary` above — those are real clickable/actionable
+ * **Below that — supporting detail, still real filter-aware MongoDB data, not removed**:
+ * `SalesPerformancePanel` (rates/cycle-times/Active-Non-Active counts) + `ExpectedSalesForecastChart`,
+ * `ActivityFollowUpSummary` (pending approvals/follow-ups/expired/new-customer counts), revenue/
+ * job-type charts, the sales pipeline step cards (`PipelineSteps.tsx` — the non-overlapping
+ * horizontal-step-card replacement for the old broken `recharts` `FunnelChart`), ranking tables,
+ * top customers/job types, the actionable Pending Approvals + Follow-up Reminders lists (distinct
+ * from the compact *counts* in `ActivityFollowUpSummary` — those are real clickable/actionable
  * line-item lists), the notification summary, and the customer-interest breakdown. None of this
- * was the "too many large KPI cards" complaint, so none of it was removed — see CHANGELOG.md.
+ * data was removed — it moved out of the 4 required top sections because the business requirement
+ * doesn't name it as required, not because it stopped mattering. See CHANGELOG.md.
  *
  * History: 2026-07-10 (UI/UX redesign) split the original flat KPI grid into a tiered "primary
  * hero cards + dense secondary mini-cards" layout and added `QuotationStatusSummary`/
  * `PipelineSteps`/`SalesActivityAnalytics`, removing 5 now-redundant charts. 2026-07-13 (first
- * revert pass) merged the tiered KPI cards back into one flat `KpiGrid`. 2026-07-13 (second
- * revert pass) replaced that flat grid with `ExecutiveSummaryCards` + 2 new compact panels.
- * 2026-07-13 (this pass) reordered the page to match a fully-specified 7-section structure,
- * promoted `SalesActivityAnalytics` into the top overview, and added Active/Non-Active Quotations
- * to `SalesPerformancePanel`.
+ * revert pass) merged the tiered KPI cards back into one flat `KpiGrid`. 2026-07-13 (second revert
+ * pass) replaced that flat grid with `ExecutiveSummaryCards` + 2 new compact panels. 2026-07-13
+ * (third pass) reordered into a fully-specified 7-section structure. 2026-07-13 (this pass, the
+ * P'Keng/P'Kee business-requirement pass) fixed 4 High Priority Codex data/filter bugs, then
+ * simplified to the exact 4-section required layout above, added Sales Activity's per-salesperson
+ * breakdown table, and added structured quotation/customer fields to Recent Activity Details.
  */
-export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotations: (filter: QuotationListFilter) => void }) {
+export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavigateToQuotations: (filter: QuotationListFilter) => void; onOpenQuote: (quoteId: string) => void }) {
   const { t } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -125,6 +130,12 @@ export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotatio
     approvalDashboard, notificationSummary, availableSalespeople, availableDepartments,
   } = stats;
   const interestTotal = interestBreakdown.interested + interestBreakdown.notInterested + interestBreakdown.notEvaluated;
+  // Sales Activity Analytics / Revenue Trend are rolling windows that ignore the filter's `from`
+  // bound by design (see UI_GUIDELINES.md "Filter Honesty") — this anchor date is what "ending on"
+  // actually means: the selected `to` date if the user picked one, else today (Bangkok-local, not
+  // the server/browser's ambient timezone). Threaded into both charts so their sub-copy can state
+  // a real date instead of a generic "rolling trend" phrase — 2026-07-13, independent review fix.
+  const trendAnchorDate = stats.filters.to || todayIsoBangkok();
 
   const exportCsv = () => {
     const csv = buildDashboardCsv(stats, stats.filters);
@@ -158,37 +169,41 @@ export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotatio
         <EmptyState icon={LayoutDashboard} title={t("empty.dashboard.title")} description={t("empty.dashboard.sub")} />
       ) : (
         <>
-          {/* ── The 5-second overview ── */}
+          {/* ── The required P'Keng/P'Kee 5-section overview, in the exact requested order ── */}
 
-          {/* 1. Executive summary — 4 cards only */}
+          {/* 1. Executive KPI summary — 4 cards only */}
           <div data-tour="dashboard-kpis">
             <ExecutiveSummaryCards kpis={kpis} />
           </div>
 
-          {/* 2. Quotation status summary + forecast */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <QuotationStatusSummary kpis={kpis} />
-            <ExpectedSalesForecastChart forecast={forecast} />
-          </div>
+          {/* 2. Quotation status summary — full width, not paired with Forecast (Forecast moved to
+              supporting detail below per "if it makes the Dashboard cluttered, move it lower") */}
+          <QuotationStatusSummary kpis={kpis} />
 
-          {/* 3. Sales performance — compact rates/cycle-time panel, not more cards */}
-          <SalesPerformancePanel kpis={kpis} />
+          {/* 3. Sales activity analytics — trend + recent-period table + per-salesperson
+              breakdown, filter-aware, full width */}
+          {salesActivity && <SalesActivityAnalytics data={salesActivity} anchorDate={trendAnchorDate} />}
 
-          {/* 4. Sales activity analytics — trend + recent-period table, filter-aware */}
-          {salesActivity && <SalesActivityAnalytics data={salesActivity} />}
+          {/* 4. Recent activity details */}
+          {activityTimeline && <ActivityTimeline entries={activityTimeline} onOpenQuote={onOpenQuote} />}
 
-          {/* 5. Activity & follow-up — compact counts, clickable where a real filter exists */}
-          <ActivityFollowUpSummary kpis={kpis} onPendingApprovalsClick={() => onNavigateToQuotations({ status: "รออนุมัติ" })} />
-
-          {/* 6. Recent activities */}
-          {activityTimeline && <ActivityTimeline entries={activityTimeline} />}
-
-          {/* ── Supporting detail — unchanged content, just below the overview above ── */}
+          {/* ── Supporting detail — real data, unchanged, just not part of the 4 required
+              sections above. Sales Performance/Tasks&Follow-up/Forecast moved here 2026-07-13
+              (P'Keng/P'Kee pass) since they weren't named in the required 5-row layout — "focus
+              first on the exact required business information." Not removed, still real,
+              filter-aware MongoDB data. ── */}
           <div className="pt-2 border-t border-border space-y-6">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.section.detail")}</p>
 
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <SalesPerformancePanel kpis={kpis} />
+              <ExpectedSalesForecastChart forecast={forecast} />
+            </div>
+
+            <ActivityFollowUpSummary kpis={kpis} onPendingApprovalsClick={() => onNavigateToQuotations({ status: "รออนุมัติ" })} />
+
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-              <RevenueTrendChart trend={revenueTrend} />
+              <RevenueTrendChart trend={revenueTrend} anchorDate={trendAnchorDate} />
               <ProductsByCategoryChart categoryBreakdown={categoryBreakdown} />
             </div>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

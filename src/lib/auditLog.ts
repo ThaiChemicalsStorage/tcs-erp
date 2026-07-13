@@ -9,6 +9,14 @@ export interface AuditLogEntry {
   action: string;
   details: string;
   createdAt: string;
+  /** Quotation number (same value as `Quote.id`) this entry relates to — only present on
+   * quote-workflow entries written by `writeQuoteAuditEntry()` (api/handlers/quotes.ts), added
+   * 2026-07-13 so the Dashboard's Recent Activities list can render/link to it as a real field
+   * instead of parsing it out of `details`. Absent on older entries and on entries from other
+   * modules (Users, Roles, Settings, Login/Logout). */
+  relatedQuoteId?: string;
+  /** Customer/client name this entry relates to — same provenance/caveats as `relatedQuoteId`. */
+  relatedCustomerName?: string;
 }
 
 export async function fetchAuditLog(): Promise<AuditLogEntry[]> {

@@ -18,6 +18,12 @@ function iso(y: number, m: number, d: number): string {
   return new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
 }
 
+/** Today's date (YYYY-MM-DD) in Thailand's fixed UTC+7 offset — safe to use as a rolling trend's anchor date when no explicit `to` filter is selected. */
+export function todayIsoBangkok(): string {
+  const now = bangkokNow();
+  return iso(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
+
 /** Computes {from, to} for every preset except "custom" (caller supplies its own range) and "all" (no filter). */
 export function rangeForPreset(preset: DateRangePreset): { from: string; to: string } | null {
   const now = bangkokNow();

@@ -25,7 +25,7 @@ export interface DashboardKpis {
   /** Total amount of `activeQuotations` — same exact predicate (not-closed and not expired) as the count, added 2026-07-13 so `QuotationStatusSummary`'s count and value columns always describe the same population (previously the value column approximated from `PipelineStage` per-status totals, which don't carve out expired-but-unclosed quotes the way this count does). */
   activeQuotationsValue: number;
   expiredQuotations: number;
-  /** Cancelled, expired, Customer Rejected, or Lost — "closed without success." Won and still-active-unexpired quotes are excluded. */
+  /** Cancelled, Customer Rejected, or expired-without-closing — "closed without success, and not already its own row." Lost is deliberately excluded (it has its own `lostDeals` row) so a quote never counts in both Lose and Non-Active — see `NON_ACTIVE_OUTCOME_STATUSES` in api/dashboard/index.ts. Won and still-active-unexpired quotes are excluded too. */
   nonActiveQuotations: number;
   /** Total amount of `nonActiveQuotations` — same exact predicate as the count, see `activeQuotationsValue`. */
   nonActiveQuotationsValue: number;
@@ -122,11 +122,28 @@ export interface SalesActivityPeriod {
   approvalCompleted: number;
 }
 
+/** One (period, salesperson) row — Created/Edited only (the 2 activity types this specific business requirement names), not all 5 `SalesActivityPeriod` categories. Only non-zero rows are returned; a salesperson with no activity in a given period simply has no row. */
+export interface SalesActivityBySalespersonRow {
+  period: string;
+  salesperson: string;
+  created: number;
+  edited: number;
+}
+
 export interface SalesActivityTrend {
   weekly: SalesActivityPeriod[];
   monthly: SalesActivityPeriod[];
   quarterly: SalesActivityPeriod[];
   yearly: SalesActivityPeriod[];
+  /** Per-salesperson breakdown of the same data, added 2026-07-13 (P'Keng/P'Kee business
+   * requirement) for the "Activity Summary Table" (ช่วงเวลา/พนักงานขาย/เปิดใบเสนอราคาใหม่/
+   * แก้ไขใบเสนอราคาเก่า/กิจกรรมรวม). */
+  bySalesperson: {
+    weekly: SalesActivityBySalespersonRow[];
+    monthly: SalesActivityBySalespersonRow[];
+    quarterly: SalesActivityBySalespersonRow[];
+    yearly: SalesActivityBySalespersonRow[];
+  };
 }
 
 export interface Forecast {

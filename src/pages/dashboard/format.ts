@@ -24,6 +24,11 @@ export function fmtPercentOrDash(n: number | null): string {
   return n === null ? "—" : fmtPercent(n);
 }
 
+/** "YYYY-MM-DD" -> a short localized date, e.g. "13 ก.ค. 2026" / "13 Jul 2026" — used to label a rolling trend's anchor ("ending [date]"), not for period-key display (see periodLabel below for that). */
+export function fmtDateShort(iso: string, locale: "th" | "en"): string {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale === "th" ? "th-TH" : "en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}
+
 export function monthLabel(key: string): string {
   const [y, m] = key.split("-").map(Number);
   if (!y || !m) return key;

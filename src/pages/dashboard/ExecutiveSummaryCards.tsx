@@ -4,7 +4,7 @@ import { useI18n } from "../../lib/i18n";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { fmtShort } from "./format";
 
-function SummaryCard({ title, value, icon: Icon, accent, help }: { title: string; value: string; icon: LucideIcon; accent: string; help?: string }) {
+function SummaryCard({ title, value, icon: Icon, accent, help, helper }: { title: string; value: string; icon: LucideIcon; accent: string; help?: string; helper: string }) {
   return (
     <div className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all duration-200">
       <div className="flex items-center justify-between gap-2 mb-2">
@@ -17,6 +17,7 @@ function SummaryCard({ title, value, icon: Icon, accent, help }: { title: string
         {help && <MetricInfoTooltip label={title} text={help} />}
       </div>
       <p className="text-2xl font-bold text-foreground font-mono tracking-tight">{value}</p>
+      <p className="text-[10px] text-muted-foreground mt-1 truncate" title={helper}>{helper}</p>
     </div>
   );
 }
@@ -33,14 +34,19 @@ function SummaryCard({ title, value, icon: Icon, accent, help }: { title: string
  * server-side (untouched), just not part of this executive-overview spec; total customers/repeat
  * customers remain visible in the richer `CustomerAnalytics.tsx` table further down the page, and
  * total products on the Products page itself.
+ *
+ * **2026-07-13, P'Keng/P'Kee requirement**: each card now shows a one-line `helper` caption below
+ * the value (was previously bare value + label, with an (i) tooltip only on Expected Sales) —
+ * the business requirement calls for explicit helper text under all 4, not just the one with a
+ * non-obvious calculation.
  */
 export function ExecutiveSummaryCards({ kpis }: { kpis: DashboardKpis }) {
   const { t } = useI18n();
-  const cards: { title: string; value: string; icon: LucideIcon; accent: string; help?: string }[] = [
-    { title: t("dashboard.kpi.totalQuotations"), value: kpis.totalQuotations.toLocaleString("th-TH"), icon: FileText, accent: "#1a5fb4" },
-    { title: t("dashboard.kpi.totalQuotationValue"), value: fmtShort(kpis.totalQuotationValue), icon: Wallet, accent: "#5a7299" },
-    { title: t("dashboard.kpi.closedSales"), value: fmtShort(kpis.closedSales), icon: TrendingUp, accent: "#157347" },
-    { title: t("dashboard.kpi.expectedSales"), value: fmtShort(kpis.expectedSales), icon: Target, accent: "#c9a84c", help: t("dashboard.kpi.help.expectedSales") },
+  const cards: { title: string; value: string; icon: LucideIcon; accent: string; help?: string; helper: string }[] = [
+    { title: t("dashboard.kpi.totalQuotations"), value: kpis.totalQuotations.toLocaleString("th-TH"), icon: FileText, accent: "#1a5fb4", helper: t("dashboard.kpi.helper.totalQuotations") },
+    { title: t("dashboard.kpi.totalQuotationValue"), value: fmtShort(kpis.totalQuotationValue), icon: Wallet, accent: "#5a7299", helper: t("dashboard.kpi.helper.totalQuotationValue") },
+    { title: t("dashboard.kpi.closedSales"), value: fmtShort(kpis.closedSales), icon: TrendingUp, accent: "#157347", helper: t("dashboard.kpi.helper.closedSales") },
+    { title: t("dashboard.kpi.expectedSales"), value: fmtShort(kpis.expectedSales), icon: Target, accent: "#c9a84c", help: t("dashboard.kpi.help.expectedSales"), helper: t("dashboard.kpi.helper.expectedSales") },
   ];
   return (
     <div>

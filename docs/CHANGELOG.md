@@ -4,6 +4,148 @@
 
 ---
 
+## 2026-07-13 — Fix Codex-review High Priority Dashboard status/filter issues (eighth same-day pass)
+
+**Scope**: a follow-up independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) audited the
+seventh pass's P'Keng/P'Kee completion work. Result: **zero Critical issues** — the review
+confirmed the 4 required KPI cards, Expected Sales' `isPotentialOpportunity`-only rule, the
+Sales Activity Analytics weekly/monthly/quarterly/yearly views, the salesperson filter, the
+Created/Edited activity counts, and "no fake data" were all already correct. **3 High Priority
+issues** were found; 2 are fixed this pass, 1 (department filtering) is a documented, already-
+tracked business decision deliberately not attempted here — see below.
+
+1. **Fixed: Win/Lose/Active/Non-Active double-counted Lost quotations.** `QuotationStatusSummary`'s
+   donut/table presents 4 rows and a Percentage column (count ÷ sum of all 4 rows' counts) — but
+   `NON_ACTIVE_OUTCOME_STATUSES` in `api/dashboard/index.ts` included `เสียโอกาส` (Lost) alongside
+   Cancelled/Customer Rejected, so every Lost quote was counted in *both* the Lose row and the
+   Non-Active row. The 4 rows' counts summed to more than `docs.length`, and the percentage column
+   didn't add up to 100% — a real correctness bug for an executive-facing summary, not a display
+   nit. **Fixed at the source**: `NON_ACTIVE_OUTCOME_STATUSES` no longer includes Lost (Lost
+   already has its own row). Win + Lose + Active + Non-Active are now a true partition of every
+   quote status — every quote counts in exactly one row, every percentage column now sums to
+   exactly 100%. `kpis.nonActiveQuotations`/`nonActiveQuotationsValue` (also used by
+   `SalesPerformancePanel`'s "Non-Active Jobs" tile and the CSV export) changed meaning
+   consistently everywhere they're used — there is now only one definition of "Non-Active,"
+   not a donut-only one and a KPI-only one. Updated the `dashboard.kpi.help.nonActiveQuotations`
+   Thai/English copy to match (no longer lists "Lost" among Non-Active's causes, explicitly notes
+   why).
+2. **Improved: rolling-trend widgets now state their actual anchor date.** Sales Activity
+   Analytics and Revenue Trend both intentionally ignore the date filter's `from` bound to keep a
+   real trailing window (documented, unchanged) — but the review noted that a generic "rolling
+   trend, not limited by the filter's start date" caption doesn't tell a user *what date it does
+   end on*, which reads as vague rather than precise. Both widgets' `sub` caption now appends
+   "— ending [date]" using the selected filter's `to` date, or today (Bangkok-local) if no `to`
+   is selected — computed via a new `todayIsoBangkok()` helper (`dateRanges.ts`) and a new
+   `fmtDateShort()` formatter (`format.ts`), threaded in as an `anchorDate` prop from
+   `DashboardPage.tsx`. New dictionary key `dashboard.trend.endingOn` ("สิ้นสุดที่" / "ending on").
+3. **Deliberately not fixed this pass: department filtering is a fragile free-text join.**
+   `api/dashboard/index.ts` resolves a Department filter by matching free-text `User.department`
+   to `Quote.salesperson` via `User.fullName` — accurate only as long as names never collide,
+   get typo'd, or get renamed. A real fix needs `Quote` to carry a stable `salespersonUserId`
+   (and `User`/`Quote` to carry a real `departmentId`), which in turn requires deciding whether
+   the Quotation form's free-text Salesperson field should become a locked dropdown of real
+   `User` records — a genuine product/workflow decision, not a bug fix, and already tracked as a
+   "Business decision needed" item in TODO.md (added during the 2026-07-10 pass). Not attempted
+   here without that sign-off; also out of the explicit fix-list for this pass (department wasn't
+   named, salesperson filtering was — and salesperson filtering itself was independently
+   confirmed correct by this review).
+4. Every Medium/Low item from this review (quote soft-deletion readiness, "activity is
+   audit-performer not quote-owner" terminology, deep-detail-area length, small chart typography)
+   is a documented, non-blocking observation, not a defect — left as-is, not tracked as new TODOs
+   beyond what's already noted in this review's own report.
+5. **Verification**: same environment constraint as every same-day pass this session (no local
+   backend). `npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build`
+   all pass clean. Visually verified via an isolated Playwright preview composing the real
+   `QuotationStatusSummary`/`SalesActivityAnalytics`/`RevenueTrendChart` components with mock data
+   constructed so Won+Lost+Active+NonActive sum to exactly `totalQuotations` (30+10+45+15=100) —
+   confirmed all 4 percentages now sum to 100% (was previously >100% before this fix) — and
+   confirmed both widgets' captions render "สิ้นสุดที่ 13 ก.ค. 2569" / an equivalent anchor date,
+   at 1440px and 390px.
+6. Docs updated: this file, CLAUDE.md, PROJECT_STATUS.md, TODO.md, DATABASE.md,
+   MODULES/Dashboard.md, UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md.
+
+---
+
+## 2026-07-13 — Complete Dashboard against the P'Keng/P'Kee business requirement (seventh same-day pass)
+
+**Scope**: a business-stakeholder requirement doc (P'Keng/P'Kee) listing exact required Dashboard
+content, exact Thai label/subtitle text, an exact 5-section page structure, a Win/Lose/Active/
+Non-Active status-mapping rule, and detailed Sales Activity Analytics requirements (period +
+salesperson grouping, tracked event types, a per-salesperson summary table, and a Recent Activity
+list with structured quotation/customer fields). **Clarified one high-stakes ambiguity with the
+user before touching any code**: the requirement's status mapping would have counted "Customer
+Accepted" (ลูกค้ายอมรับ) as Win and "Customer Rejected" (ลูกค้าปฏิเสธ) as Lose, which conflicts with
+every other Win Rate/Closed Sales/Average Deal Size/Revenue Trend calculation on the page (all of
+which only count formally-closed ปิดการขายสำเร็จ/เสียโอกาส). User confirmed: **keep today's
+definition everywhere** — no status-mapping logic was changed.
+
+1. **Exact-text corrections** across the page, matching the requirement's literal copy: page
+   subtitle ("สรุปใบเสนอราคา ยอดขาย และกิจกรรมของฝ่ายขาย", was "ข้อมูลแบบเรียลไทม์จากฐานข้อมูล"),
+   the Closed Sales KPI label ("ยอดขายที่ปิดได้แล้ว", was missing "ได้"), the Quotation Status
+   Summary section title/subtitle ("สถิติสถานะใบเสนอราคา" / "สรุปจำนวนงานตามสถานะ Win / Lose /
+   Active / Non Active", was "สถานะใบเสนอราคา" / a different Thai phrasing), and the Sales Activity
+   subtitle (now leads with the requirement's exact phrase, "ติดตามการเปิดใบเสนอราคาใหม่และการแก้ไข
+   ใบเสนอราคาเดิม", with the existing filter-honesty caveat appended after it rather than replaced).
+2. **`ExecutiveSummaryCards.tsx` now shows a one-line helper caption under every card's value**
+   (previously only Expected Sales had an (i) tooltip, no card had visible helper text) — the 4
+   helper strings match the requirement's exact wording (3 of the 4 existing `dashboard.kpi.helper.*`
+   keys were reworded slightly to match exactly; Expected Sales' was already an exact match).
+3. **Page reorganized to the requirement's exact 5-row layout**: Header+Filters →
+   `ExecutiveSummaryCards` → `QuotationStatusSummary` (now full width, no longer paired with the
+   forecast chart) → `SalesActivityAnalytics` (full width) → `ActivityTimeline` ("Recent Activity
+   Details"). `SalesPerformancePanel`, `ActivityFollowUpSummary`, and `ExpectedSalesForecastChart`
+   — real, still-computed, filter-aware data, just not named in this requirement's required-5 list
+   — moved into the existing "supporting detail" section below, per the requirement's own
+   instruction to "focus first on the exact required business information" and move anything else
+   lower. **Nothing was deleted** — same components, same data, different position on the page.
+4. **Sales Activity Analytics gained a per-salesperson breakdown table** ("สรุปตามพนักงานขาย" —
+   ช่วงเวลา/พนักงานขาย/เปิดใบเสนอราคาใหม่/แก้ไขใบเสนอราคาเก่า/กิจกรรมรวม columns), a genuinely new
+   feature: `api/dashboard/index.ts`'s `salesActivity` aggregation now also buckets by
+   `(period, salesperson)`, not just by period — Created/Edited only (the 2 event types this
+   requirement explicitly names), distinct from the 5-category stacked chart above it. Only
+   non-zero rows are returned (no combinatorial zero-row explosion across every period × every
+   salesperson). **Bug caught and fixed during implementation**: an early version of this
+   aggregation joined `period` and `salesperson` into one string key (`` `${period} ${salesperson}` ``)
+   and split it back apart later — Thai full names routinely contain a space (e.g. "สมชาย ธนากร"),
+   which would have silently truncated names on split. Fixed with a proper nested `Map<period,
+   Map<salesperson, counts>>` instead of any string join/split. A related literal NUL-byte
+   (`\x00`) corruption was also found and fixed in the same block, introduced by an earlier
+   editing pass in this session — verified clean via a full-file scan before proceeding.
+5. **Recent Activity Details (`ActivityTimeline.tsx`) rebuilt as a proper table** (was a card
+   list) with the requirement's exact columns — วันที่/พนักงานขาย/กิจกรรม/ใบเสนอราคา/ลูกค้า — and
+   the quotation number is now a clickable link that opens the quotation directly (`onOpenQuote`,
+   threaded from `App.tsx`'s existing `navigateToQuotation()`, previously only wired to
+   `NotificationBell`). **Backend addition**: `writeQuoteAuditEntry()` (`api/handlers/quotes.ts`)
+   now optionally stores structured `relatedQuoteId`/`relatedCustomerName` fields on every
+   quote-workflow audit entry (Created/Updated/Duplicated/every workflow transition) — the
+   quotation number and customer name were already embedded in the entry's free-text `details`
+   string, but the Dashboard needs them as real fields to render as columns/a link instead of
+   parsing prose. Backward-compatible: `AuditLogEntry`'s 2 new fields are optional, older entries
+   and non-quote modules (Users/Roles/Settings/Login) simply render "—" for both.
+6. **New `audit_log` index**: `{ action: 1, createdAt: -1 }` — the Sales Activity query now scans
+   5 action values (was 2, see the sixth pass below) and commonly runs with no `userName` filter
+   ("All Sales" selected), which the existing `{ userName: 1, createdAt: -1 }` index can't serve.
+7. **Database/index requirements not applicable to the current schema**: the requirement's
+   suggested `quotations.salespersonId`/`departmentId`/`isDeleted`/`createdAt`/`updatedAt` indexes
+   don't apply — this schema uses free-text `salesperson` (no ID/FK), has no `departmentId` (department
+   is resolved via `User.department` free-text join, documented in DATABASE.md), no soft-delete
+   flag, and `Quote` has no `createdAt`/`updatedAt` timestamp fields at all (a pre-existing, already
+   tracked gap — see TODO.md). Indexing non-existent fields wasn't attempted; see DATABASE.md for
+   the actual schema.
+8. **Verification**: same environment constraint as every same-day pass this session (no local
+   backend). `npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build`
+   all pass clean. Visually verified via an isolated Playwright preview composing the real
+   `ExecutiveSummaryCards`/`QuotationStatusSummary`/`SalesActivityAnalytics`/`ActivityTimeline`
+   components with representative mock data (including 2 salespeople with space-containing Thai
+   names, specifically to exercise the bucketing-bug fix) at 1440px (all 5 sections render in the
+   exact requested order, per-salesperson table and clickable quotation links both work, no
+   overlapping labels) and 390px (clean stacking, Recent Activity table scrolls horizontally
+   within its existing wrapper, consistent with every other Dashboard table).
+9. Docs updated: this file, CLAUDE.md, PROJECT_STATUS.md, TODO.md, DATABASE.md, API.md,
+   UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md.
+
+---
+
 ## 2026-07-13 — Fix Codex-review High Priority Dashboard data/filter issues (sixth same-day pass)
 
 **Scope**: a follow-up independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) of the fifth pass

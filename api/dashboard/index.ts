@@ -27,8 +27,18 @@ const TERMINAL_STATUSES = new Set([WON_STATUS, LOST_STATUS, CANCELLED_STATUS]);
  * does still need to treat Customer Rejected as its own live pipeline stage, not a terminal one.
  */
 const CLOSED_STATUSES = new Set([...TERMINAL_STATUSES, CUSTOMER_REJECTED_STATUS]);
-/** "Closed without success," per the Dashboard spec's Non-Active Jobs definition — Lost, Customer Rejected, Cancelled. Won is a success and Active statuses are still in play, so neither belongs here. */
-const NON_ACTIVE_OUTCOME_STATUSES = new Set([LOST_STATUS, CUSTOMER_REJECTED_STATUS, CANCELLED_STATUS]);
+/**
+ * "Closed without success, and not already its own row" — Customer Rejected, Cancelled. Won is a
+ * success and Active statuses are still in play, so neither belongs here. **Lost (เสียโอกาส) is
+ * deliberately excluded**, even though it's also "closed without success" — 2026-07-13, fixing a
+ * Codex-flagged bug where `เสียโอกาส` counted in *both* the Lose row and the Non-Active row of
+ * `QuotationStatusSummary`'s donut/table, so the 4 rows' counts summed to more than `docs.length`
+ * and their percentages (each row ÷ the 4-row sum) didn't add up to 100% — a real correctness bug
+ * for an executive-facing summary, not just a documentation nit. With Lost excluded here, Won +
+ * Lost + Active + Non-Active are a true partition of every quote status (see the exhaustive check
+ * in `nonActiveDocs` below) — every quote counts in exactly one of the four rows now.
+ */
+const NON_ACTIVE_OUTCOME_STATUSES = new Set([CUSTOMER_REJECTED_STATUS, CANCELLED_STATUS]);
 /** Display order — matches QuoteList.tsx's `statuses` array. */
 const PIPELINE_ORDER = [
   "ร่าง", "รออนุมัติ", "อนุมัติแล้ว", "ส่งให้ลูกค้าแล้ว",
@@ -83,6 +93,10 @@ async function ensureQuoteAnalyticsIndexes(
     quotes.createIndex({ isPotentialOpportunity: 1, status: 1, expiryDate: 1 }),
     // Supports the newly filter-aware Activity Timeline query above (userName + createdAt range).
     auditLog.createIndex({ userName: 1, createdAt: -1 }),
+    // Supports the salesActivity query (2026-07-13, P'Keng/P'Kee pass: expanded from 2 to 5
+    // ACTIVITY_ACTIONS values, and commonly runs with "All Sales" selected — i.e. filtered by
+    // `action` alone, with no `userName` for the {userName,createdAt} index above to serve).
+    auditLog.createIndex({ action: 1, createdAt: -1 }),
   ]);
   quoteAnalyticsIndexesEnsured = true;
 }
@@ -394,8 +408,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const activeDocs = docs.filter((q) => !CLOSED_STATUSES.has(q.status) && !isExpired(q));
     const activeQuotations = activeDocs.length;
     const expiredQuotations = docs.filter(isExpired).length;
-    // Non-Active Jobs: cancelled, expired, rejected, or closed without success (Lost) — Won is a
-    // success and doesn't belong here; still-active-and-unexpired quotes don't either.
+    // Non-Active Jobs: cancelled, rejected, or expired-without-closing — Won and Lost each have
+    // their own row (see NON_ACTIVE_OUTCOME_STATUSES above for why Lost isn't folded in here too),
+    // and still-active-and-unexpired quotes don't belong here either. Exhaustive check: every
+    // QuoteStatus is exactly one of {the 5 Active-eligible statuses, Won, Lost, Customer Rejected,
+    // Cancelled} — Active claims the 5 minus any that are expired, Won/Lost claim their own status,
+    // and this line claims Customer Rejected + Cancelled + the expired remainder — so Won + Lost +
+    // Active + Non-Active always sums to exactly `docs.length`, a true partition, not an overlap.
     const nonActiveDocs = docs.filter((q) => NON_ACTIVE_OUTCOME_STATUSES.has(q.status) || isExpired(q));
     const nonActiveQuotations = nonActiveDocs.length;
     // Value sums for the Quotation Status Summary panel — deliberately reuse the *exact* same
@@ -620,11 +639,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     const zeroActivity = (): Record<ActivityCategory, number> =>
       ({ created: 0, edited: 0, statusChanged: 0, approvalRequested: 0, approvalCompleted: 0 });
+    type BySalespersonRow = { period: string; salesperson: string; created: number; edited: number };
     let salesActivity: {
       weekly: ({ period: string } & Record<ActivityCategory, number>)[];
       monthly: ({ period: string } & Record<ActivityCategory, number>)[];
       quarterly: ({ period: string } & Record<ActivityCategory, number>)[];
       yearly: ({ period: string } & Record<ActivityCategory, number>)[];
+      // Per-salesperson breakdown (2026-07-13, P'Keng/P'Kee business requirement) — deliberately
+      // just Created/Edited (the 2 activity types the requirement names), not all 5 categories the
+      // chart above tracks. Only non-zero rows are included (a salesperson with zero activity in a
+      // given period doesn't get a row) — zero-filling this would be a combinatorial explosion of
+      // empty rows across every period × every salesperson who ever appears in the audit log.
+      bySalesperson: {
+        weekly: BySalespersonRow[]; monthly: BySalespersonRow[]; quarterly: BySalespersonRow[]; yearly: BySalespersonRow[];
+      };
     } | null = null;
     if (roleHasPermission(ctx.role, "auditLog:view")) {
       const activityMatch: Record<string, unknown> = { action: { $in: [...ACTIVITY_ACTIONS] } };
@@ -638,7 +666,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           Object.assign(activityMatch, deptCond);
         }
       }
-      const activityDocs = await auditLog.find(activityMatch, { projection: { action: 1, createdAt: 1 } }).toArray();
+      const activityDocs = await auditLog.find(activityMatch, { projection: { action: 1, createdAt: 1, userName: 1 } }).toArray();
       const bucket = <T extends string>(keyFn: (d: Date) => T) => {
         const map = new Map<T, Record<ActivityCategory, number>>();
         for (const d of activityDocs) {
@@ -649,17 +677,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         return map;
       };
+      const bucketBySalesperson = <T extends string>(keyFn: (d: Date) => T) => {
+        // Keyed by (period, salesperson) via a nested Map, not a joined/split string - Thai full
+        // names routinely contain a space (e.g. "somchai thanakon"), which would silently corrupt
+        // a naive period-space-salesperson-then-split round trip.
+        const map = new Map<string, Map<string, { created: number; edited: number }>>();
+        for (const d of activityDocs) {
+          const category = categoryForAction(d.action);
+          if (category !== "created" && category !== "edited") continue;
+          const period: string = keyFn(new Date(d.createdAt));
+          const salesperson = d.userName || "-";
+          const byPerson = map.get(period) ?? new Map<string, { created: number; edited: number }>();
+          const entry = byPerson.get(salesperson) ?? { created: 0, edited: 0 };
+          entry[category] += 1;
+          byPerson.set(salesperson, entry);
+          map.set(period, byPerson);
+        }
+        return [...map.entries()]
+          .flatMap(([period, byPerson]) => [...byPerson.entries()].map(([salesperson, counts]) => ({ period, salesperson, ...counts })))
+          .sort((a, b) => (a.period === b.period ? (b.created + b.edited) - (a.created + a.edited) : b.period.localeCompare(a.period)));
+      };
       const weekMap = bucket((d) => isoWeekKey(d) as string);
       const monthMap = bucket((d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
       const quarterMap = bucket((d) => quarterKey(d.getUTCFullYear(), d.getUTCMonth()));
       const yearMap = bucket((d) => String(d.getUTCFullYear()));
       const zeroFill = <T extends string>(keys: T[], map: Map<T, Record<ActivityCategory, number>>) =>
         keys.map((period) => ({ period, ...(map.get(period) ?? zeroActivity()) }));
+      const weekKeys = new Set(lastNWeekKeys(12, trendAnchor));
+      const monthKeys = new Set(lastNMonthKeys(MONTHS_BACK, trendAnchor));
+      const quarterKeys = new Set(lastNQuarterKeys(8, trendAnchor));
+      const yearKeys = new Set(lastNYearKeys(5, trendAnchor));
       salesActivity = {
         weekly: zeroFill(lastNWeekKeys(12, trendAnchor), weekMap),
         monthly: zeroFill(lastNMonthKeys(MONTHS_BACK, trendAnchor), monthMap),
         quarterly: zeroFill(lastNQuarterKeys(8, trendAnchor), quarterMap),
         yearly: zeroFill(lastNYearKeys(5, trendAnchor), yearMap),
+        bySalesperson: {
+          weekly: bucketBySalesperson((d) => isoWeekKey(d) as string).filter((r) => weekKeys.has(r.period)),
+          monthly: bucketBySalesperson((d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`).filter((r) => monthKeys.has(r.period)),
+          quarterly: bucketBySalesperson((d) => quarterKey(d.getUTCFullYear(), d.getUTCMonth())).filter((r) => quarterKeys.has(r.period)),
+          yearly: bucketBySalesperson((d) => String(d.getUTCFullYear())).filter((r) => yearKeys.has(r.period)),
+        },
       };
     }
 
