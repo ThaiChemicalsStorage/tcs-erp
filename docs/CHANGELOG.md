@@ -4,6 +4,144 @@
 
 ---
 
+## 2026-07-13 — Fix Codex-review High Priority Dashboard data/filter issues (sixth same-day pass)
+
+**Scope**: a follow-up independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) of the fifth pass
+found **zero Critical issues** and 4 High Priority issues — all data/filter-correctness bugs, not
+visual regressions (the review explicitly confirmed the 4-card KPI summary, the funnel-chart
+removal, Expected Sales, and the sidebar overflow fix are all already correct). Fixed all 4:
+
+1. **Sales Activity Analytics now tracks all 5 requested event categories**, not just 2. Previously
+   `api/dashboard/index.ts`'s `salesActivity` aggregation only counted `"Quotation Created"`/
+   `"Quotation Updated"`. Added a `categoryForAction()` mapping covering every audit action
+   `writeQuoteAuditEntry()` can write: `"Quotation Submitted"` → Approval Requested,
+   `"Quotation Approved"` → Approval Completed, `"Quotation Rejected"` + the generic
+   `"Status Changed"` → Status Changed (both are "the quote's status field changed," not a content
+   edit). `SalesActivityAnalytics.tsx` now renders all 5 as a **stacked** bar chart (not 5 grouped
+   bars per period, which would have tripled the visual density this section exists to avoid) plus
+   a matching 6-column table. `SalesActivityPeriod`/`SalesActivityTrend` types (`lib/dashboard.ts`)
+   extended to match.
+2. **The Sales Activity/Revenue Trend "rolling window, doesn't honor the filter's start date"
+   behavior is now stated in the UI**, not silent. Both trend widgets were already correctly
+   anchoring their *end* to the filter's `to` date (or today) while intentionally showing a fixed
+   trailing window regardless of `from` — a deliberate design so a "last 12 months" trend chart
+   doesn't collapse to 1-2 points when a user picks a narrow date range. The review flagged the
+   *silence* about this as misleading, not the behavior itself (both options — fully honor `from`,
+   or label clearly — were offered; forcing full compliance would break the trend charts'
+   usefulness, so labeling was the fix that didn't touch the underlying "don't remove business
+   logic" trend-window design). `dashboard.salesActivity.sub`/`dashboard.chart.revenue.sub` now
+   say so explicitly in Thai and English.
+3. **Every other deliberately-unfiltered widget now says so in the UI too**: `ProductsByCategoryChart`
+   ("all time, not filtered" — it's a catalog snapshot, not quotation activity), `NotificationSummary`
+   (new caption: "your personal data — not affected by dashboard filters"), and the forecast panel's
+   win-rate baseline (`dashboard.forecast.basedOn` reworded to "based on **company-wide**
+   historical win rate," making explicit that the baseline is deliberately not salesperson-scoped
+   for statistical stability — already true and already documented in code comments, just not
+   visible in the UI). No filtering logic changed — only added labels, per the review's own
+   "either apply the filter everywhere or label clearly" framing and this task's "do not remove
+   business logic" instruction.
+4. **Fixed `QuotationStatusSummary`'s count/value population mismatch.** The panel's Won/Lost/
+   Active/Non-Active table used to derive its *value* column by summing the `pipeline` prop's
+   per-stage totals grouped by raw status — which doesn't carve out expired-but-unclosed quotes
+   the way the Active/Non-Active *counts* do (from `DashboardKpis`), so a row could show a count
+   that excludes an expired quote sitting right next to a value that still included its amount.
+   Fixed at the source: `api/dashboard/index.ts` now computes `lostValue`/`activeQuotationsValue`/
+   `nonActiveQuotationsValue` using the *exact same* predicates as their matching count fields
+   (`lostDocs`/`activeDocs`/`nonActiveDocs`), returned as new `DashboardKpis` fields. `Quotation
+   StatusSummary.tsx` now reads these directly instead of approximating from `pipeline` — the
+   `pipeline` prop is no longer needed by this component at all, so it was dropped from its props
+   and from the `DashboardPage.tsx` call site. Count and value now always describe the same
+   population, no more approximation to document.
+5. **Verified already-correct, not touched**: exactly 4 primary KPI cards, no huge card wall
+   (confirmed by the review's own source read); the old funnel chart stays gone (`PipelineSteps.tsx`
+   untouched); Expected Sales visible and computed as the literal "Potential Opportunity" rule;
+   Win/Lose/Active/Non-Active visible in `QuotationStatusSummary`; sidebar overflow fix, mobile
+   drawer, and Noto Sans Thai typography unchanged (`git diff --stat` confirmed zero changes to
+   `BrandMark.tsx`/`App.tsx`/`styles/{theme,index,fonts}.css`).
+6. **Verification**: same environment constraint as every prior same-day pass (no local backend).
+   `npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json` (the backend `api/dashboard/index.ts`
+   change needed this too), `npm run lint`, and `npm run build` all pass clean. Visually verified
+   via an isolated Playwright preview composing the real `QuotationStatusSummary` (no `pipeline`
+   prop), `SalesActivityAnalytics` (5-category stacked chart), `RevenueTrendChart`,
+   `ProductsByCategoryChart`, `ExpectedSalesForecastChart`, and `NotificationSummary` with
+   representative mock data reflecting the new `DashboardKpis` fields (deleted before finishing),
+   at 1440px (all new captions/labels visible, stacked chart readable, no overlapping labels) and
+   390px (chart and 6-column table both remain usable, table scrolls horizontally within its
+   existing wrapper, no page-level overflow).
+7. **Not done this pass** (Medium/Low priority per the review, not requested): supporting-detail
+   area still requires scrolling (no collapse control); Overdue Follow-ups/Expired Quotations
+   task tiles still aren't clickable (no matching date-derived quotation-list filter exists to
+   link to); `ActivityTimeline` still has no structured related-record field (`details` is free
+   text); charts still don't have a non-visual tabular fallback beyond the ones that already
+   double as a table (Sales Activity, Quotation Status); repeated inline Playfair/color style
+   objects across Dashboard components not consolidated into shared tokens.
+8. Docs updated: this file, CLAUDE.md (`docs/CLAUDE.md`'s module table), PROJECT_STATUS.md,
+   TODO.md, UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/Dashboard.md.
+
+---
+
+## 2026-07-13 — Reorder Dashboard into the full 7-section structure (fifth same-day pass)
+
+**Scope**: a fully-specified follow-up to the fourth pass — the same underlying request (simplify,
+don't add large cards, don't remove business logic), but this time naming the exact 7 top-level
+sections wanted, in order, and 2 concrete content gaps: Sales Activity Analytics needed to be a
+named top-level section (it existed but was buried in the "supporting detail" area below the
+fold), and Sales Performance needed Active/Non-Active Quotations added to its metric list.
+
+1. **`SalesActivityAnalytics` promoted from "supporting detail" into the top overview**, now
+   sitting between `SalesPerformancePanel` and `ActivityFollowUpSummary` — matching the requested
+   order exactly (Executive Summary → Quotation Status → Sales Performance → Sales Activity
+   Analytics → Tasks/Follow-up/Approvals → Recent Activities). No changes to the component itself
+   or its underlying data — same filter-aware Created/Edited trend chart + period table, still
+   respects the global date/department/salesperson filters server-side, still has its own
+   `hasData` empty state (no fake charts on empty data).
+2. **`SalesPerformancePanel.tsx` gained Active Quotations and Non-Active Quotations** (now 8
+   metrics in a `grid-cols-2 sm:grid-cols-4` layout, was 6 in `grid-cols-2 sm:grid-cols-3`) — the
+   requested example table listed these two counts alongside the 6 rate/cycle-time metrics.
+   They're also shown in `QuotationStatusSummary`'s table (a different view — per-status
+   count/value/share vs. this panel's flat metric list); showing both isn't a duplication bug,
+   it's two different useful cuts of the same numbers, matching what was explicitly requested.
+3. **Expected Sales helper text reworded** to lead with the requested exact phrase ("เฉพาะใบเสนอราคา
+   ที่เซลส์ติ๊กว่างานนี้น่าสนใจ") while keeping the "regardless of status" qualifier — that qualifier
+   is load-bearing (Expected Sales genuinely does include closed/lost quotes still flagged
+   Potential Opportunity, not just active ones), so it wasn't dropped for the sake of matching the
+   shorter requested wording exactly.
+4. **Verified, not changed** (all already true from prior passes, re-confirmed this pass):
+   - Page title "ภาพรวมผู้บริหาร" / subtitle "ข้อมูลแบบเรียลไทม์จากฐานข้อมูล" — exact match already.
+   - The old broken funnel chart is gone — `PipelineSteps.tsx` (horizontal step cards, "Option A"
+     from the request) has been the pipeline visualization since 2026-07-10; it wasn't touched
+     this pass and was never reverted to the funnel shape.
+   - Sidebar overflow fix, mobile drawer, and Noto Sans Thai typography — unchanged since the
+     first same-day pass, confirmed via `git diff --stat` showing zero changes to `BrandMark.tsx`,
+     `App.tsx`, or `styles/{theme,index,fonts}.css`.
+   - Empty states — every section already guards on its own `hasData`/`hasAnyData` check before
+     rendering a chart/table, falling back to a real `EmptyState` component (no fake data, no
+     broken blank charts) — this predates this pass, not newly added.
+5. **Verification**: same environment constraint as the prior 4 same-day passes (no local
+   backend). Built a throwaway isolated preview composing all 7 real section components with
+   representative mock data (deleted before finishing) in the exact requested order, verified via
+   Playwright at 1440px (full page: header/filters → 4 KPI cards → status donut+table → forecast
+   → 8-metric performance grid → activity trend chart+table → 4-tile task row → recent-activity
+   list, no overlapping labels, no blank/broken charts) and 390px (clean single/2-column mobile
+   stacking, no horizontal overflow). `npx tsc -b`, `npm run lint`, and `npm run build` all pass
+   clean.
+6. **Not done this pass** (flagged for a future pass / Codex review, see "What Codex should
+   review next" in the final summary): `SalesActivityAnalytics` still only tracks 2 event
+   categories (Created/Edited) against the 5 the request described (also Status Changed, Approval
+   Requested, Approval Completed) — the underlying `audit_log` actions already distinguish these
+   (`writeQuoteAuditEntry()` records "Submitted"/"Approved"/"Rejected"/"Status Changed" alongside
+   "Quotation Created"/"Quotation Updated"), so extending the `api/dashboard/index.ts` aggregation
+   to bucket by these categories is feasible, but wasn't attempted this pass — it's a backend
+   aggregation change with no live-data path to verify against in this sandboxed session, and
+   wasn't one of the explicit "Manual Website Verification" checklist items. Similarly, "Recent
+   Activities" showing a structured "related quotation/customer" column (vs. today's free-text
+   `details` field, which already contains this info as text) wasn't restructured — would need an
+   `AuditLogEntry` schema change, out of scope for a display-reorganization pass.
+7. Docs updated: this file, CLAUDE.md, PROJECT_STATUS.md, TODO.md, UI_GUIDELINES.md,
+   IMPLEMENTATION_CHECKLIST.md.
+
+---
+
 ## 2026-07-13 — Simplify the Dashboard overview into 5 compact sections (fourth same-day pass)
 
 **Scope**: further direct user feedback — even the flat 22-card `KpiGrid.tsx` from the previous

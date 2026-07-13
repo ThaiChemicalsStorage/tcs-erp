@@ -11,6 +11,8 @@ export interface DashboardKpis {
   expectedSales: number;
   wonDeals: number;
   lostDeals: number;
+  /** Total amount of `lostDeals` — same predicate (`status === LOST_STATUS`) as the count, so this and `closedSales` (Won's value) are always population-consistent with their respective counts. */
+  lostValue: number;
   averageDealSize: number;
   winRate: number;
   loseRate: number;
@@ -20,9 +22,13 @@ export interface DashboardKpis {
   /** Days, average of (marked-won timestamp - first approval-history entry) across won quotes. Null when there are no won quotes in the filtered set. */
   averageClosingTime: number | null;
   activeQuotations: number;
+  /** Total amount of `activeQuotations` — same exact predicate (not-closed and not expired) as the count, added 2026-07-13 so `QuotationStatusSummary`'s count and value columns always describe the same population (previously the value column approximated from `PipelineStage` per-status totals, which don't carve out expired-but-unclosed quotes the way this count does). */
+  activeQuotationsValue: number;
   expiredQuotations: number;
   /** Cancelled, expired, Customer Rejected, or Lost — "closed without success." Won and still-active-unexpired quotes are excluded. */
   nonActiveQuotations: number;
+  /** Total amount of `nonActiveQuotations` — same exact predicate as the count, see `activeQuotationsValue`. */
+  nonActiveQuotationsValue: number;
   /** Count of quotations currently awaiting approval — visible regardless of `quotations:approve` (unlike the actionable `ApprovalDashboard.pendingList`, this is just a count). */
   pendingApprovals: number;
   overdueFollowups: number;
@@ -102,10 +108,18 @@ export interface RevenueTrend {
   yearly: RevenuePeriod[];
 }
 
+/**
+ * 2026-07-13: expanded from {created, edited} to all 5 quotation workflow event categories a
+ * Codex review flagged as required — see `categoryForAction()` in `api/dashboard/index.ts` for
+ * the exact audit-action → category mapping.
+ */
 export interface SalesActivityPeriod {
   period: string;
   created: number;
   edited: number;
+  statusChanged: number;
+  approvalRequested: number;
+  approvalCompleted: number;
 }
 
 export interface SalesActivityTrend {

@@ -15,15 +15,19 @@ Last Quotation Date, full sortability), and Won/Lost-aware Average Closing Time;
 independent Codex review (third pass, same day) — see CHANGELOG.md for that pass's detail; then
 **visually redesigned** (fourth pass, same day) — the flat KPI grid was split into a tiered
 hero-card/mini-card hierarchy and the funnel-shaped pipeline chart (labels overlapping, reading
-as unprofessional) was replaced with horizontal pipeline step cards. **2026-07-13, two more
+as unprofessional) was replaced with horizontal pipeline step cards. **2026-07-13, three more
 same-day passes**: the tiered KPI hierarchy was reverted back to a single flat `KpiGrid` (first
-pass), then further user feedback that even the flat 22-card grid still read as cluttered led to
-a full reorganization into 4 primary KPI cards (`ExecutiveSummaryCards.tsx`) plus 3 compact panels
-(`QuotationStatusSummary`, `SalesPerformancePanel.tsx`, `ActivityFollowUpSummary.tsx`) at the top
-of the page, with every other redesign-added section (pipeline step cards, `SalesActivityAnalytics`,
-rankings, actionable approval/follow-up lists) kept exactly as-is below an "In-Depth Detail"
-divider (second pass). See "Pages / Components" below for the current shape, and CHANGELOG.md for
-both passes' full writeup. Driven by the Job Type/Potential Opportunity/Follow-up Date fields added
+pass); further feedback that even the flat 22-card grid still read as cluttered led to a
+reorganization into 4 primary KPI cards (`ExecutiveSummaryCards.tsx`) plus 2 compact panels
+(`SalesPerformancePanel.tsx`, `ActivityFollowUpSummary.tsx`) alongside `QuotationStatusSummary`,
+with pipeline step cards/`SalesActivityAnalytics`/rankings/actionable approval-follow-up lists
+moved below an "In-Depth Detail" divider (second pass); a fully-specified 7-section order then
+promoted `SalesActivityAnalytics` back into the top overview (between `SalesPerformancePanel` and
+`ActivityFollowUpSummary`) and added Active/Non-Active Quotations to `SalesPerformancePanel`
+(third pass). Pipeline step cards, rankings, actionable approval/follow-up lists, and the
+remaining charts stayed below the divider throughout. See "Pages / Components" below for the
+current shape, and CHANGELOG.md for all three passes' full writeup. Driven by the Job Type/
+Potential Opportunity/Follow-up Date fields added
 to `Quote` earlier the same day (see [Quotation.md](./Quotation.md)).
 
 ## Business Flow
@@ -105,16 +109,30 @@ documented rather than silently assumed:
   Sales, Expected Sales), the only "KPI card" tier on the page. `MetricInfoTooltip` only on
   Expected Sales (the one non-obvious calculation among the 4).
 - `SalesPerformancePanel.tsx` — Win/Lose/Conversion Rate, Average Deal Size, Average
-  Approval/Closing Time as a compact label/value grid inside one `ChartCard`, not individual cards.
+  Approval/Closing Time, and (added 2026-07-13, third pass) Active/Non-Active Quotations — 8
+  metrics as a compact label/value grid inside one `ChartCard`, not individual cards.
+- `SalesActivityAnalytics.tsx` — quotation activity as a **stacked** bar chart + period table,
+  week/month/quarter/year tabs, filtered server-side by salesperson/department (not the date
+  filter's start — see "Filter Honesty" in UI_GUIDELINES.md). Positioned right after
+  `SalesPerformancePanel` in the top overview (moved here 2026-07-13, fifth pass — previously
+  below the "In-Depth Detail" divider). **2026-07-13, sixth pass**: expanded from 2 tracked
+  categories (Created/Edited) to all 5 an independent review flagged as required — Created,
+  Edited, Status Changed, Approval Requested, Approval Completed — via `categoryForAction()` in
+  `api/dashboard/index.ts`, mapping every audit action `writeQuoteAuditEntry()` can write.
 - `ActivityFollowUpSummary.tsx` — Pending Approvals, Overdue Follow-ups, Expired Quotations, New
   Customers as a compact 4-tile row inside one `ChartCard`; only Pending Approvals is clickable
   (navigates to the quotation list filtered to that status) since it's the only one with a real
   single-status filter to jump to.
 - `QuotationStatusSummary.tsx` (added 2026-07-10, replaces `DashboardCharts.tsx`'s
   `QuotationStatusDonut` + `WinLoseDonut`) — one Win/Lose/Active/Non-Active donut + table (Status/
-  Count/Value/Percentage columns, the last added 2026-07-13). Counts are the same numbers as the
-  KPI cards (can never visually disagree); per-bucket value is a documented approximation summed
-  from the filtered pipeline's per-stage totals.
+  Count/Value/Percentage columns, the last added 2026-07-13). Takes only a `kpis` prop (no
+  `pipeline`, dropped 2026-07-13, sixth pass). Both count and value now come straight from
+  `DashboardKpis` fields (`closedSales`/`lostValue`/`activeQuotationsValue`/
+  `nonActiveQuotationsValue`) computed server-side with the *identical* predicate as their
+  matching count — **previously** the value column was approximated by summing the `pipeline`
+  prop's per-stage totals, which didn't carve out expired-but-unclosed quotes the way the counts
+  did (an independent review correctly flagged this as a count/value population mismatch); now
+  fixed at the source, no approximation left to document.
 
   **KPI presentation history**: originally a single flat `KpiGrid.tsx` (22 uniform cards). 2026-07-10
   (UI/UX redesign) split it into two tiers — `PrimaryKpiCards.tsx` (6 hero cards) +

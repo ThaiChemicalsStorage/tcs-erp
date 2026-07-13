@@ -4,6 +4,13 @@
 
 ## High Priority
 
+- [x] ~~Sales Activity Analytics only tracks 2 of the 5 requested event categories~~ — **done 2026-07-13** (sixth same-day pass, flagged by an independent Codex review as High Priority): `api/dashboard/index.ts`'s `salesActivity` aggregation now buckets by `categoryForAction()` into all 5 (Created/Edited/Status Changed/Approval Requested/Approval Completed), rendered as a stacked bar chart in `SalesActivityAnalytics.tsx`. See CHANGELOG.md.
+- [ ] **Dashboard "Recent Activities" has no structured "related quotation/customer" field.** `AuditLogEntry.details` is free text that usually contains the quotation number/client name (e.g. "QT-2026-0142 · ลูกค้า: ..."), but there's no dedicated `relatedQuoteId`/`relatedCustomer` field to render as its own column/badge or to link from. Would need an `AuditLogEntry` schema addition, not just a display change — flagged 2026-07-13, not attempted.
+- [ ] **Medium/Low Priority items deferred from the 2026-07-13 sixth-pass Codex review** (data/filter-correctness review, `docs/CODEX_REVIEW_REPORT.md` — distinct from the earlier UI/UX review bucketed below) — the Critical (none found) + High items were fixed the same day (see CHANGELOG.md):
+  - Overdue Follow-ups/Expired Quotations task tiles (`ActivityFollowUpSummary.tsx`) still aren't clickable — no matching date-derived quotation-list filter exists to link to yet.
+  - Supporting-detail area (below the "In-Depth Detail" divider) still requires substantial scrolling — no collapse/expand control.
+  - Charts without an equivalent full data table (forecast, revenue trend) — Sales Activity and Quotation Status already double as a table.
+  - Repeated inline Playfair Display/color `style={{...}}` objects across Dashboard components — not consolidated into shared typography/color tokens.
 - [ ] **Medium/Low Priority UI items deferred from the 2026-07-13 Codex review** (`docs/CODEX_REVIEW_REPORT.md`) — the Critical + High items were fixed the same day (see CHANGELOG.md), these were explicitly scoped out:
   - Topbar search is decorative (no state/filtering/results) — either wire it up or remove the input to stop implying it works.
   - Notification delete button is hover-only (`opacity-0 group-hover:opacity-100`) — no persistent affordance for touch/keyboard users.

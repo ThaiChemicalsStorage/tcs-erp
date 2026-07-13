@@ -391,11 +391,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // own expiry date*. An expired-but-unclosed quote isn't really "active" anymore even though its
     // status hasn't changed, so it's carved out here and counted under Non-Active Jobs instead.
     const isExpired = (q: QuoteCalcDoc) => !CLOSED_STATUSES.has(q.status) && !!q.expiryDate && q.expiryDate < today;
-    const activeQuotations = docs.filter((q) => !CLOSED_STATUSES.has(q.status) && !isExpired(q)).length;
+    const activeDocs = docs.filter((q) => !CLOSED_STATUSES.has(q.status) && !isExpired(q));
+    const activeQuotations = activeDocs.length;
     const expiredQuotations = docs.filter(isExpired).length;
     // Non-Active Jobs: cancelled, expired, rejected, or closed without success (Lost) — Won is a
     // success and doesn't belong here; still-active-and-unexpired quotes don't either.
-    const nonActiveQuotations = docs.filter((q) => NON_ACTIVE_OUTCOME_STATUSES.has(q.status) || isExpired(q)).length;
+    const nonActiveDocs = docs.filter((q) => NON_ACTIVE_OUTCOME_STATUSES.has(q.status) || isExpired(q));
+    const nonActiveQuotations = nonActiveDocs.length;
+    // Value sums for the Quotation Status Summary panel — deliberately reuse the *exact* same
+    // `activeDocs`/`nonActiveDocs`/`lostDocs` predicates as the counts above (2026-07-13, fixing a
+    // Codex-flagged population mismatch: the panel used to derive its value column by summing
+    // `pipeline` per-stage totals grouped by raw status, which doesn't carve out expired-but-
+    // unclosed quotes the way the KPI counts do — so a row could show an Active *count* that
+    // excludes expired quotes next to an Active *value* that still includes them). Won's value is
+    // `closedSales` (already computed above, same predicate as `wonDeals`) — no separate field.
+    const lostValue = lostDocs.reduce((s, q) => s + q.amount, 0);
+    const activeQuotationsValue = activeDocs.reduce((s, q) => s + q.amount, 0);
+    const nonActiveQuotationsValue = nonActiveDocs.reduce((s, q) => s + q.amount, 0);
     const pendingApprovals = docs.filter((q) => q.status === PENDING_APPROVAL_STATUS).length;
     // overdueFollowups is derived from `followUps.overdue` below (not recomputed from `docs`) — the KPI
     // card and the Follow-Up Reminders panel share the exact same filtered follow-up set so they can
@@ -578,18 +590,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       activityTimeline = entries.map(withStringId);
     }
 
-    // ── Sales activity analytics — quotation Created/Updated counts, trailing week/month/quarter/year ──
+    // ── Sales activity analytics — 5 quotation event categories, trailing week/month/quarter/year ──
     // Same gate as Activity Timeline (both read `audit_log`); same userName-based salesperson/
-    // department match as everywhere else in this file, but deliberately unbounded by the date-range
-    // filter — a rolling trend window, same rationale as `revenueTrend` above.
+    // department match as everywhere else in this file, but deliberately unbounded by the *start*
+    // of the date-range filter — a rolling trend window anchored to `to` (see `trendAnchor` above),
+    // same rationale as `revenueTrend`: a "trend over time" chart needs a real trailing window of
+    // history to be readable, so narrowing `from` doesn't collapse it to 1-2 data points. The
+    // client surfaces this explicitly (see `dashboard.salesActivity.sub`) rather than silently
+    // ignoring `from` — a 2026-07-13 Codex review flagged the previous silence as misleading.
+    //
+    // 5 categories, not just Created/Edited (also 2026-07-13, same review): every quote-workflow
+    // audit action `writeQuoteAuditEntry()` (api/handlers/quotes.ts) can write is bucketed —
+    // "Quotation Submitted"/"Quotation Approved" map to their own named categories (Approval
+    // Requested/Completed) since those are workflow milestones distinct from a content edit;
+    // "Quotation Rejected" and the generic "Status Changed" (every other workflow transition —
+    // Sent to Customer, Customer Accepted/Rejected, Won, Lost, Cancelled) both bucket into
+    // `statusChanged` since they're all "the quote's status field changed," not a content edit.
+    const ACTIVITY_ACTIONS = [
+      "Quotation Created", "Quotation Updated",
+      "Quotation Submitted", "Quotation Approved", "Quotation Rejected", "Status Changed",
+    ] as const;
+    type ActivityCategory = "created" | "edited" | "statusChanged" | "approvalRequested" | "approvalCompleted";
+    const categoryForAction = (action: string): ActivityCategory => {
+      if (action === "Quotation Created") return "created";
+      if (action === "Quotation Updated") return "edited";
+      if (action === "Quotation Submitted") return "approvalRequested";
+      if (action === "Quotation Approved") return "approvalCompleted";
+      return "statusChanged"; // "Quotation Rejected" + the generic "Status Changed"
+    };
+    const zeroActivity = (): Record<ActivityCategory, number> =>
+      ({ created: 0, edited: 0, statusChanged: 0, approvalRequested: 0, approvalCompleted: 0 });
     let salesActivity: {
-      weekly: { period: string; created: number; edited: number }[];
-      monthly: { period: string; created: number; edited: number }[];
-      quarterly: { period: string; created: number; edited: number }[];
-      yearly: { period: string; created: number; edited: number }[];
+      weekly: ({ period: string } & Record<ActivityCategory, number>)[];
+      monthly: ({ period: string } & Record<ActivityCategory, number>)[];
+      quarterly: ({ period: string } & Record<ActivityCategory, number>)[];
+      yearly: ({ period: string } & Record<ActivityCategory, number>)[];
     } | null = null;
     if (roleHasPermission(ctx.role, "auditLog:view")) {
-      const activityMatch: Record<string, unknown> = { action: { $in: ["Quotation Created", "Quotation Updated"] } };
+      const activityMatch: Record<string, unknown> = { action: { $in: [...ACTIVITY_ACTIONS] } };
       if (salespersonFilter && salespersonFilter !== "all") activityMatch.userName = salespersonFilter;
       if (salespeopleInDepartment) {
         const deptCond = { userName: { $in: [...salespeopleInDepartment] } };
@@ -602,11 +640,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       const activityDocs = await auditLog.find(activityMatch, { projection: { action: 1, createdAt: 1 } }).toArray();
       const bucket = <T extends string>(keyFn: (d: Date) => T) => {
-        const map = new Map<T, { created: number; edited: number }>();
+        const map = new Map<T, Record<ActivityCategory, number>>();
         for (const d of activityDocs) {
           const key = keyFn(new Date(d.createdAt));
-          const entry = map.get(key) ?? { created: 0, edited: 0 };
-          if (d.action === "Quotation Created") entry.created += 1; else entry.edited += 1;
+          const entry = map.get(key) ?? zeroActivity();
+          entry[categoryForAction(d.action)] += 1;
           map.set(key, entry);
         }
         return map;
@@ -615,8 +653,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const monthMap = bucket((d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
       const quarterMap = bucket((d) => quarterKey(d.getUTCFullYear(), d.getUTCMonth()));
       const yearMap = bucket((d) => String(d.getUTCFullYear()));
-      const zeroFill = <T extends string>(keys: T[], map: Map<T, { created: number; edited: number }>) =>
-        keys.map((period) => ({ period, ...(map.get(period) ?? { created: 0, edited: 0 }) }));
+      const zeroFill = <T extends string>(keys: T[], map: Map<T, Record<ActivityCategory, number>>) =>
+        keys.map((period) => ({ period, ...(map.get(period) ?? zeroActivity()) }));
       salesActivity = {
         weekly: zeroFill(lastNWeekKeys(12, trendAnchor), weekMap),
         monthly: zeroFill(lastNMonthKeys(MONTHS_BACK, trendAnchor), monthMap),
@@ -730,8 +768,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       kpis: {
         totalCustomers, totalLeads, totalProducts,
         totalQuotations, totalQuotationValue, closedSales, expectedSales,
-        wonDeals, lostDeals, averageDealSize, winRate, loseRate, conversionRate,
-        averageApprovalTime, averageClosingTime, activeQuotations, expiredQuotations, nonActiveQuotations,
+        wonDeals, lostDeals, lostValue, averageDealSize, winRate, loseRate, conversionRate,
+        averageApprovalTime, averageClosingTime, activeQuotations, activeQuotationsValue,
+        expiredQuotations, nonActiveQuotations, nonActiveQuotationsValue,
         pendingApprovals,
         overdueFollowups: followUps.overdue.length,
         newCustomers, repeatCustomers,

@@ -56,29 +56,34 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 /**
  * Executive Dashboard.
  *
- * **Top of page — the "answer in 5 seconds" overview** (2026-07-13, third simplification pass,
- * direct user request for exactly this 5-section shape): page title + compact filters,
- * `ExecutiveSummaryCards` (4 cards only — Total Quotations/Value, Closed/Expected Sales),
- * `QuotationStatusSummary` (Won/Lost/Active/Non-Active, one panel not 4 cards) + the forecast
- * chart, `SalesPerformancePanel` (rates + cycle times, a compact label/value grid not 6 cards),
- * `ActivityFollowUpSummary` (pending approvals/overdue follow-ups/expired/new customers, a
- * compact clickable-where-possible tile row not 4 more cards), then `ActivityTimeline` ("Recent
- * Work"). This replaces the flat 22-card `KpiGrid.tsx` (removed) — user feedback was that even a
- * single-tier 22-card grid still read as "a generated template" with no visual hierarchy.
+ * **Top of page — the "answer in 5 seconds" overview**, in the exact order requested 2026-07-13
+ * (fifth same-day pass): page title + compact filters, `ExecutiveSummaryCards` (4 cards only —
+ * Total Quotations/Value, Closed/Expected Sales), `QuotationStatusSummary` (Won/Lost/Active/
+ * Non-Active, one panel not 4 cards) + the forecast chart, `SalesPerformancePanel` (rates +
+ * cycle times + Active/Non-Active counts, a compact label/value grid not 8 cards),
+ * `SalesActivityAnalytics` (Created/Edited trend, filter-aware — promoted up from the "supporting
+ * detail" section below to its own named top-level section per this pass), `ActivityFollowUpSummary`
+ * (pending approvals/overdue follow-ups/expired/new customers, a compact clickable-where-possible
+ * tile row), then `ActivityTimeline` ("Recent Activities"). This replaces the flat 22-card
+ * `KpiGrid.tsx` (removed 2026-07-13) — user feedback was that even a single-tier 22-card grid
+ * still read as "a generated template" with no visual hierarchy.
  *
  * **Below that — supporting detail, unchanged**: revenue/job-type charts, the sales pipeline step
- * cards, the sales-activity trend, ranking tables, top customers/job types, the actionable
- * Pending Approvals + Follow-up Reminders lists (distinct from the compact *counts* in
- * `ActivityFollowUpSummary` above — those are real clickable/actionable line-item lists), the
- * notification summary, and the customer-interest breakdown. None of this was the "too many large
- * KPI cards" complaint, so none of it was removed — see CHANGELOG.md for the full reasoning.
+ * cards (`PipelineSteps.tsx` — already the non-overlapping horizontal-step-card replacement for
+ * the old broken `recharts` `FunnelChart`, not touched this pass), ranking tables, top customers/
+ * job types, the actionable Pending Approvals + Follow-up Reminders lists (distinct from the
+ * compact *counts* in `ActivityFollowUpSummary` above — those are real clickable/actionable
+ * line-item lists), the notification summary, and the customer-interest breakdown. None of this
+ * was the "too many large KPI cards" complaint, so none of it was removed — see CHANGELOG.md.
  *
  * History: 2026-07-10 (UI/UX redesign) split the original flat KPI grid into a tiered "primary
  * hero cards + dense secondary mini-cards" layout and added `QuotationStatusSummary`/
  * `PipelineSteps`/`SalesActivityAnalytics`, removing 5 now-redundant charts. 2026-07-13 (first
- * revert pass) merged the tiered KPI cards back into one flat `KpiGrid`. 2026-07-13 (this pass)
- * replaced that flat grid with the 4-section compact overview described above, after further user
- * feedback that even the flat 22-card version still felt cluttered and template-like.
+ * revert pass) merged the tiered KPI cards back into one flat `KpiGrid`. 2026-07-13 (second
+ * revert pass) replaced that flat grid with `ExecutiveSummaryCards` + 2 new compact panels.
+ * 2026-07-13 (this pass) reordered the page to match a fully-specified 7-section structure,
+ * promoted `SalesActivityAnalytics` into the top overview, and added Active/Non-Active Quotations
+ * to `SalesPerformancePanel`.
  */
 export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotations: (filter: QuotationListFilter) => void }) {
   const { t } = useI18n();
@@ -162,17 +167,20 @@ export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotatio
 
           {/* 2. Quotation status summary + forecast */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <QuotationStatusSummary kpis={kpis} pipeline={pipeline} />
+            <QuotationStatusSummary kpis={kpis} />
             <ExpectedSalesForecastChart forecast={forecast} />
           </div>
 
           {/* 3. Sales performance — compact rates/cycle-time panel, not more cards */}
           <SalesPerformancePanel kpis={kpis} />
 
-          {/* 4. Activity & follow-up — compact counts, clickable where a real filter exists */}
+          {/* 4. Sales activity analytics — trend + recent-period table, filter-aware */}
+          {salesActivity && <SalesActivityAnalytics data={salesActivity} />}
+
+          {/* 5. Activity & follow-up — compact counts, clickable where a real filter exists */}
           <ActivityFollowUpSummary kpis={kpis} onPendingApprovalsClick={() => onNavigateToQuotations({ status: "รออนุมัติ" })} />
 
-          {/* 5. Recent work */}
+          {/* 6. Recent activities */}
           {activityTimeline && <ActivityTimeline entries={activityTimeline} />}
 
           {/* ── Supporting detail — unchanged content, just below the overview above ── */}
@@ -189,8 +197,6 @@ export function DashboardPage({ onNavigateToQuotations }: { onNavigateToQuotatio
             </div>
 
             <PipelineSteps pipeline={pipeline} onStageClick={(status) => onNavigateToQuotations({ status })} />
-
-            {salesActivity && <SalesActivityAnalytics data={salesActivity} />}
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} />
