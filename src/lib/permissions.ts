@@ -23,7 +23,11 @@ export type Permission =
   | "companyProfiles:edit"
   | "companyProfiles:archive"
   | "companyProfiles:delete"
-  | "companyProfiles:setDefault";
+  | "companyProfiles:setDefault"
+  | "customers:view"
+  | "customers:create"
+  | "customers:edit"
+  | "customers:archive";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -49,6 +53,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "companyProfiles:archive",
   "companyProfiles:delete",
   "companyProfiles:setDefault",
+  "customers:view",
+  "customers:create",
+  "customers:edit",
+  "customers:archive",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -75,6 +83,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "companyProfiles:archive": "เก็บถาวร/กู้คืนข้อมูลบริษัท",
   "companyProfiles:delete": "ลบข้อมูลบริษัท",
   "companyProfiles:setDefault": "ตั้งบริษัทเริ่มต้น",
+  "customers:view": "ดูข้อมูลลูกค้า",
+  "customers:create": "เพิ่มข้อมูลลูกค้า",
+  "customers:edit": "แก้ไขข้อมูลลูกค้า",
+  "customers:archive": "เก็บถาวร/กู้คืนข้อมูลลูกค้า",
 };
 
 /** Translated display label per permission — `PERMISSION_LABELS` (Thai) stays as-is since it's also used to seed the `permissions` collection's stored `label` field; this map is UI-display only. */
@@ -102,6 +114,10 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "companyProfiles:archive": "permission.companyProfilesArchive",
   "companyProfiles:delete": "permission.companyProfilesDelete",
   "companyProfiles:setDefault": "permission.companyProfilesSetDefault",
+  "customers:view": "permission.customersView",
+  "customers:create": "permission.customersCreate",
+  "customers:edit": "permission.customersEdit",
+  "customers:archive": "permission.customersArchive",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -123,6 +139,11 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
     label: "คลังสินค้า",
     labelKey: "nav.products",
     permissions: ["products:view", "products:create", "products:edit", "products:delete", "products:export"],
+  },
+  {
+    label: "ลูกค้า",
+    labelKey: "nav.customers",
+    permissions: ["customers:view", "customers:create", "customers:edit", "customers:archive"],
   },
   {
     label: "ระบบ",

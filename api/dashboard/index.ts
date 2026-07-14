@@ -354,7 +354,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // by this salesperson" dimension to filter by (products aren't owned by a salesperson at all;
       // Customer/Lead counts will be 0 until that module ships regardless). Documented explicitly
       // here and in MODULES/Dashboard.md rather than forcing a filter that wouldn't mean anything.
-      customers.countDocuments({ deletedAt: null }),
+      customers.countDocuments({ isDeleted: false }),
       leads.countDocuments({ deletedAt: null }),
       products.countDocuments({ archived: false }),
       // Deliberately unfiltered (no date/salesperson match) — this is what decides whether the page

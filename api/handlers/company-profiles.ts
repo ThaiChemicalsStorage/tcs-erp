@@ -4,6 +4,7 @@ import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requirePermission, requireUser, type AuthContext } from "../_lib/auth.js";
 import { companyProfilesCollection, auditLogCollection, toObjectId, withStringId, type CompanyProfileFields } from "../_lib/collections.js";
 import { validateCompanyProfileDraft } from "../_lib/companyProfileValidation.js";
+import { handleCustomers } from "../_lib/customersHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 import type { CompanyProfileDraft } from "../../src/lib/companyProfiles.js";
@@ -103,10 +104,12 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   await ensureCompanyProfileIndexes(companyProfiles);
 
   if (req.method === "GET") {
-    // Two legitimate reasons to read this list, added 2026-07-13 (Quotation integration pass):
-    // an admin managing profiles (`companyProfiles:view`), or a Sales User picking which company
-    // to issue a quotation under (`quotations:create`) — the latter doesn't hold and shouldn't
-    // need the former just to read active issuer options. A caller with neither is rejected.
+    // `quotations:create` was added as a second valid reader 2026-07-13 for a "pick which company
+    // issues this quotation" selector that was reverted 2026-07-14 (see
+    // docs/MODULES/CompanyProfiles.md "Correction") — the Quotation form no longer calls this
+    // route at all. Left in place: it's a harmless, already-narrower-than-`companyProfiles:view`
+    // read grant with no current caller, not worth a behavior change with no active consumer to
+    // verify against; removing it is a candidate for a future cleanup pass if it's confirmed dead.
     const ctx = await requireUser(req);
     const canManage = roleHasPermission(ctx.role, "companyProfiles:view");
     const canReadForQuotation = roleHasPermission(ctx.role, "quotations:create");
@@ -317,6 +320,15 @@ async function handleSetDefault(req: VercelRequest, res: VercelResponse, id: str
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   await withErrorHandling(res, async () => {
+    // Customers (added 2026-07-14) share this function file rather than getting their own
+    // `api/handlers/customers.ts` — Vercel Hobby's 12-serverless-function cap is already reached
+    // (see docs/CLAUDE.md). Checked first, on the raw pathname, before the company-profiles-only
+    // path parsing below.
+    const pathname = (req.url ?? "").split("?")[0];
+    if (pathname === "/api/customers" || pathname.startsWith("/api/customers/")) {
+      return handleCustomers(req, res);
+    }
+
     const parts = getPathSegments(req, "/api/company-profiles");
 
     if (parts.length === 0) return handleList(req, res);

@@ -16,51 +16,56 @@ Create, edit, duplicate, and print professional quotation documents for customer
 7a. **Job Type, Potential Opportunity, Follow-up Date** (added 2026-07-10, for the Executive Dashboard/CRM pass): every quote carries a `jobTypeCode`/`jobTypeName` (picked from the Job Type master list — `src/lib/jobTypes.ts`, `GET/POST/PATCH /api/jobtypes`, 13 seeded defaults: TA/STA/LI/SC/BF/GA/BI/VT/WTP/OTHER TA/OTHER SC/OTHER BF/OTHER — snapshotted at save time, same non-live-reference rationale as the Product picker), an `isPotentialOpportunity` checkbox ("sales thinks this is likely to close" — feeds the Dashboard's Expected Sales KPI/forecast, literally `isPotentialOpportunity = true` with no other condition, per the business spec), and a `followUpDate` (feeds the Dashboard's Today/Overdue/Upcoming follow-up reminders). All three are shown/edited in the same meta-fields grid as Payment Terms, filterable/searchable in the list view (Job Type dropdown filter + column, Potential Opportunity summary card), and printed on the PDF (`ประเภทงาน` field, auto-hidden if unclassified — Potential Opportunity/Follow-up Date are internal-only, not printed on the customer-facing document). **Job Type is required on every new quote as of 2026-07-10 (Codex review fix)**: the create form no longer offers a blank "unclassified" choice (a disabled placeholder is shown until a real selection is made), and `POST /api/quotes` rejects a missing/blank `jobTypeCode` server-side, matching a valid `job_types` master record (`jobTypeName` is always re-derived from that record, never trusted from the client). Editing an *existing* quote still tolerates a blank Job Type (legacy data predating this field) — only a non-blank value is validated for membership, so an unrelated field edit on an old unclassified quote isn't blocked.
 8. **Print/PDF**: "พิมพ์ / PDF" calls `window.print()`. The printed document (`src/pages/quotation/PrintDocument.tsx`, added 2026-07-09, modeled on a real customer-facing quotation template) is a single `<table>` with a repeating `<thead>` — the company header (logo, name, address, tax ID), the blue "QUOTATION" ribbon, the full "ผู้ซื้อ" (buyer) block, the "ใบเสนอราคา" meta block (quote number/dates/payment terms/salesperson), and the item-table column headers all re-render on every printed page automatically via the browser's native thead-repeat behavior — verified via a forced 2-page print (see [CHANGELOG.md](../CHANGELOG.md)). Each line shows unit price and **per-unit discount (amount + %)** as separate columns, with notes/sub-details/specifications/tags indented beneath (sub-details as a pin-icon bullet list). Totals include a **Thai-words amount line** under the grand total (`bahtText()`, see [DATABASE.md](../DATABASE.md)). A three-column signature table (ผู้เสนอราคา / ผู้อนุมัติใบเสนอราคา / ผู้ยืนยันการสั่งซื้อ) closes the document — the third (customer PO confirmation) column has no backing data and is always blank for hand-signing. **Any document field left empty is automatically omitted from the printed output** rather than printing a blank row (see [UI_GUIDELINES.md](../UI_GUIDELINES.md) Print/PDF section). Known simplification: the repeating header is identical on every page (the reference design this was modeled on shrinks it on continuation pages); browser print has no reliable way to vary `<thead>` content by page number, so a fuller, consistent header was kept on all pages instead. Page numbers ("Page X/Y") are also omitted — browser print/PDF has no supported way to read total page count from CSS.
 
-## Issuer Company (added 2026-07-13, Quotation integration pass)
+## Customer Selection (added 2026-07-14, replacing an earlier — incorrect — "Issuer Company" feature)
 
-An `IssuerCompanySelector` panel sits above the customer-information section on the create/edit
-form — "ออกใบเสนอราคาในนามบริษัท" ("Issue quotation as company") — letting the user pick which
-saved [Company Profile](./CompanyProfiles.md) issues this specific quotation, instead of retyping
-company name/address/phone/tax ID per quote. Populated from `GET /api/company-profiles` (active,
-non-archived only — see [RBAC.md](../RBAC.md) for the relaxed read access that lets a Sales user,
-who doesn't hold any Company Profile management permission, still read this list). Selection
-rules: the default active profile (or the sole active profile, if only one exists) preselects
-automatically; 2+ active profiles require an explicit choice; zero active profiles shows an empty
-state with a permission-gated link to Company Profiles instead of a dropdown.
+**Correction**: a 2026-07-13 pass built an `IssuerCompanySelector` here — letting the user pick
+which saved [Company Profile](./CompanyProfiles.md) "issues" a quotation — against a
+misunderstanding of the actual requirement. This ERP only ever issues quotations under a single
+company identity (Settings → Company Info); there is no per-quote issuer selection, and that UI has
+been fully removed from this form. The real requirement was a **Customer** selector: pick a saved
+customer/company the quotation is *for*, and autofill the Customer Information fields from it. See
+[Customer.md](./Customer.md) for the full module writeup.
 
-Picking a profile updates the on-screen header preview immediately (logo, name, address,
-phone/fax/email, website, tax ID, branch — blank fields hidden, never a placeholder). On save,
-`issuerCompanyId` is sent to the server; `api/handlers/quotes.ts`'s `resolveIssuerCompanyUpdate()`
-validates the profile (rejects if missing/inactive/archived) and builds `issuerCompanySnapshot` —
-a frozen copy of the profile's fields at that instant — server-side, never trusting a
-client-supplied snapshot. **Editing a company profile's master data later never changes what an
-already-saved quotation displays**, since display always prefers the quotation's own snapshot over
-the live profile — same non-live-reference guarantee this app already gives `QuoteLine`/`Product`
-and `jobTypeCode`/`jobTypeName`/`JobType`.
+A `CustomerSelector` ("เลือกลูกค้า / บริษัท") sits at the top of the Customer Information section,
+searching saved [Customer](./Customer.md) records by company name/contact name/phone/email/tax ID.
+Selecting one autofills all nine Customer Information fields unconditionally — `client`/
+`contactName`/`contactPhone`/`contactEmail`/`address`/`taxId`/`deliveryMethod`/`project`/
+`deliveryAddress` — **including any that are blank on the selected customer** (fixed 2026-07-14,
+Codex review High #2: previously `deliveryMethod`/`project`/`deliveryAddress` were only copied when
+truthy, so selecting a customer with no delivery info silently left stale values from whichever
+customer/manual entry was previously on screen). All nine remain freely editable afterward, and
+editing them never writes back to the Customer master record. Clearing the selection (×) reverts to
+a plain manually-entered quote without discarding whatever's already been typed.
 
-**Changing the issuer is Draft-only.** Both `PATCH /api/quotes/:id` and
-`POST /api/quotes/:id/workflow` reject (`400`) a request that tries to change `issuerCompanyId`
-once `quote.status !== "ร่าง"` — a submitted/approved/sent/etc. quotation's issuer identity is
-frozen, matching the snapshot's own "don't silently change an already-communicated document"
-principle. The selector itself is disabled in the UI once a quote has left Draft, with a Thai
-"เปลี่ยนบริษัทผู้ออกเอกสารได้เฉพาะสถานะร่างเท่านั้น" tooltip explaining why.
+On save, `customerId` (if a customer is linked) is sent to the server; `api/handlers/quotes.ts`
+validates it exists and isn't archived, and **always** builds `customerSnapshot` — a frozen copy of
+the Customer Information fields actually submitted, whether autofilled-then-possibly-edited or
+entirely manual — server-side, never trusting a client-supplied snapshot. **Changing the linked
+customer is Draft-only**, same rule the earlier issuer feature had: both `PATCH /api/quotes/:id` and
+`POST /api/quotes/:id/workflow` reject (`400`) a request that tries to change `customerId` once
+`quote.status !== "ร่าง"`. The selector itself is disabled in the UI once a quote has left Draft,
+with a Thai "เปลี่ยนลูกค้าที่เลือกได้เฉพาะสถานะร่างเท่านั้น" note explaining why.
 
-A quote with no issuer company resolved at all (no snapshot, no live selection, nothing) shows a
-distinct warning — "ใบเสนอราคานี้ยังไม่มีข้อมูลบริษัทผู้ออกเอกสาร" — but **is not blocked from
-saving**; this app's Draft workflow already tolerates other missing fields, and hard-requiring an
-issuer was left as a deliberate, documented choice rather than silently assumed — see
-[MODULES/CompanyProfiles.md](./CompanyProfiles.md) "Known Limitations."
+**`customerSnapshot` is read first when reopening a quotation** (fixed 2026-07-14, Codex review
+High #1). `QuoteDocument.tsx` seeds each Customer Information field's `useState` from
+`quote.customerSnapshot` first, falling back to the quote's legacy top-level field (`quote.client`,
+`quote.contactName`, etc.) when no snapshot exists, and finally to an empty string — exactly the
+specified (1) snapshot → (2) legacy field → (3) empty order, using `??` so a real empty string
+stored in the snapshot is respected rather than incorrectly falling through. `PrintDocument.tsx`
+inherits this automatically since it renders the same already-snapshot-seeded component state, not
+a second, independently-initialized copy. This resolver deliberately does **not** fall back to a
+*live* lookup of the current customer master record by `customerId` — that would silently overwrite
+whatever the user already typed/edited on this quote with today's master data, exactly the
+"editing copied data must not retroactively change the quotation" guarantee `customerSnapshot`
+exists to provide. In practice `customerSnapshot` and the legacy top-level fields are kept in sync
+on every save that touches a customer field (see `api/handlers/quotes.ts`'s
+`CUSTOMER_FIELD_KEYS`/`WORKFLOW_CUSTOMER_FIELD_KEYS` refresh logic), so this mainly matters as a
+defensive/correctness guarantee rather than a case that visibly changes today's rendered values.
 
-`PrintDocument.tsx` (the actual printed/PDF document) now takes an `issuer: IssuerCompanyDisplay`
-prop instead of the old `company: Company` prop — resolved by `QuoteDocument.tsx` in the same
-4-step fallback order as the on-screen preview: the quote's own `issuerCompanySnapshot` first, then
-the live-selected profile the quote actually references, then (added 2026-07-13, Codex review
-Medium #1 fix) the default active company profile — covers a saved quote whose `issuerCompanyId`
-points to a profile that's since been deactivated/archived with no snapshot to fall back on — then
-the legacy Settings → Company Info `company` singleton (for quotes created before this feature
-existed, or when no company profile has ever been set up) — so the printed header is never
-hardcoded and never blank. See [CompanyProfiles.md](./CompanyProfiles.md) "Quotation Integration"
-for the full chain.
+Old quotations saved under the 2026-07-13 issuer feature simply have a stray, unread
+`issuerCompanyId`/`issuerCompanySnapshot` pair and no `customerId`/`customerSnapshot` — they fall
+through to their existing legacy top-level fields (step 2 of the resolver above) and display/edit
+normally, no backfill needed.
 
 ## Approval Workflow (added 2026-07-08 — see [RBAC.md](../RBAC.md) for the full model)
 
@@ -88,7 +93,7 @@ The preparer's signature is looked up via `quote.createdByUserId`; the approver'
 
 The `quotes` MongoDB collection (see [DATABASE.md](../DATABASE.md) for the `Quote`/`QuoteLine`/`SubDetail`/`ApprovalHistoryEntry` shapes) — keyed by the human-readable business ID (e.g. `"QT-2567-0041"`) as the literal MongoDB `_id`, not an `ObjectId`. Migrated 2026-07-09 from `localStorage` (`tcs_erp_quotes`, fixed 2026-07-08) to real server-side persistence. The `job_types` collection (added 2026-07-10, see [DATABASE.md](../DATABASE.md) "`JobType`") backs the Job Type dropdown.
 
-**2026-07-13**: `Quote.issuerCompanyId`/`issuerCompanySnapshot` (added the same day, initially unused) are now fully wired — see "Issuer Company" above and [CompanyProfiles.md](./CompanyProfiles.md) "Quotation Integration" for the full flow. Existing quotations created before this pass simply have both fields unset; they display via the legacy `company` singleton fallback and are otherwise completely unaffected — no backfill/migration was run or needed.
+**2026-07-14**: `Quote.customerId`/`customerSnapshot` (replacing the short-lived, incorrect `issuerCompanyId`/`issuerCompanySnapshot` pair from 2026-07-13) are now wired — see "Customer Selection" above and [Customer.md](./Customer.md) for the full flow. Existing quotations from before this pass simply have both fields unset; they display and edit normally via their existing free-text fields and are otherwise completely unaffected — no backfill/migration was run or needed.
 
 ## APIs
 
@@ -117,12 +122,13 @@ Client-side RBAC (see [RBAC.md](../RBAC.md)) via `computeQuotePermissions(quote,
 - **Job Type classification** (added 2026-07-10) — dropdown from a 13-entry master list, searchable/filterable in the list view, printed on the PDF, feeds the Dashboard's Job Type Analytics
 - **Potential Opportunity checkbox** (added 2026-07-10) — sales-marked "likely to close," feeds the Dashboard's Expected Sales KPI/forecast
 - **Follow-up Date field** (added 2026-07-10) — feeds the Dashboard's Today/Overdue/Upcoming follow-up reminders; clicking a reminder opens the quotation list pre-filtered to that customer
-- **Issuer Company selection** (added 2026-07-13) — pick which saved [Company Profile](./CompanyProfiles.md) issues each quotation instead of retyping company info; server-frozen snapshot at issue time, Draft-only changes, live header preview and print/PDF integration — see "Issuer Company" above
+- **Customer selection** (added 2026-07-14, replacing an earlier incorrect "Issuer Company" feature) — pick a saved [Customer](./Customer.md) to autofill the Customer Information fields instead of retyping them; server-built `customerSnapshot` at save time, Draft-only changes to the linked customer — see "Customer Selection" above
 
 ## Future Improvements
 
 - Wire `Company.vatRate` into the VAT calculation (currently `computeTotals()` still uses the fixed `VAT_RATE` constant)
-- Replace the client free-text field with a real Customer reference once [Customer.md](./Customer.md) exists
+- ~~Replace the client free-text field with a real Customer reference once Customer.md exists~~ — **done 2026-07-14**: `client`/`contactName`/etc. can now be autofilled from (and linked to, via `customerId`) a saved [Customer](./Customer.md) record, though the fields themselves remain free text/editable afterward rather than becoming fully derived — see "Customer Selection" above
+- "บันทึกเป็นลูกค้าใหม่" (save the manually-typed Customer Information as a new Customer record, inline from the Quotation form) — explicitly flagged as a future nice-to-have in the 2026-07-14 requirement, not built (kept simple/safe) — a Sales user creates customers via the [Customers admin page](./Customer.md) today
 - Sequential two-level approval (Approver Level 1 must approve before Level 2) — currently both approver roles have independent rights; see [RBAC.md](../RBAC.md) Known Simplifications
 - ~~Notification clicks still only navigate to the quotation list, not a specific quote's detail view~~ — **fixed 2026-07-10** (Codex review pass): a `quotationDeepLinkId` (separate from the pre-existing `quotationListFilter` used by the Dashboard's pipeline/follow-up click-through) is now lifted to `App.tsx` and consumed by `QuotationPage`, which switches straight to that quote's detail view. See [Notifications.md](./Notifications.md).
 - ~~Auto quotation numbering... needs a real sequence once multi-user/backend exists~~ — **fixed 2026-07-10** (Codex review pass): `nextQuoteId()` now reserves numbers atomically via a `counters` MongoDB collection (`findOneAndUpdate` with `$inc`, upsert), replacing the previous scan-all-quotes-then-max+1 approach that could race two concurrent creates into the same id. See [DATABASE.md](../DATABASE.md).

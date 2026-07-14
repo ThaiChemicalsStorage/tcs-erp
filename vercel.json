@@ -17,6 +17,8 @@
     { "source": "/api/jobtypes", "destination": "/api/handlers/jobtypes" },
     { "source": "/api/jobtypes/:path*", "destination": "/api/handlers/jobtypes" },
     { "source": "/api/company-profiles", "destination": "/api/handlers/company-profiles" },
-    { "source": "/api/company-profiles/:path*", "destination": "/api/handlers/company-profiles" }
+    { "source": "/api/company-profiles/:path*", "destination": "/api/handlers/company-profiles" },
+    { "source": "/api/customers", "destination": "/api/handlers/company-profiles" },
+    { "source": "/api/customers/:path*", "destination": "/api/handlers/company-profiles" }
   ]
 }

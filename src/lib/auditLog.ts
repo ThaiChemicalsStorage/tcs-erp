@@ -20,10 +20,12 @@ export interface AuditLogEntry {
   /** Company Profile `id` this entry relates to — present on Company Profile module entries
    * written by `writeCompanyProfileAuditEntry()` (api/handlers/company-profiles.ts, added
    * 2026-07-13 per a Codex review finding that those entries were previously client-authored
-   * with no structured linkage), **and** (added the same day, Quotation integration pass) on
-   * quotation entries where an issuer company was set/changed, written by `writeQuoteAuditEntry()`
-   * (api/handlers/quotes.ts) — the same fact ("which company profile") in both cases, so one pair
-   * of fields serves both modules rather than duplicating a second pair of names. Absent on older
+   * with no structured linkage). A brief 2026-07-13 "Quotation integration pass" also wrote this
+   * pair from quote-workflow entries when an issuer company was set/changed — that feature was
+   * reverted 2026-07-14 (see MODULES/CompanyProfiles.md "Correction"), so quote entries no longer
+   * populate these fields; `writeQuoteAuditEntry()` now writes `"Quotation Customer Changed"`
+   * entries with `relatedCustomerName` instead (no dedicated `relatedCustomerId` field — the
+   * quote's own `client`/customer name is what the Dashboard actually renders). Absent on older
    * entries and on entries unrelated to a company profile. */
   relatedCompanyProfileId?: string;
   /** Company name (Thai) this entry relates to — same provenance/caveats as `relatedCompanyProfileId`. */

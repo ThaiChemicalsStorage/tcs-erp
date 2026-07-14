@@ -10,14 +10,17 @@ export interface BankAccount {
 }
 
 /**
- * A Company Profile is the official business identity used on quotation documents — company
+ * A Company Profile is an administrator-managed business-identity record — company
  * name/logo/address/tax ID/bank accounts/terms — not a customer, not a user account, not a
- * separate website. Added 2026-07-13 to let the company issue quotations under more than one
- * registered entity/branch. This module manages the master-data records themselves
- * (add/edit/view/activate/archive/set default); the Quotation form's `IssuerCompanySelector`
- * (`src/pages/quotation/IssuerCompanySelector.tsx`, wired the same day) is what actually lets a
- * user pick one when issuing a quote — see `Quote.issuerCompanyId`/`issuerCompanySnapshot` in
- * `quotes.tsx` and `resolveIssuerCompanyUpdate()` in `api/handlers/quotes.ts`.
+ * separate website. Added 2026-07-13, originally intended to let the company issue quotations
+ * under more than one registered entity/branch. **This module manages the master-data records
+ * themselves only (add/edit/view/activate/archive/set default) — it is NOT connected to the
+ * Quotation form.** A 2026-07-13 pass briefly wired a "pick which profile issues this quote"
+ * selector into Quotation; that was built against a misunderstanding of the actual requirement
+ * (this ERP only ever has one issuer company) and was fully reverted 2026-07-14. Quotations select
+ * a saved **Customer** instead — see `src/pages/quotation/CustomerSelector.tsx`,
+ * `Quote.customerId`/`customerSnapshot` in `quotes.tsx`, and `src/lib/customers.ts`. See
+ * docs/MODULES/CompanyProfiles.md "Correction (2026-07-14)" for the full writeup.
  */
 export interface CompanyProfile {
   id: string;
@@ -105,93 +108,6 @@ export const emptyCompanyProfileDraft: CompanyProfileDraft = {
 
 export function newBankAccountId(): string {
   return `bank-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-/**
- * The frozen-at-issue-time copy of a `CompanyProfile` stored on `Quote.issuerCompanySnapshot`
- * (`src/lib/quotes.tsx`) — defined here, once, so both files reference the same shape instead of
- * `quotes.tsx` inlining its own duplicate object literal type. Added 2026-07-13 (Quotation
- * integration pass). Server-derived only — see `resolveIssuerCompanyUpdate()` in
- * `api/handlers/quotes.ts`; nothing on the client ever constructs one of these directly.
- */
-export interface IssuerCompanySnapshot {
-  companyCode: string;
-  companyNameTh: string;
-  companyNameEn: string;
-  displayName: string;
-  logoDataUrl: string;
-  addressTh: string;
-  addressEn: string;
-  taxId: string;
-  branchName: string;
-  branchCode: string;
-  phone: string;
-  fax: string;
-  email: string;
-  website: string;
-  bankAccounts: BankAccount[];
-  quotationPrefix: string;
-  quotationTerms: string;
-  quotationFooter: string;
-  stampDataUrl: string;
-}
-
-/**
- * A common shape for rendering "who is issuing this document" regardless of source — a live
- * `CompanyProfile` (while a Draft quote's selector is being changed), a frozen
- * `IssuerCompanySnapshot` (an already-saved quote, so editing the profile later can't silently
- * change what a customer already received), or the legacy single-company `Company` singleton
- * (the fallback for a quote that predates this feature, or when no company profile has been set
- * up yet). `QuoteDocument.tsx`/`PrintDocument.tsx` render this one shape, never the three source
- * types directly, so the header/print logic doesn't need to branch on which source it came from.
- */
-export interface IssuerCompanyDisplay {
-  name: string;
-  nameEn: string;
-  logoDataUrl: string;
-  address: string;
-  phone: string;
-  fax: string;
-  email: string;
-  website: string;
-  taxId: string;
-  branchName: string;
-  branchCode: string;
-  stampDataUrl: string;
-}
-
-export function issuerDisplayFromProfile(p: CompanyProfile): IssuerCompanyDisplay {
-  return {
-    name: p.displayName || p.companyNameTh,
-    nameEn: p.companyNameEn,
-    logoDataUrl: p.logoDataUrl,
-    address: p.addressTh,
-    phone: p.phone,
-    fax: p.fax,
-    email: p.email,
-    website: p.website,
-    taxId: p.taxId,
-    branchName: p.branchName,
-    branchCode: p.branchCode,
-    stampDataUrl: p.stampDataUrl,
-  };
-}
-
-export function issuerDisplayFromSnapshot(s: IssuerCompanySnapshot): IssuerCompanyDisplay {
-  return {
-    name: s.displayName || s.companyNameTh,
-    nameEn: s.companyNameEn,
-    logoDataUrl: s.logoDataUrl,
-    address: s.addressTh,
-    phone: s.phone,
-    fax: s.fax,
-    email: s.email,
-    website: s.website,
-    taxId: s.taxId,
-    branchName: s.branchName,
-    branchCode: s.branchCode,
-    stampDataUrl: s.stampDataUrl,
-  };
 }
 
 export async function fetchCompanyProfiles(): Promise<CompanyProfile[]> {

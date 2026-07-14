@@ -3,7 +3,7 @@ import type { User } from "./users";
 import { type Role, hasPermission } from "./roles";
 import { apiFetch } from "./apiClient.js";
 import type { TranslationKey } from "./i18n";
-import type { IssuerCompanySnapshot } from "./companyProfiles";
+import type { CustomerSnapshot } from "./customers";
 
 export type QuoteStatus =
   | "ร่าง"
@@ -112,26 +112,24 @@ export interface Quote {
   updatedBy: string;
   approvalHistory: ApprovalHistoryEntry[];
   /**
-   * → `CompanyProfile.id` — which saved Company Profile issues this quote, set server-side from
-   * the client-sent id via `resolveIssuerCompanyUpdate()` in `api/handlers/quotes.ts` (added
-   * 2026-07-13 alongside the Company Profiles module, wired into the Quotation form the same day).
-   * Optional — every quote created before this feature existed simply has it unset and is
-   * otherwise unaffected. `issuerCompanySnapshot` (below) is always captured **at issue time**, not
-   * read live from the referenced profile, so editing a company profile later never silently
-   * changes the header/terms/bank details on a quotation that already went out to a customer —
-   * same snapshot-not-live-reference rationale as `QuoteLine` never referencing `Product` live.
-   * Changing this on an existing quote is restricted server-side to Draft status. See
-   * docs/MODULES/CompanyProfiles.md "Quotation Integration" and docs/MODULES/Quotation.md "Issuer
-   * Company" for the full design.
+   * → `Customer.id` — which saved Customer this quote is issued to, set when the user picks one
+   * from the Quotation form's Customer selector (`src/pages/quotation/CustomerSelector.tsx`,
+   * added 2026-07-14, replacing an earlier — wrong — "issuer company" selector built the same
+   * week). Optional: a quote can still be created with the Customer Information fields typed in
+   * manually, with no linked customer record at all. Changing the selected customer on an
+   * existing quote is restricted server-side to Draft status, same rule as every other structural
+   * field on this quote — see `api/handlers/quotes.ts`.
    */
-  issuerCompanyId?: string;
+  customerId?: string;
   /**
-   * Widened 2026-07-13 (Quotation integration pass) to the full `IssuerCompanySnapshot` shape
-   * (`src/lib/companyProfiles.ts`) — the original prep-only shape (added alongside the Company
-   * Profiles module the same day) only covered a subset. Still server-derived only, see the
-   * field-by-field doc above and `resolveIssuerCompanyUpdate()` in `api/handlers/quotes.ts`.
+   * Frozen-at-save-time copy of the Customer Information fields actually submitted with this
+   * quote (whether autofilled from `customerId` and then possibly edited, or typed manually) —
+   * always server-derived, never trusted from the client. Exists so that later edits to the
+   * Customer master record (or to this quote's own fields, on a further edit) don't retroactively
+   * change what an already-issued quotation is understood to have said at the time. See
+   * `src/lib/customers.ts`'s `CustomerSnapshot` and docs/MODULES/Customer.md.
    */
-  issuerCompanySnapshot?: IssuerCompanySnapshot;
+  customerSnapshot?: CustomerSnapshot;
 }
 
 export type QuoteDraftFields = Pick<
@@ -141,10 +139,10 @@ export type QuoteDraftFields = Pick<
   | "deliveryMethod" | "deliveryAddress" | "project"
   | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks"
   | "jobTypeCode" | "jobTypeName" | "isPotentialOpportunity" | "followUpDate"
-  // Client only ever sends the id — the server always re-derives `issuerCompanySnapshot` itself
-  // from the live company_profiles record, the same "never trust a client-supplied derived value"
-  // rule `amount`/`jobTypeName` already follow. See api/handlers/quotes.ts.
-  | "issuerCompanyId"
+  // Client only ever sends the id — the server always re-derives `customerSnapshot` itself from
+  // the submitted Customer Information fields, the same "never trust a client-supplied derived
+  // value" rule `amount`/`jobTypeName` already follow. See api/handlers/quotes.ts.
+  | "customerId"
 > & { amount: number };
 
 /** Fields the server accepts on general quote edits — everything except id/status/date/valid/createdByUserId/updatedBy/approvalHistory, which only the server (or the workflow endpoint) sets. */

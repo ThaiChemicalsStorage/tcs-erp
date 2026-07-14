@@ -2,12 +2,13 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import {
   LayoutDashboard, Settings, Package,
   Search, ChevronRight, Menu, X, ChevronDown,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Building2,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Building2, Contact,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
 import { type JobType, fetchJobTypes } from "./lib/jobTypes";
 import { type CompanyProfile, fetchCompanyProfiles } from "./lib/companyProfiles";
+import { type Customer, fetchCustomers } from "./lib/customers";
 import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes";
 import { type User, fetchUsers, initials } from "./lib/users";
 import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
@@ -38,6 +39,7 @@ const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage")
 const RoleManagementPage = lazy(() => import("./pages/admin/RoleManagementPage").then((m) => ({ default: m.RoleManagementPage })));
 const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) => ({ default: m.AuditLogPage })));
 const CompanyProfilesPage = lazy(() => import("./pages/admin/companyProfiles/CompanyProfilesPage").then((m) => ({ default: m.CompanyProfilesPage })));
+const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then((m) => ({ default: m.CustomersPage })));
 
 function PageLoading() {
   return (
@@ -60,7 +62,7 @@ function BootLoading() {
 }
 
 /** Stable routing identifiers — decoupled from the (now translatable) display label, so switching language never breaks navigation. */
-type NavKey = "dashboard" | "quotations" | "products" | "users" | "roles" | "auditLog" | "companyProfiles" | "settings";
+type NavKey = "dashboard" | "quotations" | "products" | "customers" | "users" | "roles" | "auditLog" | "companyProfiles" | "settings";
 
 interface NavItem {
   key: NavKey;
@@ -73,6 +75,7 @@ const navItems: NavItem[] = [
   { key: "dashboard", icon: LayoutDashboard, labelKey: "nav.dashboard", permission: "dashboard:view" },
   { key: "quotations", icon: FileText, labelKey: "nav.quotations", permission: "quotations:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
+  { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
   { key: "roles", icon: ShieldCheck, labelKey: "nav.roles", permission: "roles:manage" },
   { key: "auditLog", icon: ScrollText, labelKey: "nav.auditLog", permission: "auditLog:view" },
@@ -81,14 +84,15 @@ const navItems: NavItem[] = [
 
 /**
  * Sidebar grouping (2026-07-10 UI/UX redesign) — purely a display grouping over the same flat
- * `navItems`/`NavKey` list above, not a new data model. Only reflects modules that actually exist
- * today: no "Leads"/"Customers" group (schema-only, no UI yet, see MODULES/Lead.md and
- * MODULES/Customer.md) and no separate "Approvals" group (approval actions live inside the
- * Quotation module's own workflow, there's no dedicated Pending Approvals/Approval History page).
+ * `navItems`/`NavKey` list above, not a new data model. "Leads" still has no group/UI (schema-only,
+ * see MODULES/Lead.md) — "Customers" got one 2026-07-14 (Customer master data, used to autofill
+ * the Quotation form's Customer selector, see MODULES/Customer.md). No separate "Approvals" group
+ * (approval actions live inside the Quotation module's own workflow, there's no dedicated Pending
+ * Approvals/Approval History page).
  */
 const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
-  { labelKey: "nav.group.sales", keys: ["quotations"] },
+  { labelKey: "nav.group.sales", keys: ["quotations", "customers"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "auditLog", "companyProfiles"] },
 ];
@@ -97,6 +101,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   dashboard: "nav.dashboard",
   quotations: "nav.quotations",
   products: "nav.products",
+  customers: "nav.customers",
   users: "nav.users",
   roles: "nav.roles",
   auditLog: "nav.auditLog",
@@ -113,6 +118,7 @@ function moduleForAction(action: string): string {
   // prefix first and get mislabeled as the single-company Settings module.
   if (action.startsWith("Company Profile") || action === "Default Company Changed") return "โปรไฟล์บริษัท";
   if (action.startsWith("Company")) return "การตั้งค่า";
+  if (action.startsWith("Customer")) return "ลูกค้า";
   if (action.startsWith("Profile") || action.startsWith("Signature")) return "โปรไฟล์";
   if (action.startsWith("Product")) return "คลังสินค้า";
   return "ระบบ";
@@ -157,6 +163,8 @@ export default function App() {
    * array is the correct fallback for a caller who can't see this resource anyway.
    */
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
+  /** Same `.catch(() => [])` guard as `fetchCompanyProfiles()` above, for the same reason: not every default role holds `customers:view` (Viewer/Approver only get it as a read-only grant, but a hypothetical custom role might not), and `quotations:create` alone is enough to read active customers via the server's carve-out — see api/_lib/customersHandler.ts. */
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
   const [showTourPrompt, setShowTourPrompt] = useState(false);
   const tour = useGuidedTour(() => {
@@ -171,8 +179,8 @@ export default function App() {
       if (cancelled) return;
       if (session.needsSetup) { setBootStatus("needsSetup"); return; }
       if (!session.user) { setBootStatus("signedOut"); return; }
-      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList, companyProfileList] = await Promise.all([
-        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(), fetchCompanyProfiles().catch(() => []),
+      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList, companyProfileList, customerList] = await Promise.all([
+        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(), fetchCompanyProfiles().catch(() => []), fetchCustomers().catch(() => []),
       ]);
       if (cancelled) return;
       setUsers(userList);
@@ -184,6 +192,7 @@ export default function App() {
       setQuotes(quoteList);
       setJobTypes(jobTypeList);
       setCompanyProfiles(companyProfileList);
+      setCustomers(customerList);
       setCurrentUser(session.user);
       setBootStatus("ready");
     })();
@@ -259,8 +268,8 @@ export default function App() {
   const handleSetupComplete = async (fields: SetupWizardFields): Promise<string | null> => {
     try {
       const created = await setupSuperAdmin(fields);
-      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList, companyProfileList] = await Promise.all([
-        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(), fetchCompanyProfiles().catch(() => []),
+      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList, companyProfileList, customerList] = await Promise.all([
+        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(), fetchCompanyProfiles().catch(() => []), fetchCustomers().catch(() => []),
       ]);
       setUsers(userList);
       setRoles(roleList);
@@ -271,6 +280,7 @@ export default function App() {
       setQuotes(quoteList);
       setJobTypes(jobTypeList);
       setCompanyProfiles(companyProfileList);
+      setCustomers(customerList);
       setCurrentUser(created);
       setBootStatus("ready");
       logAudit({
@@ -286,8 +296,8 @@ export default function App() {
     const result = await login(identifier, password);
     if (result.error || !result.user) return result.error;
     const found = result.user;
-    const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList, companyProfileList] = await Promise.all([
-      fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(), fetchCompanyProfiles().catch(() => []),
+    const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList, companyProfileList, customerList] = await Promise.all([
+      fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(), fetchCompanyProfiles().catch(() => []), fetchCustomers().catch(() => []),
     ]);
     setUsers(userList);
     setRoles(roleList);
@@ -298,6 +308,7 @@ export default function App() {
     setQuotes(quoteList);
     setJobTypes(jobTypeList);
     setCompanyProfiles(companyProfileList);
+    setCustomers(customerList);
     setCurrentUser(found);
     setBootStatus("ready");
     logAudit({ module: "ระบบ", action: "Login", details: "เข้าสู่ระบบสำเร็จ" }).catch(() => {});
@@ -317,6 +328,7 @@ export default function App() {
     setCategories([]);
     setJobTypes([]);
     setCompanyProfiles([]);
+    setCustomers([]);
     setNotifications([]);
     setQuotes([]);
     setBootStatus("signedOut");
@@ -350,11 +362,13 @@ export default function App() {
   }
 
   const canManageCompany = hasPermission(currentUser, roles, "company:manage");
-  const canViewCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:view");
   const canCreateCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:create");
   const canEditCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:edit");
   const canArchiveCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:archive");
   const canSetDefaultCompanyProfile = hasPermission(currentUser, roles, "companyProfiles:setDefault");
+  const canCreateCustomers = hasPermission(currentUser, roles, "customers:create");
+  const canEditCustomers = hasPermission(currentUser, roles, "customers:edit");
+  const canArchiveCustomers = hasPermission(currentUser, roles, "customers:archive");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
   /** Whether the sidebar should render its expanded content (group labels, nav text, full brand
    * wordmark) — true on desktop when the user hasn't collapsed it, and always true inside the
@@ -492,7 +506,9 @@ export default function App() {
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
           <Suspense fallback={<PageLoading />}>
             {effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} companyProfiles={companyProfiles} canViewCompanyProfiles={canViewCompanyProfiles} onNavigateToCompanyProfiles={() => setActiveNav("companyProfiles")} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} />
+              : effectiveNav === "customers"
+              ? <CustomersPage customers={customers} onCustomersChange={setCustomers} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} />
               : effectiveNav === "settings"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
               : effectiveNav === "products"

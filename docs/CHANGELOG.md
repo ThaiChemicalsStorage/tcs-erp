@@ -4,6 +4,182 @@
 
 ---
 
+## 2026-07-14 — Codex review fix pass: customer autofill/snapshot High Priority issues + documentation/naming cleanup
+
+**Scope**: an independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) of the previous same-day
+Customer Management pass found the core requirement already met (issuer UI gone, customer selector
+wired to the real `customers` API, `customerId`/`customerSnapshot` persisted server-side) but 2
+High Priority functional gaps and 3 Medium documentation/naming issues. Zero Critical findings.
+
+**High #1 — `customerSnapshot` was written but never read.** `QuoteDocument.tsx` initialized every
+Customer Information field's `useState` exclusively from the quote's legacy top-level fields
+(`quote.client`, `quote.contactName`, etc.), never from `quote.customerSnapshot` — so the persisted
+snapshot had no display consumer, failing the specified "snapshot displayed first when reopening a
+quotation" requirement. Fixed by seeding each field from `quote.customerSnapshot` first (via `??`,
+so a real stored empty string is respected, not skipped), falling back to the legacy top-level
+field, then to `""` — the exact specified (1) snapshot → (2) legacy field → (3) empty order.
+Deliberately does **not** add a further live lookup of the current customer master record by
+`customerId` as a fourth fallback tier — that would silently overwrite a user's already-edited quote
+fields with today's master data on every reopen, defeating the entire point of a frozen snapshot.
+`PrintDocument.tsx` needed no separate change — it renders the same component state, now correctly
+snapshot-seeded at its source.
+
+**High #2 — customer selection could leave stale optional fields.** `handleSelectCustomer` in
+`QuoteDocument.tsx` only overwrote `deliveryMethod`/`project`/`deliveryAddress` when the selected
+customer's corresponding value was truthy (`if (c.deliveryMethod) setDeliveryMethod(...)`) — so
+selecting a customer with blank delivery info left whatever value a *previously* selected customer
+or manual entry had typed there, which then got saved into the newly-selected customer's
+`customerSnapshot`. Fixed by assigning all nine fields unconditionally, including blank strings.
+
+**Medium — dead/confusing issuer-branded types and stale present-tense documentation.**
+- `src/lib/companyProfiles.ts`'s unused `IssuerCompanySnapshot` interface and unused
+  `issuerDisplayFromProfile()`/`issuerDisplayFromSnapshot()` functions (nothing called them —
+  `Quote.issuerCompanySnapshot` was already removed in the prior pass) — deleted outright.
+- `IssuerCompanyDisplay` (still legitimately used for the single-`company`-singleton document
+  header shape) renamed to `CompanyHeaderInfo` and **moved out of `companyProfiles.ts` into
+  `storage.ts`** (next to `Company`, its actual data source) — the old name/location, sitting next
+  to the live Company Profiles module, risked being mistaken for a still-supported multi-issuer
+  concept. `QuoteDocument.tsx`'s `issuerDisplay` variable and `PrintDocument.tsx`'s `issuer` prop
+  renamed to `companyHeader` to match; the now-pointless `?? company.x`/`?.` fallbacks in
+  `QuoteDocument.tsx` were also simplified away since `companyHeader` is always a fully-populated
+  plain object now, never conditionally built from a resolved Company Profile.
+- `src/lib/companyProfiles.ts`'s `CompanyProfile` module-doc-comment, `src/lib/auditLog.ts`'s
+  `relatedCompanyProfileId` doc comment, and `api/handlers/company-profiles.ts`'s `handleList()`
+  comment still described the reverted issuer-selector integration as current — all corrected to
+  past tense / marked reverted.
+- `docs/MODULES/CompanyProfiles.md`'s "Quotation Integration" section and "Audit Logging" section's
+  last paragraph were still written in **present tense** describing the removed feature as live
+  (despite an earlier disclaimer at the section's top) — the review read this as "presents the old
+  selector as current behavior." Rewrote "Quotation Integration" into a short, explicitly
+  past-tense archival summary (renamed "— ARCHIVED, removed 2026-07-14 (do not reimplement)") and
+  corrected the Audit Logging paragraph to state the removal plainly. `docs/CLAUDE.md`'s Company
+  Profiles module-table row's **status label itself** still read "✅ Built (master-data management +
+  Quotation integration)" — fixed to "✅ Built (admin master-data management **only** — NOT
+  connected to Quotation)", with the long historical narrative trimmed and pointed at CHANGELOG.md
+  instead of re-duplicated inline.
+- `docs/MODULES/Quotation.md`'s "Customer Selection" section previously asserted the app's
+  top-level quote fields were "always the direct source of truth shown on screen... not re-derived
+  from the snapshot" — that was the exact design gap Codex's High #1 finding caught; corrected to
+  describe the now-actually-implemented snapshot-first resolver.
+
+**Verification**: `npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, and
+`npm run build` all pass clean. No live-database browser verification — same sandboxed-session
+network limitation as every prior pass (see PROJECT_STATUS.md "Known Risks").
+
+**Deliberately not changed** (Low Priority / out of scope per the review's own framing): the
+selector's 20-result client-side cap with no server-side search (acceptable at today's real
+customer-list scale, matches the Company Profiles/Products precedent); the selected-customer chip
+shows only the company name, not contact/tax ID (a UX polish, not a functional gap); no automated
+test coverage was added (this project has none anywhere, by longstanding, documented choice — see
+RBAC.md Known Gaps — not a regression introduced by this pass).
+
+Docs updated: CLAUDE.md, PROJECT_STATUS.md, TODO.md, DATABASE.md, API.md, UI_GUIDELINES.md,
+IMPLEMENTATION_CHECKLIST.md, MODULES/CompanyProfiles.md, MODULES/Quotation.md,
+CODEX_REVIEW_REPORT.md (new "Claude Fix Status" section).
+
+---
+
+## 2026-07-14 — Correction: removed the incorrect Quotation "Issuer Company" feature; built the correct Customer Management module
+
+**Scope**: a follow-up correction to the 2026-07-13 ninth/eleventh/twelfth-pass work. That work
+built a Company Profiles selector into the Quotation form ("ออกใบเสนอราคาในนามบริษัท" — "issue
+quotation as company") against a misunderstanding of the actual business requirement: this ERP only
+ever issues quotations under a **single** company identity, so there is no "which company issues
+this quote" decision to make. The real, correct requirement — restated explicitly this pass — was
+always a **Customer** selector: save a customer/company's information once, then pick it from the
+Quotation form to autofill the Customer Information section.
+
+**Removed from the Quotation form and its API**:
+- `src/pages/quotation/IssuerCompanySelector.tsx` — deleted.
+- `QuoteDocument.tsx`'s issuer-company state block (`activeProfiles`/`defaultActiveProfile`/
+  `issuerCompanyId`/`issuerChanged`/`selectedLiveProfile`/`useSnapshotForDisplay`/
+  `hasIssuerProfile`/`canChangeIssuer`) and its rendered `<IssuerCompanySelector>` — removed.
+  `issuerDisplay` (still used by the header band/`PrintDocument.tsx`) is now built directly and
+  unconditionally from the `company` singleton, with no Company Profile branching.
+- `companyProfiles`/`canViewCompanyProfiles`/`onNavigateToCompanyProfiles` props — removed from
+  `QuoteDocument.tsx` and `QuotationPage.tsx`; `App.tsx` no longer threads them into
+  `QuotationPage` (it still fetches `companyProfiles` for the standalone admin page, unchanged).
+- `resolveIssuerCompanyUpdate()` and every `issuerCompanyId`/`issuerCompanySnapshot` branch in
+  `api/handlers/quotes.ts` (create/PATCH/workflow) — removed.
+- `Quote.issuerCompanyId`/`issuerCompanySnapshot` — removed from the `Quote` interface
+  (`src/lib/quotes.tsx`) and `QuoteDraftFields`. Old quote documents in MongoDB may still carry
+  these fields from the brief window they existed — harmless, simply unread now, not backfilled.
+- `quotation.issuer.*` i18n keys — removed (Thai + English); the "ออกใบเสนอราคาในนามบริษัท" string
+  no longer appears anywhere in the app.
+
+**What was explicitly NOT removed**: the Company Profiles module itself (admin CRUD page, API,
+`company_profiles` collection, `companyProfiles:*` permissions) — it remains fully functional for
+managing business-identity master data, per the instruction to forget the *issuer-company-in-Quotation*
+requirement specifically, not to delete the module wholesale.
+
+**Built: Customer Management module** (replacing an unused, schema-only 2026-07-09 draft shape):
+- `api/_lib/collections.ts`'s `CustomerFields` redefined to `companyName`/`contactName`/`phone`/
+  `email`/`address`/`taxId`/`deliveryMethod`/`projectName`/`deliveryAddress`/`isActive`/`isDeleted`/
+  audit fields — matching exactly what the Quotation form's Customer Information section collects,
+  replacing the old CRM-flavored `position`/`source`/`salesOwnerId`/`notes`/`status`/`deletedAt`
+  shape (which had zero live data — a clean redefinition, not a migration). `api/dashboard/index.ts`'s
+  `totalCustomers` query updated from `deletedAt: null` to `isDeleted: false` to match.
+- `api/_lib/customerValidation.ts` (new) — server-side validation, mirroring
+  `companyProfileValidation.ts`'s pattern; only `companyName` is required.
+- `api/_lib/customersHandler.ts` (new) — `handleCustomers()`, list/create/one/patch/archive, same
+  shape a standalone `api/handlers/customers.ts` would have. **Folded into the `company-profiles`
+  serverless function** rather than getting its own file: Vercel Hobby's 12-function cap was already
+  reached (`company-profiles.ts` was the 12th and final slot, 2026-07-13). `api/handlers/company-profiles.ts`'s
+  exported handler now checks the raw request pathname first — `/api/customers[/...]` delegates to
+  `handleCustomers()` before falling through to its own `/api/company-profiles` path parsing.
+  `vercel.json` gained matching `/api/customers` and `/api/customers/:path*` rewrites, both pointing
+  at `/api/handlers/company-profiles`.
+- `src/lib/customers.ts` (new) — `Customer`/`CustomerDraft`/`CustomerSnapshot` types +
+  `fetchCustomers()`/`fetchCustomer()`/`createCustomer()`/`updateCustomer()`/`setCustomerArchived()`.
+- `src/pages/customers/CustomersPage.tsx` (new) — single-file list + modal create/edit form (search,
+  active/inactive filter, show-archived toggle, activate/deactivate, archive/restore) — deliberately
+  simpler than Company Profiles' 3-file list/form/detail split, since a Customer record has far
+  fewer fields and no logo/bank-account/multi-section complexity.
+- `src/pages/quotation/CustomerSelector.tsx` (new) — "เลือกลูกค้า / บริษัท": a search input over the
+  fetched customer list (matches company name/contact/phone/email/tax ID), a dropdown of results,
+  and a collapsed "chip" once a customer is linked (with a `×` to unlink). Presentational only —
+  `QuoteDocument.tsx` owns the actual autofill (`handleSelectCustomer()` copies
+  companyName/contactName/phone/email/address/taxId always, and deliveryMethod/projectName/
+  deliveryAddress only when the customer record has them set) and the Draft-only lock
+  (`canChangeCustomer`).
+- `Quote.customerId?: string` / `customerSnapshot?: CustomerSnapshot` (`src/lib/quotes.tsx`) —
+  replacing the removed issuer fields. `QuoteDraftFields` gained `customerId` (client only ever
+  sends the id, same "never trust a client-supplied derived value" rule `amount`/`jobTypeName`
+  already follow).
+- `api/handlers/quotes.ts`: `resolveCustomerIdUpdate()` (validates a sent `customerId` exists and
+  isn't archived) and `buildCustomerSnapshot()` (always builds `customerSnapshot` from the
+  Customer Information fields actually being saved — client/contactName/contactPhone/contactEmail/
+  address/taxId/deliveryMethod/project/deliveryAddress — whether autofilled-then-edited or fully
+  manual, per "when manually entered, still save the information into customerSnapshot"). `POST
+  /api/quotes` always populates `customerSnapshot`, optionally `customerId`. `PATCH /api/quotes/:id`
+  and `POST /api/quotes/:id/workflow` restrict `customerId` changes to Draft status (`400`
+  otherwise, same rule the old `issuerCompanyId` had) and refresh `customerSnapshot` whenever
+  `customerId` or any Customer Information field is present in the request, from the resulting
+  merged values — otherwise leaving it untouched, so reopening a quotation preserves its existing
+  snapshot. A distinct `"Quotation Customer Changed"` audit action replaces the removed
+  `"Quotation Issuer Company Changed"` one.
+- 4 new permissions: `customers:view/create/edit/archive` (`src/lib/permissions.ts`, not
+  Super-Admin-locked) — Administrator gets all four by default; Sales User gets view/create/edit
+  (no archive); Approver 1/2 and Viewer get view-only. New "ลูกค้า" `PERMISSION_GROUPS` entry.
+- New nav item "ลูกค้า" (`Contact` icon), added to the existing "Sales" sidebar group alongside
+  Quotations; `CustomersPage` lazy-loaded and routed in `App.tsx`, with `customers` state fetched
+  in every boot/setup/sign-in `Promise.all` (`.catch(() => [])`-guarded, same reasoning as
+  `companyProfiles`).
+- ~40 new i18n keys (Thai + English): `nav.customers`, `quotation.customerSelector.*`,
+  `customers.*` (page/list/form/toasts/confirms), `empty.customers.*`, `permission.customers*`.
+
+**Verification**: `npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, and
+`npm run build` all pass clean. **Not done**: no live-database browser verification (same
+sandboxed-session network limitation as every prior pass — see PROJECT_STATUS.md Known Risks); no
+"บันทึกเป็นลูกค้าใหม่" (save-as-new-customer-from-the-quotation-form) convenience feature —
+explicitly flagged optional/future in the requirement ("do not add unless simple and safe").
+
+Docs updated: PROJECT_STATUS.md, TODO.md, CLAUDE.md, DATABASE.md, API.md, RBAC.md,
+UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/Customer.md (full rewrite),
+MODULES/Quotation.md, MODULES/CompanyProfiles.md.
+
+---
+
 ## 2026-07-14 — Dashboard Codex-review fix pass (Critical + High Priority)
 
 **Scope**: an independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) of the same-day Pre-Tax

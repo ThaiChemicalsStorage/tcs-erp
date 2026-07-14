@@ -131,23 +131,34 @@ export async function positionsCollection() {
   return db.collection<PositionFields>("positions");
 }
 
+/**
+ * Customer master data (redefined 2026-07-14 — corrects an earlier misunderstanding that built
+ * a "Company Profiles" / issuer-company selector into the Quotation form instead). A Customer is
+ * who a quotation is issued *to*, saved once and reused across quotations via the Customer
+ * selector (`src/pages/quotation/CustomerSelector.tsx`) — see `Quote.customerId`/
+ * `customerSnapshot` in `src/lib/quotes.tsx` and docs/MODULES/Customer.md. Shape intentionally
+ * matches the fields the Quotation form's Customer Information section actually collects
+ * (companyName/contactName/phone/email/address/taxId/deliveryMethod/projectName/deliveryAddress)
+ * rather than the earlier CRM-flavored draft (position/source/salesOwnerId/notes/status) — no live
+ * data existed under the old shape (schema-only, zero API routes/UI), so this is a clean redefinition,
+ * not a migration.
+ */
 export interface CustomerFields {
   companyName: string;
   contactName: string;
-  position: string;
   phone: string;
   email: string;
   address: string;
   taxId: string;
-  source: string;
-  salesOwnerId: string;
-  notes: string;
-  status: "active" | "inactive";
+  deliveryMethod: string;
+  projectName: string;
+  deliveryAddress: string;
+  isActive: boolean;
+  isDeleted: boolean;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
-  deletedAt: string | null;
 }
 export async function customersCollection() {
   const db = await getDb();
@@ -386,8 +397,8 @@ export async function ensureIndexes() {
     permissions.createIndex({ key: 1 }, { unique: true }),
     departments.createIndex({ code: 1 }, { unique: true }),
     positions.createIndex({ code: 1 }, { unique: true }),
-    customers.createIndex({ salesOwnerId: 1 }),
-    customers.createIndex({ deletedAt: 1 }),
+    customers.createIndex({ isDeleted: 1 }),
+    customers.createIndex({ isActive: 1 }),
     customers.createIndex({ companyName: 1 }),
     customerContacts.createIndex({ customerId: 1 }),
     leads.createIndex({ salesOwnerId: 1 }),

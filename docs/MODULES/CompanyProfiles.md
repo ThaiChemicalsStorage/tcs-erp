@@ -15,20 +15,49 @@ of feature as Job Types or Product Categories, just for "who is issuing this doc
 "what is being sold." No multi-tenant architecture, no per-company data isolation, no separate
 deployment.
 
-**Master-data management (add/edit/view/activate/archive/set default) and Quotation-form
-integration are both built** — see "Quotation Integration" below for exactly how a user picks a
-company profile when issuing a quote, what gets stored, and the fallback/Draft-only rules.
+**Master-data management (add/edit/view/activate/archive/set default) is built and unaffected.**
+Quotation-form integration ("Quotation Integration," below) was built 2026-07-13 and then **fully
+reverted 2026-07-14** — see "Correction (2026-07-14)" immediately below.
+
+## Correction (2026-07-14)
+
+The 2026-07-13 "Quotation Integration" work described later in this doc (an `IssuerCompanySelector`
+panel on the Quotation form, `Quote.issuerCompanyId`/`issuerCompanySnapshot`, a Draft-only
+issuer-change rule, a 4-step display fallback chain) was built against a **misunderstanding of the
+actual business requirement**. This ERP only ever issues quotations under a single company identity
+— there is no concept of "which company issues this quote" to select. The real, correct requirement
+was always a **Customer** selector: pick a saved customer/company the quotation is *for*, and
+autofill the Customer Information section from it. That has been built as
+[Customer.md](./Customer.md) / `src/pages/quotation/CustomerSelector.tsx`.
+
+**What was removed from the Quotation form**: the `IssuerCompanySelector` component (deleted),
+"ออกใบเสนอราคาในนามบริษัท" and every related UI string, the `companyProfiles`/
+`canViewCompanyProfiles`/`onNavigateToCompanyProfiles` props threaded through `QuotationPage.tsx`/
+`QuoteDocument.tsx`, and `resolveIssuerCompanyUpdate()`/the issuer-handling branches in
+`api/handlers/quotes.ts`. `Quote.issuerCompanyId`/`issuerCompanySnapshot` are no longer read,
+written, or validated by any route — see [Quotation.md](./Quotation.md) "Customer Selection" and
+[API.md](../API.md) "Quotations."
+
+**What was NOT removed**: this Company Profiles module itself — the admin page
+(`CompanyProfilesPage.tsx`/`CompanyProfileList.tsx`/`CompanyProfileForm.tsx`/
+`CompanyProfileDetail.tsx`), its API (`api/handlers/company-profiles.ts`), its `company_profiles`
+collection, and its `companyProfiles:*` permissions all remain fully functional for managing
+business-identity master data — it's simply **no longer read anywhere in the Quotation create/edit
+flow**. It stays available in the nav (admin group) for whatever future use the business decides,
+per the instruction to "forget the issuer company requirement completely" for Quotations
+specifically, not to delete the module. The rest of this document (Business Flow, Data Rules, Form
+Fields, Pages/Components, Database, APIs, Permissions, Audit Logging) is still accurate for the
+module as an admin-managed master-data list; only "Quotation Integration" below is historical.
 
 ## Relationship to the `company` singleton
 
 This app already has a single-company `company` MongoDB collection (`src/lib/storage.ts`,
 Settings → Company Info, `company:manage` permission) — the app's own branding/identity record,
-used today for the sidebar, login page, and favicon. **That record is untouched by this module**
-and is now only a **fallback**, not the primary source, for the quotation header/print output:
-`PrintDocument.tsx`/`QuoteDocument.tsx` prefer a quote's own `issuerCompanySnapshot`, then a
-live-selected `CompanyProfile`, then the default active profile, and only fall back to the
-`company` singleton when none of those resolve (a quote that predates this feature, or when no
-company profile has ever been set up) — see "Quotation Integration" below for the full chain.
+used for the sidebar, login page, favicon, and (as of the 2026-07-14 correction below) **always**
+the quotation header/print output too — `PrintDocument.tsx`/`QuoteDocument.tsx` build their
+`issuer` display directly from `company`, not from any `CompanyProfile`. **That record is untouched
+by this module** and the two collections are deliberately not merged (see below) — `company_profiles`
+is simply unused by Quotation now, not a fallback source for it. See "Correction (2026-07-14)" below.
 
 `company_profiles` is a **separate** collection from `company` — a *list* of company identities,
 versus `company`'s single record. They are deliberately not merged or migrated into each other:
@@ -191,99 +220,49 @@ permission-gated admin modules; it just didn't hold up under review for this mod
 "structured linkage" and "not forgeable" bar was applied — the fix moved it to match quotes'
 stricter precedent instead.)
 
-**Quotation-issuer audit entries (added 2026-07-13, Quotation integration pass)**: the same
-`relatedCompanyProfileId`/`relatedCompanyProfileName` structured fields are reused (not
-duplicated) on quote-side audit entries written by `writeQuoteAuditEntry()` in
-`api/handlers/quotes.ts` — `"Quotation Created"` now names the issuer company in its `details`
-text when one was set, and a Draft-only issuer change writes a distinct `"Quotation Issuer Company
-Changed"` entry. See [MODULES/Quotation.md](./Quotation.md) "Issuer Company" and
-[AuditLog.md](./AuditLog.md).
+**Quotation-issuer audit entries — REMOVED 2026-07-14, no longer accurate.** A 2026-07-13 pass had
+quote-side audit entries reuse `relatedCompanyProfileId`/`relatedCompanyProfileName` when an issuer
+company was set/changed. That entire feature was reverted the next day (see "Correction
+(2026-07-14)" above) — `writeQuoteAuditEntry()` (`api/handlers/quotes.ts`) no longer writes either
+field; quote-side entries now write a `"Quotation Customer Changed"` action with
+`relatedCustomerName` instead, when the linked [Customer](./Customer.md) changes. See
+[MODULES/Quotation.md](./Quotation.md) "Customer Selection" and [AuditLog.md](./AuditLog.md).
 
-## Quotation Integration (built 2026-07-13)
+## Quotation Integration — ARCHIVED, removed 2026-07-14 (do not reimplement)
 
-"Save company info once here, pick which one issues each quote" is now wired end-to-end. The
-Quotation form (`QuoteDocument.tsx`) shows an `IssuerCompanySelector` above the customer section —
-"ออกใบเสนอราคาในนามบริษัท" — populated from `GET /api/company-profiles` (active,
-non-archived profiles only, via the relaxed `quotations:create` read access described in
-[RBAC.md](../RBAC.md)). Selection rules: a single default active profile (or the lone active
-profile if there's only one) preselects automatically; multiple active profiles require an
-explicit pick; zero active profiles shows an empty state ("ยังไม่มีข้อมูลบริษัท" /
-"กรุณาเพิ่มข้อมูลบริษัทก่อนสร้างใบเสนอราคา") with a permission-gated link straight to this module.
-Picking a profile updates the on-screen header preview immediately — logo, name (TH + EN if
-present), address, phone/fax/email, website, tax ID, branch — omitting any field that's empty
-rather than showing placeholder text.
+> **This section is a historical record of a feature that no longer exists in this codebase.**
+> Written in past tense on purpose so it cannot be misread as current behavior. Do not use it as a
+> spec for future work — see "Correction (2026-07-14)" above for what replaced it
+> ([Customer.md](./Customer.md)'s `CustomerSelector`).
 
-`Quote.issuerCompanyId`/`issuerCompanySnapshot` (`src/lib/quotes.tsx`) are populated server-side by
-`resolveIssuerCompanyUpdate()` in `api/handlers/quotes.ts`: the client only ever sends
-`issuerCompanyId`; the server looks up the referenced profile, rejects it with a `400` if it
-doesn't exist or is inactive/archived, and builds `issuerCompanySnapshot` (shape: `IssuerCompanySnapshot`
-in `src/lib/companyProfiles.ts` — the full profile minus `id`/`isDefault`/`isActive`/`isDeleted`/
-timestamps/audit fields) from the profile as it exists at that instant. **This is the
-snapshot-not-live-reference rule this doc previously flagged as critical**, now enforced: editing a
-company profile's address/phone/logo later never changes what an already-saved quotation displays,
-because the quotation reads its own frozen copy, not the live profile. This mirrors the
-already-audited rule for `QuoteLine` never referencing `Product` live (see [Product.md](./Product.md)).
+Between 2026-07-13 and 2026-07-14, the Quotation form (`QuoteDocument.tsx`) briefly showed an
+`IssuerCompanySelector` above the customer section — "ออกใบเสนอราคาในนามบริษัท" — that let a user
+pick a saved Company Profile to "issue" the quotation under. It populated from
+`GET /api/company-profiles`, preselected a default/sole active profile, and required an explicit
+pick among 2+. Selecting a profile set `Quote.issuerCompanyId` and a server-built, frozen
+`issuerCompanySnapshot` (via `resolveIssuerCompanyUpdate()` in `api/handlers/quotes.ts`), locked to
+Draft-only changes, with a 4-step display fallback chain (snapshot → live-referenced profile →
+default active profile → the legacy `company` singleton) feeding both the on-screen header and
+`PrintDocument.tsx`'s `issuer` prop.
 
-**Issuer changes are Draft-only.** `PATCH /api/quotes/:id` and `POST /api/quotes/:id/workflow`
-both throw a `400` if a request tries to change `issuerCompanyId` while the quote's status isn't
-`"ร่าง"` (Draft) — once a quote has been submitted/approved/sent/etc., its issuer identity is
-frozen, same principle as the snapshot itself. Within Draft, changing the selection re-runs
-`resolveIssuerCompanyUpdate()` and takes a fresh snapshot; sending an empty `issuerCompanyId`
-explicitly clears both fields (`$unset`, not just an empty string). This was a deliberate choice
-among the options this doc previously left open — see "Decisions made" below.
-
-**Display resolution, for both the on-screen preview and `PrintDocument.tsx`** (the actual
-printed/PDF quotation), a 4-step fallback chain: (1) `issuerDisplayFromSnapshot(quote.issuerCompanySnapshot)`
-(an already-saved quote whose selector hasn't been touched this session), (2)
-`issuerDisplayFromProfile(selectedLiveProfile)` — the profile the quote actually references, if
-it's still active/not-deleted (a Draft being actively edited, or a brand-new quote before its
-first save), (3) `issuerDisplayFromProfile(defaultActiveProfile)` — **added 2026-07-13, Codex
-review Medium #1 fix**: covers the partial-data edge case where `issuerCompanyId` is set but
-`issuerCompanySnapshot` is missing (e.g. very old data) and the referenced profile has since been
-deactivated/archived, so step 2 can't find it — this step shows the default active company instead
-of jumping straight to legacy data, since that's still real, non-fake company information, just
-not the exact company this specific quote originally referenced, (4) the legacy Settings → Company
-Info `company` singleton (a quote created before this feature existed, or no company profile set
-up at all) — so neither the header band nor the print output ever has a "nothing to show" case.
-Steps 2 and 3 both count as "a real issuer was resolved" for `hasIssuerProfile`. A quote where none
-of the first three steps resolve (`hasIssuerProfile === false`) shows a distinct warning banner
-("ใบเสนอราคานี้ยังไม่มีข้อมูลบริษัทผู้ออกเอกสาร") independently of what the preview panel
-displays — draft creation without an issuer is allowed (not hard-blocked), consistent with this
-app's existing Draft workflow already tolerating other blank fields.
-
-**Decisions made** (previously listed as open questions in this doc):
-- The Quotation form has a company-profile picker, defaulting to the default/sole active profile;
-  it is **not** hard-required to save a Draft (a warning is shown instead — see above).
-- `PrintDocument.tsx` now takes an `issuer: IssuerCompanyDisplay` prop (replacing its old
-  `company: Company` prop) resolved via the fallback order above — no hardcoded company header
-  remains in the quotation form or print output.
-- `quotationPrefix`/`quotationNumberFormat` per company profile are **not** wired into
-  `nextQuoteId()`'s atomic sequence yet — still a single global counter regardless of issuer
-  company. Left as a known limitation (see below), not required for this pass.
-- Company-profile *selection* on a quote does not require its own new permission — it rides on
-  whichever permission already gates the quote itself (`quotations:create`/`edit`) plus the
-  relaxed `GET /api/company-profiles` read access (see [RBAC.md](../RBAC.md)) — a Sales user can
-  select an issuer but still cannot manage Company Profiles themselves.
+None of this exists anymore: `IssuerCompanySelector.tsx` was deleted, `resolveIssuerCompanyUpdate()`
+and every issuer branch in `api/handlers/quotes.ts` were removed, `Quote.issuerCompanyId`/
+`issuerCompanySnapshot` were removed from the client type, and the `IssuerCompanySnapshot`/
+`IssuerCompanyDisplay` types themselves were deleted from `src/lib/companyProfiles.ts` (the
+surviving single-company header shape was renamed `CompanyHeaderInfo` and moved to
+`src/lib/storage.ts` specifically so it could no longer be confused with this removed feature).
+Old quote documents saved during this window may still carry stray, unread `issuerCompanyId`/
+`issuerCompanySnapshot` values in MongoDB — harmless, not backfilled.
 
 ## Known Limitations
 
-- **`quotationPrefix`/`quotationNumberFormat` per company profile are not wired into quotation
-  numbering** — `nextQuoteId()` (`api/handlers/quotes.ts`) still uses one single global atomic
-  `counters` sequence regardless of which company profile issues the quote. A future pass could
-  make numbering per-company-profile if the business needs distinct number ranges per issuing
-  entity — not required for this pass, not built speculatively ahead of that need.
-- **No hard block on saving a Draft quotation with no issuer company selected** — a warning banner
-  is shown ("ใบเสนอราคานี้ยังไม่มีข้อมูลบริษัทผู้ออกเอกสาร") but the save is allowed, consistent
-  with this app's Draft workflow already tolerating other missing fields. If the business later
-  decides an issuer company must be mandatory even for a Draft, this is a one-line change in
-  `QuoteDocument.tsx`'s `save()` client-side check plus a server-side `400` in
-  `POST /api/quotes` — not done here since it wasn't explicitly required.
-- **`handleWorkflow` does not write a distinct "Quotation Issuer Company Changed" audit entry** —
-  only `PATCH /api/quotes/:id` does. A workflow-transition request that also changes the issuer
-  (e.g. submitting a Draft while also switching companies in the same request) is still fully
-  validated and snapshotted correctly, and the workflow's own action audit entry still fires — it
-  just doesn't get the *additional*, more specific issuer-change entry `PATCH` gets. Worth
-  reconsidering in a future pass; not a correctness gap, a granularity one.
+- ~~`quotationPrefix`/`quotationNumberFormat` per company profile are not wired into quotation
+  numbering~~ — **moot as of 2026-07-14**: Company Profiles is no longer read by Quotation at all
+  (see "Correction (2026-07-14)" above), so there's no "which profile issues the quote" concept to
+  wire numbering against. Left here as historical context only.
+- ~~No hard block on saving a Draft quotation with no issuer company selected~~ / ~~`handleWorkflow`
+  does not write a distinct "Quotation Issuer Company Changed" audit entry~~ — **both moot as of
+  2026-07-14**, same reason: the issuer-company feature these referred to no longer exists.
 - No live-database browser verification — same sandboxed-session network limitation as every
   other pass this session (see PROJECT_STATUS.md "Known Risks"); verified via an isolated
   Playwright preview of the real components with mock data instead.

@@ -19,16 +19,16 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **Users** (`src/lib/users.ts`): a `User` is both the employee record and the account — `employeeId`, `fullName`, `username`, `email`, `passwordHash`, `phone`, `department`, `position`, `roleKey`, `status` (`active`/`inactive`), `profilePictureDataUrl`, `signatureDataUrl`. `employeeId`/`username`/`email` are enforced unique. **Position and Role are deliberately separate fields** — Position is a free-text job title (with suggestions: CEO, Director, General Manager, Sales Manager, Sales Executive, Engineer, HR, Accounting, Purchasing, Warehouse) with no bearing on permissions; Role is the RBAC role, assigned independently by an admin.
 
-**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 23-key `Permission` union — `dashboard:view`; `quotations:view/create/edit/delete/approve/reject/export`; `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `companyProfiles:view/create/edit/archive/delete/setDefault` (added 2026-07-13, see "Company Profiles" below). Six default `Role`s ship out of the box:
+**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 27-key `Permission` union — `dashboard:view`; `quotations:view/create/edit/delete/approve/reject/export`; `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `companyProfiles:view/create/edit/archive/delete/setDefault` (added 2026-07-13, see "Company Profiles" below); `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below). Six default `Role`s ship out of the box:
 
 | Role | `isSuperAdmin` | `isSystem` | Summary |
 |---|---|---|---|
 | Super Admin | ✅ | ✅ (undeletable) | Every permission, always — `roleHasPermission()` short-circuits to `true` regardless of the stored list |
-| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product CRUD + audit log view + view (not manage) company profiles. No `roles:manage`/`company:manage`. |
-| Sales User | — | — | Create/edit/export quotations, no approve/reject. Maps to the request's "Sales Executive." |
-| Approver Level 1 | — | — | View/edit/approve/reject quotations. Maps to "Sales Manager." |
+| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + view (not manage) company profiles. No `roles:manage`/`company:manage`. |
+| Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Maps to the request's "Sales Executive." |
+| Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Maps to "Sales Manager." |
 | Approver Level 2 | — | — | Same rights as Level 1 in this build (see Known Simplifications below). Maps to "CEO." |
-| Viewer | — | — | `*:view` only. |
+| Viewer | — | — | `*:view` only (incl. `customers:view`). |
 
 **No new permission was added for the 2026-07-10 Job Type / Executive Dashboard pass.** `GET /api/jobtypes` reuses `quotations:view` (already required to touch a quote); `POST`/`PATCH /api/jobtypes` reuse `company:manage` (Super Admin only, matching the existing precedent for company-wide configuration data like bank/VAT/T&C). `GET /api/dashboard` continues to reuse `dashboard:view`, which every default role already has — two of its response sections (`activityTimeline`, `approvalDashboard`) are additionally gated per-caller by the `auditLog:view`/`quotations:approve` the caller already has, rather than a new dashboard-specific permission.
 
@@ -55,21 +55,39 @@ isn't wired to any additional route: this module's only "delete" is the reversib
 (`companyProfiles:archive`), matching the pre-existing Category/Job Type precedent of no
 hard-delete route — see API.md/DATABASE.md for the full reasoning.
 
-**Quotation-issuer selection (added 2026-07-13, Quotation integration pass)**: a Sales user holds
-`quotations:create` but not `companyProfiles:view` by default (see above), yet the Quotation
-form's "ออกใบเสนอราคาในนามบริษัท" selector needs to read the list of active companies to populate
-its dropdown. Rather than granting `companyProfiles:view` to Sales by default (which would also
-unlock the Company Profiles management page itself, not just quotation issuer selection),
-`GET /api/company-profiles` was relaxed to accept **either** `companyProfiles:view` **or**
-`quotations:create` — see [API.md](./API.md). A caller with only `quotations:create` gets a
-narrower, server-filtered response (active and not-deleted profiles only, no archived/inactive
-ones), so a Sales user can select an issuing company without being able to see or manage anything
-they couldn't already see via the selector itself. Selecting a company profile on a quote does not
-require any of the six Company Profile management permissions — only `quotations:create`/`edit`
-(whichever already gates the quote itself) plus this relaxed read access. Changing which company a
-quote is issued under is further restricted to quotes still in Draft status — see
-[MODULES/Quotation.md](./MODULES/Quotation.md) "Issuer Company" and [API.md](./API.md)'s
-`PATCH /api/quotes/:id` row — enforced server-side, not just hidden client-side.
+**Quotation-issuer selection — REMOVED 2026-07-14 (correction).** A 2026-07-13 pass relaxed
+`GET /api/company-profiles` to also accept `quotations:create` callers so the Quotation form's
+(incorrect) issuer-company selector could read active profiles. That selector and its RBAC carve-out
+purpose no longer apply — the route still accepts `quotations:create` (kept, harmless, no active
+consumer relies on it today), but Quotation no longer reads `company_profiles` at all. See
+[MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) "Correction (2026-07-14)" and "Customers"
+below for the RBAC carve-out that replaced it.
+
+### Customers (added 2026-07-14)
+
+4 new permissions — `customers:view/create/edit/archive` — gate the Customer master-data module
+(see [MODULES/Customer.md](./MODULES/Customer.md)), built as the correction to the removed
+issuer-company feature above. **Not** Super-Admin-locked, matching the Company Profiles precedent.
+`defaultRoles`: Administrator gets all four; Sales User gets view/create/edit (no archive — matches
+their day-to-day "add and maintain customer records" workflow without granting the ability to
+remove one); Approver 1/2 and Viewer get view-only.
+
+Every route in `api/_lib/customersHandler.ts` calls `requirePermission()` server-side with the
+matching permission. Same "manage vs. pick-for-a-quotation" carve-out as Company Profiles:
+`GET /api/customers`/`GET /api/customers/:id` accept **either** `customers:view` **or**
+`quotations:create` — a Sales user without `customers:view` (not the default grant here, but
+possible on a custom role) can still search customers to autofill a quotation via the Quotation
+form's `CustomerSelector`, getting a narrower, server-filtered response (active and not-deleted
+only). Selecting a customer on a quote does not require any of the four Customer management
+permissions — only `quotations:create`/`edit` (whichever already gates the quote itself) plus this
+relaxed read access. Changing which customer a quote is linked to is further restricted to quotes
+still in Draft status — see [MODULES/Quotation.md](./MODULES/Quotation.md) "Customer Selection" and
+[API.md](./API.md)'s `PATCH /api/quotes/:id` row — enforced server-side, not just hidden
+client-side. `customers:archive` (not granted to Sales User by default) gates the one form of
+"delete" this module has, same reversible-archive precedent as Company Profiles/Categories/Job
+Types — no separate `customers:delete` permission exists (unlike Company Profiles, which defines
+one it doesn't wire to a route, matching an older literal request; Customers wasn't asked to define
+one, so it doesn't).
 
 **Independently confirmed 2026-07-13 (tenth same-day pass)**: a follow-up Codex review of this
 module found **zero Critical issues** in this RBAC enforcement — every exposed route was already

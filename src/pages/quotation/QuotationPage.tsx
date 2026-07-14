@@ -4,7 +4,7 @@ import type { Product, ProductCategory } from "../../lib/products";
 import type { JobType } from "../../lib/jobTypes";
 import type { User } from "../../lib/users";
 import type { Role } from "../../lib/roles";
-import type { CompanyProfile } from "../../lib/companyProfiles";
+import type { Customer } from "../../lib/customers";
 import {
   type Quote, type QuoteInterest, type QuoteDraftFields, type ApprovalAction, type QuotationListFilter,
   createQuote, updateQuote, duplicateQuote, performWorkflowAction, approvalActionLabelKey, computeQuotePermissions, nextQuoteId,
@@ -26,9 +26,7 @@ export function QuotationPage({
   products,
   categories,
   jobTypes,
-  companyProfiles,
-  canViewCompanyProfiles,
-  onNavigateToCompanyProfiles,
+  customers,
   initialFilter,
   onFilterConsumed,
   initialQuoteId,
@@ -44,9 +42,7 @@ export function QuotationPage({
   products: Product[];
   categories: ProductCategory[];
   jobTypes: JobType[];
-  companyProfiles: CompanyProfile[];
-  canViewCompanyProfiles: boolean;
-  onNavigateToCompanyProfiles: () => void;
+  customers: Customer[];
   /** Set by the Dashboard's pipeline/follow-up click-through — consumed once on mount then cleared, see App.tsx. */
   initialFilter: QuotationListFilter | null;
   onFilterConsumed: () => void;
@@ -183,9 +179,7 @@ export function QuotationPage({
         products={products}
         categories={categories}
         jobTypes={jobTypes}
-        companyProfiles={companyProfiles}
-        canViewCompanyProfiles={canViewCompanyProfiles}
-        onNavigateToCompanyProfiles={onNavigateToCompanyProfiles}
+        customers={customers}
         permissions={permissions}
         onBack={() => setView("list")}
         onSave={handleSave}

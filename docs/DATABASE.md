@@ -19,7 +19,8 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `audit_log` | MongoDB `ObjectId` | `AuditLogEntry` minus `id` | `POST /api/audit-log` always derives `userId`/`userName`/`roleName` from the authenticated session, never trusting those fields from the request body. |
 | `quotes` | **the business ID string itself** (e.g. `"QT-2567-0041"`), not an `ObjectId` | `Quote` minus `id` (the business ID is `_id`) | `nextQuoteId()` in `api/handlers/quotes.ts` scans existing `_id`s to compute the next sequence number. |
 | `job_types` | MongoDB `ObjectId` | `code: string; name: string; isActive: boolean` + audit fields | **Added 2026-07-10** for the Executive Dashboard/CRM pass — Job Type master data, one per quotation. See "Job Type" entity section below. |
-| `company_profiles` | MongoDB `ObjectId` | `CompanyProfile` minus `id` (see below) | **Added 2026-07-13** — the official business identities a quotation can (eventually) be issued under, distinct from the `company` singleton above. See "`CompanyProfile`" entity section below and [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md). |
+| `company_profiles` | MongoDB `ObjectId` | `CompanyProfile` minus `id` (see below) | **Added 2026-07-13** — admin-managed business-identity master data, distinct from the `company` singleton above. **Not used by Quotation** — see "`CompanyProfile`" entity section below and [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) for the 2026-07-14 correction. |
+| `customers` | MongoDB `ObjectId` | `Customer` minus `id` (see below) | **Redefined + wired 2026-07-14** — customer master data, selected on the Quotation form to autofill the Customer Information section. Shares a serverless function with `company_profiles` (`api/handlers/company-profiles.ts` dispatches `/api/customers` requests to `api/_lib/customersHandler.ts`) — see [ARCHITECTURE.md](./ARCHITECTURE.md) "Serverless function count." |
 | `dashboard` (virtual — no collection) | — | — | `GET /api/dashboard` (`api/dashboard/index.ts`) is a read-only aggregation over `customers`/`leads`/`quotes`/`products`/`categories`/`audit_log`/`notifications`/`job_types`-derived fields already embedded on `quotes` — it doesn't own or write any collection of its own. See Dashboard KPI section below and [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full breakdown. |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
@@ -32,8 +33,7 @@ Per the 2026-07-09 production-readiness pass, every collection below exists with
 | `sessions` | Scaffolding for future "log out other devices" / session revocation. Nothing writes to it — auth is still pure-JWT (`api/_lib/auth.ts`), unchanged. | No | `{ userId: 1 }`, TTL index `{ expiresAt: 1 }` (`expireAfterSeconds: 0`, auto-purges) |
 | `departments` | Org unit list. **Not** wired into `User.department` (still free text, unchanged — see `User` below). | Yes, generic starter list (ฝ่ายขาย, ฝ่ายจัดซื้อ, ฝ่ายคลังสินค้า, ฝ่ายบัญชี, ฝ่ายทรัพยากรบุคคล, ฝ่ายบริหาร, ฝ่ายไอที) — rename/manage via a future admin UI | `{ code: 1 }` unique |
 | `positions` | Position/level list. **Not** wired into `User.position` (still free text, unchanged). | Yes, generic starter list (พนักงาน, หัวหน้างาน, ผู้จัดการ, ผู้จัดการทั่วไป, กรรมการผู้จัดการ) | `{ code: 1 }` unique |
-| `customers` | CRM customer record — company/contact/tax/sales-owner fields, soft-delete via `deletedAt`. No API routes/UI yet; `GET /api/dashboard`'s `totalCustomers` KPI counts this (correctly always 0 until the module ships). | No (zero business data by design) | `{ salesOwnerId: 1 }`, `{ deletedAt: 1 }`, `{ companyName: 1 }` |
-| `customer_contacts` | Secondary contacts beyond a customer's primary contact. | No | `{ customerId: 1 }` |
+| `customer_contacts` | Secondary contacts beyond a customer's primary contact — **still schema-only**, no API/UI (unrelated to the 2026-07-14 `customers` rewrite below, which uses `Quote`'s own single-contact shape instead of this table). | No | `{ customerId: 1 }` |
 | `leads` | CRM lead/pipeline record, 9-stage `LeadStage` (ลูกค้าใหม่ → ... → ปิดการขายสำเร็จ/เสียโอกาส), `convertedToCustomerId` link. Resolves the open "Lead vs Customer: one entity or two?" question from `MODULES/Customer.md`/`Lead.md` — this pass builds them as **two separate collections**. `GET /api/dashboard`'s `totalLeads` KPI counts this. | No | `{ salesOwnerId: 1 }`, `{ stage: 1 }`, `{ deletedAt: 1 }` |
 | `lead_activities` | Append-only lead timeline (stage changes, notes, calls, emails, meetings) — same immutable-event-log shape as `audit_log`/embedded `approvalHistory`, no `updatedAt`/`deletedAt`. | No | `{ leadId: 1, createdAt: -1 }` |
 | `product_templates` | Reusable presets for fast product creation, independent of the live `products` catalog. **Semantics not fully settled** — treat as a starting interpretation, confirm before building UI against it. | No | `{ categoryId: 1 }`, `{ isActive: 1 }` |
@@ -320,23 +320,72 @@ collection was added after the deployment was already provisioned): `{ companyCo
 defensively to drop-and-recreate on an `IndexOptionsConflict` (e.g. if a plain, non-unique
 `isDefault` index from an earlier local run already exists) rather than crashing every cold start.
 
-**Quotation integration — wired 2026-07-13**: `Quote.issuerCompanyId`/`issuerCompanySnapshot` (added
-the same day as this collection, initially unused) are now set by `POST /api/quotes` and (Draft-only)
-`PATCH /api/quotes/:id`/`POST /api/quotes/:id/workflow` — see
-[MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) "Quotation Integration" and
-[MODULES/Quotation.md](./MODULES/Quotation.md) "Issuer Company" for the full flow. Same
-snapshot-not-live-reference rule as `Quote.jobTypeCode`/`jobTypeName` above: `issuerCompanySnapshot`
-is built server-side from the live `CompanyProfile` at the instant it's selected and never re-derived
-afterward, so editing a company profile's master data later cannot silently change what an
-already-issued quotation displays.
+**Quotation integration — reverted 2026-07-14 (correction).** The 2026-07-13 "Quotation
+Integration" pass described here (an `IssuerCompanySelector` on the Quotation form, wiring
+`Quote.issuerCompanyId`/`issuerCompanySnapshot` to a selected `CompanyProfile`) was built against a
+misunderstanding of the actual business requirement — the ERP only ever has one issuer company, and
+the real need was a **Customer** selector, not an issuer-company one. That UI/wiring has been fully
+removed from the Quotation form; see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md)
+"Correction (2026-07-14)" and the new `Customer`/`Quote.customerId`/`customerSnapshot` entities
+below. `company_profiles` itself, and its admin CRUD page, are unaffected and remain available for
+other future use — they're simply no longer read anywhere in the quotation create/edit flow.
 
-**Display fallback, corrected 2026-07-13 (twelfth same-day pass, Codex review Medium #1)**: for a
-quote where `issuerCompanyId` is set but `issuerCompanySnapshot` is missing (rare partial/legacy
-data) and the referenced `CompanyProfile` document has since had `isActive`/`isDeleted` changed so
-it no longer appears in the active list, `QuoteDocument.tsx` now falls back to the default active
-`CompanyProfile` before falling back further to the legacy `company` singleton — previously it
-skipped straight to the singleton. This is a client-side display/read concern only; no schema or
-stored-document change was needed.
+Quote documents saved between 2026-07-13 and 2026-07-14 may still carry a stray
+`issuerCompanyId`/`issuerCompanySnapshot` pair — harmless, unread by any current code path, not
+backfilled/cleaned up (no functional reason to touch old rows). See TODO.md.
+
+### `Customer` (`src/lib/customers.ts`) — redefined + wired 2026-07-14
+
+```ts
+interface Customer {
+  id: string;
+  companyName: string;
+  contactName: string;
+  phone: string;
+  email: string;
+  address: string;
+  taxId: string;
+  deliveryMethod: string;
+  projectName: string;
+  deliveryAddress: string;
+  isActive: boolean;
+  isDeleted: boolean;   // soft-delete/archive, same convention as CompanyProfile.isDeleted
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;    // → User.id
+  updatedBy: string;    // → User.id
+}
+```
+
+Customer master data — who a quotation is issued *to*, selected via the Quotation form's Customer
+selector (`src/pages/quotation/CustomerSelector.tsx`) to autofill the Customer Information section
+instead of retyping it. Managed via a dedicated admin page (`src/pages/customers/CustomersPage.tsx`,
+`customers:view/create/edit/archive` permissions).
+
+**This replaces the earlier (2026-07-09) CRM-flavored `CustomerFields` shape**
+(`companyName`/`contactName`/`position`/`phone`/`email`/`address`/`taxId`/`source`/`salesOwnerId`/
+`notes`/`status`/`deletedAt`) — that shape had zero API routes/UI/live data (schema-only scaffolding,
+per the earlier version of this doc), so this is a clean redefinition, not a migration. The new shape
+intentionally mirrors exactly what the Quotation form's Customer Information section collects
+(`deliveryMethod`/`projectName`/`deliveryAddress`, not `position`/`source`/`salesOwnerId`/`notes`),
+and uses `isActive`/`isDeleted` booleans (matching `CompanyProfile`'s convention) instead of the old
+`status: "active"|"inactive"` + `deletedAt: string|null` pair.
+
+Indexes (created defensively inside `api/_lib/customersHandler.ts`, same lazy-on-first-request
+pattern as `company_profiles`'/`job_types`' indexes): `{ isDeleted: 1 }`, `{ isActive: 1 }`,
+`{ companyName: 1 }`. No seed data — starts empty, per the "no fake customer data" requirement.
+
+**API**: folded into the `company-profiles` serverless function rather than getting its own
+`api/handlers/customers.ts` file — Vercel Hobby's 12-function cap was already reached by
+`company-profiles.ts` (see [ARCHITECTURE.md](./ARCHITECTURE.md)). `vercel.json` rewrites
+`/api/customers[/:path*]` to `/api/handlers/company-profiles`, which checks the raw pathname first
+and delegates to `handleCustomers()` (`api/_lib/customersHandler.ts`) before falling through to its
+own company-profile path parsing. Same request/response shape as a standalone handler would have.
+
+`GET /api/customers` returns every customer to a `customers:view` holder (including archived, for
+the admin list's own "show archived" toggle), or just active/non-deleted customers to a caller who
+only holds `quotations:create` — the same "manage vs. pick-for-a-quotation" carve-out
+`company-profiles.ts` already established for `companyProfiles:view` vs. that same permission.
 
 ### `Quote` / `QuoteLine` / `SubDetail` (`src/lib/quotes.tsx`)
 ```ts
@@ -414,21 +463,20 @@ interface Quote {
   createdByUserId: string;             // → User.id, "" for legacy/seed quotes (any editor treated as owner)
   updatedBy: string;                   // → User.id, added 2026-07-09 — set server-side on every plain edit or workflow action, "" until first edit
   approvalHistory: ApprovalHistoryEntry[];  // append-only
-  issuerCompanyId?: string;             // added 2026-07-13, → CompanyProfile.id; server-set from the client-sent id, see api/handlers/quotes.ts's resolveIssuerCompanyUpdate()
-  issuerCompanySnapshot?: IssuerCompanySnapshot;  // added 2026-07-13 — server-built copy of the CompanyProfile at issue time, never client-constructed; shape below
+  customerId?: string;                  // added 2026-07-14, → Customer.id; set when a saved customer is selected on the Quotation form
+  customerSnapshot?: CustomerSnapshot;  // added 2026-07-14 — server-built copy of the submitted Customer Information fields, never client-constructed; shape below
 }
 
-// The frozen-at-issue-time copy stored on Quote.issuerCompanySnapshot (src/lib/companyProfiles.ts) —
-// same field set as CompanyProfile minus id/isDefault/isActive/isDeleted/timestamps/audit fields.
-interface IssuerCompanySnapshot {
-  companyCode: string; companyNameTh: string; companyNameEn: string; displayName: string;
-  logoDataUrl: string; addressTh: string; addressEn: string; taxId: string;
-  branchName: string; branchCode: string; phone: string; fax: string; email: string; website: string;
-  bankAccounts: BankAccount[]; quotationPrefix: string; quotationTerms: string; quotationFooter: string;
-  stampDataUrl: string;
+// The frozen-at-save-time copy stored on Quote.customerSnapshot (src/lib/customers.ts) — built
+// server-side from the quotation's own Customer Information field values (client/contactName/
+// contactPhone/contactEmail/address/taxId/deliveryMethod/project/deliveryAddress), whether they came
+// from an autofilled Customer or were typed manually. Field names mirror Customer's own field names.
+interface CustomerSnapshot {
+  companyName: string; contactName: string; phone: string; email: string; address: string;
+  taxId: string; deliveryMethod: string; projectName: string; deliveryAddress: string;
 }
 ```
-All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session.
+All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session. `customerId`/`customerSnapshot` (added 2026-07-14, replacing the short-lived `issuerCompanyId`/`issuerCompanySnapshot` pair from 2026-07-13) are set by `POST /api/quotes` and (Draft-only, for `customerId` specifically) `PATCH /api/quotes/:id`/`POST /api/quotes/:id/workflow` — see `resolveCustomerIdUpdate()`/`buildCustomerSnapshot()` in `api/handlers/quotes.ts`, and [MODULES/Customer.md](./MODULES/Customer.md).
 
 Indexes added 2026-07-09 (`quotes` had none beyond default `_id` before this): `{ status: 1 }`, `{ createdByUserId: 1 }` (already used for ownership checks), `{ issueDate: 1 }` (needed for the Dashboard's monthly revenue aggregation — see below). Added 2026-07-10: `{ jobTypeCode: 1 }`, `{ salesperson: 1 }`, `{ followUpDate: 1 }`, serving the Dashboard filters/grouping; later the same day, `{ isPotentialOpportunity: 1 }` and `{ client: 1 }` (Expected Sales/forecast filtering and customer-analytics grouping, respectively — both already-hot query paths that had no supporting index). No soft-delete field — the `ยกเลิก` (Cancelled) terminal workflow status already serves that role, so a `createdAt`/`updatedAt`/`isDeleted`/`department` index (all requested by a generic Dashboard index checklist) would be moot: `Quote` has no `createdAt`/`updatedAt` fields (`issueDate`/`date`/`updatedBy` serve that role instead) and no `isDeleted`/`department` field at all (`User.department`, itself free text, is what Dashboard department filtering actually joins against — see below).
 

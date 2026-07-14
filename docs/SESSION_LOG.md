@@ -4,6 +4,85 @@
 
 ---
 
+## Session — 2026-07-14, correction pass (Issuer Company → Customer Management)
+
+### What was implemented
+- User provided a corrected requirement: a prior session (2026-07-13) had misread "let a Sales
+  user pick a saved customer/company for a quotation" as "let a user pick which company issues the
+  quotation" and built a Company Profiles selector into the Quotation form instead. This session's
+  task was explicit: forget the issuer-company requirement entirely, remove that UI, and build the
+  correct Customer selector.
+- Spent significant up-front effort mapping the existing code (via a background Explore agent) before
+  touching anything — found the exact issuer-company wiring across `QuoteDocument.tsx`,
+  `api/handlers/quotes.ts`, `src/lib/quotes.tsx`, and confirmed a `customers` MongoDB collection
+  already existed but was schema-only (no API/UI, wrong CRM-flavored field shape).
+- Removed the issuer-company feature completely: deleted `IssuerCompanySelector.tsx`, stripped every
+  `issuerCompanyId`/`issuerCompanySnapshot` reference from the client `Quote` type and
+  `api/handlers/quotes.ts`, removed `companyProfiles`/`canViewCompanyProfiles`/
+  `onNavigateToCompanyProfiles` props from the Quotation component tree. Left the Company Profiles
+  admin module itself untouched (not asked to delete it, just to stop using it in Quotation).
+- Built the Customer module from scratch: redefined `CustomerFields` to match the Quotation form's
+  actual fields, added `api/_lib/customerValidation.ts` + `api/_lib/customersHandler.ts`,
+  `src/lib/customers.ts`, `CustomersPage.tsx` (admin CRUD), `CustomerSelector.tsx` (Quotation-form
+  search-and-autofill), 4 new permissions, and `Quote.customerId`/`customerSnapshot` wiring on the
+  create/update/workflow API routes (`resolveCustomerIdUpdate()`/`buildCustomerSnapshot()`).
+- **Key constraint handled**: Vercel Hobby's 12-serverless-function cap was already exhausted
+  (`company-profiles.ts` was the 12th). Rather than requesting a plan upgrade, folded the new
+  `/api/customers` routes into the same `company-profiles.ts` function via a pathname-prefix
+  dispatch, with matching `vercel.json` rewrites — no new function file needed.
+- Full documentation sweep: CLAUDE.md, PROJECT_STATUS.md, CHANGELOG.md, TODO.md, DATABASE.md,
+  API.md, RBAC.md, UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, and a full rewrite of
+  MODULES/Customer.md, plus correction sections added to MODULES/CompanyProfiles.md and
+  MODULES/Quotation.md — every doc that described the now-removed issuer feature as current was
+  updated to mark it historical/reverted rather than left silently stale.
+
+### Files Modified
+`api/_lib/{collections,customerValidation (new),customersHandler (new)}.ts`,
+`api/handlers/{company-profiles,quotes}.ts`, `api/dashboard/index.ts` (customer count query),
+`vercel.json`, `src/lib/{customers (new),quotes,permissions,roles}.ts(x)`,
+`src/pages/quotation/{CustomerSelector (new),QuoteDocument,QuotationPage,PrintDocument}.tsx`
+(`IssuerCompanySelector.tsx` deleted), `src/pages/customers/CustomersPage.tsx` (new), `src/App.tsx`,
+`src/lib/i18n.tsx`. Docs: all 8 listed in CLAUDE.md's standing rule, plus SESSION_LOG.md (this
+entry), MODULES/{Customer,Quotation,CompanyProfiles}.md.
+
+### Architectural Decisions
+- **Kept the Company Profiles module intact rather than deleting it** — the correction explicitly
+  scoped "stop using it in Quotation," not "remove the module." Deleting a working, tested,
+  permission-gated admin feature on a broad reading of "forget the issuer company requirement" would
+  have been overreach; the narrower reading (remove it from Quotation specifically) matches every
+  concrete instruction in the request (which all named the Quotation form/UI, never the standalone
+  admin page).
+- **`customerSnapshot` is always populated at save time, from the current form values being
+  submitted** (not a separately-tracked "value at selection time") — chosen because the requirement's
+  own wording ("Create customerSnapshot from selected customer plus current form values" / "when
+  manually entered, still save the information into customerSnapshot") describes exactly this
+  behavior, and it avoids inventing a second, competing notion of "what the customer data really is"
+  alongside the quote's own already-editable flat fields.
+- **Folded `/api/customers` into the existing `company-profiles` function file** instead of asking
+  the user to upgrade off Vercel Hobby — a reversible, low-risk engineering choice that unblocks the
+  feature without a billing/infrastructure decision the user didn't ask to make. Clearly documented
+  as a deliberate pattern (not a hack to be surprised by later) in DATABASE.md/API.md/CLAUDE.md.
+
+### Problems Found
+- None outside the scope of the correction itself — `tsc -b`, `tsc --noEmit -p tsconfig.api.json`,
+  `npm run lint`, and `npm run build` all passed clean on the first attempt after the full rewrite,
+  aside from one expected `noUnusedLocals` catch (`canViewCompanyProfiles` in `App.tsx` became dead
+  code once no longer threaded into `QuotationPage`) — fixed immediately.
+
+### What's Next
+- No live-database browser verification was possible in this sandboxed session (same recurring
+  limitation noted in every prior session's log) — a real walkthrough (create a Customer, select it
+  on a new quotation, confirm autofill, edit a copied field, save, reopen, confirm the snapshot held,
+  edit the customer master record, confirm the old quote is unaffected) should be run against a
+  preview/production deployment before considering this fully closed out.
+- "บันทึกเป็นลูกค้าใหม่" (save manually-typed quotation customer info as a new Customer record)
+  remains unbuilt, per the requirement's own "optional, only if simple and safe" framing.
+- A future data-hygiene pass could strip the now-dead `issuerCompanyId`/`issuerCompanySnapshot`
+  fields from any quote documents saved during the brief 2026-07-13–2026-07-14 window — not urgent,
+  purely cosmetic (nothing reads them).
+
+---
+
 ## Session — 2026-07-10, third pass (Codex review fix pass)
 
 ### What was implemented
