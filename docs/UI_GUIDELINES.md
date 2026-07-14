@@ -53,17 +53,100 @@ The single source of truth for the app's logo — always use this instead of a n
 **2026-07-13, overflow bug fix**: the `"full"` variant's wordmark previously used `whitespace-nowrap` inside an `overflow-hidden` container with no truncation/ellipsis — at the sidebar's fixed 256px width the English title ("Thai Chemicals Storage ERP") rendered past the container edge instead of wrapping or shrinking. Fixed to `break-words line-clamp-2 leading-snug` (wraps to at most 2 lines, never overflows) with `min-w-0` on the wrapping containers so the text column can actually shrink; the Thai subtitle now uses `truncate`. When adding a new `BrandMark` call site or a new wordmark-style text block anywhere, never pair `whitespace-nowrap` with a container that lacks both a `min-w-0` ancestor and a `truncate`/wrapping strategy — that combination is exactly how this bug happened.
 
 ### Topbar
-`bg-card border-b border-border`, sidebar collapse toggle, breadcrumb (`องค์กร > {activeNav}` in Playfair gold), search input (currently decorative), notification bell (see Notification Bell below), user avatar dropdown (initials circle or uploaded picture, name/role, dropdown with Settings/Log out).
+`bg-card border-b border-border`, sidebar collapse toggle, breadcrumb (`องค์กร > {activeNav}` in Playfair gold), Global Search (`GlobalSearch.tsx`, see below — was a decorative dead input until 2026-07-14), notification bell (see Notification Bell below), user avatar dropdown (initials circle or uploaded picture, name/role, dropdown with Settings/Log out).
 
 **2026-07-13, second pass — responsive breakpoints.** The topbar degrades progressively instead of clipping (`App.tsx` root has `overflow-hidden`, so anything that doesn't fit was silently getting cut off, not wrapping):
 - Padding/gap/height scale down below `md`: `px-3 md:px-6`, `gap-2 md:gap-4`, `min-h-[60px] md:min-h-[68px]`.
 - The mobile drawer hamburger (`md:hidden`) and the desktop collapse-toggle (`hidden md:block`) are two separate buttons, not one button whose icon/behavior changes — the two are semantically different actions (open an overlay vs. resize a static column).
 - Breadcrumb: `hidden sm:flex` (640px+) with `truncate` on the page-name span.
 - Search box and the user avatar's name/role/chevron: `hidden lg:flex`/`hidden lg:block` (1024px+) — **not** `md:`. A real-width check at 768–900px found `md:` still too cramped once the fixed-width (`w-72`) search box was in the mix: the user's Thai full name had no width constraint and wrapped into an ugly 4-line stack. The name/role block also now has `max-w-[140px] truncate` as a hard backstop regardless of breakpoint.
-- The notification bell's `ml-auto` (used to right-align it whenever the search box is hidden) must stay in sync with whichever breakpoint the search box uses — it's currently `ml-auto lg:ml-0` to match the search box's `lg:` visibility. If you ever change the search box's breakpoint again, update the bell's alongside it or the right-alignment breaks.
+- The notification bell no longer carries its own `ml-auto` (removed 2026-07-14, same day as the mobile Global Search fix below) — `GlobalSearch.tsx` now renders a real, visible element at *every* breakpoint (the inline input on `lg:`+, an icon trigger button below it), so its own elements own the right-alignment `ml-auto` at each breakpoint instead of the bell needing to compensate for whichever one is currently invisible. **If you ever add another header element between Global Search and the bell, don't reflexively add `ml-auto` back to the bell** — check which element is the last one before it that's guaranteed visible at every breakpoint, and put the auto-margin there instead. Two sibling flex items both carrying `ml-auto` don't stack (each gets an equal share of leftover space, pulling them apart with a gap) — only one item per "trailing cluster" should own it.
 
 ### Notification Bell & Panel (`src/components/NotificationBell.tsx`)
 Bell icon with **no badge at 0 unread** — don't render a "0" badge, that's the one explicit anti-pattern here. When unread > 0: a small red (`bg-[#e05252]`) circular badge, top-right of the bell, showing the count or `"99+"` above 99. Click opens a dropdown panel (`absolute right-0 top-full mt-2`, `w-96`, same card/border/shadow-xl treatment as the user-menu dropdown) with a header (title + "อ่านทั้งหมด" mark-all-read), a scrollable list (`max-h-[28rem] overflow-y-auto`), and per-row: icon in a tinted square, title, description (`line-clamp-2`), module + relative-time metadata, and a hover-reveal delete icon. Unread rows get a subtle gold tint (`bg-[#c9a84c]/[0.06]`) and a small gold dot next to the title — the same "unread" visual language used for sidebar/notification badges elsewhere. Reuse this component for any future notification-style feed rather than building a second dropdown pattern.
+
+### Global Search (`src/components/GlobalSearch.tsx`, added 2026-07-14, fixed against an
+independent Codex review the same day)
+Replaces the previously decorative, non-functional topbar search input (a bare `<input>` with no
+`value`/`onChange`, plus a placeholder mentioning purchase orders/SKU/vendors — none of which are
+modules this ERP has). Same visual chrome as the old box (`bg-secondary border border-border
+rounded-lg`, `w-72`) at `lg:`+ so it doesn't look "redesigned," just made real.
+
+**Placeholder**: "ค้นหาใบเสนอราคา ลูกค้า สินค้า หรือเมนู..." (Thai) / "Search quotations, customers,
+products, or pages..." (English) — describes what this ERP actually has, not a generic e-commerce
+template's vocabulary.
+
+**Two rendered UIs, one shared state**: the same `query`/`results`/`activeIndex`/keyboard-handling
+state drives two different visual surfaces depending on viewport width — never two independent
+search sessions.
+- **Desktop (`lg:`+, 1024px and up)**: inline `w-72` input; focusing or typing opens an anchored
+  dropdown (`absolute left-0 top-full`, `w-[26rem]`, same card/border/shadow-xl treatment as
+  `NotificationBell.tsx`'s panel and the user-menu dropdown — reuse that visual language for any
+  future topbar dropdown rather than inventing a new one), closed by clicking outside (a `fixed
+  inset-0` backdrop, same pattern as the notification/user-menu dropdowns) or Escape.
+- **Mobile/tablet (below `lg`)**: a bare icon-only trigger button (`lg:hidden`) opens a full-screen
+  takeover (`fixed inset-0 z-50 bg-background`) with its own input + an explicit close (X) button
+  — a small anchored dropdown doesn't work well on a narrow screen, so this is a deliberate
+  different layout, not a shrunk copy of the desktop one. **Added 2026-07-14 in a same-day Codex
+  review fix pass** — the first version of this component had no visible search affordance at all
+  below `lg`, and Ctrl/Cmd+K silently focused the now-invisible desktop input, doing nothing
+  observable; a follow-up independent review correctly flagged this as High Priority for a global
+  ERP-wide function. Ctrl/Cmd+K now checks `window.matchMedia("(min-width: 1024px)")` to decide
+  which of the two UIs to open, so the shortcut is never a no-op regardless of viewport width.
+
+Debounced 300ms; results are grouped under headings (ใบเสนอราคา / ลูกค้า / สินค้า / เมนู /
+ผู้ใช้งาน, in that order), each capped at 5 rows. **Previous results stay visible during a
+refetch** — only a small `Loader2` spinner appears next to the input (replacing the `Ctrl K` hint
+badge on desktop) — never a blank flash between keystrokes, same "keep prior data visible while
+loading" principle as Dashboard filter changes (see Progressive/Shell-First Loading below).
+
+**Keyboard**: Arrow Up/Down move a highlighted selection across every visible group (one flat
+index spanning all categories, not per-group — the active row auto-scrolls into view via
+`scrollIntoView({block: "nearest"})` for longer result lists), Enter activates the highlighted row
+(or the first row if none is explicitly highlighted yet), Escape closes whichever UI (desktop
+dropdown or mobile panel) is currently open and blurs its input.
+
+**Accessibility** (combobox/listbox ARIA semantics, added 2026-07-14 same-day fix pass — a review
+found keyboard movement worked visually but had no assistive-technology semantics at all): each
+input carries `role="combobox"`, `aria-expanded`, `aria-haspopup="listbox"`,
+`aria-autocomplete="list"`, `aria-controls` (pointing at the results container's `id`), and
+`aria-activedescendant` (pointing at the currently-highlighted row's `id`). The results container
+is `role="listbox"`; each row is `role="option"` with `aria-selected` and a stable `id`. The
+desktop and mobile UIs use separate `id` namespaces (`global-search-option-{desktop|mobile}-N`) —
+both can be mounted in the DOM simultaneously (one hidden via CSS at a given viewport width), and
+duplicate `id`s are invalid HTML regardless of which one is actually visible.
+
+**Result rows**: icon + group heading, then per row a primary title (with the matched substring
+highlighted via a simple `<mark>` — no fuzzy-match scoring, just a literal case-insensitive
+substring wrap) plus one line of secondary context (e.g. a quotation's customer name/project/
+status/salesperson/before-VAT amount; a customer's contact/phone/email; a product's category/
+unit). Clicking or pressing Enter on a row navigates directly to that record's edit view (not just
+the parent list page) via the same deep-link pattern `QuotationPage.tsx`'s `initialQuoteId` already
+established — see `CustomersPage.tsx`/`ProductsPage.tsx`/`UserManagementPage.tsx`'s `initialEditId`
+prop. **Customer results respect the caller's own edit permission** (2026-07-14 same-day fix): a
+`customers:view`-only (not `customers:edit`) searcher lands on the filtered list instead of the
+edit form, matching the same gate the list's own edit button already enforces — a review flagged
+the deep-link as bypassing that gate. Products has no equivalent split (any `products:view` holder
+can already open the edit form from the normal list UI, a pre-existing, separately-tracked gap —
+see IMPLEMENTATION_CHECKLIST.md), so its deep-link is unchanged.
+
+**States**: before typing (query under 2 characters) shows "พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหา"; a
+genuine zero-result search shows "ไม่พบข้อมูลที่ตรงกับ "{query}"" plus a one-line suggestion; a
+failed request shows an error message + a "ลองใหม่" retry button, with the rest of the page
+completely unaffected (the dropdown/panel is the only thing that shows an error — never a
+full-page failure for a search request). Loading with zero results so far shows a bare centered
+spinner, not the "no results" message (loading must never read as "confirmed zero"). A query is
+also capped at 100 characters via the input's native `maxLength` (matching the server's real
+enforcement — see RBAC.md/API.md), so an oversized paste is silently truncated rather than
+producing an error.
+
+**RBAC**: every result category is already filtered server-side before this component ever
+receives a response — see [RBAC.md](./RBAC.md) "Global Search." This component renders whatever
+groups the response contains and nothing more; it does not itself decide what a user is allowed to
+see.
+
+**Deliberately not built**: recent-search history (explicitly optional per the original
+requirement).
 
 ### Cards
 `bg-card border border-border rounded-xl`, padding `p-4`–`p-6` depending on density. Hover state on interactive cards: `hover:border-[#c9a84c]/30 transition-all`.

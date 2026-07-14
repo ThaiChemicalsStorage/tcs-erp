@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Pencil, KeyRound, UserCheck, UserX, Trash2, Search, ShieldCheck } from "lucide-react";
 import type { User, UserStatus } from "../../lib/users";
 import { createUser, updateUser, deleteUser, isEmployeeIdTaken, isUsernameTaken, isEmailTaken, initials, POSITION_SUGGESTIONS, DEPARTMENT_SUGGESTIONS } from "../../lib/users";
@@ -39,6 +39,8 @@ export function UserManagementPage({
   currentUser,
   isSuperAdmin,
   onAudit,
+  initialEditId,
+  onEditIdConsumed,
 }: {
   users: User[];
   onUsersChange: (users: User[]) => void;
@@ -46,6 +48,9 @@ export function UserManagementPage({
   currentUser: User;
   isSuperAdmin: boolean;
   onAudit: (action: string, details: string) => void;
+  /** Set by a Global Search user result click — opens that user's edit form directly, whether UserManagementPage is mounting fresh or already on-screen (see CustomersPage's identical `initialEditId` for the full rationale). */
+  initialEditId?: string | null;
+  onEditIdConsumed?: () => void;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<View>("list");
@@ -83,6 +88,16 @@ export function UserManagementPage({
     setEditingId(u.id);
     setView("edit");
   };
+
+  const [appliedEditId, setAppliedEditId] = useState<string | null>(null);
+  if (initialEditId && initialEditId !== appliedEditId) {
+    setAppliedEditId(initialEditId);
+    const target = users.find((u) => u.id === initialEditId);
+    if (target) startEdit(target);
+  }
+  useEffect(() => {
+    if (initialEditId) onEditIdConsumed?.();
+  }, [initialEditId, onEditIdConsumed]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

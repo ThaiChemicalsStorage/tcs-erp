@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, Pencil, Power, Archive, ArchiveRestore, Contact, X } from "lucide-react";
 import {
   type Customer, type CustomerDraft, emptyCustomerDraft,
@@ -28,12 +28,22 @@ export function CustomersPage({
   canCreate,
   canEdit,
   canArchive,
+  initialEditId,
+  onEditIdConsumed,
+  autoCreateSeq,
+  onAutoActionConsumed,
 }: {
   customers: Customer[];
   onCustomersChange: (customers: Customer[]) => void;
   canCreate: boolean;
   canEdit: boolean;
   canArchive: boolean;
+  /** Set by a Global Search customer result click — opens that customer's edit form directly, whether CustomersPage is mounting fresh or already on-screen (reacts to every change, like QuotationPage's initialQuoteId, since a second search click while already here should still jump to the newly-clicked customer). Optional: pages composed without a search feature (none today) simply never set it. */
+  initialEditId?: string | null;
+  onEditIdConsumed?: () => void;
+  /** Set (to a fresh, ever-increasing number) by the Global Search "Add Customer" page result — opens the create form once per dispatch. A monotonic sequence number rather than a boolean so two consecutive identical dispatches (e.g. the same result clicked twice) both still fire, not just the first. */
+  autoCreateSeq?: number | null;
+  onAutoActionConsumed?: () => void;
 }) {
   const { t } = useI18n();
   const { message, show } = useToast();
@@ -43,6 +53,42 @@ export function CustomersPage({
   const [formTarget, setFormTarget] = useState<Customer | "new" | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Customer | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Customer | null>(null);
+
+  // React's "adjust state during rendering" pattern (see QuotationPage.tsx's identical
+  // initialQuoteId handling) — reacts to every change of initialEditId, not just once per mount.
+  // 2026-07-14, Codex review Medium fix: only actually opens the edit form when `canEdit` is true
+  // — previously this bypassed the same permission gate the list's own edit (pencil) button
+  // already respects, dropping a view-only user (`customers:view` without `customers:edit`) into
+  // an editable form they could never normally reach from this page's own UI. A view-only search
+  // click instead lands on the list, filtered down to just that customer (status/archived filters
+  // reset so the record is guaranteed visible regardless of its own active/archived state) — a
+  // real "found it" result without an edit affordance the server would reject anyway.
+  const [appliedEditId, setAppliedEditId] = useState<string | null>(null);
+  if (initialEditId && initialEditId !== appliedEditId) {
+    setAppliedEditId(initialEditId);
+    const target = customers.find((c) => c.id === initialEditId);
+    if (target) {
+      if (canEdit) {
+        setFormTarget(target);
+      } else {
+        setSearch(target.companyName);
+        setStatusFilter("all");
+        setShowArchived(true);
+      }
+    }
+  }
+  useEffect(() => {
+    if (initialEditId) onEditIdConsumed?.();
+  }, [initialEditId, onEditIdConsumed]);
+
+  const [appliedAutoCreateSeq, setAppliedAutoCreateSeq] = useState<number | null>(null);
+  if (autoCreateSeq != null && autoCreateSeq !== appliedAutoCreateSeq) {
+    setAppliedAutoCreateSeq(autoCreateSeq);
+    setFormTarget("new");
+  }
+  useEffect(() => {
+    if (autoCreateSeq != null) onAutoActionConsumed?.();
+  }, [autoCreateSeq, onAutoActionConsumed]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

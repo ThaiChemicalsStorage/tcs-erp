@@ -426,6 +426,58 @@ Read-only, no collection of its own — see [MODULES/Dashboard.md](./MODULES/Das
 - **Timezone**: `today`/date-range-preset/month-boundary math (`api/dashboard/index.ts`'s `todayIsoDate()`/`periodEnd()`/`lastNMonthKeys()`, `src/pages/dashboard/dateRanges.ts`) is computed via a fixed +7h (Bangkok, no DST) offset applied once, then read back exclusively through UTC getters/`Date.UTC` — never through a local-timezone `Date` constructor mixed with `.toISOString()`, which shifts every boundary back a day for Thailand. Fixed 2026-07-10 after code review; found via empirical `TZ=Asia/Bangkok` reproduction. `averageApprovalTime`/`averageClosingTime`/`avgClosingTime` (per-salesperson) are `number | null` — `null` means no qualifying quote yet, distinct from a genuine same-day (`0.0`) average; same null-not-zero treatment as `monthlyClosingRate.winRate` above.
 - `categoryBreakdown`: real `products` grouped by `categoryId` (archived excluded) — intentionally **not** "revenue by category," since `QuoteLine` has no `categoryId` reference back to `Product` (see Relationships below) and there's no reliable way to compute that without unreliable string-matching.
 
+### Global Search (`GET /api/search?q=`, added 2026-07-14)
+
+Read-only, no collection of its own — see [API.md](./API.md) "Global Search" for the full field
+list per category. Key data-model notes:
+- Every category (`quotations`, `customers`, `products`, `users`) queries via a case-insensitive,
+  unanchored `$regex` `$or` across several fields, with the query string passed through
+  `escapeRegExp()` first (matching the existing helper already duplicated in
+  `api/handlers/roles.ts`) so a search containing regex metacharacters (`.`, `*`, `(`, etc.)
+  searches for that literal text instead of being interpreted as a pattern.
+- **Query length is bounded on both ends** (2026-07-14, Codex review High Priority fix): 2–100
+  characters (`MIN_QUERY_LENGTH`/`MAX_QUERY_LENGTH` in `api/_lib/searchHandler.ts`), `400` outside
+  that range. The minimum keeps a 1-character query from matching nearly everything; the maximum
+  (added this pass — previously unbounded) caps how expensive a single unanchored multi-field
+  regex scan across 4 collections can get, since `escapeRegExp()` prevents regex *injection* but
+  not an oversized *legitimate* pattern from still costing real scan time. The client mirrors this
+  with a native `maxLength` on the search input as defense-in-depth, not the actual enforcement.
+- `quotations` results carry the **before-VAT amount** via the same shared
+  `computeQuoteAmountBeforeVat()` helper the Dashboard uses — never `Quote.amount`'s VAT-included
+  grand total (see the Dashboard aggregation notes above for the full rationale). No `isDeleted`
+  filter (same reason as the Dashboard: `Quote` has no such field).
+- `customers` results are filtered to `isDeleted: false`; `products` results to `archived: false`
+  (Product's actual soft-delete-equivalent field — there is no separate `isDeleted`/`isActive`
+  pair on `Product`, only `archived`).
+- `products` category-name matching joins to `categories` via `categoryId` — the full `categories`
+  collection is fetched once per request (small, cheap) and reused as both the match-join source
+  and the display-name lookup, avoiding a second round trip.
+- `users` role-name matching joins to `roles` the same way (fetched once, matched by display
+  `name`, mapped back to `roleKey` for the actual `$in` filter) — so searching "Sales User" finds
+  users whose `roleKey` is `"sales_user"`, not just users whose raw `roleKey` string happens to
+  contain the query text.
+- **Pages/menus** are a small static in-memory list (`SEARCHABLE_PAGES` in
+  `api/_lib/searchHandler.ts`), not MongoDB-backed — this ERP's application page/menu list is part
+  of the app itself, not business data. Permission-filtered per entry via `roleHasPermission()`,
+  matching the same permission each page's sidebar entry already requires (see RBAC.md).
+- **Indexes**: `ensureSearchIndexes()` in `api/_lib/searchHandler.ts` — plain, non-unique
+  single-field indexes on `quotes.customerId`/`jobTypeCode`, `customers.contactName`/`phone`/
+  `email`/`taxId`, `products.code`/`name`/`categoryId`/`archived`, `users.fullName`/`department`/
+  `position`/`roleKey`. Lazy/idempotent, same once-per-warm-instance pattern as
+  `ensureQuoteAnalyticsIndexes()` (see above) — deliberately does **not** redeclare
+  `users.email`/`username`/`employeeId` (already declared `unique: true` in `ensureIndexes()`; a
+  non-unique redeclaration of the same key pattern would throw `IndexOptionsConflict` if that
+  unique index exists in this deployment).
+- **Not Atlas Search**: substring (not prefix-only) regex matching across a `$or` of several
+  fields can't be efficiently served by a standard index regardless of how many single-field
+  indexes exist — the indexes above help exact-match/sort use cases and keep the query planner's
+  working set smaller, but the search itself is effectively a filtered collection scan per
+  category at real scale, capped at 5 results via `limit()`. Acceptable at this ERP's actual data
+  volume (one internal company, not big-data scale — same conclusion the Dashboard's own
+  aggregation already reached, see above). Revisit with MongoDB Atlas Search if data volume ever
+  grows enough to matter — not introduced now since it isn't already configured and isn't clearly
+  beneficial at today's scale.
+
 **`id` → `_id` mapping**: `Quote.id` (the client-facing field, e.g. `"QT-2567-0041"`) is stored as the literal MongoDB `_id` for the `quotes` collection — not an `ObjectId`. This is deliberate: quote IDs are already unique, human-meaningful business identifiers (generated by `nextQuoteId()` in `api/handlers/quotes.ts`, which scans existing `_id`s for the highest sequence number), so there was no reason to also carry a separate `ObjectId`. Every other collection (`users`, `products`, `categories`, `notifications`, `audit_log`) uses a real MongoDB `ObjectId` as `_id`, mapped to a string `id` field for the client via `withStringId()`/`toPublicUser()` (`api/_lib/collections.ts`).
 
 `bahtText(amount: number): string` (`src/lib/quotes.tsx`) converts a THB amount to its Thai-words form (e.g. `689615` → `"(หกแสนแปดหมื่นเก้าพันหกร้อยสิบห้าบาทถ้วน)"`), used under the print document's grand total.

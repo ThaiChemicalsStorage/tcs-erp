@@ -1,276 +1,263 @@
-# Codex Review Report — Company Profiles Removal, Pre-Tax Dashboard, and Progressive Loading
+# Codex Review Report — ERP Global Search Audit
 
 **Review date:** 2026-07-14  
-**Scope:** Read-only code, API, documentation, RBAC, and UI-state audit. Only this report and its archive copy were updated.
+**Scope:** Read-only review of Global Search UI, API, MongoDB access, RBAC, navigation, performance, and documentation. Only the report files were changed.
 
 ## Executive Summary
 
-**Not ready for real internal users as a complete progressive-loading release.** Company Profiles removal and dashboard pre-tax calculations are correctly implemented in the reviewed source. However, the loading implementation still globally blocks ordinary data-driven pages behind all nine boot requests, and dashboard data can be stale after a workflow action without a visible refreshing state. The Dashboard is also a single all-or-nothing API response, so a failure in an optional section can prevent KPIs and every other section from rendering.
+**Not ready for all real internal users.** The desktop Global Search is genuinely functional: it calls a real authenticated API, groups real MongoDB results, enforces category RBAC server-side, supports debounce/cancellation/keyboard use, and excludes the removed Company Profiles module. However, it is unavailable on mobile/narrow layouts, and the endpoint permits arbitrarily long unanchored regex queries across multiple collections. These are material usability and performance/security gaps.
 
 ## Critical Issues
 
-None found. Dashboard money calculations consistently use the shared pre-VAT helper; no mixed VAT-included `amount` aggregation was found in dashboard response construction.
+None found. User data is queried only when `users:manage` is held, and all business-result categories are filtered before their MongoDB searches run.
 
 ## High Priority Issues
 
-1. **Normal navigation remains blocked by unrelated boot data.** `App.tsx` starts nine requests independently but uses one `initialDataLoading` flag, cleared only by `Promise.allSettled(tasks)`. While any request remains pending, every prop-driven module—Quotations, Customers, Products, Users, Roles, and Settings—is replaced by `SectionLoading`, even if that module's own data has already arrived. Users do not see that page's title, actions, filters, table headers, or form structure. Track readiness/error per resource/page and render each page’s shell immediately.
+1. **No maximum query length on a multi-collection unanchored-regex endpoint.** `GET /api/search` trims and enforces a two-character minimum but has no maximum length. It escapes regex metacharacters correctly, preventing regex injection, yet still builds literal unanchored regexes over many fields in quotations, customers, products, and users. An authenticated caller can submit oversized terms and force expensive scans. Add a server-side maximum length, reject excess input with `400`, and document it; rate limiting/Atlas Search should be evaluated as data volume grows.
 
-2. **Dashboard workflow refresh silently leaves stale data visible.** `refreshAfterAction()` only increments `retryToken`; unlike filter changes and retries, it does not set `loading` true. The previous statistics stay on screen with no spinner or “refreshing” indication until the response returns. This violates the requirement that stale values not appear current without an indication.
-
-3. **A single optional dashboard failure blocks all dashboard sections.** `GET /api/dashboard` executes catalog counts, quote analytics, audit-log activity, notifications, role-dependent approvals, and several aggregations in shared `Promise.all` chains under one error boundary. Any rejected optional query/index operation returns a single 500; `DashboardPage` then replaces the entire data area with `ErrorState`, hiding KPIs, status, and other otherwise available sections. Split independently recoverable sections/endpoints, or return section-level error states from a resilient aggregate API.
+2. **Global Search does not exist below `lg` (1024px).** `GlobalSearch.tsx` uses `hidden lg:flex`; on mobile and many tablet widths there is no visible search control. The Ctrl/Cmd+K listener still focuses the now-invisible input, which gives no usable UI. This is documented as deferred, but it fails the requested responsive usability review for a global ERP function.
 
 ## Medium Priority Issues
 
-1. **First-load Dashboard is shell-first but not section-first.** The title and filters render immediately, but all dashboard content is one generic animated skeleton until the monolithic response completes. Required visible structure such as section titles, table headers, and named card containers is not present during loading. This is an improvement over a full-page loader, but only partial compliance with UI-first progressive loading.
+1. **View-only customer/product users are sent to editable forms.** Search returns Customers with `customers:view` and Products with `products:view`, but result activation deep-links to `CustomerFormModal`/`ProductForm` edit state without an edit-permission check. The APIs correctly reject unauthorized saves, so this is not a security bypass; it is confusing and presents an edit UI unavailable through normal list actions. Navigate view-only users to a read-only detail/list state or pass/read an explicit editing capability.
 
-2. **Older/malformed quotations with no usable `lines` silently contribute zero pre-tax value.** `computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0)` avoids a crash and correctly avoids falling back to VAT-included `amount`, but reports zero when legacy/external documents lack usable line data. The documentation asserts this cannot occur rather than documenting the observable zero-value fallback. Add data-quality detection/telemetry and document the behavior; migrate or flag affected records if they exist.
+2. **Search accessibility semantics are incomplete.** Keyboard movement works visually, but the input/dropdown has no combobox/listbox roles, `aria-expanded`, `aria-controls`, `aria-activedescendant`, or semantic selected state. Focus stays on the input rather than the active row. Add these semantics and ensure the active row is scrolled into view for longer result lists.
 
-3. **Documentation contains stale implementation details.** `docs/MODULES/Customer.md` still says Customers shares the former `company-profiles` function, while the current code uses `api/handlers/customers.ts`. `docs/TODO.md` repeats that outdated claim and also has historical text saying the Company Profiles module remains available. These conflict with `PROJECT_STATUS.md`, `API.md`, and the source.
+3. **Search is a documented collection-scan design.** The five-result limit limits payload, not scan work. Standard indexes cannot efficiently serve the unanchored `$regex` `$or` searches; `ensureSearchIndexes()` includes several fields not directly useful to the quotation search. Acceptable at today’s stated scale, but it needs monitoring and a clear Atlas Search/prefix-search threshold.
+
+4. **No automated search coverage was found.** Add API tests for category RBAC, escaping, archived/deleted exclusion, and query constraints, plus UI tests for debouncing, stale requests, keyboard navigation, and result deep links.
 
 ## Low Priority Issues
 
-1. `src/lib/dashboard.ts` comments still describe dashboard values generically as “amount”; explicitly saying “before VAT” in these public interfaces would reduce future regression risk.
+1. English query terms do not map to Thai quotation-status values; for example, English status aliases are not present in the quotation search predicate. Add bilingual status aliases if English status lookup is expected.
 
-2. The boot screen remains a full-screen logo pulse until the session request resolves. This is reasonable for unauthenticated session establishment, but a cached shell/route transition strategy would improve perceived speed further.
+2. Search result rows have useful details and highlighting, but customer results omit tax ID even when that was the matching field. Consider a compact “matched by” detail without exposing more data than necessary.
 
-## Company Profiles Removal Review
+## Global Search Functional Review
 
-**Pass.** The active application has no Company Profiles page folder or client library, no `companyProfiles` navigation key/sidebar item/render case, and no matching i18n menu/empty-state keys. `vercel.json` has no `/api/company-profiles` rewrite, and no company-profile handler or validation file remains. This makes direct API access a 404 under the deployed rewrite model; the app uses internal state navigation rather than browser URL routes, so no old front-end route is exposed.
+**Pass on desktop.** The controlled input opens a dropdown on focus, debounces API requests by 300 ms, renders grouped results, clears results below two characters, closes on backdrop click/Escape, supports Arrow Up/Down and Enter, and supports Ctrl/Cmd+K. Clicking/Enter calls validated App navigation callbacks. Previous results remain visible during a refetch with an inline spinner; errors offer retry; loading, empty query, no results, and errors are distinct. It does not block or skeleton the page.
 
-The historical `company_profiles` MongoDB collection and old audit entries are deliberately untouched. No destructive production data cleanup was found or required.
+## Quotation Search Review
 
-## Leftover Route / API / Permission Review
+**Pass.** The server searches quotation `_id`, customer/client name and snapshot company name, contact name, project, PO reference, salesperson, job type code/name, status, and remarks. Results show quote number, client/project, status/salesperson, issue date, and a before-VAT amount, then deep-link to the quote. There is no quote soft-delete field in the current schema; therefore no nonexistent filter can be applied. `quotations:view` is enforced before the search query runs.
 
-**Pass for executable code.** No active `CompanyProfiles`, `CompanyProfileForm`, `company_profiles`, `issuerCompany`, `issuerCompanyId`, or `issuerCompanySnapshot` reference was found in application/API code. The `Permission` union and default roles no longer include Company Profiles permissions. Existing custom database roles may retain inert legacy permission strings; this is safe because no UI or endpoint evaluates them.
+## Customer Search Review
 
-Remaining Company Profiles and issuer terms are historical documentation/comments, not live routes or imports. The documentation mismatch is reported above.
+**Pass, with view-only navigation issue noted above.** Search uses MongoDB `customers`, never `company_profiles`, across company name, contact, phone, email, tax ID, address, and project name. It filters `isDeleted: false` and projects only company/contact/phone/email/tax ID—not address or full master data. No fake customer result array was found.
 
-## Quotation Regression Review
+## Product Search Review
 
-**Pass.** The quotation form has no issuer selector. Quote create/update/workflow routes do not accept or require `issuerCompanyId`; they use optional `customerId` and server-built `customerSnapshot`. Customer selection remains `CustomerSelector` → `GET /api/customers` → MongoDB `customers`, not Company Profiles.
+**Pass, with view-only navigation issue noted above.** Product search uses real `products`, filters `archived: false`, and matches code, name, description, specifications, unit, and linked category name. It returns a compact projection and requires `products:view` before querying.
 
-## Dashboard Before-VAT Calculation Review
+## Page/Menu Search Review
 
-**Pass.** `api/_lib/quoteAmounts.ts` is the authoritative rule: line quantity × unit price after line discounts, then quote-level discount, before VAT. `computeQuoteAmountWithVat()` and server quote validation use the same input/formula family. `api/dashboard/index.ts` projects `lines` and `discount` and maps each quote through `computeQuoteAmountBeforeVat()` once before all KPI, status, pipeline, ranking, customer, job type, forecast, revenue trend, follow-up, and pending-approval computations.
+**Pass.** Static page definitions are appropriate application metadata, contain Thai and English aliases, are permission-filtered server-side, and navigate through an App-side `NavKey` allowlist. They contain no Company Profiles / ข้อมูลบริษัท entry and do not invent a Notifications page. Action results map to real quotation/customer/product actions.
 
-CSV export labels and values use the returned before-VAT dashboard statistics. No dashboard path was found summing persisted VAT-included `Quote.amount` as a dashboard monetary result.
+## User Search and Privacy Review
 
-## Expected Sales Review
+**Pass.** User search runs only when `users:manage` is held and returns only a compact management-oriented projection: name, email, employee ID, department, position, role name, and status—never username, password, password hash, or profile image. Normal users receive an empty users group, not user records.
 
-**Pass.** Expected Sales is the sum of mapped pre-tax quote values where `isPotentialOpportunity === true`. It derives from `docs`, which already applies the selected date, salesperson, and department conditions. There is no additional “all active quotations” predicate and no VAT-included fallback.
+## API and Security Review
 
-## Old Quotation Data Compatibility Review
+`GET /api/search?q=` requires authentication, trims input, enforces two characters, has a per-category limit of five, escapes regex metacharacters, uses safe projections, and follows the shared HTTP error boundary. It executes category permission checks before database calls. Customer/product soft-delete filters are correct; quotation deletion is not modeled.
 
-**Partial.** The dashboard will not crash and will not silently use the VAT-included grand total: missing lines become an empty array and calculate to zero. That is safer than mixing VAT bases, but can understate historical data and is insufficiently documented as a fallback behavior. This is a data-quality/compatibility concern rather than a VAT-mixing defect.
+Regex injection is prevented by `escapeRegExp()`. The missing maximum query length remains a denial-of-service/performance concern, not an injection flaw. Server-side category filtering protects modified clients and direct API requests.
 
-## Progressive Loading Review
+## RBAC Review
 
-**Partial.** After session resolution the sidebar/top navigation shell appears immediately. Dashboard title, description, filters, and a loading spinner also appear immediately; filter changes preserve prior data and show a small spinner. However, other ordinary pages are globally replaced by a central loading state until all boot fetches settle, and first-load Dashboard content remains a monolithic generic skeleton.
+**Pass for server authorization.** Quotations require `quotations:view`, Customers `customers:view`, Products `products:view`, Users `users:manage`, and page entries each use their destination permission. Search-result navigation is also guarded by App navigation/page permissions and mutation APIs. The editable view-only deep-link behavior is a client UX inconsistency; server mutation enforcement remains intact.
 
-## Data Fetching and Caching Review
+## MongoDB and Performance Review
 
-The boot requests are concurrent, not sequential, and dashboard filter effects use a cancellation flag to prevent older responses overwriting newer filter results. No React Query/SWR duplication was introduced; custom fetching remains consistent.
+The client debounces, aborts stale requests, avoids boot-time searches, and limits each group to five rows. Quotes/customers/products/users query in parallel after authorization. Categories/roles are fetched once per relevant request for match/display joins.
 
-The central global readiness flag defeats much of the benefit of concurrent requests. Dashboard has no cache beyond component state. Refresh after approval/rejection has no loading signal, as noted in High Priority issue 2.
+The known cost is unanchored case-insensitive regex searching across multiple `$or` fields; ordinary indexes do not solve arbitrary substring matching. Add a query cap now and adopt Atlas Search or a controlled prefix/search-token strategy when data size or query latency warrants it. No full business collection is downloaded to the browser.
 
-## Actual Performance Review
+## Loading and Error State Review
 
-Dashboard has useful analytics indexes and uses projection for `lines`/`discount` rather than fetching arbitrary quote fields. The shared amount helper avoids repeated inconsistent VAT conversion. `Promise.all` is appropriate for independent database reads but creates a single failure domain.
+**Pass.** Before-query hint, loading spinner, no-results copy, error/retry state, and real results are mutually distinguishable. Search affects only its dropdown and preserves the underlying page. Aborted stale requests do not become user-facing errors.
 
-The dashboard response remains large and all 18 data sections are calculated and rendered together. Heavy chart components are loaded with the Dashboard rather than independently deferred, and there is no per-section endpoint/error isolation. At larger data volumes, line-item recomputation in application memory and the all-in-one response will become the primary scalability risks.
+## UI / UX and Accessibility Review
 
-## Error / Empty / Zero State Review
+Desktop layout, grouping, Thai text, secondary details, matched-substring highlighting, fixed backdrop, max-height scrolling, and keyboard controls are solid. The dropdown uses `max-w-[90vw]`, reducing overflow risk. The hidden mobile control and missing combobox semantics are the principal UX/accessibility gaps.
 
-Loading is generally distinct from confirmed zero: Dashboard uses a skeleton/spinner, and empty business data renders a compact banner plus zero-capable widgets. Filter refresh retains prior data. Section-level error handling is missing because a dashboard request failure produces one data-area error state. Global data pages also use one error/loading state rather than resource-specific outcomes.
+## No Fake Data Review
 
-## UI / UX Review
-
-Company Profiles is no longer cluttering navigation. The immediate Dashboard shell, filter controls, compact first-load placeholder, retryable errors, and Thai loading/error copy are clear improvements. The remaining global blocking state makes navigation feel unresponsive on slow APIs, and silent post-action refresh can make users question whether an approval/rejection took effect. No source-level responsive-layout regression was found.
-
-## Security Review
-
-Removal leaves no exposed Company Profiles API route or permission path. Customer selection remains protected by the existing customer/quotation server-side permissions. Dashboard still requires `dashboard:view`; role-dependent activity and approval details remain permission-gated. No new sensitive-data exposure was found.
+**Pass.** Quotations, customers, products, and users all come from MongoDB API queries. The only static array is the permission-filtered real application page/menu catalog, which is appropriate and contains no obsolete Company Profiles result.
 
 ## Documentation Review
 
-Most top-level documentation accurately records removal, the pre-tax formula, and progressive-loading intent. Correct the stale Customers-handler references in `docs/MODULES/Customer.md` and `docs/TODO.md`, and historical wording implying Company Profiles remains available. Document the missing-line dashboard fallback explicitly rather than claiming it cannot occur.
+Documentation broadly matches the code: it correctly describes the API, RBAC, debounce/cancellation, limits, static pages, Company Profiles removal, and the deliberate mobile/Atlas Search deferrals. It does not document the absence of a maximum query length because no such limit exists. The stated mobile deferral is a documented scope decision, but remains a functional usability gap for this audit.
 
 ## Requirements Checklist
 
-- [x] ข้อมูลบริษัท removed from sidebar
-- [x] Company Profiles routes inaccessible
-- [x] Company Profiles links removed
-- [x] Unused Company Profiles permissions removed or safely deprecated
-- [x] Existing database records not destructively deleted
-- [x] Issuer company selector absent from quotation form
-- [x] Quotation save does not require issuerCompanyId
-- [x] Customer selection still works
-- [x] Dashboard total quotation value is before VAT
-- [x] Closed sales is before VAT
-- [x] Expected Sales is before VAT
-- [x] Expected Sales uses potentialOpportunity only
-- [x] Win/Lose/Active/Non Active values are before VAT
-- [x] Forecast is before VAT
-- [x] Rankings and charts use before-VAT values
-- [x] Dashboard exports use before-VAT values
-- [x] One consistent pre-tax calculation rule is used
-- [!] Main UI shell appears immediately
-- [!] No blocking full-page Skeleton during normal navigation
-- [!] Previous data remains during refetch where appropriate
-- [x] Loading is distinguishable from confirmed zero
-- [ ] One failed section does not block the entire page
-- [x] Duplicate API calls reviewed
+- [x] Search input works
+- [x] Placeholder matches the ERP
+- [x] Quotation search works
+- [x] Customer company search works
+- [x] Product search works
+- [x] Page/menu search works
+- [x] User search is permission restricted
+- [x] Results are grouped
+- [x] Result navigation works
+- [x] Thai search works
+- [!] English search works
+- [x] Minimum query length exists
+- [x] Debounce exists
+- [x] Stale requests are handled
+- [x] RBAC is enforced server-side
+- [x] Soft-deleted records are excluded
+- [x] Removed Company Profiles page is not searchable
+- [x] No fake business results
+- [x] Loading/no-results/error states are distinct
+- [x] Search does not block the whole page
+- [!] MongoDB indexes/performance reviewed
 - [ ] Build passes if checked
-- [ ] Documentation updated
+- [!] Documentation updated
 
 ## Suggested Fix Plan for Claude Code
 
-1. Preserve the shared line-item pre-tax helper and add tests/assertions that every dashboard monetary response path uses it.
-2. Preserve the strict `isPotentialOpportunity === true` Expected Sales predicate and test date/salesperson/department scope.
-3. Keep Company Profiles/issuer behavior removed; correct remaining historical documentation only—do not delete production collection records.
-4. Replace global `initialDataLoading` gating with resource/page-specific loading states so each page shell and ready data render independently; retain the sidebar shell immediately.
-5. Add a dashboard refreshing indication for workflow-triggered refreshes and consider lightweight cached dashboard state.
-6. Isolate optional dashboard work into resilient sections or section-status payloads so KPI/status data survives activity/notification/approval failures.
-7. Keep first-load Dashboard structure visible with named card/table/section shells, then populate each section as data becomes available.
-8. Add data-quality handling/documentation for quotes without valid line-item data, plus update stale Customers/Company Profiles documentation.
+1. Add a server-side maximum query length and consider authenticated search-rate limiting; retain escaped regex handling.
+2. Ensure no unauthorized category can ever execute a query or disclose fields; retain current server-side RBAC tests.
+3. Add an accessible mobile/tablet search entry point or intentionally remove the invisible Ctrl/Cmd+K behavior below `lg` until one exists.
+4. Route view-only customer/product results to a read-only/list state rather than editable forms.
+5. Preserve debounce/AbortController behavior; monitor scan latency and move to Atlas Search/prefix indexing at the defined scale threshold.
+6. Add semantic combobox/listbox attributes, active-row scrolling, and focused-state accessibility verification.
+7. Add bilingual aliases for quotation statuses if English status search is required.
+8. Add API/UI regression tests and update documentation with the query cap and mobile-search decision.
 
 ## Build Check
 
 Commands attempted without modifying the project:
 
-- `npm run lint` — did not start linting: `WSL 1 is not supported. Please upgrade to WSL 2 or above. Could not determine Node.js install directory.`
-- `npm run build` — did not start compilation with the same Node/WSL error.
+- `npm run lint` — did not start: `WSL 1 is not supported. Please upgrade to WSL 2 or above. Could not determine Node.js install directory.`
+- `npm run build` — did not start, with the same Node/WSL error.
 
-Likely cause: this review environment resolves to a Windows Node installation incompatible with WSL 1. Recommended fix: run in WSL2 or a Linux-compatible Node environment, then rerun both commands.
+Likely cause: the review shell resolves to a Windows Node installation incompatible with WSL 1. Recommended fix: use WSL2 or a Linux-compatible Node installation, then rerun lint and build.
 
 ---
 
 ## Claude Fix Status (2026-07-14)
 
 ### Critical issues fixed
-None — the review found zero Critical issues. No action needed.
+None — the review found zero Critical issues. No unauthorized data exposure was found; every
+result category is genuinely filtered server-side before its query runs. No action needed.
 
-### High Priority issues fixed (3 of 3)
+### High Priority issues fixed (2 of 2)
 
-1. **Normal navigation blocked by unrelated boot data.** Fixed. `App.tsx`'s single `initialDataLoading`
-   flag (shared by all 9 boot resources) replaced with per-resource `resourceStatus` tracking
-   (`Record<ResourceKey, "loading"|"ready"|"error">`) plus a new `NAV_RESOURCES` map naming exactly
-   which resources each page (Quotations/Products/Customers/Users/Roles/Settings) actually reads.
-   Each page's `pageDataLoading`/`pageDataError` is now computed only from its own required subset —
-   navigating to Products no longer waits on `notifications`/`quotes`/`users`/etc. `loadDomainData`/
-   its new `trackResource()` helper are wrapped in `useCallback` (backed by a module-level
-   `INITIAL_RESOURCE_STATUS` constant so the callback is genuinely stable across renders), so the
-   boot `useEffect` can correctly list it as a dependency without re-running on every render.
-2. **Dashboard workflow refresh silently leaves stale data visible.** Fixed. `refreshAfterAction()`
-   now also calls `setLoading(true)`, surfacing the same small spinner a filter change/retry already
-   shows. On subsequent loads (once `stats` exists) this renders as a "กำลังอัปเดตข้อมูล..."/"Updating
-   data..." label next to the page title (new `dashboard.refreshing` i18n key, both languages) —
-   `stats` itself stays untouched until the new response lands, so the previous data never
-   disappears, only the indicator appears.
-3. **A single optional dashboard failure blocks all dashboard sections.** Fixed. `api/dashboard/index.ts`
-   isolates 4 independently-optional blocks in their own `try/catch`, each degrading to a safe
-   default instead of throwing: `ensureQuoteAnalyticsIndexes()` (log-and-continue), `activityTimeline`
-   (degrades to `null`, same as a caller without `auditLog:view`), `salesActivity` (same pattern, its
-   inline object type extracted to a named `SalesActivityResult` type for a clean `let`/try/catch),
-   `approvalDashboard` (in-memory only, wrapped for defense-in-depth), and `notificationSummary`/
-   `availableSalespeople` (fall back to `{unreadCount:0,byType:{}}`/`[]`). Each catch logs via
-   `console.error` for Vercel function-log visibility. `kpis`/`pipeline`/`salesPerformance`/
-   `customerAnalytics`/`jobTypeAnalytics`/`forecast`/`revenueTrend`/`followUps` don't depend on any
-   of the four and now survive a failure in any of them.
+1. **No maximum query length on a multi-collection unanchored-regex endpoint.** Fixed. Added
+   `MAX_QUERY_LENGTH = 100` to `api/_lib/searchHandler.ts` — `GET /api/search` now rejects a query
+   longer than 100 characters with `400`, same as it already rejected one shorter than 2. The
+   search `<input>` in `GlobalSearch.tsx` (both desktop and the new mobile variant) also carries a
+   matching native `maxLength={100}` — defense-in-depth, not the real enforcement (a modified
+   client could bypass a client-only constraint; the server-side check is what actually matters).
+   Regex injection remains prevented by the pre-existing `escapeRegExp()`, unaffected by this fix.
+2. **Global Search does not exist below `lg` (1024px).** Fixed with a real mobile entry point, not
+   by disabling the Ctrl/Cmd+K shortcut (the review's suggested fallback option). Added a
+   `lg:hidden` icon-only trigger button that opens a full-screen search takeover (`fixed inset-0`)
+   with its own input, close button, and the same grouped results — reusing the exact same
+   `query`/`results`/`activeIndex`/keyboard-handling state as the desktop dropdown, not a
+   duplicated second search implementation. Ctrl/Cmd+K now checks `window.matchMedia("(min-width:
+   1024px)")` to decide whether to focus the desktop input or open the mobile panel, so the
+   shortcut always does something observable regardless of viewport width. Fixing this surfaced a
+   real CSS bug: the notification bell's `ml-auto lg:ml-0` (previously the one element responsible
+   for right-aligning the header's trailing icons on mobile, since Global Search contributed
+   nothing visible there) would have competed with the new mobile trigger's own `ml-auto` for the
+   same flex leftover space, pulling them apart with an unintended gap instead of grouping them —
+   fixed by removing the bell's margin classes entirely now that Global Search's own elements
+   correctly own that responsibility at every breakpoint (`App.tsx`).
 
-### Medium Priority issues fixed (3 of 3)
+### Medium Priority issues fixed (2 of 4 — the 2 directly actionable ones; see "not fixed" below)
 
-1. **First-load Dashboard is shell-first but not section-first.** Fixed. `DashboardContentSkeleton`
-   rebuilt to mirror the real 4-section P'Keng/P'Kee structure (`ExecutiveSummaryCards` →
-   `QuotationStatusSummary` → `SalesActivityAnalytics` → `ActivityTimeline`) using the real
-   translated section titles (`t()`, same keys the loaded components use) and, for the two middle
-   sections, the real `ChartCard` component itself for pixel-identical header markup, plus the real
-   5-column `ActivityTimeline` table header row with pulsing placeholder rows underneath.
-2. **Missing-`lines` pre-tax fallback undocumented.** Fixed. `api/dashboard/index.ts` now emits a
-   `console.warn` naming the affected count whenever a doc in the filtered set has no `lines` field
-   at all (distinct from a genuinely empty `lines: []`, which is a normal new Draft). `docs/DATABASE.md`
-   and `docs/MODULES/Dashboard.md` corrected from asserting this "cannot occur" to documenting the
-   actual (expected-to-be-a-null-set) fallback and what to do if the warning ever fires.
-3. **Stale documentation.** Fixed. `docs/MODULES/Customer.md` corrected (dedicated `customers.ts`
-   function file, not shared with `company-profiles.ts`; Purpose section's Company Profiles
-   comparison rewritten to not conflate it with this ERP's own single-company identity).
-   `docs/TODO.md` and `docs/PROJECT_STATUS.md` both had a same-day-but-superseded entry claiming
-   "Company Profiles remains available" — corrected with an explicit "superseded later the same
-   day" note (not silently rewritten, preserving what was true when each entry was written).
-   `docs/ARCHITECTURE.md`'s API-layout section still listed `company-profiles` in the live handler
-   file list — corrected to `customers`.
+1. **View-only customer/product users are sent to editable forms.** Fixed for Customers, left
+   unchanged for Products (reasoning below). `CustomersPage.tsx`'s `initialEditId` handling now
+   only opens the edit form (`CustomerFormModal`) when the caller's `canEdit` prop is true —
+   previously it bypassed the same gate the list's own edit (pencil) button already respects. A
+   view-only (`customers:view` without `customers:edit`) searcher now lands on the list instead,
+   pre-filtered to that customer's company name with the status/archived filters reset so the
+   record is guaranteed visible. **Products intentionally left as-is**: `ProductsPage.tsx` has no
+   button-level edit-permission gating at all today — any `products:view` holder can already open
+   the edit form via the normal list UI (a pre-existing, already-documented gap in
+   `IMPLEMENTATION_CHECKLIST.md`, predating Global Search entirely) — so the search deep-link isn't
+   introducing a new inconsistency there; fixing that pre-existing gap is out of this pass's scope.
+   Users has no view/edit permission split to violate (`users:manage` is one flat permission), so
+   no fix was needed there.
+2. **Search accessibility semantics are incomplete.** Fixed. Added `role="combobox"`/
+   `aria-expanded`/`aria-haspopup="listbox"`/`aria-autocomplete="list"`/`aria-controls`/
+   `aria-activedescendant` to both the desktop and mobile inputs; `role="listbox"` on the results
+   container; `role="option"`/`aria-selected`/a stable `id` on every result row (desktop and mobile
+   use separate `id` namespaces since both can be mounted simultaneously). The active row now
+   scrolls into view (`scrollIntoView({block: "nearest"})`) on every Arrow Up/Down.
 
-### Low Priority issues — not fixed this pass
+### Remaining issues (not fixed this pass, with reasons)
 
-1. `src/lib/dashboard.ts`'s field comments still say "amount" generically rather than spelling out
-   "before VAT" in each interface. Left as-is: genuinely low-risk (the module-level comment and
-   `MODULES/Dashboard.md` already state the rule clearly), and touching ~15 interface comments for a
-   cosmetic-only change was judged lower value than the Critical/High/Medium items above given this
-   pass's scope.
-2. The boot screen is still a full-screen logo pulse until the session request resolves (no
-   cached-shell/route-transition strategy). Left as-is: the review itself called this "reasonable for
-   unauthenticated session establishment," not a defect — a genuinely optional future perceived-speed
-   improvement, not part of the Critical/High/Medium fix scope.
+- **"Search is a documented collection-scan design" (Medium).** Not a new problem — already
+  documented as an accepted limitation at this ERP's real data volume in the prior pass's
+  CHANGELOG entry; this review re-confirms the same conclusion rather than finding something new.
+  The max-length fix above bounds the worst case but doesn't change the fundamental limitation
+  (unanchored substring regex can't use a standard B-tree index efficiently). No further action
+  taken beyond documenting it again alongside the new max-length cap.
+- **"No automated search coverage was found" (Medium).** Not fixed. This project has no automated
+  test infrastructure anywhere in it — a longstanding, deliberate, already-documented scope
+  decision (see RBAC.md "Known Gaps") — introducing tests for exactly one feature in isolation
+  would be inconsistent with that standing decision, not a small fix.
+- **English quotation-status aliases (Low).** Not fixed — Low Priority, outside this pass's
+  Critical/High/directly-relevant-Medium scope. Tracked in TODO.md.
+- **Customer results don't disclose which field matched, e.g. tax ID (Low).** Not fixed — Low
+  Priority, same reasoning. Tracked in TODO.md.
+- **No live-database/browser verification**, including of the new mobile UI at real device widths
+  — same sandboxed-session network limitation as every prior pass on this project (no
+  `MONGODB_URI` reachable, no Vercel CLI installed). Verified instead via `tsc`/`lint`/`build` and
+  code-level review of every changed path. See docs/TODO.md for the specific unverified behaviors.
 
-### Company Profiles cleanup performed this pass
-None needed — the review's own "Company Profiles Removal Review," "Leftover Route/API/Permission
-Review," and "Quotation Regression Review" sections all passed with no findings. Only the
-stale-documentation items above (which *described* the Company Profiles removal inaccurately, not
-the removal itself) needed correcting.
+### Search categories
+Unchanged from the prior pass — Quotations (`quotations:view`), Customers (`customers:view`),
+Products (`products:view`), a static permission-filtered pages/menu list, Users (`users:manage`
+only). No category was added or removed this pass.
 
-### Before-VAT calculation field/helper used
-Unchanged from the prior pass — the review confirmed it's correct: `computeQuoteAmountBeforeVat(lines,
-discountPct)` (`api/_lib/quoteAmounts.ts`), applied to every quote's own `lines`/`discount` once
-in `api/dashboard/index.ts` right after the filtered fetch, and at the two separate-query read sites
-(`revenueTrend`'s won-quote scan, `followUps`). No calculation logic changed this pass — only its
-resilience (try/catch isolation) and the accuracy of its documentation.
+### Search API and indexes
+`GET /api/search?q=` (`api/_lib/searchHandler.ts`) — query now bounded to 2–100 characters
+(previously 2+ with no upper bound). Indexes unchanged from the prior pass
+(`ensureSearchIndexes()`); no new indexes were added or needed for this fix pass, since the fixes
+were about request-size bounding and UI/accessibility, not query shape.
 
-### Dashboard areas updated this pass
-`api/dashboard/index.ts` (index creation, `activityTimeline`, `salesActivity`, `approvalDashboard`,
-`notificationSummary`/`availableSalespeople` — resilience only, no calculation changes),
-`DashboardPage.tsx` (refresh indicator, section-first skeleton), `App.tsx` (per-page resource
-gating, indirectly affects every page that reads Dashboard-adjacent boot data).
-
-### Loading strategy implemented
-Per-resource boot-data tracking (`resourceStatus`) + per-page required-resource gating
-(`NAV_RESOURCES`) replacing the single global flag; section-first first-load Dashboard skeleton
-(real titles/table headers, not one generic block); a visible refresh indicator for
-workflow-triggered Dashboard refreshes that keeps previous data on screen; section-level API
-resilience so one optional Dashboard section's failure can't blank the rest of the page. See
-`docs/UI_GUIDELINES.md` "Progressive/Shell-First Loading" for the full pattern description.
+### RBAC behavior
+Unchanged and reconfirmed correct by this review ("Pass for server authorization") — every
+category is still checked via `roleHasPermission()` before its MongoDB query runs, server-side,
+independent of anything the client sends or hides. The one behavioral change this pass
+(Customer view-only navigation) is a client-side UX fix, not an RBAC change — the server already
+independently rejected an unauthorized save either way; see RBAC.md "Global Search."
 
 ### Performance fixes
-None targeted this pass — the review's performance-adjacent findings (large all-in-one response,
-heavy chart components loaded with Dashboard, in-memory line-item recomputation at scale) were
-explicitly framed as future scalability risks, not defects, and are out of this pass's Critical/
-High/Medium fix scope. The resilience changes (try/catch isolation) do not add meaningful overhead —
-they wrap already-existing queries, not new ones.
+The `MAX_QUERY_LENGTH` bound (High #1 above) is the only performance-relevant change this pass —
+it caps the worst-case cost of a single request rather than changing the underlying query
+strategy. The broader "full collection scan per category" characteristic is unchanged and remains
+a documented, accepted limitation at this ERP's current data volume (see "Remaining issues" above).
 
 ### Files changed
-- `api/dashboard/index.ts` — index-creation/activityTimeline/salesActivity/approvalDashboard/
-  notificationSummary resilience, missing-`lines` telemetry.
-- `src/App.tsx` — per-resource `resourceStatus`/`NAV_RESOURCES`, `useCallback`-stabilized
-  `loadDomainData`/`trackResource`, module-level `INITIAL_RESOURCE_STATUS`.
-- `src/pages/dashboard/DashboardPage.tsx` — `refreshAfterAction` refresh indicator, section-first
-  `DashboardContentSkeleton` rewrite.
-- `src/lib/i18n.tsx` — new `dashboard.refreshing` key (Thai + English).
-- `docs/DATABASE.md`, `docs/MODULES/Dashboard.md`, `docs/MODULES/Customer.md`,
-  `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/UI_GUIDELINES.md`, `docs/IMPLEMENTATION_CHECKLIST.md`,
-  `docs/TODO.md`, `docs/PROJECT_STATUS.md`, `docs/CLAUDE.md`, `docs/CHANGELOG.md` — documentation
-  corrections and new dated entries.
+- `api/_lib/searchHandler.ts` — `MAX_QUERY_LENGTH` validation.
+- `src/components/GlobalSearch.tsx` — mobile full-screen search takeover, `matchMedia`-aware
+  Ctrl/Cmd+K, combobox/listbox ARIA semantics, active-row scroll-into-view, client `maxLength`.
+- `src/App.tsx` — removed the notification bell's now-unnecessary/conflicting `ml-auto` margin.
+- `src/pages/customers/CustomersPage.tsx` — `initialEditId` handling now respects `canEdit`.
+- `src/lib/i18n.tsx` — new `search.close` key (Thai + English).
+- `docs/CLAUDE.md`, `docs/PROJECT_STATUS.md`, `docs/CHANGELOG.md`, `docs/TODO.md`,
+  `docs/DATABASE.md`, `docs/API.md`, `docs/RBAC.md`, `docs/UI_GUIDELINES.md`,
+  `docs/IMPLEMENTATION_CHECKLIST.md` — documentation corrections and new dated entries.
 
 ### `npm run lint` result
 Clean: `0 errors`, `2 warnings` (both pre-existing, unrelated — `react-refresh/only-export-components`
 on `src/lib/i18n.tsx`'s `translate()`/`useI18n()` exports, not touched by this pass).
 
 ### `npm run build` result
-Clean: `tsc -b && tsc --noEmit -p tsconfig.api.json && vite build` all succeed; no `CompanyProfiles`-
-related chunk in the output (confirms the module stays fully removed from the bundle).
+Clean: `tsc -b && tsc --noEmit -p tsconfig.api.json && vite build` all succeed.
 
 ### Manual test result
 Not possible — same sandboxed-session limitation as every prior pass on this project (no
-`MONGODB_URI` reachable, no Vercel CLI installed to `vercel env pull`/`vercel dev`). Verified instead
-via `tsc`/`lint`/`build` and code-level review of every changed code path. See `docs/TODO.md` for the
-specific unverified behaviors (per-page resource gating under real slow-network conditions, the
-refresh indicator around a real Approve/Reject action, a real forced auditLog-query failure actually
-degrading gracefully) flagged as open items for whoever next has live-database access.
+`MONGODB_URI` reachable, no Vercel CLI installed). Verified instead via `tsc`/`lint`/`build` and
+code-level review of every changed code path, including manually re-checking the flex `ml-auto`
+layout logic by reasoning through the CSS box-alignment spec (multiple auto-margin siblings split
+leftover space rather than stacking) rather than visually confirming it in a browser. See
+docs/TODO.md for the specific unverified behaviors (real mobile viewport rendering, live RBAC
+category filtering against real data, rapid-typing stale-request handling in a real browser)
+flagged as open items for whoever next has live-database/browser access.

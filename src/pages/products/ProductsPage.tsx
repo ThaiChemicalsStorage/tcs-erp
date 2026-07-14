@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Product, ProductCategory } from "../../lib/products";
 import { createProduct, updateProduct, deleteProduct } from "../../lib/products";
 import { ProductList } from "./ProductList";
@@ -13,15 +13,48 @@ export function ProductsPage({
   onProductsChange,
   categories,
   onCategoriesChange,
+  initialEditId,
+  onEditIdConsumed,
+  autoView,
+  autoViewSeq,
+  onAutoActionConsumed,
 }: {
   products: Product[];
   onProductsChange: (products: Product[]) => void;
   categories: ProductCategory[];
   onCategoriesChange: (categories: ProductCategory[]) => void;
+  /** Set by a Global Search product result click — opens that product's edit form directly, whether ProductsPage is mounting fresh or already on-screen (see CustomersPage's identical `initialEditId` for the full rationale). */
+  initialEditId?: string | null;
+  onEditIdConsumed?: () => void;
+  /** Set by the Global Search "Product Categories" page result — jumps straight to the categories manager view. `autoViewSeq` is a monotonic sequence number (not a boolean) so the same page result clicked twice in a row still fires both times. */
+  autoView?: "create" | "categories" | null;
+  autoViewSeq?: number | null;
+  onAutoActionConsumed?: () => void;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<View>("list");
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [appliedEditId, setAppliedEditId] = useState<string | null>(null);
+  if (initialEditId && initialEditId !== appliedEditId) {
+    setAppliedEditId(initialEditId);
+    if (products.some((p) => p.id === initialEditId)) {
+      setEditingId(initialEditId);
+      setView("edit");
+    }
+  }
+  useEffect(() => {
+    if (initialEditId) onEditIdConsumed?.();
+  }, [initialEditId, onEditIdConsumed]);
+
+  const [appliedAutoViewSeq, setAppliedAutoViewSeq] = useState<number | null>(null);
+  if (autoViewSeq != null && autoViewSeq !== appliedAutoViewSeq && autoView) {
+    setAppliedAutoViewSeq(autoViewSeq);
+    setView(autoView);
+  }
+  useEffect(() => {
+    if (autoViewSeq != null) onAutoActionConsumed?.();
+  }, [autoViewSeq, onAutoActionConsumed]);
 
   const editingProduct = products.find((p) => p.id === editingId);
 

@@ -32,6 +32,37 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **No new permission was added for the 2026-07-10 Job Type / Executive Dashboard pass.** `GET /api/jobtypes` reuses `quotations:view` (already required to touch a quote); `POST`/`PATCH /api/jobtypes` reuse `company:manage` (Super Admin only, matching the existing precedent for company-wide configuration data like bank/VAT/T&C). `GET /api/dashboard` continues to reuse `dashboard:view`, which every default role already has — two of its response sections (`activityTimeline`, `approvalDashboard`) are additionally gated per-caller by the `auditLog:view`/`quotations:approve` the caller already has, rather than a new dashboard-specific permission.
 
+**No new permission was added for Global Search either (added 2026-07-14).** `GET /api/search` is
+reachable by any authenticated user — RBAC happens *per result category*, not at the route level:
+`quotations` needs `quotations:view`, `customers` needs `customers:view`, `products` needs
+`products:view`, `users` needs `users:manage` (the same permission the User Management page itself
+requires), and the static `pages`/menu-search category is filtered per entry against whichever
+permission that page's sidebar item already requires (`null` = always visible, e.g. Settings/
+Profile). Every check is `roleHasPermission()` called server-side inside
+`api/_lib/searchHandler.ts` **before** that category's MongoDB query even runs — a category the
+caller lacks permission for never executes its query and comes back as an empty array, identical
+in shape to a genuine zero-result search. This is the same "hiding a result in the UI is not
+enough" principle the Dashboard's permission-gated sections (`activityTimeline`/`approvalDashboard`
+above) already follow: the actual data never leaves the server for an unauthorized caller, so a
+compromised or modified frontend can't reveal anything the server itself wouldn't already refuse
+to return. Clicking a search result still lands on a page/action gated by that page's own existing
+permission checks (e.g. a Users search result still requires `users:manage` to actually reach
+`UserManagementPage`) — search result visibility and destination-page access enforce the same
+permission by construction, not by two independently-maintained rules that could drift apart.
+
+**Independent Codex review confirmation (2026-07-14, same day)**: an audit of Global Search's RBAC
+found **zero Critical issues** — "User data is queried only when `users:manage` is held, and all
+business-result categories are filtered before their MongoDB searches run." One Medium-severity UX
+inconsistency was found and fixed: a Customer search result deep-linked into the editable
+`CustomerFormModal` regardless of whether the caller held `customers:edit`, bypassing the same gate
+`CustomersPage.tsx`'s own list UI already respects for its edit button. **Not a security bypass**
+(the server's `requirePermission(req, "customers:edit")` on `PATCH /api/customers/:id` already
+rejected an unauthorized save either way — this was a client-side UX gap, not an enforcement gap)
+but confusing, since it presented an edit affordance unreachable through the page's normal
+controls. Fixed by only opening the edit form when `canEdit` is true; a view-only searcher now
+lands on the filtered list instead. See CHANGELOG.md and `CODEX_REVIEW_REPORT.md`'s "Claude Fix
+Status" for the full writeup.
+
 ### Company Profiles — REMOVED 2026-07-14
 
 6 permissions (`companyProfiles:view/create/edit/archive/delete/setDefault`) gated the multi-issuer-

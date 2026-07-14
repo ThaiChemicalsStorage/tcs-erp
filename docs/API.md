@@ -139,6 +139,25 @@ There is deliberately **no** `POST /api/notifications` (create-arbitrary-notific
 
 `DashboardPage.tsx` self-fetches via `src/lib/dashboard.ts`'s `fetchDashboardStats(filters)`, re-fetching whenever the on-screen date-range/department/salesperson filter changes (or after an Approve/Reject action from the Pending Approvals list) — not part of the universal boot-time fetch, since it's the only page that needs this particular aggregate. Approve/Reject actions themselves reuse the existing `POST /api/quotes/:id/workflow` route below — no new mutating route was added for the Dashboard.
 
+## Global Search (`api/_lib/searchHandler.ts`, mounted at `/api/search` — added 2026-07-14)
+
+Shares `api/handlers/customers.ts`'s function file (checked first on the raw pathname, before
+falling through to the customers-only logic) rather than getting its own — Vercel Hobby's
+12-function cap is still fully used, the same established sharing pattern this file itself once
+used with the now-removed `company-profiles.ts`. Replaces the topbar search box, which had never
+actually worked before this pass (a dead `<input>` with no `value`/`onChange` at all).
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/search?q=` | Any authenticated user | `q` required, trimmed, 2–100 characters (`400` outside that range — the frontend already gates on both ends via the input's own `minLength`/native `maxLength`, so a caller normally never hits the 400 path). The 100-character maximum was added 2026-07-14 in a same-day Codex review fix pass — previously unbounded, letting an oversized term force an expensive unanchored `$regex` `$or` scan across 4 collections in one request (a performance/availability concern, not a regex-injection one — `escapeRegExp()` already prevented that). Returns `{ quotations, customers, products, pages, users }`, each an array capped at 5 results. **Every category is independently RBAC-filtered** via `roleHasPermission()` before its query even runs: `quotations` needs `quotations:view`, `customers` needs `customers:view`, `products` needs `products:view`, `users` needs `users:manage`, `pages` are filtered per-entry against the same permission each page's sidebar item already requires (`null` permission = always included, e.g. Settings/Profile). A category the caller lacks permission for comes back as an empty array — identical in shape to a genuine zero-result search, so the response itself never signals "you're not allowed to see this" vs. "there's nothing here." `quotations[].amount` is the before-VAT figure via the same shared `computeQuoteAmountBeforeVat()` the Dashboard uses. See [DATABASE.md](./DATABASE.md) "Global Search" for the exact fields matched per category and the index/scaling notes. |
+
+`GlobalSearch.tsx` self-fetches via `src/lib/search.ts`'s `fetchGlobalSearch(query, signal)`,
+debounced 300ms client-side and cancelled via `AbortSignal` when a newer query supersedes an
+in-flight one — not part of the universal boot-time fetch, since it only runs while the search box
+is actively in use. `signal` support means a rapidly-typing user never races an older response
+against a newer one; the aborted request's `.catch()` recognizes `signal.aborted` and treats it as
+"superseded," not a real error.
+
 ## Quotations (`api/handlers/quotes.ts`, mounted at `/api/quotes`)
 
 | Method & Path | Auth | Notes |

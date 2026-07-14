@@ -4,6 +4,228 @@
 
 ---
 
+## 2026-07-14 — Codex review fix pass: Global Search High Priority issues + view-only navigation/accessibility
+
+An independent Codex review (`docs/CODEX_REVIEW_REPORT.md`, "ERP Global Search Audit") of the
+Global Search feature below found **zero Critical issues** (no unauthorized data exposure — every
+result category is genuinely filtered server-side before its query runs) and **2 High Priority**
+issues, both fixed this pass, plus 2 directly-relevant Medium findings.
+
+### High Priority #1 — no maximum query length on a multi-collection unanchored-regex endpoint
+
+`GET /api/search` enforced a 2-character minimum but no upper bound — an authenticated caller
+could submit an arbitrarily long term and force an expensive `$regex` `$or` scan across quotations/
+customers/products/users in one request. Not a regex-injection risk (`escapeRegExp()` already
+prevented that), but a real performance/availability concern. Fixed: new `MAX_QUERY_LENGTH = 100`
+in `api/_lib/searchHandler.ts`, rejected with `400` if exceeded; the search `<input>` in
+`GlobalSearch.tsx` (both the desktop and new mobile variants) also carries a matching native
+`maxLength={100}` as defense-in-depth (the server-side check is the real enforcement — a modified
+client could bypass a client-only `maxLength`).
+
+### High Priority #2 — Global Search doesn't exist below the `lg` breakpoint (1024px)
+
+`GlobalSearch.tsx` was entirely `hidden lg:flex`, so mobile and most tablet users had no visible
+search control at all — and the Ctrl/Cmd+K shortcut still silently focused the now-invisible
+input, doing nothing observable. Fixed with a real mobile entry point rather than disabling the
+shortcut: a `lg:hidden` icon-only trigger button opens a full-screen search takeover (`fixed
+inset-0`, its own input + close button + the same grouped results list, reusing the exact same
+`query`/`results`/`activeIndex`/keyboard-handling state as the desktop dropdown — no duplicated
+search logic, just a second rendering of the same underlying session). Ctrl/Cmd+K now checks
+`window.matchMedia("(min-width: 1024px)")` to decide whether to focus the desktop input or open
+the mobile panel, so the shortcut is never a no-op regardless of viewport width. Fixing this also
+required a small layout correction: the notification bell's `ml-auto lg:ml-0` (which used to be
+the one element responsible for right-aligning the trailing header icons on mobile, back when
+Global Search contributed nothing visible there) would have competed for the same flex auto-margin
+space against the new mobile search trigger's own `ml-auto`, pulling them apart with an
+unintended gap — the bell's margin classes were removed entirely (`App.tsx`), since Global Search's
+own elements (the desktop div's `ml-auto` at `lg:`, the mobile button's `ml-auto` below it) now
+correctly own that responsibility at every breakpoint.
+
+### Medium — view-only Customer search results opened an editable form
+
+Codex found that clicking a Customer result deep-linked directly into the edit modal
+(`CustomerFormModal`) regardless of whether the caller actually held `customers:edit` — bypassing
+the same gate `CustomersPage.tsx`'s own list UI already respects (the edit pencil icon is only
+shown when `canEdit` is true). Not a security bypass (the server independently rejects an
+unauthorized save either way), but confusing: a view-only user would land in an editable-looking
+form they could never normally reach from this page. Fixed: `CustomersPage.tsx`'s `initialEditId`
+handling now only opens the edit form when `canEdit` is true; a view-only searcher instead lands on
+the list, pre-filtered to that customer's company name (with the status/archived filters reset so
+the record is guaranteed visible regardless of its own active/archived state) — a real "found it"
+result without an edit affordance the server would reject anyway. **Products deliberately left
+unchanged**: `ProductsPage.tsx` has no button-level edit-permission gating at all today (a
+pre-existing, already-documented gap in `IMPLEMENTATION_CHECKLIST.md` — any `products:view` holder
+can already open the edit form via the normal list UI), so the search deep-link isn't introducing
+any new inconsistency there; fixing that would be a pre-existing, unrelated-to-this-feature gap,
+out of this pass's scope. Users has no view/edit permission split to violate (`users:manage` is a
+single flat permission covering both), so no fix was needed there either.
+
+### Medium — missing combobox/listbox accessibility semantics
+
+Keyboard navigation worked visually but had no ARIA semantics identifying the input as a combobox
+or the results as a listbox, and the active row never scrolled into view for a longer result list.
+Fixed: `role="combobox"`/`aria-expanded`/`aria-haspopup="listbox"`/`aria-autocomplete="list"`/
+`aria-controls`/`aria-activedescendant` on both the desktop and mobile inputs; `role="listbox"` on
+the results container; `role="option"`/`aria-selected`/a stable `id` on every result row (desktop
+and mobile use separate `id` namespaces — `global-search-option-{desktop|mobile}-{index}` — since
+both panels can be mounted simultaneously, one hidden via CSS, and duplicate DOM `id`s are invalid
+regardless of visibility). The active row now scrolls into view (`scrollIntoView({block:
+"nearest"})`) on every Arrow Up/Down.
+
+### Deliberately not fixed this pass (documented, not silently dropped)
+
+- **Low Priority items** (English quotation-status aliases not matched by the search predicate;
+  customer results don't surface which field matched) — out of this pass's Critical/High/directly-
+  relevant-Medium scope.
+- **"Search is a documented collection-scan design" (Medium)** — already documented as a known,
+  accepted limitation at this ERP's real data volume (see the prior pass's CHANGELOG entry below);
+  Codex's review re-confirms the same conclusion rather than finding a new problem. No code change
+  needed beyond the max-length cap above.
+- **"No automated search coverage was found" (Medium)** — this project has no automated test
+  infrastructure anywhere (a longstanding, deliberate, already-documented scope decision — see
+  RBAC.md "Known Gaps"), not something a single targeted fix pass for one feature should introduce
+  in isolation.
+
+### Build/verification
+
+`npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint` (0 errors, 2 pre-existing
+unrelated `i18n.tsx` warnings), and `npm run build` all pass clean. Same sandboxed-session
+limitation as every prior pass this project (no `MONGODB_URI`, no Vercel CLI) — no live-database or
+running-`vercel dev` manual verification, including of the new mobile UI at real device widths, was
+possible; see `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status" section for the full itemized
+status.
+
+---
+
+## 2026-07-14 — Implement Global Search
+
+The top navigation search box had never actually worked — a bare `<input>` with no `value`/
+`onChange` at all, wired to nothing, plus a placeholder ("ค้นหาคำสั่งซื้อ, SKU, ผู้จำหน่าย...") left
+over from a generic template mentioning purchase orders/vendors, neither of which are modules this
+ERP has. Replaced with a real, permission-aware Global Search across Quotations, Customers,
+Products, application pages/menus, and (permission-gated) Users.
+
+### Backend — `GET /api/search?q=`
+
+New `api/_lib/searchHandler.ts` (`handleSearch()`), mounted by adding a pathname check to
+`api/handlers/customers.ts` (checked first, before falling through to the existing
+`handleCustomers()` logic) rather than a new function file — Vercel Hobby's 12-function cap is
+still fully used, same established pattern this file itself once shared with the now-removed
+`company-profiles.ts`. New `vercel.json` rewrite: `/api/search` → `/api/handlers/customers`.
+
+- **Query handling**: trimmed, minimum 2 characters (enforced server-side with a `400` — the
+  frontend already gates on this before ever calling the endpoint, so this is defense-in-depth,
+  not a normally-reachable path), every value regex-escaped (`escapeRegExp()`, matching the
+  existing pattern in `api/handlers/roles.ts`) before use in a MongoDB `$regex`, so a query
+  containing regex metacharacters searches for that literal text instead of being interpreted as a
+  pattern or throwing.
+- **Quotations** (`quotations:view`): matches quotation number (`_id`), customer/company name
+  (`client`, or `customerSnapshot.companyName` when a linked customer exists), contact name,
+  project name, PO reference, salesperson, Job Type code/name, status, and remarks. Each result
+  carries the **before-VAT amount**, computed via the same shared `computeQuoteAmountBeforeVat()`
+  helper the Dashboard uses (`api/_lib/quoteAmounts.ts`) — never `Quote.amount`'s VAT-included
+  grand total. `Quote` has no `isDeleted` field (confirmed, documented in MODULES/Dashboard.md), so
+  no such filter applies here either — consistent with every other Quote query in this codebase.
+- **Customers** (`customers:view`): matches company name, contact name, phone, email, tax ID,
+  address, project name. Filtered to `isDeleted: false` — archived customers don't normally appear.
+- **Products** (`products:view`): matches SKU/code, name, description, specifications, unit, and
+  category name (joined via a `categoryId` lookup against the small `categories` collection, which
+  is also reused as the display-name lookup — no second round trip). Filtered to `archived: false`.
+- **Pages/menus**: a small static, non-MongoDB-backed list (11 entries: Dashboard, Quotations,
+  Create Quotation, Customers, Add Customer, Products, Product Categories, User Management, Roles
+  and Permissions, Audit Logs, Profile/Settings) — matched against Thai/English aliases, filtered
+  by the same permission each page's sidebar entry already requires. Deliberately excludes a
+  "Notifications" entry present in an earlier requirement draft — this app has no dedicated
+  Notifications page (only the header bell's dropdown), and inventing a fake nav target would
+  violate the "no fake results" requirement. "Create Quotation"/"Product Categories" reuse their
+  parent page's own view permission (`quotations:view`/`products:view`) rather than a stricter
+  invented one, since neither page actually gates its create/manage-categories button more tightly
+  today (a pre-existing, already-documented gap in IMPLEMENTATION_CHECKLIST.md — not something this
+  feature should silently paper over). "Add Customer" does use `customers:create`, matching
+  `CustomersPage.tsx`'s real `canCreate` gate.
+- **Users** (`users:manage` only — every other category requires only view-level access, this one
+  requires the same permission the User Management page itself does): matches full name, email,
+  employee ID, username, department, position, and role (joined against the small `roles`
+  collection by display name, so searching "Sales User" finds users with `roleKey: "sales_user"`).
+- **RBAC enforcement is server-side, not UI-hiding**: every category above is independently gated
+  by `roleHasPermission()` before its query even runs — a category the caller lacks permission for
+  simply comes back as an empty array, indistinguishable in the response from a genuine
+  zero-result search. The actual data never leaves the server for an unauthorized caller.
+- **Indexes**: new `ensureSearchIndexes()` (same lazy, idempotent, once-per-warm-instance pattern
+  as `ensureQuoteAnalyticsIndexes()` in `api/dashboard/index.ts`, wrapped in the same
+  log-and-continue try/catch so a transient index-creation failure can't 500 the whole search) adds
+  plain single-field indexes on `quotes.customerId`/`jobTypeCode`, `customers.contactName`/`phone`/
+  `email`/`taxId`, `products.code`/`name`/`categoryId`/`archived`, `users.fullName`/`department`/
+  `position`/`roleKey`. Deliberately does **not** redeclare `users.email`/`username`/`employeeId`
+  (already declared `unique: true` elsewhere; a non-unique redeclaration of the same key would
+  throw `IndexOptionsConflict` if that unique index exists in this deployment).
+- **Known scaling limitation, documented not "fixed"**: substring (not just prefix) regex matching
+  across a `$or` of several fields can't be efficiently served by a standard B-tree index — the
+  indexes above help exact-match/sort use cases and keep the query planner's working set smaller,
+  but the underlying search at real scale is still effectively a filtered collection scan per
+  category, capped at 5 results and a small `limit()`. Acceptable at this ERP's actual data volume
+  (one internal company, not big-data scale — same conclusion the Dashboard's own aggregation
+  already reached). If data volume ever grows enough to matter, revisit with MongoDB Atlas Search
+  (`$search`) rather than more regex indexes — not introduced now since it isn't already configured
+  and isn't clearly beneficial at today's scale.
+
+### Frontend
+
+- New `src/lib/search.ts` — `fetchGlobalSearch(query, signal)`, typed `SearchResults`/per-category
+  result interfaces mirroring the API response shape. Supports an `AbortSignal` for stale-request
+  cancellation.
+- New `src/components/GlobalSearch.tsx` — the dropdown/command-palette UI, replacing the dead
+  input in `App.tsx`'s topbar. Debounced 300ms; a combined effect handles both the debounce timer
+  and stale-request cancellation via `AbortController`. Previous results stay visible (with a
+  small inline spinner, not a blank flash) while a new query is in flight — state resets only
+  happen in the event handlers that trigger them (`handleQueryChange`, `retry`), not synchronously
+  at the top of the fetch effect, matching the exact pattern `DashboardPage.tsx`'s
+  `handleFiltersChange`/`retry` already established (avoids an avoidable render cascade,
+  `react-hooks/set-state-in-effect`). Keyboard nav: Arrow Up/Down move a flat-indexed selection
+  across all groups (offsets precomputed once per result set via `useMemo`, not a mutable counter
+  threaded through render — the mutable-counter version tripped a `react-hooks/immutability` lint
+  error), Enter activates the highlighted (or first) result, Escape closes. Ctrl/Cmd+K focuses the
+  box from anywhere (a no-op below the `lg` breakpoint, where this header search box has no visible
+  affordance at all today — not a regression, matches the box's existing responsive behavior).
+  Simple substring highlighting (`<mark>`) on matched text. Click-outside-to-close mirrors
+  `NotificationBell.tsx`'s existing `fixed inset-0` overlay pattern.
+- **Deep-link navigation, not just list-page redirects**: clicking a Customer/Product/User result
+  opens that record's edit form directly, and clicking "Create Quotation"/"Add Customer"/"Product
+  Categories" jumps straight into that action — not just the parent list page. Added
+  `initialEditId`/`onEditIdConsumed` to `CustomersPage.tsx`/`ProductsPage.tsx`/
+  `UserManagementPage.tsx` (mirroring `QuotationPage.tsx`'s existing `initialQuoteId` pattern
+  exactly: reacts to every change, not just once per mount, so a second search click while already
+  on the page still jumps to the newly-clicked record) and `autoCreateSeq`/`autoView`/`autoViewSeq`
+  to `CustomersPage.tsx`/`ProductsPage.tsx` (a monotonic sequence number, not a boolean, so the
+  same page-action result clicked twice in a row still fires both times). `App.tsx` gained
+  `navigateToCustomer`/`navigateToProduct`/`navigateToUser`/`navigateToPage` handlers plus
+  `customerDeepLinkId`/`productDeepLinkId`/`userDeepLinkId`/`pageAction` state, following the exact
+  shape of the pre-existing `quotationDeepLinkId`/`navigateToQuotation`.
+- **i18n**: `topbar.searchPlaceholder` changed from the old generic-template text to "ค้นหาใบเสนอราคา
+  ลูกค้า สินค้า หรือเมนู..." ("Search quotations, customers, products, or pages..."); new
+  `topbar.searchAria` and `search.group.*`/`search.before`/`search.noResults`/
+  `search.noResultsHelper`/`search.error`/`search.retry` keys (Thai + English).
+
+### Deliberately not built this pass
+
+- **Recent-search history** — explicitly optional per the requirement ("do not implement if it
+  adds significant complexity"); skipped to keep this pass's scope to the core search feature.
+- **Mobile/narrow-viewport search UI** — the header search box (and therefore Global Search
+  entirely) remains `hidden` below the `lg` breakpoint, unchanged from before this pass. Building a
+  mobile-specific full-screen search overlay would be a header-layout redesign beyond this task's
+  scope, not a one-line fix.
+- **MongoDB Atlas Search** — not introduced; see the "Known scaling limitation" note above.
+
+### Build/verification
+
+`npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint` (0 errors, 2 pre-existing
+unrelated `i18n.tsx` warnings), and `npm run build` all pass clean. Same sandboxed-session
+limitation as every prior pass this project (no `MONGODB_URI`, no Vercel CLI) — no live-database or
+running-`vercel dev` manual verification was possible; see docs/TODO.md for the specific unverified
+behaviors flagged as open items.
+
+---
+
 ## 2026-07-14 — Codex review fix pass: progressive-loading High Priority issues + data-quality/documentation cleanup
 
 An independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) of the Company Profiles removal /

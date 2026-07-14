@@ -1,7 +1,7 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard, Settings, Package,
-  Search, ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
+  ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
@@ -23,6 +23,7 @@ import {
 import { logAudit } from "./lib/auditLog";
 import { hasTourCompleted, markTourCompleted } from "./lib/tour";
 import { NotificationBell } from "./components/NotificationBell";
+import { GlobalSearch } from "./components/GlobalSearch";
 import { BrandMark } from "./components/BrandMark";
 import { useGuidedTour } from "./components/GuidedTour";
 import { useI18n, type TranslationKey } from "./lib/i18n";
@@ -217,6 +218,17 @@ export default function App() {
   const [quotationListFilter, setQuotationListFilter] = useState<QuotationListFilter | null>(null);
   /** Set by a notification click when it has a `relatedQuoteId` — opens that quote's detail view directly instead of just the module's list, consumed once by QuotationPage then cleared (see below). */
   const [quotationDeepLinkId, setQuotationDeepLinkId] = useState<string | null>(null);
+  /** Same deep-link pattern as `quotationDeepLinkId` above, one per module — set by a Global Search
+   * result click (see `GlobalSearch.tsx`), consumed once by the target page then cleared. */
+  const [customerDeepLinkId, setCustomerDeepLinkId] = useState<string | null>(null);
+  const [productDeepLinkId, setProductDeepLinkId] = useState<string | null>(null);
+  const [userDeepLinkId, setUserDeepLinkId] = useState<string | null>(null);
+  /** Set by a Global Search "page action" result (e.g. "Create Quotation," "Product Categories")
+   * — `seq` is a monotonic sequence number, not a boolean, so the same result clicked twice in a
+   * row still re-fires on the target page (see CustomersPage/ProductsPage's `autoCreateSeq`/
+   * `autoViewSeq` props for the consuming side). Cleared once the target page has applied it. */
+  const [pageAction, setPageAction] = useState<{ nav: NavKey; action: "create" | "categories"; seq: number } | null>(null);
+  const pageActionSeq = useRef(0);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const [company, setCompany] = useState<Company>(defaultCompany);
@@ -353,6 +365,32 @@ export default function App() {
     setQuotationDeepLinkId(quoteId);
     setActiveNav("quotations");
   };
+  const navigateToCustomer = (customerId: string) => {
+    setCustomerDeepLinkId(customerId);
+    setActiveNav("customers");
+  };
+  const navigateToProduct = (productId: string) => {
+    setProductDeepLinkId(productId);
+    setActiveNav("products");
+  };
+  const navigateToUser = (userId: string) => {
+    setUserDeepLinkId(userId);
+    setActiveNav("users");
+  };
+  /** `navKey` arrives from Global Search as a plain string (see `SearchPageResult` in
+   * src/lib/search.ts) — validated against the known `NavKey` union here, at the one place a
+   * server-supplied string actually needs to become a real `NavKey`, rather than trusting it
+   * blindly or threading an unsafe cast through GlobalSearch.tsx. */
+  const navigateToPage = (navKey: string, action?: "create" | "categories") => {
+    if (!navItems.some((n) => n.key === navKey) && navKey !== "settings") return;
+    const key = navKey as NavKey;
+    if (action) {
+      pageActionSeq.current += 1;
+      setPageAction({ nav: key, action, seq: pageActionSeq.current });
+    }
+    setActiveNav(key);
+  };
+  const clearPageAction = () => setPageAction(null);
 
   const refreshNotifications = () => { fetchNotifications().then(setNotifications).catch(() => {}); };
   const markNotificationRead = (id: string) => {
@@ -537,11 +575,14 @@ export default function App() {
             <ChevronRight size={13} className="text-muted-foreground flex-shrink-0" />
             <span className="text-[#c9a84c] font-medium truncate" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t(NAV_LABEL_KEYS[effectiveNav])}</span>
           </div>
-          <div className="hidden lg:flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 ml-auto focus-within:border-[#c9a84c]/40 transition-colors">
-            <Search size={14} className="text-muted-foreground flex-shrink-0" />
-            <input type="text" placeholder={t("topbar.searchPlaceholder")} className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full" />
-          </div>
-          <div data-tour="notification-bell" className="ml-auto lg:ml-0 flex-shrink-0">
+          <GlobalSearch
+            onNavigateToQuotation={navigateToQuotation}
+            onNavigateToCustomer={navigateToCustomer}
+            onNavigateToProduct={navigateToProduct}
+            onNavigateToUser={navigateToUser}
+            onNavigateToPage={navigateToPage}
+          />
+          <div data-tour="notification-bell" className="flex-shrink-0">
             <NotificationBell
               notifications={notifications}
               currentUserId={currentUser.id}
@@ -616,13 +657,13 @@ export default function App() {
               : effectiveNav === "quotations"
               ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} />
               : effectiveNav === "customers"
-              ? <CustomersPage customers={customers} onCustomersChange={setCustomers} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} />
+              ? <CustomersPage customers={customers} onCustomersChange={setCustomers} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} initialEditId={customerDeepLinkId} onEditIdConsumed={() => setCustomerDeepLinkId(null)} autoCreateSeq={pageAction?.nav === "customers" && pageAction.action === "create" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "settings"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
               : effectiveNav === "products"
-              ? <ProductsPage products={products} onProductsChange={updateProducts} categories={categories} onCategoriesChange={updateCategories} />
+              ? <ProductsPage products={products} onProductsChange={updateProducts} categories={categories} onCategoriesChange={updateCategories} initialEditId={productDeepLinkId} onEditIdConsumed={() => setProductDeepLinkId(null)} autoView={pageAction?.nav === "products" ? pageAction.action : null} autoViewSeq={pageAction?.nav === "products" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "users"
-              ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} />
+              ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
               : effectiveNav === "roles" && isSuperAdmin
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} onAudit={handleAudit} />
               : <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
