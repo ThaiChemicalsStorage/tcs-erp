@@ -19,12 +19,12 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **Users** (`src/lib/users.ts`): a `User` is both the employee record and the account — `employeeId`, `fullName`, `username`, `email`, `passwordHash`, `phone`, `department`, `position`, `roleKey`, `status` (`active`/`inactive`), `profilePictureDataUrl`, `signatureDataUrl`. `employeeId`/`username`/`email` are enforced unique. **Position and Role are deliberately separate fields** — Position is a free-text job title (with suggestions: CEO, Director, General Manager, Sales Manager, Sales Executive, Engineer, HR, Accounting, Purchasing, Warehouse) with no bearing on permissions; Role is the RBAC role, assigned independently by an admin.
 
-**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 27-key `Permission` union — `dashboard:view`; `quotations:view/create/edit/delete/approve/reject/export`; `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `companyProfiles:view/create/edit/archive/delete/setDefault` (added 2026-07-13, see "Company Profiles" below); `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below). Six default `Role`s ship out of the box:
+**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 21-key `Permission` union — `dashboard:view`; `quotations:view/create/edit/delete/approve/reject/export`; `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) Six default `Role`s ship out of the box:
 
 | Role | `isSuperAdmin` | `isSystem` | Summary |
 |---|---|---|---|
 | Super Admin | ✅ | ✅ (undeletable) | Every permission, always — `roleHasPermission()` short-circuits to `true` regardless of the stored list |
-| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + view (not manage) company profiles. No `roles:manage`/`company:manage`. |
+| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view. No `roles:manage`/`company:manage`. |
 | Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Maps to the request's "Sales Executive." |
 | Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Maps to "Sales Manager." |
 | Approver Level 2 | — | — | Same rights as Level 1 in this build (see Known Simplifications below). Maps to "CEO." |
@@ -32,36 +32,17 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **No new permission was added for the 2026-07-10 Job Type / Executive Dashboard pass.** `GET /api/jobtypes` reuses `quotations:view` (already required to touch a quote); `POST`/`PATCH /api/jobtypes` reuse `company:manage` (Super Admin only, matching the existing precedent for company-wide configuration data like bank/VAT/T&C). `GET /api/dashboard` continues to reuse `dashboard:view`, which every default role already has — two of its response sections (`activityTimeline`, `approvalDashboard`) are additionally gated per-caller by the `auditLog:view`/`quotations:approve` the caller already has, rather than a new dashboard-specific permission.
 
-### Company Profiles (added 2026-07-13)
+### Company Profiles — REMOVED 2026-07-14
 
-6 new permissions — `companyProfiles:view/create/edit/archive/delete/setDefault` — gate the new
-multi-company-issuer master-data module (see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md)).
-**Unlike `company:manage`, these are deliberately not added to `SUPER_ADMIN_ONLY_PERMISSIONS`** —
-the request explicitly wants Administrator (or a custom role) to be grantable
-create/edit/archive/setDefault access via the normal Role Management permission matrix, not
-structurally locked to Super Admin the way company-wide settings are. `defaultRoles`'
-Administrator entry ships with `companyProfiles:view` only out of the box; broader access is an
-explicit grant a Super Admin makes via Role Management, not automatic. Sales/Approver/Viewer
-roles get none of these six by default — per the request, "Normal Sales users should not manage
-company profiles," though a future Quotation-form integration may eventually need its own
-distinct permission for *selecting* (not managing) a company profile when issuing a quote — not
-built yet, see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) "Future Quotation
-Integration."
-
-Every route in `api/handlers/company-profiles.ts` calls `requirePermission()` server-side with the
-matching permission — same enforcement posture as every other module, genuinely unbypassable via
-devtools. `companyProfiles:delete` is defined (matching the request's literal permission list) but
-isn't wired to any additional route: this module's only "delete" is the reversible archive action
-(`companyProfiles:archive`), matching the pre-existing Category/Job Type precedent of no
-hard-delete route — see API.md/DATABASE.md for the full reasoning.
-
-**Quotation-issuer selection — REMOVED 2026-07-14 (correction).** A 2026-07-13 pass relaxed
-`GET /api/company-profiles` to also accept `quotations:create` callers so the Quotation form's
-(incorrect) issuer-company selector could read active profiles. That selector and its RBAC carve-out
-purpose no longer apply — the route still accepts `quotations:create` (kept, harmless, no active
-consumer relies on it today), but Quotation no longer reads `company_profiles` at all. See
-[MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) "Correction (2026-07-14)" and "Customers"
-below for the RBAC carve-out that replaced it.
+6 permissions (`companyProfiles:view/create/edit/archive/delete/setDefault`) gated the multi-issuer-
+company master-data module added 2026-07-13, briefly (and incorrectly) wired into the Quotation
+form as an issuer-company selector, then fully removed from the user-facing ERP on 2026-07-14 — this
+ERP only ever needs one issuer company. All six permission keys are gone from the `Permission`
+union/`ALL_PERMISSIONS`/`PERMISSION_GROUPS` and from the Administrator default role's permission
+list. **Any custom role that already had one of these six permissions stored keeps it** — a
+harmless, meaningless legacy string, since `api/handlers/roles.ts` never validated `permissions`
+arrays against `ALL_PERMISSIONS` and nothing checks for these keys anymore. See
+[MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) for the full removal writeup.
 
 ### Customers (added 2026-07-14)
 
@@ -89,22 +70,10 @@ Types — no separate `customers:delete` permission exists (unlike Company Profi
 one it doesn't wire to a route, matching an older literal request; Customers wasn't asked to define
 one, so it doesn't).
 
-**Independently confirmed 2026-07-13 (tenth same-day pass)**: a follow-up Codex review of this
-module found **zero Critical issues** in this RBAC enforcement — every exposed route was already
-correctly gated. Its 3 High Priority findings were data-integrity/audit-integrity gaps, not RBAC
-gaps: a current default profile could be deactivated without reassignment, the one-default
-invariant had no database-level guarantee (fixed with a partial unique index, see
-[DATABASE.md](./DATABASE.md)), and Company Profile audit entries were client-authored via the
-generic `POST /api/audit-log` rather than server-authoritative. All three fixed — the last one the
-same way the 2026-07-10 quotation audit-integrity fix worked: a `writeCompanyProfileAuditEntry()`
-helper writes every mutation's audit entry inside the handler itself, and `POST /api/audit-log` now
-rejects the `"โปรไฟล์บริษัท"` module outright (see [API.md](./API.md)/[AuditLog.md](./MODULES/AuditLog.md)).
-Separately, the same review's Medium-severity, "needs runtime verification" hedge on whether the
-app's boot sequence handles users lacking `companyProfiles:view` correctly turned out to be a real,
-more severe bug than described: it broke sign-in entirely for every role except Super
-Admin/Administrator. Fixed in `App.tsx` — see CHANGELOG.md for the full writeup; not itself an RBAC
-enforcement gap (the 403 was the *correct* server response), but a client resilience gap in how the
-app reacted to it.
+*(Historical note: a 2026-07-13 Codex review of the then-live Company Profiles module's RBAC
+enforcement found zero Critical issues and 3 High Priority data/audit-integrity gaps, all fixed
+same day — see CHANGELOG.md if that history is ever needed. The module itself was removed
+2026-07-14, so this no longer describes any live route.)*
 
 Admins can create additional custom roles and edit any non-system role's permission checkboxes via Role Management (`src/pages/admin/RoleManagementPage.tsx`) — gated client-side by `userIsSuperAdmin()`, and **independently re-enforced server-side**: `POST`/`PATCH`/`DELETE /api/roles*` all require the `roles:manage` permission (`api/handlers/roles.ts`), which only the Super Admin role holds (see below), and the server strips any `roles:manage`/`company:manage` permission from a submitted permission list regardless of what the client sent, so there is no way — UI or direct API call — to grant them elsewhere. `roles:manage` and `company:manage` are additionally hardcoded in `SUPER_ADMIN_ONLY_PERMISSIONS` (`permissions.ts`) and `isPermissionLockedToSuperAdmin()` (`src/lib/roles.ts`, the same function used both client- and server-side) — the permission-matrix checkboxes for those two are disabled/locked for every role except Super Admin itself in the UI, and the server independently refuses to persist them onto any other role even if a request is crafted by hand.
 

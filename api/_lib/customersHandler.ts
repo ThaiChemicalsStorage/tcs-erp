@@ -9,11 +9,11 @@ import { nowIso } from "../../src/lib/products.js";
 
 /**
  * Customer master data API (added 2026-07-14, replacing the earlier — wrong — "issuer company"
- * quotation feature). Folded into the `company-profiles` serverless function (see the dispatch in
- * `api/handlers/company-profiles.ts`) rather than getting its own `api/handlers/customers.ts` file
- * — Vercel Hobby's 12-serverless-function cap is already reached (see docs/CLAUDE.md), and adding
- * a 13th function file isn't an option without a plan upgrade. Same request/response shape as a
- * standalone handler would have; only the module boundary differs.
+ * quotation feature). Entry point: `api/handlers/customers.ts`. Briefly (2026-07-14, same day)
+ * folded into the `company-profiles` serverless function instead of getting its own file, to stay
+ * under Vercel Hobby's 12-function cap — once the Company Profiles module itself was removed later
+ * the same day (see docs/MODULES/CompanyProfiles.md "Removed"), that function slot freed up and
+ * this logic got its own dedicated `api/handlers/customers.ts` file again.
  */
 
 let customerIndexesEnsured = false;

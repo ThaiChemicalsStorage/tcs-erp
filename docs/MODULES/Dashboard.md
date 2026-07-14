@@ -146,26 +146,48 @@ avgDealSize), `forecast` (thisMonth/thisQuarter/thisYear), `revenueTrend`/`reven
 **Why this is exact, not an approximation**: `Quote` has no persisted pre-tax/subtotal field —
 `amount` is always the VAT-included grand total
 (`afterDiscount * (1 + VAT_RATE/100)`, see `computeQuoteAmount()` in
-`api/_lib/quoteValidation.ts`), computed with no intermediate rounding. `VAT_RATE` is a single
-fixed 7%, applied uniformly to every quote ever saved — never a per-quote override, never a
-different historical rate. So `preTaxAmount(amount) = amount / 1.07` (`api/dashboard/index.ts`)
-recovers the *exact* `afterDiscount` value the server computed at save time, for old and new
-quotes alike — not a best-effort fallback for legacy data, because there is no legacy formula to
-fall back from.
+`api/_lib/quoteValidation.ts`), computed with no intermediate rounding. Rather than reverse the
+VAT out of `amount` (which would round-trip a division by a fixed rate that has never varied but
+is fragile if it ever does), the Dashboard recomputes the pre-tax figure the same way the server
+computed it going forward: directly from each quote's own `lines`/`discount` via the shared
+`computeQuoteAmountBeforeVat(lines, discountPct)` helper (`api/_lib/quoteAmounts.ts`) — the exact
+same per-line reduction (`qty × unitPrice × (1 − itemDiscount/100)`, summed, then less the
+quote-level `discount`) that `computeQuoteAmount()` itself starts from before adding VAT. This
+keeps the Dashboard and the Quotation create/edit path mathematically unable to drift apart, and
+sidesteps the (small) precision loss of dividing a VAT-included total back down.
 
-**Implementation**: `docs[].amount` (the per-quote array every KPI/ranking/analytics computation
-in `api/dashboard/index.ts` derives from) is normalized to its pre-tax value exactly once, right
-after the filtered `quotes.find()` fetch — every downstream `.reduce()`/`.filter()` across KPIs,
-pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast, and
-`approvalDashboard.pendingList` (which derives from `docs`) inherits it automatically, so no
-individual call site can accidentally sum the VAT-included figure. The two aggregations that read
-from separate queries instead of `docs` (`revenueTrend`'s won-quote scan, `followUps`) apply
-`preTaxAmount()` explicitly at their own read sites.
+**Implementation**: `docs[]` (the per-quote array every KPI/ranking/analytics computation in
+`api/dashboard/index.ts` derives from) has its pre-tax value computed exactly once, right after
+the filtered `quotes.find()` fetch, via `computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ??
+0)` — every downstream `.reduce()`/`.filter()` across KPIs, pipeline, salesPerformance,
+customerAnalytics, jobTypeAnalytics, forecast, and `approvalDashboard.pendingList` (which derives
+from `docs`) inherits it automatically, so no individual call site can accidentally sum the
+VAT-included figure. The projection for `docs` (and the two separate queries below) fetches
+`lines`/`discount` instead of `amount` so the helper always has its real inputs. The two
+aggregations that read from separate queries instead of `docs` (`revenueTrend`'s won-quote scan,
+`followUps`) call `computeQuoteAmountBeforeVat()` explicitly at their own read sites, on their own
+`lines`/`discount` projections.
 
 **UI labels**: every affected Thai label says "ก่อนภาษี" explicitly (the 4 KPI card titles/
 helpers, the Status Summary's "มูลค่ารวมก่อนภาษี" column, and "(ก่อนภาษี)" suffixes on the
 ranking/job-type/customer/pipeline/approval tables and CSV headers) — see
 [UI_GUIDELINES.md](../UI_GUIDELINES.md) "Pre-Tax Amount Labeling."
+
+**Data-quality fallback for missing line data** (2026-07-14, Codex review Medium finding — a prior
+draft of this doc/`DATABASE.md` over-claimed this case "cannot occur"): `computeQuoteAmountBeforeVat(q.lines
+?? [], q.discount ?? 0)` treats a doc whose `lines` field is entirely *absent* (not the same as a
+genuinely new Draft's legitimate `lines: []`) the same as a real zero-value quote — it silently
+reports `$0` pre-tax rather than crashing the whole Dashboard or falling back to the VAT-included
+`amount` (both of which would be worse: one denies every user the page, the other mixes VAT bases).
+This is the deliberately safer of the three options, but it can understate historical totals if
+such a document exists, and nothing in the UI currently calls it out per-record. Every quote has
+carried a real `lines` array since the 2026-07-08 rewrite, so this is expected to be a null set in
+practice — not verified against production data in this sandboxed session (see PROJECT_STATUS.md
+"Known Risks"). `api/dashboard/index.ts` now emits a `console.warn` (grep-able in Vercel function
+logs) naming the affected count whenever this fires, as lightweight telemetry until a real
+per-record data-quality surface is worth building. If it ever fires against real data, treat it as
+a signal to inspect those specific quotes by hand (`db.quotes.find({ lines: { $exists: false } })`)
+— not a bug in this calculation rule itself.
 
 ## Pages / Components
 
@@ -497,3 +519,14 @@ pass — see [RBAC.md](../RBAC.md).
   and component rendering were checked in isolation), and that selecting a real narrow date range
   against real audit-log data actually reduces the returned counts (verified by code review, not
   exercised against live data) — both flagged as next steps in CODEX_REVIEW_REPORT.md.
+- **2026-07-14, Company Profiles removal / pre-tax rework / progressive-loading pass**: same
+  sandboxed-session limitation (no `MONGODB_URI`, no Vercel CLI) — no live-database or running-`vercel
+  dev` verification was possible this pass either. The 2026-07-14 Pre-Tax Amount pass above computed
+  the before-VAT figure by dividing the VAT-included `amount` back down (`amount / 1.07`); this pass
+  replaces that with the items-based `computeQuoteAmountBeforeVat(lines, discountPct)` helper (see
+  "Pre-Tax Amount Rule" above) so the Dashboard can never silently show a VAT-included figure for a
+  quote whose stored `amount` predates a future VAT-rate change, and so it shares its exact formula
+  with quote creation/editing instead of merely inverting the output. Verified via `tsc --noEmit`
+  (both configs)/`npm run lint`/`npm run build` only — the arithmetic change itself was not
+  re-exercised against a live quote's data in this pass; that spot-check remains an open item for
+  whoever next has live-database access.

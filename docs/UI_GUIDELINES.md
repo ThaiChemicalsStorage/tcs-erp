@@ -94,12 +94,18 @@ For an action that needs a **free-text comment** attached (not just a yes/no con
 When a field/button should only be interactive for users with the right permission, don't just leave it enabled and rely on the save handler to reject the change — set `disabled={!canEdit}` directly on the input (Tailwind `disabled:opacity-60` / `disabled:cursor-not-allowed`), and omit the button entirely (not `disabled`) if the action itself shouldn't be attempted — see the sidebar (items are filtered out of the array, not rendered-and-disabled) and `QuoteDocument.tsx`'s workflow action buttons (each one is conditionally rendered based on `QuotePermissions`, not shown-but-greyed). Remember this is client-side display logic only, not enforcement — see [RBAC.md](./RBAC.md).
 
 ### Image Upload Fields
-`src/components/ImageUploadField.tsx` (extracted 2026-07-13 from what was previously inlined only inside `SettingsPage.tsx`): a labeled preview box (`w-16 h-16` square or `w-28 h-16` wide, via the `aspect` prop) + Upload/Remove buttons + a size hint, client-side MIME/size pre-check (1MB) with inline error text, converts to a base64 data URL via `FileReader`. Use this for any new logo/stamp/signature-style upload field instead of re-inlining a copy — it's now shared between Company Settings (logo/stamp) and Company Profiles (logo/stamp). The authoritative validation is still server-side (`validateImageDataUrl()` in `api/_lib/uploadValidation.ts`, 2MB cap) — this component's client-side check is fail-fast UX only, not the security boundary.
+`src/components/ImageUploadField.tsx` (extracted 2026-07-13 from what was previously inlined only inside `SettingsPage.tsx`): a labeled preview box (`w-16 h-16` square or `w-28 h-16` wide, via the `aspect` prop) + Upload/Remove buttons + a size hint, client-side MIME/size pre-check (1MB) with inline error text, converts to a base64 data URL via `FileReader`. Use this for any new logo/stamp/signature-style upload field instead of re-inlining a copy — it currently backs Company Settings' logo/stamp fields (its Company Profiles counterpart was removed 2026-07-14 along with that module, see [MODULES/CompanyProfiles.md](../MODULES/CompanyProfiles.md)). The authoritative validation is still server-side (`validateImageDataUrl()` in `api/_lib/uploadValidation.ts`, 2MB cap) — this component's client-side check is fail-fast UX only, not the security boundary.
 
-### Sectioned Master-Data Forms (Company Profiles, and the pattern to follow for similar future forms)
-`CompanyProfileForm.tsx` (`src/pages/admin/companyProfiles/`) is the reference pattern for a form with more fields than fit comfortably in one flat card: group into labeled `Section` cards (`bg-card border border-border rounded-xl p-6 space-y-4`, an uppercase-tracking-wide Playfair Display section heading) rather than one long unbroken form — matches the requested "group fields into clear sections" requirement. Required fields get a `<span className="text-[#e05252]">*</span>` marker next to the label (not just relying on the eventual error message to communicate that). A repeatable sub-list (bank accounts here, capped at 10, entirely-blank rows silently dropped server-side rather than stored — see DATABASE.md) is its own bordered block per entry with an inline remove button, plus an "+ Add" button below the list and a one-line hint explaining the multiplicity rule (e.g. "only one can be marked default"). An unsaved-changes discard-confirmation (`ConfirmDialog`, dirty-checked via comparing the current draft to its starting snapshot) fires on Cancel/breadcrumb-back when the form has real edits — cheaper than a global `beforeunload` listener and sufficient for a form that's only ever left via an in-page button, not a browser navigation.
-
-**Confirm before any state-changing row action, not just destructive ones** (added 2026-07-13, Codex review fix): `CompanyProfileList.tsx` originally only confirmed Set Default and Archive, leaving Deactivate as a single-click, no-confirmation action — flagged as a real UX gap (deactivating is reversible, but still consequential enough to warrant a pause, especially once the server-side rule "can't deactivate the current default" can itself surface as an error the user didn't expect). Deactivate now shows the same `ConfirmDialog` pattern as Archive/Set Default; Activate stays a single click (re-enabling something is lower-stakes than disabling it). Icon-only row actions should carry both `title` (hover tooltip) and an `aria-label` naming the specific row's record (e.g. `` `${t("common.edit")} ${company.companyNameTh}` ``) — `title` alone isn't an accessible name for every assistive technology.
+### Sectioned Master-Data Forms — pattern reference removed 2026-07-14
+The reference example for this pattern (group fields with more than fit one flat card into labeled
+`Section` cards, `bg-card border border-border rounded-xl p-6 space-y-4` with an uppercase-tracking-wide
+Playfair Display heading; required fields get a `<span className="text-[#e05252]">*</span>` marker;
+a repeatable sub-list is its own bordered block per entry with an inline remove + "+ Add" button; an
+unsaved-changes discard-confirmation fires on Cancel/breadcrumb-back when dirty) used to be
+`CompanyProfileForm.tsx`/`CompanyProfileList.tsx`, both deleted when the Company Profiles module was
+removed (see [MODULES/CompanyProfiles.md](../MODULES/CompanyProfiles.md)). The pattern description
+itself is still good guidance for any future form that needs it — `ProductForm.tsx`/`SettingsPage.tsx`
+follow variations of the same idea — just without a dedicated example component to point to anymore.
 
 ### Search-and-Pick Autofill (Quotation's Customer selector, added 2026-07-14)
 `CustomerSelector.tsx` (`src/pages/quotation/`) is the reference pattern for "search a saved
@@ -117,11 +123,67 @@ explaining why, not hidden — the user should still see what's currently linked
 
 **Superseded pattern (2026-07-13–2026-07-14, historical)**: an earlier `IssuerCompanySelector.tsx`
 used a `<select>` + always-visible live preview card instead — that component and the feature it
-served were removed 2026-07-14 (see [MODULES/CompanyProfiles.md](../MODULES/CompanyProfiles.md)
-"Correction"), but the general shape (fallback ordering from most-specific-still-real to
-least-specific, empty-state-replaces-picker-when-zero-records, non-hidden-but-disabled-with-a-reason
-for a locked selection) remains good guidance for any *other* future reference-picker that also
-needs a live preview panel, not just autofill-then-edit.
+served (and, later the same week, the entire admin module behind it) were removed (see
+[MODULES/CompanyProfiles.md](../MODULES/CompanyProfiles.md)), but the general shape (fallback
+ordering from most-specific-still-real to least-specific, empty-state-replaces-picker-when-zero-records,
+non-hidden-but-disabled-with-a-reason for a locked selection) remains good guidance for any *other*
+future reference-picker that also needs a live preview panel, not just autofill-then-edit.
+
+### Progressive/Shell-First Loading (App boot + Dashboard, added 2026-07-14, reworked the same day
+after an independent Codex review's High Priority findings)
+Render the app shell (sidebar, header) as soon as the session check resolves — don't also wait on
+the slower bulk domain-data fetch behind it. `src/App.tsx`'s boot `useEffect` sets `bootStatus =
+"ready"` immediately once `fetchSession()` confirms an authenticated user, then fires every domain
+fetch (`fetchUsers`/`fetchRoles`/`fetchQuotes`/etc.) independently — each one's own `setState` call
+runs the moment *that* fetch resolves, not gated behind a shared `Promise.all`.
+
+**Per-page resource gating, not one global flag.** The first version of this pass tracked loading
+behind a single `initialDataLoading` boolean shared by all 9 boot resources — a review correctly
+flagged that this still globally blocked *every* prop-driven page (Quotations/Products/Customers/
+Users/Roles/Settings) until the *slowest* of all nine resolved, even for a page that only reads one
+or two of them. Fixed: each resource has its own `resourceStatus` entry (`"loading"|"ready"|
+"error"`), and a `NAV_RESOURCES` map names which resources each page actually needs (e.g.
+`products: ["products", "categories"]`). A page's own `pageDataLoading`/`pageDataError` is computed
+only from its required subset, so navigating straight to Products no longer waits on unrelated
+`notifications`/`quotes`/`users` fetches. Pages gated this way show a small `SectionLoading`
+placeholder (spinner + "กำลังโหลดข้อมูล...") in the content area while their own resources are still
+loading, instead of either blocking the shell or rendering a false "no records yet" empty state from
+still-empty arrays. Pages that fetch their own data (Dashboard, Audit Log) render immediately
+regardless, gated by neither mechanism. **Rule of thumb for any future boot-time resource**: add it
+to `resourceStatus`/`loadDomainData`, then list it under `NAV_RESOURCES` only for the pages that
+actually read it — never fall back to one shared flag for convenience.
+
+A page-level fetch failure surfaces a small, scoped error with a retry button (`SectionLoading`'s
+`error` prop, or `DashboardPage.tsx`'s own `ErrorState`) — never a full-app error screen, unless the
+failure is the session check itself (`BootError`, the one case where nothing meaningful can render
+yet).
+
+**Section-first, not just shell-first, on first load.** On `DashboardPage.tsx`: the page
+title/description/filter bar render before the first `/api/dashboard` fetch resolves (split into a
+`DashboardContent` subcomponent so only the data-driven widget area shows a loading state on first
+load) — but the *data-driven area itself* also mirrors the real required section structure rather
+than one anonymous pulsing block: real section titles/table headers (via the same `t()` keys and,
+where applicable, the same `ChartCard` component the loaded state uses) with pulsing bars standing
+in for values/rows underneath. This avoids a layout/text jump once the real data arrives — only the
+placeholders inside each section resolve. A later filter change, retry, or workflow-triggered
+refresh (e.g. Approve/Reject from the Approval Dashboard widget) keeps the previously-loaded data on
+screen and shows a small "กำลังอัปเดตข้อมูล..." label + spinner next to the page title instead —
+never reverting to the first-load skeleton, and never silently refreshing with zero visible
+indication (a review flagged the latter: an approve/reject refresh previously updated `stats` with
+no on-screen sign anything was happening).
+
+**Section-level resilience on the server side too.** `GET /api/dashboard` isolates each optional
+section (index creation, activity timeline, sales activity, approval dashboard, notification
+summary) in its own `try/catch`, degrading to `null`/a safe default instead of 500ing the whole
+response — so a transient failure in one auditLog-backed section can't take KPIs/pipeline/every
+other section down with it. Apply the same pattern to any future endpoint that bundles several
+genuinely-independent, permission-gated, or best-effort sections into one response: the parts every
+caller needs (and that everything else derives from) can fail together, but parts that are optional/
+gated/best-effort should fail *individually*.
+
+Do not build a new full-page blocking spinner/skeleton for a page-level fetch if the page can
+instead render its static chrome immediately and let only the data-dependent part show a lightweight
+loading state — that's the standard to follow for any future page-level fetch in this app.
 
 ### Spacing
 Page containers: `p-6 space-y-5`/`space-y-6`. Card internal padding: `p-4`–`p-6`. Grid gaps: `gap-4`. Consistent `rounded-xl` on cards/panels, `rounded-lg` on buttons/inputs, `rounded-full` on pills/badges/avatars.

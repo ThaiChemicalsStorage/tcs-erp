@@ -21,8 +21,11 @@ see [CompanyProfiles.md](./CompanyProfiles.md) "Correction (2026-07-14)" and
 
 Save a customer/company's information once, then pick it from the Quotation form's Customer
 selector instead of retyping the same company name/contact/phone/email/address/tax ID on every new
-quote. Distinct from [Company Profiles](./CompanyProfiles.md), which is the single company's *own*
-identity (who issues documents), not a customer.
+quote. Distinct from *this ERP's own* single-company identity (who issues documents — name/logo/
+address/tax ID, Settings → Company Info, the `company` singleton) — a Customer is who a quotation
+is issued *to*, never who it's issued *from*. [Company Profiles](./CompanyProfiles.md) — a since-
+removed module that would have let this single-company identity be one of several — is unrelated to
+either.
 
 ## Business Flow
 
@@ -82,18 +85,20 @@ schema-only, untouched by this pass — not needed for the single-contact-per-cu
 
 ## Pages / Components / APIs / Permissions
 
-- `src/pages/customers/CustomersPage.tsx` — list + modal create/edit form, single file (see
-  Business Flow above for why this is simpler than Company Profiles' 3-file split).
+- `src/pages/customers/CustomersPage.tsx` — list + modal create/edit form, single file (simpler
+  than the now-removed [Company Profiles](./CompanyProfiles.md) module's 3-file split was).
 - `src/pages/quotation/CustomerSelector.tsx` — the Quotation-form search-and-pick control.
 - `src/lib/customers.ts` — `Customer`/`CustomerDraft`/`CustomerSnapshot` types + `fetchCustomers()`/
   `createCustomer()`/`updateCustomer()`/`setCustomerArchived()`.
 - API: `GET/POST /api/customers`, `GET/PATCH /api/customers/:id`, `POST /api/customers/:id/archive`
-  — see [API.md](../API.md) "Customers." **Shares the `company-profiles` serverless function file**
-  rather than getting its own — Vercel Hobby's 12-function cap was already reached; see
-  [ARCHITECTURE.md](../ARCHITECTURE.md).
+  — see [API.md](../API.md) "Customers." **Correction (2026-07-14)**: originally shared the
+  `company-profiles` serverless function file (Vercel Hobby's 12-function cap was already reached);
+  once Company Profiles was removed the same day, `customers.ts` got its own dedicated
+  `api/handlers/customers.ts` function file in its place — still exactly 12 of 12 function slots
+  used. See [ARCHITECTURE.md](../ARCHITECTURE.md) and [MODULES/CompanyProfiles.md](./CompanyProfiles.md).
 - Permissions: `customers:view/create/edit/archive` — Administrator gets all four by default; Sales
   User gets view/create/edit (no archive); Approver 1/2/Viewer get view-only. Not Super-Admin-locked
-  (matches the Company Profiles precedent) — see [RBAC.md](../RBAC.md).
+  — see [RBAC.md](../RBAC.md).
 
 ## Database Tables
 

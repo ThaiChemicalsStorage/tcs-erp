@@ -1,5 +1,6 @@
 import { HttpError } from "./http.js";
 import type { QuoteFields } from "./collections.js";
+import { computeQuoteAmountWithVat } from "./quoteAmounts.js";
 
 /**
  * Server-side quote payload validation — added per the 2026-07-10 Codex review's Critical finding
@@ -8,13 +9,11 @@ import type { QuoteFields } from "./collections.js";
  * `amount`. Every function here is pure (no MongoDB/network calls) except `validateJobType`,
  * which needs the caller to have already fetched the job-type master list.
  *
- * `VAT_RATE`/the totals formula are duplicated from `src/lib/quotes.tsx`'s `computeTotals()`
- * rather than imported, for the same reason `api/_lib/quoteWorkflow.ts` duplicates
- * `workflowTransitions` instead of importing `quotes.tsx` — that file also defines JSX
- * (`statusIcon`), and importing it by value into a Node serverless function would drag React/JSX
- * evaluation in for no reason. Keep the formula in sync with `computeTotals()` if it ever changes.
+ * The totals formula itself lives in `./quoteAmounts.ts` (shared with `api/dashboard/index.ts`,
+ * so both compute a quote's value the same way) rather than importing `src/lib/quotes.tsx`'s
+ * `computeTotals()` — that file also defines JSX (`statusIcon`), and importing it by value into a
+ * Node serverless function would drag React/JSX evaluation in for no reason.
  */
-const VAT_RATE = 7;
 
 const MAX_LINES = 200;
 const MAX_TAGS_PER_LINE = 20;
@@ -104,13 +103,9 @@ export function validateLines(raw: unknown): QuoteFields["lines"] {
   return raw.map((l, i) => sanitizeLine(l, i));
 }
 
-/** Same formula as `computeTotals()` in `src/lib/quotes.tsx` — see the file-level comment for why it's duplicated, not imported. */
+/** The VAT-included grand total actually persisted as `Quote.amount` — see `./quoteAmounts.ts`. */
 export function computeQuoteAmount(lines: QuoteFields["lines"], discountPct: number): number {
-  const subtotal = lines.reduce((s, l) => s + l.qty * l.unitPrice * (1 - l.discount / 100), 0);
-  const discountAmt = subtotal * (discountPct / 100);
-  const afterDiscount = subtotal - discountAmt;
-  const vatAmt = afterDiscount * (VAT_RATE / 100);
-  return afterDiscount + vatAmt;
+  return computeQuoteAmountWithVat(lines, discountPct);
 }
 
 /**

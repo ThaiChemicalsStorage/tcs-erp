@@ -19,8 +19,8 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `audit_log` | MongoDB `ObjectId` | `AuditLogEntry` minus `id` | `POST /api/audit-log` always derives `userId`/`userName`/`roleName` from the authenticated session, never trusting those fields from the request body. |
 | `quotes` | **the business ID string itself** (e.g. `"QT-2567-0041"`), not an `ObjectId` | `Quote` minus `id` (the business ID is `_id`) | `nextQuoteId()` in `api/handlers/quotes.ts` scans existing `_id`s to compute the next sequence number. |
 | `job_types` | MongoDB `ObjectId` | `code: string; name: string; isActive: boolean` + audit fields | **Added 2026-07-10** for the Executive Dashboard/CRM pass — Job Type master data, one per quotation. See "Job Type" entity section below. |
-| `company_profiles` | MongoDB `ObjectId` | `CompanyProfile` minus `id` (see below) | **Added 2026-07-13** — admin-managed business-identity master data, distinct from the `company` singleton above. **Not used by Quotation** — see "`CompanyProfile`" entity section below and [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) for the 2026-07-14 correction. |
-| `customers` | MongoDB `ObjectId` | `Customer` minus `id` (see below) | **Redefined + wired 2026-07-14** — customer master data, selected on the Quotation form to autofill the Customer Information section. Shares a serverless function with `company_profiles` (`api/handlers/company-profiles.ts` dispatches `/api/customers` requests to `api/_lib/customersHandler.ts`) — see [ARCHITECTURE.md](./ARCHITECTURE.md) "Serverless function count." |
+| `company_profiles` | MongoDB `ObjectId` | *(unused — see below)* | Orphaned. Built 2026-07-13 for the now-removed Company Profiles module; **no code reads or writes this collection anymore** as of 2026-07-14, but any existing documents were deliberately left in place (no destructive cleanup) — see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) and "`CompanyProfile`" below. |
+| `customers` | MongoDB `ObjectId` | `Customer` minus `id` (see below) | **Redefined + wired 2026-07-14** — customer master data, selected on the Quotation form to autofill the Customer Information section. Has its own dedicated `api/handlers/customers.ts` serverless function (previously shared `company-profiles.ts`'s function slot; that file was deleted 2026-07-14 along with the rest of the Company Profiles module, freeing the slot) — see [ARCHITECTURE.md](./ARCHITECTURE.md) "Serverless function count." |
 | `dashboard` (virtual — no collection) | — | — | `GET /api/dashboard` (`api/dashboard/index.ts`) is a read-only aggregation over `customers`/`leads`/`quotes`/`products`/`categories`/`audit_log`/`notifications`/`job_types`-derived fields already embedded on `quotes` — it doesn't own or write any collection of its own. See Dashboard KPI section below and [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full breakdown. |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
@@ -159,13 +159,13 @@ interface AuditLogEntry {
   createdAt: string;
   relatedQuoteId?: string;              // added 2026-07-13, seventh same-day pass
   relatedCustomerName?: string;         // added 2026-07-13, seventh same-day pass
-  relatedCompanyProfileId?: string;     // added 2026-07-13, tenth same-day pass
-  relatedCompanyProfileName?: string;   // added 2026-07-13, tenth same-day pass
+  relatedCompanyProfileId?: string;     // orphaned field — see below
+  relatedCompanyProfileName?: string;   // orphaned field — see below
 }
 ```
 Append-only — `logAudit()` has no corresponding update/delete function, so there is no code path to alter history from the UI (including for Super Admin). `POST /api/audit-log` (`api/audit-log/index.ts`) always derives `userId`/`userName`/`roleName` from the authenticated session server-side, never trusting those fields from the request body — a genuine integrity improvement over the pre-migration `localStorage` array, where a client could have written an entry claiming to be any user. Index added 2026-07-09: `{ createdAt: -1 }` (was previously an unindexed `find().sort().limit(1000)`). Index added 2026-07-13 (seventh same-day pass): `{ action: 1, createdAt: -1 }`, serving the Sales Activity Analytics query (now scans all 5 tracked `action` values, commonly with no `userName` filter — "All Sales" selected — which the existing `{ userName: 1, createdAt: -1 }` index can't serve alone).
 
-`relatedCompanyProfileId`/`relatedCompanyProfileName` (2026-07-13, tenth same-day pass): same provenance/caveat pattern as `relatedQuoteId`/`relatedCustomerName` — only present on entries written by `writeCompanyProfileAuditEntry()` (`api/handlers/company-profiles.ts`). Added per an independent Codex review's High Priority finding: Company Profile audit entries were previously written by the *client* calling the generic `POST /api/audit-log`, forgeable and lacking structured linkage to which profile changed. `POST /api/audit-log` now rejects the `"โปรไฟล์บริษัท"` module outright, the same lockout pattern as `"ใบเสนอราคา"`.
+`relatedCompanyProfileId`/`relatedCompanyProfileName` (added 2026-07-13, tenth same-day pass) are **orphaned as of 2026-07-14** — they were only ever written by `writeCompanyProfileAuditEntry()` inside the now-deleted `api/handlers/company-profiles.ts` (see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) "Removed"). Nothing writes them anymore; kept on the type only so the historical `audit_log` entries that already have them still type-check and render without special-casing. `POST /api/audit-log` still rejects the `"โปรไฟล์บริษัท"` module outright (prevents a client from forging *new* entries for a module that no longer exists) — same lockout pattern as `"ใบเสนอราคา"`.
 
 `relatedQuoteId`/`relatedCustomerName` (2026-07-13, seventh same-day pass): optional structured fields, set only by `writeQuoteAuditEntry()` (`api/handlers/quotes.ts`) on quote-workflow entries (Created/Updated/Duplicated/every workflow transition) — the quotation number and customer name were already present in the entry's free-text `details` string, but the Dashboard's Recent Activity table needs them as real fields to render as a clickable link/column instead of parsing prose. Backward-compatible: older entries and every non-quote module (Users/Roles/Settings/Login) simply lack these fields, and `ActivityTimeline.tsx` renders "—" when absent.
 
@@ -217,122 +217,25 @@ Master data for classifying every quotation by the kind of work it represents. S
 
 `Quote.jobTypeCode`/`jobTypeName` are a **snapshot**, not a live reference — same rationale as `QuoteLine` never referencing `Product` live: renaming a Job Type later must not rewrite historical quotes.
 
-### `CompanyProfile` (`src/lib/companyProfiles.ts`) — added 2026-07-13
+### `CompanyProfile` — REMOVED 2026-07-14
 
-```ts
-interface BankAccount {
-  id: string;
-  bankName: string;
-  accountName: string;
-  accountNumber: string;
-  branch: string;
-  isDefault: boolean;  // at most one true per profile, enforced server-side
-}
+The `CompanyProfile`/`BankAccount` client types (`src/lib/companyProfiles.ts`), the
+`CompanyProfileFields` server type and `companyProfilesCollection()` accessor
+(`api/_lib/collections.ts`), and every route/index/invariant that used to be documented in this
+section were deleted along with the rest of the Company Profiles module — this ERP only ever needs
+one issuer company (Settings → Company Info), so a module for managing several was unused scope.
+See [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) for the full removal writeup.
 
-interface CompanyProfile {
-  id: string;
-  companyCode: string;       // unique, required
-  companyNameTh: string;     // required
-  companyNameEn: string;
-  displayName: string;       // shown in lists/badges when set, falls back to companyNameTh
-  logoDataUrl: string;       // base64 data URL, same convention as Company.logoDataUrl
-  addressTh: string;
-  addressEn: string;
-  taxId: string;             // 13-digit format checked when non-empty, not required
-  branchName: string;
-  branchCode: string;
-  phone: string;
-  fax: string;
-  email: string;             // format checked when non-empty
-  website: string;           // format checked when non-empty
-  bankAccounts: BankAccount[];
-  quotationPrefix: string;
-  quotationNumberFormat: string;
-  quotationTerms: string;
-  quotationFooter: string;
-  stampDataUrl: string;
-  signatureLabel: string;
-  isDefault: boolean;        // exactly one true among active, non-deleted profiles — see below
-  isActive: boolean;         // Activate/Deactivate toggle, independent of isDefault/isDeleted
-  isDeleted: boolean;        // soft-delete/archive — this module's only "delete," always reversible
-  createdAt: string;
-  updatedAt: string;
-  createdBy: string;         // → User.id
-  updatedBy: string;         // → User.id
-}
-```
+**The `company_profiles` MongoDB collection itself, and any documents already in it, were
+deliberately left untouched** — no code reads or writes it anymore, but no destructive database
+cleanup was performed as part of this removal. The field shape, default-profile invariant design
+(partial unique index on `isDefault`), and index list that used to live in this section are
+preserved in git history (`git log -- docs/DATABASE.md`) and in `docs/CHANGELOG.md`'s dated entries
+if ever needed for reference against those old documents.
 
-Master data for the business identities a quotation can (eventually) be issued under — see
-[MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) for the full module writeup and its
-relationship to the pre-existing `company` singleton (unmerged, deliberately — both exist side by
-side for now).
-
-**Default-profile invariant** — "at most one active, non-archived profile is `isDefault: true`" —
-is enforced at **two layers**, not application logic alone (corrected 2026-07-13, tenth same-day
-pass, after an independent Codex review found the original application-only sequencing left real
-concurrency and deactivation holes):
-
-- **Database-level (the real guarantee)**: a **partial unique index** on
-  `company_profiles` — `{ isDefault: 1 }` with `partialFilterExpression: { isDefault: true }`.
-  MongoDB itself now rejects any write that would result in two documents simultaneously holding
-  `isDefault: true`, regardless of application-code bugs or races. This is the layer that actually
-  closes the "concurrent set-default/first-create can leave two defaults" gap — sequencing alone
-  (below) only narrows the race window, it can't eliminate it without a database-level constraint.
-- **Application-level (server-side in `api/handlers/company-profiles.ts`)**:
-  - The very first profile ever created is automatically `isDefault: true` **and forced
-    `isActive: true`** (`existingCount === 0` at insert time, added 2026-07-13 — a prior version
-    could leave an *inactive* default, which is its own invariant break) — the client-facing
-    `CompanyProfileDraft` type has no `isDefault` field at all. If a genuinely concurrent "first
-    create" race hits the partial unique index, the losing request retries once as a non-default
-    profile instead of surfacing a raw 500.
-  - `POST /api/company-profiles/:id/set-default` unsets every other `isDefault: true` document
-    (`updateMany`) then sets the target (`updateOne`) — two sequential writes, not a single Mongo
-    transaction (this app doesn't use transactions anywhere else at this scale). A crash between
-    them leaves at most a *missing* default (safe, re-settable); a genuine race between two
-    concurrent set-default calls on different targets is caught via the partial unique index's
-    duplicate-key error on the second `updateOne` and surfaced as a clear "try again" message, not
-    silently producing two defaults.
-  - `POST /api/company-profiles/:id/archive` (the `isDeleted` toggle) rejects setting
-    `isDeleted: true` on the current default with a `400` — an admin must reassign default first.
-  - `PATCH /api/company-profiles/:id` rejects `isActive: false` on the current default with the
-    same `400` (added 2026-07-13 — a prior version allowed deactivating the default outright,
-    leaving no active default at all).
-  - Setting an archived (`isDeleted: true`) or inactive (`isActive: false`) profile as default is
-    also rejected with a `400`.
-
-`companyCode` has its own separate unique index (case-insensitive uniqueness additionally checked
-in the handler, same `escapeRegExp()` + case-insensitive-regex pattern as
-`Product.code`/`JobType.code`).
-
-**No hard delete exists for this collection** — `isDeleted` (toggled via the archive action) is
-the only removal mechanism, always reversible, matching the Category/Job Type precedent. The
-`companyProfiles:delete` permission is defined (per the original request's literal permission
-list) but isn't wired to any additional route for this reason — see [RBAC.md](./RBAC.md).
-
-**No seed data** — the collection starts empty; an admin must add the first profile manually, per
-the "no fake/demo company data" requirement.
-
-Indexes (created defensively inside `api/handlers/company-profiles.ts` itself — same
-`ensureIndexes()`-never-reaches-production reasoning as `job_types`'s indexes, since this
-collection was added after the deployment was already provisioned): `{ companyCode: 1 }` (unique),
-`{ isDefault: 1 }` (**partial unique**, `partialFilterExpression: { isDefault: true }`, added
-2026-07-13 — see above), `{ isActive: 1 }`, `{ isDeleted: 1 }`. The index-creation call is wrapped
-defensively to drop-and-recreate on an `IndexOptionsConflict` (e.g. if a plain, non-unique
-`isDefault` index from an earlier local run already exists) rather than crashing every cold start.
-
-**Quotation integration — reverted 2026-07-14 (correction).** The 2026-07-13 "Quotation
-Integration" pass described here (an `IssuerCompanySelector` on the Quotation form, wiring
-`Quote.issuerCompanyId`/`issuerCompanySnapshot` to a selected `CompanyProfile`) was built against a
-misunderstanding of the actual business requirement — the ERP only ever has one issuer company, and
-the real need was a **Customer** selector, not an issuer-company one. That UI/wiring has been fully
-removed from the Quotation form; see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md)
-"Correction (2026-07-14)" and the new `Customer`/`Quote.customerId`/`customerSnapshot` entities
-below. `company_profiles` itself, and its admin CRUD page, are unaffected and remain available for
-other future use — they're simply no longer read anywhere in the quotation create/edit flow.
-
-Quote documents saved between 2026-07-13 and 2026-07-14 may still carry a stray
-`issuerCompanyId`/`issuerCompanySnapshot` pair — harmless, unread by any current code path, not
-backfilled/cleaned up (no functional reason to touch old rows). See TODO.md.
+Quote documents saved between 2026-07-13 and 2026-07-14 (the brief window a "Company Profile issues
+this quote" feature existed) may still carry a stray, unread `issuerCompanyId`/
+`issuerCompanySnapshot` pair — harmless, not backfilled/cleaned up. See TODO.md.
 
 ### `Customer` (`src/lib/customers.ts`) — redefined + wired 2026-07-14
 
@@ -375,17 +278,21 @@ Indexes (created defensively inside `api/_lib/customersHandler.ts`, same lazy-on
 pattern as `company_profiles`'/`job_types`' indexes): `{ isDeleted: 1 }`, `{ isActive: 1 }`,
 `{ companyName: 1 }`. No seed data — starts empty, per the "no fake customer data" requirement.
 
-**API**: folded into the `company-profiles` serverless function rather than getting its own
-`api/handlers/customers.ts` file — Vercel Hobby's 12-function cap was already reached by
-`company-profiles.ts` (see [ARCHITECTURE.md](./ARCHITECTURE.md)). `vercel.json` rewrites
-`/api/customers[/:path*]` to `/api/handlers/company-profiles`, which checks the raw pathname first
-and delegates to `handleCustomers()` (`api/_lib/customersHandler.ts`) before falling through to its
-own company-profile path parsing. Same request/response shape as a standalone handler would have.
+**API**: `api/handlers/customers.ts` — its own dedicated serverless function as of 2026-07-14. It
+originally (2026-07-14, earlier the same day) shared the `company-profiles` serverless function
+(`vercel.json` rewrote `/api/customers[/:path*]` to `/api/handlers/company-profiles`, which checked
+the raw pathname first and delegated to `handleCustomers()` before falling through to its own
+company-profile path parsing) — Vercel Hobby's 12-function cap was already reached by
+`company-profiles.ts` at the time. Once the whole Company Profiles module (including that file) was
+removed later the same day, the freed function slot went to giving `customers.ts` its own dedicated
+file, which is the thin wrapper it is today (see [ARCHITECTURE.md](./ARCHITECTURE.md)); the actual
+logic still lives in `api/_lib/customersHandler.ts`'s `handleCustomers()`, unchanged by either move.
 
 `GET /api/customers` returns every customer to a `customers:view` holder (including archived, for
 the admin list's own "show archived" toggle), or just active/non-deleted customers to a caller who
-only holds `quotations:create` — the same "manage vs. pick-for-a-quotation" carve-out
-`company-profiles.ts` already established for `companyProfiles:view` vs. that same permission.
+only holds `quotations:create` — the same "manage vs. pick-for-a-quotation" carve-out the
+now-removed Company Profiles module established for `companyProfiles:view` vs. that same
+permission.
 
 ### `Quote` / `QuoteLine` / `SubDetail` (`src/lib/quotes.tsx`)
 ```ts
@@ -499,8 +406,8 @@ Lazily bootstrapped from the current max existing `_id` (via `$max`, idempotent 
 
 Read-only, no collection of its own — see [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full widget-by-widget breakdown. Key data-model notes:
 - Accepts `?from=yyyy-mm-dd&to=yyyy-mm-dd&salesperson=<name|all>&department=<name|all>` query params — `from`/`to` filter against `Quote.issueDate` (lexicographic string comparison), `salesperson` is an exact match against the free-text `Quote.salesperson` field, `department` resolves to the set of `User.fullName` whose `User.department` matches (free-text join — see MODULES/Dashboard.md caveats) and composes with an also-selected `salesperson` via `$and` rather than one silently overwriting the other.
-- Almost every section is computed by fetching the filtered `quotes` set **once** (a small projection, no `lines`) and reducing it in plain JS, rather than a dozen separate fine-grained aggregation pipelines — deliberate, matching the pre-existing `revenueByMonth`/`categoryBreakdown` post-processing style, and appropriate at this data volume (one internal company's quotations, not big-data scale). Revisit if data volume ever justifies moving this to pure `$group` pipelines or a cache layer.
-- **Every monetary total is pre-tax (before VAT)** (2026-07-14, P'Keng/P'Kee requirement) — `Quote.amount` is the persisted VAT-included grand total (see the `amount` field note below), and `Quote` has no separate stored pre-tax/subtotal field. `preTaxAmount(amount) = amount / (1 + VAT_RATE/100)` (`api/dashboard/index.ts`, `VAT_RATE = 7`) is applied once to the filtered `docs` array right after fetch — every downstream KPI/pipeline/salesPerformance/customerAnalytics/jobTypeAnalytics/forecast/`approvalDashboard.pendingList` computation derives from `docs`, so this single normalization covers all of them; `revenueTrend`/`revenueByMonth` and `followUps`, which read from separate queries, apply `preTaxAmount()` explicitly at their own read sites. Since `VAT_RATE` has always been a single fixed 7% (never a per-quote override or a different historical rate), this recovers the *exact* pre-tax value the server computed at save time for every quote, old or new — not an approximation. See [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Pre-Tax Amount Rule" for the full field list.
+- Almost every section is computed by fetching the filtered `quotes` set **once** (a lean projection — as of 2026-07-14 including `lines`/`discount`, see the pre-tax note below) and reducing it in plain JS, rather than a dozen separate fine-grained aggregation pipelines — deliberate, matching the pre-existing `revenueByMonth`/`categoryBreakdown` post-processing style, and appropriate at this data volume (one internal company's quotations, not big-data scale). Revisit if data volume ever justifies moving this to pure `$group` pipelines or a cache layer.
+- **Every monetary total is pre-tax (before VAT)** (2026-07-14, P'Keng/P'Kee requirement; **reworked the same day** to compute from an authoritative source). `Quote.amount` is the persisted VAT-included grand total (see the `amount` field note below) — `Quote` has no separate stored pre-tax/subtotal field, so the before-VAT figure is recomputed directly from each quote's own `lines`/`discount` via the shared `computeQuoteAmountBeforeVat()` (`api/_lib/quoteAmounts.ts`, also used by `api/_lib/quoteValidation.ts` to derive the persisted `amount` on create/edit) — **not** by dividing `amount` back down by a fixed VAT rate, which the first version of this pass did (`preTaxAmount(amount) = amount / 1.07`, since replaced). Applied once to the filtered `docs` array right after fetch — every downstream KPI/pipeline/salesPerformance/customerAnalytics/jobTypeAnalytics/forecast/`approvalDashboard.pendingList` computation derives from `docs`, so this single normalization covers all of them; `revenueTrend`/`revenueByMonth` and `followUps`, which read from separate queries (`wonRevenueDocsRaw`/`followUpDocsRaw`, both also projecting `lines`/`discount` now), call the same helper explicitly at their own read sites. Every quote has carried real `lines`/`discount` data since the 2026-07-08 rewrite, so this should always be computable in practice. **Correction (2026-07-14, Codex review Medium finding)**: an earlier draft of this note overstated that as "no legacy-data fallback case exists" — a doc whose `lines` field is entirely absent (not merely empty) still computes to a silent `$0` via `q.lines ?? []` rather than crashing or falling back to the VAT-included `amount`; see [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Pre-Tax Amount Rule" for the full data-quality note and the `console.warn` telemetry that now flags this if it ever occurs.
 - `totalCustomers`/`totalLeads`: `countDocuments({ deletedAt: null })` on `customers`/`leads` — always `0` today (module not built yet), which is correct per the "empty database → display 0" requirement, not a placeholder.
 - `wonDeals`/`lostDeals`: quotes with `status: "ปิดการขายสำเร็จ"` / `"เสียโอกาส"`. `ลูกค้าปฏิเสธ` (Customer Rejected) is a distinct terminal status and is **not** counted as "lost" — only quotes actually marked `เสียโอกาส` are.
 - `activeQuotations`/`nonActiveQuotations`/`expiredQuotations` (Non-Active added 2026-07-10, second pass): Active = non-terminal status *and* not past `expiryDate`; Non-Active = Cancelled/Customer Rejected, **or** non-terminal-but-expired; Expired = the narrower "still non-terminal but past its own expiry date" subset (kept as its own KPI alongside the broader Non-Active bucket, not replaced by it). **Lost is deliberately excluded from Non-Active** (fixed 2026-07-13, eighth same-day pass) — it previously counted in both `lostDeals` and `nonActiveQuotations`, which made `QuotationStatusSummary`'s 4-row donut/percentage table double-count Lost quotes (rows summed to more than `totalQuotations`). With Lost excluded, Won + Lost + Active + Non-Active are a true partition of every quote status — see `NON_ACTIVE_OUTCOME_STATUSES`'s comment in `api/dashboard/index.ts`.

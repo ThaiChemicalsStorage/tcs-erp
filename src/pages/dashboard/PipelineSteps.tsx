@@ -47,7 +47,7 @@ export function PipelineSteps({ pipeline, onStageClick }: { pipeline: PipelineSt
   const offRampStages = OFF_RAMP.map((s) => byStage.get(s)).filter((s): s is PipelineStage => !!s);
 
   return (
-    <ChartCard title={t("dashboard.pipeline.title")} sub={t("dashboard.pipelineSteps.sub")}>
+    <ChartCard title={t("dashboard.pipeline.title")} sub={t("dashboard.pipeline.sub")}>
       {!hasData ? (
         <EmptyState icon={GitBranch} title={t("dashboard.noData")} description={t("dashboard.pipeline.sub")} compact />
       ) : (

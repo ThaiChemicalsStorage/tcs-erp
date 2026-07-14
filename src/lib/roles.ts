@@ -41,7 +41,6 @@ export const defaultRoles: Role[] = [
       "products:export",
       "users:manage",
       "auditLog:view",
-      "companyProfiles:view",
       "customers:view",
       "customers:create",
       "customers:edit",

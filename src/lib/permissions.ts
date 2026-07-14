@@ -18,12 +18,6 @@ export type Permission =
   | "roles:manage"
   | "company:manage"
   | "auditLog:view"
-  | "companyProfiles:view"
-  | "companyProfiles:create"
-  | "companyProfiles:edit"
-  | "companyProfiles:archive"
-  | "companyProfiles:delete"
-  | "companyProfiles:setDefault"
   | "customers:view"
   | "customers:create"
   | "customers:edit"
@@ -47,12 +41,6 @@ export const ALL_PERMISSIONS: Permission[] = [
   "roles:manage",
   "company:manage",
   "auditLog:view",
-  "companyProfiles:view",
-  "companyProfiles:create",
-  "companyProfiles:edit",
-  "companyProfiles:archive",
-  "companyProfiles:delete",
-  "companyProfiles:setDefault",
   "customers:view",
   "customers:create",
   "customers:edit",
@@ -77,12 +65,6 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "roles:manage": "จัดการบทบาทและสิทธิ์",
   "company:manage": "จัดการข้อมูลบริษัท",
   "auditLog:view": "ดูบันทึกการใช้งาน (Audit Log)",
-  "companyProfiles:view": "ดูข้อมูลบริษัท (โปรไฟล์บริษัท)",
-  "companyProfiles:create": "เพิ่มข้อมูลบริษัท",
-  "companyProfiles:edit": "แก้ไขข้อมูลบริษัท",
-  "companyProfiles:archive": "เก็บถาวร/กู้คืนข้อมูลบริษัท",
-  "companyProfiles:delete": "ลบข้อมูลบริษัท",
-  "companyProfiles:setDefault": "ตั้งบริษัทเริ่มต้น",
   "customers:view": "ดูข้อมูลลูกค้า",
   "customers:create": "เพิ่มข้อมูลลูกค้า",
   "customers:edit": "แก้ไขข้อมูลลูกค้า",
@@ -108,12 +90,6 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "roles:manage": "permission.rolesManage",
   "company:manage": "permission.companyManage",
   "auditLog:view": "permission.auditLogView",
-  "companyProfiles:view": "permission.companyProfilesView",
-  "companyProfiles:create": "permission.companyProfilesCreate",
-  "companyProfiles:edit": "permission.companyProfilesEdit",
-  "companyProfiles:archive": "permission.companyProfilesArchive",
-  "companyProfiles:delete": "permission.companyProfilesDelete",
-  "companyProfiles:setDefault": "permission.companyProfilesSetDefault",
   "customers:view": "permission.customersView",
   "customers:create": "permission.customersCreate",
   "customers:edit": "permission.customersEdit",
@@ -148,11 +124,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
   {
     label: "ระบบ",
     labelKey: "permissionGroup.system",
-    permissions: [
-      "users:manage", "roles:manage", "company:manage", "auditLog:view",
-      "companyProfiles:view", "companyProfiles:create", "companyProfiles:edit",
-      "companyProfiles:archive", "companyProfiles:delete", "companyProfiles:setDefault",
-    ],
+    permissions: ["users:manage", "roles:manage", "company:manage", "auditLog:view"],
   },
 ];
 
@@ -161,12 +133,5 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
  * permissions, promoting to Super Admin, and company-wide settings). Per spec these are Super
  * Admin-only regardless of what a role's permission list says, so a non-Super-Admin role can never
  * be misconfigured into unlocking them.
- *
- * `companyProfiles:*` (added 2026-07-13, Company Profiles module) is deliberately **not** on this
- * list, unlike the single-company `company:manage` it sits next to — the business spec explicitly
- * wants Administrator to be grantable create/edit/archive/setDefault access via the normal Role
- * Management permission matrix ("Admin: can create/edit if permission is granted"), not
- * structurally locked to Super Admin only. `defaultRoles`' Administrator entry only ships with
- * `companyProfiles:view` out of the box — broader access is an explicit grant, not a code change.
  */
 export const SUPER_ADMIN_ONLY_PERMISSIONS: Permission[] = ["roles:manage", "company:manage"];

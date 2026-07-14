@@ -4,6 +4,262 @@
 
 ---
 
+## 2026-07-14 — Codex review fix pass: progressive-loading High Priority issues + data-quality/documentation cleanup
+
+An independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) of the Company Profiles removal /
+Dashboard pre-tax / progressive-loading pass below found **zero Critical issues** (Company Profiles
+removal, the before-VAT calculation rule, and Expected Sales all passed) but **3 High Priority**
+progressive-loading issues and **3 Medium Priority** issues, all fixed this pass.
+
+### High Priority #1 — normal page navigation still globally blocked by unrelated boot data
+
+`App.tsx` fired all 9 boot-time domain fetches (`users`/`roles`/`company`/`products`/`categories`/
+`notifications`/`quotes`/`jobTypes`/`customers`) independently, but gated every prop-driven page
+(Quotations/Products/Customers/Users/Roles/Settings) behind one shared `initialDataLoading` flag —
+so navigating straight to Products still waited on `notifications`/`quotes`/`users`/etc. that
+Products never reads. Replaced with per-resource status tracking (`resourceStatus: Record<ResourceKey,
+"loading"|"ready"|"error">`, one entry per boot resource) plus a new `NAV_RESOURCES` map naming which
+resources each page actually needs (`products: ["products", "categories"]`, `customers:
+["customers"]`, etc.). A page's loading/error state (`pageDataLoading`/`pageDataError`) is now
+computed only from its own required subset. `loadDomainData`/its new `trackResource()` helper are
+wrapped in `useCallback` (with a module-level `INITIAL_RESOURCE_STATUS` constant so the callback is
+genuinely stable across renders) so the boot `useEffect` can correctly list it as a dependency
+without re-running on every render.
+
+### High Priority #2 — Dashboard workflow-triggered refresh left stale data with no indication
+
+`DashboardPage.tsx`'s `refreshAfterAction()` (called after an Approve/Reject action from the
+Approval Dashboard widget) only bumped `retryToken`, never set `loading`, so the previous stats
+stayed on screen with zero visible sign a refresh was happening — a user could reasonably wonder
+whether their approval actually took effect. Fixed: `refreshAfterAction` now also calls
+`setLoading(true)`, surfacing the same small header indicator a filter change/retry already shows.
+Since `stats` itself is untouched until the new response lands, the real data never disappears —
+only a small "กำลังอัปเดตข้อมูล..." ("Updating data...") label + spinner appears next to the page
+title (new `dashboard.refreshing` i18n key, both languages), replacing the bare spinner-only
+indicator on subsequent loads (the very first load, where no `stats` exists yet, still shows the
+plain spinner since the section skeleton below already communicates loading).
+
+### High Priority #3 — a single optional dashboard section failure blocked the entire page
+
+`GET /api/dashboard` ran index-creation, activity-timeline, sales-activity, approval-dashboard, and
+notification-summary queries in the same failure domain as the KPI/pipeline/salesPerformance/etc.
+computation — any one of them throwing (e.g. a transient auditLog query issue) 500'd the whole
+response, and `DashboardPage.tsx` then replaced the entire data area with one `ErrorState`, hiding
+KPIs and every other otherwise-healthy section. `api/dashboard/index.ts` now isolates each of these
+four independently-optional blocks in its own `try/catch`, degrading to `null`/a safe zero default
+(and a `console.error`/`console.warn` for visibility in Vercel function logs) on failure instead of
+throwing:
+- `ensureQuoteAnalyticsIndexes()` — index creation, log-and-continue.
+- `activityTimeline` — already-nullable; failure now degrades to `null` (frontend already guards
+  with `activityTimeline &&`), same as a caller without `auditLog:view`.
+- `salesActivity` — same pattern; the object-literal type moved to a named `SalesActivityResult`
+  type so the `let salesActivity: SalesActivityResult | null` declaration and try/catch assignment
+  read cleanly.
+- `approvalDashboard` — in-memory only (no I/O), wrapped for defense-in-depth consistency with the
+  other permission-gated sections.
+- `notificationSummary`/`availableSalespeople` — fall back to `{ unreadCount: 0, byType: {} }`/`[]`
+  respectively (a personal unread-count widget and a filter-dropdown source list, neither of which
+  is business data the rest of the response depends on).
+
+KPIs, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast, revenueTrend, and
+followUps — none of which depend on any of the four sections above — now survive a failure in any
+one of them.
+
+### Medium — first-load Dashboard skeleton was shell-first but not section-first
+
+The original first-load placeholder (`DashboardContentSkeleton` in `DashboardPage.tsx`) was one
+generic 4-card grid + one anonymous pulsing block — no real section titles, table headers, or named
+card containers were visible while `GET /api/dashboard` was still in flight, only after the review
+called this out as "shell-first but not section-first." Rebuilt to mirror the real P'Keng/P'Kee
+4-section structure (`ExecutiveSummaryCards` → `QuotationStatusSummary` → `SalesActivityAnalytics` →
+`ActivityTimeline`), reusing the *real* translated titles (via `t()`, the same keys the loaded
+components use) and — for the two middle sections — the real `ChartCard` component itself for
+pixel-identical header markup, plus the real 5-column `ActivityTimeline` table header row with
+pulsing placeholder rows underneath. No layout/text jump when the real data arrives; only the
+pulsing placeholders inside each section resolve into real values.
+
+### Medium — missing-line pre-tax fallback was undocumented and unmonitored
+
+`computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0)` silently reports `$0` for a quote doc
+whose `lines` field is entirely *absent* (not the same as a genuinely new Draft's legitimate `lines:
+[]`) — the safest of three bad options (vs. crashing the whole Dashboard or falling back to the
+VAT-included `amount`), but a prior draft of `docs/DATABASE.md`/`MODULES/Dashboard.md` over-claimed
+this "cannot occur in practice" rather than documenting the fallback. Fixed: `api/dashboard/index.ts`
+now emits a `console.warn` naming the affected count whenever a doc with no `lines` field is found in
+the filtered set (grep-able in Vercel function logs, no new response field/UI surface added for what
+is expected to be a null set); both docs corrected to describe the actual fallback behavior instead
+of asserting it can't happen. See [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Pre-Tax Amount
+Rule."
+
+### Medium — stale documentation
+
+`docs/MODULES/Customer.md` still described `/api/customers` as sharing the `company-profiles`
+serverless function file and mixed up "this ERP's own single-company identity" with the (by then
+removed) Company Profiles module in its Purpose section — both corrected to describe the current
+dedicated `api/handlers/customers.ts` file and the actual `company` singleton. `docs/TODO.md` and
+`docs/PROJECT_STATUS.md` both had a same-day-but-superseded entry claiming "the Company Profiles
+module itself is untouched and remains available for future use," written before the module's
+later-that-day full removal — both corrected with an explicit "superseded later the same day"
+note pointing at the removal entry, rather than being silently rewritten (preserving the historical
+record of what was true when each entry was written). `docs/ARCHITECTURE.md`'s "API layout" section
+still listed `company-profiles` in the live `api/handlers/{...}` file list and said the project
+"as of 2026-07-13" was at the function-count cap — corrected to the current `customers` file list
+and "still at the cap as of 2026-07-14," with the `company-profiles.ts` → `customers.ts` slot
+hand-off explained.
+
+### Build/verification
+
+`npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint` (0 errors, 2 pre-existing
+unrelated `i18n.tsx` warnings), and `npm run build` all pass clean. Same sandboxed-session
+limitation as every prior pass this project (no `MONGODB_URI`, no Vercel CLI) — no live-database or
+running-`vercel dev` manual verification was possible; see `docs/CODEX_REVIEW_REPORT.md`'s "Claude
+Fix Status" section for the full itemized status and what still needs a live-database pass.
+
+---
+
+## 2026-07-14 — Remove Company Profiles module; Dashboard items-based pre-tax rework; progressive/shell-first loading
+
+Three-part pass, requested together.
+
+### Part 1 — Company Profiles module removed from the user-facing ERP
+
+This ERP only ever needs one issuer company; the admin module for managing several (built
+2026-07-13, briefly and incorrectly wired into the Quotation form, corrected the same week — see
+the entry below) was itself unused scope. Removed on explicit instruction, not left as dormant
+surface area.
+
+**Frontend removed**: `src/pages/admin/companyProfiles/` (`CompanyProfilesPage.tsx`,
+`CompanyProfileList.tsx`, `CompanyProfileForm.tsx`, `CompanyProfileDetail.tsx`) and
+`src/lib/companyProfiles.ts` deleted outright. `src/App.tsx`: the "ข้อมูลบริษัท" nav item removed
+from `navItems`/`NavKey`/`NAV_GROUPS`/`NAV_LABEL_KEYS`; `canCreateCompanyProfiles`/
+`canEditCompanyProfiles`/`canArchiveCompanyProfiles`/`canSetDefaultCompanyProfile` permission
+booleans and the `"companyProfiles"` render case removed; the `companyProfiles`/`setCompanyProfiles`
+state and its 4 fetch call sites (boot, setup-complete, sign-in, logout-reset) removed.
+
+**Backend removed**: `api/handlers/company-profiles.ts` and `api/_lib/companyProfileValidation.ts`
+deleted. `vercel.json`'s `/api/company-profiles` and `/api/company-profiles/:path*` rewrites removed
+entirely — the path now returns Vercel's plain 404 (no function matches it), satisfying "return a
+proper 404, not just hide the sidebar item." `api/_lib/collections.ts`: `CompanyProfileFields`
+type and `companyProfilesCollection()` accessor removed (and its 3 `createIndex` calls removed from
+`ensureIndexes()`). The customer-data logic that had been sharing `company-profiles.ts`'s
+serverless function (to stay under Vercel Hobby's 12-function cap) now has its own dedicated
+`api/handlers/customers.ts` file — the freed slot went straight back to its rightful owner rather
+than sitting idle.
+
+**RBAC removed**: `companyProfiles:view/create/edit/archive/delete/setDefault` removed from the
+`Permission` union, `ALL_PERMISSIONS`, `PERMISSION_LABELS`, `PERMISSION_LABEL_KEY`,
+`PERMISSION_GROUPS` (`src/lib/permissions.ts`), and from the Administrator default role's
+permission list (`src/lib/roles.ts`). Confirmed safe before removing: `api/handlers/roles.ts` never
+validated incoming `permissions` arrays against `ALL_PERMISSIONS` (only strips Super-Admin-locked
+keys), so an existing custom role that already had one of these six permission strings stored keeps
+it — inert and harmless, not a breaking change to that role.
+
+**i18n removed**: every `companyProfiles.*`/`permission.companyProfiles*`/`empty.companyProfiles.*`/
+`nav.companyProfiles` dictionary key (Thai + English, ~110 keys total) removed from
+`src/lib/i18n.tsx`.
+
+**Deliberately NOT removed**: the `company_profiles` MongoDB collection and any documents already
+in it — no code reads or writes it anymore, but per this pass's explicit "no destructive database
+cleanup" instruction, the collection itself was left in place in MongoDB. Historical `audit_log`
+entries with `module: "โปรไฟล์บริษัท"` also remain and still display normally in the Audit Log page;
+`POST /api/audit-log` still rejects that module string from the generic client-facing endpoint
+(prevents forging *new* entries for a module that no longer exists — costs nothing to keep).
+
+`npx tsc -b` and `npx tsc --noEmit -p tsconfig.api.json` both pass clean after this part.
+
+### Part 2 — Dashboard pre-tax amounts reworked to compute from line items
+
+The 2026-07-14 (earlier same day) Pre-Tax Amount pass had computed every Dashboard monetary value
+via `preTaxAmount(amount) = amount / (1 + VAT_RATE/100)` — backing the before-VAT figure out of the
+persisted VAT-included grand total by dividing by a fixed rate. A follow-up requirement asked for
+this to instead compute from an authoritative source: `Quote` has no stored pre-tax/subtotal field,
+so the authoritative source is each quote's own `lines`/`discount` — the same inputs already used to
+derive the persisted `amount` at save time.
+
+New shared `api/_lib/quoteAmounts.ts`:
+```ts
+computeQuoteAmountBeforeVat(lines, discountPct)  // subtotal after line + quote-level discounts, no VAT
+computeQuoteAmountWithVat(lines, discountPct)    // the above, plus VAT — what Quote.amount stores
+```
+`api/_lib/quoteValidation.ts`'s `computeQuoteAmount()` (used by `POST`/`PATCH /api/quotes` to derive
+the persisted `amount`) now delegates to `computeQuoteAmountWithVat()`, so create/edit and the
+Dashboard compute a quote's value via the identical formula — no risk of the two ever drifting onto
+different math. `api/dashboard/index.ts`'s local `preTaxAmount()`/`VAT_RATE` removed; its 3 raw-Mongo
+queries that used to read `amount` (the main `docs` query, `followUpDocsRaw`, `wonRevenueDocsRaw`)
+now project `lines`/`discount` instead and call `computeQuoteAmountBeforeVat()` at each read site.
+`QuoteCalcDoc`'s `Pick<QuoteFields, ...>` gained `"lines" | "discount"`. Every `DashboardStats`
+response field keeps its existing shape/key names — no client-side changes were needed for the
+computation change itself.
+
+**Label audit**: reviewed all 18 Dashboard widgets that render a monetary value for whether they
+label it "(Before VAT)"/"ก่อนภาษี." 15 already did (KPI cards, Status Summary, both ranking tables,
+Customer/Job Type Analytics, all 4 charts, Approval Dashboard, CSV export). 3 gaps fixed:
+- `SalesPerformancePanel.tsx`'s Average Deal Size — the `dashboard.kpi.averageDealSize` i18n value
+  itself gained "(ก่อนภาษี)"/"(Before VAT)" (this key has exactly one call site, so editing the
+  value directly was safe and simpler than adding a new key).
+- `PipelineSteps.tsx` — its `ChartCard`'s visible `sub` caption was `dashboard.pipelineSteps.sub`
+  ("Click a stage...", no VAT wording); the already-correctly-worded `dashboard.pipeline.sub`
+  ("Count and value of quotations by stage (before VAT) · click to view the list") existed in
+  i18n.tsx but was only ever reachable via the `EmptyState` fallback — swapped the live `sub` prop
+  to use it, which also preserves the click-affordance text since that key already includes it.
+- `FollowUpReminders.tsx` — its per-row `฿{amount}` had zero adjacent label of any kind. Added a new
+  `dashboard.followUps.amountNote` caption ("มูลค่าที่แสดงเป็นยอดก่อนภาษี"/"Amounts shown are before
+  VAT") under the card title.
+
+`npx tsc --noEmit -p tsconfig.api.json` and `npx tsc -b` both pass clean after this part.
+
+### Part 3 — Progressive/shell-first loading
+
+**`src/App.tsx` boot sequence.** Previously: `bootStatus` stayed `"loading"` (a full-page pulsing-logo
+splash, `BootLoading`) through both the session check *and* a blocking 10-way `Promise.all` of every
+domain fetch (users/roles/company/products/categories/notifications/quotes/jobTypes/companyProfiles/
+customers) before the sidebar/header ever appeared. Now: `bootStatus` flips to `"ready"` as soon as
+`fetchSession()` resolves with an authenticated user — the shell renders immediately — and a new
+`loadDomainData()` fires each of the (now 9, companyProfiles fetch removed) domain fetches
+independently via `Promise.allSettled`, with each one's own `setState` call running the moment *that*
+fetch resolves rather than all of them waiting on the slowest. A new `initialDataLoading` boolean
+tracks whether that bulk fetch has finished; pages purely prop-driven off it (Quotations/Products/
+Customers/Users/Roles) render a new lightweight `SectionLoading` placeholder ("กำลังโหลดข้อมูล...")
+in the content area instead of either blocking the shell or rendering their real (but still-empty)
+props as a false "no records yet" state. Dashboard and Audit Log render immediately regardless,
+since both already fetch their own data independently of this bulk load. `handleSetupComplete`/
+`handleSignIn` were refactored onto the same `loadDomainData()` helper (previously 3 near-identical
+copies of the same 10-fetch `Promise.all` block, one per entry point).
+
+**Fixed a previously-documented, real gap**: the boot `useEffect`'s `fetchSession()` call had no
+`try`/`catch` at all — any thrown network/API error left `bootStatus` stuck at `"loading"` forever,
+with no way out (flagged in TODO.md since 2026-07-10, never fixed until now). Now wrapped; a thrown
+error sets a new `bootError` state and renders a retryable `BootError` screen instead.
+
+**`src/pages/dashboard/DashboardPage.tsx`.** The page title/description (`PageHeader`) and filter
+bar now render unconditionally, even before the very first `/api/dashboard` fetch resolves (only
+`stats?.` accesses, no `if (!stats) return ...` guard above them anymore). The large data-driven
+widget tree (all 18 widgets) was extracted into a new `DashboardContent` subcomponent, so only that
+part — not the page shell around it — shows a loading placeholder on first load (`DashboardContentSkeleton`,
+now scoped to just the KPI-card-grid + one chart area, not the whole page). The pre-existing
+keep-previous-data-visible-during-refetch behavior on filter change (a small spinner in the header,
+`stats` never cleared) was already correct before this pass and is unchanged.
+
+`npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all pass
+clean after all three parts combined. Production bundle: the `CompanyProfilesPage`/company-profiles-
+specific `ImageUploadField` chunks are gone entirely; the main `index.js` chunk shrank from
+~342KB to ~324KB (raw, pre-gzip).
+
+**Not done this pass**: no live-database/live-browser manual walkthrough — same recurring
+sandboxed-session network limitation as every prior pass (no path to MongoDB Atlas or a running dev
+server; see PROJECT_STATUS.md "Known Risks"). No per-widget progressive rendering *within* an
+already-loaded Dashboard (all 18 widgets still render together once `stats` arrives — only the
+page-shell-vs-first-load-content boundary was addressed). Quotations/Products/Users/Roles/Customers/
+Settings pages were not redesigned with their own independent loading states beyond the new shared
+`SectionLoading` placeholder, per "do not redesign unrelated pages." A real end-to-end spot-check of
+the reworked pre-tax arithmetic against a live quote (hand-compute from its `lines`/`discount`,
+compare to the Dashboard's reported figure) also needs a live database.
+
+Docs updated: CLAUDE.md, PROJECT_STATUS.md, TODO.md, DATABASE.md, API.md, RBAC.md, UI_GUIDELINES.md,
+IMPLEMENTATION_CHECKLIST.md, MODULES/CompanyProfiles.md (full rewrite).
+
+---
+
 ## 2026-07-14 — Codex review fix pass: customer autofill/snapshot High Priority issues + documentation/naming cleanup
 
 **Scope**: an independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) of the previous same-day

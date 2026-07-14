@@ -1,142 +1,144 @@
-# Codex Review Report — Quotation Customer Company Autofill Audit
+# Codex Review Report — Company Profiles Removal, Pre-Tax Dashboard, and Progressive Loading
 
 **Review date:** 2026-07-14  
-**Scope:** Read-only review of the current working tree. No application source, configuration, or dependency changes were made.
+**Scope:** Read-only code, API, documentation, RBAC, and UI-state audit. Only this report and its archive copy were updated.
 
 ## Executive Summary
 
-**Partially correct; not ready to be marked fully compliant.** The Create Quotation form now uses the real `customers` API, has the correctly labelled customer selector, sends an optional `customerId`, and server-side create/update code builds and persists a `customerSnapshot`. There is no active issuer-company selector in the quotation form and quote APIs do not require `issuerCompanyId`.
-
-Two high-priority functional gaps remain: the UI/print paths never read `customerSnapshot` when reopening a quotation, and selecting a customer with blank optional delivery/project values can retain stale values from the previously edited form. Documentation also contains contradictory historical issuer-integration text.
+**Not ready for real internal users as a complete progressive-loading release.** Company Profiles removal and dashboard pre-tax calculations are correctly implemented in the reviewed source. However, the loading implementation still globally blocks ordinary data-driven pages behind all nine boot requests, and dashboard data can be stale after a workflow action without a visible refreshing state. The Dashboard is also a single all-or-nothing API response, so a failure in an optional section can prevent KPIs and every other section from rendering.
 
 ## Critical Issues
 
-None found.
-
-`issuerCompanyId` is not required by `POST /api/quotes`, `PATCH /api/quotes/:id`, or the workflow endpoint. The server instead accepts optional `customerId` and ignores issuer fields because they are not in the request allowlists.
+None found. Dashboard money calculations consistently use the shared pre-VAT helper; no mixed VAT-included `amount` aggregation was found in dashboard response construction.
 
 ## High Priority Issues
 
-1. **Saved `customerSnapshot` is not displayed first when reopening a quotation.** `customerSnapshot` is written in `api/handlers/quotes.ts`, but no component reads it. `QuoteDocument.tsx` initializes the visible customer fields exclusively from top-level quote fields (`quote.client`, `quote.contactName`, etc.), and the print document receives those same live top-level values. This does not implement the specified snapshot-first fallback behavior and leaves the persisted snapshot unused. Fix by deriving the displayed customer field set from `quote.customerSnapshot` first, falling back safely to legacy top-level quote fields.
+1. **Normal navigation remains blocked by unrelated boot data.** `App.tsx` starts nine requests independently but uses one `initialDataLoading` flag, cleared only by `Promise.allSettled(tasks)`. While any request remains pending, every prop-driven module—Quotations, Customers, Products, Users, Roles, and Settings—is replaced by `SectionLoading`, even if that module's own data has already arrived. Users do not see that page's title, actions, filters, table headers, or form structure. Track readiness/error per resource/page and render each page’s shell immediately.
 
-2. **Customer selection can leave stale optional data in the quotation.** `handleSelectCustomer` in `src/pages/quotation/QuoteDocument.tsx` updates `deliveryMethod`, `project`, and `deliveryAddress` only when the selected customer values are truthy. If a user previously entered values, then selects a saved customer whose corresponding fields are blank, the old values remain and are saved into the selected customer's quotation snapshot. Selection must copy all nine fields, including empty strings.
+2. **Dashboard workflow refresh silently leaves stale data visible.** `refreshAfterAction()` only increments `retryToken`; unlike filter changes and retries, it does not set `loading` true. The previous statistics stay on screen with no spinner or “refreshing” indication until the response returns. This violates the requirement that stale values not appear current without an indication.
+
+3. **A single optional dashboard failure blocks all dashboard sections.** `GET /api/dashboard` executes catalog counts, quote analytics, audit-log activity, notifications, role-dependent approvals, and several aggregations in shared `Promise.all` chains under one error boundary. Any rejected optional query/index operation returns a single 500; `DashboardPage` then replaces the entire data area with `ErrorState`, hiding KPIs, status, and other otherwise available sections. Split independently recoverable sections/endpoints, or return section-level error states from a resilient aggregate API.
 
 ## Medium Priority Issues
 
-1. **Documentation is internally inconsistent.** `docs/MODULES/CompanyProfiles.md` contains a correction stating issuer integration was removed, but its later historical section still presents the old quotation issuer selector as current behavior. `docs/CLAUDE.md` also retains an active-looking Company Profiles table entry claiming quotation integration. This can cause future work to reintroduce the wrong feature.
+1. **First-load Dashboard is shell-first but not section-first.** The title and filters render immediately, but all dashboard content is one generic animated skeleton until the monolithic response completes. Required visible structure such as section titles, table headers, and named card containers is not present during loading. This is an improvement over a full-page loader, but only partial compliance with UI-first progressive loading.
 
-2. **Dead issuer-oriented types/comments remain in application code.** `src/lib/companyProfiles.ts` still documents and exports `IssuerCompanySnapshot` / `IssuerCompanyDisplay`; `QuoteDocument.tsx` and `PrintDocument.tsx` still use the issuer-shaped display type for the single Settings-company header. It is not a selector and does not currently break the requirement, but the naming preserves confusion between issuer-company and customer-company responsibilities.
+2. **Older/malformed quotations with no usable `lines` silently contribute zero pre-tax value.** `computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0)` avoids a crash and correctly avoids falling back to VAT-included `amount`, but reports zero when legacy/external documents lack usable line data. The documentation asserts this cannot occur rather than documenting the observable zero-value fallback. Add data-quality detection/telemetry and document the behavior; migrate or flag affected records if they exist.
 
-3. **No automated evidence was found for the new customer selection/snapshot scenarios.** Add API and UI coverage for selecting, clearing, manually editing, reopening, and editing a customer master after quote creation.
+3. **Documentation contains stale implementation details.** `docs/MODULES/Customer.md` still says Customers shares the former `company-profiles` function, while the current code uses `api/handlers/customers.ts`. `docs/TODO.md` repeats that outdated claim and also has historical text saying the Company Profiles module remains available. These conflict with `PROJECT_STATUS.md`, `API.md`, and the source.
 
 ## Low Priority Issues
 
-1. The selector returns at most 20 client-side matches and has no debounced/server-side search. This is acceptable for a small customer list but will not scale well.
+1. `src/lib/dashboard.ts` comments still describe dashboard values generically as “amount”; explicitly saying “before VAT” in these public interfaces would reduce future regression risk.
 
-2. The selected-state control shows only the company name; showing contact name or tax ID would make selection confirmation clearer.
+2. The boot screen remains a full-screen logo pulse until the session request resolves. This is reasonable for unauthenticated session establishment, but a cached shell/route transition strategy would improve perceived speed further.
 
-## Wrong Issuer Company UI Removal Review
+## Company Profiles Removal Review
 
-**Pass for the Create Quotation page.** `src/pages/quotation/QuoteDocument.tsx` renders `CustomerSelector` in Customer Information and has no issuer-company selector, Company Profiles selector, issuer preview, or strings for “ออกใบเสนอราคาในนามบริษัท” / “เลือกบริษัทผู้ออกเอกสาร”. The removed `IssuerCompanySelector.tsx` is deleted.
+**Pass.** The active application has no Company Profiles page folder or client library, no `companyProfiles` navigation key/sidebar item/render case, and no matching i18n menu/empty-state keys. `vercel.json` has no `/api/company-profiles` rewrite, and no company-profile handler or validation file remains. This makes direct API access a 404 under the deployed rewrite model; the app uses internal state navigation rather than browser URL routes, so no old front-end route is exposed.
 
-The quotation header still displays the single Settings-company identity, which is appropriate and is not a selectable issuer control. Company Profiles administration remains elsewhere in the application; it is not connected to the quotation form.
+The historical `company_profiles` MongoDB collection and old audit entries are deliberately untouched. No destructive production data cleanup was found or required.
 
-## Customer Selection Review
+## Leftover Route / API / Permission Review
 
-**Pass, with the high-priority optional-field defect noted above.** `CustomerSelector.tsx` is visibly placed at the top of Customer Information with the Thai label **“เลือกลูกค้า / บริษัท”**. It uses the `customers` prop populated by `fetchCustomers()` from `GET /api/customers`.
+**Pass for executable code.** No active `CompanyProfiles`, `CompanyProfileForm`, `company_profiles`, `issuerCompany`, `issuerCompanyId`, or `issuerCompanySnapshot` reference was found in application/API code. The `Permission` union and default roles no longer include Company Profiles permissions. Existing custom database roles may retain inert legacy permission strings; this is safe because no UI or endpoint evaluates them.
 
-Search filters active, non-archived customers by company name, contact name, phone, email, and tax ID. Selecting a customer correctly copies company name, contact, phone, email, address, and tax ID. The resulting fields are ordinary editable inputs, and the selector can be cleared; manual entry is therefore supported.
+Remaining Company Profiles and issuer terms are historical documentation/comments, not live routes or imports. The documentation mismatch is reported above.
 
-Delivery method, project, and delivery address are not reliably autofilled when saved values are blank, as described in High Priority issue 2.
+## Quotation Regression Review
 
-## Customer Snapshot Review
+**Pass.** The quotation form has no issuer selector. Quote create/update/workflow routes do not accept or require `issuerCompanyId`; they use optional `customerId` and server-built `customerSnapshot`. Customer selection remains `CustomerSelector` → `GET /api/customers` → MongoDB `customers`, not Company Profiles.
 
-**Server persistence passes; snapshot-first display fails.** `Quote.customerId?: string` and the nine-field `CustomerSnapshot` interface exist. Create always calls `buildCustomerSnapshot()` from submitted customer fields. PATCH and workflow updates rebuild it whenever a customer-information field or `customerId` changes, while unrelated reopens/edits leave it untouched.
+## Dashboard Before-VAT Calculation Review
 
-Quote edits write only quote fields and snapshots; they do not call the customer-master update endpoints. Consequently, customer-master edits do not change existing top-level quote data. However, the required explicit snapshot-first read behavior is absent because the UI never consumes `customerSnapshot`.
+**Pass.** `api/_lib/quoteAmounts.ts` is the authoritative rule: line quantity × unit price after line discounts, then quote-level discount, before VAT. `computeQuoteAmountWithVat()` and server quote validation use the same input/formula family. `api/dashboard/index.ts` projects `lines` and `discount` and maps each quote through `computeQuoteAmountBeforeVat()` once before all KPI, status, pipeline, ranking, customer, job type, forecast, revenue trend, follow-up, and pending-approval computations.
 
-## API Review
+CSV export labels and values use the returned before-VAT dashboard statistics. No dashboard path was found summing persisted VAT-included `Quote.amount` as a dashboard monetary result.
 
-**Pass.**
+## Expected Sales Review
 
-- `POST /api/quotes` requires `quotations:create`, accepts optional `customerId`, verifies it resolves to an existing non-archived customer, and saves a server-built snapshot.
-- `PATCH /api/quotes/:id` validates/saves a changed `customerId` only in Draft status and refreshes the snapshot when customer fields change.
-- `POST /api/quotes/:id/workflow` applies the same validation to an in-flight draft.
-- No quote mutation route validates or requires `issuerCompanyId`.
+**Pass.** Expected Sales is the sum of mapped pre-tax quote values where `isPotentialOpportunity === true`. It derives from `docs`, which already applies the selected date, salesperson, and department conditions. There is no additional “all active quotations” predicate and no VAT-included fallback.
 
-The API intentionally permits inactive-but-not-archived customers when a caller supplies an ID; the UI selector excludes them. This matches the stated “exists and is not deleted” API criterion, but should be made explicit as a product rule.
+## Old Quotation Data Compatibility Review
 
-## Data Source Review
+**Partial.** The dashboard will not crash and will not silently use the VAT-included grand total: missing lines become an empty array and calculate to zero. That is safer than mixing VAT bases, but can understate historical data and is insufficiently documented as a fallback behavior. This is a data-quality/compatibility concern rather than a VAT-mixing defect.
 
-**Pass.** The selector is driven by `src/lib/customers.ts` → `GET /api/customers` → MongoDB `customers` collection. No hardcoded or mock customer array was found in the quotation selector/flow. `company_profiles` is not queried by the selector.
+## Progressive Loading Review
 
-## Company Profiles Confusion Review
+**Partial.** After session resolution the sidebar/top navigation shell appears immediately. Dashboard title, description, filters, and a loading spinner also appear immediately; filter changes preserve prior data and show a small spinner. However, other ordinary pages are globally replaced by a central loading state until all boot fetches settle, and first-load Dashboard content remains a monolithic generic skeleton.
 
-**Functional pass; maintainability/documentation concern.** The customer information section uses `CustomerSelector` and `Customer` objects, not Company Profiles. `customerId` and `customerSnapshot` are distinct from issuer fields in the quote model and API.
+## Data Fetching and Caching Review
 
-The remaining issuer display type and stale documentation discussed above should be cleaned up so they cannot be mistaken for a still-supported multi-issuer quotation feature.
+The boot requests are concurrent, not sequential, and dashboard filter effects use a cancellation flag to prevent older responses overwriting newer filter results. No React Query/SWR duplication was introduced; custom fetching remains consistent.
 
-## Existing Quotation Compatibility Review
+The central global readiness flag defeats much of the benefit of concurrent requests. Dashboard has no cache beyond component state. Refresh after approval/rejection has no loading signal, as noted in High Priority issue 2.
 
-**Mostly pass, with snapshot-first caveat.** Old quotations lacking both customer fields open from their existing top-level free-text fields. Stray historical `issuerCompanyId` / `issuerCompanySnapshot` database fields are not read or required. Duplicate/edit/print paths use existing quote fields and should not crash merely because the new snapshot is absent.
+## Actual Performance Review
 
-Because the UI does not read `customerSnapshot`, this compatibility behavior is safe but not the required snapshot-first behavior for newer quotes.
+Dashboard has useful analytics indexes and uses projection for `lines`/`discount` rather than fetching arbitrary quote fields. The shared amount helper avoids repeated inconsistent VAT conversion. `Promise.all` is appropriate for independent database reads but creates a single failure domain.
+
+The dashboard response remains large and all 18 data sections are calculated and rendered together. Heavy chart components are loaded with the Dashboard rather than independently deferred, and there is no per-section endpoint/error isolation. At larger data volumes, line-item recomputation in application memory and the all-in-one response will become the primary scalability risks.
+
+## Error / Empty / Zero State Review
+
+Loading is generally distinct from confirmed zero: Dashboard uses a skeleton/spinner, and empty business data renders a compact banner plus zero-capable widgets. Filter refresh retains prior data. Section-level error handling is missing because a dashboard request failure produces one data-area error state. Global data pages also use one error/loading state rather than resource-specific outcomes.
 
 ## UI / UX Review
 
-The selector is prominent, clearly labelled in Thai, searchable, and leaves copied fields editable. The two-column responsive layout uses standard `grid-cols-1 sm:grid-cols-2` patterns; no code-level overflow issue was found. Manual customer entry remains possible.
+Company Profiles is no longer cluttering navigation. The immediate Dashboard shell, filter controls, compact first-load placeholder, retryable errors, and Thai loading/error copy are clear improvements. The remaining global blocking state makes navigation feel unresponsive on slow APIs, and silent post-action refresh can make users question whether an approval/rejection took effect. No source-level responsive-layout regression was found.
 
-The stale optional-field carryover is visible and misleading: a user can select a customer yet see delivery/project information belonging to the prior customer. Resolve this before release.
+## Security Review
 
-## RBAC Review
-
-**Pass.** Customer mutations use dedicated server-side `customers:create`, `customers:edit`, and `customers:archive` permissions. Customer reads require `customers:view`, except a deliberate server-side carve-out allowing a user with `quotations:create` to read only active, non-archived customers for quotation selection. Quote writes independently enforce quotation permissions and validate selected customer IDs server-side, so the selector does not grant customer-master edit authority.
-
-## Code Quality Review
-
-The customer API and quote snapshot construction are explicit, allowlisted, and server-authoritative. The snapshot data is duplicated as top-level quote fields and a snapshot, but the read path is incomplete; this is the main quality/design defect. Stale issuer abstractions and historical prose should be removed or unequivocally marked archival.
+Removal leaves no exposed Company Profiles API route or permission path. Customer selection remains protected by the existing customer/quotation server-side permissions. Dashboard still requires `dashboard:view`; role-dependent activity and approval details remain permission-gated. No new sensitive-data exposure was found.
 
 ## Documentation Review
 
-Customer and API documentation accurately describe the corrected customer flow in many places. However, the active-looking old issuer integration material in `docs/MODULES/CompanyProfiles.md` and `docs/CLAUDE.md` conflicts with it. Update these documents to state that Company Profiles are not used by quotations, or move obsolete implementation detail to an explicitly historical changelog section.
+Most top-level documentation accurately records removal, the pre-tax formula, and progressive-loading intent. Correct the stale Customers-handler references in `docs/MODULES/Customer.md` and `docs/TODO.md`, and historical wording implying Company Profiles remains available. Document the missing-line dashboard fallback explicitly rather than claiming it cannot occur.
 
-## Build Check
+## Requirements Checklist
 
-Both optional checks were attempted without modifying the project:
-
-- `npm run lint` — failed before linting: `WSL 1 is not supported. Please upgrade to WSL 2 or above. Could not determine Node.js install directory.`
-- `npm run build` — failed before compilation with the same Node/WSL environment error.
-
-Likely cause: the current shell resolves to a Windows Node installation that does not support this WSL 1 environment. Recommended fix: run with a Linux/WSL2-compatible Node installation, then rerun lint and build.
-
-## Missing Requirements Checklist
-
-- [x] Issuer company selector removed
-- [x] "ออกใบเสนอราคาในนามบริษัท" removed from Create Quotation
+- [x] ข้อมูลบริษัท removed from sidebar
+- [x] Company Profiles routes inaccessible
+- [x] Company Profiles links removed
+- [x] Unused Company Profiles permissions removed or safely deprecated
+- [x] Existing database records not destructively deleted
+- [x] Issuer company selector absent from quotation form
 - [x] Quotation save does not require issuerCompanyId
-- [x] Customer selector exists
-- [x] Customer selector uses customers collection/API
-- [x] Customer search works
-- [!] Selecting customer auto-fills customer fields
-- [x] User can edit copied customer fields
-- [x] customerId saved when customer selected
-- [x] customerSnapshot saved
-- [ ] customerSnapshot displayed first
-- [x] Customer master edits do not unexpectedly change old quotations
-- [x] Manual customer entry works if allowed
-- [x] No fake customer data
-- [x] Company Profiles not confused with customers in the quotation flow
-- [x] Existing quotations still open
+- [x] Customer selection still works
+- [x] Dashboard total quotation value is before VAT
+- [x] Closed sales is before VAT
+- [x] Expected Sales is before VAT
+- [x] Expected Sales uses potentialOpportunity only
+- [x] Win/Lose/Active/Non Active values are before VAT
+- [x] Forecast is before VAT
+- [x] Rankings and charts use before-VAT values
+- [x] Dashboard exports use before-VAT values
+- [x] One consistent pre-tax calculation rule is used
+- [!] Main UI shell appears immediately
+- [!] No blocking full-page Skeleton during normal navigation
+- [!] Previous data remains during refetch where appropriate
+- [x] Loading is distinguishable from confirmed zero
+- [ ] One failed section does not block the entire page
+- [x] Duplicate API calls reviewed
 - [ ] Build passes if checked
+- [ ] Documentation updated
 
 ## Suggested Fix Plan for Claude Code
 
-1. Keep issuer company UI removed; remove or rename remaining issuer-only display abstractions/comments so they cannot revive the wrong flow.
-2. Keep `issuerCompanyId` absent from quote mutation contracts; add regression tests that prove it is not required.
-3. Retain the current `CustomerSelector` and customers API data source.
-4. Change selection to assign every customer field unconditionally, including blank delivery method, project name, and delivery address.
-5. Add a single snapshot-first customer-field resolver for quotation detail and print rendering, with legacy top-level fields as fallback; use it when initializing editable fields.
-6. Preserve the existing server-side customer existence/archive validation and add tests for malformed, missing, archived, and inactive IDs.
-7. Add compatibility tests for legacy quotes without snapshots and records containing obsolete issuer fields.
-8. Remove dead issuer naming/types where feasible, or rename the remaining single-company document-header display model.
-9. Correct contradictory Company Profiles and architecture documentation, keeping historical material only in changelog/archive sections.
+1. Preserve the shared line-item pre-tax helper and add tests/assertions that every dashboard monetary response path uses it.
+2. Preserve the strict `isPotentialOpportunity === true` Expected Sales predicate and test date/salesperson/department scope.
+3. Keep Company Profiles/issuer behavior removed; correct remaining historical documentation only—do not delete production collection records.
+4. Replace global `initialDataLoading` gating with resource/page-specific loading states so each page shell and ready data render independently; retain the sidebar shell immediately.
+5. Add a dashboard refreshing indication for workflow-triggered refreshes and consider lightweight cached dashboard state.
+6. Isolate optional dashboard work into resilient sections or section-status payloads so KPI/status data survives activity/notification/approval failures.
+7. Keep first-load Dashboard structure visible with named card/table/section shells, then populate each section as data becomes available.
+8. Add data-quality handling/documentation for quotes without valid line-item data, plus update stale Customers/Company Profiles documentation.
+
+## Build Check
+
+Commands attempted without modifying the project:
+
+- `npm run lint` — did not start linting: `WSL 1 is not supported. Please upgrade to WSL 2 or above. Could not determine Node.js install directory.`
+- `npm run build` — did not start compilation with the same Node/WSL error.
+
+Likely cause: this review environment resolves to a Windows Node installation incompatible with WSL 1. Recommended fix: run in WSL2 or a Linux-compatible Node environment, then rerun both commands.

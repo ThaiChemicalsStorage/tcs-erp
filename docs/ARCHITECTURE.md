@@ -39,12 +39,15 @@ src/
 ### API layout: 12 function files (the Vercel Hobby cap), two dispatch patterns
 
 Vercel's Hobby plan caps deployments at 12 serverless functions, so routes are consolidated.
-**As of 2026-07-13 (`company-profiles.ts` added) this project is at the cap** — any future new
-resource needs a new dispatch branch inside an existing handler file, not a new file, unless the
-project moves off Vercel Hobby:
+**Still at the cap as of 2026-07-14** — any future new resource needs a new dispatch branch inside
+an existing handler file, not a new file, unless the project moves off Vercel Hobby. (Briefly
+`company-profiles.ts`, added 2026-07-13, was the 12th slot, with `/api/customers` folded into it to
+avoid a 13th file; both `company-profiles.ts` and the whole Company Profiles module were removed
+2026-07-14, freeing that slot — immediately spent giving `customers.ts` its own dedicated file
+below instead, so the count is still exactly 12 of 12.)
 
 - **Plain single-route files** — `api/company/index.ts`, `api/audit-log/index.ts`, `api/dashboard/index.ts` (added 2026-07-09, GET only) — dispatch on `req.method` within one file.
-- **One file per resource, dispatching on path** — `api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes,company-profiles}.ts` — each parses the URL's path segments after the resource prefix (via `getPathSegments(req, prefix)` in `api/_lib/http.ts`, which parses `req.url` directly) and branches on them (e.g. `parts.length === 2 && parts[1] === "workflow"` for `POST /api/quotes/:id/workflow`).
+- **One file per resource, dispatching on path** — `api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes,customers}.ts` — each parses the URL's path segments after the resource prefix (via `getPathSegments(req, prefix)` in `api/_lib/http.ts`, which parses `req.url` directly) and branches on them (e.g. `parts.length === 2 && parts[1] === "workflow"` for `POST /api/quotes/:id/workflow`).
 - **`api/_lib/`** — shared server-only code, never routed: `mongodb.ts` (connection singleton), `http.ts` (`HttpError`, `withErrorHandling`, `getPathSegments`), `auth.ts` (JWT/cookie/bcrypt helpers, `requireUser`/`requirePermission`), `collections.ts` (typed MongoDB collection getters + id-mapping helpers, extended 2026-07-09 with 15 schema-prep collections — see [DATABASE.md](./DATABASE.md)), `rbacSeed.ts` (seeds default roles on first run), `systemSeed.ts` (added 2026-07-09, seeds system/config data on first run — permissions/departments/positions/notification types/system settings, zero business data), `quoteWorkflow.ts` (see below).
 - **2026-07-09 cleanup**: a duplicate, unreachable `api/{auth,users,roles,products,categories,notifications,quotes}/[[...segments]].ts` layer (plus a few standalone files like `api/auth/login.ts`) existed alongside `api/handlers/`, shadowed by the `vercel.json` rewrites described below — confirmed dead via production traffic logs and deleted. If old commit history references those paths, they no longer exist; `api/handlers/*.ts` was always the real routing.
 - **`quoteWorkflow.ts` is a deliberate duplicate**: `workflowTransitions`, the `ApprovalAction` type, and the per-action required-permission mapping are copied from `src/lib/quotes.tsx` rather than imported, because `quotes.tsx` contains JSX (a `statusIcon` map using `lucide-react` components) and the team decided not to risk value-importing a `.tsx`-with-JSX file into a Node serverless function. A comment in `quoteWorkflow.ts` notes to keep the two copies in sync if the workflow ever changes.

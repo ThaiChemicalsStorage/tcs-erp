@@ -1,13 +1,12 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
   LayoutDashboard, Settings, Package,
-  Search, ChevronRight, Menu, X, ChevronDown,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Building2, Contact,
+  Search, ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
 import { type JobType, fetchJobTypes } from "./lib/jobTypes";
-import { type CompanyProfile, fetchCompanyProfiles } from "./lib/companyProfiles";
 import { type Customer, fetchCustomers } from "./lib/customers";
 import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes";
 import { type User, fetchUsers, initials } from "./lib/users";
@@ -38,7 +37,6 @@ const DashboardPage = lazy(() => import("./pages/dashboard/DashboardPage").then(
 const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage").then((m) => ({ default: m.UserManagementPage })));
 const RoleManagementPage = lazy(() => import("./pages/admin/RoleManagementPage").then((m) => ({ default: m.RoleManagementPage })));
 const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) => ({ default: m.AuditLogPage })));
-const CompanyProfilesPage = lazy(() => import("./pages/admin/companyProfiles/CompanyProfilesPage").then((m) => ({ default: m.CompanyProfilesPage })));
 const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then((m) => ({ default: m.CustomersPage })));
 
 function PageLoading() {
@@ -61,8 +59,85 @@ function BootLoading() {
   );
 }
 
+/** Shown only if the session check itself fails (network/server error) — distinct from `signedOut`
+ * (a resolved "you are not logged in" answer). Fixes a previously-documented gap: the boot effect
+ * had no error handling at all, so a thrown fetch error left `bootStatus` stuck at `"loading"`
+ * forever with no way out — see TODO.md/CHANGELOG.md 2026-07-14 progressive-loading pass. */
+function BootError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="flex flex-col items-center text-center gap-3 max-w-sm">
+        <div className="w-12 h-12 rounded-full bg-[#e05252]/10 flex items-center justify-center">
+          <AlertTriangle size={22} className="text-[#e05252]" />
+        </div>
+        <p className="text-sm font-medium text-foreground">{t("boot.error.title")}</p>
+        <button onClick={onRetry} className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+          <RotateCw size={14} /> {t("boot.error.retry")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Lightweight per-section placeholder used while *the specific boot-time domain resources a page
+ * needs* (see `NAV_RESOURCES` above) are still in flight — the sidebar/header/page chrome around
+ * it is already visible by this point (see `bootStatus === "ready"` rendering below), so this only
+ * needs to cover the content area, not the whole screen. Deliberately not a full skeleton grid: a
+ * page that's purely prop-driven off this data (Quotations/Products/Customers/Users/Roles) would
+ * otherwise render a false "no records yet" empty state while data is still loading — showing this
+ * instead keeps "loading" and "genuinely empty" visually distinct. Dashboard/AuditLog fetch their
+ * own data independently and never show this. */
+function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => void }) {
+  const { t } = useI18n();
+  if (error) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+        <AlertTriangle size={20} className="text-[#e05252]" />
+        <p className="text-sm text-muted-foreground">{t("boot.sectionError")}</p>
+        <button onClick={onRetry} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <RotateCw size={12} /> {t("boot.error.retry")}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-2.5 p-6">
+      <Loader2 size={20} className="text-muted-foreground animate-spin" />
+      <p className="text-xs text-muted-foreground">{t("boot.sectionLoading")}</p>
+    </div>
+  );
+}
+
 /** Stable routing identifiers — decoupled from the (now translatable) display label, so switching language never breaks navigation. */
-type NavKey = "dashboard" | "quotations" | "products" | "customers" | "users" | "roles" | "auditLog" | "companyProfiles" | "settings";
+type NavKey = "dashboard" | "quotations" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
+
+/** The boot-time domain resources fetched once after sign-in — see `loadDomainData()`/`resourceStatus` below. */
+type ResourceKey = "users" | "roles" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
+type ResourceState = "loading" | "ready" | "error";
+
+/**
+ * Which boot-time resources a given page actually needs, for per-page loading/error gating
+ * (2026-07-14, Codex review High Priority fix — see the `resourceStatus` doc comment in `App()`).
+ * Dashboard/AuditLog aren't listed: they fetch their own data and never wait on this at all.
+ * "settings" needs `company` (Company Info tab, Super-Admin-only) and `roles` (role name display).
+ */
+const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
+  quotations: ["quotes", "company", "users", "roles", "products", "categories", "jobTypes", "customers"],
+  products: ["products", "categories"],
+  customers: ["customers"],
+  users: ["users", "roles"],
+  roles: ["roles", "users"],
+  settings: ["company", "roles"],
+};
+
+/** Module-scope (not component-local) so it's a referentially stable object across every render —
+ * required for `loadDomainData` below to itself be stable under `useCallback`, which is what lets
+ * the boot effect's dependency array correctly list it without re-running on every render. */
+const INITIAL_RESOURCE_STATUS: Record<ResourceKey, ResourceState> = {
+  users: "loading", roles: "loading", company: "loading", products: "loading", categories: "loading",
+  notifications: "loading", quotes: "loading", jobTypes: "loading", customers: "loading",
+};
 
 interface NavItem {
   key: NavKey;
@@ -79,7 +154,6 @@ const navItems: NavItem[] = [
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
   { key: "roles", icon: ShieldCheck, labelKey: "nav.roles", permission: "roles:manage" },
   { key: "auditLog", icon: ScrollText, labelKey: "nav.auditLog", permission: "auditLog:view" },
-  { key: "companyProfiles", icon: Building2, labelKey: "nav.companyProfiles", permission: "companyProfiles:view" },
 ];
 
 /**
@@ -88,13 +162,15 @@ const navItems: NavItem[] = [
  * see MODULES/Lead.md) — "Customers" got one 2026-07-14 (Customer master data, used to autofill
  * the Quotation form's Customer selector, see MODULES/Customer.md). No separate "Approvals" group
  * (approval actions live inside the Quotation module's own workflow, there's no dedicated Pending
- * Approvals/Approval History page).
+ * Approvals/Approval History page). The former "Company Profiles" entry (multi-issuer master data)
+ * was removed 2026-07-14 — this ERP has exactly one issuer company, so a management page for
+ * multiple was unused scope; see docs/MODULES/CompanyProfiles.md "Removed (2026-07-14)."
  */
 const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
   { labelKey: "nav.group.sales", keys: ["quotations", "customers"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
-  { labelKey: "nav.group.admin", keys: ["users", "roles", "auditLog", "companyProfiles"] },
+  { labelKey: "nav.group.admin", keys: ["users", "roles", "auditLog"] },
 ];
 
 const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
@@ -105,7 +181,6 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   users: "nav.users",
   roles: "nav.roles",
   auditLog: "nav.auditLog",
-  companyProfiles: "nav.companyProfiles",
   settings: "nav.settings",
 };
 
@@ -113,10 +188,6 @@ function moduleForAction(action: string): string {
   if (action.startsWith("Quotation") || action === "Status Changed") return "ใบเสนอราคา";
   if (action.startsWith("User") || action === "Password Reset") return "ผู้ใช้งาน";
   if (action.startsWith("Role") || action === "Permission Changed") return "บทบาทและสิทธิ์";
-  // Checked before the generic "Company" branch below (Company Settings Updated etc.) since
-  // "Company Profile Created"/"Company Profile Updated"/... would otherwise match that broader
-  // prefix first and get mislabeled as the single-company Settings module.
-  if (action.startsWith("Company Profile") || action === "Default Company Changed") return "โปรไฟล์บริษัท";
   if (action.startsWith("Company")) return "การตั้งค่า";
   if (action.startsWith("Customer")) return "ลูกค้า";
   if (action.startsWith("Profile") || action.startsWith("Signature")) return "โปรไฟล์";
@@ -152,19 +223,28 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
-  /**
-   * `fetchCompanyProfiles()` is `.catch(() => [])`-guarded at every call site (unlike every other
-   * fetch in these `Promise.all`s) because, unlike `products:view`/`quotations:view`/etc., not
-   * every default role holds `companyProfiles:view` (Sales User/Approver/Viewer don't, by design
-   * — see RBAC.md). Without the catch, `GET /api/company-profiles` 403s for those roles, which
-   * rejects the whole `Promise.all` and — since this boot/sign-in code has no surrounding
-   * try/catch — leaves `bootStatus` stuck at `"loading"` forever instead of ever reaching
-   * `"ready"`. Found and fixed 2026-07-13 (Codex review of the Company Profiles module); an empty
-   * array is the correct fallback for a caller who can't see this resource anyway.
-   */
-  const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
-  /** Same `.catch(() => [])` guard as `fetchCompanyProfiles()` above, for the same reason: not every default role holds `customers:view` (Viewer/Approver only get it as a read-only grant, but a hypothetical custom role might not), and `quotations:create` alone is enough to read active customers via the server's carve-out — see api/_lib/customersHandler.ts. */
+  /** Same `.catch(() => [])` guard applied at every call site: not every default role holds
+   * `customers:view` (Viewer/Approver only get it as a read-only grant, but a hypothetical custom
+   * role might not), and `quotations:create` alone is enough to read active customers via the
+   * server's carve-out — see api/_lib/customersHandler.ts. A rejection here must not be treated as
+   * a real data-load failure (see `loadDomainData` below) — it's an expected, valid 403 for some
+   * roles, not an error to surface. */
   const [customers, setCustomers] = useState<Customer[]>([]);
+
+  // ── Progressive boot data loading (2026-07-14, reworked same day — Codex review High Priority
+  // fix) ────────────────────────────────────────────────────────────────────────────────────────
+  // `bootStatus` flips to `"ready"` as soon as the session check resolves — the sidebar/header
+  // shell renders immediately at that point (see the render logic below), *before* any of the bulk
+  // domain data (users/roles/quotes/products/etc.) has arrived. The first version of this pass
+  // tracked that separate, slower fetch behind ONE flag (`initialDataLoading`) shared by every
+  // boot-time resource — which meant navigating straight to e.g. Products still waited on
+  // `notifications`/`quotes`/`users`/etc. even though Products only needs `products`/`categories`.
+  // An independent Codex review flagged this as still effectively a global blocking gate. Fixed by
+  // tracking each resource's own status independently (`resourceStatus`), so a given page's
+  // readiness is computed only from the resources *it* actually needs (see `NAV_RESOURCES` above) —
+  // Dashboard/AuditLog still don't wait on any of this at all, they fetch their own data.
+  const [resourceStatus, setResourceStatus] = useState<Record<ResourceKey, ResourceState>>(INITIAL_RESOURCE_STATUS);
+  const [bootError, setBootError] = useState(false);
 
   const [showTourPrompt, setShowTourPrompt] = useState(false);
   const tour = useGuidedTour(() => {
@@ -172,32 +252,63 @@ export default function App() {
     if (currentUser) markTourCompleted(currentUser.id);
   });
 
+  /**
+   * Fires every boot-data fetch independently (not one blocking `Promise.all`) so each domain list
+   * populates the UI — and its own `resourceStatus` entry flips to `"ready"`/`"error"` — as soon as
+   * *its own* request resolves, rather than every resource (and every page gated on one) waiting
+   * for the single slowest of the nine. No shared `Promise.allSettled` gate anymore — each resource
+   * is independently observable, which is what lets `NAV_RESOURCES` below compute per-page
+   * readiness from only the subset a given page actually needs.
+   */
+  // `useCallback` with an empty dep array (both here and on `loadDomainData` below) — `setXxx`
+  // setters are React-guaranteed stable and `INITIAL_RESOURCE_STATUS` is a module-level constant,
+  // so neither function's *real* behavior depends on anything that changes across renders. Making
+  // them referentially stable is what lets the boot effect below list `loadDomainData` in its
+  // dependency array (satisfying `react-hooks/exhaustive-deps`) without re-running on every render.
+  const trackResource = useCallback(<T,>(key: ResourceKey, promise: Promise<T>, onSuccess: (v: T) => void) => {
+    promise
+      .then((v) => { onSuccess(v); setResourceStatus((s) => ({ ...s, [key]: "ready" })); })
+      .catch(() => { setResourceStatus((s) => ({ ...s, [key]: "error" })); });
+  }, []);
+  const loadDomainData = useCallback(() => {
+    setResourceStatus(INITIAL_RESOURCE_STATUS);
+    trackResource("users", fetchUsers(), setUsers);
+    trackResource("roles", fetchRoles(), setRoles);
+    trackResource("company", fetchCompany(), setCompany);
+    trackResource("products", fetchProducts(), setProducts);
+    trackResource("categories", fetchCategories(), setCategories);
+    trackResource("notifications", fetchNotifications(), setNotifications);
+    trackResource("quotes", fetchQuotes(), setQuotes);
+    trackResource("jobTypes", fetchJobTypes(), setJobTypes);
+    // Not every default role holds `customers:view` (see the `customers` state doc comment above) —
+    // a 403 here is an expected, valid outcome for some roles, not a real data-load failure, so it
+    // resolves as "ready" with an empty list rather than "error" (which would show a retry prompt
+    // for something retrying can never fix).
+    trackResource("customers", fetchCustomers().catch(() => []), setCustomers);
+  }, [trackResource]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const session = await fetchSession();
+      let session;
+      try {
+        session = await fetchSession();
+      } catch {
+        // Previously unhandled — a thrown network/API error here left `bootStatus` stuck at
+        // `"loading"` forever with no way out (documented gap, see TODO.md/CHANGELOG.md
+        // 2026-07-14). Now surfaces a real, retryable error screen instead.
+        if (!cancelled) setBootError(true);
+        return;
+      }
       if (cancelled) return;
       if (session.needsSetup) { setBootStatus("needsSetup"); return; }
       if (!session.user) { setBootStatus("signedOut"); return; }
-      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList, companyProfileList, customerList] = await Promise.all([
-        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(), fetchCompanyProfiles().catch(() => []), fetchCustomers().catch(() => []),
-      ]);
-      if (cancelled) return;
-      setUsers(userList);
-      setRoles(roleList);
-      setCompany(companyData);
-      setProducts(productList);
-      setCategories(categoryList);
-      setNotifications(notificationList);
-      setQuotes(quoteList);
-      setJobTypes(jobTypeList);
-      setCompanyProfiles(companyProfileList);
-      setCustomers(customerList);
       setCurrentUser(session.user);
       setBootStatus("ready");
+      loadDomainData();
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [loadDomainData]);
 
   // Mobile drawer: Escape closes it, and it never survives a nav change made some other way
   // (e.g. browser back) since it's plain UI state, not routed — no cleanup needed there.
@@ -268,21 +379,9 @@ export default function App() {
   const handleSetupComplete = async (fields: SetupWizardFields): Promise<string | null> => {
     try {
       const created = await setupSuperAdmin(fields);
-      const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList, companyProfileList, customerList] = await Promise.all([
-        fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(), fetchCompanyProfiles().catch(() => []), fetchCustomers().catch(() => []),
-      ]);
-      setUsers(userList);
-      setRoles(roleList);
-      setCompany(companyData);
-      setProducts(productList);
-      setCategories(categoryList);
-      setNotifications(notificationList);
-      setQuotes(quoteList);
-      setJobTypes(jobTypeList);
-      setCompanyProfiles(companyProfileList);
-      setCustomers(customerList);
       setCurrentUser(created);
       setBootStatus("ready");
+      loadDomainData();
       logAudit({
         module: "ระบบ", action: "User Created", details: `ตั้งค่าเริ่มต้นระบบ — สร้างบัญชี Super Admin คนแรก (${created.username})`,
       }).catch(() => {});
@@ -295,22 +394,9 @@ export default function App() {
   const handleSignIn = async (identifier: string, password: string): Promise<string | null> => {
     const result = await login(identifier, password);
     if (result.error || !result.user) return result.error;
-    const found = result.user;
-    const [userList, roleList, companyData, productList, categoryList, notificationList, quoteList, jobTypeList, companyProfileList, customerList] = await Promise.all([
-      fetchUsers(), fetchRoles(), fetchCompany(), fetchProducts(), fetchCategories(), fetchNotifications(), fetchQuotes(), fetchJobTypes(), fetchCompanyProfiles().catch(() => []), fetchCustomers().catch(() => []),
-    ]);
-    setUsers(userList);
-    setRoles(roleList);
-    setCompany(companyData);
-    setProducts(productList);
-    setCategories(categoryList);
-    setNotifications(notificationList);
-    setQuotes(quoteList);
-    setJobTypes(jobTypeList);
-    setCompanyProfiles(companyProfileList);
-    setCustomers(customerList);
-    setCurrentUser(found);
+    setCurrentUser(result.user);
     setBootStatus("ready");
+    loadDomainData();
     logAudit({ module: "ระบบ", action: "Login", details: "เข้าสู่ระบบสำเร็จ" }).catch(() => {});
     return null;
   };
@@ -327,10 +413,10 @@ export default function App() {
     setProducts([]);
     setCategories([]);
     setJobTypes([]);
-    setCompanyProfiles([]);
     setCustomers([]);
     setNotifications([]);
     setQuotes([]);
+    setResourceStatus(INITIAL_RESOURCE_STATUS);
     setBootStatus("signedOut");
     setUserMenuOpen(false);
     setActiveNav("dashboard");
@@ -340,6 +426,15 @@ export default function App() {
   const activeNavItem = navItems.find((n) => n.key === activeNav);
   const activeNavAllowed = activeNav === "settings" || !activeNavItem?.permission || hasPermission(currentUser, roles, activeNavItem.permission);
   const effectiveNav = activeNavAllowed ? activeNav : "dashboard";
+  // Only the resources `effectiveNav`'s own page actually needs gate it — see `NAV_RESOURCES`
+  // above. A page not listed there (Dashboard/AuditLog) is never gated here at all.
+  const requiredResources = NAV_RESOURCES[effectiveNav] ?? [];
+  const pageDataLoading = requiredResources.some((k) => resourceStatus[k] === "loading");
+  const pageDataError = requiredResources.some((k) => resourceStatus[k] === "error");
+
+  if (bootError) {
+    return <BootError onRetry={() => window.location.reload()} />;
+  }
 
   if (bootStatus === "loading") {
     return <BootLoading />;
@@ -362,10 +457,6 @@ export default function App() {
   }
 
   const canManageCompany = hasPermission(currentUser, roles, "company:manage");
-  const canCreateCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:create");
-  const canEditCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:edit");
-  const canArchiveCompanyProfiles = hasPermission(currentUser, roles, "companyProfiles:archive");
-  const canSetDefaultCompanyProfile = hasPermission(currentUser, roles, "companyProfiles:setDefault");
   const canCreateCustomers = hasPermission(currentUser, roles, "customers:create");
   const canEditCustomers = hasPermission(currentUser, roles, "customers:edit");
   const canArchiveCustomers = hasPermission(currentUser, roles, "customers:archive");
@@ -505,7 +596,24 @@ export default function App() {
 
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
           <Suspense fallback={<PageLoading />}>
-            {effectiveNav === "quotations"
+            {/* Dashboard and Audit Log fetch their own data independently (see AREA 2 in the
+                2026-07-14 progressive-loading pass) — they render immediately regardless of any
+                boot-time resource's status. Every other page here is purely prop-driven off the
+                boot-time domain fetch (`loadDomainData`), so it shows a lightweight `SectionLoading`
+                placeholder instead while *its own required resources* (`NAV_RESOURCES`/
+                `pageDataLoading`/`pageDataError` above — not every boot resource) are still in
+                flight — rendering the real page early with empty arrays would otherwise look like a
+                false "no records yet" empty state. Reworked 2026-07-14 (Codex review High Priority
+                fix) from one global flag shared by all nine boot resources to this per-page subset,
+                so e.g. navigating straight to Products no longer waits on unrelated resources like
+                `notifications`/`quotes` that Products never reads. */}
+            {effectiveNav === "dashboard"
+              ? <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
+              : effectiveNav === "auditLog"
+              ? <AuditLogPage />
+              : pageDataLoading || pageDataError
+              ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
+              : effectiveNav === "quotations"
               ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} />
               : effectiveNav === "customers"
               ? <CustomersPage customers={customers} onCustomersChange={setCustomers} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} />
@@ -517,18 +625,6 @@ export default function App() {
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} />
               : effectiveNav === "roles" && isSuperAdmin
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} onAudit={handleAudit} />
-              : effectiveNav === "auditLog"
-              ? <AuditLogPage />
-              : effectiveNav === "companyProfiles"
-              ? <CompanyProfilesPage
-                  profiles={companyProfiles}
-                  onProfilesChange={setCompanyProfiles}
-                  users={users}
-                  canCreate={canCreateCompanyProfiles}
-                  canEdit={canEditCompanyProfiles}
-                  canArchive={canArchiveCompanyProfiles}
-                  canSetDefault={canSetDefaultCompanyProfile}
-                />
               : <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
             }
           </Suspense>

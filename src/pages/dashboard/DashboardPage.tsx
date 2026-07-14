@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw, Download } from "lucide-react";
+import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw, Download, History } from "lucide-react";
 import { type QuotationListFilter, interestLabelKey } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardStats } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
@@ -7,6 +7,7 @@ import { PageHeader } from "../../components/PageHeader";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
 import { todayIsoBangkok } from "./dateRanges";
 import { buildDashboardCsv, downloadCsv } from "./csvExport";
+import { ChartCard } from "./ChartCard";
 import { ExecutiveSummaryCards } from "./ExecutiveSummaryCards";
 import { SalesPerformancePanel } from "./SalesPerformancePanel";
 import { ActivityFollowUpSummary } from "./ActivityFollowUpSummary";
@@ -25,14 +26,87 @@ import {
   ExpectedSalesForecastChart, ProductsByCategoryChart,
 } from "./DashboardCharts";
 
-function DashboardSkeleton() {
+/** A single pulsing bar standing in for a not-yet-loaded value. */
+function SkeletonBar({ className = "h-4 w-16" }: { className?: string }) {
+  return <div className={`rounded bg-muted animate-pulse ${className}`} />;
+}
+
+/**
+ * Content-area-only placeholder for the very first load (2026-07-14, progressive-loading pass;
+ * reworked the same day into a section-first version — Codex review Medium finding: the first
+ * cut was shell-first but not section-first, i.e. real section titles/table headers/named card
+ * containers weren't visible during loading, just one generic animated block). Deliberately does
+ * NOT cover the page title/description/filter bar above it, which now render immediately
+ * regardless of whether `stats` has arrived yet (see the component body below) — only the
+ * data-driven widget area waits on the fetch, and even that area now mirrors the real P'Keng/Kee
+ * required 4-section structure (`ExecutiveSummaryCards` → `QuotationStatusSummary` →
+ * `SalesActivityAnalytics` → `ActivityTimeline`) with each section's *real* translated title/table
+ * headers (via `t()`, the same keys the loaded components use) rather than an anonymous shape, so
+ * there's no layout/text jump when the real data arrives — only the pulsing placeholders inside
+ * each section resolve into real values/rows. `ChartCard` is reused directly for the middle two
+ * sections so their header markup is pixel-identical to the loaded state, not an approximation.
+ * On every *subsequent* load (a filter change, a retry, an approve/reject refresh) this never
+ * shows at all — `stats` is already non-null by then, so the previous real data stays on screen
+ * with just a small "refreshing" indicator in the header (see `loading` below) instead of
+ * reverting to this skeleton.
+ */
+function DashboardContentSkeleton() {
+  const { t } = useI18n();
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
-      <div className="h-8 w-56 rounded-lg bg-muted animate-pulse" />
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />)}
+    <div className="space-y-6">
+      {/* 1. Executive KPI summary — 4 named cards, same title row as ExecutiveSummaryCards.tsx */}
+      <div>
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("dashboard.section.overview")}</h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            t("dashboard.kpi.totalQuotations"), t("dashboard.kpi.totalQuotationValue"),
+            t("dashboard.kpi.closedSales"), t("dashboard.kpi.expectedSales"),
+          ].map((title) => (
+            <div key={title} className="bg-card border border-border rounded-xl p-4">
+              <p className="text-xs text-muted-foreground font-medium truncate mb-2">{title}</p>
+              <SkeletonBar className="h-6 w-24" />
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="h-64 rounded-xl bg-muted animate-pulse" />
+
+      {/* 2. Quotation status summary */}
+      <ChartCard title={t("dashboard.statusSummary.title")} sub={t("dashboard.statusSummary.sub")}>
+        <SkeletonBar className="h-40 w-full" />
+      </ChartCard>
+
+      {/* 3. Sales activity analytics */}
+      <ChartCard title={t("dashboard.salesActivity.title")} sub={t("dashboard.salesActivity.sub")}>
+        <SkeletonBar className="h-52 w-full" />
+      </ChartCard>
+
+      {/* 4. Recent activity details — real table headers, pulsing rows underneath */}
+      <div className="bg-card border border-border rounded-xl p-5">
+        <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <History size={15} /> {t("dashboard.activity.title")}
+        </h2>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border">
+              {[
+                t("dashboard.activity.col.date"), t("dashboard.activity.col.salesperson"), t("dashboard.activity.col.action"),
+                t("dashboard.activity.col.quotation"), t("dashboard.activity.col.customer"),
+              ].map((col) => (
+                <th key={col} className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{col}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[...Array(3)].map((_, i) => (
+              <tr key={i} className="border-b border-border/40 last:border-0">
+                {[...Array(5)].map((_, j) => (
+                  <td key={j} className="px-2 py-2"><SkeletonBar className="h-3 w-full max-w-[100px]" /></td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -40,7 +114,7 @@ function DashboardSkeleton() {
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+    <div className="flex flex-col items-center justify-center p-12 text-center">
       <div className="w-14 h-14 rounded-xl bg-[#e05252]/10 flex items-center justify-center mb-4">
         <AlertTriangle size={22} className="text-[#e05252]" />
       </div>
@@ -115,28 +189,23 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
     setFilters(next);
   };
   const retry = () => { setLoading(true); setLoadError(false); setRetryToken((n) => n + 1); };
-  // Approve/Reject from the Approval Dashboard widget mutates a quote's status server-side —
-  // silently re-fetch (no loading skeleton) so every other filter-scoped widget stays consistent
-  // with the new pending-approvals count instead of only patching that one card in place.
-  const refreshAfterAction = () => setRetryToken((n) => n + 1);
+  // Approve/Reject from the Approval Dashboard widget mutates a quote's status server-side, then
+  // re-fetches so every other filter-scoped widget stays consistent with the new pending-approvals
+  // count instead of only patching that one card in place. `setLoading(true)` here (2026-07-14,
+  // Codex review High Priority fix) surfaces the same small header spinner a filter change/retry
+  // already shows — previously this path left the *previous* stats on screen with zero visible
+  // indication a refresh was even happening, which reads as "did my approval actually take effect?"
+  // `stats` itself is untouched until the new response lands (see the `!stats` skeleton guard
+  // below, which only fires on the very first load), so the real data never disappears/resets —
+  // only the spinner appears, exactly the "keep previous data visible during refetch, with a small
+  // indicator" behavior the progressive-loading requirement calls for.
+  const refreshAfterAction = () => { setLoading(true); setRetryToken((n) => n + 1); };
 
-  if (!stats && loadError) return <ErrorState onRetry={retry} />;
-  if (!stats) return <DashboardSkeleton />;
-
-  const {
-    hasAnyData, kpis, interestBreakdown, revenueTrend, categoryBreakdown, pipeline, salesPerformance,
-    customerAnalytics, jobTypeAnalytics, forecast, followUps, activityTimeline, salesActivity,
-    approvalDashboard, notificationSummary, availableSalespeople, availableDepartments,
-  } = stats;
-  const interestTotal = interestBreakdown.interested + interestBreakdown.notInterested + interestBreakdown.notEvaluated;
-  // Sales Activity Analytics / Revenue Trend are rolling windows that ignore the filter's `from`
-  // bound by design (see UI_GUIDELINES.md "Filter Honesty") — this anchor date is what "ending on"
-  // actually means: the selected `to` date if the user picked one, else today (Bangkok-local, not
-  // the server/browser's ambient timezone). Threaded into both charts so their sub-copy can state
-  // a real date instead of a generic "rolling trend" phrase — 2026-07-13, independent review fix.
-  const trendAnchorDate = stats.filters.to || todayIsoBangkok();
-
+  // `stats?.field` below (not a destructure at the top) is deliberate — see the 2026-07-14
+  // progressive-loading pass: the header/filter bar render unconditionally, before the first
+  // fetch resolves, so they must not depend on `stats` already existing.
   const exportCsv = () => {
+    if (!stats) return;
     const csv = buildDashboardCsv(stats, stats.filters);
     downloadCsv(`dashboard-export-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
@@ -149,8 +218,17 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
           description={t("dashboard.subtitle")}
           actions={
             <>
-              {loading && <div className="w-4 h-4 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" />}
-              {hasAnyData && (
+              {/* Bare spinner on the very first load (no `stats` yet — the content area below shows
+                  its own full skeleton). Once `stats` exists, every subsequent load (filter change,
+                  retry, or an approve/reject-triggered refresh) keeps the previous data on screen
+                  and adds this text label instead — "previous data stays visible during refetch,
+                  with a small indicator" per the progressive-loading requirement. */}
+              {loading && (
+                stats
+                  ? <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><div className="w-3.5 h-3.5 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin flex-shrink-0" />{t("dashboard.refreshing")}</div>
+                  : <div className="w-4 h-4 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" />
+              )}
+              {stats?.hasAnyData && (
                 <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
                   <Download size={13} /> {t("dashboard.export.csv")}
                 </button>
@@ -161,9 +239,48 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
       </div>
 
       <div data-tour="dashboard-filters">
-        <DashboardFilterBar filters={filters} onChange={handleFiltersChange} availableSalespeople={availableSalespeople} availableDepartments={availableDepartments} />
+        <DashboardFilterBar filters={filters} onChange={handleFiltersChange} availableSalespeople={stats?.availableSalespeople ?? []} availableDepartments={stats?.availableDepartments ?? []} />
       </div>
 
+      {!stats ? (
+        loadError ? <ErrorState onRetry={retry} /> : <DashboardContentSkeleton />
+      ) : (
+        <DashboardContent stats={stats} onNavigateToQuotations={onNavigateToQuotations} onOpenQuote={onOpenQuote} refreshAfterAction={refreshAfterAction} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The actual data-driven widget tree — split out of `DashboardPage` (2026-07-14, progressive-
+ * loading pass) purely so the parent's early-render shell (header/filter bar) doesn't need to
+ * duplicate this component's large JSX tree behind an `if (!stats) return ...` guard. Same content
+ * as before this pass, unchanged; only the extraction is new.
+ */
+function DashboardContent({
+  stats, onNavigateToQuotations, onOpenQuote, refreshAfterAction,
+}: {
+  stats: DashboardStats;
+  onNavigateToQuotations: (filter: QuotationListFilter) => void;
+  onOpenQuote: (quoteId: string) => void;
+  refreshAfterAction: () => void;
+}) {
+  const { t } = useI18n();
+  const {
+    hasAnyData, kpis, interestBreakdown, revenueTrend, categoryBreakdown, pipeline, salesPerformance,
+    customerAnalytics, jobTypeAnalytics, forecast, followUps, activityTimeline, salesActivity,
+    approvalDashboard, notificationSummary,
+  } = stats;
+  const interestTotal = interestBreakdown.interested + interestBreakdown.notInterested + interestBreakdown.notEvaluated;
+  // Sales Activity Analytics / Revenue Trend are rolling windows that ignore the filter's `from`
+  // bound by design (see UI_GUIDELINES.md "Filter Honesty") — this anchor date is what "ending on"
+  // actually means: the selected `to` date if the user picked one, else today (Bangkok-local, not
+  // the server/browser's ambient timezone). Threaded into both charts so their sub-copy can state
+  // a real date instead of a generic "rolling trend" phrase — 2026-07-13, independent review fix.
+  const trendAnchorDate = stats.filters.to || todayIsoBangkok();
+
+  return (
+    <>
       {/* 2026-07-14, Codex-review fix (High Priority): `hasAnyData` used to gate the ENTIRE page
           behind one full-page `EmptyState`, so a genuinely empty database (no quotations, no
           products anywhere) hid the required KPI cards instead of showing them at zero — the
@@ -275,6 +392,6 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import {
 } from "../_lib/collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
+import { computeQuoteAmountBeforeVat } from "../_lib/quoteAmounts.js";
 
 const WON_STATUS = "ปิดการขายสำเร็จ";
 const LOST_STATUS = "เสียโอกาส";
@@ -68,20 +69,16 @@ const TOP_N = 10;
 const ACTIVITY_LIMIT = 30;
 
 /**
- * P'Keng/P'Kee business requirement (2026-07-14): every Dashboard monetary total must be reported
- * pre-tax, never the VAT-included grand total. `Quote.amount` is always
- * `afterDiscount * (1 + VAT_RATE/100)` (see `computeQuoteAmount()` in quoteValidation.ts) with no
- * intermediate rounding, and no separate pre-tax/subtotal field is persisted on the Quote document
- * at all. `VAT_RATE` has always been a single fixed 7% applied uniformly to every quote — never a
- * per-quote override, never a different historical rate — so dividing it back out recovers the
- * *exact* `afterDiscount` value the server computed at save time. This is not an approximation or
- * a "best guess" fallback for old data: it works identically, exactly, for every quote ever saved,
- * regardless of when it was created.
+ * P'Keng/P'Kee business requirement (2026-07-14), reworked the same day per a follow-up
+ * requirement to compute from an authoritative source rather than back-deriving from the persisted
+ * VAT-included total: every Dashboard monetary total must be reported pre-tax. `Quote` has no
+ * stored pre-tax/subtotal field — only `amount` (VAT-included) is persisted — so the before-VAT
+ * figure is recomputed directly from each quote's own `lines`/`discount` via the shared
+ * `computeQuoteAmountBeforeVat()` (`api/_lib/quoteAmounts.ts`, also used by `quoteValidation.ts` to
+ * derive the persisted `amount` on create/edit) rather than dividing `amount` back down by a fixed
+ * VAT rate. Every quote has carried real `lines`/`discount` data since the 2026-07-08 rewrite (see
+ * CHANGELOG.md), so this is always computable — an empty `lines` array correctly yields `0`.
  */
-const VAT_RATE = 7;
-function preTaxAmount(amount: number): number {
-  return amount / (1 + VAT_RATE / 100);
-}
 
 /**
  * `ensureIndexes()` in api/_lib/collections.ts only ever runs from the one-time Setup Wizard
@@ -119,9 +116,10 @@ async function ensureQuoteAnalyticsIndexes(
 
 type QuoteCalcDoc = Pick<
   QuoteFields,
-  "status" | "amount" | "client" | "salesperson" | "jobTypeCode" | "jobTypeName" |
-  "isPotentialOpportunity" | "followUpDate" | "issueDate" | "expiryDate" | "approvalHistory" | "interest"
-> & { _id: string };
+  "status" | "client" | "salesperson" | "jobTypeCode" | "jobTypeName" |
+  "isPotentialOpportunity" | "followUpDate" | "issueDate" | "expiryDate" | "approvalHistory" | "interest" |
+  "lines" | "discount"
+> & { _id: string; amount: number };
 
 /**
  * Thailand is UTC+7, no DST. Vercel's Node runtime has no guaranteed local timezone (typically
@@ -271,7 +269,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       customersCollection(), leadsCollection(), quotesCollection(), productsCollection(), categoriesCollection(),
       usersCollection(), jobTypesCollection(), auditLogCollection(),
     ]);
-    await ensureQuoteAnalyticsIndexes(quotes, auditLog);
+    // Index creation is incidental infrastructure, not data the response depends on — a transient
+    // failure here (e.g. a conflicting index option on a warm instance) must not 500 the whole
+    // dashboard. 2026-07-14, Codex review High Priority fix (see docs/CODEX_REVIEW_REPORT.md).
+    try {
+      await ensureQuoteAnalyticsIndexes(quotes, auditLog);
+    } catch (err) {
+      console.error("[dashboard] ensureQuoteAnalyticsIndexes failed", err);
+    }
 
     // `User.department` is free text (no real Department entity yet — see DATABASE.md), joined here
     // to `Quote.salesperson` by exact name match, the same free-text-matching convention already
@@ -336,8 +341,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const trendAnchor = to ? new Date(`${to}T00:00:00Z`) : bangkokNow();
 
     const projection = {
-      status: 1, amount: 1, client: 1, salesperson: 1, jobTypeCode: 1, jobTypeName: 1,
+      status: 1, client: 1, salesperson: 1, jobTypeCode: 1, jobTypeName: 1,
       isPotentialOpportunity: 1, followUpDate: 1, issueDate: 1, expiryDate: 1, approvalHistory: 1, interest: 1,
+      lines: 1, discount: 1,
     } as const;
 
     const [
@@ -367,7 +373,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // series below, rather than four separate $group aggregations for the same underlying rows.
       quotes.find(
         { ...salespersonOnlyMatch, status: WON_STATUS, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } },
-        { projection: { issueDate: 1, amount: 1 } },
+        { projection: { issueDate: 1, lines: 1, discount: 1 } },
       ).toArray(),
       products.aggregate<{ _id: string; count: number }>([
         { $match: { archived: false } },
@@ -381,7 +387,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // consistent with "the date filter must affect every widget" (see MODULES/Dashboard.md).
       quotes.find(
         fullMatch,
-        { projection: { status: 1, client: 1, salesperson: 1, followUpDate: 1, amount: 1 } },
+        { projection: { status: 1, client: 1, salesperson: 1, followUpDate: 1, lines: 1, discount: 1 } },
       ).toArray(),
       // Deliberately company-wide only (no salesperson filter) — the forecast's weighting baseline is a
       // trailing-12-month win rate meant to be a stable, low-noise reference; narrowing it to one
@@ -401,12 +407,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // this app's own API could have `client`/`salesperson` missing entirely, and `.trim()`ing
     // `undefined` throughout this file would 500 the whole dashboard for every user over one bad
     // document. Normalize once here rather than defensively guarding every call site below.
-    // `amount` is normalized to its pre-tax value here too (see `preTaxAmount()` above) — every
-    // money metric below (KPIs, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics,
-    // forecast, approvalDashboard's pendingList) derives from `docs`, so converting once here
-    // instead of at each individual `.reduce()`/`.filter()` call site is both simpler and
-    // impossible for any one of them to accidentally miss.
-    const docs = (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: preTaxAmount(q.amount) }));
+    // `amount` here is the before-VAT figure, computed from `lines`/`discount` via
+    // `computeQuoteAmountBeforeVat()` (see the file-level comment above) — every money metric below
+    // (KPIs, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast,
+    // approvalDashboard's pendingList) derives from `docs`, so converting once here instead of at
+    // each individual `.reduce()`/`.filter()` call site is both simpler and impossible for any one
+    // of them to accidentally miss.
+    const docs = (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0) }));
+
+    // Data-quality telemetry (2026-07-14, Codex review Medium finding): a doc with `lines` entirely
+    // *absent* (not just an empty array — a genuinely new Draft with no items yet legitimately has
+    // `lines: []` and is not a data-quality issue) computes to a `$0` pre-tax value above, same as a
+    // real zero-value quote — silently, since crashing or falling back to the VAT-included `amount`
+    // are both worse (see the file-level comment above). Every quote has carried a real `lines`
+    // array since the 2026-07-08 rewrite, so this should never fire in practice — but "should never"
+    // isn't "cannot," and a prior draft of this documentation over-claimed the latter (Codex review
+    // flagged it). A `console.warn` here is grep-able in Vercel function logs without adding a new
+    // response field/UI surface for what is expected to be a null set. See MODULES/Dashboard.md
+    // "Pre-Tax Amount Rule" for the full data-quality note.
+    const missingLinesCount = (docsRaw as QuoteCalcDoc[]).filter((q) => q.lines == null).length;
+    if (missingLinesCount > 0) {
+      console.warn(`[dashboard] ${missingLinesCount} quote(s) in the filtered set have no "lines" field at all (not just empty) — reporting $0 pre-tax value for each instead of crashing or using the VAT-included amount. See docs/MODULES/Dashboard.md "Pre-Tax Amount Rule."`);
+    }
 
     // ── KPIs ──────────────────────────────────────────────────────────────
     const totalQuotations = docs.length;
@@ -610,10 +632,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     // ── Follow-ups ────────────────────────────────────────────────────────
-    const followUpDocs = (followUpDocsRaw as Array<Pick<QuoteFields, "status" | "client" | "salesperson" | "followUpDate" | "amount"> & { _id: string }>)
+    const followUpDocs = (followUpDocsRaw as Array<Pick<QuoteFields, "status" | "client" | "salesperson" | "followUpDate" | "lines" | "discount"> & { _id: string }>)
       .filter((q) => q.followUpDate && !TERMINAL_STATUSES.has(q.status));
     const toFollowUpSummary = (q: (typeof followUpDocs)[number]) => ({
-      id: q._id, client: q.client, salesperson: q.salesperson, followUpDate: q.followUpDate, amount: preTaxAmount(q.amount),
+      id: q._id, client: q.client, salesperson: q.salesperson, followUpDate: q.followUpDate, amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0),
     });
     const followUps = {
       today: followUpDocs.filter((q) => q.followUpDate === today).map(toFollowUpSummary),
@@ -629,22 +651,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Not every audit entry is a quote-related action (RBAC/user-management events also land here),
     // so a salesperson/department filter does legitimately narrow this to "things that person did,"
     // not just "their quotes" — a reasonable, consistent interpretation of "activity" filtering.
+    // 2026-07-14, Codex review High Priority fix: this query previously ran inside the same failure
+    // domain as the rest of the response — a rejected auditLog read here (e.g. a transient index/
+    // connection issue) took down KPIs, pipeline, and every other section along with it. Isolated so
+    // a failure here degrades to "section hidden" (activityTimeline stays null, same as a caller who
+    // lacks auditLog:view — the frontend already treats both identically) instead of blanking the
+    // whole dashboard. See docs/CODEX_REVIEW_REPORT.md "Claude Fix Status."
     let activityTimeline: ReturnType<typeof withStringId>[] | null = null;
     if (roleHasPermission(ctx.role, "auditLog:view")) {
-      const auditMatch: Record<string, unknown> = {};
-      if (from || to) auditMatch.createdAt = bangkokDayBoundsUtc(from, to);
-      if (salespersonFilter && salespersonFilter !== "all") auditMatch.userName = salespersonFilter;
-      if (salespeopleInDepartment) {
-        const deptCond = { userName: { $in: [...salespeopleInDepartment] } };
-        if (auditMatch.userName) {
-          auditMatch.$and = [{ userName: auditMatch.userName }, deptCond];
-          delete auditMatch.userName;
-        } else {
-          Object.assign(auditMatch, deptCond);
+      try {
+        const auditMatch: Record<string, unknown> = {};
+        if (from || to) auditMatch.createdAt = bangkokDayBoundsUtc(from, to);
+        if (salespersonFilter && salespersonFilter !== "all") auditMatch.userName = salespersonFilter;
+        if (salespeopleInDepartment) {
+          const deptCond = { userName: { $in: [...salespeopleInDepartment] } };
+          if (auditMatch.userName) {
+            auditMatch.$and = [{ userName: auditMatch.userName }, deptCond];
+            delete auditMatch.userName;
+          } else {
+            Object.assign(auditMatch, deptCond);
+          }
         }
+        const entries = await auditLog.find(auditMatch).sort({ createdAt: -1 }).limit(ACTIVITY_LIMIT).toArray();
+        activityTimeline = entries.map(withStringId);
+      } catch (err) {
+        console.error("[dashboard] activityTimeline query failed", err);
+        activityTimeline = null;
       }
-      const entries = await auditLog.find(auditMatch).sort({ createdAt: -1 }).limit(ACTIVITY_LIMIT).toArray();
-      activityTimeline = entries.map(withStringId);
     }
 
     // ── Sales activity analytics — 5 quotation event categories, week/month/quarter/year ──
@@ -702,50 +735,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         Object.assign(activityMatch, deptCond);
       }
     }
-    const activityDocs = await auditLog.find(activityMatch, { projection: { action: 1, createdAt: 1, userName: 1 } }).toArray();
-    const bucket = <T extends string>(keyFn: (d: Date) => T) => {
-      const map = new Map<T, Record<ActivityCategory, number>>();
-      for (const d of activityDocs) {
-        const key = keyFn(new Date(d.createdAt));
-        const entry = map.get(key) ?? zeroActivity();
-        entry[categoryForAction(d.action)] += 1;
-        map.set(key, entry);
-      }
-      return map;
-    };
-    const bucketBySalesperson = <T extends string>(keyFn: (d: Date) => T) => {
-      // Keyed by (period, salesperson) via a nested Map, not a joined/split string - Thai full
-      // names routinely contain a space (e.g. "somchai thanakon"), which would silently corrupt
-      // a naive period-space-salesperson-then-split round trip.
-      const map = new Map<string, Map<string, { created: number; edited: number }>>();
-      for (const d of activityDocs) {
-        const category = categoryForAction(d.action);
-        if (category !== "created" && category !== "edited") continue;
-        const period: string = keyFn(new Date(d.createdAt));
-        const salesperson = d.userName || "-";
-        const byPerson = map.get(period) ?? new Map<string, { created: number; edited: number }>();
-        const entry = byPerson.get(salesperson) ?? { created: 0, edited: 0 };
-        entry[category] += 1;
-        byPerson.set(salesperson, entry);
-        map.set(period, byPerson);
-      }
-      return [...map.entries()]
-        .flatMap(([period, byPerson]) => [...byPerson.entries()].map(([salesperson, counts]) => ({ period, salesperson, ...counts })))
-        .sort((a, b) => (a.period === b.period ? (b.created + b.edited) - (a.created + a.edited) : b.period.localeCompare(a.period)));
-    };
-    const weekMap = bucket((d) => isoWeekKey(d) as string);
-    const monthMap = bucket((d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
-    const quarterMap = bucket((d) => quarterKey(d.getUTCFullYear(), d.getUTCMonth()));
-    const yearMap = bucket((d) => String(d.getUTCFullYear()));
-    const zeroFill = <T extends string>(keys: T[], map: Map<T, Record<ActivityCategory, number>>) =>
-      keys.map((period) => ({ period, ...(map.get(period) ?? zeroActivity()) }));
-    const weekKeys = new Set(lastNWeekKeys(12, trendAnchor));
-    const monthKeys = new Set(lastNMonthKeys(MONTHS_BACK, trendAnchor));
-    const quarterKeys = new Set(lastNQuarterKeys(8, trendAnchor));
-    const yearKeys = new Set(lastNYearKeys(5, trendAnchor));
-    // Non-nullable — every `dashboard:view` caller gets this now (see comment above); `activityTimeline`
-    // below is the one still-permission-gated (`auditLog:view`) field.
-    const salesActivity: {
+    // Non-nullable in intent — every `dashboard:view` caller gets this now (see comment above) —
+    // but kept a real `| null` and wrapped in try/catch (2026-07-14, Codex review High Priority
+    // fix): a rejected auditLog query here previously took the entire dashboard response down with
+    // it. On failure this section degrades to hidden (frontend already guards with `salesActivity
+    // &&`), same as `activityTimeline` above, instead of blanking KPIs/pipeline/every other section.
+    type SalesActivityResult = {
       weekly: ({ period: string } & Record<ActivityCategory, number>)[];
       monthly: ({ period: string } & Record<ActivityCategory, number>)[];
       quarterly: ({ period: string } & Record<ActivityCategory, number>)[];
@@ -758,18 +753,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       bySalesperson: {
         weekly: BySalespersonRow[]; monthly: BySalespersonRow[]; quarterly: BySalespersonRow[]; yearly: BySalespersonRow[];
       };
-    } = {
-      weekly: zeroFill(lastNWeekKeys(12, trendAnchor), weekMap),
-      monthly: zeroFill(lastNMonthKeys(MONTHS_BACK, trendAnchor), monthMap),
-      quarterly: zeroFill(lastNQuarterKeys(8, trendAnchor), quarterMap),
-      yearly: zeroFill(lastNYearKeys(5, trendAnchor), yearMap),
-      bySalesperson: {
-        weekly: bucketBySalesperson((d) => isoWeekKey(d) as string).filter((r) => weekKeys.has(r.period)),
-        monthly: bucketBySalesperson((d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`).filter((r) => monthKeys.has(r.period)),
-        quarterly: bucketBySalesperson((d) => quarterKey(d.getUTCFullYear(), d.getUTCMonth())).filter((r) => quarterKeys.has(r.period)),
-        yearly: bucketBySalesperson((d) => String(d.getUTCFullYear())).filter((r) => yearKeys.has(r.period)),
-      },
     };
+    let salesActivity: SalesActivityResult | null;
+    try {
+      const activityDocs = await auditLog.find(activityMatch, { projection: { action: 1, createdAt: 1, userName: 1 } }).toArray();
+      const bucket = <T extends string>(keyFn: (d: Date) => T) => {
+        const map = new Map<T, Record<ActivityCategory, number>>();
+        for (const d of activityDocs) {
+          const key = keyFn(new Date(d.createdAt));
+          const entry = map.get(key) ?? zeroActivity();
+          entry[categoryForAction(d.action)] += 1;
+          map.set(key, entry);
+        }
+        return map;
+      };
+      const bucketBySalesperson = <T extends string>(keyFn: (d: Date) => T) => {
+        // Keyed by (period, salesperson) via a nested Map, not a joined/split string - Thai full
+        // names routinely contain a space (e.g. "somchai thanakon"), which would silently corrupt
+        // a naive period-space-salesperson-then-split round trip.
+        const map = new Map<string, Map<string, { created: number; edited: number }>>();
+        for (const d of activityDocs) {
+          const category = categoryForAction(d.action);
+          if (category !== "created" && category !== "edited") continue;
+          const period: string = keyFn(new Date(d.createdAt));
+          const salesperson = d.userName || "-";
+          const byPerson = map.get(period) ?? new Map<string, { created: number; edited: number }>();
+          const entry = byPerson.get(salesperson) ?? { created: 0, edited: 0 };
+          entry[category] += 1;
+          byPerson.set(salesperson, entry);
+          map.set(period, byPerson);
+        }
+        return [...map.entries()]
+          .flatMap(([period, byPerson]) => [...byPerson.entries()].map(([salesperson, counts]) => ({ period, salesperson, ...counts })))
+          .sort((a, b) => (a.period === b.period ? (b.created + b.edited) - (a.created + a.edited) : b.period.localeCompare(a.period)));
+      };
+      const weekMap = bucket((d) => isoWeekKey(d) as string);
+      const monthMap = bucket((d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+      const quarterMap = bucket((d) => quarterKey(d.getUTCFullYear(), d.getUTCMonth()));
+      const yearMap = bucket((d) => String(d.getUTCFullYear()));
+      const zeroFill = <T extends string>(keys: T[], map: Map<T, Record<ActivityCategory, number>>) =>
+        keys.map((period) => ({ period, ...(map.get(period) ?? zeroActivity()) }));
+      const weekKeys = new Set(lastNWeekKeys(12, trendAnchor));
+      const monthKeys = new Set(lastNMonthKeys(MONTHS_BACK, trendAnchor));
+      const quarterKeys = new Set(lastNQuarterKeys(8, trendAnchor));
+      const yearKeys = new Set(lastNYearKeys(5, trendAnchor));
+      salesActivity = {
+        weekly: zeroFill(lastNWeekKeys(12, trendAnchor), weekMap),
+        monthly: zeroFill(lastNMonthKeys(MONTHS_BACK, trendAnchor), monthMap),
+        quarterly: zeroFill(lastNQuarterKeys(8, trendAnchor), quarterMap),
+        yearly: zeroFill(lastNYearKeys(5, trendAnchor), yearMap),
+        bySalesperson: {
+          weekly: bucketBySalesperson((d) => isoWeekKey(d) as string).filter((r) => weekKeys.has(r.period)),
+          monthly: bucketBySalesperson((d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`).filter((r) => monthKeys.has(r.period)),
+          quarterly: bucketBySalesperson((d) => quarterKey(d.getUTCFullYear(), d.getUTCMonth())).filter((r) => quarterKeys.has(r.period)),
+          yearly: bucketBySalesperson((d) => String(d.getUTCFullYear())).filter((r) => yearKeys.has(r.period)),
+        },
+      };
+    } catch (err) {
+      console.error("[dashboard] salesActivity query failed", err);
+      salesActivity = null;
+    }
 
     // ── Approval dashboard — only for callers who can already approve quotations ──
     // The detailed, actionable pending-approvals list (with id/client/amount/salesperson/submitted
@@ -781,22 +824,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       canReject: boolean;
       pendingList: { id: string; client: string; salesperson: string; amount: number; submittedDate: string | null; status: string }[];
     } | null = null;
+    // In-memory over the already-fetched `docs` (no further I/O), so failure here is unlikely — but
+    // wrapped anyway (2026-07-14, Codex review High Priority fix) for the same reason as the two
+    // sections above: this section is genuinely optional (permission-gated, already null for most
+    // roles) and must not be able to take KPIs/pipeline/every other section down with it.
     if (roleHasPermission(ctx.role, "quotations:approve")) {
-      const approvedToday = docs.filter((q) => lastEntry(q.approvalHistory, "approved")?.createdAt.startsWith(today)).length;
-      const rejectedToday = docs.filter((q) => lastEntry(q.approvalHistory, "rejected")?.createdAt.startsWith(today)).length;
-      const pendingDocs = docs.filter((q) => q.status === PENDING_APPROVAL_STATUS);
-      approvalDashboard = {
-        pendingApprovals: pendingDocs.length,
-        approvedToday, rejectedToday, averageApprovalTime,
-        canReject: roleHasPermission(ctx.role, "quotations:reject"),
-        pendingList: pendingDocs
-          .map((q) => ({
-            id: q._id, client: q.client, salesperson: q.salesperson, amount: q.amount,
-            submittedDate: firstEntry(q.approvalHistory, "submitted")?.createdAt ?? null,
-            status: q.status,
-          }))
-          .sort((a, b) => (a.submittedDate ?? "").localeCompare(b.submittedDate ?? "")),
-      };
+      try {
+        const approvedToday = docs.filter((q) => lastEntry(q.approvalHistory, "approved")?.createdAt.startsWith(today)).length;
+        const rejectedToday = docs.filter((q) => lastEntry(q.approvalHistory, "rejected")?.createdAt.startsWith(today)).length;
+        const pendingDocs = docs.filter((q) => q.status === PENDING_APPROVAL_STATUS);
+        approvalDashboard = {
+          pendingApprovals: pendingDocs.length,
+          approvedToday, rejectedToday, averageApprovalTime,
+          canReject: roleHasPermission(ctx.role, "quotations:reject"),
+          pendingList: pendingDocs
+            .map((q) => ({
+              id: q._id, client: q.client, salesperson: q.salesperson, amount: q.amount,
+              submittedDate: firstEntry(q.approvalHistory, "submitted")?.createdAt ?? null,
+              status: q.status,
+            }))
+            .sort((a, b) => (a.submittedDate ?? "").localeCompare(b.submittedDate ?? "")),
+        };
+      } catch (err) {
+        console.error("[dashboard] approvalDashboard computation failed", err);
+        approvalDashboard = null;
+      }
     }
 
     // ── Notification summary — per-caller, same scoping as GET /api/notifications ──
@@ -807,19 +859,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Flagged by the 2026-07-10 Codex review; documented explicitly rather than silently unfiltered.
     // Also parallelized with the two independent queries below it (previously three sequential
     // awaits in a row, none of which depend on each other or on anything computed above).
-    const notifications = await notificationsCollection();
-    const [myNotifications, availableSalespeopleRaw] = await Promise.all([
-      // Only `read` docs' `.type` field is ever read below — no need to fetch full Notification
-      // documents (title/description/module/relatedQuoteId) just to count them by type.
-      notifications.find({ recipientUserId: ctx.user.id, read: false }, { projection: { type: 1 } }).toArray(),
-      // Available salespeople (for the filter dropdown) — respects the date filter only.
-      quotes.distinct("salesperson", dateMatch),
-    ]);
-    const notificationsByType: Record<string, number> = {};
-    for (const n of myNotifications) notificationsByType[n.type] = (notificationsByType[n.type] ?? 0) + 1;
-    // unreadCount is exactly myNotifications.length (same filter) — no separate countDocuments round trip.
-    const notificationSummary = { unreadCount: myNotifications.length, byType: notificationsByType };
-    const availableSalespeople = availableSalespeopleRaw.filter((s): s is string => !!s && s.trim() !== "").sort();
+    // Isolated (2026-07-14, Codex review High Priority fix): a personal unread-count widget and a
+    // filter-dropdown source list, neither of which is business data the rest of the response
+    // depends on — a failure here degrades to "0 unread"/"no extra salesperson options" instead of
+    // taking KPIs/pipeline/every other section down with it.
+    let notificationSummary = { unreadCount: 0, byType: {} as Record<string, number> };
+    let availableSalespeople: string[] = [];
+    try {
+      const notifications = await notificationsCollection();
+      const [myNotifications, availableSalespeopleRaw] = await Promise.all([
+        // Only `read` docs' `.type` field is ever read below — no need to fetch full Notification
+        // documents (title/description/module/relatedQuoteId) just to count them by type.
+        notifications.find({ recipientUserId: ctx.user.id, read: false }, { projection: { type: 1 } }).toArray(),
+        // Available salespeople (for the filter dropdown) — respects the date filter only.
+        quotes.distinct("salesperson", dateMatch),
+      ]);
+      const notificationsByType: Record<string, number> = {};
+      for (const n of myNotifications) notificationsByType[n.type] = (notificationsByType[n.type] ?? 0) + 1;
+      // unreadCount is exactly myNotifications.length (same filter) — no separate countDocuments round trip.
+      notificationSummary = { unreadCount: myNotifications.length, byType: notificationsByType };
+      availableSalespeople = availableSalespeopleRaw.filter((s): s is string => !!s && s.trim() !== "").sort();
+    } catch (err) {
+      console.error("[dashboard] notificationSummary/availableSalespeople query failed", err);
+    }
 
     // ── Monthly closing rate — win rate per calendar month, trailing 12 months ──
     const monthlyOutcomeMap = new Map<string, { won: number; lost: number }>();
@@ -840,13 +902,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const revenueByMonthMap = new Map<string, number>();
     const revenueByQuarterMap = new Map<string, number>();
     const revenueByYearMap = new Map<string, number>();
-    for (const r of wonRevenueDocsRaw as Array<{ issueDate: string; amount: number }>) {
+    for (const r of wonRevenueDocsRaw as Array<{ issueDate: string; lines: QuoteFields["lines"]; discount: number }>) {
       const [y, m, d] = r.issueDate.split("-").map(Number);
       const date = new Date(Date.UTC(y, m - 1, d));
       const wk = isoWeekKey(date);
       const monthKey = r.issueDate.slice(0, 7);
       const qk = quarterKey(y, m - 1);
-      const amt = preTaxAmount(r.amount);
+      const amt = computeQuoteAmountBeforeVat(r.lines ?? [], r.discount ?? 0);
       revenueByWeekMap.set(wk, (revenueByWeekMap.get(wk) ?? 0) + amt);
       revenueByMonthMap.set(monthKey, (revenueByMonthMap.get(monthKey) ?? 0) + amt);
       revenueByQuarterMap.set(qk, (revenueByQuarterMap.get(qk) ?? 0) + amt);
