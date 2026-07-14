@@ -4,7 +4,6 @@ import { type QuotationListFilter, interestLabelKey } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardStats } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { PageHeader } from "../../components/PageHeader";
-import { EmptyState } from "../../components/EmptyState";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
 import { todayIsoBangkok } from "./dateRanges";
 import { buildDashboardCsv, downloadCsv } from "./csvExport";
@@ -165,98 +164,117 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
         <DashboardFilterBar filters={filters} onChange={handleFiltersChange} availableSalespeople={availableSalespeople} availableDepartments={availableDepartments} />
       </div>
 
-      {!hasAnyData ? (
-        <EmptyState icon={LayoutDashboard} title={t("empty.dashboard.title")} description={t("empty.dashboard.sub")} />
-      ) : (
-        <>
-          {/* ── The required P'Keng/P'Kee 5-section overview, in the exact requested order ── */}
-
-          {/* 1. Executive KPI summary — 4 cards only */}
-          <div data-tour="dashboard-kpis">
-            <ExecutiveSummaryCards kpis={kpis} />
+      {/* 2026-07-14, Codex-review fix (High Priority): `hasAnyData` used to gate the ENTIRE page
+          behind one full-page `EmptyState`, so a genuinely empty database (no quotations, no
+          products anywhere) hid the required KPI cards instead of showing them at zero — the
+          business requirement calls for the 4 KPI cards plus Status/Sales Activity's own empty
+          states to remain visible even then. Now: a slim inline banner communicates "no business
+          data yet" without blocking the rest of the page, and every section below always renders
+          (each already has its own per-widget "no data" fallback for an empty filtered/real result
+          — `QuotationStatusSummary`/`SalesActivityAnalytics` show their own `EmptyState compact`
+          when their own data is empty, same as before). A narrow filter matching zero results was
+          already handled correctly before this fix; this only changes the *no data anywhere* case. */}
+      {!hasAnyData && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[#c9a84c]/10 border border-[#c9a84c]/25">
+          <LayoutDashboard size={18} className="text-[#c9a84c] flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">{t("empty.dashboard.title")}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("empty.dashboard.sub")}</p>
           </div>
-
-          {/* 2. Quotation status summary — full width, not paired with Forecast (Forecast moved to
-              supporting detail below per "if it makes the Dashboard cluttered, move it lower") */}
-          <QuotationStatusSummary kpis={kpis} />
-
-          {/* 3. Sales activity analytics — trend + recent-period table + per-salesperson
-              breakdown, filter-aware, full width */}
-          {salesActivity && <SalesActivityAnalytics data={salesActivity} anchorDate={trendAnchorDate} />}
-
-          {/* 4. Recent activity details */}
-          {activityTimeline && <ActivityTimeline entries={activityTimeline} onOpenQuote={onOpenQuote} />}
-
-          {/* ── Supporting detail — real data, unchanged, just not part of the 4 required
-              sections above. Sales Performance/Tasks&Follow-up/Forecast moved here 2026-07-13
-              (P'Keng/P'Kee pass) since they weren't named in the required 5-row layout — "focus
-              first on the exact required business information." Not removed, still real,
-              filter-aware MongoDB data. ── */}
-          <div className="pt-2 border-t border-border space-y-6">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.section.detail")}</p>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <SalesPerformancePanel kpis={kpis} />
-              <ExpectedSalesForecastChart forecast={forecast} />
-            </div>
-
-            <ActivityFollowUpSummary kpis={kpis} onPendingApprovalsClick={() => onNavigateToQuotations({ status: "รออนุมัติ" })} />
-
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-              <RevenueTrendChart trend={revenueTrend} anchorDate={trendAnchorDate} />
-              <ProductsByCategoryChart categoryBreakdown={categoryBreakdown} />
-            </div>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <RevenueByJobTypeChart jobTypeAnalytics={jobTypeAnalytics} />
-              <JobTypeDistributionChart jobTypeAnalytics={jobTypeAnalytics} />
-            </div>
-
-            <PipelineSteps pipeline={pipeline} onStageClick={(status) => onNavigateToQuotations({ status })} />
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} />
-            </div>
-            <SalesPerformanceTable title={t("dashboard.salesPerformance.title")} sub={t("dashboard.salesPerformance.sub")} entries={salesPerformance} />
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <CustomerAnalytics data={customerAnalytics} />
-              <JobTypeAnalytics jobTypeAnalytics={jobTypeAnalytics} />
-            </div>
-
-            {approvalDashboard && <ApprovalDashboard data={approvalDashboard} onRefresh={refreshAfterAction} />}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <FollowUpReminders followUps={followUps} onOpenClient={(client) => onNavigateToQuotations({ client })} />
-              <NotificationSummary summary={notificationSummary} />
-            </div>
-
-            <div className="bg-card border border-border rounded-xl p-5 max-w-xl">
-              <h2 className="text-base font-semibold text-foreground mb-4" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.interest.title")}</h2>
-              <div className="space-y-3">
-                {[
-                  { label: t(interestLabelKey["น่าสนใจ"]), count: interestBreakdown.interested, color: "#2aa36b", icon: <ThumbsUp size={13} /> },
-                  { label: t(interestLabelKey["ไม่น่าสนใจ"]), count: interestBreakdown.notInterested, color: "#e05252", icon: <ThumbsDown size={13} /> },
-                  { label: t("quotation.interest.notEvaluated"), count: interestBreakdown.notEvaluated, color: "#5a7299", icon: <CircleDot size={13} /> },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${item.color}15` }}>
-                      <span style={{ color: item.color }}>{item.icon}</span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs text-foreground">{item.label}</span>
-                        <span className="text-xs font-mono font-semibold text-foreground">{item.count} {t("quotation.countUnit")}</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${interestTotal ? (item.count / interestTotal) * 100 : 0}%`, background: item.color }} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </>
+        </div>
       )}
+
+      {/* ── The required P'Keng/P'Kee 5-section overview, in the exact requested order ── */}
+
+      {/* 1. Executive KPI summary — 4 cards only */}
+      <div data-tour="dashboard-kpis">
+        <ExecutiveSummaryCards kpis={kpis} />
+      </div>
+
+      {/* 2. Quotation status summary — full width, not paired with Forecast (Forecast moved to
+          supporting detail below per "if it makes the Dashboard cluttered, move it lower") */}
+      <QuotationStatusSummary kpis={kpis} />
+
+      {/* 3. Sales activity analytics — trend + recent-period table + per-salesperson
+          breakdown, filter-aware, full width. Always present for every `dashboard:view` role as
+          of 2026-07-14 (previously null/hidden for roles without `auditLog:view` — a Codex-review
+          Critical finding, see api/dashboard/index.ts); `salesActivity &&` stays as a defensive
+          null-check, not a real permission gate anymore. */}
+      {salesActivity && (
+        <SalesActivityAnalytics data={salesActivity} anchorDate={trendAnchorDate} dateFiltered={!!stats.filters.from} />
+      )}
+
+      {/* 4. Recent activity details */}
+      {activityTimeline && <ActivityTimeline entries={activityTimeline} onOpenQuote={onOpenQuote} />}
+
+      {/* ── Supporting detail — real data, unchanged, just not part of the 4 required
+          sections above. Sales Performance/Tasks&Follow-up/Forecast moved here 2026-07-13
+          (P'Keng/P'Kee pass) since they weren't named in the required 5-row layout — "focus
+          first on the exact required business information." Not removed, still real,
+          filter-aware MongoDB data. ── */}
+      <div className="pt-2 border-t border-border space-y-6">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.section.detail")}</p>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <SalesPerformancePanel kpis={kpis} />
+          <ExpectedSalesForecastChart forecast={forecast} />
+        </div>
+
+        <ActivityFollowUpSummary kpis={kpis} onPendingApprovalsClick={() => onNavigateToQuotations({ status: "รออนุมัติ" })} />
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <RevenueTrendChart trend={revenueTrend} anchorDate={trendAnchorDate} />
+          <ProductsByCategoryChart categoryBreakdown={categoryBreakdown} />
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <RevenueByJobTypeChart jobTypeAnalytics={jobTypeAnalytics} />
+          <JobTypeDistributionChart jobTypeAnalytics={jobTypeAnalytics} />
+        </div>
+
+        <PipelineSteps pipeline={pipeline} onStageClick={(status) => onNavigateToQuotations({ status })} />
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} />
+        </div>
+        <SalesPerformanceTable title={t("dashboard.salesPerformance.title")} sub={t("dashboard.salesPerformance.sub")} entries={salesPerformance} />
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <CustomerAnalytics data={customerAnalytics} />
+          <JobTypeAnalytics jobTypeAnalytics={jobTypeAnalytics} />
+        </div>
+
+        {approvalDashboard && <ApprovalDashboard data={approvalDashboard} onRefresh={refreshAfterAction} />}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <FollowUpReminders followUps={followUps} onOpenClient={(client) => onNavigateToQuotations({ client })} />
+          <NotificationSummary summary={notificationSummary} />
+        </div>
+
+        <div className="bg-card border border-border rounded-xl p-5 max-w-xl">
+          <h2 className="text-base font-semibold text-foreground mb-4" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.interest.title")}</h2>
+          <div className="space-y-3">
+            {[
+              { label: t(interestLabelKey["น่าสนใจ"]), count: interestBreakdown.interested, color: "#2aa36b", icon: <ThumbsUp size={13} /> },
+              { label: t(interestLabelKey["ไม่น่าสนใจ"]), count: interestBreakdown.notInterested, color: "#e05252", icon: <ThumbsDown size={13} /> },
+              { label: t("quotation.interest.notEvaluated"), count: interestBreakdown.notEvaluated, color: "#5a7299", icon: <CircleDot size={13} /> },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${item.color}15` }}>
+                  <span style={{ color: item.color }}>{item.icon}</span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs text-foreground">{item.label}</span>
+                    <span className="text-xs font-mono font-semibold text-foreground">{item.count} {t("quotation.countUnit")}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${interestTotal ? (item.count / interestTotal) * 100 : 0}%`, background: item.color }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

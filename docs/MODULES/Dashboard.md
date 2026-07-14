@@ -43,6 +43,27 @@ below for the current shape, and CHANGELOG.md for the full writeup of every pass
 Job Type/Potential Opportunity/Follow-up Date fields added to `Quote` earlier on 2026-07-10 (see
 [Quotation.md](./Quotation.md)).
 
+**2026-07-14 — Pre-Tax Amount pass.** A follow-up P'Keng/P'Kee requirement: every Dashboard
+monetary total must be the **pre-tax (before-VAT) amount**, never `Quote.amount` (the persisted
+VAT-included grand total). The required-5-section layout, the 4 KPI cards, Win/Lose/Active/
+Non-Active status summary, and Sales Activity Analytics with weekly/monthly/quarterly/yearly tabs
+and a salesperson filter were all already in place from the 2026-07-13 passes above — this pass's
+scope was strictly the amount-calculation rule and the labels that make it visible. See "Pre-Tax
+Amount Rule" below for exactly how, and CHANGELOG.md for the full writeup.
+
+**2026-07-14, second same-day pass — Codex-review fix (Critical + High Priority).** An independent
+review of the Pre-Tax Amount pass (`docs/CODEX_REVIEW_REPORT.md`) found the Dashboard didn't
+actually satisfy the business requirement end-to-end despite the correct pre-tax math: Sales
+Activity Analytics — a *required* section — was Critically broken, silently invisible to every
+default role except those with full audit-log access, because it shared `activityTimeline`'s
+`auditLog:view` gate instead of the page's own `dashboard:view` gate. Two more High Priority
+findings: the same section's query never actually applied the selected date range (so "Today"
+still showed a full rolling trend of all-time data), and a wholly empty database hid the four
+required KPI cards behind one full-page empty state instead of showing them at zero. All three
+fixed, plus a folded-in Medium fix (Expected Sales now uses strict `isPotentialOpportunity ===
+true`). See "Pages / Components," "APIs," and "Permissions" below for the specifics, and
+CODEX_REVIEW_REPORT.md's "Claude Fix Status" section for the complete fixed/remaining breakdown.
+
 ## Business Flow
 
 1. User signs in → lands on Dashboard by default (`activeNav` initial state in `App.tsx`).
@@ -106,10 +127,45 @@ documented rather than silently assumed:
   Sales" column) means **Won-only** value; `totalValue` means every quotation's value regardless
   of outcome. Both are always returned side by side per the business spec's "Total Quotation
   Value" vs. "Closed Sales/Won Value" requirement — earlier in this module's history some of
-  these only exposed the won subset, which under-reported total pipeline value.
+  these only exposed the won subset, which under-reported total pipeline value. **Both are
+  pre-tax as of 2026-07-14** — see "Pre-Tax Amount Rule" below.
 - **`forecast` (thisMonth/thisQuarter/thisYear) is a live weighted estimate**, not a stored
   prediction — open `isPotentialOpportunity` quote value in each period × the trailing-12-month
   win rate, recomputed on every request. No ML, no `forecast` collection.
+
+## Pre-Tax Amount Rule (2026-07-14)
+
+Every monetary total the Dashboard displays or exports is **pre-tax (before VAT)** —
+`totalQuotationValue`, `closedSales`, `expectedSales`, the Win/Lose/Active/Non-Active status
+values, `pipeline[].totalValue`, `salesPerformance` (revenue/totalValue/expectedRevenue/
+avgDealSize), `customerAnalytics` (revenue/totalValue), `jobTypeAnalytics` (revenue/totalValue/
+avgDealSize), `forecast` (thisMonth/thisQuarter/thisYear), `revenueTrend`/`revenueByMonth`,
+`followUps[].amount`, and `approvalDashboard.pendingList[].amount`. Every value in the CSV export
+(`csvExport.ts`) inherits this since it's built from the same already-fetched response.
+
+**Why this is exact, not an approximation**: `Quote` has no persisted pre-tax/subtotal field —
+`amount` is always the VAT-included grand total
+(`afterDiscount * (1 + VAT_RATE/100)`, see `computeQuoteAmount()` in
+`api/_lib/quoteValidation.ts`), computed with no intermediate rounding. `VAT_RATE` is a single
+fixed 7%, applied uniformly to every quote ever saved — never a per-quote override, never a
+different historical rate. So `preTaxAmount(amount) = amount / 1.07` (`api/dashboard/index.ts`)
+recovers the *exact* `afterDiscount` value the server computed at save time, for old and new
+quotes alike — not a best-effort fallback for legacy data, because there is no legacy formula to
+fall back from.
+
+**Implementation**: `docs[].amount` (the per-quote array every KPI/ranking/analytics computation
+in `api/dashboard/index.ts` derives from) is normalized to its pre-tax value exactly once, right
+after the filtered `quotes.find()` fetch — every downstream `.reduce()`/`.filter()` across KPIs,
+pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast, and
+`approvalDashboard.pendingList` (which derives from `docs`) inherits it automatically, so no
+individual call site can accidentally sum the VAT-included figure. The two aggregations that read
+from separate queries instead of `docs` (`revenueTrend`'s won-quote scan, `followUps`) apply
+`preTaxAmount()` explicitly at their own read sites.
+
+**UI labels**: every affected Thai label says "ก่อนภาษี" explicitly (the 4 KPI card titles/
+helpers, the Status Summary's "มูลค่ารวมก่อนภาษี" column, and "(ก่อนภาษี)" suffixes on the
+ranking/job-type/customer/pipeline/approval tables and CSV headers) — see
+[UI_GUIDELINES.md](../UI_GUIDELINES.md) "Pre-Tax Amount Labeling."
 
 ## Pages / Components
 
@@ -138,17 +194,31 @@ documented rather than silently assumed:
   now a true partition of every quote status. Full width in the top overview as of
   2026-07-13 (seventh pass) — no longer paired side-by-side with the forecast chart.
 - `SalesActivityAnalytics.tsx` — quotation activity as a **stacked** bar chart + period table,
-  week/month/quarter/year tabs, filtered server-side by salesperson/department (not the date
-  filter's start — see "Filter Honesty" in UI_GUIDELINES.md). Third row of the top overview as of
-  2026-07-13 (seventh pass), full width. **2026-07-13, sixth pass**: expanded from 2 tracked
-  categories (Created/Edited) to all 5 an independent review flagged as required — Created,
-  Edited, Status Changed, Approval Requested, Approval Completed — via `categoryForAction()` in
-  `api/dashboard/index.ts`, mapping every audit action `writeQuoteAuditEntry()` can write.
-  **2026-07-13, eighth pass**: the "rolling trend, not limited by the filter's start date" caption
-  now also states the actual anchor date it ends on ("— ending [date]") — an `anchorDate` prop
-  computed in `DashboardPage.tsx` (`stats.filters.to`, or today via the new `todayIsoBangkok()` in
-  `dateRanges.ts`) and formatted via the new `fmtDateShort()` in `format.ts`. `RevenueTrendChart`
-  (in supporting detail, see below) got the identical treatment in the same pass.
+  week/month/quarter/year tabs, filtered server-side by salesperson/department. Third row of the
+  top overview as of 2026-07-13 (seventh pass), full width. **2026-07-13, sixth pass**: expanded
+  from 2 tracked categories (Created/Edited) to all 5 an independent review flagged as required —
+  Created, Edited, Status Changed, Approval Requested, Approval Completed — via
+  `categoryForAction()` in `api/dashboard/index.ts`, mapping every audit action
+  `writeQuoteAuditEntry()` can write. **2026-07-13, eighth pass**: the "rolling trend, not limited
+  by the filter's start date" caption now also states the actual anchor date it ends on
+  ("— ending [date]") — an `anchorDate` prop computed in `DashboardPage.tsx` (`stats.filters.to`,
+  or today via the new `todayIsoBangkok()` in `dateRanges.ts`) and formatted via the new
+  `fmtDateShort()` in `format.ts`. `RevenueTrendChart` (in supporting detail, see below) got the
+  identical treatment in the same pass.
+  **2026-07-14, second same-day pass (independent Codex review fix — Critical + High)**: two
+  fixes. (1) The section is **no longer gated by `auditLog:view`** — only `dashboard:view`, same as
+  every other required section. Previously `api/dashboard/index.ts` returned `salesActivity: null`
+  for any role without `auditLog:view` (Sales User, Approver 1/2, Viewer by default), so this
+  *required* business section silently vanished for most real users — a Critical finding. (2) The
+  underlying query now actually respects the date-range filter's `from`/`to` (bounded via
+  `bangkokDayBoundsUtc`, same pattern `activityTimeline` already used) — previously an
+  unconditional full-history scan regardless of the selected range, so the caption's "not limited
+  by filter's start date" claim was true in a worse way than intended: the *required* section
+  ignored the filter outright, not just as a documented, deliberate exception the way
+  `RevenueTrendChart` does. A new `dateFiltered` prop (`DashboardPage.tsx` passes
+  `!!stats.filters.from`) switches the caption between the original rolling-trend copy (no filter
+  selected) and a new "กรองตามช่วงวันที่ที่เลือก" / "filtered to the selected date range" copy (a
+  filter is selected) — see UI_GUIDELINES.md "Filter honesty" for the full before/after reasoning.
   **2026-07-13, seventh pass**: gained a second table below the chart, "สรุปตามพนักงานขาย" —
   ช่วงเวลา/พนักงานขาย/เปิดใบเสนอราคาใหม่/แก้ไขใบเสนอราคาเก่า/กิจกรรมรวม, sourced from the API's
   new `salesActivity.bySalesperson.{weekly,monthly,quarterly,yearly}`, Created/Edited only
@@ -264,19 +334,35 @@ None owned by this page — it's a read-only aggregation over `customers`, `lead
   expanded to 5 categories; `kpis` gained `lostValue`/`activeQuotationsValue`/
   `nonActiveQuotationsValue`. **2026-07-13, seventh pass**: `salesActivity` gained
   `bySalesperson.{weekly,monthly,quarterly,yearly}` (period × salesperson, Created/Edited only);
-  `activityTimeline` entries may now carry `relatedQuoteId`/`relatedCustomerName`.
+  `activityTimeline` entries may now carry `relatedQuoteId`/`relatedCustomerName`. **2026-07-14**:
+  every monetary field in the response (KPIs, pipeline, salesPerformance, customerAnalytics,
+  jobTypeAnalytics, forecast, revenueTrend/revenueByMonth, followUps, approvalDashboard's
+  pendingList) is now pre-tax — see "Pre-Tax Amount Rule" above. No field was renamed; only the
+  computed values changed. **2026-07-14, second same-day pass (Codex-review fix)**: `salesActivity`
+  is effectively never `null` for a `dashboard:view` caller anymore (previously required
+  `auditLog:view` too — see Permissions below) and its query now bounds `createdAt` by the
+  selected `from`/`to` when set (previously unconditional full-history). `expectedSales`/
+  `salesPerformance[].expectedRevenue`/`forecast`'s underlying opportunity filter now use strict
+  `isPotentialOpportunity === true`, not a truthy check.
 - Approve/Reject actions from the Pending Approvals widget reuse the existing
   `POST /api/quotes/:id/workflow` route (same one the Quotation module's own approval buttons
   call) — no new API route was added for this.
 
 ## Permissions
 
-`dashboard:view` (every default role has it, unchanged) gates the whole page. Sections are
-additionally, individually gated by a permission the caller already needs elsewhere:
-`activityTimeline` by `auditLog:view`; `approvalDashboard` (stat tiles + Pending Approvals list)
-by `quotations:approve`; the list's Reject button additionally by `quotations:reject`
-(`approvalDashboard.canReject`). No new `Permission` was added for this pass — see
-[RBAC.md](../RBAC.md).
+`dashboard:view` (every default role has it, unchanged) gates the whole page — and, as of
+2026-07-14, that's now also the *only* gate on `salesActivity` (Sales Activity Analytics). It used
+to share `activityTimeline`'s `auditLog:view` gate too, which an independent Codex review found
+Critical: the default Sales User/Approver 1/Approver 2/Viewer roles all have `dashboard:view` but
+not `auditLog:view`, so the required "Sales Activity Analytics" business section was silently
+missing for every one of them. Fixed by removing that extra gate specifically from `salesActivity`
+— it's a coarse aggregate rollup (counts per period/category), not raw audit-log rows, so it didn't
+need the same restriction as the literal audit-log feed. Other sections remain gated by a
+permission the caller already needs elsewhere: `activityTimeline` (the actual "Recent Activity
+Details" audit-log feed, with full entry text) still by `auditLog:view`; `approvalDashboard` (stat
+tiles + Pending Approvals list) by `quotations:approve`; the list's Reject button additionally by
+`quotations:reject` (`approvalDashboard.canReject`). No new `Permission` was added for either
+pass — see [RBAC.md](../RBAC.md).
 
 ## Current Features
 
@@ -382,3 +468,32 @@ by `quotations:approve`; the list's Reject button additionally by `quotations:re
   boot effect has no error handling, so the app's loading spinner never resolves to the sign-in
   screen when that fetch throws — logged in [TODO.md](../TODO.md), not fixed here (out of scope
   for a Critical/High Codex-findings fix pass). Doesn't affect the Dashboard's own code.
+- **2026-07-14 Pre-Tax Amount pass**: same sandboxed-session limitation (this session's local
+  `.env.local` has no `MONGODB_URI`, and no Vercel CLI is installed to `vercel env pull` one, so
+  there's no live-database path either locally or via `vercel dev`). Verified instead via
+  `tsc --noEmit` (both configs)/`npm run lint`/`npm run build` (all clean) and a temporary,
+  isolated Playwright preview harness mounting the real `ExecutiveSummaryCards`/
+  `QuotationStatusSummary`/`SalesActivityAnalytics` components with mock `DashboardKpis`/
+  `SalesActivityTrend` data (deleted after use, not part of the app's real routing) — confirmed
+  all 4 KPI cards render with their new "ก่อนภาษี" titles/helpers, the Status Summary's
+  "มูลค่ารวมก่อนภาษี" column and Win/Lose/Active/Non-Active rows, and Sales Activity Analytics'
+  weekly/monthly/quarterly/yearly tab switching (clicked "รายสัปดาห์," confirmed the chart/table
+  re-rendered), all with zero console errors beyond an expected missing-favicon 404. The pre-tax
+  *arithmetic* itself (`amount / 1.07`) is a pure, non-network function verified by code
+  inspection and `tsc`, not something a UI screenshot can independently confirm — a live-database
+  pass should still spot-check one real quote's Dashboard-reported value against its
+  `lines`/`discount` by hand.
+- **2026-07-14, second same-day pass (Codex-review fix)**: same limitation; the review that found
+  these issues hit a different but equally blocking environment problem on its own side ("WSL 1 is
+  not supported... Could not determine Node.js install directory"). Verified via `tsc`/`lint`/
+  `build` (all clean) and a Playwright preview specifically targeting this pass's fixes: rendered
+  `ExecutiveSummaryCards`/`QuotationStatusSummary`/`SalesActivityAnalytics` together under a
+  "simulating a Sales User (dashboard:view only, not auditLog:view)" label to confirm Sales
+  Activity Analytics now actually renders in that scenario; rendered it twice more with
+  `dateFiltered={false}`/`dateFiltered={true}` to confirm the caption switches correctly; rendered
+  the new compact empty-state banner markup. All four confirmed correct, zero console errors. What
+  this did **not** verify: that a real authenticated Sales User/Approver/Viewer session against a
+  live deployment actually receives the section end-to-end (only the underlying permission logic
+  and component rendering were checked in isolation), and that selecting a real narrow date range
+  against real audit-log data actually reduces the returned counts (verified by code review, not
+  exercised against live data) — both flagged as next steps in CODEX_REVIEW_REPORT.md.

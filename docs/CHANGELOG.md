@@ -4,6 +4,140 @@
 
 ---
 
+## 2026-07-14 — Dashboard Codex-review fix pass (Critical + High Priority)
+
+**Scope**: an independent Codex review (`docs/CODEX_REVIEW_REPORT.md`) of the same-day Pre-Tax
+Amount pass found 1 Critical and 3 High Priority Dashboard issues. All 4 fixed this pass, plus one
+Medium-priority correctness fix folded in since it touched the same code paths.
+
+**Critical — Sales Activity Analytics was invisible to most Dashboard roles.**
+`api/dashboard/index.ts`'s `salesActivity` aggregation was gated behind `roleHasPermission(ctx.role,
+"auditLog:view")` — the same gate as the raw audit-log-backed `activityTimeline`. Default
+`sales_user`/`approver_1`/`approver_2`/`viewer` roles all have `dashboard:view` but not
+`auditLog:view`, so the P'Keng/P'Kee-required "กิจกรรมของฝ่ายขาย" section silently disappeared for
+every one of them. Fixed by removing that gate from `salesActivity` specifically — it's now
+computed for any caller who already passed the route's own `dashboard:view` check, matching every
+other required-section field. `activityTimeline` ("Recent Activity Details," the literal audit-log
+feed) intentionally keeps its `auditLog:view` gate — a different, more sensitive feature. Response
+type comment in `src/lib/dashboard.ts` updated; `DashboardPage.tsx`'s `salesActivity &&` render
+check is now a defensive null-guard, not an actual permission gate.
+
+**High — Sales Activity ignored the date-range filter's start date.** The `activityMatch` query
+behind `salesActivity` never bounded by `from`/`to` at all — selecting "Today" still scanned and
+displayed a full rolling 12-week/12-month/etc. trend built from all-time data, contradicting the
+"filters must affect all Dashboard sections" requirement. Fixed by adding
+`activityMatch.createdAt = bangkokDayBoundsUtc(from, to)` when either is set, the same pattern
+`activityTimeline` already used. `SalesActivityAnalytics.tsx` gained a `dateFiltered` prop
+(`DashboardPage.tsx` passes `!!stats.filters.from`) that switches the section's caption between the
+existing "rolling trend, not limited by filter's start date" copy and a new "กรองตามช่วงวันที่ที่เลือก"
+/ "filtered to the selected date range" copy, so the UI never claims a behavior the query isn't
+actually doing. New i18n keys: `dashboard.salesActivity.sub.filtered` (Thai + English).
+
+**High — an empty database hid the required KPI cards.** `DashboardPage.tsx` replaced the *entire*
+page with one full-page `EmptyState` whenever `hasAnyData` was false, so a brand-new deployment
+with zero quotations/products never showed the four required KPI cards at 0, nor the Status
+Summary/Sales Activity's own empty states — failing the business requirement's explicit "show zero
+KPI values plus relevant empty states" rule for an empty database (distinct from a narrow filter
+matching zero results, which was already handled correctly). Fixed: removed the page-wide
+conditional entirely; every required section and supporting-detail section now always renders
+(each already degrades gracefully via its own per-widget empty state). A compact inline banner
+("ยังไม่มีข้อมูลธุรกิจ") now renders above the KPI cards instead, communicating the same thing
+without blocking the page. The now-unused full-page `EmptyState` import was removed from
+`DashboardPage.tsx`.
+
+**Medium (folded in) — Expected Sales used a truthy check, not strict `=== true`.** All three
+`isPotentialOpportunity` predicates in `api/dashboard/index.ts` (`expectedSales` KPI,
+`salesPerformance[].expectedRevenue`, `forecast`'s `openOpportunities` filter) now compare
+`q.isPotentialOpportunity === true` explicitly rather than relying on JS truthiness — closes a
+theoretical gap where a stray non-boolean truthy value (e.g. the string `"false"`, which is truthy)
+on a legacy/externally-written document would have been miscounted as a potential opportunity.
+
+**Not fixed, documented instead — High: no soft-delete predicate on Dashboard quote queries.**
+Confirmed by grep that `Quote`/`QuoteFields` has no `isDeleted`/soft-delete field anywhere in the
+schema today (quotations are only ever removed from "active" via the `ยกเลิก`/Cancelled status).
+Adding a MongoDB filter on a field that can never be set would be dead, speculative code implying a
+deletion feature that doesn't exist. Documented explicitly instead — a code comment directly above
+every Dashboard quote-query match object in `api/dashboard/index.ts`, plus DATABASE.md/
+MODULES/Dashboard.md — noting every quote query in the file must be updated together if a real
+soft-delete field is ever introduced.
+
+**Verification**: `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+Same sandboxed-session no-live-database limitation as every prior pass (this review's own session
+hit a different but equally blocking environment issue — "WSL 1 is not supported"). Verified via a
+temporary isolated Playwright preview (`src/devPreview.tsx` + `dashboard-preview.html`, deleted
+after use) specifically targeting this review's findings: rendered the KPI/status/activity
+components together under a "simulating a Sales User (dashboard:view only)" label, confirming Sales
+Activity Analytics now renders in that scenario; rendered `SalesActivityAnalytics` with both
+`dateFiltered={false}` and `dateFiltered={true}` to confirm the caption switches; rendered the new
+compact empty-state banner. All confirmed correct with zero console errors.
+
+**Files changed**: `api/dashboard/index.ts`, `src/lib/dashboard.ts`,
+`src/pages/dashboard/DashboardPage.tsx`, `src/pages/dashboard/SalesActivityAnalytics.tsx`,
+`src/lib/i18n.tsx`. Docs updated: this file, CLAUDE.md, PROJECT_STATUS.md, TODO.md, DATABASE.md,
+API.md, UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/Dashboard.md,
+CODEX_REVIEW_REPORT.md's new "Claude Fix Status" section.
+
+---
+
+## 2026-07-14 — Dashboard Pre-Tax Amount pass
+
+**Scope**: a follow-up P'Keng/P'Kee requirement — every Dashboard monetary total must be the
+pre-tax (before-VAT) amount, never `Quote.amount`'s persisted VAT-included grand total. The
+required-5-section layout (4 KPI cards, Win/Lose/Active/Non-Active status summary, Sales Activity
+Analytics with weekly/monthly/quarterly/yearly tabs and a salesperson filter tracking new-quotation
+and edited-quotation counts) was already in place from the 2026-07-13 passes — this pass's scope
+was strictly the amount-calculation rule and making it visible.
+
+**Why this is exact, not an approximation**: `Quote` has no persisted pre-tax/subtotal field —
+`amount` is always `afterDiscount * (1 + VAT_RATE/100)` with no intermediate rounding
+(`computeQuoteAmount()` in `api/_lib/quoteValidation.ts`), and `VAT_RATE` (7%) has always been a
+single fixed constant applied to every quote, never a per-quote override or a different historical
+rate. So `preTaxAmount(amount) = amount / 1.07` (new helper, `api/dashboard/index.ts`) recovers the
+exact `afterDiscount` value the server computed at save time — for every quote ever saved, old or
+new alike, not a best-effort fallback.
+
+**Backend** (`api/dashboard/index.ts`): added `preTaxAmount()`. Normalized `docs[].amount` (the
+filtered per-quote array every KPI/pipeline/salesPerformance/customerAnalytics/jobTypeAnalytics/
+forecast/`approvalDashboard.pendingList` computation derives from) to its pre-tax value exactly
+once, immediately after the filtered `quotes.find()` fetch — every downstream `.reduce()`/
+`.filter()` inherits it automatically, so no individual call site could accidentally miss the
+conversion. The two aggregations reading from separate queries instead of `docs`
+(`revenueTrend`/`revenueByMonth`'s won-quote scan, `followUps`) apply `preTaxAmount()` explicitly
+at their own read sites. No response field was renamed — `totalQuotationValue`, `closedSales`,
+`expectedSales`, `lostValue`/`activeQuotationsValue`/`nonActiveQuotationsValue`,
+`pipeline[].totalValue`, `salesPerformance`, `customerAnalytics`, `jobTypeAnalytics`, `forecast`,
+`revenueTrend`/`revenueByMonth`, `followUps[].amount`, `approvalDashboard.pendingList[].amount`
+all keep their names, only their computed values changed.
+
+**Frontend labels** (`src/lib/i18n.tsx`, both Thai and English): the 4 KPI card titles/helpers now
+say "ก่อนภาษี" — `มูลค่าใบเสนอราคารวมก่อนภาษี`, `ยอดขายที่ปิดแล้วก่อนภาษี`,
+`ยอดขายที่คาดว่าจะปิดได้ก่อนภาษี` — matching the requirement's exact wording; the Expected Sales
+helper text (`เฉพาะใบเสนอราคาที่เซลส์ติ๊กว่างานนี้น่าสนใจ`) already matched verbatim, unchanged.
+`QuotationStatusSummary`'s value column is now `มูลค่ารวมก่อนภาษี`. Supporting-detail
+tables/charts (Executive Ranking, Sales Performance, Job Type Analytics, Customer Analytics,
+Sales Pipeline, Approval Dashboard, Revenue Trend/by-Job-Type charts, Expected Sales forecast
+chart) gained a "(ก่อนภาษี)"/"(Before VAT)" suffix on every money-bearing label. `csvExport.ts`
+column headers gained the same "(Before VAT)" suffixes.
+
+**Verification**: `tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run lint`,
+`npm run build` all pass clean. This sandboxed session has no live-database path (`.env.local`
+carries no `MONGODB_URI`, and no Vercel CLI is installed to `vercel env pull` one) — same
+limitation as every prior pass, see PROJECT_STATUS.md "Known Risks." Verified instead via a
+temporary, isolated Playwright preview harness (`src/devPreview.tsx` + `dashboard-preview.html`,
+deleted after use) mounting the real `ExecutiveSummaryCards`/`QuotationStatusSummary`/
+`SalesActivityAnalytics` components with representative mock data — confirmed all 4 KPI cards
+render with the new titles/helpers, the Status Summary shows the Won/Lost/Active/Non-Active rows
+with job counts + pre-tax values + percentages under the new column header, and Sales Activity
+Analytics' weekly/monthly/quarterly/yearly tabs switch correctly (clicked "รายสัปดาห์," confirmed
+the chart and table both re-rendered for the new period), with zero console errors beyond an
+expected missing-favicon 404.
+
+**Files changed**: `api/dashboard/index.ts`, `src/lib/i18n.tsx`, `src/pages/dashboard/csvExport.ts`.
+Docs updated: this file, PROJECT_STATUS.md, TODO.md, DATABASE.md, API.md, UI_GUIDELINES.md,
+IMPLEMENTATION_CHECKLIST.md, MODULES/Dashboard.md.
+
+---
+
 ## 2026-07-13 — Fix Codex-review issues in Company Profile header integration (twelfth same-day pass)
 
 **Scope**: an independent Codex review of the eleventh pass's Quotation-issuer integration

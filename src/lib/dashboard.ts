@@ -217,7 +217,17 @@ export interface DashboardStats {
   followUps: FollowUps;
   /** Null when the caller lacks auditLog:view — the frontend hides the Activity Timeline section entirely in that case. */
   activityTimeline: AuditLogEntry[] | null;
-  /** Null when the caller lacks auditLog:view (same gate as activityTimeline, both read audit_log). Quotation Created/Updated counts per period, trailing window ending at the date filter's `to` (or today) — same rolling-window rationale as `revenueTrend`. */
+  /**
+   * Always present for any `dashboard:view` caller as of 2026-07-14 — previously gated behind
+   * `auditLog:view` like `activityTimeline`, which an independent Codex review flagged as Critical
+   * (this is the required "Sales Activity Analytics" business section; the default Sales User/
+   * Approver/Viewer roles all have `dashboard:view` but not `auditLog:view`, so the required
+   * section was silently missing for them). Quotation Created/Updated (+3 more categories) counts
+   * per period, ending at the date filter's `to` (or today); periods before the filter's `from`
+   * (when set) now correctly zero-fill instead of showing unfiltered history — see
+   * `api/dashboard/index.ts`. Kept `| null` in the type for defensive frontend handling, but the
+   * API contract no longer actually returns null for a `dashboard:view` caller.
+   */
   salesActivity: SalesActivityTrend | null;
   /** Null when the caller lacks quotations:approve — the frontend hides the Approval Dashboard section entirely in that case. */
   approvalDashboard: ApprovalDashboard | null;

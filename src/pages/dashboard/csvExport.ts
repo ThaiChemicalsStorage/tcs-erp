@@ -25,13 +25,13 @@ export function buildDashboardCsv(stats: DashboardStats, filters: { from: string
   lines.push(csvRow(["Department filter", filters.department]));
   lines.push("");
 
-  lines.push(csvRow(["KPIs"]));
+  lines.push(csvRow(["KPIs (all monetary values are pre-tax / before VAT)"]));
   const k = stats.kpis;
   const kpiRows: [string, number | string][] = [
     ["Total Quotations", k.totalQuotations],
-    ["Total Quotation Value", k.totalQuotationValue],
-    ["Closed Sales", k.closedSales],
-    ["Expected Sales", k.expectedSales],
+    ["Total Quotation Value (Before VAT)", k.totalQuotationValue],
+    ["Closed Sales (Before VAT)", k.closedSales],
+    ["Expected Sales (Before VAT)", k.expectedSales],
     ["Won Jobs", k.wonDeals],
     ["Lost Jobs", k.lostDeals],
     ["Active Jobs", k.activeQuotations],
@@ -40,7 +40,7 @@ export function buildDashboardCsv(stats: DashboardStats, filters: { from: string
     ["Win Rate (%)", k.winRate],
     ["Lose Rate (%)", k.loseRate],
     ["Conversion Rate (%)", k.conversionRate],
-    ["Average Deal Size", k.averageDealSize],
+    ["Average Deal Size (Before VAT)", k.averageDealSize],
     ["Average Closing Time (days)", k.averageClosingTime ?? ""],
     ["Average Approval Time (days)", k.averageApprovalTime ?? ""],
     ["Total Customers", k.totalCustomers],
@@ -54,22 +54,22 @@ export function buildDashboardCsv(stats: DashboardStats, filters: { from: string
   for (const [label, value] of kpiRows) lines.push(csvRow([label, value]));
   lines.push("");
 
-  lines.push(csvRow(["Sales Performance"]));
-  lines.push(csvRow(["Salesperson", "Jobs", "Total Value", "Closed Sales", "Expected Revenue", "Won", "Lost", "Pending", "Conversion Rate (%)", "Avg. Deal Size", "Avg. Closing Time (days)"]));
+  lines.push(csvRow(["Sales Performance (monetary values before VAT)"]));
+  lines.push(csvRow(["Salesperson", "Jobs", "Total Value (Before VAT)", "Closed Sales (Before VAT)", "Expected Revenue (Before VAT)", "Won", "Lost", "Pending", "Conversion Rate (%)", "Avg. Deal Size (Before VAT)", "Avg. Closing Time (days)"]));
   for (const s of stats.salesPerformance) {
     lines.push(csvRow([s.salesperson, s.quotationCount, s.totalValue, s.revenue, s.expectedRevenue, s.won, s.lost, s.pending, s.conversionRate, s.avgDealSize, s.avgClosingTime ?? ""]));
   }
   lines.push("");
 
-  lines.push(csvRow(["Top Customers (by revenue)"]));
-  lines.push(csvRow(["Customer", "Quotations", "Total Value", "Won Value", "Last Quotation Date"]));
+  lines.push(csvRow(["Top Customers (by revenue, before VAT)"]));
+  lines.push(csvRow(["Customer", "Quotations", "Total Value (Before VAT)", "Won Value (Before VAT)", "Last Quotation Date"]));
   for (const c of stats.customerAnalytics.topByRevenue) {
     lines.push(csvRow([c.client, c.quotationCount, c.totalValue, c.revenue, c.lastQuotationDate || ""]));
   }
   lines.push("");
 
-  lines.push(csvRow(["Job Type Analytics"]));
-  lines.push(csvRow(["Code", "Job Type", "Jobs", "Total Value", "Won Value", "Win Rate (%)", "Avg. Deal Size"]));
+  lines.push(csvRow(["Job Type Analytics (monetary values before VAT)"]));
+  lines.push(csvRow(["Code", "Job Type", "Jobs", "Total Value (Before VAT)", "Won Value (Before VAT)", "Win Rate (%)", "Avg. Deal Size (Before VAT)"]));
   for (const j of stats.jobTypeAnalytics) {
     lines.push(csvRow([j.jobTypeCode, j.jobTypeName, j.count, j.totalValue, j.revenue, j.winRate, j.avgDealSize]));
   }

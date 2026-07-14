@@ -33,8 +33,15 @@ const CATEGORIES: { key: ActivityCategory; color: string }[] = [
  * plainly that this is a rolling trend anchored to the filter's end date, not limited by its start
  * date — the previous silence on that was flagged as misleading (the date-range filter visibly
  * has a "from" control that doesn't affect this chart).
+ *
+ * **2026-07-14, Codex-review fix**: the query behind `data` now actually respects the filter's
+ * `from`/`to` (see `api/dashboard/index.ts`) — an independent review found the "rolling trend, not
+ * limited by filter's start date" caption was misleading in a different way than the 2026-07-13
+ * fix addressed: the chart *said* it ignored `from`, and the query genuinely did, all the time,
+ * even when a date range was actively selected. `dateFiltered` (derived from whether the caller
+ * picked a `from` date) switches the caption to reflect which behavior is actually in effect.
  */
-export function SalesActivityAnalytics({ data, anchorDate }: { data: SalesActivityTrend; anchorDate: string }) {
+export function SalesActivityAnalytics({ data, anchorDate, dateFiltered }: { data: SalesActivityTrend; anchorDate: string; dateFiltered: boolean }) {
   const { t, lang } = useI18n();
   const [grouping, setGrouping] = useState<Grouping>("monthly");
   const groupingLabel: Record<Grouping, string> = {
@@ -60,7 +67,9 @@ export function SalesActivityAnalytics({ data, anchorDate }: { data: SalesActivi
   return (
     <ChartCard
       title={t("dashboard.salesActivity.title")}
-      sub={`${t("dashboard.salesActivity.sub")} — ${t("dashboard.trend.endingOn")} ${fmtDateShort(anchorDate, lang)}`}
+      sub={dateFiltered
+        ? t("dashboard.salesActivity.sub.filtered")
+        : `${t("dashboard.salesActivity.sub")} — ${t("dashboard.trend.endingOn")} ${fmtDateShort(anchorDate, lang)}`}
       actions={
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
           {GROUPINGS.map((g) => (

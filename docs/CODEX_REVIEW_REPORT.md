@@ -1,327 +1,222 @@
-# Codex Review Report — Company Profile Selection in Quotation Audit
+# Dashboard Business Requirements + Pre-Tax Amount Review
 
-**Review date:** 2026-07-13
-
-**Scope:** Read-only review of quotation issuer selection, snapshots, APIs, Company Profile read access, print/PDF behavior, RBAC, audit records, UI, and project documentation. No application source, configuration, dependency, or formatting change was made.
+**Review date:** 2026-07-14
+**Scope:** Read-only review of Dashboard-related React UI, `GET /api/dashboard`, quotation writes/audit events, types, RBAC, and project documentation. No application source, configuration, or package files were changed.
 
 ## Executive Summary
 
-**Ready for controlled internal use, subject to a small compatibility/fallback correction and live-database verification.**
+The Dashboard is substantially implemented: it has the four required KPI cards, a grouped Win/Lose/Active/Non-Active status summary, real MongoDB-backed quotation/audit-log data, pre-tax conversion, and Weekly/Monthly/Quarterly/Yearly sales activity UI. The required sections are ordered sensibly and no mock Dashboard dataset was found.
 
-The requested end-to-end path is implemented. A user creating a quotation can select a saved active Company Profile. The API validates the chosen profile server-side, stores issuerCompanyId, derives issuerCompanySnapshot server-side, and locks issuer changes after Draft. On-screen preview and PrintDocument use the saved snapshot first, protecting historic documents from later master-data edits. No fake issuer profiles or hardcoded issuer header were found.
-
-The main remaining weakness is the fallback path for a quote that has issuerCompanyId but lacks issuerCompanySnapshot: if its referenced profile is no longer active, the UI jumps to the legacy single-company singleton instead of trying the default active Company Profile before warning. This is a rare legacy/partial-data case, but it does not meet the requested fallback order exactly.
+It does **not fully satisfy** P' Keng / P' Geeky's requirements yet. Most seriously, Sales Activity Analytics is entirely absent for the default Sales User and Viewer roles despite those roles having `dashboard:view`. In addition, Sales Activity intentionally ignores the selected date range's start date, and an entirely empty business database hides the KPI cards instead of showing zero values. These are business-requirement failures, not merely UI polish issues.
 
 ## Critical Issues
 
-No Critical issue was found in issuer-company creation, server-side snapshot generation, Company Profile validation, or server-side RBAC for the reviewed routes.
+1. **Sales Activity Analytics is not visible to all Dashboard users.** `api/dashboard/index.ts` returns `salesActivity: null` unless the caller has `auditLog:view`; `DashboardPage.tsx` renders the section only when this value is non-null. Default `sales_user`, `approver_1`, `approver_2`, and `viewer` roles in `src/lib/roles.ts` have `dashboard:view` but not `auditLog:view`. For those users, the required activity section, its period selectors, created count, and edited count disappear completely. This is Critical for role-scoped Dashboard usage because the requirement explicitly makes the section required and defines a completely missing activity section as Critical.
 
 ## High Priority Issues
 
-No High Priority missing selector, snapshot, hardcoded issuer data, or inactive/deleted issuer acceptance was found.
+1. **Sales Activity does not fully obey the date-range filter.** `salesActivity` queries audit events by action/salesperson/department but never applies `from` or a `createdAt` range. It uses trailing windows anchored only to `to`; the UI says this openly. That documentation does not meet the requirement that Date range affect Sales Activity Analytics and its table/chart. `RevenueTrend` follows the same exception, so optional money trend widgets also do not honor a selected start date.
+
+2. **No-data behavior fails the required zero-KPI state.** `DashboardPage.tsx` uses `hasAnyData` to replace the entire dashboard with one page-level `EmptyState` when there are no quotations and no products. Consequently the four KPI cards do not visibly show `0`, and the status/activity empty states are not rendered. The requirement specifically calls for zero KPI values plus status/activity empty states when business data is absent.
+
+3. **The quotation query has no explicit soft-delete exclusion.** `api/dashboard/index.ts` builds `fullMatch` without `isDeleted: { $ne: true }` (or a comparable deletion predicate). Current quote schema/docs say quotations have no soft-delete field and use Cancelled status instead, so normal app-created records are not presently excluded incorrectly. However, this does not satisfy the stated Expected Sales predicate and is unsafe if archived/imported quotations obtain `isDeleted: true`. Add a formal quote deletion policy and enforce it in every Dashboard quote query before relying on this Dashboard for executive totals.
 
 ## Medium Priority Issues
 
-1. **Fallback chain skips the default active profile.** In QuoteDocument.tsx, a saved quote with no snapshot uses a live profile only if issuerCompanyId matches an active record. If that profile is inactive/deleted/unavailable, it falls directly to the legacy company singleton. It does not then try defaultActiveProfile. This conflicts with the required fallback order: snapshot, referenced profile, default active profile, warning/empty state.
+1. **Expected Sales uses truthiness rather than strict boolean equality.** The aggregation is `.filter((q) => q.isPotentialOpportunity)`, not `=== true`. The normal API validates new writes as booleans, but MongoDB has no enforced schema and legacy/external string values such as `"false"` would be counted. Use an explicit boolean predicate and an equivalent MongoDB filter when the query is moved server-side.
 
-2. **Issuer selection is allowed to be empty for a Draft.** api/handlers/quotes.ts accepts omitted or empty issuerCompanyId, and the UI shows a warning rather than blocking the save. This is documented as an intentional business choice, not a hidden defect, but it means a new quotation can still be created using the legacy singleton rather than a reusable profile.
+2. **Pre-tax is reconstructed from VAT-included `amount` rather than stored pre-tax data.** The implementation consistently converts `amount / 1.07`; the server currently calculates `amount` as exact pre-rounding 7% VAT, so the result is correct for current records. Nevertheless it does not use the preferred persisted fields (`subtotal`, `amountBeforeVat`, etc.) and will be fragile if VAT becomes quote-specific, changes historically, or amount rounding rules change. Persist a canonical before-VAT total at quotation write time.
 
-3. **Sales users receive the entire active Company Profile document.** GET /api/company-profiles permits quotations:create and correctly filters active/non-deleted records, but it returns bank account details, base64 logo/stamp data, and all document fields. This is sufficient for selection but broader than a lightweight issuer-selector projection.
+3. **Salesperson/department matching is free-text and activity attribution is actor-based.** Quote filters join `Quote.salesperson` to `User.fullName`; activity filters use audit-log `userName`. Name edits, duplicate names, or spelling variation can omit/misattribute data. A manager approving a salesperson's quote is attributed to the manager in activity analytics. Use IDs (`salespersonId`, `departmentId`, and quote reference in activities) for reliable filtering.
 
-4. **Header preview is a selector-panel preview rather than a persistent document-header band.** It clearly updates immediately and shows required issuer information, but the visible main quotation document header is represented by the print-specific PrintDocument. Usability testing should confirm that staff understand the selected issuer before saving.
+4. **Performance concern for activity analytics.** The endpoint reads all matching activity records and buckets them in Node before retaining only 12 weeks/12 months/8 quarters/5 years. The current `action, createdAt` index helps, but the absence of a bounded time query will grow with audit history. Use a minimum timestamp covering the largest displayed window (or date filter) and aggregate in MongoDB.
+
+5. **Documentation overstates completion.** `PROJECT_STATUS.md`, `docs/CLAUDE.md`, `docs/API.md`, and `docs/MODULES/Dashboard.md` describe the Dashboard as completed against the business specification, while the same Dashboard documentation explicitly records the deliberate start-date exception and the code hides Activity Analytics by role. Update the completion claims and document the role/data-range limitations until resolved.
 
 ## Low Priority Issues
 
-1. Issuer display currently prefers addressTh; an English-only document variant has no addressEn selection.
-2. The inline comment above issuer fields in src/lib/quotes.tsx still begins with obsolete “Prep only, not yet wired” wording before its later update note.
-3. No API endpoint returns only the current default profile; the client derives it from the active list, which is adequate at this scale.
+1. `fmtShort()` displays large baht values as `฿1.2K`/`฿1.23M`. This is compact, but executive financial cards and the status summary would be clearer with full THB formatting or a visible precision/rounding convention.
 
-## Business Requirement Review
+2. The status grouping is sensible and exhaustive for the current nine-status workflow, but it is embedded in Dashboard constants. Centralizing the business-status grouping with the workflow definitions would reduce drift when statuses change.
 
-The reusable issuer-company flow is implemented:
+## Business Requirements Checklist
 
-1. Company Profiles are persisted in MongoDB company_profiles.
-2. QuoteDocument.tsx renders IssuerCompanySelector with the Thai “ออกใบเสนอราคาในนามบริษัท” title.
-3. The selected id is included in the quotation draft.
-4. api/handlers/quotes.ts resolves the id against MongoDB and writes both issuerCompanyId and issuerCompanySnapshot.
-5. Existing quotes display their snapshot first, so future Company Profile edits do not change issued documents.
+- [x] จำนวนใบเสนอราคาทั้งหมด
+- [x] ยอดใบเสนอราคาทั้งหมดก่อนภาษี
+- [x] ยอดขายที่ปิดได้แล้วก่อนภาษี
+- [!] ยอดที่คาดว่าจะปิดได้ก่อนภาษี
+- [x] Dashboard monetary totals use pre-tax amount
+- [x] Dashboard does not use grandTotal including VAT unless clearly labeled
+- [x] KPI labels indicate before VAT
+- [!] Expected Sales uses potentialOpportunity only
+- [x] Expected Sales uses pre-tax amount
+- [x] Win / Lose / Active / Non Active status summary
+- [x] Status summary shows job count
+- [x] Win / Lose / Active / Non Active values use pre-tax amount
+- [!] Sales Activity Analytics visible
+- [!] Weekly activity view
+- [!] Monthly activity view
+- [!] Quarter activity view
+- [!] Yearly activity view
+- [!] Salesperson filter for activity
+- [!] New quotation created count
+- [!] Existing quotation edited count
+- [!] Department filter
+- [!] Date range filter
+- [x] No fake dashboard data
 
-No multi-tenant design was introduced. Company Profiles remain internal issuer master data.
+`[!]` means implemented for callers with `auditLog:view` and/or normal current data, but not fully compliant with the stated requirement for all Dashboard users and filters.
 
-## Company Selector Review
+## KPI Calculation Review
 
-IssuerCompanySelector.tsx is populated from the Company Profiles state passed through App.tsx, QuotationPage.tsx, and QuoteDocument.tsx.
+`ExecutiveSummaryCards.tsx` renders exactly four top-level cards in the requested order. `GET /api/dashboard` loads quotations by selected `issueDate`, salesperson, and department, then calculates:
 
-- A caller with companyProfiles:view sees the management list; a quotations:create-only Sales user is allowed to GET active, non-deleted profiles by api/handlers/company-profiles.ts.
-- QuoteDocument.tsx independently filters to isActive and not isDeleted.
-- The default active record is preselected. If no default exists and exactly one active record exists, that record is selected.
-- Multiple active records are selectable; default is marked in the option label.
-- Changing the selection updates issuerDisplay immediately.
-- The selector does not mutate Company Profile master data.
-- No static company array or fake issuer record was found.
-- If no active profiles exist, it shows a Thai empty state and provides a Company Profiles navigation button only to a user with Company Profile view access.
+- Total quotations: count of filtered quotes.
+- Total quotation value: sum of converted pre-tax values.
+- Closed sales: sum where status is `ปิดการขายสำเร็จ`.
+- Expected sales: sum where `isPotentialOpportunity` is truthy.
 
-## Header Preview Review
+Labels in `src/lib/i18n.tsx` explicitly say `ก่อนภาษี`; values use `฿` formatting. No hardcoded KPI values were found. The Expected Sales boolean and soft-delete limitations are recorded above.
 
-IssuerCompanySelector.tsx previews logo, Thai name, English name when supplied, address, phone, fax, email, website, tax ID, branch name, and branch code. Empty fields are omitted, rather than rendered as placeholders. Text uses a min-w-0 content wrapper and responsive card layout, so long content can wrap.
+## Dashboard Pre-Tax Amount Review
 
-PrintDocument.tsx receives the resolved issuer object and renders logo, issuer name, address, tax ID, phone, and email. It does not use a hardcoded company header. Fax, website, branch, and English name are available in the preview/snapshot but not currently printed; this is a document-design decision to confirm with business users.
+Pass for current data. `Quote.amount` is generated server-side as after-discount amount plus the fixed 7% VAT. `api/dashboard/index.ts` normalizes filtered documents once through `preTaxAmount(amount) = amount / 1.07`; separate revenue trend and follow-up reads also convert. Review of the Dashboard response paths found the conversion applied to KPI values, status values, pipeline, sales performance, customer analytics, job type analytics, forecasts, revenue trends, follow-ups, and approval amounts. The related labels say before VAT.
 
-## Quotation Storage / Snapshot Review
+No VAT-included `grandTotal`, `totalWithVat`, or `finalTotal` Dashboard field was found. The remaining Medium-risk is that the source of truth is reconstructed from a VAT-inclusive field rather than persisted before-VAT data.
 
-Quote has optional issuerCompanyId and issuerCompanySnapshot fields in src/lib/quotes.tsx. IssuerCompanySnapshot contains:
+## Expected Sales Review
 
-- company code, Thai/English names, display name
-- logo and stamp data URLs
-- Thai/English addresses
-- tax ID, branch name/code, phone, fax, email, website
-- bank accounts
-- quotation prefix, terms, and footer
+The quotation UI/type/API support `isPotentialOpportunity`; server create/edit paths validate the field and Dashboard Expected Sales uses it. The current calculation includes every status if flagged, matching the supplied requirement's literal `potentialOpportunity = true` rule rather than treating all Active quotes as forecast.
 
-resolveIssuerCompanyUpdate() in api/handlers/quotes.ts constructs this snapshot from the MongoDB profile. The client sends only issuerCompanyId; it has no write path for a client-authored snapshot. This is the correct anti-tampering and historic-document design.
+The calculation is pre-tax and respects the quotation's date/salesperson/department match. It does not explicitly exclude `isDeleted: true`, and it uses truthiness instead of `=== true`; these prevent an unqualified pass.
 
-## Quotation API Review
+## Status Mapping Review
 
-| Operation | Evidence | Result |
-| --- | --- | --- |
-| Create quote | POST /api/quotes resolves issuerCompanyId | Existence, active state, and archive state validated server-side; id and snapshot are inserted |
-| Update Draft | PATCH /api/quotes/:id | Issuer change is resolved server-side and gets a fresh snapshot |
-| Non-Draft update | PATCH handler | Server rejects issuer change unless status is Draft |
-| Workflow request | POST workflow route | Same Draft-only issuer rule before a transition |
-| Clear issuer | Explicit empty issuerCompanyId | Clears id and unsets snapshot; permitted for legacy/Draft compatibility |
-| Audit | writeQuoteAuditEntry | Create and issuer-change events include related quote/customer and issuer profile id/name |
+Pass for the current workflow. The API maps:
 
-An inactive or archived Company Profile cannot be submitted as an issuer: resolveIssuerCompanyUpdate() returns a Thai 400 error. This is not client-only validation.
+- Win: `ปิดการขายสำเร็จ`
+- Lose: `เสียโอกาส`
+- Active: non-closed, non-expired Draft/Pending Approval/Approved/Sent/Customer Accepted states
+- Non Active: Customer Rejected, Cancelled, and expired otherwise-open quotations
 
-## PDF / Print Review
+The four groups are a true partition: Lost is not double counted in Non Active. `QuotationStatusSummary.tsx` visibly gives a job count, before-VAT total, and percentage for each group. The summary derives count/value pairs from identical server predicates and inherits all three quote filters.
 
-PrintDocument.tsx has been changed from a company singleton prop to an issuer prop. QuoteDocument.tsx resolves that prop in this order for the normal saved-quote path:
+## Sales Activity Analytics Review
 
-1. issuerCompanySnapshot when the saved quote has not had its selector changed in the session
-2. active selected live Company Profile
-3. legacy Settings company singleton
+The implementation has real server-authored quotation audit events for create, update, and workflow events. `SalesActivityAnalytics.tsx` visibly offers Weekly, Monthly, Quarterly, and Yearly controls, a stacked chart, a period table, and a per-salesperson table with Created/Edited counts. There is no fake activity data.
 
-This protects snapshot-bearing quotations and avoids a blank/crashing header for old quotations. The medium-priority exception is that a default active profile is not tried between the live-id lookup and singleton fallback.
+However, the API only returns this data to `auditLog:view` callers, making the entire required section missing for default dashboard roles. It also does not use the filter's `from` date. Salesperson and department filtering operate on audit actors (`userName`), not a stable salesperson ID associated with the quotation.
 
-## Old Quotation Compatibility Review
+## Filter Review
 
-Old quotations without issuer fields continue to open because issuerDisplay always has a legacy singleton fallback. They do not crash, and a Draft quote can select an issuer and save a fresh snapshot. Quotes that already have a snapshot are insulated from later Company Profile changes.
+Date, salesperson, and department controls are present and re-fetch `/api/dashboard`. The filtered quote set correctly drives all four KPIs and the status summary. Salesperson/department also filter activity where it is returned.
 
-The partial-data case described under Medium Issues should be corrected before any migration/import is allowed to create issuerCompanyId without a snapshot.
+Exceptions that violate the stated all-widget filter requirement:
 
-## RBAC Review
+- Sales Activity ignores the date-range start and reads a rolling history ending at `to`/today.
+- Revenue Trend ignores the date-range start in the same way.
+- Forecast historical win-rate baseline is company-wide by design.
+- Catalog/personal widgets (customers/products/category breakdown and notifications) are intentionally unfiltered.
 
-- Company Profile management remains protected by companyProfiles:view/create/edit/archive/delete/setDefault.
-- Sales users do not receive those management permissions by default.
-- A user with quotations:create may read only active/non-deleted profiles from GET /api/company-profiles so they can select an issuer.
-- Company Profile management mutations still require their specific server-side permissions.
-- Quote create requires quotations:create; issuer changes use the existing server-side quote ownership/edit checks and Draft-only rule.
-- Sidebar management visibility remains gated by companyProfiles:view.
+The UI/documentation call out several exceptions, which improves honesty but does not make them compliant with the requested filter behavior.
 
-No direct API bypass of issuer validation or Company Profile management RBAC was found.
+## MongoDB / API Review
 
-## Audit Log Review
+Dashboard data originates from MongoDB collections via `GET /api/dashboard`; client UI does not calculate executive totals from mock arrays. Quote mutation endpoints write authoritative `Quotation Created`, `Quotation Updated`, and workflow audit records server-side, preventing client-forged quotation activity. Empty metric arrays are zero-filled for chart periods.
 
-Quotation create with an issuer writes a server-authoritative Quotation Created event including:
+Concerns: Dashboard quote reads do not apply a soft-delete predicate; no quote deletion field currently exists. Activity analytics reads and buckets an unbounded audit-log result in application memory. Department and salesperson filters are name-based joins rather than IDs. These are correctness/scalability risks rather than evidence of fake data.
 
-- authenticated actor
-- quotation id/number and customer
-- relatedCompanyProfileId
-- relatedCompanyProfileName
-- timestamp
+## Dashboard UI / UX Review
 
-A Draft issuer change writes the distinct Quotation Issuer Company Changed action with the same structured linkage. Company Profile mutations themselves are also now logged inside api/handlers/company-profiles.ts. The snapshot is created as part of quote creation/change; it is represented in the authoritative quote event rather than logged as a redundant separate event.
+The primary visual order is good: title/filters, four executive KPIs, status summary, sales activity, recent activity, then supporting detail. Optional material is below the required sections. Thai labels clearly describe pre-tax amounts, status totals are readable, and tables use overflow wrappers.
 
-## No Multi-Tenant / No Fake Data Review
+The role-gated absence of Sales Activity is a major UX/business regression. The page-level no-data state is otherwise clean but hides information users are explicitly expected to see as zero. Runtime browser verification against the deployed API was not possible in this environment, so overlap/actual responsive rendering was assessed from component structure and existing CSS only.
 
-No tenantId, tenant switching, separate database, separate domain, or unrelated data-isolation logic was found. No fake company list, mock company API data, or hardcoded issuer records/header content was found. The only legacy fallback is the pre-existing Settings company singleton, and the no-issuer warning makes that fallback visible.
+## Sidebar / Typography Review
 
-## UI / UX Review
-
-The selector title, default label, profile preview, lock explanation for non-Draft records, and no-active-company empty state are clear. The form is responsive by source classes: selector preview uses a wrapping flexible card and print is separate.
-
-Recommended user testing: long Thai address/company strings, a Sales user with only quotations:create, no active profiles, one profile, several profiles, an inactive previously-selected profile, and a saved snapshot after master data changes.
+Code review finds `BrandMark`/sidebar changes documented for wrapping/truncation and Thai fallback fonts (`Noto Sans Thai`) in the styling. No new Dashboard-side typography or sidebar regression was apparent in source. A live visual confirmation could not be performed because the local Node runtime cannot start under the detected WSL1 environment.
 
 ## Empty State Review
 
-With zero active profiles, IssuerCompanySelector.tsx shows a useful empty state instead of fabricated issuer data or a crash. It offers navigation to Company Profiles only when the viewer can see that module. A Draft can still be saved without an issuer, with a visible warning, per the documented workflow decision.
+Per-widget empty states exist for status and Sales Activity when the dashboard itself renders. Filter results with no matching quotations retain the page and show zero KPI values/empty widgets, which is correct. A completely empty business database instead shows only a global empty state, failing the stated requirement to show the four zero KPI values and relevant empty states.
 
 ## Code Quality Review
 
-Strengths:
+Strengths: server-side amount computation, a single central pre-tax normalization path, typed API response contracts, authoritative activity events, and explicit status partition comments.
 
-- Snapshot construction is centralized in resolveIssuerCompanyUpdate().
-- Rendering uses a shared IssuerCompanyDisplay shape, preventing form/print source drift.
-- The client does not duplicate snapshot calculation.
-- Issuer naming is mostly consistent across UI, model, API, and audit fields.
-
-Improvements:
-
-- Extract an explicit fallback resolver that accepts snapshot, issuer id, profile list, default profile, and singleton; test its precedence independently.
-- Remove obsolete prep-only comments from src/lib/quotes.tsx.
-- Consider a lightweight selector DTO to avoid returning stamps/bank account details for list selection.
-- QuoteDocument.tsx remains a large multi-purpose component; issuer resolution could become a focused hook/helper once it grows further.
+Concerns: extremely large `api/dashboard/index.ts` combines authorization, filter resolution, database access, aggregation, business mapping, and response shaping; the code repeats free-text filter composition across quote/audit branches; status/business rules live separately from workflow definitions; and activity analytics does in-memory aggregation of unbounded data. Pre-tax logic is centralized but coupled to a duplicated fixed VAT constant rather than a stored source amount.
 
 ## Documentation Review
 
-Documentation is broadly updated and accurately describes the selector, active-only Sales read access, server-built snapshot, Draft-only issuer changes, print integration, and intentional non-required issuer behavior. The main documentation mismatch is historical wording:
-
-- src/lib/companyProfiles.ts and the beginning of the issuer comment in src/lib/quotes.tsx still say integration is “not yet wired,” while later comments and docs correctly state it is live.
-- docs/MODULES/CompanyProfiles.md has older introductory paragraphs stating no selector/print integration before its later Quotation Integration section; the newer section is correct but the document is internally contradictory.
-- Documentation states snapshot → live profile → legacy singleton but does not call out the absent default-active fallback for partial records.
-
-## Missing Requirements Checklist
-
-- [x] Company profiles can be saved
-- [x] Create Quotation has company selector
-- [x] Default company preselected
-- [x] Multiple active companies selectable
-- [x] Selector uses MongoDB/API data
-- [x] Header preview updates immediately
-- [x] issuerCompanyId saved
-- [x] issuerCompanySnapshot saved
-- [x] Snapshot created server-side
-- [x] Old quotations do not break
-- [x] Old quotations do not unexpectedly change after master company edit
-- [x] PDF/print uses selected company or TODO documented
-- [x] No hardcoded company header
-- [x] No fake company data
-- [x] Sales users can read active companies
-- [x] Sales users cannot manage company profiles
-- [x] APIs enforce RBAC
-- [x] Empty state works
-- [x] Audit logs created
-- [!] Documentation updated
-- [!] Build passes if checked
-
-## Suggested Fix Plan for Claude Code
-
-1. Add and test the missing fallback step: snapshot → referenced live profile → default active profile → legacy singleton plus warning.
-2. Decide whether new Draft quotation creation should require an issuer profile. If it remains optional, make the legacy fallback warning especially prominent and prevent printing/sending if business requires an issuer then.
-3. Create a minimal active-issuer selector response/projection for quotations:create callers, excluding unnecessary stamp/bank payloads unless required by preview.
-4. Expand print layout only if business requires fax, website, branch, English name, or document bank details in the PDF header/footer.
-5. Add integration tests against MongoDB for active/inactive/deleted profile validation, snapshot immutability, Draft-only change, Sales read permissions, and the fallback chain.
-6. Remove stale prep-only wording from source comments and older documentation sections.
+Documentation is extensive and generally matches the current source: it correctly describes the 7% reverse-VAT calculation, current status partition, audit-log source, free-text department join, and rolling activity behavior. It is not fully aligned with the business requirement because several documents call the Dashboard completed while documenting deliberate filter exceptions and omit the impact of the `auditLog:view` gate on the mandatory activity section. The documentation should be corrected after the fixes, not used to waive the requirements.
 
 ## Build Check
 
-Command attempted: npm run lint && npm run build
+Attempted command:
 
-Result:
+```text
+npm run lint && npm run build
+```
 
-    WSL 1 is not supported. Please upgrade to WSL 2 or above.
-    Could not determine Node.js install directory
+Result: neither command started. The environment returned:
 
-Likely cause: local WSL/Node toolchain configuration. This is not a source lint/build result; run it under WSL2, native Windows Node, or CI.
+```text
+WSL 1 is not supported. Please upgrade to WSL 2 or above.
+Could not determine Node.js install directory
+```
+
+Likely cause: the installed Node/npm launcher is incompatible with the WSL1 runtime, not a demonstrated source lint/build failure. Recommended action: run lint/build in WSL2, native Windows, or CI with a supported Node installation.
+
+## Suggested Fix Plan for Claude Code
+
+1. Make Sales Activity Analytics available to every role with `dashboard:view`. Either grant read-only activity aggregation independently of the full Audit Log permission, or add a narrowly scoped dashboard activity permission. Keep raw audit-log access restricted.
+2. Apply the selected date range to activity analytics and its per-salesperson table. If rolling trends remain desirable, expose them as a separate clearly named control rather than overriding the reporting filter.
+3. Change the no-data page behavior: retain the four KPI cards at zero and render Status/Sales Activity empty states for an empty database.
+4. Establish quotation deletion semantics. If soft delete is required, add/standardize the field and add `isDeleted != true` to every Dashboard quote query; otherwise formally update the approved business requirement and imports policy.
+5. Make Expected Sales predicate exact (`isPotentialOpportunity === true`) and add a migration/data validation check for legacy records.
+6. Persist a canonical pre-VAT quotation total at write time; use it as the primary Dashboard source while retaining a documented legacy fallback only where necessary.
+7. Replace free-text salesperson/department matching with IDs and associate each activity with both actor and quotation salesperson/department. Add bounded MongoDB aggregation/indexes for activity periods.
+8. Re-run visual QA with empty data, a date range excluding older activity, Sales User/Viewer/Approver roles, department/salesperson filters, and both desktop/mobile widths.
+9. Update PROJECT_STATUS, API, Dashboard module docs, checklist, and changelog to distinguish fixed requirements from intentional exceptions.
 
 ---
 
-## Claude Fix Status
-
-**Scope of this fix pass**: Critical and High Priority issues related to the Company Profile
-header integration in the Quotation form. This review found **zero Critical** and **zero High
-Priority** issues in that area — every item in "Missing Requirements Checklist" is checked except
-documentation/build, which are addressed below. The only concrete, in-scope code defect was
-**Medium #1** (the fallback-chain gap), which is fixed. The remaining Medium/Low items and the
-"Suggested Fix Plan" items are either explicitly out of this task's scope (full print-layout
-expansion, a hard-required-issuer business decision, integration tests against a live database) or
-left as documented, tracked limitations — see "Remaining issues" below.
+## Claude Fix Status (2026-07-14, fix pass following this review)
 
 ### Fixed
 
-1. **Medium #1 — fallback chain skipped the default active profile.** `QuoteDocument.tsx`'s
-   `issuerDisplay`/`hasIssuerProfile` resolution now tries, in order: (1) the quote's own
-   `issuerCompanySnapshot`, (2) the live profile the quote actually references (if still
-   active/not-deleted), (3) **the default active company profile — newly added** — covering the
-   exact partial-data case this review flagged (an `issuerCompanyId` set with no snapshot, whose
-   referenced profile has since been deactivated/archived), (4) the legacy Settings → Company Info
-   `company` singleton. Both the header band's live preview and `PrintDocument.tsx` (which receives
-   the same resolved `issuerDisplay`) benefit from this fix. Verified via an isolated Playwright
-   preview reproducing the exact scenario (a quote referencing a deactivated profile with no
-   snapshot, alongside a separate default active profile) — the header now correctly shows the
-   default active profile's real data instead of the legacy singleton, and no warning banner is
-   shown (a real, non-fake company was resolved).
-2. **Documentation mismatch — stale "prep only"/"not yet wired" wording.** `src/lib/quotes.tsx`'s
-   `issuerCompanyId` doc comment and `src/lib/companyProfiles.ts`'s `CompanyProfile` doc comment
-   both still described the integration as unbuilt; both now describe the live, wired-in
-   integration. `docs/MODULES/CompanyProfiles.md`'s introductory "Relationship to the `company`
-   singleton" section and its "no Quotation-form UI selects one yet" sentence — both written before
-   the Quotation integration pass but never updated — are corrected to describe the actual,
-   currently-implemented 4-step fallback chain, removing the internal contradiction this review
-   flagged. `docs/MODULES/Quotation.md`'s "Issuer Company" section's fallback-order description
-   updated to include the new default-active-profile step.
+- **Critical #1 — Sales Activity Analytics hidden from non-`auditLog:view` roles.** Fixed. `api/dashboard/index.ts`'s `salesActivity` computation is no longer gated behind `roleHasPermission(ctx.role, "auditLog:view")` — it's now computed unconditionally for any caller who already passed the route's own `requirePermission(req, "dashboard:view")` check, same as every other required-section field. Default `sales_user`/`approver_1`/`approver_2`/`viewer` roles (all `dashboard:view`, none `auditLog:view`) now receive the section. `activityTimeline` ("Recent Activity Details," the raw audit-log feed with full entry text) deliberately **stays** gated by `auditLog:view` — that's a different, more sensitive feature than the aggregate Sales Activity counts, and the review's own suggested fix plan (#1) explicitly says to keep raw audit-log access restricted while freeing the aggregate section. `src/lib/dashboard.ts`'s `DashboardStats.salesActivity` type comment updated to describe the new (effectively always-present) contract; `src/pages/dashboard/DashboardPage.tsx`'s `{salesActivity && ...}` render guard is now a defensive null-check, not a real permission gate.
+- **High #1 — Sales Activity ignores the date-range filter's start.** Fixed. `activityMatch.createdAt` is now bounded by `bangkokDayBoundsUtc(from, to)` when either is set — the exact same pattern `activityTimeline`'s query already used. Selecting a narrow date range (e.g. "Today") now correctly zero-fills periods outside that range instead of silently still scanning full history. `SalesActivityAnalytics.tsx` gained a `dateFiltered` prop (`DashboardPage.tsx` passes `!!stats.filters.from`) that switches the section's caption between the original "rolling trend, not limited by filter's start date" copy (when no `from` is selected) and a new "กรองตามช่วงวันที่ที่เลือก" / "filtered to the selected date range" copy (when one is) — so the caption never claims behavior the query isn't actually doing. `RevenueTrend`'s same documented exception (mentioned in this issue's writeup, not itself the Critical/High-named item) was intentionally left as-is — it's supporting-detail, not the required Sales Activity Analytics section, and changing it wasn't in this pass's explicit scope.
+- **High #2 — No-data behavior hides the required KPI cards.** Fixed. `DashboardPage.tsx` no longer wraps every section in `{!hasAnyData ? <EmptyState/> : (...)}`. The four required KPI cards, Status Summary, Sales Activity Analytics, Recent Activity Details, and all supporting-detail sections now always render (each already has its own per-widget "no data" fallback for a genuinely empty result — unchanged). When `hasAnyData` is false, a compact inline banner ("ยังไม่มีข้อมูลธุรกิจ") renders above the KPI cards instead of replacing the page — communicates the same thing without hiding the required zero-valued KPIs the business spec calls for.
+- **Medium #1 — Expected Sales uses truthy instead of `=== true`.** Fixed. All three `isPotentialOpportunity` predicates in `api/dashboard/index.ts` (`expectedSales` KPI, `salesPerformance[].expectedRevenue`, `forecast`'s `openOpportunities` filter) now use strict `q.isPotentialOpportunity === true` instead of a truthy check, closing the theoretical gap where a stray non-boolean truthy value (e.g. the string `"false"`) on a legacy/externally-written document would have been miscounted.
+- **High #3 — No soft-delete predicate on Dashboard quote queries.** Addressed via the review's own offered alternative resolution, not a code filter: confirmed by grep that `Quote`/`QuoteFields` has **no** `isDeleted`/soft-delete field anywhere in the schema today (`src/lib/quotes.tsx`, `api/_lib/collections.ts`) — quotations are only ever removed from "active" via the `ยกเลิก` (Cancelled) status. Adding a MongoDB filter on a field that can never be set would be dead code implying a deletion feature that doesn't exist, which conflicts with "don't add speculative code for scenarios that can't happen." Documented explicitly instead, as a code comment directly above every Dashboard quote-query match object in `api/dashboard/index.ts` and in DATABASE.md/MODULES/Dashboard.md, with an explicit instruction that every quote query in the file must be updated together if a real soft-delete field is ever introduced.
 
-### Remaining issues (not fixed this pass, with reason)
+### Remaining (not fixed this pass, with reason)
 
-- **Medium #2 (issuer optional on Draft) — not changed, by design.** Already an explicit, documented
-  business decision (this review itself calls it "not a hidden defect"). Changing this to a hard
-  requirement is a product decision outside this task's scope ("do not implement the full
-  multi-company quotation issuing system yet" / header-integration-only task framing) — tracked in
-  TODO.md/MODULES/CompanyProfiles.md "Known Limitations" for a future explicit business decision.
-- **Medium #3 (full Company Profile payload on the selector's list response) — not changed.** The
-  suggested fix ("a lightweight issuer-selector projection") is a real API-shape change beyond
-  "using Company Profile data in the form header," and this task explicitly scoped out further
-  multi-company-system work; today's real scale (a handful of company identities) makes this a
-  performance nicety, not a correctness or security defect. Left for a future pass if profile counts
-  grow.
-- **Medium #4 (header preview is a selector-panel preview, not a persistent document-header band)
-  — not changed.** This describes the on-screen editing UI's existing, intentional layout (a
-  preview card above the customer section, with the navy header band below it also driven by the
-  same resolved `issuerDisplay`); no functional gap was identified, and reworking the layout further
-  risks exactly the "do not redesign unrelated modules" instruction. Flagged as a UX question for
-  real user testing, not a code defect, per the review's own framing.
-- **Low #1/#3 (English-address print variant, no dedicated "get default profile" endpoint) — not
-  changed.** Both are speculative future conveniences, not required by this task or flagged as
-  urgent by the review.
-- **Print layout expansion (fax/website/branch/English name in the PDF) — explicitly not done**,
-  per this task's own instruction ("Do not implement full PDF company switching yet unless Codex
-  explicitly found a safe required fix") — the review itself frames this as "a document-design
-  decision to confirm with business users," not a required fix.
-- **Live-database integration tests (Suggested Fix Plan #5) — not possible.** This session has no
-  network path to MongoDB Atlas (the same sandboxed-environment limitation noted in every prior
-  pass's docs — see PROJECT_STATUS.md "Known Risks"); the local build-check environment itself also
-  reported a WSL1 incompatibility, separate from this constraint.
-- **Cosmetic observation, not from this review**: when a quote's `issuerCompanyId` references a
-  profile no longer present in the active list (the same stale-reference scenario Medium #1
-  addresses), the `<select>`'s bound value has no matching `<option>` — the browser silently shows
-  its first available option instead. This does not corrupt data (the underlying `issuerCompanyId`
-  state is untouched and nothing is resent on save unless the user explicitly changes the
-  selection), and was not flagged by this review; noted here for a future pass, not fixed now to
-  keep this pass scoped to the reported findings.
+- **Medium #2 — Pre-tax reconstructed from `amount / 1.07` rather than a persisted pre-tax field.** Not changed. The review itself confirms this is correct for all current data (no intermediate rounding, `VAT_RATE` always a fixed 7%). Persisting a canonical `subtotal`/`amountBeforeVat` field at write time is a schema migration (new field, backfill for existing quotes, write-path changes in `api/handlers/quotes.ts`/`quoteValidation.ts`) — out of scope for a Dashboard-focused fix pass and not flagged Critical/High. Tracked in TODO.md.
+- **Medium #3 — Free-text salesperson/department matching, actor- vs. quotation-based activity attribution.** Not changed. This is a pre-existing, already-documented data-model limitation (see MODULES/Dashboard.md "Data-model caveats") that predates this review; fixing it needs a real `User.id`-referencing `salespersonId`/`departmentId` on `Quote` and on audit-log entries — a schema change affecting the Quotation module, not a Dashboard-only fix, and explicitly out of this pass's "do not redesign unrelated modules" instruction.
+- **Medium #4 — Unbounded audit-log read for activity analytics.** Partially improved as a side effect of the High #1 fix (the query is now bounded by `createdAt` whenever a date filter is selected), but remains unbounded when no filter is applied (the default view) — same as `revenueTrend`'s existing rolling-window convention. A hard floor (e.g. cap at the widest displayed window, 5 years) wasn't added this pass since it changes default-view behavior beyond what the review flagged as Critical/High.
+- **Low #1/#2 — `fmtShort()` compact number formatting, status-grouping constants embedded in Dashboard code.** Not changed — both Low Priority, cosmetic/architectural preferences, not correctness issues, and out of this pass's Critical/High-first scope.
 
 ### Files changed
 
-- `src/pages/quotation/QuoteDocument.tsx` — added the default-active-profile fallback step to
-  `issuerDisplay`/`hasIssuerProfile`; corrected a stale doc-comment cross-reference.
-- `src/lib/quotes.tsx` — rewrote the `issuerCompanyId` doc comment (removed "prep only, not yet
-  wired" wording).
-- `src/lib/companyProfiles.ts` — rewrote the `CompanyProfile` interface's doc comment (removed "no
-  Quotation-form UI selects one yet" wording).
-- `docs/MODULES/CompanyProfiles.md` — corrected the introductory "master-data management only" /
-  "Relationship to the `company` singleton" sections; expanded the "Display resolution" fallback
-  description to the full 4-step chain.
-- `docs/MODULES/Quotation.md` — expanded the "Issuer Company" section's fallback-order description
-  to match.
-- `docs/CLAUDE.md`, `docs/PROJECT_STATUS.md`, `docs/CHANGELOG.md`, `docs/TODO.md`,
-  `docs/DATABASE.md`, `docs/API.md`, `docs/UI_GUIDELINES.md`, `docs/IMPLEMENTATION_CHECKLIST.md` —
-  updated to record this fix pass (see each file's latest dated entry).
+`api/dashboard/index.ts`, `src/lib/dashboard.ts`, `src/pages/dashboard/DashboardPage.tsx`, `src/pages/dashboard/SalesActivityAnalytics.tsx`, `src/lib/i18n.tsx`. Docs: this file, CLAUDE.md, PROJECT_STATUS.md, CHANGELOG.md, TODO.md, DATABASE.md, API.md, UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/Dashboard.md.
+
+### Pre-tax calculation fields used
+
+Unchanged from the prior pass (this review found it correct): `preTaxAmount(amount) = amount / (1 + VAT_RATE/100)`, `VAT_RATE = 7`, applied to `docs[].amount` once after fetch (covering all KPI/pipeline/salesPerformance/customerAnalytics/jobTypeAnalytics/forecast/`approvalDashboard.pendingList` derivations) plus explicitly at `revenueTrend`'s won-quote scan and `followUps`' read site.
 
 ### Build result
 
-`npx tsc -b` — clean. `npx tsc --noEmit -p tsconfig.api.json` — clean. `npm run lint` — clean (2
-pre-existing `react-refresh/only-export-components` warnings in `src/lib/i18n.tsx`, unrelated to
-this change, 0 errors). `npm run build` — clean, all chunks emitted successfully.
+`tsc --noEmit -p tsconfig.json` — clean. `tsc --noEmit -p tsconfig.api.json` — clean. `npm run lint` — clean (2 pre-existing, unrelated warnings in `src/lib/i18n.tsx` about fast-refresh export granularity). `npm run build` — clean, `dist/` produced successfully.
 
 ### Manual test result
 
-No live-database walkthrough was possible in this sandboxed session (no network path to MongoDB
-Atlas — same constraint noted throughout this report and PROJECT_STATUS.md "Known Risks"). Verified
-instead via an isolated Playwright preview (`preview.html` + `src/previewMain.tsx`, deleted after
-use per this project's established verification pattern) mounting the real `QuoteDocument`
-component with mock data reproducing the exact Medium #1 scenario: a quote whose `issuerCompanyId`
-references a deactivated Company Profile with no `issuerCompanySnapshot`, alongside a separate
-default active profile. Confirmed at both 1440px and 390px: the header preview and the navy
-document-header band both correctly display the **default active profile's** real data (not the
-legacy singleton, not fabricated data), no warning banner is shown, the customer-information form
-below the header renders and accepts input normally, and no layout overflow or console errors occur
-(aside from a harmless missing-favicon 404).
+This sandboxed session has no live MongoDB path (`.env.local` has no `MONGODB_URI`; no Vercel CLI installed to `vercel env pull` one) — same limitation this review itself hit ("WSL 1 is not supported... Could not determine Node.js install directory" — a different but equally blocking environment issue on the review's own side). Verified instead via a temporary, isolated Playwright preview harness (`src/devPreview.tsx` + `dashboard-preview.html`, deleted after use) that specifically targeted this review's findings: rendered `ExecutiveSummaryCards`/`QuotationStatusSummary`/`SalesActivityAnalytics` together under a "simulating a Sales User (dashboard:view only, not auditLog:view)" label to confirm Sales Activity Analytics now renders in that scenario (previously it would have been `null`/hidden); rendered `SalesActivityAnalytics` twice with `dateFiltered={false}` and `dateFiltered={true}` to confirm the caption text correctly switches; rendered the new compact empty-state banner markup to confirm it's a small inline element, not a full-page block. All four rendered correctly with zero console errors. This confirms the **UI/permission-gate logic**; the actual MongoDB query bounding (`activityMatch.createdAt`) is verified by code review and `tsc`, not independently exercised against a real audit-log dataset — a live-database pass should confirm a real date-range selection actually narrows the returned activity counts.
+
+### What Codex should review next
+
+1. Confirm against a real deployment that selecting a narrow date range (e.g. "Today") on Sales Activity Analytics now shows genuinely reduced/zero activity for older periods, not just that the UI caption changed.
+2. Confirm a Sales User/Approver/Viewer-role login now actually sees the Sales Activity Analytics section end-to-end (this pass verified the underlying permission logic and component rendering in isolation, not a full authenticated session as those specific roles).
+3. Re-assess whether the remaining Medium items (persisted pre-tax field, ID-based salesperson/department matching, bounded activity-log aggregation) should be scheduled as their own follow-up passes, given they were confirmed correct-for-current-data but architecturally fragile.
+4. Verify the empty-state banner reads correctly at mobile width (390px) — not visually checked this pass beyond the default preview viewport.
