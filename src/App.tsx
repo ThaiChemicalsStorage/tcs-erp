@@ -223,6 +223,9 @@ export default function App() {
   const [customerDeepLinkId, setCustomerDeepLinkId] = useState<string | null>(null);
   const [productDeepLinkId, setProductDeepLinkId] = useState<string | null>(null);
   const [userDeepLinkId, setUserDeepLinkId] = useState<string | null>(null);
+  /** Set by a Global Search "Template ใบเสนอราคา" result click — opens the Create Quotation
+   * wizard with this Job Type + Template preselected (see QuotationTemplateWizard.tsx). */
+  const [quotationTemplateDeepLink, setQuotationTemplateDeepLink] = useState<{ jobTypeCode: string; templateId: string } | null>(null);
   /** Set by a Global Search "page action" result (e.g. "Create Quotation," "Product Categories")
    * — `seq` is a monotonic sequence number, not a boolean, so the same result clicked twice in a
    * row still re-fires on the target page (see CustomersPage/ProductsPage's `autoCreateSeq`/
@@ -376,6 +379,10 @@ export default function App() {
   const navigateToUser = (userId: string) => {
     setUserDeepLinkId(userId);
     setActiveNav("users");
+  };
+  const navigateToTemplate = (jobTypeCode: string, templateId: string) => {
+    setQuotationTemplateDeepLink({ jobTypeCode, templateId });
+    setActiveNav("quotations");
   };
   /** `navKey` arrives from Global Search as a plain string (see `SearchPageResult` in
    * src/lib/search.ts) — validated against the known `NavKey` union here, at the one place a
@@ -581,6 +588,7 @@ export default function App() {
             onNavigateToProduct={navigateToProduct}
             onNavigateToUser={navigateToUser}
             onNavigateToPage={navigateToPage}
+            onNavigateToTemplate={navigateToTemplate}
           />
           <div data-tour="notification-bell" className="flex-shrink-0">
             <NotificationBell
@@ -655,7 +663,7 @@ export default function App() {
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} onNotify={refreshNotifications} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} onNotify={refreshNotifications} />
               : effectiveNav === "customers"
               ? <CustomersPage customers={customers} onCustomersChange={setCustomers} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} initialEditId={customerDeepLinkId} onEditIdConsumed={() => setCustomerDeepLinkId(null)} autoCreateSeq={pageAction?.nav === "customers" && pageAction.action === "create" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "settings"

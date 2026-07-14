@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Search, FileText, Contact, Package, Menu as MenuIcon, Users as UsersIcon,
+  Search, FileText, Contact, Package, Menu as MenuIcon, Users as UsersIcon, Layers,
   Loader2, AlertTriangle, RotateCw, X,
 } from "lucide-react";
-import { fetchGlobalSearch, type SearchResults, type SearchQuotationResult, type SearchCustomerResult, type SearchProductResult, type SearchPageResult, type SearchUserResult } from "../lib/search";
+import { fetchGlobalSearch, type SearchResults, type SearchQuotationResult, type SearchCustomerResult, type SearchProductResult, type SearchTemplateResult, type SearchPageResult, type SearchUserResult } from "../lib/search";
 import { statusLabelKey } from "../lib/quotes";
 import { useI18n } from "../lib/i18n";
 
@@ -24,6 +24,7 @@ type FlatItem =
   | { type: "quotation"; data: SearchQuotationResult }
   | { type: "customer"; data: SearchCustomerResult }
   | { type: "product"; data: SearchProductResult }
+  | { type: "template"; data: SearchTemplateResult }
   | { type: "page"; data: SearchPageResult }
   | { type: "user"; data: SearchUserResult };
 
@@ -84,12 +85,18 @@ export function GlobalSearch({
   onNavigateToProduct,
   onNavigateToUser,
   onNavigateToPage,
+  onNavigateToTemplate,
 }: {
   onNavigateToQuotation: (id: string) => void;
   onNavigateToCustomer: (id: string) => void;
   onNavigateToProduct: (id: string) => void;
   onNavigateToUser: (id: string) => void;
   onNavigateToPage: (navKey: string, action?: "create" | "categories") => void;
+  /** Opens the Create Quotation wizard with this template's Job Type + Template preselected (see
+   * `QuotationTemplateWizard.tsx`'s `initialSelection` prop) rather than just its preview — a
+   * Sales user searching for "Wet Scrubber" almost always wants to start a quotation from it, not
+   * merely look at it. */
+  onNavigateToTemplate: (jobTypeCode: string, templateId: string) => void;
 }) {
   const { t, lang } = useI18n();
   const [query, setQuery] = useState("");
@@ -154,6 +161,7 @@ export function GlobalSearch({
       ...results.quotations.map((data): FlatItem => ({ type: "quotation", data })),
       ...results.customers.map((data): FlatItem => ({ type: "customer", data })),
       ...results.products.map((data): FlatItem => ({ type: "product", data })),
+      ...results.templates.map((data): FlatItem => ({ type: "template", data })),
       ...results.pages.map((data): FlatItem => ({ type: "page", data })),
       ...results.users.map((data): FlatItem => ({ type: "user", data })),
     ];
@@ -168,9 +176,10 @@ export function GlobalSearch({
     const quotations = o; o += r?.quotations.length ?? 0;
     const customers = o; o += r?.customers.length ?? 0;
     const products = o; o += r?.products.length ?? 0;
+    const templates = o; o += r?.templates.length ?? 0;
     const pages = o; o += r?.pages.length ?? 0;
     const users = o;
-    return { quotations, customers, products, pages, users };
+    return { quotations, customers, products, templates, pages, users };
   }, [results]);
 
   // Active row scroll-into-view (Codex review Medium fix) — harmless no-op for whichever panel
@@ -192,6 +201,7 @@ export function GlobalSearch({
     if (item.type === "quotation") onNavigateToQuotation(item.data.id);
     else if (item.type === "customer") onNavigateToCustomer(item.data.id);
     else if (item.type === "product") onNavigateToProduct(item.data.id);
+    else if (item.type === "template") onNavigateToTemplate(item.data.jobTypeCode, item.data.id);
     else if (item.type === "user") onNavigateToUser(item.data.id);
     else onNavigateToPage(item.data.navKey, item.data.action);
     setOpen(false);
@@ -328,6 +338,15 @@ export function GlobalSearch({
                 <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0"><Highlight text={item.code} query={trimmedQuery} /></span>
               </div>
               <p className="text-[11px] text-muted-foreground truncate">{item.categoryName} · {item.unit}</p>
+            </button>
+          ))}
+          {renderGroup<SearchTemplateResult>(idPrefix, t("search.group.templates"), <Layers size={11} />, results?.templates ?? [], groupOffsets.templates, (item, isActive, id, onClick) => (
+            <button id={id} role="option" aria-selected={isActive} className={rowCls(isActive)} onClick={onClick}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium text-foreground truncate"><Highlight text={item.templateName} query={trimmedQuery} /></p>
+                <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0"><Highlight text={item.jobTypeCode} query={trimmedQuery} /></span>
+              </div>
+              <p className="text-[11px] text-muted-foreground truncate">{item.jobTypeName}{item.description && ` · ${item.description}`}</p>
             </button>
           ))}
           {renderGroup<SearchPageResult>(idPrefix, t("search.group.pages"), <MenuIcon size={11} />, results?.pages ?? [], groupOffsets.pages, (item, isActive, id, onClick) => (

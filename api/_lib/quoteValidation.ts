@@ -92,6 +92,11 @@ function sanitizeLine(raw: unknown, index: number): QuoteFields["lines"][number]
     specifications: sanitizeText(r.specifications, `ข้อกำหนดของรายการที่ ${index + 1}`, MAX_LINE_TEXT),
     tags,
     subDetails,
+    // Optional, defaults falsy — added 2026-07-14 for Quotation Templates' section-header lines
+    // (see docs/MODULES/QuotationTemplates.md). No special validation beyond "must be a real
+    // boolean if present": a header line is still a completely ordinary QuoteLine otherwise, so
+    // its qty/unitPrice/discount/etc. go through the exact same checks as any other line.
+    isSectionHeader: sanitizeBoolean(r.isSectionHeader, `ประเภทหัวข้อของรายการที่ ${index + 1}`),
   };
 }
 
@@ -126,6 +131,38 @@ export function validateJobType(
   const match = jobTypes.find((j) => j.code === code);
   if (!match) throw new HttpError(400, "ประเภทงานไม่ถูกต้อง กรุณาเลือกจากรายการที่กำหนด");
   return { jobTypeCode: match.code, jobTypeName: match.name };
+}
+
+/**
+ * Server-authoritative Quotation Template reference (added 2026-07-14) — same pattern as
+ * `validateJobType()` above: the client-supplied `quotationTemplateId` must match a real,
+ * non-deleted `quotation_templates` record, and `quotationTemplateName`/`quotationTemplateVersion`
+ * are always re-derived from that record rather than trusted from the client. Deliberately allows
+ * a currently-*inactive* template match (an Admin may have deactivated it moments after a Sales
+ * user started their draft) — only `isDeleted` disqualifies it, since a template someone actually
+ * started building a quote from should never suddenly become an invalid reference mid-save. Never
+ * `required`: a quote can always be started blank ("เริ่มจากใบเสนอราคาเปล่า"), no template needed.
+ *
+ * `quoteJobTypeCode` is the quote's OWN already-validated `jobTypeCode` (from `validateJobType()`
+ * above, called first at every call site) — 2026-07-14, Codex review High Priority fix: previously
+ * the template's `jobTypeCode` was never compared against the quote's, so a direct API caller
+ * (bypassing the wizard's UI-level guardrails) could create e.g. a TA quotation carrying LI
+ * template provenance. A template match whose `jobTypeCode` disagrees is now rejected outright,
+ * the same way an unrecognized id is.
+ */
+export function validateQuotationTemplate(
+  quotationTemplateId: unknown,
+  templates: { id: string; templateName: string; version: string; jobTypeCode: string; isDeleted: boolean }[],
+  quoteJobTypeCode: string,
+): { quotationTemplateId: string; quotationTemplateName: string; quotationTemplateVersion: string } {
+  const id = sanitizeText(quotationTemplateId, "Template ใบเสนอราคา", 100, false);
+  if (!id) return { quotationTemplateId: "", quotationTemplateName: "", quotationTemplateVersion: "" };
+  const match = templates.find((t) => t.id === id && !t.isDeleted);
+  if (!match) throw new HttpError(400, "Template ใบเสนอราคาไม่ถูกต้อง กรุณาเลือกจากรายการที่กำหนด");
+  if (match.jobTypeCode !== quoteJobTypeCode) {
+    throw new HttpError(400, "Template ใบเสนอราคาไม่ตรงกับประเภทงานที่เลือก กรุณาเลือกใหม่");
+  }
+  return { quotationTemplateId: match.id, quotationTemplateName: match.templateName, quotationTemplateVersion: match.version };
 }
 
 export function sanitizeShortText(v: unknown, fieldLabel: string, required = false): string {

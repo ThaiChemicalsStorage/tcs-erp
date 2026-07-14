@@ -94,8 +94,21 @@ search sessions.
   ERP-wide function. Ctrl/Cmd+K now checks `window.matchMedia("(min-width: 1024px)")` to decide
   which of the two UIs to open, so the shortcut is never a no-op regardless of viewport width.
 
-Debounced 300ms; results are grouped under headings (ใบเสนอราคา / ลูกค้า / สินค้า / เมนู /
-ผู้ใช้งาน, in that order), each capped at 5 rows. **Previous results stay visible during a
+**2026-07-14, second same-day addition — Quotation Templates group.** A new "Template ใบเสนอราคา" /
+"Quotation Templates" result group (`api/_lib/searchHandler.ts`'s `searchTemplates()`) slots into
+the same grouped results list, matched against `templateCode`/`templateName`/`jobTypeCode`/
+`jobTypeName`/`description` (e.g. "Wet Scrubber", "Activated Carbon", "Bag Filter", "FRP Tank",
+"FRP Lining", or a Job Type code like "SC"/"TA"). Only active, non-deleted templates are ever
+returned. Clicking a result opens the Create Quotation wizard (see "Create Quotation Wizard"
+below) with that Job Type + Template preselected, jumping straight to the wizard's Preview step
+instead of the normal Step 1 Job Type grid — a different deep-link shape than every other search
+category here, since a template result's natural destination is "preview this template," not "edit
+this record." Falls back gracefully to the normal Step 1 grid if the template or its Job Type is no
+longer valid (deleted/deactivated) by the time the link is followed. See
+[MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Global Search Integration."
+
+Debounced 300ms; results are grouped under headings (ใบเสนอราคา / ลูกค้า / สินค้า / Template
+ใบเสนอราคา / เมนู / ผู้ใช้งาน, in that order), each capped at 5 rows. **Previous results stay visible during a
 refetch** — only a small `Loader2` spinner appears next to the input (replacing the `Ctrl K` hint
 badge on desktop) — never a blank flash between keystrokes, same "keep prior data visible while
 loading" principle as Dashboard filter changes (see Progressive/Shell-First Loading below).
@@ -211,6 +224,53 @@ served (and, later the same week, the entire admin module behind it) were remove
 ordering from most-specific-still-real to least-specific, empty-state-replaces-picker-when-zero-records,
 non-hidden-but-disabled-with-a-reason for a locked selection) remains good guidance for any *other*
 future reference-picker that also needs a live preview panel, not just autofill-then-edit.
+
+### Create Quotation Wizard (`QuotationTemplateWizard.tsx`, added 2026-07-14)
+Clicking "สร้างใบเสนอราคา / Create Quotation" now opens a dynamic-step wizard instead of jumping
+straight to a blank document — Job Type (always step 1) → Template choice (only shown when the
+selected Job Type has 2+ active templates — today, only SC) → Preview → the normal quotation form,
+pre-filled but still fully editable. See [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)
+for the full business flow and the Job Type → Template mapping.
+
+**Same overlay/step-flow visual language as the rest of the app** — no new modal/dialog pattern was
+introduced. Each screen reuses existing card/grid/button conventions (Cards, Buttons above) rather
+than inventing wizard-specific chrome. Four screen states, one per step:
+- **Job Type grid**: a card grid of active Job Types, same card hover treatment as elsewhere.
+- **Template choice** (SC only today): shown only when 2+ active templates exist for the selected
+  Job Type — every other mapped Job Type has exactly one template and **auto-advances straight to
+  Preview**, skipping this screen entirely so a single-template Job Type never makes the user click
+  through a pointless one-option "choice."
+- **Empty state** (a Job Type with zero templates): reuses `EmptyState.tsx`'s pattern (icon, title,
+  one-line explanation) with three explicit next-step buttons — "เริ่มจากใบเสนอราคาเปล่า" (start
+  blank), "เลือกประเภทงานอื่น" (pick a different Job Type), "แจ้งผู้ดูแลระบบ" (shows a toast, no
+  backend call — there's no ticketing system to actually notify anyone).
+- **Error state** (a failed template fetch): short Thai message + a "ลองใหม่" retry button, same
+  retry-affordance convention used elsewhere in this app (Global Search's failed-request state,
+  `SectionLoading`'s `error` prop).
+- **Preview**: Job Type/template name/description, a section list with per-section item counts,
+  total counts, source file/sheet name, version, and the first 6 included item names — enough for a
+  Sales user to confirm "this is the right template" without opening the full quotation form first.
+  "ย้อนกลับ" (back), "ใช้ Template นี้" (apply), and "เริ่มจากแบบฟอร์มเปล่า" (start blank, always
+  available regardless of whether a template exists) are the only three actions.
+
+**Always an escape hatch to the old blank-form flow.** "เริ่มจากแบบฟอร์มเปล่า"/"เริ่มจากใบเสนอราคาเปล่า"
+appears on every screen that could otherwise dead-end a user (the empty state and the Preview
+screen) — the wizard is additive, never a mandatory extra step standing between a Sales user and a
+quotation they don't want a template for.
+
+### Section-Header Lines (Quotation editor + print, added 2026-07-14)
+A `QuoteLine` can be `isSectionHeader: true` (copied from a `QuotationTemplate` section's title when
+a quotation is created from a template — see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)
+"Section-Header Rendering"). Renders as a **full-width bold divider row**, not an ordinary priced
+line — no unit/qty/price/discount inputs/columns at all — in both `LineItemsEditor.tsx` (marked
+with a "§" glyph instead of a line number) and `PrintDocument.tsx` (a full-width `colSpan={7}` bold
+row). Item numbering ("No." column) in both places **skips section headers entirely**, so a
+template-seeded quotation's visible numbering stays a clean 1, 2, 3... instead of leaving gaps at
+each divider. A section header with no items left under it (e.g. every item beneath it was deleted
+but the header itself was kept) is silently omitted from the printed PDF — an empty section heading
+on a real customer document reads as a mistake, not intentional structure, so it's dropped rather
+than printed blank. If you build a future template/section-style feature, follow this same
+"skip-in-numbering, omit-if-empty-in-print" pair rather than inventing a new convention.
 
 ### Progressive/Shell-First Loading (App boot + Dashboard, added 2026-07-14, reworked the same day
 after an independent Codex review's High Priority findings)

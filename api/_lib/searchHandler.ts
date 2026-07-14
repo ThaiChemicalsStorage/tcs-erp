@@ -3,7 +3,7 @@ import { HttpError } from "./http.js";
 import { requireUser, type AuthContext } from "./auth.js";
 import {
   quotesCollection, customersCollection, productsCollection, categoriesCollection,
-  usersCollection, rolesCollection, withStringId, type QuoteFields,
+  usersCollection, rolesCollection, quotationTemplatesCollection, withStringId, type QuoteFields,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
@@ -141,10 +141,25 @@ export interface SearchUserResult {
   status: string;
 }
 
+/** "Template ใบเสนอราคา" result group (added 2026-07-14) — see docs/MODULES/QuotationTemplates.md
+ * "Global Search Integration." Only `templateCode`/`templateName`/`jobTypeCode`/`jobTypeName`/
+ * `description` are projected — `sections`/`internalNotes` never leave the server for this
+ * endpoint, so an internal review comment buried in a template can never surface in search
+ * results even indirectly. */
+export interface SearchTemplateResult {
+  id: string;
+  templateCode: string;
+  templateName: string;
+  jobTypeCode: string;
+  jobTypeName: string;
+  description: string;
+}
+
 export interface SearchResults {
   quotations: SearchQuotationResult[];
   customers: SearchCustomerResult[];
   products: SearchProductResult[];
+  templates: SearchTemplateResult[];
   pages: SearchPageResult[];
   users: SearchUserResult[];
 }
@@ -275,6 +290,29 @@ async function searchUsers(query: string): Promise<SearchUserResult[]> {
   });
 }
 
+async function searchTemplates(query: string): Promise<SearchTemplateResult[]> {
+  const templates = await quotationTemplatesCollection();
+  const rx = containsRegex(query);
+  const docs = await templates.find(
+    {
+      isDeleted: false,
+      // Only active templates are ever offered as a new-quotation starting point — a deactivated
+      // template shouldn't show up as something a Sales user can pick from search either.
+      isActive: true,
+      $or: [{ templateCode: rx }, { templateName: rx }, { jobTypeCode: rx }, { jobTypeName: rx }, { description: rx }],
+    },
+    {
+      projection: { templateCode: 1, templateName: 1, jobTypeCode: 1, jobTypeName: 1, description: 1 },
+      sort: { templateName: 1 },
+      limit: RESULT_LIMIT,
+    },
+  ).toArray();
+  return docs.map((d) => {
+    const { id, templateCode, templateName, jobTypeCode, jobTypeName, description } = withStringId(d);
+    return { id, templateCode, templateName, jobTypeCode, jobTypeName, description };
+  });
+}
+
 function searchPages(query: string, ctx: AuthContext): SearchPageResult[] {
   const q = query.toLowerCase();
   return SEARCHABLE_PAGES
@@ -309,16 +347,21 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
     console.error("[search] ensureSearchIndexes failed", err);
   }
 
-  const [quotationResults, customerResults, productResults, userResults] = await Promise.all([
+  const [quotationResults, customerResults, productResults, templateResults, userResults] = await Promise.all([
     roleHasPermission(ctx.role, "quotations:view") ? searchQuotations(query) : Promise.resolve([]),
     roleHasPermission(ctx.role, "customers:view") ? searchCustomers(query) : Promise.resolve([]),
     roleHasPermission(ctx.role, "products:view") ? searchProducts(query) : Promise.resolve([]),
+    // Same read gate as browsing templates while creating a quotation (quotationTemplatesHandler.ts)
+    // — a Sales user with only quotations:create, no quotationTemplates:manage, can still find them.
+    (roleHasPermission(ctx.role, "quotations:create") || roleHasPermission(ctx.role, "quotationTemplates:manage"))
+      ? searchTemplates(query) : Promise.resolve([]),
     roleHasPermission(ctx.role, "users:manage") ? searchUsers(query) : Promise.resolve([]),
   ]);
   const pages = searchPages(query, ctx);
 
   const results: SearchResults = {
-    quotations: quotationResults, customers: customerResults, products: productResults, pages, users: userResults,
+    quotations: quotationResults, customers: customerResults, products: productResults,
+    templates: templateResults, pages, users: userResults,
   };
   res.status(200).json(results);
 }

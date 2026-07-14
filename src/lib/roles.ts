@@ -45,6 +45,7 @@ export const defaultRoles: Role[] = [
       "customers:create",
       "customers:edit",
       "customers:archive",
+      "quotationTemplates:manage",
     ],
     isSuperAdmin: false,
     isSystem: true,

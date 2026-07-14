@@ -4,6 +4,231 @@
 
 ---
 
+## 2026-07-14 — Quotation Templates: Codex review fix pass (3 High Priority)
+
+An independent Codex review (`docs/CODEX_REVIEW_REPORT.md`, "Quotation Templates by Job Type and
+Excel Import Audit") of the Quotation Templates feature below found **0 Critical issues** and
+**3 High Priority** issues, all fixed this pass.
+
+### High Priority #1 — Template Job Type not server-bound to the quote's Job Type
+
+`POST /api/quotes` validated `jobTypeCode` and `quotationTemplateId` completely independently —
+nothing compared the two, so a direct API caller bypassing the wizard's UI-level guardrails could
+create e.g. a `TA` (FRP Tank) quotation carrying `LI-FRP-LINING` template provenance. Fixed:
+`TemplateMasterEntry`/`loadTemplateMaster()` (`api/handlers/quotes.ts`) now also project/return
+each template's `jobTypeCode`; `validateQuotationTemplate()` (`api/_lib/quoteValidation.ts`)
+gained a required 3rd parameter, `quoteJobTypeCode: string` (the quote's own already-validated Job
+Type — `validateJobType()` always runs first at the same call site), and throws `HttpError(400,
+"Template ใบเสนอราคาไม่ตรงกับประเภทงานที่เลือก กรุณาเลือกใหม่")` when the matched template's
+`jobTypeCode` differs. Enforced only on `POST /api/quotes` — template attachment is create-only,
+already structurally impossible to change via `PATCH`.
+
+### High Priority #2 — Missing Excel source content in 2 of the 5 templates
+
+Both `SC-ACTIVATED-CARBON` and `BF-BAG-FILTER`'s "Main Ducting" item were missing a real source
+specification line — `"Exhaust Duct, Elbow, Flange, Damper and accessories"` (row 5 of both the
+"Activated carbon" and "Bag filter" sheets in
+`public/Scope of work new template for air pollution control_Technic.xlsx`), immediately before
+the existing "Stack"/"Ladder, safety ring & platform"/"Sampling port according to Thai law ?"
+lines that were already present. Re-verified directly against the source workbook (not just
+trusted from the review's paraphrase) before fixing. Fixed: added as the first entry in each
+template's "Main Ducting" item `specifications` array, in `api/_lib/templateSeedData.ts`, matching
+the source's row order.
+
+### High Priority #3 — Real source literal values silently discarded when a template was applied
+
+The seed data stored several real, non-placeholder source values (`Brand: TCS`,
+`Material: Steel`, `Brand: TCS or equivalent`, `Static Pressure: 200 mm wg.`,
+`Brand: Kruger or equivalent` — 9 occurrences total, all confined to `SC-ACTIVATED-CARBON` and
+`BF-BAG-FILTER`) inside `TemplateEditableParameter.value`. But `applyTemplateToQuoteDraft()`
+(`src/pages/quotation/applyTemplate.ts`) always renders every editable parameter as a blank
+`"Label: ______"` prompt regardless of `value` — so these real workbook defaults were silently
+lost the moment a template was applied to a quotation, contradicting
+`TemplateEditableParameter.value`'s own interface doc comment ("is always blank at
+template-definition time") in `src/lib/quotationTemplates.ts`. Fixed: rather than changing
+`applyTemplateToQuoteDraft()`'s "value is always blank" data-model contract, all 9 real-valued
+entries were reclassified from `editableParameters` to `specifications` (plain `"Label: value"`
+text) in `api/_lib/templateSeedData.ts` — matching a classification rule the file's own top-of-file
+doc comment already stated but the original seed data violated. `TemplateEditableParameter.value`
+is now verified genuinely always blank across all 5 templates, and the real Brand/Material/
+Static-Pressure defaults now survive into the applied quotation as ordinary editable specification
+text (via the existing `SpecificationsEditor` in `LineItemsEditor.tsx`) instead of being discarded.
+
+### Not changed (remaining Medium/Low items, explicitly out of scope — task was "fix Critical/High," 0 Critical found)
+
+- `POST /api/quotation-templates/import` still upserts the hand-transcribed `QUOTATION_TEMPLATE_SEEDS` TypeScript data and hashes canonical seed JSON — doesn't parse/hash the `.xlsx` file itself.
+- No admin UI exists yet for triggering import/viewing the report/activating templates.
+- The quote's template snapshot is flattened `QuoteLine[]` metadata, not a full structured `TemplateSection`/`TemplateItem` hierarchy snapshot.
+- The import loop is find-then-insert/update rather than a single atomic MongoDB upsert (the unique `templateCode` index still prevents an actual duplicate).
+- Template preview still shows only the first 6 item names; verbatim vs. normalized source text isn't preserved separately.
+
+### Build/verification
+
+`npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, and `npm run build` all pass
+clean. Seed data changes verified via a `tsx` sanity script run against the actual template
+objects. No live MongoDB/browser verification (same sandboxed-session network limitation as every
+prior pass). Docs updated: CLAUDE.md, PROJECT_STATUS.md, this file, TODO.md, DATABASE.md, API.md,
+IMPLEMENTATION_CHECKLIST.md. See `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status" section.
+
+---
+
+## 2026-07-14 — Quotation Templates + Create Quotation wizard
+
+Business requirement (P'Suki/P'Keng): when a Sales user clicks "สร้างใบเสนอราคา / Create
+Quotation," they now go through a wizard — Job Type → Template (only when 2+ active templates
+exist for that Job Type) → Preview → the normal quotation form, pre-filled but still fully
+editable — instead of always starting blank. Template content was extracted from a real Excel
+workbook the company provided
+(`public/Scope of work new template for air pollution control_Technic.xlsx`), not invented.
+
+### Job Type → Template mapping (5 templates from 4 source sheets)
+
+- **SC** (Wet Scrubber / Activated Carbon System) — two templates, the only Job Type where the
+  wizard's template-choice screen actually appears: `SC-WET-SCRUBBER` "Wet Scrubber" (sheet "Wet
+  scrubber," 66 rows, 2 sections/28 items/14 editable parameters/1 internal note/6 default term
+  lines) and `SC-ACTIVATED-CARBON` "Activated Carbon" (sheet "Activated carbon," 51 rows, 1
+  section/18 items/21 editable parameters/0 internal notes/6 default term lines).
+- **BF** (Dust Collector System) — `BF-BAG-FILTER` "Bag Filter" (sheet "Bag filter," 46 rows, 1
+  section/17 items/16 editable parameters/0 internal notes/6 default term lines; the sheet's BOQ
+  title literally says "Dust Collector System," intentional per the task spec, not a mismatch).
+  Auto-selected — no template-choice screen for a Job Type with exactly one template.
+- **TA** (Fiberglass Tank) — `TA-FRP-TANK` "FRP Tank" (sheet "FRP Tank and LI," rows 22–48 only, 1
+  section/17 items/12 editable parameters/1 internal note/1 default term line). Auto-selected.
+- **LI** (FRP Lining) — `LI-FRP-LINING` "FRP Lining" (the *same* sheet "FRP Tank and LI," rows 0–21
+  only — row 22's "FRP Tank" heading is the exact split point, deliberately never mixed with the
+  FRP Tank rows — 1 section/17 items/5 editable parameters/2 internal notes/1 default term line).
+  Auto-selected.
+- Any other active Job Type (no template) falls back to an empty-state screen offering "เริ่มจาก
+  ใบเสนอราคาเปล่า" (start blank).
+
+### Excel row classification rules
+
+Documented in [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) so a future
+re-import follows the same rules: `section` (text-only row, no No./Qty/Unit), `item` (top-level
+No.), `subItem` ("N.M" numbering — in the No. column or embedded in the description text — or an
+unnumbered row with its own real Qty/Unit), `specification` (any other loose descriptive line),
+`editableParameter` (a "Label : value" line whose value is a placeholder like `xxx`/blank/a bare
+unit token — becomes a fill-in-the-blank `{label, value: "", unit, editable: true}`, never a
+fabricated value), `internalNote` (real internal-staff review comments — flagged
+`visibleToCustomer: false`, **never** copied into a quotation or printed; exactly 3 exist across
+the whole workbook), `paymentTerm`/`warrantyTerm`/`taxNote` (→ `defaultTerms`, not regular items).
+The recurring phrase "Sampling port according to Thai law ?" (present in all 3 BOQ sheets) was
+deliberately kept as normal customer-facing spec text, not classified internal. No prices were
+ever invented — every template item stores a nullable `quantity` and never a price; applying a
+template always sets `unitPrice: 0`/`discount: 0` on every copied line.
+
+### Data model — new `quotation_templates` MongoDB collection
+
+Full TS shape in `src/lib/quotationTemplates.ts` (`QuotationTemplate`/`TemplateSection`/
+`TemplateItem`/`TemplateEditableParameter`/`TemplateTermLine`/`QuotationTemplateSummary`/
+`TemplateImportReport`) — type-only imported into the API bundle from `api/_lib/collections.ts`
+and `api/_lib/quotationTemplatesHandler.ts`, per this repo's standing rule against letting a
+*value* import into a `src/lib/*` file pull JSX into the serverless bundle; the actual
+`QuotationTemplate → QuoteLine[]` conversion function therefore lives in a separate page-scoped
+file, `src/pages/quotation/applyTemplate.ts`, instead. Indexes: `templateCode` (unique),
+`jobTypeCode`, `isActive`, `isDeleted`. Seed data (the real extracted content) lives in
+`api/_lib/templateSeedData.ts` as `QUOTATION_TEMPLATE_SEEDS`.
+
+### Idempotent import
+
+`upsertQuotationTemplates(actorUserId)` (`api/_lib/quotationTemplatesHandler.ts`) computes a
+SHA-256 `sourceHash` over canonical JSON of the content-relevant fields (not `version`) for each of
+the 5 seeds and upserts by the stable `templateCode` key: insert if new, skip if the hash is
+unchanged, `$set`-update if changed. Returns a `TemplateImportReport`. Re-running against unchanged
+seed data always produces an all-"skipped" report with zero writes — verified genuinely idempotent.
+`seedQuotationTemplatesIfEmpty()` runs defensively from every `GET /api/quotation-templates` call,
+but only when the collection is empty — the same self-healing pattern `seedJobTypesIfEmpty()`
+already established, since the Setup Wizard's one-time bootstrap path is permanently unreachable on
+an already-provisioned deployment. A real re-import after *editing* `templateSeedData.ts`'s content
+needs the explicit `POST /api/quotation-templates/import` admin action.
+
+### API — 4 new endpoints, sharing `api/handlers/jobtypes.ts`'s function slot
+
+`GET /api/quotation-templates?jobTypeCode=` (list — `quotationTemplates:manage` or
+`quotations:create`, non-managers only see active templates), `GET
+/api/quotation-templates/:id` (single full template, same permission gate), `POST
+/api/quotation-templates/import` (`quotationTemplates:manage`), `PATCH
+/api/quotation-templates/:id` (`{ isActive?, isDeleted? }`, `quotationTemplates:manage`). Mounted
+by extending `api/handlers/jobtypes.ts` (checking the raw pathname before falling through to the
+existing Job Type dispatch) rather than a new file — Vercel Hobby's 12-function cap is still fully
+used, the same established pattern `/api/search` uses by sharing `api/handlers/customers.ts`. Two
+new `vercel.json` rewrites (`/api/quotation-templates`, `/api/quotation-templates/:path*`).
+
+### RBAC — new `quotationTemplates:manage` permission
+
+Added to `Permission`/`ALL_PERMISSIONS`/`PERMISSION_LABELS`/`PERMISSION_LABEL_KEY` and the
+"ใบเสนอราคา" (Quotations) permission group in `src/lib/permissions.ts`. Granted by default to
+**Administrator** (`src/lib/roles.ts`) — not Super-Admin-exclusive. Sales-facing template *read*
+access reuses the existing `quotations:create` permission (no new "view" permission), the same
+"manage vs. pick-for-a-quotation" carve-out already established for Customers and, before that,
+Company Profiles.
+
+### Quote model changes — all optional, backward-compatible
+
+`QuoteLine.isSectionHeader?: boolean` (a non-priced section-divider line, validated server-side via
+`sanitizeBoolean()` in `api/_lib/quoteValidation.ts`'s `sanitizeLine()`) and
+`Quote.quotationTemplateId?/quotationTemplateName?/quotationTemplateVersion?: string` (frozen
+provenance metadata, set only at creation time — the client only ever sends
+`quotationTemplateId`; the server re-derives `quotationTemplateName`/`quotationTemplateVersion` via
+`validateQuotationTemplate()` in `api/_lib/quoteValidation.ts`, mirroring the existing
+`validateJobType()` pattern, and never trusts a client-sent name/version. `PATCH
+/api/quotes/:id`'s `sanitizePartialQuoteFields()` never lists these 3 fields, so they're
+structurally impossible to change after creation. An inactive-but-not-deleted template match is
+deliberately still allowed, so deactivating a template mid-draft doesn't retroactively break a
+Sales user's in-progress quote). Every pre-existing quotation simply has these fields `undefined`
+and is completely unaffected.
+
+### Template → quote snapshot semantics
+
+`applyTemplateToQuoteDraft(template)` (`src/pages/quotation/applyTemplate.ts`) converts a full
+`QuotationTemplate` into `{ lines, paymentTerms, remarks }`, generating a fresh id for every line
+and sub-detail — editing the resulting quotation can never write back to the master template, and
+editing the master template later never changes quotations already created from it. Each
+`TemplateSection` becomes one `isSectionHeader: true` divider line; each `TemplateItem` becomes an
+ordinary line (`unitPrice`/`discount` always `0`); each `editableParameter` becomes a
+fill-in-the-blank `subDetails` row (`"Label: ______ Unit"`); `internalNotes` (item- and
+template-level) are **never copied**, by design, so an internal review comment can never reach a
+customer-facing quotation or its PDF; `defaultTerms` map into `Quote.paymentTerms`/`Quote.remarks`.
+
+### UI — the wizard, section-header rendering, Global Search
+
+New `src/pages/quotation/QuotationTemplateWizard.tsx`, a dynamic-step wizard wired into
+`QuotationPage.tsx` via a new `"wizard"` view state sitting between `"list"` and `"new"`. Job Type
+grid → (template choice, only for 2+ active templates) → Preview → apply/start-blank. The wizard's
+result seeds `QuoteDocument.tsx`'s initial `lines`/`jobTypeCode`/`jobTypeName`/`paymentTerms`/
+`remarks` state (fresh "new" mounts only — reopening a saved quote always uses its own data). A
+small "สร้างจาก Template: {name} (v{version})" line shows near the Job Type field when a quote was
+created from a template. Section-header lines render as a full-width bold divider row (no
+unit/qty/price/discount columns) in `LineItemsEditor.tsx` (marked with "§" instead of a line
+number) and `PrintDocument.tsx` (`colSpan={7}` bold row); item numbering skips them; a header with
+no items left under it is silently omitted from print. New "Template ใบเสนอราคา" Global Search
+result group (`searchTemplates()` in `api/_lib/searchHandler.ts`), matching
+`templateCode`/`templateName`/`jobTypeCode`/`jobTypeName`/`description`, projecting only those
+fields (never `sections`/`internalNotes`), gated by the same `quotationTemplates:manage` or
+`quotations:create` check — clicking a result deep-links straight into the wizard's Preview step
+for that template via `App.tsx`'s new `navigateToTemplate()`/`quotationTemplateDeepLink` plumbing.
+
+### Housekeeping
+
+Removed the `xlsx` npm package from `package.json` — it was only ever used for one-time offline
+Excel analysis via ad-hoc Node scripts during development, never imported by any runtime
+`api/`/`src/` code.
+
+### Build/verification
+
+`npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, and `npm run build` all pass
+clean, zero errors, zero new warnings. **Not done**: no live MongoDB/Vercel access was available
+this session, so the real DB-backed behavior (an actual import run, real API round-trips, the
+wizard's live fetch/preview/apply flow, Global Search actually returning template results) has not
+been manually tested end-to-end in a browser — same sandboxed-session network limitation as every
+prior pass; no UI screenshot/visual verification of the wizard's 3 screens or the section-header
+divider rendering; if the source Excel workbook is ever revised, `api/_lib/templateSeedData.ts`
+needs manual re-transcription and re-import — there is no live xlsx-parsing-at-runtime anywhere in
+this app. Docs updated: CLAUDE.md, this file, PROJECT_STATUS.md, DATABASE.md, API.md, RBAC.md,
+UI_GUIDELINES.md, IMPLEMENTATION_CHECKLIST.md, MODULES/QuotationTemplates.md (new).
+
+---
+
 ## 2026-07-14 — Codex review fix pass: Global Search High Priority issues + view-only navigation/accessibility
 
 An independent Codex review (`docs/CODEX_REVIEW_REPORT.md`, "ERP Global Search Audit") of the

@@ -52,10 +52,21 @@ export interface SearchUserResult {
   status: string;
 }
 
+/** Mirrors `SearchTemplateResult` in api/_lib/searchHandler.ts — "Template ใบเสนอราคา" group. */
+export interface SearchTemplateResult {
+  id: string;
+  templateCode: string;
+  templateName: string;
+  jobTypeCode: string;
+  jobTypeName: string;
+  description: string;
+}
+
 export interface SearchResults {
   quotations: SearchQuotationResult[];
   customers: SearchCustomerResult[];
   products: SearchProductResult[];
+  templates: SearchTemplateResult[];
   pages: SearchPageResult[];
   users: SearchUserResult[];
 }

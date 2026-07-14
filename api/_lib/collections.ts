@@ -8,6 +8,7 @@ import type { Product, ProductCategory } from "../../src/lib/products.js";
 import type { Notification } from "../../src/lib/notifications.js";
 import type { AuditLogEntry } from "../../src/lib/auditLog.js";
 import type { Quote } from "../../src/lib/quotes.js";
+import type { QuotationTemplate } from "../../src/lib/quotationTemplates.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits. */
 export type UserFields = Omit<User, "id"> & { passwordHash: string };
@@ -68,6 +69,21 @@ export async function countersCollection() {
 export async function quotesCollection() {
   const db = await getDb();
   return db.collection<QuoteFields & { _id: string }>("quotes");
+}
+
+/**
+ * Reusable Job-Type-specific quotation starting structures (added 2026-07-14), imported from the
+ * real "Scope of work new template for air pollution control" Excel workbook — see
+ * `src/lib/quotationTemplates.ts` for the full domain-shape doc comment and
+ * docs/MODULES/QuotationTemplates.md for the Excel source/parsing writeup. `templateCode` is the
+ * stable natural key (e.g. "TA-FRP-TANK") used for the idempotent import/upsert — not the MongoDB
+ * `_id`, since re-running the import must recognize "the same template" across runs regardless of
+ * `_id` generation.
+ */
+export type QuotationTemplateFields = Omit<QuotationTemplate, "id">;
+export async function quotationTemplatesCollection() {
+  const db = await getDb();
+  return db.collection<QuotationTemplateFields>("quotation_templates");
 }
 
 // ─── Schema-prep collections (2026-07 production-readiness pass) ──────────
@@ -362,7 +378,7 @@ export async function ensureIndexes() {
     users, roles, products, categories, quotes, notifications, auditLog,
     permissions, departments, positions, customers, customerContacts,
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
-    notificationTypes, jobTypes,
+    notificationTypes, jobTypes, quotationTemplates,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -370,7 +386,7 @@ export async function ensureIndexes() {
     customersCollection(), customerContactsCollection(),
     leadsCollection(), leadActivitiesCollection(), productTemplatesCollection(),
     quotationCommentsCollection(), quotationTagsCollection(), notificationTypesCollection(),
-    jobTypesCollection(),
+    jobTypesCollection(), quotationTemplatesCollection(),
   ]);
 
   await Promise.all([
@@ -412,6 +428,10 @@ export async function ensureIndexes() {
     notificationTypes.createIndex({ key: 1 }, { unique: true }),
     jobTypes.createIndex({ code: 1 }, { unique: true }),
     jobTypes.createIndex({ isActive: 1 }),
+    quotationTemplates.createIndex({ templateCode: 1 }, { unique: true }),
+    quotationTemplates.createIndex({ jobTypeCode: 1 }),
+    quotationTemplates.createIndex({ isActive: 1 }),
+    quotationTemplates.createIndex({ isDeleted: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

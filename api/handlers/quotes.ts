@@ -1,14 +1,14 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser, requirePermission, type AuthContext } from "../_lib/auth.js";
-import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, countersCollection, auditLogCollection, customersCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
+import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, quotationTemplatesCollection, countersCollection, auditLogCollection, customersCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
 import { PERMISSION_LABELS } from "../../src/lib/permissions.js";
 import { nowIso } from "../../src/lib/products.js";
 import {
-  validateLines, validateIsoDateOrEmpty, validateJobType, computeQuoteAmount,
+  validateLines, validateIsoDateOrEmpty, validateJobType, validateQuotationTemplate, computeQuoteAmount,
   sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeBoolean,
 } from "../_lib/quoteValidation.js";
 
@@ -98,6 +98,20 @@ type JobTypeMasterEntry = { code: string; name: string; isActive: boolean };
 async function loadJobTypeMaster(): Promise<JobTypeMasterEntry[]> {
   const jobTypes = await jobTypesCollection();
   return jobTypes.find({}, { projection: { code: 1, name: 1, isActive: 1 } }).toArray();
+}
+
+type TemplateMasterEntry = { id: string; templateName: string; version: string; jobTypeCode: string; isDeleted: boolean };
+
+/** Same "load the small master list, then validate against it" pattern as `loadJobTypeMaster()` —
+ * see `validateQuotationTemplate()` in api/_lib/quoteValidation.ts. Only called on create, since a
+ * template can never be attached to an existing quote after the fact. Includes `jobTypeCode` (2026-07-14,
+ * Codex review High Priority fix) so `validateQuotationTemplate()` can reject a template whose own
+ * Job Type doesn't match the quote's validated Job Type — without this, a direct API caller could
+ * create e.g. a TA quotation carrying LI template provenance. */
+async function loadTemplateMaster(): Promise<TemplateMasterEntry[]> {
+  const templates = await quotationTemplatesCollection();
+  const docs = await templates.find({}, { projection: { templateName: 1, version: 1, jobTypeCode: 1, isDeleted: 1 } }).toArray();
+  return docs.map((d) => ({ id: d._id.toString(), templateName: d.templateName, version: d.version, jobTypeCode: d.jobTypeCode, isDeleted: d.isDeleted }));
 }
 
 function isApprovalAction(v: unknown): v is ApprovalAction {
@@ -218,6 +232,8 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
 
     const jobTypeMaster = await loadJobTypeMaster();
     const { jobTypeCode, jobTypeName } = validateJobType(body.jobTypeCode, jobTypeMaster, { required: true });
+    const templateMaster = await loadTemplateMaster();
+    const { quotationTemplateId, quotationTemplateName, quotationTemplateVersion } = validateQuotationTemplate(body.quotationTemplateId, templateMaster, jobTypeCode);
     const lines = validateLines(body.lines);
     const discount = sanitizeDiscountPct(body.discount);
     // Optional — a quotation may be created against a saved Customer (selected via
@@ -264,6 +280,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       approvalHistory: [],
       customerSnapshot: buildCustomerSnapshot(customerFields),
       ...(customerId ? { customerId } : {}),
+      ...(quotationTemplateId ? { quotationTemplateId, quotationTemplateName, quotationTemplateVersion } : {}),
     };
     await quotes.insertOne(doc);
     await writeQuoteAuditEntry(

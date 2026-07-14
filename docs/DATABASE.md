@@ -22,6 +22,7 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `company_profiles` | MongoDB `ObjectId` | *(unused — see below)* | Orphaned. Built 2026-07-13 for the now-removed Company Profiles module; **no code reads or writes this collection anymore** as of 2026-07-14, but any existing documents were deliberately left in place (no destructive cleanup) — see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) and "`CompanyProfile`" below. |
 | `customers` | MongoDB `ObjectId` | `Customer` minus `id` (see below) | **Redefined + wired 2026-07-14** — customer master data, selected on the Quotation form to autofill the Customer Information section. Has its own dedicated `api/handlers/customers.ts` serverless function (previously shared `company-profiles.ts`'s function slot; that file was deleted 2026-07-14 along with the rest of the Company Profiles module, freeing the slot) — see [ARCHITECTURE.md](./ARCHITECTURE.md) "Serverless function count." |
 | `dashboard` (virtual — no collection) | — | — | `GET /api/dashboard` (`api/dashboard/index.ts`) is a read-only aggregation over `customers`/`leads`/`quotes`/`products`/`categories`/`audit_log`/`notifications`/`job_types`-derived fields already embedded on `quotes` — it doesn't own or write any collection of its own. See Dashboard KPI section below and [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full breakdown. |
+| `quotation_templates` | MongoDB `ObjectId` | `QuotationTemplate` minus `id` | **Added 2026-07-14** — reusable Job-Type-scoped quotation content (sections/items/editable parameters/default terms) extracted from a real Excel workbook, applied via the new Create Quotation wizard. See "`QuotationTemplate`" below and [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md). |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
 
@@ -217,6 +218,57 @@ Master data for classifying every quotation by the kind of work it represents. S
 
 `Quote.jobTypeCode`/`jobTypeName` are a **snapshot**, not a live reference — same rationale as `QuoteLine` never referencing `Product` live: renaming a Job Type later must not rewrite historical quotes.
 
+### `QuotationTemplate` (`src/lib/quotationTemplates.ts`) — added 2026-07-14
+
+```ts
+interface TemplateEditableParameter { label: string; value: string; unit: string; editable: true; }
+type TemplateItemType = "item" | "subItem" | "specification";
+interface TemplateItem {
+  id: string; itemType: TemplateItemType; itemCode: string; name: string; description: string;
+  quantity: number | null; unit: string; specifications: string[]; subDetails: string[];
+  editableParameters: TemplateEditableParameter[]; internalNotes: string[]; productId?: string;
+  visibleToCustomer: boolean; sortOrder: number;
+}
+interface TemplateSection { id: string; title: string; description: string; sortOrder: number; items: TemplateItem[]; }
+interface TemplateTermLine { type: "paymentTerm" | "warrantyTerm" | "taxNote"; text: string; }
+interface QuotationTemplate {
+  id: string; templateCode: string; templateName: string; jobTypeCode: string; jobTypeName: string;
+  description: string; version: string; sourceFileName: string; sourceSheetName: string; sourceHash: string;
+  sections: TemplateSection[]; defaultTerms: TemplateTermLine[]; internalNotes: string[];
+  isActive: boolean; isDeleted: boolean; createdAt: string; updatedAt: string; createdBy: string; updatedBy: string;
+}
+```
+
+Backs the Create Quotation wizard's Job Type → Template → Preview flow — see
+[MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) for the full business flow, the
+Excel-row classification rules used to extract the seed content, and the 5 seeded templates
+(`SC-WET-SCRUBBER`/`SC-ACTIVATED-CARBON`/`BF-BAG-FILTER`/`TA-FRP-TANK`/`LI-FRP-LINING`).
+`internalNotes` (both item-level and template-level) hold real internal-staff review comments
+extracted from the source workbook and are `visibleToCustomer: false` — never copied into a
+quotation, never printed, and never projected by the Global Search endpoint (see "Global Search"
+below). `sourceHash` is a SHA-256 hash over the content-relevant fields, used by the idempotent
+import (`upsertQuotationTemplates()`, `api/_lib/quotationTemplatesHandler.ts`) to decide
+insert/skip/update by the stable `templateCode` natural key.
+
+Indexes (`ensureIndexes()`, `api/_lib/collections.ts`): `templateCode` (unique), `jobTypeCode`,
+`isActive`, `isDeleted`. Seed data lives in `api/_lib/templateSeedData.ts`
+(`QUOTATION_TEMPLATE_SEEDS`); `seedQuotationTemplatesIfEmpty()` runs defensively from
+`GET /api/quotation-templates` whenever the collection is empty, the same self-healing pattern
+`seedJobTypesIfEmpty()` established for `job_types` (see above) — `ensureIndexes()`'s one-time
+Setup Wizard bootstrap path is unreachable on an already-provisioned deployment.
+
+**Seed content corrected 2026-07-14 (Codex review fix pass, no schema/field-shape change):**
+`SC-ACTIVATED-CARBON`'s and `BF-BAG-FILTER`'s "Main Ducting" item was missing a real source
+specification row ("Exhaust Duct, Elbow, Flange, Damper and accessories", re-verified against the
+source workbook and restored as the item's first `specifications` entry), and 9 real,
+non-placeholder literal values (`Brand`/`Material`/`Static Pressure`) were reclassified from
+`editableParameters` to plain `specifications` text — see CHANGELOG.md for the full writeup. Both
+changes only touch seed *content*, not the `QuotationTemplate` shape above. Since `sourceHash` is
+computed over the content-relevant fields, both templates' hash changed — per the idempotent-import
+explanation above, the next `POST /api/quotation-templates/import` run against a live database will
+report these two as `updated` (an `$set`-update by the stable `templateCode` key), not
+`created`/duplicated; the other 3 templates are untouched and will report `skipped`.
+
 ### `CompanyProfile` — REMOVED 2026-07-14
 
 The `CompanyProfile`/`BankAccount` client types (`src/lib/companyProfiles.ts`), the
@@ -337,6 +389,7 @@ interface QuoteLine {
   specifications: string;  // distinct from notes; auto-copied from Product.specifications via the picker
   tags: string[];
   subDetails: SubDetail[];
+  isSectionHeader?: boolean;  // added 2026-07-14 — a non-priced section-divider line, copied from a QuotationTemplate section title
 }
 
 interface Quote {
@@ -372,6 +425,9 @@ interface Quote {
   approvalHistory: ApprovalHistoryEntry[];  // append-only
   customerId?: string;                  // added 2026-07-14, → Customer.id; set when a saved customer is selected on the Quotation form
   customerSnapshot?: CustomerSnapshot;  // added 2026-07-14 — server-built copy of the submitted Customer Information fields, never client-constructed; shape below
+  quotationTemplateId?: string;         // added 2026-07-14, → QuotationTemplate.id; set only at create time via the Create Quotation wizard, never editable afterward
+  quotationTemplateName?: string;       // added 2026-07-14 — server-derived snapshot of QuotationTemplate.templateName at create time, never client-writable
+  quotationTemplateVersion?: string;    // added 2026-07-14 — server-derived snapshot of QuotationTemplate.version at create time, never client-writable
 }
 
 // The frozen-at-save-time copy stored on Quote.customerSnapshot (src/lib/customers.ts) — built
@@ -383,7 +439,7 @@ interface CustomerSnapshot {
   taxId: string; deliveryMethod: string; projectName: string; deliveryAddress: string;
 }
 ```
-All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session. `customerId`/`customerSnapshot` (added 2026-07-14, replacing the short-lived `issuerCompanyId`/`issuerCompanySnapshot` pair from 2026-07-13) are set by `POST /api/quotes` and (Draft-only, for `customerId` specifically) `PATCH /api/quotes/:id`/`POST /api/quotes/:id/workflow` — see `resolveCustomerIdUpdate()`/`buildCustomerSnapshot()` in `api/handlers/quotes.ts`, and [MODULES/Customer.md](./MODULES/Customer.md).
+All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session. `customerId`/`customerSnapshot` (added 2026-07-14, replacing the short-lived `issuerCompanyId`/`issuerCompanySnapshot` pair from 2026-07-13) are set by `POST /api/quotes` and (Draft-only, for `customerId` specifically) `PATCH /api/quotes/:id`/`POST /api/quotes/:id/workflow` — see `resolveCustomerIdUpdate()`/`buildCustomerSnapshot()` in `api/handlers/quotes.ts`, and [MODULES/Customer.md](./MODULES/Customer.md). `quotationTemplateId`/`quotationTemplateName`/`quotationTemplateVersion` (added 2026-07-14) are frozen provenance metadata set only by `POST /api/quotes` when a quote is created from the Create Quotation wizard's Preview step — the client sends only `quotationTemplateId`; `quotationTemplateName`/`quotationTemplateVersion` are always re-derived server-side from the matched `quotation_templates` record (`validateQuotationTemplate()` in `api/_lib/quoteValidation.ts`, mirroring `validateJobType()`), never trusted from the client, and structurally excluded from `PATCH /api/quotes/:id`'s field whitelist so they can never change after creation. All three are optional — a quote created without the wizard (or before this feature existed) simply has them `undefined`. `QuoteLine.isSectionHeader` (added 2026-07-14) similarly defaults to `undefined`/falsy on every pre-existing line — see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Template → Quote Snapshot Semantics."
 
 Indexes added 2026-07-09 (`quotes` had none beyond default `_id` before this): `{ status: 1 }`, `{ createdByUserId: 1 }` (already used for ownership checks), `{ issueDate: 1 }` (needed for the Dashboard's monthly revenue aggregation — see below). Added 2026-07-10: `{ jobTypeCode: 1 }`, `{ salesperson: 1 }`, `{ followUpDate: 1 }`, serving the Dashboard filters/grouping; later the same day, `{ isPotentialOpportunity: 1 }` and `{ client: 1 }` (Expected Sales/forecast filtering and customer-analytics grouping, respectively — both already-hot query paths that had no supporting index). No soft-delete field — the `ยกเลิก` (Cancelled) terminal workflow status already serves that role, so a `createdAt`/`updatedAt`/`isDeleted`/`department` index (all requested by a generic Dashboard index checklist) would be moot: `Quote` has no `createdAt`/`updatedAt` fields (`issueDate`/`date`/`updatedBy` serve that role instead) and no `isDeleted`/`department` field at all (`User.department`, itself free text, is what Dashboard department filtering actually joins against — see below).
 
@@ -430,6 +486,13 @@ Read-only, no collection of its own — see [MODULES/Dashboard.md](./MODULES/Das
 
 Read-only, no collection of its own — see [API.md](./API.md) "Global Search" for the full field
 list per category. Key data-model notes:
+- **`templates`** (added 2026-07-14, same day as the `quotation_templates` collection itself):
+  matches `templateCode`/`templateName`/`jobTypeCode`/`jobTypeName`/`description` against active,
+  non-deleted `quotation_templates` documents only. Only those 5 fields are projected — `sections`/
+  `internalNotes` never leave the server via this endpoint, so an internal-staff review comment
+  (see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)) can never leak through
+  search even indirectly. Gated by the same `quotations:create` **or** `quotationTemplates:manage`
+  check as `GET /api/quotation-templates` itself.
 - Every category (`quotations`, `customers`, `products`, `users`) queries via a case-insensitive,
   unanchored `$regex` `$or` across several fields, with the query string passed through
   `escapeRegExp()` first (matching the existing helper already duplicated in

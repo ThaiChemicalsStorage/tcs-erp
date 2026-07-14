@@ -218,6 +218,12 @@ export function LineItemsEditor({
 
   const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount);
 
+  // "No." numbering counts only ordinary priced lines — a section-header line (see below) gets its
+  // own "§" marker instead, so numbering a template-seeded quotation stays a clean 1, 2, 3... across
+  // its real line items rather than skipping a number at every section divider.
+  let itemNumber = 0;
+  const itemNumbers = lines.map((l) => (l.isSectionHeader ? null : ++itemNumber));
+
   const columns = [
     t("quotation.lineItems.col.no"), t("quotation.lineItems.col.description"), t("quotation.lineItems.col.unit"),
     t("quotation.lineItems.col.qty"), t("quotation.lineItems.col.unitPrice"), t("quotation.lineItems.col.discount"),
@@ -250,12 +256,37 @@ export function LineItemsEditor({
           </thead>
           <tbody>
             {lines.map((line, idx) => {
+              // Section-header line copied from a Quotation Template (see applyTemplate.ts) — a
+              // non-priced divider, not an ordinary priced line. Rendered as one full-width row
+              // (editable title, no unit/qty/price/discount/notes) instead of the normal 8-column
+              // layout below.
+              if (line.isSectionHeader) {
+                return (
+                  <tr key={line.id} className="border-b border-border/50 bg-muted/20 group">
+                    <td className="px-4 py-2.5 text-center text-xs font-mono text-muted-foreground align-top">§</td>
+                    <td colSpan={6} className="px-4 py-2.5 align-top">
+                      <input
+                        className="w-full text-sm font-semibold text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors"
+                        value={line.description}
+                        onChange={(e) => updateLine(line.id, "description", e.target.value)}
+                        placeholder={t("quotation.lineItems.sectionHeaderPlaceholder")}
+                      />
+                    </td>
+                    <td className="px-4 py-2.5 align-top">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => removeLine(line.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={13} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
+
               const isExpanded = expanded.has(line.id);
               const hasDetails = lineHasDetails(line);
               return (
                 <Fragment key={line.id}>
                   <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
-                    <td className="px-4 py-3 text-center text-xs font-mono text-muted-foreground align-top">{idx + 1}</td>
+                    <td className="px-4 py-3 text-center text-xs font-mono text-muted-foreground align-top">{itemNumbers[idx]}</td>
                     <td className="px-4 py-3 align-top">
                       <input className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.description} onChange={(e) => updateLine(line.id, "description", e.target.value)} placeholder={t("quotation.lineItems.descriptionPlaceholder")} />
                     </td>

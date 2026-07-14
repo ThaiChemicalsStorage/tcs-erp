@@ -21,7 +21,8 @@ export type Permission =
   | "customers:view"
   | "customers:create"
   | "customers:edit"
-  | "customers:archive";
+  | "customers:archive"
+  | "quotationTemplates:manage";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -45,6 +46,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "customers:create",
   "customers:edit",
   "customers:archive",
+  "quotationTemplates:manage",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -69,6 +71,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "customers:create": "เพิ่มข้อมูลลูกค้า",
   "customers:edit": "แก้ไขข้อมูลลูกค้า",
   "customers:archive": "เก็บถาวร/กู้คืนข้อมูลลูกค้า",
+  "quotationTemplates:manage": "จัดการ Template ใบเสนอราคา (นำเข้า/เปิด-ปิดใช้งาน)",
 };
 
 /** Translated display label per permission — `PERMISSION_LABELS` (Thai) stays as-is since it's also used to seed the `permissions` collection's stored `label` field; this map is UI-display only. */
@@ -94,6 +97,7 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "customers:create": "permission.customersCreate",
   "customers:edit": "permission.customersEdit",
   "customers:archive": "permission.customersArchive",
+  "quotationTemplates:manage": "permission.quotationTemplatesManage",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -109,6 +113,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "quotations:approve",
       "quotations:reject",
       "quotations:export",
+      "quotationTemplates:manage",
     ],
   },
   {

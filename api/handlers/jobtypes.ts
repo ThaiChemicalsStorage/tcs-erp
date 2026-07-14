@@ -3,6 +3,7 @@ import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requirePermission } from "../_lib/auth.js";
 import { jobTypesCollection, toObjectId, withStringId } from "../_lib/collections.js";
 import { seedJobTypesIfEmpty } from "../_lib/systemSeed.js";
+import { handleQuotationTemplates } from "../_lib/quotationTemplatesHandler.js";
 import { nowIso } from "../../src/lib/products.js";
 
 function escapeRegExp(s: string): string {
@@ -74,6 +75,16 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   await withErrorHandling(res, async () => {
+    // Quotation Templates (added 2026-07-14) shares this function file rather than getting its
+    // own — Vercel Hobby's 12-function cap is still fully used (see docs/ARCHITECTURE.md).
+    // Checked first, on the raw pathname, before falling through to the Job Types logic below —
+    // the same established sharing pattern api/handlers/customers.ts already uses for
+    // `/api/search`. Thematically the closest existing handler: templates are keyed by Job Type.
+    const pathname = (req.url ?? "").split("?")[0];
+    if (pathname === "/api/quotation-templates" || pathname.startsWith("/api/quotation-templates/")) {
+      return handleQuotationTemplates(req, res);
+    }
+
     const parts = getPathSegments(req, "/api/jobtypes");
 
     if (parts.length === 0) return handleList(req, res);

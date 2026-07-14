@@ -16,6 +16,7 @@ import { InterestButtons } from "./InterestButtons";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { CustomerSelector } from "./CustomerSelector";
 import { PrintDocument } from "./PrintDocument";
+import type { QuotationWizardResult } from "./QuotationTemplateWizard";
 import { BrandMark } from "../../components/BrandMark";
 import { useI18n } from "../../lib/i18n";
 
@@ -36,6 +37,7 @@ const ACTION_ICON: Record<ApprovalAction, React.ReactNode> = {
 export function QuoteDocument({
   mode,
   quote,
+  wizardResult,
   nextId,
   company,
   currentUser,
@@ -54,6 +56,11 @@ export function QuoteDocument({
 }: {
   mode: "new" | "detail";
   quote?: Quote;
+  /** Set only in "new" mode, when the quotation was started via the Job Type -> Template wizard
+   * (`QuotationTemplateWizard.tsx`). `null`/`undefined` means "start blank" — no fallback to any
+   * live template lookup happens here, matching the "template = one-time copy, never a live
+   * reference" rule (see docs/MODULES/QuotationTemplates.md). */
+  wizardResult?: QuotationWizardResult | null;
   nextId: string;
   company: Company;
   currentUser: User;
@@ -89,7 +96,18 @@ export function QuoteDocument({
   // Derived, not local state: the component doesn't remount on a workflow-driven status change
   // (same `key`, since selectedId is unchanged), so this must always reflect the live prop.
   const quoteStatus: QuoteStatus = quote?.status ?? "ร่าง";
-  const [lines, setLines] = useState<QuoteLine[]>(quote?.lines ?? []);
+
+  // Quotation Template wizard result (2026-07-14) — a ONE-TIME copy consumed at mount only (see
+  // `QuotationTemplateWizard.tsx`/`applyTemplate.ts`). `quote` always wins when present (reopening
+  // an existing quotation must never re-apply a template), so this only ever affects a fresh "new"
+  // mount. `quotationTemplateId/Name/Version` are frozen provenance metadata: no setter is exposed
+  // because nothing in this form is meant to change them after creation (see `src/lib/quotes.tsx`).
+  const templateSnapshot = wizardResult?.templateSnapshot ?? null;
+  const quotationTemplateId = quote?.quotationTemplateId ?? templateSnapshot?.quotationTemplateId ?? "";
+  const quotationTemplateName = quote?.quotationTemplateName ?? templateSnapshot?.quotationTemplateName ?? "";
+  const quotationTemplateVersion = quote?.quotationTemplateVersion ?? templateSnapshot?.quotationTemplateVersion ?? "";
+
+  const [lines, setLines] = useState<QuoteLine[]>(quote?.lines ?? templateSnapshot?.lines ?? []);
   const [discount, setDiscount] = useState(quote?.discount ?? 0);
   const [salesperson, setSalesperson] = useState(quote?.salesperson ?? currentUser.fullName);
   const [contactName, setContactName] = useState(customerSnapshot?.contactName ?? quote?.contactName ?? "");
@@ -101,16 +119,16 @@ export function QuoteDocument({
   const [deliveryAddress, setDeliveryAddress] = useState(customerSnapshot?.deliveryAddress ?? quote?.deliveryAddress ?? "");
   const [project, setProject] = useState(customerSnapshot?.projectName ?? quote?.project ?? "");
   const [poRef, setPoRef] = useState(quote?.poRef ?? "");
-  const [paymentTerms, setPaymentTerms] = useState(quote?.paymentTerms ?? paymentTermsOptions[0]);
+  const [paymentTerms, setPaymentTerms] = useState(quote?.paymentTerms ?? (templateSnapshot?.paymentTerms || paymentTermsOptions[0]));
   const [issueDate, setIssueDate] = useState(quote?.issueDate ?? todayIso());
   const [expiryDate, setExpiryDate] = useState(quote?.expiryDate ?? plusDaysIso(30));
-  const [remarks, setRemarks] = useState(quote?.remarks ?? (company.termsAndConditions || DEFAULT_TERMS));
-  const [jobTypeCode, setJobTypeCode] = useState(quote?.jobTypeCode ?? "");
+  const [remarks, setRemarks] = useState(quote?.remarks ?? (templateSnapshot?.remarks || company.termsAndConditions || DEFAULT_TERMS));
+  const [jobTypeCode, setJobTypeCode] = useState(quote?.jobTypeCode ?? wizardResult?.jobTypeCode ?? "");
   // Seeded from the quote's own persisted snapshot, not re-derived from the live `jobTypes` list on
   // every render — jobTypeCode/jobTypeName are a deliberate snapshot (see src/lib/quotes.tsx), so
   // renaming or recoding a Job Type after this quote was saved must not silently change what this
   // quote displays or re-save a different name the next time it's edited.
-  const [jobTypeName, setJobTypeName] = useState(quote?.jobTypeName ?? "");
+  const [jobTypeName, setJobTypeName] = useState(quote?.jobTypeName ?? wizardResult?.jobTypeName ?? "");
   const [isPotentialOpportunity, setIsPotentialOpportunity] = useState(quote?.isPotentialOpportunity ?? false);
   const [followUpDate, setFollowUpDate] = useState(quote?.followUpDate ?? "");
   const disabled = !permissions.canEdit;
@@ -181,6 +199,10 @@ export function QuoteDocument({
     // api/handlers/quotes.ts's resolveCustomerIdUpdate()). A brand-new quote always sends it
     // (customerChanged is trivially true against the empty original).
     ...(customerChanged ? { customerId } : {}),
+    // Template provenance — create-only (see `QuoteDraftFields`'s Pick union in src/lib/quotes.tsx
+    // and `sanitizePartialQuoteFields()` in api/handlers/quotes.ts, which never accepts this field
+    // on update). Server re-derives quotationTemplateName/Version from this id; never send those.
+    ...(mode === "new" && quotationTemplateId ? { quotationTemplateId } : {}),
   });
 
   // Warn on an accidental tab close/refresh while there are unsaved edits — a plain JSON diff
@@ -466,6 +488,15 @@ export function QuoteDocument({
                     <input disabled={disabled} type="date" className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
                   </div>
                 </div>
+                {quotationTemplateId && (
+                  // Read-only provenance display — no input, since this is frozen at creation (see
+                  // the `quotationTemplateId` comment above). Only ever shown for a quote actually
+                  // created from a template; a manually-started ("เริ่มจากใบเสนอราคาเปล่า") quote
+                  // never has this set, in "new" mode or after reopening it later.
+                  <p className="text-[11px] text-muted-foreground -mt-1">
+                    {t("quotation.field.appliedTemplate")}: {quotationTemplateName} (v{quotationTemplateVersion})
+                  </p>
+                )}
                 <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-foreground">
                   <input
                     type="checkbox"

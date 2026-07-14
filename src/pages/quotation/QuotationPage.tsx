@@ -12,6 +12,7 @@ import {
 import { ApiError } from "../../lib/apiClient";
 import { QuoteList } from "./QuoteList";
 import { QuoteDocument } from "./QuoteDocument";
+import { QuotationTemplateWizard, type QuotationWizardResult } from "./QuotationTemplateWizard";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
@@ -31,6 +32,8 @@ export function QuotationPage({
   onFilterConsumed,
   initialQuoteId,
   onQuoteIdConsumed,
+  initialTemplateSelection,
+  onTemplateSelectionConsumed,
   onNotify,
 }: {
   quotes: Quote[];
@@ -49,11 +52,22 @@ export function QuotationPage({
   /** Set by a notification click with a `relatedQuoteId` — opens that quote's detail view directly, whether QuotationPage is mounting fresh or already on-screen (unlike `initialFilter`, this reacts to every change, not just the first one, since a second notification click while already here should still jump to the new quote). */
   initialQuoteId: string | null;
   onQuoteIdConsumed: () => void;
+  /** Set by a Global Search "Template ใบเสนอราคา" result click — opens the wizard with this Job
+   * Type + Template preselected (see QuotationTemplateWizard.tsx's `initialSelection`), instead of
+   * making the user reselect what they just found via search. Same "reacts to every change"
+   * requirement as `initialQuoteId` above (a second template result click while the wizard is
+   * already open must still jump to the newly-clicked one). */
+  initialTemplateSelection: { jobTypeCode: string; templateId: string } | null;
+  onTemplateSelectionConsumed: () => void;
   onNotify: () => void;
 }) {
   const { t } = useI18n();
-  const [view, setView] = useState<"list" | "new" | "detail">("list");
+  const [view, setView] = useState<"list" | "wizard" | "new" | "detail">("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Result of the "สร้างใบเสนอราคา" wizard (Job Type -> Template -> Preview), consumed once when
+  // QuoteDocument mounts in "new" mode — see QuotationTemplateWizard.tsx. Cleared whenever a new
+  // wizard run starts so a stale template can never leak into an unrelated "start blank" quote.
+  const [wizardResult, setWizardResult] = useState<QuotationWizardResult | null>(null);
 
   // Snapshotted once via useState's lazy initializer — stable for QuotationPage's whole mount
   // lifetime, independent of `initialFilter` going back to null once consumed (see the effect
@@ -92,6 +106,19 @@ export function QuotationPage({
   useEffect(() => {
     if (initialQuoteId) onQuoteIdConsumed();
   }, [initialQuoteId, onQuoteIdConsumed]);
+
+  // Same "adjust state during rendering" pattern as `initialQuoteId` above, applied to a Global
+  // Search template result click instead of a notification click.
+  const [appliedTemplateSelection, setAppliedTemplateSelection] = useState<{ jobTypeCode: string; templateId: string } | null>(null);
+  if (initialTemplateSelection && initialTemplateSelection !== appliedTemplateSelection) {
+    setAppliedTemplateSelection(initialTemplateSelection);
+    setSelectedId(null);
+    setWizardResult(null);
+    setView("wizard");
+  }
+  useEffect(() => {
+    if (initialTemplateSelection) onTemplateSelectionConsumed();
+  }, [initialTemplateSelection, onTemplateSelectionConsumed]);
 
   const toast = useToast();
 
@@ -156,8 +183,31 @@ export function QuotationPage({
           jobTypes={jobTypes}
           initialFilter={listFilterSnapshot}
           onOpen={(id) => { setSelectedId(id); setView("detail"); }}
-          onCreateNew={() => { setSelectedId(null); setView("new"); }}
+          onCreateNew={() => {
+            setSelectedId(null);
+            setWizardResult(null);
+            // Clear any earlier Global Search template deep link — a plain "สร้างใบเสนอราคา"
+            // click must always start at Step 1, never silently reuse a stale preselection from
+            // an unrelated search click earlier in this page's lifetime.
+            setAppliedTemplateSelection(null);
+            setView("wizard");
+          }}
           onInterestChange={setInterest}
+        />
+        <Toast message={toast.message} />
+      </>
+    );
+  }
+
+  if (view === "wizard") {
+    return (
+      <>
+        <QuotationTemplateWizard
+          jobTypes={jobTypes}
+          onCancel={() => setView("list")}
+          onComplete={(result) => { setWizardResult(result); setView("new"); }}
+          showToast={toast.show}
+          initialSelection={appliedTemplateSelection}
         />
         <Toast message={toast.message} />
       </>
@@ -172,6 +222,7 @@ export function QuotationPage({
         key={view === "detail" ? selectedId ?? "new" : "new"}
         mode={view === "detail" ? "detail" : "new"}
         quote={view === "detail" ? selectedQuote : undefined}
+        wizardResult={view === "new" ? wizardResult : null}
         nextId={nextQuoteId(quotes)}
         company={company}
         currentUser={currentUser}

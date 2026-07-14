@@ -72,6 +72,14 @@ export interface QuoteLine {
   specifications: string;
   tags: string[];
   subDetails: SubDetail[];
+  /** True for a line copied from a Quotation Template's section heading (e.g. "Preparation
+   * work") — renders as a full-width, non-priced divider in `LineItemsEditor.tsx`/
+   * `PrintDocument.tsx` instead of a normal qty/unit-price item row. Optional and defaults to
+   * falsy for every quote created before this field existed (2026-07-14) or built without a
+   * template — fully backward compatible, no behavior change for existing lines. A section-header
+   * line is a completely ordinary `QuoteLine` otherwise (freely editable/removable), just flagged
+   * for display purposes. See docs/MODULES/QuotationTemplates.md. */
+  isSectionHeader?: boolean;
 }
 
 export interface Quote {
@@ -130,6 +138,20 @@ export interface Quote {
    * `src/lib/customers.ts`'s `CustomerSnapshot` and docs/MODULES/Customer.md.
    */
   customerSnapshot?: CustomerSnapshot;
+  /**
+   * Which Quotation Template (if any) this quote's `lines` were originally copied from — recorded
+   * once at creation time, added 2026-07-14 (see docs/MODULES/QuotationTemplates.md). Purely
+   * provenance metadata: `lines` itself is already an independent, quote-owned copy (same as every
+   * other quote), so editing this quotation was never able to affect the master template and vice
+   * versa, with or without these fields. Optional and always empty on quotes created without a
+   * template (including every quote from before this pass) or built from "เริ่มจากใบเสนอราคาเปล่า" /
+   * "เริ่มจากแบบฟอร์มเปล่า" (blank start) — a template is never required. Never changed after
+   * creation (not part of `QuoteUpdateFields`) — the whole point is a frozen record of what was
+   * used when the quote was first built, matching `customerSnapshot`'s "frozen at save time" rule.
+   */
+  quotationTemplateId?: string;
+  quotationTemplateName?: string;
+  quotationTemplateVersion?: string;
 }
 
 export type QuoteDraftFields = Pick<
@@ -143,6 +165,11 @@ export type QuoteDraftFields = Pick<
   // the submitted Customer Information fields, the same "never trust a client-supplied derived
   // value" rule `amount`/`jobTypeName` already follow. See api/handlers/quotes.ts.
   | "customerId"
+  // Same pattern as `customerId`/`jobTypeCode` above — the client only ever sends the id (on
+  // create only; a template can never be attached to an existing quote after the fact), and the
+  // server re-derives `quotationTemplateName`/`quotationTemplateVersion` from the matched
+  // `quotation_templates` record. See api/handlers/quotes.ts.
+  | "quotationTemplateId"
 > & { amount: number };
 
 /** Fields the server accepts on general quote edits — everything except id/status/date/valid/createdByUserId/updatedBy/approvalHistory, which only the server (or the workflow endpoint) sets. */

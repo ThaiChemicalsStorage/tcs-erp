@@ -9,6 +9,15 @@ import {
 import { FormattedNotes } from "./notesFormat";
 import { BrandMark } from "../../components/BrandMark";
 
+/** A section-header line with no item directly following it (e.g. every item under it was deleted
+ * but the header itself wasn't) is never printed — an empty section heading on the customer PDF
+ * reads as a mistake, not real content. Only checks the immediately-following line since
+ * `applyTemplate.ts` always emits a header's items contiguously right after it. */
+function sectionHeaderHasItems(lines: QuoteLine[], headerIdx: number): boolean {
+  const next = lines[headerIdx + 1];
+  return !!next && !next.isSectionHeader;
+}
+
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   if (!value.trim()) return null;
   return (
@@ -63,6 +72,13 @@ export function PrintDocument({
 }) {
   const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount);
   const quoteId = isDetail ? quote!.id : nextId;
+
+  // "No." numbering counts only ordinary priced lines, matching LineItemsEditor.tsx — a
+  // section-header row (see `sectionHeaderHasItems` above) gets no number of its own. Precomputed
+  // as a plain array rather than a mutable counter reassigned inside the render's line-mapping
+  // closure, which React's render-purity lint rule (react-hooks/immutability) flags.
+  let runningItemNumber = 0;
+  const itemNumbers = lines.map((l) => (l.isSectionHeader ? null : ++runningItemNumber));
 
   const signatureColumns = [
     { label: "ผู้เสนอราคา", user: preparerUser, name: preparerName, date: preparerDate },
@@ -153,16 +169,26 @@ export function PrintDocument({
       </thead>
       <tbody>
         {lines.map((line, idx) => {
+          if (line.isSectionHeader) {
+            if (!sectionHeaderHasItems(lines, idx)) return null;
+            return (
+              <tr key={line.id}>
+                <td colSpan={7} className="px-2 pt-2.5 pb-1 font-bold text-[11.5px] border-b border-[#0b1d3a]/15">
+                  {line.description}
+                </td>
+              </tr>
+            );
+          }
           const hasDetails = lineHasDetails(line);
           const unitDiscount = line.unitPrice * (line.discount / 100);
           return (
             <Fragment key={line.id}>
               <tr className="align-top">
-                <td className="px-2 py-1.5 text-center font-mono">{idx + 1}</td>
+                <td className="px-2 py-1.5 text-center font-mono">{itemNumbers[idx]}</td>
                 <td className="px-2 py-1.5">
                   <span className="font-semibold">{line.description}</span>
-                  {line.tags.map((t) => (
-                    <span key={t} className="inline-block ml-1 px-1 text-[9px] border border-[#1a5fb4]/30 text-[#1a5fb4] rounded">{t}</span>
+                  {line.tags.map((tag) => (
+                    <span key={tag} className="inline-block ml-1 px-1 text-[9px] border border-[#1a5fb4]/30 text-[#1a5fb4] rounded">{tag}</span>
                   ))}
                 </td>
                 <td className="px-2 py-1.5 text-center font-mono">{fmt(line.qty)}</td>
