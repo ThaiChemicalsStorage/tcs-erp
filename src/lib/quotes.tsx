@@ -4,6 +4,7 @@ import { type Role, hasPermission } from "./roles";
 import { apiFetch } from "./apiClient.js";
 import type { TranslationKey } from "./i18n";
 import type { CustomerSnapshot } from "./customers";
+import type { TemplateSection, TemplateTermLine } from "./quotationTemplates";
 
 export type QuoteStatus =
   | "ร่าง"
@@ -152,6 +153,28 @@ export interface Quote {
   quotationTemplateId?: string;
   quotationTemplateName?: string;
   quotationTemplateVersion?: string;
+  /**
+   * A server-created, structured copy of the master template's `sections`/`defaultTerms`/
+   * `internalNotes`/`sourceHash` **at the moment this quote was created** — added 2026-07-15
+   * (second Codex-review fix pass), closing the review's High Priority #2 finding that only
+   * flattened `QuoteLine[]` + 3 provenance strings were stored, not a real structured snapshot.
+   * Frozen forever at creation, same as `customerSnapshot`/`quotationTemplateName` — editing the
+   * master template afterward never touches this, and this is never itself editable. **Audit/
+   * reconstruction record only** — no rendering path reads it: the customer-facing quotation form,
+   * editor, and printed PDF all continue to read only `lines` (the already-independent, per-line
+   * copy every quote has always had), exactly as before this field existed. Deliberately **does**
+   * include `internalNotes` (unlike `lines`, which `applyTemplateToQuoteDraft()` still never copies
+   * into customer-facing content) — this is an internal-only audit trail, gated by the same
+   * `quotations:view`-family permissions as the rest of the quote document, never surfaced in the
+   * UI or PDF. See docs/MODULES/QuotationTemplates.md "Structured Template Snapshot."
+   */
+  templateSnapshot?: {
+    sections: TemplateSection[];
+    defaultTerms: TemplateTermLine[];
+    internalNotes: string[];
+    sourceHash: string;
+    capturedAt: string;
+  };
 }
 
 export type QuoteDraftFields = Pick<

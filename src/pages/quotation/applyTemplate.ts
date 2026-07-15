@@ -28,8 +28,19 @@ function termsByType(terms: TemplateTermLine[], type: TemplateTermLine["type"]):
  * - An item/subItem becomes one ordinary `QuoteLine`: `description`/`unit`/`qty` copied directly
  *   (quantity `null` → `0`, an editable starting point, never invented), `unitPrice`/`discount`
  *   always `0` (this codebase never invents prices), `specifications` joined into the line's
- *   specifications text, and every editable parameter + specification folded into `subDetails` as
- *   individual, freely editable rows (matching how `subDetails` already works for any other line).
+ *   specifications text, and `item.subDetails` **plus** every editable parameter folded into
+ *   `subDetails` as individual, freely editable rows (matching how `subDetails` already works for
+ *   any other line). **2026-07-15, second Codex-review fix pass (High Priority #3)**: `item.
+ *   subDetails` — real sub-detail text an admin configured in the Template Management editor — was
+ *   previously silently discarded here; only editable-parameter prompts were copied. Fixed: both
+ *   are now included, `item.subDetails` first (so an admin's own configured detail lines read
+ *   before the generic fill-in-the-blank prompts).
+ * - **An item with `visibleToCustomer: false` is skipped entirely** (same pass, same finding) —
+ *   previously every item was copied unconditionally regardless of this flag, so marking an item
+ *   "hidden from customer documents" in the editor had no actual effect on an applied quotation. A
+ *   section whose every item ends up hidden still gets its header line here; `PrintDocument.tsx`
+ *   already silently omits a section header with no items following it, so this doesn't need
+ *   special-casing here too.
  * - An editable parameter renders as `"Label: ______ Unit"` — a clear fill-in-the-blank prompt,
  *   never a real value (`editableParameter.value` is always blank in the source template anyway).
  * - **Internal notes are never copied** — `item.internalNotes`/`template.internalNotes` are
@@ -50,7 +61,9 @@ export function applyTemplateToQuoteDraft(template: QuotationTemplate): AppliedT
     });
 
     for (const item of section.items) {
+      if (!item.visibleToCustomer) continue;
       const subDetails = [
+        ...item.subDetails.map((text) => ({ id: newSubDetailId(), text })),
         ...item.editableParameters.map((p) => ({
           id: newSubDetailId(),
           text: `${p.label}: ______${p.unit ? ` ${p.unit}` : ""}`,

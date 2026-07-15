@@ -381,6 +381,12 @@ Amount Rule" for how the value itself is computed.
 ### Notifications (Toast)
 `src/components/Toast.tsx` + `src/hooks/useToast.ts`. Fixed bottom-right, navy background, gold check icon, auto-dismisses after 2.8s. Use `const toast = useToast()` then `toast.show("message")`; render `<Toast message={toast.message} />` once per page. Don't build a second toast implementation.
 
+### List/Tree Reordering (up/down buttons, not drag-and-drop)
+Added 2026-07-15 for Template Management's section/item editor (`src/pages/templates/TemplateEditorView.tsx`). This codebase has no drag-and-drop dependency anywhere and one wasn't added just for this — reordering uses plain `ArrowUp`/`ArrowDown` icon buttons per row, disabled at the top/bottom of the list, swapping the item with its neighbor and renumbering `sortOrder` on every move. Prefer this pattern over introducing a DnD library for any future reorderable list (matches the "hand-rolled Tailwind, no UI kit" convention above) unless a genuinely large list makes button-clicking impractical.
+
+### Clarifying-Tooltip Pattern for Actions That Sound Bigger Than They Are
+Added 2026-07-15 (second Codex-review fix pass) on Template Management's "นำเข้าจาก Excel" button (`TemplateManagementPage.tsx`) — a plain HTML `title` attribute on the button explaining precisely what the action does (checks the source workbook for changes + imports pre-transcribed content, not yet a fully-automatic Excel-to-Template conversion), after an independent review flagged the button label as potentially misleading on its own. Use this pattern — a `title` tooltip, not a whole new UI element — whenever a short button label alone could reasonably be over-read by an admin as doing more than it actually does; keep the label itself short and put the caveat in the tooltip rather than making the button text long.
+
 ### Responsive Rules
 Grids use Tailwind breakpoints (`grid-cols-2 xl:grid-cols-4` etc. for card/KPI grids — 2 columns even at mobile width is fine for short stat cards; `grid-cols-1 sm:grid-cols-2` for form field-pairs — see Forms/Inputs above, a bare `grid-cols-2` on real form inputs is a bug, not a stylistic choice).
 

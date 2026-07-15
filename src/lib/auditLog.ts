@@ -24,6 +24,12 @@ export interface AuditLogEntry {
   relatedCompanyProfileId?: string;
   /** Company name (Thai) this entry relates to — same provenance/caveats as `relatedCompanyProfileId`. */
   relatedCompanyProfileName?: string;
+  /** Quotation Template `id` this entry relates to (import/create/edit/duplicate/activate/archive
+   * events written by `api/_lib/quotationTemplatesHandler.ts`, added for the Template Management
+   * module) — same optional/backward-compatible provenance as `relatedQuoteId`. */
+  relatedTemplateId?: string;
+  relatedTemplateName?: string;
+  relatedJobTypeCode?: string;
 }
 
 export async function fetchAuditLog(): Promise<AuditLogEntry[]> {

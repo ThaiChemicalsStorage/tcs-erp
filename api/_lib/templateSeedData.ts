@@ -486,13 +486,14 @@ export type TemplateSeed = Pick<
   QuotationTemplate,
   "templateCode" | "templateName" | "jobTypeCode" | "jobTypeName" | "description" | "version"
   | "sourceFileName" | "sourceSheetName" | "sections" | "defaultTerms" | "internalNotes"
->;
+> & { sourceType: "excel_import" };
 
 export const QUOTATION_TEMPLATE_SEEDS: TemplateSeed[] = [
   {
     templateCode: WET_SCRUBBER_CODE,
     templateName: "Wet Scrubber",
     jobTypeCode: "SC",
+    sourceType: "excel_import",
     jobTypeName: "Wet Scrubber / Activated Carbon System",
     description: "โครงสร้างใบเสนอราคาสำหรับงาน Wet Scrubber System ครบวงจร ตั้งแต่งานเตรียมการ ระบบสครับเบอร์ เครื่องเป่าลม ระบบท่อ ระบบปั๊มน้ำ เครื่องมือวัดและควบคุม ไปจนถึงการติดตั้ง ทดสอบ และส่งมอบงาน",
     version: "1.0",
@@ -506,6 +507,7 @@ export const QUOTATION_TEMPLATE_SEEDS: TemplateSeed[] = [
     templateCode: ACTIVATED_CARBON_CODE,
     templateName: "Activated Carbon",
     jobTypeCode: "SC",
+    sourceType: "excel_import",
     jobTypeName: "Wet Scrubber / Activated Carbon System",
     description: "โครงสร้างใบเสนอราคาสำหรับงานระบบดูดซับด้วยถ่านกัมมันต์ (Activated Carbon System) ตั้งแต่งานเตรียมการ ท่อดักฝุ่นหลัก ระบบกรอง ระบบถ่านกัมมันต์ เครื่องเป่าลม เครื่องมือวัดและระบบควบคุมไฟฟ้า ไปจนถึงการติดตั้งและส่งมอบงาน",
     version: "1.0",
@@ -519,6 +521,7 @@ export const QUOTATION_TEMPLATE_SEEDS: TemplateSeed[] = [
     templateCode: BAG_FILTER_CODE,
     templateName: "Bag Filter",
     jobTypeCode: "BF",
+    sourceType: "excel_import",
     jobTypeName: "Dust Collector System",
     description: "โครงสร้างใบเสนอราคาสำหรับงานระบบดักฝุ่นแบบถุงกรอง (Bag Filter / Dust Collector System) ตั้งแต่งานเตรียมการ ท่อดักฝุ่นหลัก ตัวเครื่องดักฝุ่น ถุงกรอง วาล์ว เครื่องเป่าลม เครื่องมือวัดและระบบควบคุมไฟฟ้า ไปจนถึงการติดตั้งและส่งมอบงาน",
     version: "1.0",
@@ -532,6 +535,7 @@ export const QUOTATION_TEMPLATE_SEEDS: TemplateSeed[] = [
     templateCode: FRP_TANK_CODE,
     templateName: "FRP Tank",
     jobTypeCode: "TA",
+    sourceType: "excel_import",
     jobTypeName: "Fiberglass Tank",
     description: "โครงสร้างใบเสนอราคาสำหรับงานถัง FRP (FRP Tank) ครอบคลุมรายละเอียดถัง วัสดุ ความหนา อุณหภูมิ สารเคมี อุปกรณ์เสริม (Level indicator, บันได, แพลตฟอร์ม) การขนส่งและติดตั้ง",
     version: "1.0",
@@ -545,6 +549,7 @@ export const QUOTATION_TEMPLATE_SEEDS: TemplateSeed[] = [
     templateCode: FRP_LINING_CODE,
     templateName: "FRP Lining",
     jobTypeCode: "LI",
+    sourceType: "excel_import",
     jobTypeName: "FRP Lining",
     description: "โครงสร้างใบเสนอราคาสำหรับงานพ่นเคลือบ FRP Lining ครอบคลุมพื้นผิว/ประเภทงาน ความหนา ชั้นเรซิ่น สารเคมี การเตรียมพื้นผิว (เจียร/พ่นทราย) ความปลอดภัยและใบรับรองที่เกี่ยวข้อง",
     version: "1.0",

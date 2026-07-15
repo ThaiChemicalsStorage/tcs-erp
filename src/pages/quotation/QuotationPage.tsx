@@ -35,6 +35,8 @@ export function QuotationPage({
   initialTemplateSelection,
   onTemplateSelectionConsumed,
   onNotify,
+  canCreateTemplate,
+  onCreateTemplateForJobType,
 }: {
   quotes: Quote[];
   setQuotes: React.Dispatch<React.SetStateAction<Quote[]>>;
@@ -60,6 +62,10 @@ export function QuotationPage({
   initialTemplateSelection: { jobTypeCode: string; templateId: string } | null;
   onTemplateSelectionConsumed: () => void;
   onNotify: () => void;
+  /** Whether the current user can reach the Template Management create flow — gates the wizard's
+   * "สร้าง Template ใหม่สำหรับประเภทงานนี้" affordance, see QuotationTemplateWizard.tsx. */
+  canCreateTemplate: boolean;
+  onCreateTemplateForJobType: (jobTypeCode: string, jobTypeName: string) => void;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<"list" | "wizard" | "new" | "detail">("list");
@@ -208,6 +214,8 @@ export function QuotationPage({
           onComplete={(result) => { setWizardResult(result); setView("new"); }}
           showToast={toast.show}
           initialSelection={appliedTemplateSelection}
+          canCreateTemplate={canCreateTemplate}
+          onCreateTemplateForJobType={onCreateTemplateForJobType}
         />
         <Toast message={toast.message} />
       </>

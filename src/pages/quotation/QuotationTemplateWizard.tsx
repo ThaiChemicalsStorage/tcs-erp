@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Layers, FileText, AlertTriangle, RefreshCw, Loader2, PackageOpen } from "lucide-react";
+import { ChevronLeft, FileText, AlertTriangle, RefreshCw, Loader2, PackageOpen } from "lucide-react";
 import type { JobType } from "../../lib/jobTypes";
 import {
   fetchQuotationTemplates, fetchQuotationTemplate,
   type QuotationTemplateSummary, type QuotationTemplate,
 } from "../../lib/quotationTemplates";
 import { applyTemplateToQuoteDraft, type AppliedTemplateDraft } from "./applyTemplate";
+import { TemplatePreview } from "../../components/TemplatePreview";
 import { useI18n } from "../../lib/i18n";
 
 /**
@@ -42,6 +43,8 @@ export function QuotationTemplateWizard({
   onCancel,
   showToast,
   initialSelection,
+  canCreateTemplate,
+  onCreateTemplateForJobType,
 }: {
   jobTypes: JobType[];
   onComplete: (result: QuotationWizardResult) => void;
@@ -53,6 +56,12 @@ export function QuotationTemplateWizard({
    * deactivated between the search result loading and the click) just falls back to the normal
    * Step 1 job-type grid rather than erroring. */
   initialSelection?: { jobTypeCode: string; templateId: string } | null;
+  /** Whether the current user holds `quotationTemplates:create` (or `:manage`) — gates the "สร้าง
+   * Template ใหม่สำหรับประเภทงานนี้" affordance on the template-choice/empty-state screens, per the
+   * spec's "Do Not Confuse 'OTHER' Job Type with Blank Template" requirement: this button routes to
+   * the real Template Management create flow, never to "เริ่มจากแบบฟอร์มเปล่า". */
+  canCreateTemplate?: boolean;
+  onCreateTemplateForJobType?: (jobTypeCode: string, jobTypeName: string) => void;
 }) {
   const { t } = useI18n();
 
@@ -78,6 +87,42 @@ export function QuotationTemplateWizard({
 
   const activeJobTypes = jobTypes.filter((jt) => jt.isActive);
 
+  // Per-Job-Type active-template counts for the grid's "มี Template N แบบ" / "ยังไม่มี Template"
+  // badges — fetched once, unfiltered, independent of `templates` (which only ever holds the
+  // *selected* Job Type's list). A separate small fetch rather than reusing/caching into `templates`
+  // deliberately keeps the existing per-Job-Type fetch/retry flow below untouched.
+  //
+  // 2026-07-15, second Codex-review fix pass (Medium Priority): a loading-in-progress state and a
+  // failed-fetch state used to both collapse into the same "no template" badge (`templateCounts`
+  // was `null` while loading, then `new Map()` on failure — `badgeFor`'s `?? 0` fallback treated
+  // both identically to a genuine zero-templates result), which could falsely advertise the blank
+  // fallback for a Job Type that actually has templates, just not loaded yet. Now tracked as 3
+  // explicit states so the grid never claims "no template" until the count is actually known.
+  const [templateCounts, setTemplateCounts] = useState<Map<string, number> | null>(null);
+  const [templateCountsError, setTemplateCountsError] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetchQuotationTemplates()
+      .then((list) => {
+        if (cancelled) return;
+        const counts = new Map<string, number>();
+        for (const tpl of list.filter((t2) => t2.isActive)) {
+          counts.set(tpl.jobTypeCode, (counts.get(tpl.jobTypeCode) ?? 0) + 1);
+        }
+        setTemplateCounts(counts);
+      })
+      .catch(() => { if (!cancelled) setTemplateCountsError(true); });
+    return () => { cancelled = true; };
+  }, []);
+  const badgeFor = (jobTypeCode: string): string => {
+    if (templateCountsError) return t("quotation.wizard.badge.unknown");
+    if (!templateCounts) return t("quotation.wizard.badge.loading");
+    const n = templateCounts.get(jobTypeCode) ?? 0;
+    if (n === 0) return t("quotation.wizard.badge.none");
+    if (n === 1) return t("quotation.wizard.badge.one");
+    return t("quotation.wizard.badge.many").replace("{n}", String(n));
+  };
+
   // Kicks off the actual template fetch for a deep-linked selection — the synchronous "start
   // loading" state above already happened at mount via the lazy initializers, so this effect body
   // begins directly with the async call itself (matches the working pattern already established
@@ -87,7 +132,7 @@ export function QuotationTemplateWizard({
   useEffect(() => {
     if (consumedInitialSelection.current || !initialSelection || !initialJobType) return;
     consumedInitialSelection.current = true;
-    fetchQuotationTemplates(initialJobType.code)
+    fetchQuotationTemplates({ jobTypeCode: initialJobType.code })
       .then((list) => {
         const active = list.filter((tpl) => tpl.isActive);
         setTemplates(active);
@@ -134,7 +179,7 @@ export function QuotationTemplateWizard({
     setLoadingTemplates(true);
     setTemplatesError("");
     try {
-      const list = await fetchQuotationTemplates(jt.code);
+      const list = await fetchQuotationTemplates({ jobTypeCode: jt.code });
       const active = list.filter((tpl) => tpl.isActive);
       setTemplates(active);
       if (active.length === 1) {
@@ -232,6 +277,9 @@ export function QuotationTemplateWizard({
                   >
                     <span className="text-sm font-semibold text-[#c9a84c]">{jt.code}</span>
                     <span className="text-xs text-muted-foreground">{jt.name}</span>
+                    <span className={`text-[10px] mt-0.5 ${(templateCounts?.get(jt.code) ?? 0) > 0 ? "text-[#2aa36b]" : "text-muted-foreground"}`}>
+                      {badgeFor(jt.code)}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -272,9 +320,18 @@ export function QuotationTemplateWizard({
                   <button onClick={backToJobType} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                     {t("quotation.wizard.chooseOtherJobType")}
                   </button>
-                  <button onClick={handleNotifyAdmin} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-                    {t("quotation.wizard.notifyAdmin")}
-                  </button>
+                  {canCreateTemplate && onCreateTemplateForJobType ? (
+                    <button
+                      onClick={() => onCreateTemplateForJobType(selectedJobType.code, selectedJobType.name)}
+                      className="px-3 py-1.5 text-xs border border-[#c9a84c]/40 text-[#c9a84c] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
+                    >
+                      {t("quotation.wizard.createTemplateForJobType")}
+                    </button>
+                  ) : (
+                    <button onClick={handleNotifyAdmin} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+                      {t("quotation.wizard.notifyAdmin")}
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (
@@ -306,6 +363,14 @@ export function QuotationTemplateWizard({
                   <button onClick={handleStartBlank} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
                     {t("quotation.wizard.startFromBlankForm")}
                   </button>
+                  {canCreateTemplate && onCreateTemplateForJobType && (
+                    <button
+                      onClick={() => onCreateTemplateForJobType(selectedJobType.code, selectedJobType.name)}
+                      className="text-sm text-[#c9a84c] hover:text-[#f0c040] transition-colors underline underline-offset-2"
+                    >
+                      {t("quotation.wizard.createTemplateForJobType")}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -334,36 +399,8 @@ export function QuotationTemplateWizard({
             ) : fullTemplate ? (
               <div>
                 <h2 className="text-base font-medium text-foreground mb-1">{t("quotation.wizard.step3Title")}</h2>
-                <div className="rounded-lg border border-border bg-card px-5 py-4 mt-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-semibold text-[#c9a84c]">{fullTemplate.jobTypeCode}</span>
-                    <ChevronRight size={12} className="text-muted-foreground" />
-                    <span className="text-sm font-semibold text-foreground">{fullTemplate.templateName}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">{fullTemplate.description}</p>
-
-                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground mb-3">
-                    <span className="flex items-center gap-1"><Layers size={12} /> {fullTemplate.sections.length} {t("quotation.wizard.sections")}</span>
-                    <span>{fullTemplate.sections.reduce((n, s) => n + s.items.length, 0)} {t("quotation.wizard.items")}</span>
-                    <span>{t("quotation.wizard.version")}: {fullTemplate.version}</span>
-                    <span>{t("quotation.wizard.source")}: {fullTemplate.sourceFileName} — {fullTemplate.sourceSheetName}</span>
-                  </div>
-
-                  <div className="space-y-2 mb-3">
-                    {fullTemplate.sections.map((section) => (
-                      <div key={section.id}>
-                        <p className="text-xs font-semibold text-foreground">{section.title}</p>
-                        <p className="text-[11px] text-muted-foreground">{section.items.length} {t("quotation.wizard.items")}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <p className="text-[11px] text-muted-foreground mb-1">{t("quotation.wizard.includedItemsPreview")}</p>
-                  <ul className="text-xs text-foreground list-disc list-inside space-y-0.5">
-                    {fullTemplate.sections.flatMap((s) => s.items).slice(0, 6).map((item) => (
-                      <li key={item.id} className="truncate">{item.name}</li>
-                    ))}
-                  </ul>
+                <div className="mt-4">
+                  <TemplatePreview template={fullTemplate} compact />
                 </div>
 
                 <div className="mt-6 flex flex-wrap items-center gap-3">

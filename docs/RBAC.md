@@ -19,12 +19,12 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **Users** (`src/lib/users.ts`): a `User` is both the employee record and the account — `employeeId`, `fullName`, `username`, `email`, `passwordHash`, `phone`, `department`, `position`, `roleKey`, `status` (`active`/`inactive`), `profilePictureDataUrl`, `signatureDataUrl`. `employeeId`/`username`/`email` are enforced unique. **Position and Role are deliberately separate fields** — Position is a free-text job title (with suggestions: CEO, Director, General Manager, Sales Manager, Sales Executive, Engineer, HR, Accounting, Purchasing, Warehouse) with no bearing on permissions; Role is the RBAC role, assigned independently by an admin.
 
-**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 22-key `Permission` union — `dashboard:view`; `quotations:view/create/edit/delete/approve/reject/export`; `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage` (added 2026-07-14, see "Quotation Templates" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) Six default `Role`s ship out of the box:
+**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 29-key `Permission` union — `dashboard:view`; `quotations:view/create/edit/delete/approve/reject/export`; `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) Six default `Role`s ship out of the box:
 
 | Role | `isSuperAdmin` | `isSystem` | Summary |
 |---|---|---|---|
 | Super Admin | ✅ | ✅ (undeletable) | Every permission, always — `roleHasPermission()` short-circuits to `true` regardless of the stored list |
-| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + Quotation Template management (`quotationTemplates:manage`, added 2026-07-14). No `roles:manage`/`company:manage`. |
+| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15). No `roles:manage`/`company:manage`. |
 | Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Maps to the request's "Sales Executive." |
 | Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Maps to "Sales Manager." |
 | Approver Level 2 | — | — | Same rights as Level 1 in this build (see Known Simplifications below). Maps to "CEO." |
@@ -106,33 +106,82 @@ enforcement found zero Critical issues and 3 High Priority data/audit-integrity 
 same day — see CHANGELOG.md if that history is ever needed. The module itself was removed
 2026-07-14, so this no longer describes any live route.)*
 
-### Quotation Templates (added 2026-07-14)
+### Quotation Templates (added 2026-07-14, expanded to 8 permissions 2026-07-15, product-linkage integrity fixed 2026-07-15)
 
-A single new permission — `quotationTemplates:manage` — gates the admin-only actions on the new
-Create Quotation wizard's backing data (see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)):
-running `POST /api/quotation-templates/import` and toggling a template's `isActive`/`isDeleted`
-flags via `PATCH /api/quotation-templates/:id`. Granted by default to the **Administrator** role —
+**2026-07-15, second Codex-review fix pass — inactive-template policy explicitly reconfirmed, not
+changed**: an independent review of the Template Management pass flagged that
+`validateQuotationTemplate()` (`api/_lib/quoteValidation.ts`) lets a currently-*inactive*-but-not-
+deleted template still be attached to a brand-new quote, and asked that this be "explicitly accepted
+or constrained." This is the explicit accept: it's intentional, not a gap — a Sales user who started
+a quote from a template that an Admin deactivated moments later should never have their in-progress
+work retroactively invalidated. Only `isDeleted` (a real delete/archive) disqualifies a match; the
+Sales-facing browse/preview UI still only ever offers `isActive: true` templates, so this only
+matters for a template deactivated *during* an in-progress draft, or a direct API call bypassing the
+UI (which is still fully RBAC-gated regardless). No code change accompanies this entry — it's a
+formal decision record. Same pass: template item product links (`productId`/`productSnapshot`) are
+now server-resolved/server-verified rather than trusted from the client — see
+[MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Product and Custom Item Review"
+— a data-integrity fix inside the already-correctly-permission-gated content-edit routes, not a
+permission-model change.
+
+**2026-07-15**: the original single `quotationTemplates:manage` permission is now a **documented
+backward-compatible superset** — every server-side check accepts `:manage` OR the specific granular
+permission an action needs, so a pre-existing role assignment that only ever held `:manage` keeps
+full access to every new action without an admin having to re-save it. 7 new granular permissions
+were added for the Template Management admin module
+(see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Template Management Module"):
+
+| Permission | Gates |
+|---|---|
+| `quotationTemplates:view` | The Template Management admin page/list itself (sees inactive + archived templates) — **not** the wizard's browse-to-pick-a-template access, which still uses `quotations:create` (see below). |
+| `quotationTemplates:create` | `POST /api/quotation-templates` + the wizard's "สร้าง Template ใหม่สำหรับประเภทงานนี้" button. |
+| `quotationTemplates:edit` | `PATCH /api/quotation-templates/:id` when the body changes any content field. |
+| `quotationTemplates:duplicate` | `POST /api/quotation-templates/:id/duplicate`. |
+| `quotationTemplates:activate` | `PATCH /api/quotation-templates/:id` when the body changes `isActive` relative to the persisted value. |
+| `quotationTemplates:archive` | `PATCH /api/quotation-templates/:id` when the body changes `isDeleted` relative to the persisted value. |
+| `quotationTemplates:import` | `POST /api/quotation-templates/import`. |
+
+All 8 (including `:manage`) granted by default to the **Administrator** role —
 **not** Super-Admin-exclusive (Super Admin already has every permission implicitly, via
 `roleHasPermission()`'s short-circuit).
 
-**Sales-facing template *browsing* deliberately reuses the existing `quotations:create`
-permission** rather than introducing a new "view" permission — the same "manage vs.
-pick-for-a-quotation" carve-out already established for Customers (`customers:view` vs.
-`quotations:create`) and, before that, Company Profiles. `GET /api/quotation-templates` and
-`GET /api/quotation-templates/:id` accept **either** `quotationTemplates:manage` **or**
-`quotations:create`: a manager sees every non-deleted template (active or not); a
+**Sales-facing template *browsing* (picking a template while starting a quotation) deliberately
+still reuses the existing `quotations:create` permission** rather than `quotationTemplates:view` —
+the same "manage vs. pick-for-a-quotation" carve-out already established for Customers
+(`customers:view` vs. `quotations:create`) and, before that, Company Profiles.
+`GET /api/quotation-templates` and `GET /api/quotation-templates/:id` accept **either**
+`quotationTemplates:view`/`:manage` **or** `quotations:create`: a `:view`/`:manage` holder sees every
+non-deleted template (active or not, plus archived ones via `?includeArchived=true`); a
 `quotations:create`-only caller (e.g. Sales User, the default grant) gets a narrower,
 server-filtered `isActive: true`-only response — exactly what the Create Quotation wizard's Job
-Type/Template/Preview screens need and nothing more. No default role holds
-`quotationTemplates:manage` without also holding `quotations:create` today, so this carve-out
-mainly matters for a hypothetical custom role granted one permission but not the other.
+Type/Template/Preview screens need and nothing more. `quotationTemplates:view` is deliberately a
+*different, stronger* permission than `quotations:create` — it's what makes the Template Management
+sidebar entry/page itself visible, so a plain Sales User (who only has `quotations:create`) can use
+the wizard normally but never sees the admin module.
+
+**Per-dimension enforcement on `PATCH`, not one blanket check**: a single request can touch content,
+`isActive`, and `isDeleted` at once (the edit form always submits the full draft, `isActive`
+included), but each dimension only pulls in its own required permission when its value *actually
+changes* relative to the persisted document — compared server-side, not just by field presence. This
+is what lets a plain `:edit` holder save unrelated content edits without also needing `:activate`,
+while still blocking an `:edit`-only holder from sneaking a real activation through the same call.
+See `handleOne`'s `touchesActive`/`touchesArchive` in `api/_lib/quotationTemplatesHandler.ts`.
 
 Every route in `api/_lib/quotationTemplatesHandler.ts` (mounted from `api/handlers/jobtypes.ts` —
-see [API.md](./API.md) "Quotation Templates") calls `requirePermission()`/`requireUser()` server-side
-with the matching check above. **Global Search's new `templates` result category** (see
-[DATABASE.md](./DATABASE.md)/[API.md](./API.md) "Global Search") is gated by the identical
-`quotationTemplates:manage` **or** `quotations:create` check, applied the same way every other
-search category is — before that category's MongoDB query even runs, not just hidden client-side.
+see [API.md](./API.md) "Quotation Templates") calls `requireUser()`/a local `requireAnyPermission()`
+helper server-side with the matching check(s) above — never `requirePermission()`'s single-permission
+form, since every mutating action here needs the `:manage`-OR-granular pattern. **Global Search's
+`templates` result category** (see [DATABASE.md](./DATABASE.md)/[API.md](./API.md) "Global Search")
+is gated by the identical `quotationTemplates:view`/`:manage` **or** `quotations:create` check,
+applied the same way every other search category is — before that category's MongoDB query even
+runs, not just hidden client-side.
+
+**Audit logging (added 2026-07-15)**: every template lifecycle action (import/create/update/
+duplicate/activate/deactivate/archive/unarchive) writes a server-side `AuditLogEntry` via
+`writeTemplateAuditEntry()`, module `"Template ใบเสนอราคา"` — see
+[DATABASE.md](./DATABASE.md) `AuditLogEntry`'s `relatedTemplateId`/`relatedTemplateName`/
+`relatedJobTypeCode` fields. `POST /api/quotes`'s own audit entry now also distinguishes
+"Quotation Created from Template" from "Quotation Created (Blank)".
 
 Admins can create additional custom roles and edit any non-system role's permission checkboxes via Role Management (`src/pages/admin/RoleManagementPage.tsx`) — gated client-side by `userIsSuperAdmin()`, and **independently re-enforced server-side**: `POST`/`PATCH`/`DELETE /api/roles*` all require the `roles:manage` permission (`api/handlers/roles.ts`), which only the Super Admin role holds (see below), and the server strips any `roles:manage`/`company:manage` permission from a submitted permission list regardless of what the client sent, so there is no way — UI or direct API call — to grant them elsewhere. `roles:manage` and `company:manage` are additionally hardcoded in `SUPER_ADMIN_ONLY_PERMISSIONS` (`permissions.ts`) and `isPermissionLockedToSuperAdmin()` (`src/lib/roles.ts`, the same function used both client- and server-side) — the permission-matrix checkboxes for those two are disabled/locked for every role except Super Admin itself in the UI, and the server independently refuses to persist them onto any other role even if a request is crafted by hand.
 

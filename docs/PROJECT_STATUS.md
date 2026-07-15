@@ -14,6 +14,53 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-15, second Codex-review fix pass] Quotation Templates — real workbook parsing, structured snapshot, subDetails/visibleToCustomer fix, server-verified product links.**
+  An independent review of the Template Management pass below found 0 Critical, 3 High, and 3
+  Medium Priority issues — all fixed same day. **High #1**: `POST /api/quotation-templates/import`
+  now actually reads the real `.xlsx` workbook (`api/_lib/templateWorkbookParser.ts`, `xlsx`/
+  SheetJS re-added as a real production dependency) and hashes its content per sheet, so replacing
+  the workbook is now genuinely detectable — a real import-report warning fires when a sheet's live
+  content no longer matches the last hand-transcription. Full auto-classification of parsed rows
+  into structured template content was deliberately not attempted (direct inspection of the real
+  workbook found rows that pack multiple different classifications into different columns of a
+  single row — see MODULES/QuotationTemplates.md for the concrete evidence — a naive classifier
+  risks silently corrupting already-reviewed customer-facing content). **High #2**: `Quote.
+  templateSnapshot` added — a real structured copy of the matched template's sections/terms/
+  internal-notes/source-hash frozen at quote-creation time, alongside the existing provenance
+  strings; never client-writable, never editable after creation, never read by any rendering path
+  (PDF/editor still only read `lines`, unchanged). **High #3**: `applyTemplateToQuoteDraft()` now
+  copies `item.subDetails` (previously silently dropped — an admin's configured sub-detail text
+  never reached the quotation) and skips any item with `visibleToCustomer: false` (previously
+  ignored entirely — the "hide from customer" checkbox had zero actual effect). **Medium fixes**:
+  template item product links are now server-resolved against real Product Master records (a
+  client-submitted `productSnapshot` is never trusted verbatim); a concurrent import race can no
+  longer surface as an unhandled duplicate-key 500; the wizard's Job Type availability badges now
+  distinguish loading/error/real-count instead of collapsing all three into "no template." The
+  inactive-but-not-deleted-template policy was formally reconfirmed (not changed) as intentional.
+  `tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `lint`, `build` all pass clean; a local
+  dev-server + Playwright check confirmed zero console errors; `fingerprintSourceWorkbook()`
+  independently verified against the real workbook file. See `docs/CODEX_REVIEW_REPORT.md`'s
+  "Claude Fix Status" for the full writeup.
+- ✅ **[2026-07-15] Quotation Templates — Template Management module.** Closed the gap the
+  2026-07-14 pass's own docs flagged ("No admin UI exists yet for managing templates beyond the raw
+  API"). New `จัดการ Template ใบเสนอราคา` page (sidebar under งานขาย): list (search/filters/columns
+  per spec) + create/edit form (sections/items CRUD, reorder via up/down buttons, select-existing-
+  product-via-`ProductPickerModal`-vs-add-custom-item, specifications/sub-details/editable
+  parameters/internal notes/terms editing), duplicate (deep-clones with fresh ids, always created
+  Draft/Inactive, original untouched), activate/deactivate, archive/restore. RBAC expanded from one
+  coarse `quotationTemplates:manage` into 7 granular permissions
+  (`view/create/edit/duplicate/activate/archive/import`), with `:manage` kept as a documented
+  backward-compatible superset so no existing role assignment silently loses access. Server-side
+  audit logging added for every template lifecycle event, plus a new distinction on the
+  quote-creation audit entry between "Quotation Created from Template" and "Quotation Created
+  (Blank)". Job Type grid now shows template-availability badges, and a permission-gated "create
+  Template for this Job Type" action was added to the wizard's empty-state/template-choice screens.
+  `QuotationTemplate` gained `sourceType` (excel_import/manual) and `TemplateItem` gained an
+  optional `productSnapshot`. A shared `TemplatePreview` component now backs both the wizard's
+  preview step and the new module's own preview action. `tsc -b`, `tsc --noEmit -p
+  tsconfig.api.json`, `lint`, `build` all pass clean; a local dev-server + Playwright check confirmed
+  the client bundle loads with zero console errors (no local MongoDB credentials, so live-DB
+  round-trips remain unverified — see MODULES/QuotationTemplates.md "Known Limitations").
 - ✅ **[2026-07-14, Codex review fix pass] Fixed 3 High Priority Quotation Templates issues from an independent review of the pass below.** Zero Critical issues found. **High #1**: `POST /api/quotes` validated `jobTypeCode` and `quotationTemplateId` completely independently, so a direct API caller (bypassing the wizard's UI-level guardrails) could create a quotation whose Job Type and attached template didn't actually match — `validateQuotationTemplate()` (`api/_lib/quoteValidation.ts`) gained a required 3rd `quoteJobTypeCode` parameter and now throws a `400` if the matched template's own `jobTypeCode` differs from the quote's; `TemplateMasterEntry`/`loadTemplateMaster()` (`api/handlers/quotes.ts`) now project/return `jobTypeCode` to support the check. **High #2**: the `SC-ACTIVATED-CARBON` and `BF-BAG-FILTER` templates' "Main Ducting" item was missing a real source specification line present in the source workbook (row 5 of both sheets) — re-verified directly against `public/Scope of work new template for air pollution control_Technic.xlsx` before fixing, then added as each item's first `specifications` entry in `api/_lib/templateSeedData.ts`. **High #3**: 9 real, non-placeholder literal values (e.g. `Brand: TCS`, `Material: Steel`, `Static Pressure: 200 mm wg.`) were stored in `TemplateEditableParameter.value`, but `applyTemplateToQuoteDraft()` (`src/pages/quotation/applyTemplate.ts`) always renders every editable parameter as a blank fill-in-the-blank prompt regardless of `value` — so these real defaults were silently discarded on template apply, contradicting the interface's own "always blank at template-definition time" doc comment. Fixed by reclassifying all 9 from `editableParameters` to plain `specifications` text (matching a classification rule the seed file's own top-of-file comment already stated but the original data violated) — `TemplateEditableParameter.value` is now verified genuinely always blank across all 5 templates, and the real defaults now survive into the applied quotation as ordinary editable specification text. `npx tsc -b`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all pass clean; seed data changes verified via a `tsx` sanity script run against the actual template objects. **Not changed** (explicitly out of scope — task was "fix Critical/High," 0 Critical found): `POST /api/quotation-templates/import` still upserts hand-transcribed seed data rather than parsing/hashing the `.xlsx` file itself; no admin UI for triggering import/activating templates; the quote's template snapshot is flattened `QuoteLine[]` metadata, not a full structured section/item hierarchy; the import loop is find-then-insert/update rather than a single atomic upsert; template preview still shows only the first 6 item names — all tracked in TODO.md. Docs updated: this file, CLAUDE.md, CHANGELOG.md, TODO.md, DATABASE.md, API.md, IMPLEMENTATION_CHECKLIST.md. See `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status" section.
 - ✅ **[2026-07-14] Quotation Templates + Create Quotation wizard.** Sales users now go through a
   wizard (Job Type → Template → Preview → the normal quotation form, pre-filled but fully editable)

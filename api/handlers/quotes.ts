@@ -114,6 +114,25 @@ async function loadTemplateMaster(): Promise<TemplateMasterEntry[]> {
   return docs.map((d) => ({ id: d._id.toString(), templateName: d.templateName, version: d.version, jobTypeCode: d.jobTypeCode, isDeleted: d.isDeleted }));
 }
 
+/** Fetches the one full template document needed to freeze `Quote.templateSnapshot` (see
+ * src/lib/quotes.tsx) — only called when `validateQuotationTemplate()` above already confirmed
+ * `quotationTemplateId` matches a real, non-deleted record, so this should never come back empty in
+ * practice; a `null` here (e.g. a genuinely lost race with a hard delete) just means the quote is
+ * created without a snapshot rather than failing the whole request — the 3 provenance strings
+ * already validated are enough to still record what was intended. */
+async function loadTemplateSnapshot(quotationTemplateId: string): Promise<QuoteFields["templateSnapshot"] | null> {
+  const templates = await quotationTemplatesCollection();
+  const doc = await templates.findOne({ _id: toObjectId(quotationTemplateId) });
+  if (!doc) return null;
+  return {
+    sections: doc.sections,
+    defaultTerms: doc.defaultTerms,
+    internalNotes: doc.internalNotes,
+    sourceHash: doc.sourceHash,
+    capturedAt: nowIso(),
+  };
+}
+
 function isApprovalAction(v: unknown): v is ApprovalAction {
   return typeof v === "string" && v in workflowTransitions;
 }
@@ -234,6 +253,11 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     const { jobTypeCode, jobTypeName } = validateJobType(body.jobTypeCode, jobTypeMaster, { required: true });
     const templateMaster = await loadTemplateMaster();
     const { quotationTemplateId, quotationTemplateName, quotationTemplateVersion } = validateQuotationTemplate(body.quotationTemplateId, templateMaster, jobTypeCode);
+    // 2026-07-15, second Codex-review fix pass (High Priority #2): a real structured snapshot, not
+    // just the 3 provenance strings above. `loadTemplateMaster()` only projects the lightweight
+    // fields validation needs — this one extra targeted fetch (only when a template was actually
+    // matched, never for a blank-start quote) gets the full sections/terms/notes/hash to freeze.
+    const templateSnapshot = quotationTemplateId ? await loadTemplateSnapshot(quotationTemplateId) : null;
     const lines = validateLines(body.lines);
     const discount = sanitizeDiscountPct(body.discount);
     // Optional — a quotation may be created against a saved Customer (selected via
@@ -281,12 +305,20 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       customerSnapshot: buildCustomerSnapshot(customerFields),
       ...(customerId ? { customerId } : {}),
       ...(quotationTemplateId ? { quotationTemplateId, quotationTemplateName, quotationTemplateVersion } : {}),
+      ...(templateSnapshot ? { templateSnapshot } : {}),
     };
     await quotes.insertOne(doc);
+    // Distinguishes a template-seeded quotation from a Job Type's "start blank" fallback — per the
+    // Template Management spec's "Audit Logs" requirement (both are their own tracked event, not
+    // just a generic "Quotation Created"). `quotationTemplateId` is already server-validated above
+    // (`validateQuotationTemplate()`), so its presence here reliably means the wizard's "ใช้
+    // Template นี้" path was taken, not "เริ่มจากแบบฟอร์มเปล่า".
     await writeQuoteAuditEntry(
       ctx,
-      "Quotation Created",
-      `สร้างใบเสนอราคา ${id} (${client})`,
+      quotationTemplateId ? "Quotation Created from Template" : "Quotation Created (Blank)",
+      quotationTemplateId
+        ? `สร้างใบเสนอราคา ${id} (${client}) จาก Template: ${quotationTemplateName} (v${quotationTemplateVersion})`
+        : `สร้างใบเสนอราคา ${id} (${client}) แบบฟอร์มเปล่า สำหรับประเภทงาน ${jobTypeCode}`,
       { quoteId: id, customerName: client },
     );
     res.status(201).json({ quote: withStringId(doc) });

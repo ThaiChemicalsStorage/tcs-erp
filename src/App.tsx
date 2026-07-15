@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -39,6 +39,7 @@ const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage")
 const RoleManagementPage = lazy(() => import("./pages/admin/RoleManagementPage").then((m) => ({ default: m.RoleManagementPage })));
 const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) => ({ default: m.AuditLogPage })));
 const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then((m) => ({ default: m.CustomersPage })));
+const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateManagementPage").then((m) => ({ default: m.TemplateManagementPage })));
 
 function PageLoading() {
   return (
@@ -111,7 +112,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
 }
 
 /** Stable routing identifiers — decoupled from the (now translatable) display label, so switching language never breaks navigation. */
-type NavKey = "dashboard" | "quotations" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
 
 /** The boot-time domain resources fetched once after sign-in — see `loadDomainData()`/`resourceStatus` below. */
 type ResourceKey = "users" | "roles" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
@@ -125,6 +126,7 @@ type ResourceState = "loading" | "ready" | "error";
  */
 const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
   quotations: ["quotes", "company", "users", "roles", "products", "categories", "jobTypes", "customers"],
+  quotationTemplates: ["jobTypes", "products", "categories"],
   products: ["products", "categories"],
   customers: ["customers"],
   users: ["users", "roles"],
@@ -150,6 +152,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { key: "dashboard", icon: LayoutDashboard, labelKey: "nav.dashboard", permission: "dashboard:view" },
   { key: "quotations", icon: FileText, labelKey: "nav.quotations", permission: "quotations:view" },
+  { key: "quotationTemplates", icon: Layers, labelKey: "nav.quotationTemplates", permission: "quotationTemplates:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -169,7 +172,7 @@ const navItems: NavItem[] = [
  */
 const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
-  { labelKey: "nav.group.sales", keys: ["quotations", "customers"] },
+  { labelKey: "nav.group.sales", keys: ["quotations", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "auditLog"] },
 ];
@@ -177,6 +180,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
 const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   dashboard: "nav.dashboard",
   quotations: "nav.quotations",
+  quotationTemplates: "nav.quotationTemplates",
   products: "nav.products",
   customers: "nav.customers",
   users: "nav.users",
@@ -226,6 +230,13 @@ export default function App() {
   /** Set by a Global Search "Template ใบเสนอราคา" result click — opens the Create Quotation
    * wizard with this Job Type + Template preselected (see QuotationTemplateWizard.tsx). */
   const [quotationTemplateDeepLink, setQuotationTemplateDeepLink] = useState<{ jobTypeCode: string; templateId: string } | null>(null);
+  /** Set by the Create Quotation wizard's "สร้าง Template ใหม่สำหรับประเภทงานนี้" action — opens
+   * Template Management's create form pre-filled with that Job Type (see
+   * `TemplateManagementPage.tsx`'s `initialCreateForJobType` prop). `seq` follows the same
+   * monotonic-sequence-number convention as `pageAction` below, for the same reason (a second click
+   * while already on the page must still re-fire). */
+  const [templateCreateForJobType, setTemplateCreateForJobType] = useState<{ jobTypeCode: string; jobTypeName: string; seq: number } | null>(null);
+  const templateCreateSeq = useRef(0);
   /** Set by a Global Search "page action" result (e.g. "Create Quotation," "Product Categories")
    * — `seq` is a monotonic sequence number, not a boolean, so the same result clicked twice in a
    * row still re-fires on the target page (see CustomersPage/ProductsPage's `autoCreateSeq`/
@@ -384,6 +395,11 @@ export default function App() {
     setQuotationTemplateDeepLink({ jobTypeCode, templateId });
     setActiveNav("quotations");
   };
+  const navigateToCreateTemplateForJobType = (jobTypeCode: string, jobTypeName: string) => {
+    templateCreateSeq.current += 1;
+    setTemplateCreateForJobType({ jobTypeCode, jobTypeName, seq: templateCreateSeq.current });
+    setActiveNav("quotationTemplates");
+  };
   /** `navKey` arrives from Global Search as a plain string (see `SearchPageResult` in
    * src/lib/search.ts) — validated against the known `NavKey` union here, at the one place a
    * server-supplied string actually needs to become a real `NavKey`, rather than trusting it
@@ -506,6 +522,17 @@ export default function App() {
   const canEditCustomers = hasPermission(currentUser, roles, "customers:edit");
   const canArchiveCustomers = hasPermission(currentUser, roles, "customers:archive");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
+  // `quotationTemplates:manage` is a legacy superset permission kept for backward compatibility
+  // with role assignments made before the granular `quotationTemplates:*` permissions existed (see
+  // docs/RBAC.md) — every granular check here also accepts it, so a pre-existing custom role that
+  // only ever held `:manage` keeps full access without an admin having to re-save it.
+  const hasTemplatePerm = (perm: Permission) => hasPermission(currentUser, roles, "quotationTemplates:manage") || hasPermission(currentUser, roles, perm);
+  const canCreateTemplates = hasTemplatePerm("quotationTemplates:create");
+  const canEditTemplates = hasTemplatePerm("quotationTemplates:edit");
+  const canDuplicateTemplates = hasTemplatePerm("quotationTemplates:duplicate");
+  const canActivateTemplates = hasTemplatePerm("quotationTemplates:activate");
+  const canArchiveTemplates = hasTemplatePerm("quotationTemplates:archive");
+  const canImportTemplates = hasTemplatePerm("quotationTemplates:import");
   /** Whether the sidebar should render its expanded content (group labels, nav text, full brand
    * wordmark) — true on desktop when the user hasn't collapsed it, and always true inside the
    * mobile off-canvas drawer (there's no icon-only state for an overlay, it's open-and-full or
@@ -663,7 +690,9 @@ export default function App() {
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} onNotify={refreshNotifications} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} />
+              : effectiveNav === "quotationTemplates"
+              ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "customers"
               ? <CustomersPage customers={customers} onCustomersChange={setCustomers} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} initialEditId={customerDeepLinkId} onEditIdConsumed={() => setCustomerDeepLinkId(null)} autoCreateSeq={pageAction?.nav === "customers" && pageAction.action === "create" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "settings"

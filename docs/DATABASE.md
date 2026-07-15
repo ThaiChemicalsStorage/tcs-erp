@@ -162,6 +162,9 @@ interface AuditLogEntry {
   relatedCustomerName?: string;         // added 2026-07-13, seventh same-day pass
   relatedCompanyProfileId?: string;     // orphaned field — see below
   relatedCompanyProfileName?: string;   // orphaned field — see below
+  relatedTemplateId?: string;           // added 2026-07-15
+  relatedTemplateName?: string;         // added 2026-07-15
+  relatedJobTypeCode?: string;          // added 2026-07-15
 }
 ```
 Append-only — `logAudit()` has no corresponding update/delete function, so there is no code path to alter history from the UI (including for Super Admin). `POST /api/audit-log` (`api/audit-log/index.ts`) always derives `userId`/`userName`/`roleName` from the authenticated session server-side, never trusting those fields from the request body — a genuine integrity improvement over the pre-migration `localStorage` array, where a client could have written an entry claiming to be any user. Index added 2026-07-09: `{ createdAt: -1 }` (was previously an unindexed `find().sort().limit(1000)`). Index added 2026-07-13 (seventh same-day pass): `{ action: 1, createdAt: -1 }`, serving the Sales Activity Analytics query (now scans all 5 tracked `action` values, commonly with no `userName` filter — "All Sales" selected — which the existing `{ userName: 1, createdAt: -1 }` index can't serve alone).
@@ -169,6 +172,8 @@ Append-only — `logAudit()` has no corresponding update/delete function, so the
 `relatedCompanyProfileId`/`relatedCompanyProfileName` (added 2026-07-13, tenth same-day pass) are **orphaned as of 2026-07-14** — they were only ever written by `writeCompanyProfileAuditEntry()` inside the now-deleted `api/handlers/company-profiles.ts` (see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) "Removed"). Nothing writes them anymore; kept on the type only so the historical `audit_log` entries that already have them still type-check and render without special-casing. `POST /api/audit-log` still rejects the `"โปรไฟล์บริษัท"` module outright (prevents a client from forging *new* entries for a module that no longer exists) — same lockout pattern as `"ใบเสนอราคา"`.
 
 `relatedQuoteId`/`relatedCustomerName` (2026-07-13, seventh same-day pass): optional structured fields, set only by `writeQuoteAuditEntry()` (`api/handlers/quotes.ts`) on quote-workflow entries (Created/Updated/Duplicated/every workflow transition) — the quotation number and customer name were already present in the entry's free-text `details` string, but the Dashboard's Recent Activity table needs them as real fields to render as a clickable link/column instead of parsing prose. Backward-compatible: older entries and every non-quote module (Users/Roles/Settings/Login) simply lack these fields, and `ActivityTimeline.tsx` renders "—" when absent.
+
+`relatedTemplateId`/`relatedTemplateName`/`relatedJobTypeCode` (added 2026-07-15): same optional/backward-compatible structured-field pattern, set by `writeTemplateAuditEntry()` (`api/_lib/quotationTemplatesHandler.ts`) on every Quotation Template lifecycle event (module `"Template ใบเสนอราคา"`) — Created/Updated/Duplicated/Activated/Deactivated/Archived/Unarchived/Imported. `relatedTemplateId` is omitted on the "Templates Imported" bulk-import entry (no single template to point at).
 
 ### `Product` / `ProductCategory` (`src/lib/products.ts`)
 ```ts
@@ -218,7 +223,7 @@ Master data for classifying every quotation by the kind of work it represents. S
 
 `Quote.jobTypeCode`/`jobTypeName` are a **snapshot**, not a live reference — same rationale as `QuoteLine` never referencing `Product` live: renaming a Job Type later must not rewrite historical quotes.
 
-### `QuotationTemplate` (`src/lib/quotationTemplates.ts`) — added 2026-07-14
+### `QuotationTemplate` (`src/lib/quotationTemplates.ts`) — added 2026-07-14, extended 2026-07-15
 
 ```ts
 interface TemplateEditableParameter { label: string; value: string; unit: string; editable: true; }
@@ -227,13 +232,18 @@ interface TemplateItem {
   id: string; itemType: TemplateItemType; itemCode: string; name: string; description: string;
   quantity: number | null; unit: string; specifications: string[]; subDetails: string[];
   editableParameters: TemplateEditableParameter[]; internalNotes: string[]; productId?: string;
+  // Added 2026-07-15 — informational only, never read when applying a template to a quote.
+  productSnapshot?: { code: string; name: string; unit: string; defaultPrice: number };
   visibleToCustomer: boolean; sortOrder: number;
 }
 interface TemplateSection { id: string; title: string; description: string; sortOrder: number; items: TemplateItem[]; }
 interface TemplateTermLine { type: "paymentTerm" | "warrantyTerm" | "taxNote"; text: string; }
+// Added 2026-07-15 — "excel_import" for the 5 workbook seeds, "manual" for anything created/duplicated via Template Management.
+type TemplateSourceType = "excel_import" | "manual";
 interface QuotationTemplate {
   id: string; templateCode: string; templateName: string; jobTypeCode: string; jobTypeName: string;
-  description: string; version: string; sourceFileName: string; sourceSheetName: string; sourceHash: string;
+  description: string; version: string; sourceType: TemplateSourceType; sourceFileName: string; sourceSheetName: string; sourceHash: string;
+  sourceWorkbookHash?: string;  // added 2026-07-15 (second Codex-review fix pass) — SHA-256 of the real workbook sheet's raw content, computed by api/_lib/templateWorkbookParser.ts; independent of sourceHash (which only reflects the hand-transcribed seed), absent on manual templates
   sections: TemplateSection[]; defaultTerms: TemplateTermLine[]; internalNotes: string[];
   isActive: boolean; isDeleted: boolean; createdAt: string; updatedAt: string; createdBy: string; updatedBy: string;
 }
@@ -268,6 +278,29 @@ computed over the content-relevant fields, both templates' hash changed — per 
 explanation above, the next `POST /api/quotation-templates/import` run against a live database will
 report these two as `updated` (an `$set`-update by the stable `templateCode` key), not
 `created`/duplicated; the other 3 templates are untouched and will report `skipped`.
+
+**2026-07-15, Template Management pass**: `sourceType`/`productSnapshot` fields added (see above).
+Templates created via `POST /api/quotation-templates` or `POST /api/quotation-templates/:id/duplicate`
+always get `sourceType: "manual"`, `sourceFileName: ""`/`sourceSheetName: ""` (a duplicate keeps its
+source's `sourceFileName`/`sourceSheetName` for provenance, but its own `sourceType` still flips to
+`"manual"` — the moment a template is duplicated it can diverge from its original, so it stops being
+import-tracked). Editing an existing template's content via `PATCH` never touches
+`sourceType`/`sourceFileName`/`sourceSheetName` — an edited `excel_import` template stays labeled
+`excel_import`. `version` is never auto-bumped by a content edit; see
+[MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Versioning" for the practical
+rule actually implemented (quote-level snapshotting, not a version-history collection, is what
+guarantees existing quotations never change).
+
+**2026-07-15, second Codex-review fix pass**: `sourceWorkbookHash` added (see above) — set on every
+`excel_import` template from `api/_lib/templateWorkbookParser.ts`'s real per-sheet fingerprint of
+the actual `.xlsx` file, refreshed on every import run. `upsertQuotationTemplates()` compares the
+newly-computed hash against the previously-stored one and adds a `TemplateImportReport` warning when
+they diverge with `sourceHash` (the seed-content hash) unchanged — i.e. "the workbook itself changed
+but nobody has re-transcribed `templateSeedData.ts` yet." `TA-FRP-TANK`/`LI-FRP-LINING` share one
+sheet (`"FRP Tank and LI"`) and therefore share one `sourceWorkbookHash` too — a whole-sheet-level
+fingerprint, not a row-range-level one. Also this pass: `Quote.templateSnapshot` added (see the
+`Quote` schema below) and template item product links (`productId`/`productSnapshot`) are now
+resolved/rebuilt server-side from a real `products` record rather than trusted from the client.
 
 ### `CompanyProfile` — REMOVED 2026-07-14
 
@@ -428,6 +461,13 @@ interface Quote {
   quotationTemplateId?: string;         // added 2026-07-14, → QuotationTemplate.id; set only at create time via the Create Quotation wizard, never editable afterward
   quotationTemplateName?: string;       // added 2026-07-14 — server-derived snapshot of QuotationTemplate.templateName at create time, never client-writable
   quotationTemplateVersion?: string;    // added 2026-07-14 — server-derived snapshot of QuotationTemplate.version at create time, never client-writable
+  templateSnapshot?: {                  // added 2026-07-15 (second Codex-review fix pass) — real structured copy, server-built, frozen at create time, never read by any rendering path (PDF/editor still only read `lines`)
+    sections: TemplateSection[];
+    defaultTerms: TemplateTermLine[];
+    internalNotes: string[];            // deliberately included here (unlike `lines`) — pure internal audit record, gated by the same quote permissions, never rendered
+    sourceHash: string;
+    capturedAt: string;
+  };
 }
 
 // The frozen-at-save-time copy stored on Quote.customerSnapshot (src/lib/customers.ts) — built

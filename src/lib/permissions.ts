@@ -22,7 +22,14 @@ export type Permission =
   | "customers:create"
   | "customers:edit"
   | "customers:archive"
-  | "quotationTemplates:manage";
+  | "quotationTemplates:manage"
+  | "quotationTemplates:view"
+  | "quotationTemplates:create"
+  | "quotationTemplates:edit"
+  | "quotationTemplates:duplicate"
+  | "quotationTemplates:activate"
+  | "quotationTemplates:archive"
+  | "quotationTemplates:import";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -47,6 +54,13 @@ export const ALL_PERMISSIONS: Permission[] = [
   "customers:edit",
   "customers:archive",
   "quotationTemplates:manage",
+  "quotationTemplates:view",
+  "quotationTemplates:create",
+  "quotationTemplates:edit",
+  "quotationTemplates:duplicate",
+  "quotationTemplates:activate",
+  "quotationTemplates:archive",
+  "quotationTemplates:import",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -71,7 +85,14 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "customers:create": "เพิ่มข้อมูลลูกค้า",
   "customers:edit": "แก้ไขข้อมูลลูกค้า",
   "customers:archive": "เก็บถาวร/กู้คืนข้อมูลลูกค้า",
-  "quotationTemplates:manage": "จัดการ Template ใบเสนอราคา (นำเข้า/เปิด-ปิดใช้งาน)",
+  "quotationTemplates:manage": "จัดการ Template ใบเสนอราคา (สิทธิ์เต็มรูปแบบ — ครอบคลุมทุกสิทธิ์ย่อยด้านล่าง)",
+  "quotationTemplates:view": "เข้าถึงหน้าจัดการ Template ใบเสนอราคา",
+  "quotationTemplates:create": "สร้าง Template ใบเสนอราคาใหม่",
+  "quotationTemplates:edit": "แก้ไขเนื้อหา Template ใบเสนอราคา",
+  "quotationTemplates:duplicate": "ทำสำเนา Template ใบเสนอราคา",
+  "quotationTemplates:activate": "เปิด/ปิดใช้งาน Template ใบเสนอราคา",
+  "quotationTemplates:archive": "เก็บถาวร/กู้คืน Template ใบเสนอราคา",
+  "quotationTemplates:import": "นำเข้า Template จากไฟล์ Excel",
 };
 
 /** Translated display label per permission — `PERMISSION_LABELS` (Thai) stays as-is since it's also used to seed the `permissions` collection's stored `label` field; this map is UI-display only. */
@@ -98,6 +119,13 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "customers:edit": "permission.customersEdit",
   "customers:archive": "permission.customersArchive",
   "quotationTemplates:manage": "permission.quotationTemplatesManage",
+  "quotationTemplates:view": "permission.quotationTemplatesView",
+  "quotationTemplates:create": "permission.quotationTemplatesCreate",
+  "quotationTemplates:edit": "permission.quotationTemplatesEdit",
+  "quotationTemplates:duplicate": "permission.quotationTemplatesDuplicate",
+  "quotationTemplates:activate": "permission.quotationTemplatesActivate",
+  "quotationTemplates:archive": "permission.quotationTemplatesArchive",
+  "quotationTemplates:import": "permission.quotationTemplatesImport",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -114,6 +142,13 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "quotations:reject",
       "quotations:export",
       "quotationTemplates:manage",
+      "quotationTemplates:view",
+      "quotationTemplates:create",
+      "quotationTemplates:edit",
+      "quotationTemplates:duplicate",
+      "quotationTemplates:activate",
+      "quotationTemplates:archive",
+      "quotationTemplates:import",
     ],
   },
   {
