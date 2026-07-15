@@ -23,6 +23,7 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `customers` | MongoDB `ObjectId` | `Customer` minus `id` (see below) | **Redefined + wired 2026-07-14** — customer master data, selected on the Quotation form to autofill the Customer Information section. Has its own dedicated `api/handlers/customers.ts` serverless function (previously shared `company-profiles.ts`'s function slot; that file was deleted 2026-07-14 along with the rest of the Company Profiles module, freeing the slot) — see [ARCHITECTURE.md](./ARCHITECTURE.md) "Serverless function count." |
 | `dashboard` (virtual — no collection) | — | — | `GET /api/dashboard` (`api/dashboard/index.ts`) is a read-only aggregation over `customers`/`leads`/`quotes`/`products`/`categories`/`audit_log`/`notifications`/`job_types`-derived fields already embedded on `quotes` — it doesn't own or write any collection of its own. See Dashboard KPI section below and [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full breakdown. |
 | `quotation_templates` | MongoDB `ObjectId` | `QuotationTemplate` minus `id` | **Added 2026-07-14** — reusable Job-Type-scoped quotation content (sections/items/editable parameters/default terms) extracted from a real Excel workbook, applied via the new Create Quotation wizard. See "`QuotationTemplate`" below and [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md). |
+| `scope_of_works` | MongoDB `ObjectId` | `ScopeOfWork` minus `id` | **Added 2026-07-15** — a printable job document generated from an existing quotation, reproducing the reference "Scope Of Work PQ202607-174-LI-SK..." PDF's structure (`public/`). Stores its own independent snapshot of every quotation-derived field; editing it never touches the source quotation. See "`ScopeOfWork`" below and [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md). |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
 
@@ -379,6 +380,88 @@ only holds `quotations:create` — the same "manage vs. pick-for-a-quotation" ca
 now-removed Company Profiles module established for `companyProfiles:view` vs. that same
 permission.
 
+### `ScopeOfWork` (`src/lib/scopeOfWork.ts`) — added 2026-07-15, fixed against an independent Codex review the same day
+
+```ts
+type ScopeOfWorkStatus = "Draft" | "Final";
+// contactName added 2026-07-15, Codex review High Priority fix (was previously dropped entirely).
+interface ScopeOfWorkCustomerSnapshot { companyName: string; contactName: string; address: string; taxId: string; phone: string; email: string; projectName: string; }
+interface ChecklistOption { key: string; label: string; checked: boolean; }
+interface ChecklistGroup { key: string; title: string; selectionType: "single" | "multiple"; options: ChecklistOption[]; note?: string; }
+interface ScopeOfWorkSpecLine { id: string; text: string; }
+interface ScopeOfWorkItem {
+  id: string; name: string; specifications: ScopeOfWorkSpecLine[]; quantity: number | null;
+  unit: string; remark: string; isSectionHeader?: boolean;
+}
+interface ScopeOfWorkPaymentConditions { downPaymentPct: number | null; finalPaymentPct: number | null; method: string; description: string; notes: string; }
+interface ScopeOfWorkSignatory { name: string; userId: string; date: string; }
+interface ScopeOfWork {
+  id: string; scopeNumber: string; yearMonth: string; jobSequence: number; secondaryCode: string;
+  quotationId: string; quotationNumber: string; jobTypeCode: string; jobTypeName: string;
+  // quotationSalesperson added 2026-07-15, Codex review High Priority fix — frozen copy of
+  // quote.salesperson, distinct from the editable `seller` signatory below.
+  quotationSalesperson: string;
+  issueDate: string; deliveryDate: string; drawingCode: string; customerPoNumber: string;
+  customerSnapshot: ScopeOfWorkCustomerSnapshot; deliveryLocation: string;
+  shippingContact: string; shippingPhone: string; billingContact: string; billingPhone: string;
+  checklistGroups: ChecklistGroup[]; items: ScopeOfWorkItem[];
+  paymentConditions: ScopeOfWorkPaymentConditions; remarks: string;
+  seller: ScopeOfWorkSignatory; approver: ScopeOfWorkSignatory;
+  status: ScopeOfWorkStatus; version: number;
+  createdAt: string; updatedAt: string; createdBy: string; updatedBy: string; isDeleted: boolean;
+}
+```
+
+**2026-07-15, Codex review fix pass** (0 Critical, 3 High Priority found and fixed — see
+`docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status"): `customerSnapshot.contactName` and the new
+top-level `quotationSalesperson` field close the review's "quotation contact/salesperson dropped
+from the snapshot" finding; `secondaryCode` is now required (non-empty) at creation time, closing
+the "job code's 4th segment always blank" finding; `GET /api/search` gained a `scopeOfWorks` result
+group, closing the "no Global Search integration" finding. See
+[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) for the full writeup.
+
+A printable job document generated from an existing quotation, reproducing the printed structure of
+the reference PDF ("Scope Of Work PQ202607-174-LI-SK บริษัท เค ไทย ไฮดรอลิค จำกัด.pdf", `public/`) —
+see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) for the full PDF-to-field mapping, checklist
+group definitions, and scope-number format. Created from `POST /api/scope-of-works {quotationId}`,
+which copies (never live-references) the quotation's customer info/items/Job Type/PO into
+`customerSnapshot`/`items`/`jobTypeCode`/`customerPoNumber` — editing a Scope of Work never modifies
+its source quotation, and later edits to the quotation/customer/product master data never silently
+change an already-created Scope of Work (an explicit "อัปเดตข้อมูลจากใบเสนอราคา" action, `POST
+/:id/refresh`, re-pulls only the quotation-derived fields on demand).
+
+`scopeNumber` (`PQ{yearMonth}-{jobSequence}-{jobTypeCode}-{secondaryCode}`, e.g.
+`PQ202607-174-LI-SK`) is always server-generated: `yearMonth` comes from `issueDate`,
+`jobSequence` is an atomically-reserved per-month counter (`scope_{yearMonth}` in the shared
+`counters` collection, same pattern as `QUOTE_COUNTER_ID` in `api/handlers/quotes.ts`), and
+`secondaryCode` is a plain editable field (`รหัสอ้างอิงท้ายงาน`) — **its business meaning is not yet
+confirmed**, see "Open Business Questions" in the module doc. `jobSequence` is normally frozen after
+creation, except: editing `issueDate` into a different calendar month re-reserves a **fresh**
+sequence number for that month (needed to preserve the `{yearMonth, jobSequence}` uniqueness
+guarantee — see the doc comment in `api/_lib/scopeOfWorkHandler.ts`'s `handleUpdate`).
+
+`checklistGroups` reproduces the reference PDF's printed checkbox/radio groups (Safety, TOR/
+Requirement from customer, เอกสารส่งถึง, ปจ.2, งานขนส่ง, Logo, Name plate, Test Report — split into
+`testReportType`/`testReportLevel`, เงื่อนไขการวางบิล, เงื่อนไขการส่งมอบงาน) as a reusable,
+Job-Type-agnostic structure (`buildDefaultChecklistGroups()`) — every option starts unchecked except
+two Job-Type-driven suggestions the spec explicitly named (`LI` → `testReportType.frpLining`,
+`TA` → `testReportType.frpTank`), both still freely editable. A `PATCH` can only toggle `checked`/
+set a group's optional `note` — group/option `key`s, `title`s, and `selectionType` are always
+matched against the record's own already-persisted structure, never trusted from the client, so a
+direct API call can't inject a new group or rename a label.
+
+`items` starts as a 1:1 copy of the source quotation's `QuoteLine[]` (`mapLineToScopeItem()`) —
+`description`→`name`, `specifications`(string, newline-split) + `subDetails[]` → `specifications:
+ScopeOfWorkSpecLine[]`, `qty`/`unit`/`notes`→`quantity`/`unit`/`remark`, `isSectionHeader` preserved
+for template-section dividers. **Deliberately never copies** `unitPrice`/`discount`/`tags` — Scope
+of Work never shows pricing (no unit price/discount/VAT/grand total anywhere in the document or its
+print output). Fully independently editable afterward (add/remove/duplicate/reorder items, add
+specification lines) — never writes back to the quotation.
+
+Indexes (`ensureIndexes()`, `api/_lib/collections.ts`): `scopeNumber` (unique — a defense-in-depth
+safety net; uniqueness is actually guaranteed by the `{yearMonth, jobSequence}` index below, which
+is also unique), `quotationId`, `status`, `isDeleted`.
+
 ### `Quote` / `QuoteLine` / `SubDetail` (`src/lib/quotes.tsx`)
 ```ts
 type QuoteStatus =
@@ -533,6 +616,12 @@ list per category. Key data-model notes:
   (see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)) can never leak through
   search even indirectly. Gated by the same `quotations:create` **or** `quotationTemplates:manage`
   check as `GET /api/quotation-templates` itself.
+- **`scopeOfWorks`** (added 2026-07-15, Codex review High Priority fix — see
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md)): matches `scopeNumber`/`quotationId`/
+  `quotationNumber`/`customerSnapshot.companyName`/`jobTypeCode`/`jobTypeName`/`customerPoNumber`/
+  `status` against non-deleted `scope_of_works` documents. Gated by `scopeOfWork:view` — a category
+  the caller lacks that permission for comes back as an empty array, same convention as every other
+  category here.
 - Every category (`quotations`, `customers`, `products`, `users`) queries via a case-insensitive,
   unanchored `$regex` `$or` across several fields, with the query string passed through
   `escapeRegExp()` first (matching the existing helper already duplicated in

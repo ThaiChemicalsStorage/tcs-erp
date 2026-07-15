@@ -30,6 +30,11 @@ export interface AuditLogEntry {
   relatedTemplateId?: string;
   relatedTemplateName?: string;
   relatedJobTypeCode?: string;
+  /** Scope of Work `id`/`scopeNumber` this entry relates to (create/update/finalize/duplicate/
+   * refresh/print/delete events written by `api/_lib/scopeOfWorkHandler.ts`, added 2026-07-15) —
+   * same optional/backward-compatible provenance as `relatedTemplateId`. */
+  relatedScopeId?: string;
+  relatedScopeNumber?: string;
 }
 
 export async function fetchAuditLog(): Promise<AuditLogEntry[]> {

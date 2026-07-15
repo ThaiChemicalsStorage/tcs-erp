@@ -4,6 +4,121 @@
 
 ---
 
+## 2026-07-15 — Scope of Work: Codex review fix pass (contact/salesperson snapshot, required suffix, Global Search)
+
+An independent Codex review of the Scope of Work module (below) found **0 Critical**, **3 High
+Priority**, and several Medium/Low Priority issues. All 3 High Priority issues (plus the actionable
+Medium/Low ones) fixed same day; full writeup appended to `docs/CODEX_REVIEW_REPORT.md`'s "Claude
+Fix Status."
+
+### High Priority #1 — Quotation contact/salesperson dropped from the snapshot
+
+`buildCustomerSnapshot()` copied company/address/tax/phone/email/project but silently dropped
+`quote.contactName` — real quotation data, not a sample value. Separately, `seller` always defaulted
+to whoever clicked "สร้าง Scope of Work," never the quotation's actual assigned salesperson. Fixed:
+`ScopeOfWorkCustomerSnapshot.contactName` added (falls back the same way every other snapshot field
+does); a new frozen, non-editable `ScopeOfWork.quotationSalesperson` field copies `quote.salesperson`
+at creation (refreshed only by "อัปเดตข้อมูลจากใบเสนอราคา"); the default `seller` signatory now
+prefers `quote.salesperson` when non-empty (`resolveDefaultSeller()`, `api/_lib/
+scopeOfWorkHandler.ts`), with a real-user lookup by `fullName` so their saved signature image still
+renders correctly, falling back to the creator only when the quotation has no salesperson recorded.
+
+### High Priority #2 — Job code's 4th segment always blank on creation
+
+`secondaryCode` was always `""` at creation time, so every newly-generated `scopeNumber` was missing
+its required 4th segment (`PQ{YYYYMM}-{seq}-{jobType}`, no suffix at all) — failing the literal
+4-part format requirement. Fixed by making `secondaryCode` a **required** value on
+`POST /api/scope-of-works` (server-validated non-empty) — the "สร้าง Scope of Work" button now opens
+a small prompt collecting it from the user first. Its business *meaning* is still explicitly not
+invented (see `MODULES/ScopeOfWork.md` "Open Business Question") — only its *presence* is now
+enforced, and the actual value always comes from the person who knows their own business context,
+never a default/placeholder this codebase made up.
+
+### High Priority #3 — No Global Search integration
+
+Scope of Work had zero presence in Global Search — unsearchable by scope number, quotation number,
+customer, Job Type, PO, or status. Fixed: `GET /api/search` gained a `scopeOfWorks` result group
+(`searchScopeOfWorks()`, `api/_lib/searchHandler.ts`), gated by `scopeOfWork:view`, matching exactly
+those 6 keys. `GlobalSearch.tsx` renders a new "Scope of Work" group; clicking a result opens the
+source quotation's detail view then jumps straight into that Scope of Work's editor (new
+`App.tsx`/`QuotationPage.tsx` `scopeOfWorkDeepLink`/`initialScopeOfWorkDeepLink` state, same pattern
+already used for notification clicks and the Quotation Templates wizard's search result).
+
+### Medium/Low fixes
+
+- **A4 explicitly sized**: `@media print { @page { size: A4 portrait; margin: 12mm; } } ` in
+  `src/styles/index.css` (previously only `margin` was set) — applies to every printed document.
+- **Multi-page item splitting**: each item (+ its own spec/remark row, if any) is now grouped into
+  one `<tbody style="break-inside: avoid">` in `ScopeOfWorkPrintDocument.tsx`, instead of one big
+  shared `<tbody>` for the whole table — a page break can no longer fall between an item's heading
+  and its own first detail line.
+- **`refresh` now also requires `quotations:view`** (`api/_lib/scopeOfWorkHandler.ts`), matching the
+  same source-quotation-access check `create` already had — previously only Scope of Work
+  edit/ownership authorization was checked before reading the linked quotation.
+- **Bounded duplicate-key retry** added to `create`/`duplicate` (`MAX_SCOPE_NUMBER_ATTEMPTS = 3`) —
+  re-reserves a fresh sequence and retries the insert instead of surfacing a raw 500 on the
+  (essentially unreachable, given the atomic per-month counter) chance of an `E11000` collision.
+- **Delete confirmation wording corrected** — no longer claims an administrator-restore capability
+  that doesn't exist yet (a real gap tracked in TODO.md/MODULES/ScopeOfWork.md, not silently hidden).
+
+`npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all
+pass clean. Not yet manually verified against a live deployment/browser (same sandboxed-session
+no-live-database limitation as every prior pass).
+
+## 2026-07-15 — Scope of Work module (new feature, generated from a quotation)
+
+New document type reproducing the reference PDF ("Scope Of Work PQ202607-174-LI-SK บริษัท เค ไทย
+ไฮดรอลิค จำกัด.pdf", `public/`) — created from an existing quotation via a new "สร้าง Scope of Work"
+/ "เปิด / แก้ไข Scope of Work" toolbar action on the Quotation Detail page. Full writeup:
+[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
+
+- **New `scope_of_works` MongoDB collection** (`ScopeOfWork` in `src/lib/scopeOfWork.ts`) — an
+  independent snapshot of the quotation's customer info/items/Job Type/PO at creation time; editing
+  a Scope of Work never touches the source quotation, and later quotation/customer/product edits
+  never silently change an already-created one. Explicit "อัปเดตข้อมูลจากใบเสนอราคา" action re-pulls
+  only the quotation-derived fields on demand, with a confirm-before-overwrite dialog.
+- **Server-generated scope number**: `PQ{YYYYMM}-{jobSequence}-{jobTypeCode}-{secondaryCode}` (e.g.
+  `PQ202607-174-LI-SK`). `jobSequence` is an atomically-reserved per-calendar-month counter (same
+  pattern as the existing quote-numbering counter) — never generated client-side, never duplicable.
+  `secondaryCode` (the PDF's `-SK` segment) is a plain editable field, **not hardcoded** and not
+  invented a business meaning for — see the module doc's "Open Business Question."
+- **11 reusable checklist groups** (`ChecklistGroup[]`) reproducing the PDF's printed Safety/TOR/
+  เอกสารส่งถึง/ปจ.2/งานขนส่ง/Logo/Name plate/Test Report (split into ประเภท + ระดับรายงาน)/
+  เงื่อนไขการวางบิล/เงื่อนไขการส่งมอบงาน groups — every option starts unchecked except two
+  Job-Type-driven suggestions the spec explicitly named (LI→FRP Lining, TA→FRP Tank), both still
+  freely editable. Server re-clamps `"single"`-type groups to at most one checked option and only
+  recognizes group/option keys it generated itself, so a direct API call can't inject new structure.
+- **Item list** copied 1:1 from the quotation's `QuoteLine[]` at creation (never pricing —
+  `unitPrice`/`discount`/`tags` are never copied, and Scope of Work never shows pricing anywhere),
+  then fully independently editable: add/remove/duplicate/reorder, edit qty/unit, add specification
+  lines.
+- **Blue handwritten sample fields never imported as data**: shipping/billing contact name/phone,
+  delivery date, drawing code, seller/approver name/signature/date all start blank and editable —
+  the reference PDF's sample values (illegible handwriting, a specific person's name) are never
+  used as defaults. Payment conditions (down payment %/final payment %) start blank unless the
+  quotation itself already carries payment-term text.
+- **Draft/Final lifecycle** — finalizing locks a record against further edits (no un-finalize route
+  this pass; "ทำสำเนา" duplicates a fresh, freely-editable Draft copy instead).
+- **Print/PDF** (`ScopeOfWorkPrintDocument.tsx`) — A4, checked/unchecked box glyphs, numbered item
+  table with no price columns, ผู้ขาย/ผู้อนุมัติ signature table. No blue handwriting, no yellow
+  highlights, no fake placeholder values, no quotation pricing, no internal notes.
+- **6 new RBAC permissions** (`scopeOfWork:view/create/edit/finalize/print/delete`), enforced
+  server-side on every route, combined with an owner-or-`:finalize` check for edit/delete (Sales can
+  only touch their own Draft; Approvers/Admin can touch anyone's). See
+  [RBAC.md](./RBAC.md) "Scope of Work."
+- **New API**: `GET/POST /api/scope-of-works`, `GET/PATCH/DELETE /api/scope-of-works/:id`,
+  `POST /api/scope-of-works/:id/{finalize,duplicate,refresh,print}` — mounted from
+  `api/handlers/quotes.ts` (shares its function file; Vercel Hobby's 12-function cap is still fully
+  used, no new function file added). See [API.md](./API.md) "Scope of Work."
+- **Audit logging** for every action (create/update/finalize/duplicate/refresh/print/delete), module
+  `"Scope of Work"` — `POST /api/audit-log` rejects that module name from generic client calls, same
+  forgery-prevention rule as the quotation module.
+- No changes to existing Quotation create/edit/print workflows — a quotation does not need a Scope
+  of Work, and every existing quotation continues to work unchanged.
+- `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all
+  pass clean. Not yet manually verified against a live deployment/browser (same sandboxed-session
+  no-live-database limitation as every prior pass — see PROJECT_STATUS.md Known Risks).
+
 ## 2026-07-15 — Quotation Templates: second Codex-review fix pass (real workbook parsing, structured snapshot, subDetails/visibleToCustomer, product verification)
 
 An independent Codex review of the Template Management pass below found **0 Critical**, **3 High

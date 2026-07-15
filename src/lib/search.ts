@@ -62,11 +62,24 @@ export interface SearchTemplateResult {
   description: string;
 }
 
+/** Mirrors `SearchScopeOfWorkResult` in api/_lib/searchHandler.ts — "Scope of Work" group. */
+export interface SearchScopeOfWorkResult {
+  id: string;
+  scopeNumber: string;
+  quotationId: string;
+  quotationNumber: string;
+  customerName: string;
+  jobTypeCode: string;
+  jobTypeName: string;
+  status: string;
+}
+
 export interface SearchResults {
   quotations: SearchQuotationResult[];
   customers: SearchCustomerResult[];
   products: SearchProductResult[];
   templates: SearchTemplateResult[];
+  scopeOfWorks: SearchScopeOfWorkResult[];
   pages: SearchPageResult[];
   users: SearchUserResult[];
 }

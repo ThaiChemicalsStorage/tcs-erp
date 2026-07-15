@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser, requirePermission, type AuthContext } from "../_lib/auth.js";
 import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, quotationTemplatesCollection, countersCollection, auditLogCollection, customersCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
+import { handleScopeOfWork } from "../_lib/scopeOfWorkHandler.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
@@ -681,6 +682,17 @@ async function createWorkflowNotifications(
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   await withErrorHandling(res, async () => {
+    // Scope of Work (added 2026-07-15) shares this function file rather than getting its own —
+    // Vercel Hobby's 12-function cap is still fully used (see docs/ARCHITECTURE.md). Checked first,
+    // on the raw pathname, before falling through to the quotes logic below — same established
+    // sharing pattern as api/handlers/customers.ts (/api/search) and api/handlers/jobtypes.ts
+    // (/api/quotation-templates). Mounted here specifically (not jobtypes.ts) since a Scope of Work
+    // is always created from, and belongs to, exactly one quotation.
+    const pathname = (req.url ?? "").split("?")[0];
+    if (pathname === "/api/scope-of-works" || pathname.startsWith("/api/scope-of-works/")) {
+      return handleScopeOfWork(req, res);
+    }
+
     const parts = getPathSegments(req, "/api/quotes");
 
     if (parts.length === 0) return handleList(req, res);

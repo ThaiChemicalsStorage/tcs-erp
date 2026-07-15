@@ -46,7 +46,10 @@ avoid a 13th file; both `company-profiles.ts` and the whole Company Profiles mod
 2026-07-14, freeing that slot — immediately spent giving `customers.ts` its own dedicated file
 below instead, so the count is still exactly 12 of 12. Same day, `customers.ts` picked up a second
 tenant of its own: Global Search (`GET /api/search`, `api/_lib/searchHandler.ts`) dispatches from
-that same file on the raw pathname — still 12 of 12, no new file added.)
+that same file on the raw pathname — still 12 of 12, no new file added. 2026-07-14, `jobtypes.ts`
+picked up a tenant too: Quotation Templates (`/api/quotation-templates*`,
+`api/_lib/quotationTemplatesHandler.ts`). 2026-07-15, `quotes.ts` picked up one: Scope of Work
+(`/api/scope-of-works*`, `api/_lib/scopeOfWorkHandler.ts`) — still 12 of 12, no new file added.)
 
 - **Plain single-route files** — `api/company/index.ts`, `api/audit-log/index.ts`, `api/dashboard/index.ts` (added 2026-07-09, GET only) — dispatch on `req.method` within one file.
 - **One file per resource, dispatching on path** — `api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes,customers}.ts` — each parses the URL's path segments after the resource prefix (via `getPathSegments(req, prefix)` in `api/_lib/http.ts`, which parses `req.url` directly) and branches on them (e.g. `parts.length === 2 && parts[1] === "workflow"` for `POST /api/quotes/:id/workflow`).

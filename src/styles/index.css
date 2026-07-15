@@ -9,7 +9,12 @@ body {
 }
 
 @media print {
+  /* Explicit A4 portrait — 2026-07-15, Codex review Medium fix (Scope of Work): previously only
+     `margin` was set, leaving the actual paper size to each browser's own default rather than
+     stated here. Applies to every printed document in the app (Quotation's PrintDocument.tsx,
+     Scope of Work's ScopeOfWorkPrintDocument.tsx) — all of them are already designed for A4. */
   @page {
+    size: A4 portrait;
     margin: 12mm;
   }
   body {

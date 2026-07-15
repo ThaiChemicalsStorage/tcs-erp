@@ -19,24 +19,26 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **Users** (`src/lib/users.ts`): a `User` is both the employee record and the account — `employeeId`, `fullName`, `username`, `email`, `passwordHash`, `phone`, `department`, `position`, `roleKey`, `status` (`active`/`inactive`), `profilePictureDataUrl`, `signatureDataUrl`. `employeeId`/`username`/`email` are enforced unique. **Position and Role are deliberately separate fields** — Position is a free-text job title (with suggestions: CEO, Director, General Manager, Sales Manager, Sales Executive, Engineer, HR, Accounting, Purchasing, Warehouse) with no bearing on permissions; Role is the RBAC role, assigned independently by an admin.
 
-**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 29-key `Permission` union — `dashboard:view`; `quotations:view/create/edit/delete/approve/reject/export`; `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) Six default `Role`s ship out of the box:
+**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 35-key `Permission` union — `dashboard:view`; `quotations:view/create/edit/delete/approve/reject/export`; `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below); `scopeOfWork:view/create/edit/finalize/print/delete` (added 2026-07-15, see "Scope of Work" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) Six default `Role`s ship out of the box:
 
 | Role | `isSuperAdmin` | `isSystem` | Summary |
 |---|---|---|---|
 | Super Admin | ✅ | ✅ (undeletable) | Every permission, always — `roleHasPermission()` short-circuits to `true` regardless of the stored list |
-| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15). No `roles:manage`/`company:manage`. |
-| Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Maps to the request's "Sales Executive." |
-| Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Maps to "Sales Manager." |
-| Approver Level 2 | — | — | Same rights as Level 1 in this build (see Known Simplifications below). Maps to "CEO." |
-| Viewer | — | — | `*:view` only (incl. `customers:view`). |
+| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15) + full Scope of Work access (all 6 `scopeOfWork:*` permissions). No `roles:manage`/`company:manage`. |
+| Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Also `scopeOfWork:view/create/edit/print` — can create/edit a Scope of Work from a quotation they can access and print it, but not finalize or delete one. Maps to the request's "Sales Executive." |
+| Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Also `scopeOfWork:view/edit/finalize/print` (no `:create`/`:delete` — edits/finalizes Sales' drafts rather than starting new ones). Maps to "Sales Manager." |
+| Approver Level 2 | — | — | Same rights as Level 1 in this build, including the same Scope of Work grants (see Known Simplifications below). Maps to "CEO." |
+| Viewer | — | — | `*:view` only (incl. `customers:view`, `scopeOfWork:view`). |
 
 **No new permission was added for the 2026-07-10 Job Type / Executive Dashboard pass.** `GET /api/jobtypes` reuses `quotations:view` (already required to touch a quote); `POST`/`PATCH /api/jobtypes` reuse `company:manage` (Super Admin only, matching the existing precedent for company-wide configuration data like bank/VAT/T&C). `GET /api/dashboard` continues to reuse `dashboard:view`, which every default role already has — two of its response sections (`activityTimeline`, `approvalDashboard`) are additionally gated per-caller by the `auditLog:view`/`quotations:approve` the caller already has, rather than a new dashboard-specific permission.
 
 **No new permission was added for Global Search either (added 2026-07-14).** `GET /api/search` is
 reachable by any authenticated user — RBAC happens *per result category*, not at the route level:
 `quotations` needs `quotations:view`, `customers` needs `customers:view`, `products` needs
-`products:view`, `users` needs `users:manage` (the same permission the User Management page itself
-requires), and the static `pages`/menu-search category is filtered per entry against whichever
+`products:view`, `scopeOfWorks` needs `scopeOfWork:view` (added 2026-07-15, Codex review High
+Priority fix — see "Scope of Work" below), `users` needs `users:manage` (the same permission the
+User Management page itself requires), and the static `pages`/menu-search category is filtered per
+entry against whichever
 permission that page's sidebar item already requires (`null` = always visible, e.g. Settings/
 Profile). Every check is `roleHasPermission()` called server-side inside
 `api/_lib/searchHandler.ts` **before** that category's MongoDB query even runs — a category the
@@ -186,6 +188,55 @@ duplicate/activate/deactivate/archive/unarchive) writes a server-side `AuditLogE
 Admins can create additional custom roles and edit any non-system role's permission checkboxes via Role Management (`src/pages/admin/RoleManagementPage.tsx`) — gated client-side by `userIsSuperAdmin()`, and **independently re-enforced server-side**: `POST`/`PATCH`/`DELETE /api/roles*` all require the `roles:manage` permission (`api/handlers/roles.ts`), which only the Super Admin role holds (see below), and the server strips any `roles:manage`/`company:manage` permission from a submitted permission list regardless of what the client sent, so there is no way — UI or direct API call — to grant them elsewhere. `roles:manage` and `company:manage` are additionally hardcoded in `SUPER_ADMIN_ONLY_PERMISSIONS` (`permissions.ts`) and `isPermissionLockedToSuperAdmin()` (`src/lib/roles.ts`, the same function used both client- and server-side) — the permission-matrix checkboxes for those two are disabled/locked for every role except Super Admin itself in the UI, and the server independently refuses to persist them onto any other role even if a request is crafted by hand.
 
 **System-role locking, precise as of the 2026-07-09 fix**: the **Super Admin** role (`isSuperAdmin: true`) is fully read-only — name, description, and permissions can never change via `PATCH`, and it can't be deleted. **Administrator** (`isSystem: true` but `isSuperAdmin: false`) is *editable* — its description and permission checkboxes can be changed like any custom role, only its **name** is locked (can't be renamed) and it can't be deleted. Both the client (`RoleManagementPage.tsx`'s `startEdit()`/`nameLocked`) and server (`api/handlers/roles.ts`'s `handleOne()`) key this off `isSuperAdmin` for the edit lock and `isSystem` for the delete lock — **not** off `isSystem` alone for editing, which was a real bug: it previously made the entire Administrator role read-only (including permissions), identical to Super Admin, when only the name should have been locked. Custom (non-`isSystem`) roles remain fully editable and deletable (if unassigned).
+
+### Scope of Work (added 2026-07-15, fixed against an independent Codex review the same day)
+
+**2026-07-15, Codex review fix pass**: `refresh` previously only checked Scope of Work edit/
+ownership authorization before reading the linked quotation, with no equivalent source-quotation
+access check of its own (unlike `create`, which always required `quotations:view`). Fixed —
+`refresh` now requires `quotations:view` too, closing that Medium Priority gap. See
+`docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status" and
+[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
+
+6 new permissions gate the feature end-to-end, enforced server-side in
+`api/_lib/scopeOfWorkHandler.ts` (never just hidden client-side):
+
+| Permission | Gates |
+|---|---|
+| `scopeOfWork:view` | `GET /api/scope-of-works` (list) and `GET /api/scope-of-works/:id` (single record) — also required (alongside the action-specific permission below) to read the *source* record on duplicate/refresh, since those actions return/derive from its full content. |
+| `scopeOfWork:create` | `POST /api/scope-of-works` (create from a quotation) and `POST /api/scope-of-works/:id/duplicate`. |
+| `scopeOfWork:edit` | `PATCH /api/scope-of-works/:id` and `POST /api/scope-of-works/:id/refresh` — combined with an **ownership** check (see below). |
+| `scopeOfWork:finalize` | `POST /api/scope-of-works/:id/finalize`. Also, independent of ownership, a `scopeOfWork:finalize` holder can edit or delete *any* Draft record, not just their own — the RBAC spec's "Sales Manager: view/edit/finalize" language. |
+| `scopeOfWork:print` | `POST /api/scope-of-works/:id/print` (writes the print/export audit entry the client calls right before `window.print()`). |
+| `scopeOfWork:delete` | `DELETE /api/scope-of-works/:id` (soft delete) — combined with the same ownership-or-finalize check as edit. |
+
+**Ownership rule** (`canEditScope()`/`isOwnerOf()` in `api/_lib/scopeOfWorkHandler.ts`, same shape as
+the Quotation workflow's owner-or-approver check below): a Sales user (`scopeOfWork:edit` but not
+`:finalize`) can only edit/delete their **own** Draft records (`createdBy === caller.id`); a holder
+of `scopeOfWork:finalize` (Approver/Administrator/Super Admin) can edit or delete anyone's. Once a
+record's `status` is `"Final"`, `PATCH`/`refresh` are rejected outright for everyone (no un-finalize
+route in this pass — "ทำสำเนา" is the documented way to keep editing from a copy).
+
+**No dedicated `scopeOfWork:manage` superset** (unlike Quotation Templates' `:manage`) — the spec's
+requested permission list was exactly the 6 above, so none was added; see
+[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
+
+**Creating** a Scope of Work also requires `quotations:view` (the caller must be able to see the
+source quotation at all) — enforced alongside `scopeOfWork:create`, not a separate permission.
+**Refreshing** ("อัปเดตข้อมูลจากใบเสนอราคา") requires it too (2026-07-15 fix, see above), alongside
+the usual edit/ownership check.
+
+Default grants: **Sales User** gets `view/create/edit/print` (create/edit their own drafts, no
+finalize/delete); **Approver Level 1/2** get `view/edit/finalize/print` (no `create` — they act on
+Sales' drafts rather than starting new ones, though `:finalize` alone still lets them edit/delete
+any Draft per the ownership rule above); **Administrator**/**Super Admin** get all 6; **Viewer** gets
+`view` only. See the role table above.
+
+Audit logging: every action (create/update/finalize/duplicate/refresh/print/delete) writes a
+server-side `AuditLogEntry` via `writeScopeAuditEntry()`, module `"Scope of Work"` — `POST
+/api/audit-log` rejects that module name outright (same forgery-prevention rule as the `"ใบเสนอราคา"`
+module), so these events can only be written by the handler itself. See
+[DATABASE.md](./DATABASE.md) `AuditLogEntry`'s `relatedScopeId`/`relatedScopeNumber` fields.
 
 ### Sidebar / Menu Visibility
 

@@ -20,7 +20,9 @@
     { "source": "/api/customers/:path*", "destination": "/api/handlers/customers" },
     { "source": "/api/search", "destination": "/api/handlers/customers" },
     { "source": "/api/quotation-templates", "destination": "/api/handlers/jobtypes" },
-    { "source": "/api/quotation-templates/:path*", "destination": "/api/handlers/jobtypes" }
+    { "source": "/api/quotation-templates/:path*", "destination": "/api/handlers/jobtypes" },
+    { "source": "/api/scope-of-works", "destination": "/api/handlers/quotes" },
+    { "source": "/api/scope-of-works/:path*", "destination": "/api/handlers/quotes" }
   ],
   "functions": {
     "api/handlers/jobtypes.ts": {

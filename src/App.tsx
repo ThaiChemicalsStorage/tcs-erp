@@ -230,6 +230,10 @@ export default function App() {
   /** Set by a Global Search "Template ใบเสนอราคา" result click — opens the Create Quotation
    * wizard with this Job Type + Template preselected (see QuotationTemplateWizard.tsx). */
   const [quotationTemplateDeepLink, setQuotationTemplateDeepLink] = useState<{ jobTypeCode: string; templateId: string } | null>(null);
+  /** Set by a Global Search "Scope of Work" result click (added 2026-07-15, Codex review High
+   * Priority fix) — opens the source quotation's detail view, then jumps straight into that Scope
+   * of Work's editor (see `QuotationPage.tsx`'s `initialScopeOfWorkDeepLink`). */
+  const [scopeOfWorkDeepLink, setScopeOfWorkDeepLink] = useState<{ quotationId: string; scopeOfWorkId: string } | null>(null);
   /** Set by the Create Quotation wizard's "สร้าง Template ใหม่สำหรับประเภทงานนี้" action — opens
    * Template Management's create form pre-filled with that Job Type (see
    * `TemplateManagementPage.tsx`'s `initialCreateForJobType` prop). `seq` follows the same
@@ -393,6 +397,10 @@ export default function App() {
   };
   const navigateToTemplate = (jobTypeCode: string, templateId: string) => {
     setQuotationTemplateDeepLink({ jobTypeCode, templateId });
+    setActiveNav("quotations");
+  };
+  const navigateToScopeOfWork = (quotationId: string, scopeOfWorkId: string) => {
+    setScopeOfWorkDeepLink({ quotationId, scopeOfWorkId });
     setActiveNav("quotations");
   };
   const navigateToCreateTemplateForJobType = (jobTypeCode: string, jobTypeName: string) => {
@@ -616,6 +624,7 @@ export default function App() {
             onNavigateToUser={navigateToUser}
             onNavigateToPage={navigateToPage}
             onNavigateToTemplate={navigateToTemplate}
+            onNavigateToScopeOfWork={navigateToScopeOfWork}
           />
           <div data-tour="notification-bell" className="flex-shrink-0">
             <NotificationBell
@@ -690,7 +699,7 @@ export default function App() {
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} initialScopeOfWorkDeepLink={scopeOfWorkDeepLink} onScopeOfWorkDeepLinkConsumed={() => setScopeOfWorkDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} />
               : effectiveNav === "quotationTemplates"
               ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "customers"

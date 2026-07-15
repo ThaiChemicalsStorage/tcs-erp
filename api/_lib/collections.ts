@@ -9,6 +9,7 @@ import type { Notification } from "../../src/lib/notifications.js";
 import type { AuditLogEntry } from "../../src/lib/auditLog.js";
 import type { Quote } from "../../src/lib/quotes.js";
 import type { QuotationTemplate } from "../../src/lib/quotationTemplates.js";
+import type { ScopeOfWork } from "../../src/lib/scopeOfWork.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits. */
 export type UserFields = Omit<User, "id"> & { passwordHash: string };
@@ -84,6 +85,20 @@ export type QuotationTemplateFields = Omit<QuotationTemplate, "id">;
 export async function quotationTemplatesCollection() {
   const db = await getDb();
   return db.collection<QuotationTemplateFields>("quotation_templates");
+}
+
+/**
+ * Scope of Work (added 2026-07-15) — see `src/lib/scopeOfWork.ts` for the full domain-shape doc
+ * comment and docs/MODULES/ScopeOfWork.md for the PDF-to-field mapping. `scopeNumber` is the
+ * human-readable `PQ{YYYYMM}-{jobSequence}-{jobTypeCode}-{secondaryCode}` business id, uniquely
+ * indexed below — uniqueness is actually guaranteed by `{yearMonth, jobSequence}` alone (an
+ * atomic per-month counter, same pattern as `QUOTE_COUNTER_ID` in api/handlers/quotes.ts), the
+ * `scopeNumber` index is a defense-in-depth safety net, not the primary uniqueness mechanism.
+ */
+export type ScopeOfWorkFields = Omit<ScopeOfWork, "id">;
+export async function scopeOfWorksCollection() {
+  const db = await getDb();
+  return db.collection<ScopeOfWorkFields>("scope_of_works");
 }
 
 // ─── Schema-prep collections (2026-07 production-readiness pass) ──────────
@@ -378,7 +393,7 @@ export async function ensureIndexes() {
     users, roles, products, categories, quotes, notifications, auditLog,
     permissions, departments, positions, customers, customerContacts,
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
-    notificationTypes, jobTypes, quotationTemplates,
+    notificationTypes, jobTypes, quotationTemplates, scopeOfWorks,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -386,7 +401,7 @@ export async function ensureIndexes() {
     customersCollection(), customerContactsCollection(),
     leadsCollection(), leadActivitiesCollection(), productTemplatesCollection(),
     quotationCommentsCollection(), quotationTagsCollection(), notificationTypesCollection(),
-    jobTypesCollection(), quotationTemplatesCollection(),
+    jobTypesCollection(), quotationTemplatesCollection(), scopeOfWorksCollection(),
   ]);
 
   await Promise.all([
@@ -432,6 +447,11 @@ export async function ensureIndexes() {
     quotationTemplates.createIndex({ jobTypeCode: 1 }),
     quotationTemplates.createIndex({ isActive: 1 }),
     quotationTemplates.createIndex({ isDeleted: 1 }),
+    scopeOfWorks.createIndex({ scopeNumber: 1 }, { unique: true }),
+    scopeOfWorks.createIndex({ yearMonth: 1, jobSequence: 1 }, { unique: true }),
+    scopeOfWorks.createIndex({ quotationId: 1 }),
+    scopeOfWorks.createIndex({ status: 1 }),
+    scopeOfWorks.createIndex({ isDeleted: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

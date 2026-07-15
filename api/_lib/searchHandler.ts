@@ -3,7 +3,7 @@ import { HttpError } from "./http.js";
 import { requireUser, type AuthContext } from "./auth.js";
 import {
   quotesCollection, customersCollection, productsCollection, categoriesCollection,
-  usersCollection, rolesCollection, quotationTemplatesCollection, withStringId, type QuoteFields,
+  usersCollection, rolesCollection, quotationTemplatesCollection, scopeOfWorksCollection, withStringId, type QuoteFields,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
@@ -63,6 +63,7 @@ async function ensureSearchIndexes(
   customers: Awaited<ReturnType<typeof customersCollection>>,
   products: Awaited<ReturnType<typeof productsCollection>>,
   users: Awaited<ReturnType<typeof usersCollection>>,
+  scopeOfWorks: Awaited<ReturnType<typeof scopeOfWorksCollection>>,
 ): Promise<void> {
   if (searchIndexesEnsured) return;
   await Promise.all([
@@ -80,6 +81,10 @@ async function ensureSearchIndexes(
     users.createIndex({ department: 1 }),
     users.createIndex({ position: 1 }),
     users.createIndex({ roleKey: 1 }),
+    // Scope of Work (added 2026-07-15) — jobTypeCode/quotationId/status/isDeleted already indexed
+    // by ensureIndexes() in collections.ts; this adds only the ones that's missing for search.
+    scopeOfWorks.createIndex({ "customerSnapshot.companyName": 1 }),
+    scopeOfWorks.createIndex({ customerPoNumber: 1 }),
   ]);
   searchIndexesEnsured = true;
 }
@@ -155,11 +160,26 @@ export interface SearchTemplateResult {
   description: string;
 }
 
+/** "Scope of Work" result group (added 2026-07-15, Codex review High Priority fix) — see
+ * docs/MODULES/ScopeOfWork.md. Searchable by exactly the 6 keys the review named: scope number,
+ * quotation number, customer, Job Type, PO, and status. */
+export interface SearchScopeOfWorkResult {
+  id: string;
+  scopeNumber: string;
+  quotationId: string;
+  quotationNumber: string;
+  customerName: string;
+  jobTypeCode: string;
+  jobTypeName: string;
+  status: string;
+}
+
 export interface SearchResults {
   quotations: SearchQuotationResult[];
   customers: SearchCustomerResult[];
   products: SearchProductResult[];
   templates: SearchTemplateResult[];
+  scopeOfWorks: SearchScopeOfWorkResult[];
   pages: SearchPageResult[];
   users: SearchUserResult[];
 }
@@ -290,6 +310,30 @@ async function searchUsers(query: string): Promise<SearchUserResult[]> {
   });
 }
 
+async function searchScopeOfWorks(query: string): Promise<SearchScopeOfWorkResult[]> {
+  const scopeOfWorks = await scopeOfWorksCollection();
+  const rx = containsRegex(query);
+  const docs = await scopeOfWorks.find(
+    {
+      isDeleted: false,
+      $or: [
+        { scopeNumber: rx }, { quotationId: rx }, { quotationNumber: rx },
+        { "customerSnapshot.companyName": rx }, { jobTypeCode: rx }, { jobTypeName: rx },
+        { customerPoNumber: rx }, { status: rx },
+      ],
+    },
+    {
+      projection: { scopeNumber: 1, quotationId: 1, quotationNumber: 1, customerSnapshot: 1, jobTypeCode: 1, jobTypeName: 1, status: 1 },
+      sort: { updatedAt: -1 },
+      limit: RESULT_LIMIT,
+    },
+  ).toArray();
+  return docs.map((d) => {
+    const { id, scopeNumber, quotationId, quotationNumber, customerSnapshot, jobTypeCode, jobTypeName, status } = withStringId(d);
+    return { id, scopeNumber, quotationId, quotationNumber, customerName: customerSnapshot.companyName, jobTypeCode, jobTypeName, status };
+  });
+}
+
 async function searchTemplates(query: string): Promise<SearchTemplateResult[]> {
   const templates = await quotationTemplatesCollection();
   const rx = containsRegex(query);
@@ -335,19 +379,19 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
     throw new HttpError(400, `คำค้นหายาวเกินไป (สูงสุด ${MAX_QUERY_LENGTH} ตัวอักษร)`);
   }
 
-  const [quotes, customers, products, users] = await Promise.all([
-    quotesCollection(), customersCollection(), productsCollection(), usersCollection(),
+  const [quotes, customers, products, users, scopeOfWorks] = await Promise.all([
+    quotesCollection(), customersCollection(), productsCollection(), usersCollection(), scopeOfWorksCollection(),
   ]);
   // Index creation is incidental infrastructure, not data this response depends on — a transient
   // failure here must not 500 the whole search (same reasoning as the Dashboard's
   // ensureQuoteAnalyticsIndexes try/catch, see api/dashboard/index.ts).
   try {
-    await ensureSearchIndexes(quotes, customers, products, users);
+    await ensureSearchIndexes(quotes, customers, products, users, scopeOfWorks);
   } catch (err) {
     console.error("[search] ensureSearchIndexes failed", err);
   }
 
-  const [quotationResults, customerResults, productResults, templateResults, userResults] = await Promise.all([
+  const [quotationResults, customerResults, productResults, templateResults, scopeOfWorkResults, userResults] = await Promise.all([
     roleHasPermission(ctx.role, "quotations:view") ? searchQuotations(query) : Promise.resolve([]),
     roleHasPermission(ctx.role, "customers:view") ? searchCustomers(query) : Promise.resolve([]),
     roleHasPermission(ctx.role, "products:view") ? searchProducts(query) : Promise.resolve([]),
@@ -355,13 +399,15 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
     // — a Sales user with only quotations:create, no quotationTemplates:manage, can still find them.
     (roleHasPermission(ctx.role, "quotations:create") || roleHasPermission(ctx.role, "quotationTemplates:manage"))
       ? searchTemplates(query) : Promise.resolve([]),
+    // Scope of Work (added 2026-07-15, Codex review High Priority fix — see docs/MODULES/ScopeOfWork.md).
+    roleHasPermission(ctx.role, "scopeOfWork:view") ? searchScopeOfWorks(query) : Promise.resolve([]),
     roleHasPermission(ctx.role, "users:manage") ? searchUsers(query) : Promise.resolve([]),
   ]);
   const pages = searchPages(query, ctx);
 
   const results: SearchResults = {
     quotations: quotationResults, customers: customerResults, products: productResults,
-    templates: templateResults, pages, users: userResults,
+    templates: templateResults, scopeOfWorks: scopeOfWorkResults, pages, users: userResults,
   };
   res.status(200).json(results);
 }

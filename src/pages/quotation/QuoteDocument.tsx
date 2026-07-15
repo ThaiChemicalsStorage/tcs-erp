@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight, Printer, Copy, Save, Send, CheckCircle2, Building2, Hash, CalendarDays,
-  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History,
+  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList,
 } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
@@ -12,6 +12,8 @@ import {
   statusIcon, statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
 } from "../../lib/quotes";
 import type { Customer } from "../../lib/customers";
+import { fetchScopeOfWorksByQuotation, createScopeOfWorkFromQuotation, type ScopeOfWorkSummary } from "../../lib/scopeOfWork";
+import { ApiError } from "../../lib/apiClient";
 import { InterestButtons } from "./InterestButtons";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { CustomerSelector } from "./CustomerSelector";
@@ -47,6 +49,9 @@ export function QuoteDocument({
   jobTypes,
   customers,
   permissions,
+  canViewScopeOfWork,
+  canCreateScopeOfWork,
+  onOpenScopeOfWork,
   onBack,
   onSave,
   onDuplicate,
@@ -70,6 +75,12 @@ export function QuoteDocument({
   jobTypes: JobType[];
   customers: Customer[];
   permissions: QuotePermissions;
+  /** Gates the "สร้าง Scope of Work"/"เปิด / แก้ไข Scope of Work" toolbar action — added
+   * 2026-07-15, see docs/MODULES/ScopeOfWork.md. `canViewScopeOfWork` alone shows the button in its
+   * "open existing" form; creating a brand-new one additionally needs `canCreateScopeOfWork`. */
+  canViewScopeOfWork: boolean;
+  canCreateScopeOfWork: boolean;
+  onOpenScopeOfWork: (scopeOfWorkId: string) => void;
   onBack: () => void;
   onSave: (data: QuoteDraftFields) => void;
   onDuplicate: () => void;
@@ -177,6 +188,61 @@ export function QuoteDocument({
   const [pendingAction, setPendingAction] = useState<ApprovalAction | null>(null);
   const [actionComment, setActionComment] = useState("");
   const [actionError, setActionError] = useState("");
+
+  // ── Scope of Work (added 2026-07-15) ──────────────────────────────────────────────────────────
+  // "Does a Scope of Work already exist for this quotation?" — looked up once per opened quotation
+  // (not per render) so the toolbar button can show "เปิด / แก้ไข Scope of Work" instead of
+  // "สร้าง Scope of Work" when one already does. Only the most-recently-updated one is opened by
+  // this button if more than one exists (e.g. from "ทำสำเนา") — see docs/MODULES/ScopeOfWork.md.
+  const [existingScopeOfWork, setExistingScopeOfWork] = useState<ScopeOfWorkSummary | null>(null);
+  const [scopeOfWorkBusy, setScopeOfWorkBusy] = useState(false);
+  // 2026-07-15, Codex review High Priority fix: `secondaryCode` is required server-side on create
+  // (see api/_lib/scopeOfWorkHandler.ts) so the generated job code always has its 4th segment from
+  // the start, instead of silently omitting it. This modal collects the *value* from the user —
+  // the one person who actually knows it — rather than the code inventing or defaulting one.
+  const [scopeOfWorkPromptOpen, setScopeOfWorkPromptOpen] = useState(false);
+  const [scopeOfWorkSecondaryCode, setScopeOfWorkSecondaryCode] = useState("");
+  const [scopeOfWorkPromptError, setScopeOfWorkPromptError] = useState("");
+  useEffect(() => {
+    // `isDetail`/`canViewScopeOfWork` can't actually flip during this component's lifetime (a
+    // mode/permission change always comes with a fresh mount via QuotationPage's `key`), so
+    // there's no stale-`existingScopeOfWork`-from-a-different-mode case to reset here — the
+    // `useState(null)` initial value already covers it. Skipping the fetch outright (rather than
+    // setState-ing back to null first) avoids a synchronous setState at the top of the effect.
+    if (!isDetail || !canViewScopeOfWork) return;
+    let cancelled = false;
+    fetchScopeOfWorksByQuotation(quote!.id)
+      .then((list) => { if (!cancelled) setExistingScopeOfWork(list[0] ?? null); })
+      .catch(() => { if (!cancelled) setExistingScopeOfWork(null); });
+    return () => { cancelled = true; };
+  }, [isDetail, quote, canViewScopeOfWork]);
+
+  const handleScopeOfWorkClick = () => {
+    if (!quote) return;
+    if (existingScopeOfWork) {
+      onOpenScopeOfWork(existingScopeOfWork.id);
+      return;
+    }
+    setScopeOfWorkSecondaryCode("");
+    setScopeOfWorkPromptError("");
+    setScopeOfWorkPromptOpen(true);
+  };
+
+  const confirmCreateScopeOfWork = async () => {
+    if (!quote) return;
+    const secondaryCode = scopeOfWorkSecondaryCode.trim();
+    if (!secondaryCode) { setScopeOfWorkPromptError("กรุณาระบุรหัสอ้างอิงท้ายงาน"); return; }
+    setScopeOfWorkBusy(true);
+    try {
+      const created = await createScopeOfWorkFromQuotation(quote.id, secondaryCode);
+      setScopeOfWorkPromptOpen(false);
+      onOpenScopeOfWork(created.id);
+    } catch (err) {
+      setScopeOfWorkPromptError(err instanceof ApiError ? err.message : "ไม่สามารถสร้าง Scope of Work ได้");
+    } finally {
+      setScopeOfWorkBusy(false);
+    }
+  };
 
   const { total } = computeTotals(lines, discount);
   const jobTypeDisplay = jobTypeCode ? `${jobTypeCode} — ${jobTypeName}` : "";
@@ -291,6 +357,11 @@ export function QuoteDocument({
           {isDetail && permissions.canDuplicate && (
             <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
               <Copy size={13} /> {t("quotation.duplicateAction")}
+            </button>
+          )}
+          {isDetail && canViewScopeOfWork && (existingScopeOfWork || canCreateScopeOfWork) && (
+            <button onClick={handleScopeOfWorkClick} disabled={scopeOfWorkBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              <ClipboardList size={13} /> {existingScopeOfWork ? "เปิด / แก้ไข Scope of Work" : "สร้าง Scope of Work"}
             </button>
           )}
           {!disabled && (
@@ -645,6 +716,38 @@ export function QuoteDocument({
                 className={`px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"}`}
               >
                 {t("quotation.modal.confirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scopeOfWorkPromptOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
+          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setScopeOfWorkPromptOpen(false)} />
+          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>สร้าง Scope of Work</p>
+            <p className="text-xs text-muted-foreground mb-4">
+              กรุณาระบุรหัสอ้างอิงท้ายงาน (เช่น SK) เพื่อใช้ในรหัสงานของ Scope of Work — รูปแบบ PQ{"{"}YYYYMM{"}"}-{"{"}ลำดับ{"}"}-{"{"}ประเภทงาน{"}"}-{"{"}รหัสอ้างอิงท้ายงาน{"}"}
+            </p>
+            <label className="text-xs text-muted-foreground block mb-1.5">รหัสอ้างอิงท้ายงาน <span className="text-[#e05252]">*</span></label>
+            <input
+              autoFocus
+              className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+              value={scopeOfWorkSecondaryCode}
+              onChange={(e) => setScopeOfWorkSecondaryCode(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmCreateScopeOfWork(); }}
+              placeholder="เช่น SK"
+            />
+            {scopeOfWorkPromptError && <p className="text-xs text-[#e05252] mt-1.5">{scopeOfWorkPromptError}</p>}
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <button onClick={() => setScopeOfWorkPromptOpen(false)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+              <button
+                onClick={confirmCreateScopeOfWork}
+                disabled={scopeOfWorkBusy}
+                className="px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] disabled:opacity-60"
+              >
+                สร้าง Scope of Work
               </button>
             </div>
           </div>

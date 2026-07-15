@@ -1,16 +1,22 @@
 # Codex Review — 2026-07-15
 
-This dated report mirrors the current [main Codex review report](../CODEX_REVIEW_REPORT.md).
+This dated report mirrors the current [Scope of Work review report](../CODEX_REVIEW_REPORT.md).
 
 ## Outcome
 
-No Critical RBAC gap was found. The quotation-template feature is substantially implemented, but it is not complete against the requested audit/import requirements.
+The Scope of Work module is substantially implemented, with no confirmed Critical data-integrity/RBAC issue. It copies a quotation snapshot, uses server-side unique sequence allocation, supports editable items/checklists/signatures, and has print structure and permissions.
 
-- **High:** “Excel import” is a hardcoded seed upsert, not a parser of the supplied workbook; its hash is not workbook-derived.
-- **High:** quotations have flattened copied lines and provenance fields, not copied template sections/items as a structured snapshot.
-- **High:** saved template sub-details are dropped when a template is applied to a quotation.
-- **Medium:** product snapshots are client-supplied and not server-verified; availability badges can state “no template” while counts are loading/fail.
+High Priority gaps remain:
 
-Static review confirms the five required seed mappings, Job Type filtering, blank fallback, Template Management lifecycle actions, server-side template RBAC, no invented template prices, and no issuer-company regression.
+- Quotation `contactName` and salesperson are not copied/stored; seller is the creating user.
+- The required suffix code is optional/unconfigured and omitted from newly generated job codes.
+- Scope of Work has no Global Search integration.
 
-`npm run lint` / `npm run build` were attempted but npm could not initialize in this WSL1 environment. See the main report for evidence, checklist, and fix plan.
+The reference PDF could not be visually rendered, and lint/build could not run: this environment has no usable Node runtime (npm reports WSL1 unsupported) or PDF renderer. See the main report for the complete required checklist, evidence, print limitations, RBAC review, and fix plan.
+
+## Fix Status
+
+All 3 High Priority issues (contact/salesperson snapshot, required job-code suffix, missing Global
+Search integration) plus the actionable Medium/Low findings were fixed the same day in a Node-capable
+environment (`tsc`/`lint`/`build` all pass clean there). See the main report's "Claude Fix Status"
+section for the full itemized writeup.

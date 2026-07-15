@@ -4,6 +4,85 @@
 
 ---
 
+## Session — 2026-07-15, new feature (Scope of Work)
+
+### What was implemented
+- User provided a reference PDF ("Scope Of Work PQ202607-174-LI-SK บริษัท เค ไทย ไฮดรอลิค จำกัด.pdf",
+  saved to `public/`) and asked for a new Scope of Work document type generated from an existing
+  quotation, with a long, detailed spec covering data mapping, a specific "printed vs. blue
+  handwritten vs. yellow highlight" content-treatment rule, a scope-number format, checklist groups,
+  RBAC, and documentation requirements.
+- Spent substantial up-front effort reading the PDF and studying the existing codebase before
+  writing any code: read `vercel.json`/`api/handlers/{quotes,jobtypes}.ts`/`quotationTemplatesHandler.ts`
+  (the closest analogous recent feature — mounting a new resource onto an existing serverless
+  function file rather than adding a 13th, since Vercel Hobby's 12-function cap is still fully
+  used), `quoteValidation.ts` (reusable sanitizers), `roles.ts`/`permissions.ts` (RBAC conventions),
+  `QuoteDocument.tsx`/`PrintDocument.tsx`/`LineItemsEditor.tsx` (screen-editor + print patterns to
+  mirror), and `TemplateEditorView.tsx`/`quotationTemplatesHandler.ts` (the closest prior "editable
+  document generated from source data" precedent).
+- Built the full stack: `src/lib/scopeOfWork.ts` (types), 6 new RBAC permissions
+  (`scopeOfWork:view/create/edit/finalize/print/delete`) wired into `permissions.ts`/`roles.ts`/
+  `i18n.tsx`, a new `scope_of_works` MongoDB collection + indexes, `api/_lib/scopeOfWorkHandler.ts`
+  (create/get/list/update/finalize/duplicate/refresh/print/delete, mounted from
+  `api/handlers/quotes.ts` on the raw pathname — no new Vercel function file), and a frontend editor
+  (`ScopeOfWorkDocument.tsx` + `ScopeOfWorkItemsEditor.tsx` + `ScopeOfWorkChecklistGroup.tsx` +
+  `ScopeOfWorkPrintDocument.tsx`) reached via a new `"scopeOfWork"` view state inside
+  `QuotationPage.tsx` — deliberately **not** a new sidebar module, per the task's explicit "Add a
+  Scope of Work action to the Quotation module" instruction.
+- **Real correctness issue caught and fixed during self-review, before running lint/build**: the
+  scope-number's `jobSequence` component is only unique *within the calendar month it was allocated
+  for* (an atomic per-month counter, same pattern as the existing quote-numbering counter). Editing
+  `issueDate` into a different month while keeping the old (frozen) `jobSequence` would have let two
+  unrelated Scope of Work records collide on the same `{yearMonth, jobSequence}` pair. Fixed by
+  re-reserving a fresh sequence number for the new month whenever an edit actually changes it — see
+  `handleUpdate` in `api/_lib/scopeOfWorkHandler.ts` and `MODULES/ScopeOfWork.md`.
+- Also caught and fixed two `react-hooks/set-state-in-effect` ESLint errors from the two new
+  data-fetching effects (in `QuoteDocument.tsx` and `ScopeOfWorkDocument.tsx`) by following this
+  codebase's own established convention (see `DashboardPage.tsx`'s retry pattern): never call
+  `setState` synchronously at the top of an effect body — reset state at the trigger site (a click
+  handler) instead, only inside the async `.then`/`.catch` callbacks. Also added `key={scopeOfWorkId}`
+  at the `ScopeOfWorkDocument` mount site to force a clean remount when switching records (e.g. after
+  "ทำสำเนา"), closing a related hazard where a still-in-flight fetch for a *new* record could have
+  left a *different* record's data on screen and savable against the wrong id.
+- Followed the PDF's exact printed content as the checklist structure's source of truth (11 groups:
+  Safety, TOR/Requirement from customer, เอกสารส่งถึง, ปจ.2, งานขนส่ง, Logo, Name plate, Test Report
+  split into ประเภท/ระดับรายงาน, เงื่อนไขการวางบิล, เงื่อนไขการส่งมอบงาน) rather than the task
+  description's slightly different suggested category list, since the PDF was named as the source
+  of truth for exact labels/grouping.
+- Deliberately did **not** invent a business meaning for the PDF's `-SK` scope-number suffix
+  (`secondaryCode`) — left as a plain editable field with an explicit "still needs business
+  confirmation" label in the UI and a dedicated open-question section in the module doc, per the
+  task's explicit instruction not to guess.
+- Updated all 9 requested docs (CLAUDE.md, PROJECT_STATUS.md, CHANGELOG.md, TODO.md, DATABASE.md,
+  API.md, RBAC.md, IMPLEMENTATION_CHECKLIST.md, this file) plus a new `MODULES/ScopeOfWork.md`.
+
+### Problems found & fixed this session
+- The `jobSequence`-uniqueness-across-month-edits gap above (caught during self-review, fixed before
+  any build/lint run — not found by an external review this time).
+- Two `react-hooks/set-state-in-effect` lint errors (see above) — fixed by following the existing
+  `DashboardPage.tsx` convention rather than introducing a new pattern.
+- `permissions.ts`'s new `PERMISSION_LABEL_KEY` entries initially referenced `TranslationKey`
+  values (`permission.scopeOfWork*`) that didn't exist yet in `i18n.tsx`'s dictionary — caught by
+  `tsc --noEmit`, fixed by adding the missing Thai/English key pairs.
+
+### New TODOs / recommendations
+- Manually verify the whole feature against a live deployment/browser (create from a real quotation,
+  checklist persistence across reopen, print output, concurrent-creation counter behavior, and the
+  Sales-vs-Approver ownership/edit-permission boundary) — blocked in this session by the same
+  sandboxed-environment MongoDB Atlas DNS limitation documented repeatedly elsewhere in these docs.
+- `secondaryCode`'s business meaning needs a real answer from the business/Codex before this field
+  can be considered anything more than a placeholder for future confirmation.
+- Whether shipping-contact vs. billing-contact should become real distinct fields on `Customer`/
+  `Quote` (rather than always starting blank on Scope of Work) is a business-scope question, not a
+  code gap — flagged, not decided, in this pass.
+
+### Completion estimate
+Feature-complete against the given spec, `tsc`/`lint`/`build` all clean, self-reviewed for the
+correctness issue above. Not yet independently reviewed (Codex review is the expected next step per
+the task's own instructions) or manually browser-verified.
+
+---
+
 ## Session — 2026-07-14, correction pass (Issuer Company → Customer Management)
 
 ### What was implemented

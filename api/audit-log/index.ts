@@ -32,6 +32,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (module === "ใบเสนอราคา") {
         throw new HttpError(403, "เหตุการณ์ใบเสนอราคาถูกบันทึกโดยระบบโดยอัตโนมัติ ไม่สามารถบันทึกผ่าน API นี้ได้");
       }
+      // Scope of Work events are written authoritatively by api/_lib/scopeOfWorkHandler.ts itself
+      // (create/update/finalize/duplicate/refresh/print/delete) — same forgery-prevention rule as
+      // the quotation module above, added 2026-07-15 when the feature was built.
+      if (module === "Scope of Work") {
+        throw new HttpError(403, "เหตุการณ์ Scope of Work ถูกบันทึกโดยระบบโดยอัตโนมัติ ไม่สามารถบันทึกผ่าน API นี้ได้");
+      }
       // The Company Profiles module itself was removed 2026-07-14 (docs/MODULES/CompanyProfiles.md
       // "Removed") — nothing writes this module's audit entries anymore. Lockout kept anyway: the
       // historical `audit_log` entries from when the module was live still legitimately carry this

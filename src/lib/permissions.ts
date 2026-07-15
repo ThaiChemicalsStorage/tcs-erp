@@ -29,7 +29,13 @@ export type Permission =
   | "quotationTemplates:duplicate"
   | "quotationTemplates:activate"
   | "quotationTemplates:archive"
-  | "quotationTemplates:import";
+  | "quotationTemplates:import"
+  | "scopeOfWork:view"
+  | "scopeOfWork:create"
+  | "scopeOfWork:edit"
+  | "scopeOfWork:finalize"
+  | "scopeOfWork:print"
+  | "scopeOfWork:delete";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -61,6 +67,12 @@ export const ALL_PERMISSIONS: Permission[] = [
   "quotationTemplates:activate",
   "quotationTemplates:archive",
   "quotationTemplates:import",
+  "scopeOfWork:view",
+  "scopeOfWork:create",
+  "scopeOfWork:edit",
+  "scopeOfWork:finalize",
+  "scopeOfWork:print",
+  "scopeOfWork:delete",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -93,6 +105,12 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "quotationTemplates:activate": "เปิด/ปิดใช้งาน Template ใบเสนอราคา",
   "quotationTemplates:archive": "เก็บถาวร/กู้คืน Template ใบเสนอราคา",
   "quotationTemplates:import": "นำเข้า Template จากไฟล์ Excel",
+  "scopeOfWork:view": "ดู Scope of Work",
+  "scopeOfWork:create": "สร้าง Scope of Work",
+  "scopeOfWork:edit": "แก้ไข Scope of Work",
+  "scopeOfWork:finalize": "ยืนยันสถานะ Final ของ Scope of Work",
+  "scopeOfWork:print": "พิมพ์ / ส่งออก Scope of Work",
+  "scopeOfWork:delete": "ลบ Scope of Work",
 };
 
 /** Translated display label per permission — `PERMISSION_LABELS` (Thai) stays as-is since it's also used to seed the `permissions` collection's stored `label` field; this map is UI-display only. */
@@ -126,6 +144,12 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "quotationTemplates:activate": "permission.quotationTemplatesActivate",
   "quotationTemplates:archive": "permission.quotationTemplatesArchive",
   "quotationTemplates:import": "permission.quotationTemplatesImport",
+  "scopeOfWork:view": "permission.scopeOfWorkView",
+  "scopeOfWork:create": "permission.scopeOfWorkCreate",
+  "scopeOfWork:edit": "permission.scopeOfWorkEdit",
+  "scopeOfWork:finalize": "permission.scopeOfWorkFinalize",
+  "scopeOfWork:print": "permission.scopeOfWorkPrint",
+  "scopeOfWork:delete": "permission.scopeOfWorkDelete",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -149,6 +173,12 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "quotationTemplates:activate",
       "quotationTemplates:archive",
       "quotationTemplates:import",
+      "scopeOfWork:view",
+      "scopeOfWork:create",
+      "scopeOfWork:edit",
+      "scopeOfWork:finalize",
+      "scopeOfWork:print",
+      "scopeOfWork:delete",
     ],
   },
   {

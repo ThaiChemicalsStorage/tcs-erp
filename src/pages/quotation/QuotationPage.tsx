@@ -3,7 +3,7 @@ import type { Company } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
 import type { JobType } from "../../lib/jobTypes";
 import type { User } from "../../lib/users";
-import type { Role } from "../../lib/roles";
+import { type Role, hasPermission } from "../../lib/roles";
 import type { Customer } from "../../lib/customers";
 import {
   type Quote, type QuoteInterest, type QuoteDraftFields, type ApprovalAction, type QuotationListFilter,
@@ -12,6 +12,7 @@ import {
 import { ApiError } from "../../lib/apiClient";
 import { QuoteList } from "./QuoteList";
 import { QuoteDocument } from "./QuoteDocument";
+import { ScopeOfWorkDocument } from "./ScopeOfWorkDocument";
 import { QuotationTemplateWizard, type QuotationWizardResult } from "./QuotationTemplateWizard";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -34,6 +35,8 @@ export function QuotationPage({
   onQuoteIdConsumed,
   initialTemplateSelection,
   onTemplateSelectionConsumed,
+  initialScopeOfWorkDeepLink,
+  onScopeOfWorkDeepLinkConsumed,
   onNotify,
   canCreateTemplate,
   onCreateTemplateForJobType,
@@ -61,6 +64,12 @@ export function QuotationPage({
    * already open must still jump to the newly-clicked one). */
   initialTemplateSelection: { jobTypeCode: string; templateId: string } | null;
   onTemplateSelectionConsumed: () => void;
+  /** Set by a Global Search "Scope of Work" result click (added 2026-07-15, Codex review High
+   * Priority fix) — jumps straight to that quotation's detail view then opens the given Scope of
+   * Work's editor, instead of just opening the quotation and making the user find the button
+   * again. Same "reacts to every change" requirement as `initialQuoteId` above. */
+  initialScopeOfWorkDeepLink: { quotationId: string; scopeOfWorkId: string } | null;
+  onScopeOfWorkDeepLinkConsumed: () => void;
   onNotify: () => void;
   /** Whether the current user can reach the Template Management create flow — gates the wizard's
    * "สร้าง Template ใหม่สำหรับประเภทงานนี้" affordance, see QuotationTemplateWizard.tsx. */
@@ -68,8 +77,12 @@ export function QuotationPage({
   onCreateTemplateForJobType: (jobTypeCode: string, jobTypeName: string) => void;
 }) {
   const { t } = useI18n();
-  const [view, setView] = useState<"list" | "wizard" | "new" | "detail">("list");
+  const [view, setView] = useState<"list" | "wizard" | "new" | "detail" | "scopeOfWork">("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** Which Scope of Work is open when `view === "scopeOfWork"` — set by QuoteDocument's "สร้าง /
+   * เปิด Scope of Work" toolbar button, or by ScopeOfWorkDocument's "ทำสำเนา" action pointing at
+   * the freshly duplicated record. See docs/MODULES/ScopeOfWork.md. */
+  const [scopeOfWorkId, setScopeOfWorkId] = useState<string | null>(null);
   // Result of the "สร้างใบเสนอราคา" wizard (Job Type -> Template -> Preview), consumed once when
   // QuoteDocument mounts in "new" mode — see QuotationTemplateWizard.tsx. Cleared whenever a new
   // wizard run starts so a stale template can never leak into an unrelated "start blank" quote.
@@ -126,9 +139,33 @@ export function QuotationPage({
     if (initialTemplateSelection) onTemplateSelectionConsumed();
   }, [initialTemplateSelection, onTemplateSelectionConsumed]);
 
+  // Same "adjust state during rendering" pattern as `initialQuoteId`/`initialTemplateSelection`
+  // above, applied to a Global Search "Scope of Work" result click (added 2026-07-15, Codex review
+  // High Priority fix).
+  const [appliedScopeOfWorkDeepLink, setAppliedScopeOfWorkDeepLink] = useState<{ quotationId: string; scopeOfWorkId: string } | null>(null);
+  if (initialScopeOfWorkDeepLink && initialScopeOfWorkDeepLink !== appliedScopeOfWorkDeepLink) {
+    setAppliedScopeOfWorkDeepLink(initialScopeOfWorkDeepLink);
+    setSelectedId(initialScopeOfWorkDeepLink.quotationId);
+    setScopeOfWorkId(initialScopeOfWorkDeepLink.scopeOfWorkId);
+    setView("scopeOfWork");
+  }
+  useEffect(() => {
+    if (initialScopeOfWorkDeepLink) onScopeOfWorkDeepLinkConsumed();
+  }, [initialScopeOfWorkDeepLink, onScopeOfWorkDeepLinkConsumed]);
+
   const toast = useToast();
 
   const selectedQuote = quotes.find((q) => q.id === selectedId);
+
+  // Scope of Work permissions (added 2026-07-15) — computed once here and shared by both the
+  // "สร้าง / เปิด Scope of Work" button on QuoteDocument's toolbar and ScopeOfWorkDocument itself.
+  const canViewScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:view");
+  const canCreateScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:create");
+  const canEditScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:edit");
+  const canFinalizeScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:finalize");
+  const canPrintScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:print");
+  const canDeleteScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:delete");
+  const openScopeOfWork = (id: string) => { setScopeOfWorkId(id); setView("scopeOfWork"); };
 
   const setInterest = async (id: string, v: QuoteInterest) => {
     const updated = await updateQuote(id, { interest: v });
@@ -222,6 +259,27 @@ export function QuotationPage({
     );
   }
 
+  if (view === "scopeOfWork" && scopeOfWorkId) {
+    return (
+      <>
+        <ScopeOfWorkDocument
+          key={scopeOfWorkId}
+          scopeOfWorkId={scopeOfWorkId}
+          users={users}
+          canEdit={canEditScopeOfWork}
+          canFinalize={canFinalizeScopeOfWork}
+          canPrint={canPrintScopeOfWork}
+          canDelete={canDeleteScopeOfWork}
+          canCreate={canCreateScopeOfWork}
+          onBack={() => setView("detail")}
+          onDuplicated={(newId) => setScopeOfWorkId(newId)}
+          showToast={toast.show}
+        />
+        <Toast message={toast.message} />
+      </>
+    );
+  }
+
   const permissions = computeQuotePermissions(view === "detail" ? selectedQuote : undefined, view === "new", currentUser, roles);
 
   return (
@@ -240,6 +298,9 @@ export function QuotationPage({
         jobTypes={jobTypes}
         customers={customers}
         permissions={permissions}
+        canViewScopeOfWork={canViewScopeOfWork}
+        canCreateScopeOfWork={canCreateScopeOfWork}
+        onOpenScopeOfWork={openScopeOfWork}
         onBack={() => setView("list")}
         onSave={handleSave}
         onDuplicate={handleDuplicate}
