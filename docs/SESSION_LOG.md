@@ -4,6 +4,48 @@
 
 ---
 
+## Session — 2026-07-16 (same day, later), remove website URL from printed documents
+
+### What was implemented
+- User reported a website URL appearing bottom-left when printing a Quotation or Scope of Work, and
+  asked to determine whether it was app-rendered or browser-generated before doing anything else.
+- Investigated by direct code inspection rather than guessing: grepped `src/pages/quotation` and
+  `src/styles` for any URL/website/footer content. Found `PrintDocument.tsx` and
+  `ScopeOfWorkPrintDocument.tsx` never render a website URL anywhere — Quotation's
+  `CompanyHeaderInfo.website` is always hardcoded to `""` in `QuoteDocument.tsx` and isn't even read
+  by the print component. `src/styles/index.css`'s only `@media print` block (`@page` size/margin +
+  a `body` background rule) has no footer/URL content either.
+- Concluded the URL is Chrome/Edge's own browser-injected "Headers and footers" print option (page
+  URL + date + title/page number) — a print-dialog-level browser setting, not something a web page's
+  CSS/DOM can control, and confirmed `@page` margins do not affect it.
+- Since the app cannot suppress it, added a small `MetricInfoTooltip.tsx` info-icon hint next to the
+  Print button in both `QuoteDocument.tsx` and `ScopeOfWorkDocument.tsx` (inside the existing
+  `print:hidden` toolbar, so the hint itself is never in the printed output) telling users to disable
+  "Headers and footers" in their browser's print settings before printing/saving as PDF. New i18n
+  keys `quotation.printHint.label`/`.text` (Thai + English) for Quotation; Scope of Work's hint uses
+  plain hardcoded Thai text matching that file's existing convention (no i18n there).
+- No print CSS or print-document component changes were made — both were already clean; incorrectly
+  claiming `@page` could suppress browser headers/footers was explicitly avoided per the task's own
+  constraint.
+- `tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run lint` (0 errors, the same 2
+  pre-existing unrelated `i18n.tsx` warnings), and `npm run build` all pass clean.
+- Updated `docs/UI_GUIDELINES.md` ("Print / PDF" section), `docs/MODULES/Quotation.md`,
+  `docs/MODULES/ScopeOfWork.md`, and `docs/CHANGELOG.md`.
+
+### Known limitation
+- This sandboxed environment cannot launch a browser, so the requested manual Chrome/Edge
+  verification (headers/footers on/off, PDF export, console check) could not be executed — consistent
+  with every prior pass this session. The fix is a one-line, low-risk UI addition (an existing,
+  already-used tooltip component) plus zero print-CSS/print-document changes, which limits the blast
+  radius of anything an actual browser check might have caught.
+
+### Recommendation
+- If the user wants stronger confirmation that this specific browser behavior is truly
+  unsuppressable (it is, per Chrome/Edge's own documented print API — there is no `window.print()`
+  option or CSS property that disables the browser's own header/footer injection), a quick manual
+  check next time a browser is available: print a Quotation from Chrome with headers/footers on vs.
+  off and confirm the tooltip's instruction actually removes the URL/date.
+
 ## Session — 2026-07-16 (same day), Codex review fix pass on the required-field validation work
 
 ### What was implemented

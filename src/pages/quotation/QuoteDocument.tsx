@@ -21,6 +21,7 @@ import { CustomerSelector } from "./CustomerSelector";
 import { PrintDocument } from "./PrintDocument";
 import type { QuotationWizardResult } from "./QuotationTemplateWizard";
 import { BrandMark } from "../../components/BrandMark";
+import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
 import { FieldError } from "../../components/FieldError";
 import { ValidationSummary } from "../../components/ValidationSummary";
@@ -442,6 +443,9 @@ export function QuoteDocument({
             >
               <Printer size={13} /> {t("quotation.printPdf")}
             </button>
+          )}
+          {permissions.canExport && (
+            <MetricInfoTooltip label={t("quotation.printHint.label")} text={t("quotation.printHint.text")} />
           )}
           {isDetail && permissions.canDuplicate && (
             <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">

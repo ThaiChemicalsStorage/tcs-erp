@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-07-16 (same day, later) — Remove website URL from printed documents
+
+Investigated a report that a website URL appears at the bottom-left of printed Quotations and Scope
+of Works. Root cause confirmed **not app-rendered**: `PrintDocument.tsx`/`ScopeOfWorkPrintDocument.tsx`
+never render a URL anywhere (Quotation's `CompanyHeaderInfo.website` is always hardcoded to `""` and
+never read by the print component), and `src/styles/index.css`'s only `@media print` block has no
+footer/URL content. The URL is Chrome/Edge's own browser-injected "Headers and footers" print option
+(page URL + date + title/page number) — a browser print-dialog setting, not something a web page's
+CSS/DOM can control or disable (`@page` margins do not affect it). Since the app cannot suppress it,
+added a small `MetricInfoTooltip.tsx` info-icon hint next to the Print button in both
+`QuoteDocument.tsx` and `ScopeOfWorkDocument.tsx` (inside the existing `print:hidden` toolbar, so the
+hint never appears in the printed output itself) instructing users to disable "Headers and footers"
+in their browser's print settings before printing or saving as PDF — covers both "Print" and "Export
+PDF" since both are the same `window.print()` call. No print CSS or print-document component changes
+were needed (both were already clean). New i18n keys `quotation.printHint.label`/`.text` (Thai +
+English); Scope of Work's hint uses plain hardcoded Thai text, matching that file's existing
+convention. `tsc --noEmit` (both projects), `lint`, and `build` all pass clean. See
+[UI_GUIDELINES.md](./UI_GUIDELINES.md) "Print / PDF" → "Browser-generated headers/footers."
+
 ## 2026-07-16 (same day) — Quotation: make fields optional again, remove Document Requirements and Delivery
 
 **Latest business decision, overriding the two required-field validation passes immediately above.**

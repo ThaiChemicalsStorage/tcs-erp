@@ -170,6 +170,7 @@ Client-side RBAC (see [RBAC.md](../RBAC.md)) via `computeQuotePermissions(quote,
 - **Potential Opportunity checkbox** (added 2026-07-10) — sales-marked "likely to close," feeds the Dashboard's Expected Sales KPI/forecast
 - **Follow-up Date field** (added 2026-07-10) — feeds the Dashboard's Today/Overdue/Upcoming follow-up reminders; clicking a reminder opens the quotation list pre-filtered to that customer
 - **Customer selection** (added 2026-07-14, replacing an earlier incorrect "Issuer Company" feature) — pick a saved [Customer](./Customer.md) to autofill the Customer Information fields instead of retyping them; server-built `customerSnapshot` at save time, Draft-only changes to the linked customer — see "Customer Selection" above
+- **Print-hint tooltip** (added 2026-07-16) — a small info icon next to the Print/PDF button (inside the `print:hidden` toolbar, so it never appears in the printed output) telling the user to disable "Headers and footers" in their browser's print settings if they don't want the browser's own injected website URL/print date to appear — the app itself never renders a URL, this is a browser print-dialog setting the app cannot override; see [UI_GUIDELINES.md](../UI_GUIDELINES.md) "Print / PDF"
 
 ## Future Improvements
 

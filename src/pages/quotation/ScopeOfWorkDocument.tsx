@@ -8,6 +8,7 @@ import {
 } from "../../lib/scopeOfWork";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { ChecklistGroupCard } from "./ChecklistGroupCard";
 import { ScopeOfWorkItemsEditor } from "./ScopeOfWorkItemsEditor";
 import { ScopeOfWorkPrintDocument } from "./ScopeOfWorkPrintDocument";
@@ -293,6 +294,12 @@ export function ScopeOfWorkDocument({
             >
               <Printer size={13} /> พิมพ์ / PDF
             </button>
+          )}
+          {canPrint && (
+            <MetricInfoTooltip
+              label="คำแนะนำการพิมพ์"
+              text='หากไม่ต้องการให้ URL เว็บไซต์และวันที่พิมพ์ปรากฏบนเอกสาร ให้ปิดตัวเลือก "Headers and footers" (ส่วนหัว/ท้ายกระดาษ) ในหน้าตั้งค่าการพิมพ์ของเบราว์เซอร์ก่อนพิมพ์หรือบันทึกเป็น PDF'
+            />
           )}
           {canCreate && (
             <button onClick={handleDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">

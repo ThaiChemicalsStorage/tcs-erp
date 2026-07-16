@@ -324,6 +324,13 @@ and the ผู้ขาย/ผู้อนุมัติ signature table. Never
 field values render, blank where unfilled), yellow highlights, fake placeholder data, or any
 quotation pricing.
 
+**Print-hint tooltip** (added 2026-07-16): a small info icon next to the Print/PDF button (inside
+the `print:hidden` toolbar, so it never appears in the printed output) tells the user to disable
+"Headers and footers" in their browser's print settings if they don't want the browser's own
+injected website URL/print date on the page — this document never renders a URL itself, that
+content comes from the browser's print dialog, which the app has no CSS/DOM way to override; see
+[UI_GUIDELINES.md](../UI_GUIDELINES.md) "Print / PDF".
+
 **Multi-page item groups (2026-07-15, Codex review Medium fix)**: each item (and its following
 specification/remark row, when it has one) is grouped into its own `<tbody style="break-inside:
 avoid">` rather than sharing one big `<tbody>` for the whole table — a plain `breakInside: "avoid"`
