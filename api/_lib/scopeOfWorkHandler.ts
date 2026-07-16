@@ -145,18 +145,11 @@ function cloneChecklistGroups(groups: ChecklistGroup[]): ChecklistGroup[] {
  * the user afterward. Reused by both `handleCreate` and `handleRefresh` ("อัปเดตข้อมูลจากใบเสนอราคา")
  * so the two can never drift apart in what counts as "quotation-derived" content.
  *
- * `checklistGroups` (2026-07-16, Codex review High Priority fix): a Scope of Work's "ข้อกำหนด
- * เอกสารและการส่งมอบ" selections must start as a **snapshot of the quotation's own already-completed
- * selections**, not a fresh unchecked default — per the business requirement's explicit "Copy the
- * required document selections from the Quotation into the Scope of Work... store them as a Scope
- * of Work snapshot." A complete Quotation previously produced an incomplete Scope of Work with every
- * mandatory group reset to blank. Falls back to `buildDefaultChecklistGroups()` only when the source
- * quotation itself predates this field (`quote.checklistGroups` undefined) — an honest "nothing to
- * copy yet" default, never a fake completed selection. **Only used by `handleCreate`, deliberately
- * NOT by `handleRefresh`**: the same requirement says editing the Quotation later must never silently
- * change an already-created Scope of Work, so a re-copy on refresh would be wrong — the snapshot is
- * one-time-at-creation, exactly like every other "quotation-derived" field's semantics, and the
- * checklist afterward belongs to the Scope of Work's own independent edit history.
+ * `checklistGroups`: Quotation no longer carries a `checklistGroups` field of its own (2026-07-16,
+ * "Make Quotation Fields Optional and Remove Document Requirements and Delivery" — that section was
+ * removed from Quotation entirely per an explicit business decision). Scope of Work's own checklist
+ * feature is unaffected — it still always starts from `buildDefaultChecklistGroups(jobTypeCode)`,
+ * exactly as it did before the short-lived Quotation-side "copy from quotation" behavior existed.
  */
 function deriveFromQuotation(quote: QuoteFields & { _id: string }): {
   quotationNumber: string; jobTypeCode: string; jobTypeName: string; quotationSalesperson: string;
@@ -176,9 +169,7 @@ function deriveFromQuotation(quote: QuoteFields & { _id: string }): {
     remarks: quote.remarks,
     items: quote.lines.map(mapLineToScopeItem),
     paymentDescription: quote.paymentTerms,
-    checklistGroups: quote.checklistGroups
-      ? cloneChecklistGroups(quote.checklistGroups)
-      : buildDefaultChecklistGroups(quote.jobTypeCode),
+    checklistGroups: buildDefaultChecklistGroups(quote.jobTypeCode),
   };
 }
 

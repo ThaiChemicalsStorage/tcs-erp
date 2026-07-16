@@ -4,6 +4,86 @@
 
 ---
 
+## 2026-07-16 (same day) — Quotation: make fields optional again, remove Document Requirements and Delivery
+
+**Latest business decision, overriding the two required-field validation passes immediately above.**
+Users must not be forced to complete every Quotation field, incomplete Drafts must remain fully
+supported, and the "ข้อกำหนดเอกสารและการส่งมอบ" (Document Requirements and Delivery) section must
+be removed from Quotation entirely. **Scope of Work's own UI, schema, validation rules, print/PDF,
+and permissions are untouched** — every Scope of Work field, section, and component behaves exactly
+as before. One file was intentionally edited as a compatibility adjustment, not a feature change:
+`api/_lib/scopeOfWorkHandler.ts`'s `deriveFromQuotation()` — see "Snapshot Behavior" below.
+
+### Quotation required fields relaxed to the historical minimum
+
+`quotationRequiredFields` (`src/lib/validation/quotationValidation.ts`) now marks only `client` (the
+customer name) as `required: true` — every other field (`salesperson`, `contactName`,
+`contactPhone`, `contactEmail`, `address`, `taxId`, `deliveryMethod`, `deliveryAddress`, `project`,
+`poRef`, `paymentTerms`, `issueDate`, `expiryDate`, `jobTypeCode`, `remarks`, `followUpDate`,
+`isPotentialOpportunity`) is now `required: false`. This is not a new, invented rule — `client` was
+the **only** field this codebase ever required before required-field validation was added at all;
+every other field required by the two passes above is walked back to that original, least-
+restrictive behavior. `jobTypeCode` remains required **only at creation** (a separate, pre-existing
+check in `POST /api/quotes`, `validateJobType(..., { required: true })`) — never re-enforced on
+edit/submit/print, matching how it always worked. Line items are no longer required at all:
+`validateQuotationLines()`, `REQUIRE_LINE_SPECIFICATIONS`, and the "at least one line" rule were
+removed from `quotationValidation.ts` — a quote may be submitted/printed with zero or blank lines,
+same as before required-field validation existed. Semantic date-format checking (a non-blank date
+must be a real calendar date) is kept — that's a data-integrity check, not a "field is required"
+rule, and it never blocks an empty date.
+
+### Document Requirements and Delivery removed from Quotation
+
+Quotation's `checklistGroups` field (Safety/ขนส่ง/Logo/เงื่อนไขการวางบิล/เอกสารส่งถึง/Nameplate/
+เงื่อนไขการส่งมอบงาน/ปจ.2 — added in the immediately-preceding pass) is removed entirely:
+- `Quote`/`QuoteDraftFields` (`src/lib/quotes.tsx`) no longer have a `checklistGroups` field.
+- `api/handlers/quotes.ts` no longer generates, accepts, sanitizes, or returns `checklistGroups` —
+  `sanitizePartialQuoteFields()`, the create handler, `handlePrintQuote()`, and `handleWorkflow()`'s
+  finalization check all had their checklistGroups-related code removed. The `normalizeQuote()`
+  wrapper (which backfilled missing checklist groups on read) is gone; every response goes back to
+  plain `withStringId()`.
+- `QuoteDocument.tsx` no longer renders the "ข้อกำหนดเอกสารและการส่งมอบ" card, imports
+  `ChecklistGroupCard`, or tracks `checklistGroups` state.
+- **`ChecklistGroupCard.tsx` itself is NOT deleted** — Scope of Work still uses it for its own
+  (unchanged) checklist groups. Only Quotation's usage of it was removed.
+- **`src/lib/documentRequirements.ts`/`api/_lib/documentRequirements.ts` are NOT deleted or
+  changed** — `buildDefaultChecklistGroups()`/`sanitizeChecklistGroups()`/`withDefaultChecklistGroups()`/
+  `validateChecklistGroups()`/`MANDATORY_CHECKLIST_GROUP_KEYS` all still exist, unchanged, and are
+  still fully exercised by Scope of Work.
+- `api/_lib/scopeOfWorkHandler.ts`'s `deriveFromQuotation()` — which, in the immediately-preceding
+  fix pass, was changed to copy `quote.checklistGroups` into a new Scope of Work as a snapshot — now
+  always calls `buildDefaultChecklistGroups(quote.jobTypeCode)` instead, since there is no longer a
+  `quote.checklistGroups` to copy. This is the **only** Scope-of-Work-adjacent code touched this
+  pass, and it doesn't change Scope of Work's own behavior at all: a newly-created Scope of Work's
+  checklist groups start unchecked exactly as they always did before the short-lived "copy from
+  quotation" feature existed (which itself only existed for one same-day fix pass).
+- `LineItemsEditor.tsx`'s `lineErrors`/`noLinesError` props (and its `FieldError` usage) — added to
+  support the now-removed line-item requiredness gate — were reverted; the component no longer
+  accepts or renders per-line/no-lines error state.
+
+### Legacy data compatibility
+
+No destructive migration. A Quotation saved during the ~1-day window this feature existed may still
+carry a stray `checklistGroups` property in MongoDB — it's simply never read, written, or displayed
+by any current code path (the TypeScript type no longer declares it, but extra untyped properties on
+an already-fetched plain object are harmless and ignored). Existing Quotations — complete or
+incomplete, with or without the legacy field — continue to load, edit, and save exactly as before.
+
+### Not changed
+
+RBAC/permissions (unchanged), `customerId`/`customerSnapshot` behavior (unchanged), Template snapshot
+behavior (unchanged — Templates never carried a checklist concept in the first place), the print/
+workflow server-side enforcement architecture itself (`validateQuotationForFinalization()`/
+`validateQuotationForPrint()`, the `422 DOCUMENT_INCOMPLETE` shape, the real `disabled` button
+attributes, `mergeServerValidationErrors()`) — only the underlying required-field *policy* shrank,
+the mechanism enforcing whatever policy is configured is untouched and still fully server-enforced.
+
+`npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, and `npm run build` all
+pass clean. No live-deployment/browser verification performed (same sandboxed-session limitation as
+every recent pass — no MongoDB Atlas/Vercel CLI access in this environment).
+
+---
+
 ## 2026-07-16 (same day) — Quotation + Scope of Work validation: Codex review fix pass
 
 An independent Codex review of the required-field/mandatory-selection validation pass below found

@@ -14,6 +14,28 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-16, same day] Quotation fields made optional again; Document Requirements and Delivery removed.**
+  A newer business decision explicitly overrides the two required-field validation passes
+  immediately below: Quotation must not force every field to be completed, and its "ข้อกำหนดเอกสาร
+  และการส่งมอบ" section is removed entirely. `quotationRequiredFields` now only requires `client`
+  (the customer name — the same single field this codebase required before any of this validation
+  work started; no new mandatory field was invented). `jobTypeCode` stays required only at creation,
+  as it always was, via a separate server check. Line items are no longer required either (no
+  minimum count, no required per-line fields) — reverted to the original behavior. Quotation's
+  `checklistGroups` field, its UI section, and all its client/server validation were removed; the
+  shared `ChecklistGroupCard`/`documentRequirements.ts` infrastructure is untouched and still fully
+  used by Scope of Work. **Scope of Work's own UI, schema, validation, print/PDF, and permissions
+  had no changes this pass** — corrected wording (2026-07-16, Codex review Low Priority fix; the
+  original phrasing here said "zero changes"/"no file touched," which was imprecise: one file,
+  `api/_lib/scopeOfWorkHandler.ts`, *was* intentionally edited). The one actual edit is
+  `deriveFromQuotation()`, which now always calls `buildDefaultChecklistGroups()` instead of trying
+  to copy a `quote.checklistGroups` that no longer exists — a compatibility adjustment forced by the
+  Quotation-side removal, not a Scope of Work feature change; new Scope of Work records still start
+  with the same unchecked default checklist they always did before the now-removed cross-feature
+  existed. No destructive migration — a stray legacy `checklistGroups` property on an already-saved
+  Quotation is simply never read/written by any current code path.
+  `tsc`/`lint`/`build` all pass clean; no live-deployment verification (same sandboxed-session
+  limitation as every recent pass). See CHANGELOG.md for the full itemized diff.
 - ✅ **[2026-07-16, same-day Codex-review fix pass] Quotation + Scope of Work validation — checklist snapshot bug and 4 Medium-severity gaps fixed.**
   An independent review of the required-field validation pass below found 0 Critical, 2 High, and 4
   Medium Priority issues — all fixed same day. **High #1**: creating a Scope of Work discarded the

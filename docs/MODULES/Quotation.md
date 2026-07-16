@@ -71,73 +71,52 @@ normally, no backfill needed.
 
 `QuoteStatus` has 9 values: **Draft** (ร่าง) → **Pending Approval** (รออนุมัติ) → **Approved** (อนุมัติแล้ว) → **Sent to Customer** (ส่งให้ลูกค้าแล้ว) → **Customer Accepted** (ลูกค้ายอมรับ) → **Won** (ปิดการขายสำเร็จ), or **Customer Rejected** (ลูกค้าปฏิเสธ) → **Lost** (เสียโอกาส); plus a standalone **Cancelled** (ยกเลิก) reachable from Draft/Pending/Approved. Toolbar action buttons (Submit/Approve/Reject/Send to Customer/Customer Accepted/Customer Rejected/Won/Lost/Cancel) are rendered only when `computeQuotePermissions()` grants them — combining the signed-in user's RBAC permission (`quotations:create/edit/approve/reject/delete`) with **ownership** (`quote.createdByUserId === currentUser.id`, with approvers/admins able to act on quotes they don't own). Reject/Customer-Reject/Cancel open a modal requiring a comment; other transitions allow an optional one — **as of 2026-07-10 (fifth pass) this is also enforced server-side** (`COMMENT_REQUIRED_ACTIONS` in `api/_lib/quoteWorkflow.ts`, checked in `handleWorkflow`), not just by the modal's own client-side check, since a direct API call previously bypassed it. Every transition appends an `ApprovalHistoryEntry` (never removed) rendered as "ประวัติการอนุมัติ" beneath the document, and fires the relevant role-based notification (see [Notifications.md](./Notifications.md); as of 2026-07-10 fifth pass, `marked_won`/`marked_lost`/`cancelled` notify the creator too, previously silently didn't). **Known simplification**: Approver Level 1 and Level 2 are not sequenced — either can approve/reject independently from Pending Approval; there is no enforced two-stage gate.
 
-## Required-Field Validation (added 2026-07-16)
+## Required-Field Validation (added 2026-07-16, relaxed back to a minimal set later the same day)
 
-Previously only `client` (customer name) and `jobTypeCode` (create-only) were required — everything
-else, including whether any line items existed at all, could be saved, submitted, approved, and
-printed completely blank. Now enforced identically client- and server-side via the same shared,
-pure functions (`src/lib/validation/quotationValidation.ts`, value-imported into both the Vite
-frontend bundle and the API's Node bundle — impossible for the two to drift apart).
+**Current behavior (2026-07-16, same day, latest business decision — overrides everything below):**
+Quotation must not force every field to be completed, and incomplete Drafts must remain fully
+supported. Only `client` (customer name) is required — the exact same single field this codebase
+required before any required-field validation work started; no new mandatory field was invented to
+replace the ones removed. `jobTypeCode` remains required **only at creation** (a separate,
+pre-existing server check, `validateJobType(..., { required: true })` in `POST /api/quotes` —
+never re-enforced on edit/submit/print). Line items are **not required** at all — no minimum count,
+no required per-line fields; a quote may be submitted/printed with zero or blank line items, exactly
+as before required-field validation existed. The **"ข้อกำหนดเอกสารและการส่งมอบ" (Document
+Requirements and Delivery) section was removed from Quotation entirely** — no `checklistGroups`
+field, no UI card, no client/server validation for it anywhere in this module.
 
-**Required fields** (`quotationRequiredFields`, the one centralized config — whitespace-only counts
-as empty): `client`, `salesperson`, `contactName`, `contactPhone`, `address`, `deliveryMethod`,
-`deliveryAddress`, `project`, `paymentTerms`, `issueDate`, `expiryDate`, `jobTypeCode`. **Optional
-exceptions** (each with a stated reason): `contactEmail`/`taxId`/`poRef`/`remarks` — a usable email/
-tax ID/customer PO number isn't always known at quotation stage, and remarks are often left at the
-company/template default. Server-derived read-only fields (quotation number, `date`, `amount`) are
-never treated as missing — the server always generates them successfully before persisting.
+Enforced via the same shared, pure functions as before (`src/lib/validation/quotationValidation.ts`,
+value-imported into both the Vite frontend bundle and the API's Node bundle) — only the underlying
+`quotationRequiredFields` *policy* shrank; the mechanism (client-side live validation, a server-side
+re-check before Print/every non-Draft-preserving workflow transition, a `422 DOCUMENT_INCOMPLETE`
+response, real `disabled` gated buttons, `mergeServerValidationErrors()` surfacing a server-only
+rejection inline) is unchanged. **Save Draft/Save remain unaffected** either way — a Draft (or any
+status, via the plain `PATCH` route) may stay incomplete indefinitely, always could.
 
-**Line items** (`validateQuotationLines()`): at least one non-header line is required; every
-non-header line needs a non-blank `description`/`unit`, `qty > 0`, and a non-blank `specifications`
-(`REQUIRE_LINE_SPECIFICATIONS`, one centralized toggle). A completely blank row must be completed or
-deleted before proceeding — it's never silently accepted.
+A quote saved during the ~1 day this pass's stricter policy (and its removed checklist section)
+existed may still carry a stray `checklistGroups` property in MongoDB — no destructive migration was
+run; it's simply never read, written, or displayed by any current code path.
 
-**Mandatory checklist selections** — Quotation gained a new "ข้อกำหนดเอกสารและการส่งมอบ" section
-(the same `checklistGroups`/`ChecklistGroup` model Scope of Work already had — see
-[ScopeOfWork.md](./ScopeOfWork.md) "Checklist Groups") with 8 mandatory groups: Safety, ขนส่ง, Logo,
-เงื่อนไขการวางบิล, เอกสารส่งถึง, Nameplate, เงื่อนไขการส่งมอบงาน, ปจ.2 — each needs at least one
-checked option, and selecting an "อื่น ๆ"/"Etc." option (or Safety's "TOR" option) makes that group's
-free-text `note` required too (`validateChecklistGroups()`, `src/lib/documentRequirements.ts`).
+**Scope of Work's own required-field validation, UI, schema, print/PDF, and permissions are
+unaffected by this rollback** (8 mandatory checklist groups, header fields, items,
+payment-percentage rule — all untouched; see [ScopeOfWork.md](./ScopeOfWork.md) "Required-Field
+Validation"). One adjacent file needed a compatibility edit — `api/_lib/scopeOfWorkHandler.ts`'s
+`deriveFromQuotation()` now always builds a fresh default checklist instead of trying to copy a
+Quotation field that no longer exists — see "Snapshot Behavior" in that same doc. The shared
+`src/lib/documentRequirements.ts`/`ChecklistGroupCard.tsx` infrastructure this Quotation feature
+briefly reused is also untouched and still fully exercised by Scope of Work.
 
-**Enforcement points**: Print/PDF (new `POST /api/quotes/:id/print` — there was no server-side print
-route at all before this pass) and every workflow transition **except** `rejected` (→ back to Draft)
-and `cancelled` (abandoning the document) — Submit/Approve/Send to Customer/Customer Accepted/
-Customer Rejected/Won/Lost all now require a complete document
-(`validateQuotationForFinalization()`, checked in `handleWorkflow` before the transition applies). A
-`422 { code: "DOCUMENT_INCOMPLETE", fieldErrors, groupErrors }` blocks the request even if a client
-bypassed the frontend. **Save Draft/Save remain unaffected** — a Draft (or any status, via the plain
-`PATCH` route) may stay incomplete indefinitely.
+### History (superseded, kept for context)
 
-**Frontend**: red-asterisk `RequiredFieldLabel`s, inline `FieldError`s, a top-of-form
-`ValidationSummary`, and a `DocumentCompletionIndicator` (`src/components/`). Buttons that need a
-complete document (Print, Submit, Approve, Send to Customer, Customer Accepted/Rejected, Won, Lost)
-carry a real HTML `disabled` attribute (2026-07-16, Codex review Medium Priority fix — previously
-only dimmed + click-guarded, not semantically disabled) plus a `title=` tooltip explaining why; the
-`guardedWorkflowAction()`/`handlePrintClick()` click-guard logic is kept as a defensive no-op once
-truly disabled, since the server is the actual enforcement boundary either way. Reject/Cancel are
-never gated.
-
-**Existing-document compatibility**: a quote saved before `checklistGroups` existed has it filled in
-(as an unchecked default set) on every server response (`normalizeQuote()`/`withDefaultChecklistGroups()`)
-— never silently mutated in storage, just displayed as incomplete until the user actually saves. A
-record saved before the four "อื่น ๆ"/TOR-detail groups gained their `note` field is backfilled the
-same way (2026-07-16, Codex review High Priority fix).
-
-**2026-07-16, Codex review fix pass** (0 Critical, 2 High + 4 Medium found and fixed — see
-`docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status"): Safety's "TOR" option now also requires a
-detail note, matching the business rule's "If TOR or Other is selected..." wording (previously only
-"Other" did); date fields (`issueDate`/`expiryDate`/`followUpDate`) are now checked for a real
-calendar date at finalization, not just non-blank; a server-returned `422`'s `fieldErrors`/
-`groupErrors` are now merged into the on-screen validation result instead of only a toast;
-`followUpDate`/`isPotentialOpportunity` and line `unitPrice`/`discount` are now explicitly declared
-optional in the central config rather than silently absent from it.
-
-**Known limitations** (see TODO.md/CHANGELOG.md for the full list): the Billing Terms/ปจ.2/Delivery
-Terms option catalogs weren't expanded into the spec's richer example lists (Cash/Credit/custom
-schedules, etc.) — the existing Scope-of-Work-derived option sets were kept as-is per the spec's own
-"don't invent business options" instruction; "scroll to and focus the first invalid field" only
-scrolls to the summary, not a per-field focus; cancellation/rejection remain intentionally exempt
-from the completeness gate pending explicit business confirmation of that policy.
+Earlier the same day, this section briefly required 12 fields (`client`, `salesperson`,
+`contactName`, `contactPhone`, `address`, `deliveryMethod`, `deliveryAddress`, `project`,
+`paymentTerms`, `issueDate`, `expiryDate`, `jobTypeCode`), at least one non-blank line item per
+`validateQuotationLines()`, and 8 mandatory checklist groups (Safety, ขนส่ง, Logo, เงื่อนไขการวางบิล,
+เอกสารส่งถึง, Nameplate, เงื่อนไขการส่งมอบงาน, ปจ.2) with conditional "Other"/"TOR" detail rules —
+a same-day Codex review found and fixed 2 High + 4 Medium issues in that implementation (checklist
+snapshot bug, unreachable detail inputs, non-`disabled` buttons, non-semantic date checks, un-merged
+server errors, incomplete central-config coverage). All of that was then walked back by the newer
+business decision above. See CHANGELOG.md for both the original pass and this rollback, in full.
 
 ## Signature Integration
 

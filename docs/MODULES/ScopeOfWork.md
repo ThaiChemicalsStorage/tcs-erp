@@ -179,6 +179,11 @@ quotation itself already had that data.
 
 ## Required-Field Validation (added 2026-07-16)
 
+**Unaffected by the 2026-07-16 Quotation rollback** (see [Quotation.md](./Quotation.md) "Required-
+Field Validation") — that later same-day business decision only relaxed/removed Quotation's own
+required-field policy and its "ข้อกำหนดเอกสารและการส่งมอบ" section; everything below still applies
+to Scope of Work exactly as described, unchanged.
+
 Previously only `secondaryCode` was required (at creation only) — every header field, all 11
 checklist groups, items, and payment conditions could be saved, submitted for Final, and printed
 completely blank. Now enforced identically client- and server-side via
@@ -275,31 +280,27 @@ assigned to.
 ## Snapshot Behavior
 
 Creating a Scope of Work copies (never live-references) the quotation's customer info/items/Job
-Type/PO/remarks **and, as of 2026-07-16, the quotation's own `checklistGroups`** into its own
-document. Editing a Scope of Work afterward never touches the source quotation, and later edits to
-the quotation, Customer master data, or Product master data never silently change an already-created
-Scope of Work. An explicit **"อัปเดตข้อมูลจากใบเสนอราคา"** action (`POST /api/scope-of-works/:id/refresh`)
-re-pulls only the quotation-derived fields (`customerSnapshot`, `customerPoNumber`, `deliveryLocation`,
-`remarks`, `items`, `quotationNumber`, `quotationSalesperson`) — everything the user filled in by hand
-(checklist state, payment conditions, shipping/billing contact, signatures, `secondaryCode`,
-`drawingCode`, `deliveryDate`) is left untouched. The client shows a confirm dialog before calling
-this ("จะเขียนทับข้อมูล... ยืนยันหรือไม่?"). Refresh requires `quotations:view` in addition to Scope
-of Work edit/ownership authorization (2026-07-15, Codex review Medium fix — matches the same check
-`create` already had).
+Type/PO/remarks into its own document. Editing a Scope of Work afterward never touches the source
+quotation, and later edits to the quotation, Customer master data, or Product master data never
+silently change an already-created Scope of Work. An explicit **"อัปเดตข้อมูลจากใบเสนอราคา"** action
+(`POST /api/scope-of-works/:id/refresh`) re-pulls only the quotation-derived fields
+(`customerSnapshot`, `customerPoNumber`, `deliveryLocation`, `remarks`, `items`, `quotationNumber`,
+`quotationSalesperson`) — everything the user filled in by hand (checklist state, payment
+conditions, shipping/billing contact, signatures, `secondaryCode`, `drawingCode`, `deliveryDate`) is
+left untouched. The client shows a confirm dialog before calling this ("จะเขียนทับข้อมูล...
+ยืนยันหรือไม่?"). Refresh requires `quotations:view` in addition to Scope of Work edit/ownership
+authorization (2026-07-15, Codex review Medium fix — matches the same check `create` already had).
 
-**Checklist snapshot (added 2026-07-16, Codex review High Priority fix)**: `handleCreate()`
-previously called `buildDefaultChecklistGroups()` for a brand-new, always-unchecked structure,
-discarding whatever the source quotation's own checklist selections already were — a complete
-Quotation produced an incomplete Scope of Work with every mandatory group reset to blank, and the
-required "copy the required document selections from the Quotation" behavior simply didn't exist.
-`deriveFromQuotation()` now deep-copies `quote.checklistGroups` (`cloneChecklistGroups()`, fresh
-option objects so neither document's array is an aliased reference to the other) when the source
-quotation has one, falling back to `buildDefaultChecklistGroups()` only for a quotation that itself
-predates the field (an honest "nothing to copy yet" default, never a fake completed selection).
-**Deliberately only at creation, not on refresh** — matching every other quotation-derived field's
-semantics here, but explicitly required by the business rule too ("editing the Quotation later must
-not silently change an existing Scope of Work"): the checklist becomes the Scope of Work's own
-independent, freely-editable copy the moment it's created.
+**Checklist groups always start from `buildDefaultChecklistGroups(jobTypeCode)`** (a brand-new,
+always-unchecked structure) — this briefly changed and then reverted the same day (2026-07-16):
+a same-day fix pass made `deriveFromQuotation()` copy `quote.checklistGroups` from the source
+quotation (since, for about a day, Quotation itself carried a matching `checklistGroups` field —
+see [Quotation.md](./Quotation.md) "Required-Field Validation"). A later business decision removed
+that Quotation-side field entirely, so there is nothing left to copy — `deriveFromQuotation()` now
+always falls back to `buildDefaultChecklistGroups()`, which is exactly what it did before either of
+those two same-day changes. **Scope of Work's own checklist behavior is otherwise completely
+unaffected** by any of this — the groups, their mandatory/optional status, validation, and UI are
+unchanged.
 
 ## Status / Lifecycle
 
