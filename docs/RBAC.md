@@ -207,7 +207,7 @@ access check of its own (unlike `create`, which always required `quotations:view
 | `scopeOfWork:create` | `POST /api/scope-of-works` (create from a quotation) and `POST /api/scope-of-works/:id/duplicate`. |
 | `scopeOfWork:edit` | `PATCH /api/scope-of-works/:id` and `POST /api/scope-of-works/:id/refresh` — combined with an **ownership** check (see below). |
 | `scopeOfWork:finalize` | `POST /api/scope-of-works/:id/finalize`. Also, independent of ownership, a `scopeOfWork:finalize` holder can edit or delete *any* Draft record, not just their own — the RBAC spec's "Sales Manager: view/edit/finalize" language. |
-| `scopeOfWork:print` | `POST /api/scope-of-works/:id/print` (writes the print/export audit entry the client calls right before `window.print()`). |
+| `scopeOfWork:print` | `POST /api/scope-of-works/:id/print` (writes the print/export audit entry the client calls right before `window.print()`; as of 2026-07-16 also revalidates completeness first — see below). |
 | `scopeOfWork:delete` | `DELETE /api/scope-of-works/:id` (soft delete) — combined with the same ownership-or-finalize check as edit. |
 
 **Ownership rule** (`canEditScope()`/`isOwnerOf()` in `api/_lib/scopeOfWorkHandler.ts`, same shape as
@@ -220,6 +220,17 @@ route in this pass — "ทำสำเนา" is the documented way to keep edi
 **No dedicated `scopeOfWork:manage` superset** (unlike Quotation Templates' `:manage`) — the spec's
 requested permission list was exactly the 6 above, so none was added; see
 [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
+
+**2026-07-16, required-field validation pass**: no new permissions were introduced. The new
+completeness gates reuse the exact same permissions that already gated each route —
+`scopeOfWork:finalize` for `POST /:id/finalize`, `scopeOfWork:print` for `POST /:id/print`, and (for
+Quotation) `quotations:export` for the new `POST /api/quotes/:id/print`, `quotations:edit`/
+`:approve`/etc. (unchanged) for `POST /api/quotes/:id/workflow`. The gate is an additional
+completeness check layered on top of the existing permission check, not a new authorization
+dimension — a caller who already had permission to finalize/print/transition a document still does;
+they just can no longer do so against an incomplete one. See
+[MODULES/Quotation.md](./MODULES/Quotation.md)/[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md)
+"Required-Field Validation" and API.md.
 
 **Creating** a Scope of Work also requires `quotations:view` (the caller must be able to see the
 source quotation at all) — enforced alongside `scopeOfWork:create`, not a separate permission.

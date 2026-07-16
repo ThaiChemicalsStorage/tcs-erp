@@ -4,6 +4,212 @@
 
 ---
 
+## 2026-07-16 (same day) — Quotation + Scope of Work validation: Codex review fix pass
+
+An independent Codex review of the required-field/mandatory-selection validation pass below found
+**0 Critical**, **2 High Priority**, and **4 Medium Priority** issues. All fixed same day; full
+writeup appended to `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status."
+
+### High Priority #1 — Scope of Work creation discarded the Quotation's checklist selections
+
+`handleCreate()` (`api/_lib/scopeOfWorkHandler.ts`) called `buildDefaultChecklistGroups()` for a
+brand-new, always-unchecked structure instead of copying the source quotation's own
+`checklistGroups` — so a fully-complete Quotation produced an **incomplete** Scope of Work with
+every mandatory group reset to blank, directly violating the "copy the required document selections
+from the Quotation into the Scope of Work... store them as a snapshot" requirement. Fixed:
+`deriveFromQuotation()` now deep-copies `quote.checklistGroups` (`cloneChecklistGroups()`, fresh
+option objects, never an aliased reference) when the source quotation has one, falling back to
+`buildDefaultChecklistGroups()` only when the quotation itself predates the field. Deliberately only
+at creation, not on refresh — matches every other quotation-derived field's "one-time snapshot"
+semantics and the explicit "editing the Quotation later must not silently change an existing Scope
+of Work" rule.
+
+### High Priority #2 — "Other"/TOR detail input unreachable for 4 of 5 groups that need it
+
+`validateChecklistGroups()` already required a group's free-text `note` when an "other"-style option
+was checked, but `buildDefaultChecklistGroups()` only ever initialized `note: ""` for Logo —
+`ChecklistGroupCard` only renders that input when `note !== undefined`, so `safety`/`transportation`/
+`namePlate`/`documentsToSend` had a server-side rule a normal user could never actually satisfy.
+Fixed by initializing `note: ""` on all four groups too; `withDefaultChecklistGroups()` also
+backfills the missing `note` onto an already-saved record (never touching `checked` state or an
+already-present note — only adds the empty input itself). Also added `safety`'s "TOR" option to the
+same conditional-detail rule as "Other," per the business rule's literal "If TOR or Other is
+selected, require a reference/detail field" wording — previously only "Other" did.
+
+### Medium Priority fixes
+
+1. **Buttons were not semantically disabled.** Print/Submit/Approve/Send/Finalize were dimmed and
+   click-guarded but never carried the HTML `disabled` attribute. Added `disabled={!valid}` to all
+   of them (Quotation + Scope of Work), keeping the `title=` tooltip and the click-guard as a
+   harmless defensive no-op for the now-unreachable "clicked anyway" case.
+2. **Central required/optional policy didn't cover every visible field.** Added explicit
+   `required: false` entries (each with a stated reason) for Quotation's `followUpDate`/
+   `isPotentialOpportunity` and Scope of Work's `paymentConditions.method`/`.notes`,
+   `seller.date`/`approver.date` — plus documented (not enforced, since they're numeric/free-text
+   fields where "blank" doesn't apply the same way) `QUOTATION_LINE_OPTIONAL_NUMERIC_FIELDS`
+   (`unitPrice`/`discount`) and `SCOPE_ITEM_OPTIONAL_FIELDS` (`remark`).
+3. **Finalization only checked dates were non-blank, not semantically valid.** Added a pure,
+   throw-free `isValidIsoDateOrEmpty()` (`src/lib/validation/dateUtils.ts`, mirrors the server-only
+   `validateIsoDateOrEmpty()` used at write time) and wired it into both finalization validators for
+   every date field — a malformed or legacy-garbled date string (or something like "2026-02-30") now
+   fails finalization instead of passing merely by being nonblank.
+4. **Server 422 errors were only shown as a toast, never reflected inline.** Added
+   `mergeServerValidationErrors()` (`src/lib/validation/types.ts`) and wired it into both document
+   editors — a `DOCUMENT_INCOMPLETE` response from Print/Submit-etc./Finalize now overlays its
+   `fieldErrors`/`groupErrors` onto the on-screen validation summary/inline errors, not just a toast.
+
+### Deliberately not fixed (would require inventing unconfirmed business rules)
+
+The review's Medium-severity "conditional requirements incomplete" note (billing "Custom" schedule
+detail, delivery "customer form" attachment/date rule, a ปจ.2 supporting-detail model) was **not**
+addressed — building any of these means inventing a business option catalog that doesn't exist in
+this codebase and was never confirmed by the business, which both this task's and the original
+validation task's instructions explicitly rule out ("do not add fake values or automatic selections
+to make validation pass" / "do not auto-select a value without a confirmed business rule"). Left as
+an explicit, tracked TODO.md item pending real business input, not a fabricated placeholder.
+
+Also not changed, per the review's own "Low Priority"/informational findings: native browser
+`window.print()` remains available from the rendered page regardless of any API gate (an inherent
+browser capability, not something an API-level fix can prevent); the review's note that shared
+validation utilities live under `src/lib` (imported into both the frontend and API bundles) is this
+codebase's existing, intentional, already-documented architecture (see `docs/CLAUDE.md`'s Coding
+Standards), not a defect introduced by this pass; `sanitizeScopeItem()`'s pre-existing behavior of
+coercing an invalid `quantity` type to `null` (rather than rejecting the write) predates this
+validation feature and is out of scope per "do not redesign unrelated modules."
+
+`npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, and `npm run build` all
+pass clean. No live-deployment/browser verification performed (same sandboxed-session limitation as
+every recent pass, and as the review's own "Verification Limits" section notes for its own attempt).
+
+---
+
+## 2026-07-16 — Quotation + Scope of Work: required-field/mandatory-selection validation
+
+Both documents previously had almost no completeness enforcement — Quotation required only `client`
+and `jobTypeCode` (create-only); Scope of Work required only `secondaryCode` at creation. Every other
+field (contact info, delivery info, payment terms, dates, line items, and — for Scope of Work — all
+11 checklist groups) could be saved, submitted, approved, and **printed** completely blank. This pass
+adds strict, centrally-configured completion validation enforced identically client- and server-side.
+
+### Shared validation architecture
+
+- **`src/lib/documentRequirements.ts`** (new) — the `ChecklistOption`/`ChecklistGroup` types moved
+  here from `src/lib/scopeOfWork.ts` (which now just re-exports them), so Quotation can share the
+  same checklist-group model without depending on the Scope-of-Work domain module. Exports
+  `MANDATORY_CHECKLIST_GROUP_KEYS` (the 8 groups named in the business requirement: `safety`,
+  `transportation`, `logo`, `billingConditions`, `documentsToSend`, `namePlate`, `deliveryDocFormat`,
+  `pj2` — all pre-existing Scope of Work checklist keys, no renaming needed), `CHECKLIST_GROUP_THAI_LABELS`,
+  `OTHER_OPTION_KEYS` (which option per group triggers a required free-text `note` — e.g. Logo's
+  existing "Etc." option, plus a new "อื่น ๆ" option added to `safety`/`transportation`/`namePlate`/
+  `documentsToSend` specifically so this rule has something to attach to), `validateChecklistGroups()`,
+  `buildDefaultChecklistGroups()` (moved from `scopeOfWorkHandler.ts`, now shared so Quotation's
+  brand-new-document UI can seed the same default structure), and `withDefaultChecklistGroups()` (fills
+  in any group missing from an old record, for display only — never silently mutates storage).
+- **`api/_lib/documentRequirements.ts`** (new, server-only) — `sanitizeChecklistGroups()` (moved from
+  `scopeOfWorkHandler.ts`), re-exports the shared builder above.
+- **`src/lib/validation/types.ts`** — shared `ValidationResult { valid, fieldErrors, groupErrors, missingCount }`.
+- **`src/lib/validation/quotationValidation.ts`** — `quotationRequiredFields` (the one centralized
+  optional-field-exception config: `contactEmail`/`taxId`/`poRef`/`remarks` are the only fields marked
+  `required: false`, each with a stated business reason), `validateQuotationLines()` (every non-header
+  line needs description/unit/qty>0/specifications, at least one line required), and the two named
+  server functions `validateQuotationForFinalization()`/`validateQuotationForPrint()` (both delegate to
+  one shared core — no duplicated/inconsistent logic between them).
+- **`src/lib/validation/scopeOfWorkValidation.ts`** — same pattern: `scopeOfWorkRequiredFields`
+  (`customerSnapshot.taxId`/`.email`/`customerPoNumber`/`remarks` are the optional exceptions),
+  `validateScopeOfWorkItems()`, a payment-percentage rule (`downPaymentPct`/`finalPaymentPct` — if
+  either is set both must be set and must sum to exactly 100%, never a hardcoded 40/60 split — the
+  actual quotation payment terms are what seed `paymentConditions.description`), and
+  `validateScopeOfWorkForFinalization()` (always requires an approver signature) /
+  `validateScopeOfWorkForPrint()` (approver only required once already `Final` — a Draft may be
+  printed without one, since that's a Finalize-time-only requirement per the business rule "Seller/
+  approver information when reaching the relevant workflow stage").
+- All four files are pure TypeScript (no JSX/browser globals) — safe to value-import from both the
+  Vite frontend bundle and the Node serverless API bundle, the same convention `scopeOfWork.ts` already
+  established. Both server and client run the literal same functions — impossible for the two to drift.
+
+### Data model
+
+- `Quote` (`src/lib/quotes.tsx`) gained `checklistGroups?: ChecklistGroup[]` — Quotation never had
+  this "ข้อกำหนดเอกสารและการส่งมอบ" section before; it's now generated server-side at creation
+  (`buildDefaultChecklistGroups(jobTypeCode)`) exactly like Scope of Work's already does. Optional
+  only because a quote created before this field existed won't have it in storage — the server always
+  normalizes it (`normalizeQuote()`) before sending a quote to the client, so the frontend never sees
+  `undefined`. `QuoteDraftFields` gained `checklistGroups`/`salesperson` is now itself a required field too
+  (Seller information, auto-filled from the current user, still enforced as a real requirement).
+
+### Server enforcement (`api/handlers/quotes.ts`, `api/_lib/scopeOfWorkHandler.ts`)
+
+- `HttpError` (`api/_lib/http.ts`) gained optional `code`/`details` so a `422` can carry structured
+  `{ code: "DOCUMENT_INCOMPLETE", fieldErrors, groupErrors }` alongside the Thai `message` — mirrored
+  in `ApiError` (`src/lib/apiClient.ts`) so the frontend can read them back.
+- Quotation: `sanitizePartialQuoteFields()` now accepts/sanitizes `checklistGroups` on create, PATCH,
+  and workflow-draft merges. A new `POST /api/quotes/:id/print` endpoint (Quotation had **no** server
+  print route at all before — printing was 100% client-side `window.print()`) validates via
+  `validateQuotationForPrint()` before returning `ok`; the frontend now calls it before invoking
+  `window.print()`. `handleWorkflow()` validates via `validateQuotationForFinalization()` before
+  applying any transition except `rejected` (→ back to Draft) and `cancelled` (abandoning it) — every
+  other transition (submit/approve/send to customer/customer accepted/rejected/won/lost) now requires
+  a complete document.
+- Scope of Work: `handleFinalize()` (Draft → Final) and `handlePrint()` now both revalidate via the
+  shared validators before proceeding — previously neither did any completeness check at all.
+- Every response wraps the record through `normalizeQuote()`/`normalizeScope()` — fills in any
+  checklist group missing from an old stored document with an unchecked default (via
+  `withDefaultChecklistGroups()`) purely for the outgoing payload, never writing it back until the
+  user actually saves. Old records load safely and simply display as incomplete, per "Existing
+  Document Compatibility."
+
+### Frontend UX
+
+- New shared components: `src/components/RequiredFieldLabel.tsx`, `FieldError.tsx`,
+  `ValidationSummary.tsx`, `DocumentCompletionIndicator.tsx`. `ScopeOfWorkChecklistGroup.tsx` renamed
+  to `src/pages/quotation/ChecklistGroupCard.tsx` (now takes `required`/`error` props) since Quotation
+  needed the identical checkbox/radio-group card — one component, not two parallel implementations.
+- `QuoteDocument.tsx`: new "ข้อกำหนดเอกสารและการส่งมอบ" section (same `ChecklistGroupCard` grid as
+  Scope of Work); every required field gained `RequiredFieldLabel`/`FieldError`; a `ValidationSummary`
+  + `DocumentCompletionIndicator` at the top; Print/Submit/Approve/Send-to-customer/Customer-accepted/
+  Customer-rejected/Won/Lost buttons stay visible but show a red-tinted disabled style + tooltip and
+  route through a `guardedWorkflowAction()`/`handlePrintClick()` that blocks + toasts + scrolls to the
+  summary when the document is incomplete, rather than a native `disabled` attribute that would
+  silently swallow the click. Reject/Cancel remain always available (see below). Print now calls the
+  new `printQuote()` API before `window.print()`.
+- `ScopeOfWorkDocument.tsx`: identical treatment — required labels/errors on every header field,
+  checklist groups, payment conditions, seller/approver signatures; Print gated by the lenient
+  (Draft-friendly) validation, "ยืนยัน Final" gated by the strict one requiring an approver.
+- `LineItemsEditor.tsx`/`ScopeOfWorkItemsEditor.tsx` gained `lineErrors`/`itemErrors` +
+  `noLinesError`/`noItemsError` props — an incomplete row is tinted and shows its specific error
+  inline; a completely blank row is never itself silently accepted (must be completed or deleted).
+- **Draft is unaffected**: "บันทึกร่าง"/"บันทึก" and Scope of Work's PATCH/create/refresh never gained
+  a completeness gate — only Print, Finalize, and every non-Draft/non-abandoning Quotation workflow
+  transition did, per "A Draft may remain incomplete."
+
+### Deliberate scope decisions / known limitations
+
+- **Business option catalogs mostly left as-is.** The spec's Billing Terms/ปจ.2/Delivery Terms
+  examples (Cash/Credit/custom schedules, "ต้องดำเนินการ"/"ไม่เกี่ยวข้อง", pickup/etc.) were **not**
+  invented as new option catalogs — per the spec's own "Use the actual business options already used
+  by the company... do not auto-select a value without a confirmed business rule," the existing
+  Scope-of-Work-derived option sets were kept, only adding a plain "อื่น ๆ" choice where the
+  Conditional Required Rules section explicitly needed one to validate against. Confirm the fuller
+  option catalogs with the business before expanding them.
+- **`rejected`/`cancelled` are exempt from the completeness gate** (client and server agree on this,
+  `VALIDATION_EXEMPT_ACTIONS`) — a considered interpretation, not literal spec text: rejecting returns
+  to Draft (which may stay incomplete) and cancelling abandons the document outright, so forcing
+  completeness first would block the one thing a user is trying to do in both cases.
+- **"Scroll to and focus the first invalid field"** is implemented as "scroll to the top-of-form
+  ValidationSummary" (which lists every problem), not per-field programmatic focus — a deliberate
+  scope trade-off given the number of fields involved.
+- Old Scope of Work records saved before this pass won't retroactively gain the new "อื่น ๆ" option
+  *within* a checklist group they already have (only a wholly-missing group gets backfilled) — the
+  module is only one day old in production, so this is expected to affect no real data.
+- No changes to Vercel function count — the new `/api/quotes/:id/print` route is a new dispatch branch
+  inside the existing `api/handlers/quotes.ts` file, not a new function.
+
+`npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, and `npm run build` all
+pass clean. No live-deployment/browser verification yet (same sandboxed-session limitation as every
+recent pass — see PROJECT_STATUS.md Known Risks).
+
+---
+
 ## 2026-07-15 — Scope of Work: Codex review fix pass (contact/salesperson snapshot, required suffix, Global Search)
 
 An independent Codex review of the Scope of Work module (below) found **0 Critical**, **3 High

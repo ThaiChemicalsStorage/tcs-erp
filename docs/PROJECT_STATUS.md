@@ -14,6 +14,46 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-16, same-day Codex-review fix pass] Quotation + Scope of Work validation — checklist snapshot bug and 4 Medium-severity gaps fixed.**
+  An independent review of the required-field validation pass below found 0 Critical, 2 High, and 4
+  Medium Priority issues — all fixed same day. **High #1**: creating a Scope of Work discarded the
+  source Quotation's own checklist selections (reset to blank defaults instead of copying them) —
+  fixed by deep-copying `quote.checklistGroups` at creation only, matching the required
+  Quotation-to-Scope snapshot behavior. **High #2**: the "Other requires detail" rule was
+  server-enforced but had no reachable input in the UI for `safety`/`transportation`/`namePlate`/
+  `documentsToSend` (only Logo's detail field actually rendered) — fixed by initializing the missing
+  `note` field on all four (plus Safety's "TOR" option, per the spec's literal wording), with
+  backfill for already-saved records. **Medium fixes**: real HTML `disabled` on gated action
+  buttons (previously dimmed/guarded only); semantic (not just non-blank) date validation at
+  finalization; server-returned `422` field/group errors now merged into the on-screen validation
+  instead of only a toast; every visible field (including numeric/date ones previously omitted) now
+  explicitly classified in the central required/optional config. Deliberately did not invent new
+  business option catalogs for billing/ปจ.2/delivery "Other" conditional details the review also
+  flagged — no confirmed business rule exists for them yet, tracked in TODO.md instead of
+  fabricated. `tsc`/`lint`/`build` all pass clean; no live-deployment verification (same sandboxed
+  limitation as every recent pass). See CHANGELOG.md and `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix
+  Status."
+- ✅ **[2026-07-16] Quotation + Scope of Work — required-field/mandatory-selection validation.**
+  Both documents previously enforced almost nothing (Quotation: only `client`/`jobTypeCode` on
+  create; Scope of Work: only `secondaryCode`) — every other field, and all 11 checklist groups,
+  could be saved, submitted, approved, and even **printed** completely blank. Added a shared,
+  centrally-configured validation architecture (`src/lib/validation/quotationValidation.ts`/
+  `scopeOfWorkValidation.ts`, `src/lib/documentRequirements.ts`) that runs identically client- and
+  server-side (same functions, value-imported into both bundles). Quotation gained a new
+  `checklistGroups` field (the same "ข้อกำหนดเอกสารและการส่งมอบ" — Safety/ขนส่ง/Logo/เงื่อนไขการ
+  วางบิล/เอกสารส่งถึง/Nameplate/เงื่อนไขการส่งมอบงาน/ปจ.2 — checklist Scope of Work already had) and
+  a brand-new server print endpoint (`POST /api/quotes/:id/print` — there was no server-side print
+  route at all before). Server blocks Submit/Approve/Send-to-customer/Won/Lost/Print/Finalize with a
+  structured `422 DOCUMENT_INCOMPLETE` (`fieldErrors`/`groupErrors`) when incomplete; Draft/reject/
+  cancel remain unaffected. Frontend shows red-asterisk required labels, inline Thai field errors, a
+  top-of-form validation summary, and a completion-percentage indicator, reusing one shared
+  `ChecklistGroupCard` component (renamed from Scope-of-Work-only `ScopeOfWorkChecklistGroup.tsx`)
+  for both documents. Old records normalize missing checklist groups on read (never silently
+  mutated) and simply display as incomplete rather than crashing. `tsc`/`lint`/`build` all pass
+  clean; no live-deployment browser verification yet (see Known Risks). See CHANGELOG.md for the
+  full itemized writeup, including deliberate scope decisions (business option catalogs mostly kept
+  as-is, reject/cancel exempted from the completeness gate, summary-level scroll instead of
+  per-field focus).
 - ✅ **[2026-07-15, Codex-review fix pass] Scope of Work — contact/salesperson snapshot, required job-code suffix, Global Search integration.**
   An independent review of the Scope of Work module below found 0 Critical, 3 High Priority, and
   several Medium/Low Priority issues — all 3 High Priority (plus the actionable Medium/Low ones)

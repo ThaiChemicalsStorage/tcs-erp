@@ -4,6 +4,139 @@
 
 ---
 
+## Session — 2026-07-16 (same day), Codex review fix pass on the required-field validation work
+
+### What was implemented
+- User provided `docs/CODEX_REVIEW_REPORT.md` (an independent review of the required-field
+  validation pass from earlier the same day) and asked for all Critical/High Priority issues fixed,
+  with an explicit priority order and an explicit "do not add fake values or automatic selections to
+  make validation pass" constraint.
+- Read the report in full (0 Critical, 2 High, 4 Medium, several Low) before touching any code.
+- **High #1**: `handleCreate()` in `api/_lib/scopeOfWorkHandler.ts` was resetting a new Scope of
+  Work's `checklistGroups` to `buildDefaultChecklistGroups()` instead of copying the source
+  quotation's own selections — a real, confirmed bug (not a documentation issue) directly
+  contradicting the original task's "copy the required document selections... store them as a
+  snapshot" requirement. Fixed by deep-copying `quote.checklistGroups` in `deriveFromQuotation()`,
+  falling back to defaults only for a quotation that itself predates the field.
+- **High #2**: `ChecklistGroupCard` only renders its free-text detail input when `group.note !==
+  undefined`, but `buildDefaultChecklistGroups()` only ever set `note: ""` for Logo — so the
+  already-correct server-side "Other requires detail" rule was literally impossible to satisfy from
+  the UI for `safety`/`transportation`/`namePlate`/`documentsToSend`. Fixed by initializing `note`
+  on all four, with a backfill path (`withDefaultChecklistGroups()`) for already-saved records. Also
+  added Safety's "TOR" option to the same conditional-detail rule, since the original spec's wording
+  named both "TOR or Other," not just "Other" — this had been missed in the first pass.
+- **4 Medium fixes**: real `disabled` HTML attribute on every gated action button (previously
+  dimming + a click-guard only); a pure `isValidIsoDateOrEmpty()` helper wired into both finalization
+  validators so a malformed/legacy date fails semantically, not just on blankness; a
+  `mergeServerValidationErrors()` helper wired into both document editors so a server-returned 422's
+  field/group errors actually appear inline, not only as a toast; explicit `required: false` central-
+  config entries added for every remaining visible field the review found undeclared
+  (`followUpDate`, `isPotentialOpportunity`, `paymentConditions.method`/`.notes`, signatory `date`s,
+  and documented-but-not-required-by-name numeric/remark fields).
+- **Deliberately left unfixed, with reasoning recorded in CHANGELOG.md/TODO.md**: the review's
+  "conditional requirements incomplete" note (billing Custom-schedule detail, delivery
+  attachment/date rule, a ปจ.2 detail model) — every option one of these would need doesn't exist in
+  the current option catalog and was never confirmed by the business; inventing one would violate
+  the explicit "no fake values" instruction from both this task and the original validation task.
+  Also left as-is: the review's observation that shared validation code lives under `src/lib`
+  (already this codebase's standing, documented architecture, not a defect); native browser print
+  being fundamentally unblockable once a page has rendered (not something an API gate can fix); a
+  pre-existing Scope of Work item-quantity sanitizer quirk unrelated to this feature.
+
+### Verification
+- `npx tsc --noEmit` / `npx tsc --noEmit -p tsconfig.api.json`: clean after every batch of changes.
+- `npm run lint`: 0 errors (same 2 pre-existing unrelated warnings).
+- `npm run build`: clean.
+- **Not done**: live-browser manual verification — no MongoDB/Vercel access in this sandboxed
+  environment, the same limitation the review's own "Verification Limits" section hit trying to run
+  `npm run lint`/`npm run build` itself (it reported a Windows/WSL launcher issue in its environment).
+
+### Recommendations for next session
+- Run the manual verification checklist (now updated in TODO.md) against a live deployment,
+  specifically re-testing the two High Priority fixes: create a Scope of Work from a fully-complete
+  Quotation and confirm its checklist selections actually appear checked, not reset; and confirm the
+  "อื่น ๆ" detail field now genuinely renders (and is required) for Safety/ขนส่ง/Nameplate/
+  เอกสารส่งถึง, not only Logo.
+- Get a real answer from the business on the billing/delivery/ปจ.2 conditional-detail option
+  catalogs before attempting to close that TODO item — guessing would reintroduce the exact
+  "fake values" problem this pass was told to avoid.
+
+### Estimated completion
+No change to the ~40%/~98% overall figures — a correctness fix pass on an already-tracked
+hardening effort, not new module scope.
+
+---
+
+## Session — 2026-07-16, required-field/mandatory-selection validation (Quotation + Scope of Work)
+
+### What was implemented
+- User provided a long, detailed business spec asking for strict required-field/mandatory-selection
+  completion validation on both Quotation and Scope of Work — enforced client- **and** server-side,
+  with a centralized optional-field-exception configuration, 8 named mandatory checklist groups
+  (Safety/ขนส่ง/Logo/เงื่อนไขการวางบิล/เอกสารส่งถึง/Nameplate/เงื่อนไขการส่งมอบงาน/ปจ.2), conditional
+  "Other requires detail" rules, Draft-remains-incomplete semantics, print/PDF server protection, and
+  a full documentation update.
+- Spent substantial up-front research (5 parallel Explore agents) mapping the current state of both
+  modules before writing code — key finding: **Quotation had almost none of these fields at all**
+  (only `client`/`jobTypeCode` required), while **Scope of Work already had the exact checklist-group
+  structure** (`ChecklistGroup[]`, 11 groups) but explicitly documented as "nothing here is ever
+  forced/mandatory." This meant the task was really "add the whole section to Quotation for the first
+  time" + "add real enforcement to Scope of Work's existing structure," not just "tighten an existing
+  rule" on either side.
+- Built a shared, framework-agnostic validation layer (`src/lib/documentRequirements.ts`,
+  `src/lib/validation/{types,quotationValidation,scopeOfWorkValidation}.ts`) — pure TypeScript, no
+  JSX/browser globals, so the exact same functions are value-imported into both the Vite frontend
+  bundle and the Node API bundle (confirmed this pattern was already established: `api/_lib/*.ts`
+  already imports plain-TS `src/lib/*.ts` files directly, just never JSX-bearing ones like
+  `quotes.tsx`). This means client and server can never validate differently by accident.
+- Added `checklistGroups` to `Quote` (new field — Quotation never had this section), moved
+  `buildDefaultChecklistGroups()`/`sanitizeChecklistGroups()` out of `scopeOfWorkHandler.ts` into a
+  shared location so both Quotation and Scope of Work generate/validate the identical structure.
+  Extended `HttpError`/`ApiError` with optional `code`/`details` so a `422` can carry structured
+  `fieldErrors`/`groupErrors`, not just a flat message.
+- Wired server enforcement: a brand-new `POST /api/quotes/:id/print` (Quotation had **zero**
+  server-side print route before — printing was 100% client-side `window.print()`), a completeness
+  gate in `handleWorkflow()` before every transition except `rejected`/`cancelled`, and completeness
+  gates in Scope of Work's `handleFinalize()`/`handlePrint()` (previously neither validated anything
+  beyond permission + status).
+- Wired frontend UX: 4 new shared components (`RequiredFieldLabel`/`FieldError`/`ValidationSummary`/
+  `DocumentCompletionIndicator`), renamed `ScopeOfWorkChecklistGroup.tsx` → `ChecklistGroupCard.tsx`
+  (now shared by both documents instead of being Scope-of-Work-only), red-asterisk labels + inline
+  errors across every required field in both `QuoteDocument.tsx`/`ScopeOfWorkDocument.tsx`, per-row
+  highlighting in both item editors, and buttons that stay **visible but styled-disabled** (not a
+  native `disabled` attribute, so a click still triggers a toast + scroll-to-summary explanation
+  instead of silently doing nothing).
+- **Deliberate scope decisions made explicit, not silently assumed**: did not invent new business
+  option catalogs for Billing Terms/ปจ.2/Delivery Terms (the spec itself said not to, absent a
+  confirmed business rule) — only added a plain "อื่น ๆ" option to 4 groups specifically so the
+  "Other requires detail" conditional rule had something to validate against; exempted `rejected`/
+  `cancelled` from the completeness gate (a considered interpretation — abandoning/returning a
+  document to Draft shouldn't itself require the document be complete); implemented "scroll to
+  invalid field" at the validation-summary level, not per-field programmatic focus. All three are
+  called out explicitly in CHANGELOG.md/TODO.md/the module docs rather than left implicit.
+
+### Verification
+- `npx tsc --noEmit` (frontend) and `npx tsc --noEmit -p tsconfig.api.json` (API) both clean.
+- `npm run lint`: 0 errors (2 pre-existing warnings, unrelated to this change).
+- `npm run build`: clean production build.
+- **Not done this session**: any live-browser manual walkthrough (no MongoDB/Vercel CLI access in
+  this sandboxed environment — same standing limitation as every recent pass, see PROJECT_STATUS.md
+  Known Risks). The 28-step manual verification checklist in the original spec should be run against
+  a real deployment before this is considered fully verified — see the new TODO.md High Priority item.
+
+### Recommendations for next session
+- Run the manual verification checklist against a live deployment/browser.
+- Confirm the real Billing Terms/ปจ.2/Delivery Terms option catalogs with the business and update
+  `buildDefaultChecklistGroups()` if they differ from what's there now.
+- Consider whether per-field programmatic focus (not just scroll-to-summary) is worth the additional
+  ref-plumbing effort across every required field.
+
+### Estimated completion
+No change to the ~40%/~98% overall figures in PROJECT_STATUS.md — this is a correctness/completeness
+hardening pass on two already-built modules, not new module scope.
+
+---
+
 ## Session — 2026-07-15, new feature (Scope of Work)
 
 ### What was implemented

@@ -12,6 +12,10 @@ import {
   validateLines, validateIsoDateOrEmpty, validateJobType, validateQuotationTemplate, computeQuoteAmount,
   sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeBoolean,
 } from "../_lib/quoteValidation.js";
+import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeChecklistGroups } from "../_lib/documentRequirements.js";
+import { validateQuotationForFinalization, validateQuotationForPrint, type QuotationValidationInput } from "../../src/lib/validation/quotationValidation.js";
+import type { ChecklistGroup } from "../../src/lib/documentRequirements.js";
+import type { Quote } from "../../src/lib/quotes.js";
 
 /**
  * Writes an authoritative, server-side audit-log entry for a quotation mutation — identity
@@ -90,6 +94,15 @@ async function resolveCustomerIdUpdate(rawValue: unknown): Promise<string | unde
   if (!customer) throw new HttpError(400, "ไม่พบข้อมูลลูกค้าที่เลือก");
   if (customer.isDeleted) throw new HttpError(400, "ลูกค้าที่เลือกถูกเก็บถาวรแล้ว กรุณาเลือกลูกค้าอื่น");
   return trimmed;
+}
+
+/** Fills in any mandatory checklist group missing from a stored quote (a quote saved before this
+ * field existed, or before a group was added to the builder) before sending it to the client — see
+ * withDefaultChecklistGroups() in api/_lib/documentRequirements.ts. Never written back to the
+ * database by this alone; only applied to the outgoing response so an old record displays its
+ * missing requirements as incomplete instead of crashing/silently validating as complete. */
+function normalizeQuote(quote: Quote): Quote {
+  return { ...quote, checklistGroups: withDefaultChecklistGroups(quote.checklistGroups, quote.jobTypeCode) };
 }
 
 const QUOTE_YEAR = 2567;
@@ -212,7 +225,7 @@ function cloneLines(lines: QuoteFields["lines"]): QuoteFields["lines"] {
  * validated per-field instead of copied blindly. `interest` is handled by the caller, since only
  * plain edits (not workflow drafts) may move it.
  */
-function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<QuoteFields> {
+function sanitizePartialQuoteFields(body: Record<string, unknown>, existingChecklistGroups: ChecklistGroup[]): Partial<QuoteFields> {
   const update: Partial<QuoteFields> = {};
   if ("client" in body) update.client = sanitizeShortText(body.client, "ชื่อลูกค้า", true);
   if ("salesperson" in body) update.salesperson = sanitizeShortText(body.salesperson, "พนักงานขาย");
@@ -233,6 +246,7 @@ function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<Quot
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
   if ("isPotentialOpportunity" in body) update.isPotentialOpportunity = sanitizeBoolean(body.isPotentialOpportunity, "โอกาสในการขาย");
   if ("followUpDate" in body) update.followUpDate = validateIsoDateOrEmpty(body.followUpDate, "วันที่ติดตาม");
+  if ("checklistGroups" in body) update.checklistGroups = sanitizeChecklistGroups(body.checklistGroups, existingChecklistGroups);
   return update;
 }
 
@@ -241,7 +255,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     await requirePermission(req, "quotations:view");
     const quotes = await quotesCollection();
     const docs = await quotes.find({}).toArray();
-    res.status(200).json({ quotes: docs.map(withStringId) });
+    res.status(200).json({ quotes: docs.map((d) => normalizeQuote(withStringId(d))) });
     return;
   }
 
@@ -261,6 +275,13 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     const templateSnapshot = quotationTemplateId ? await loadTemplateSnapshot(quotationTemplateId) : null;
     const lines = validateLines(body.lines);
     const discount = sanitizeDiscountPct(body.discount);
+    // The frontend's "new" quotation form already renders a default checklist (built client-side
+    // from the same buildDefaultChecklistGroups()) so the user can start ticking Safety/ขนส่ง/etc.
+    // before the very first save — this folds whatever they've toggled onto the server's own
+    // authoritative default set, exactly like an update would (see sanitizeChecklistGroups above).
+    const checklistGroups = "checklistGroups" in body
+      ? sanitizeChecklistGroups(body.checklistGroups, buildDefaultChecklistGroups(jobTypeCode))
+      : buildDefaultChecklistGroups(jobTypeCode);
     // Optional — a quotation may be created against a saved Customer (selected via
     // `src/pages/quotation/CustomerSelector.tsx`) or fully manually entered; either way the
     // Customer Information fields below are always what actually gets saved and shown.
@@ -300,6 +321,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       jobTypeName,
       isPotentialOpportunity: sanitizeBoolean(body.isPotentialOpportunity, "โอกาสในการขาย"),
       followUpDate: validateIsoDateOrEmpty(body.followUpDate, "วันที่ติดตาม"),
+      checklistGroups,
       createdByUserId: ctx.user.id,
       updatedBy: ctx.user.id,
       approvalHistory: [],
@@ -322,7 +344,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
         : `สร้างใบเสนอราคา ${id} (${client}) แบบฟอร์มเปล่า สำหรับประเภทงาน ${jobTypeCode}`,
       { quoteId: id, customerName: client },
     );
-    res.status(201).json({ quote: withStringId(doc) });
+    res.status(201).json({ quote: normalizeQuote(withStringId(doc)) });
     return;
   }
 
@@ -343,7 +365,8 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   if (!hasEdit || !(isOwner || hasApprove)) throw new HttpError(403, "Forbidden");
 
   const body: Record<string, unknown> = req.body ?? {};
-  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(body);
+  const existingChecklistGroups = withDefaultChecklistGroups(target.checklistGroups, target.jobTypeCode);
+  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(body, existingChecklistGroups);
   if ("interest" in body) {
     if (!isValidInterest(body.interest)) throw new HttpError(400, "ค่าความสนใจไม่ถูกต้อง");
     update.interest = body.interest;
@@ -426,7 +449,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
     }
   }
 
-  res.status(200).json({ quote: withStringId(updated) });
+  res.status(200).json({ quote: normalizeQuote(withStringId(updated)) });
 }
 
 async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: string) {
@@ -455,7 +478,54 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
   };
   await quotes.insertOne(doc);
   await writeQuoteAuditEntry(ctx, "Quotation Created", `คัดลอกใบเสนอราคาเป็น ${newId} จาก ${id}`, { quoteId: newId, customerName: doc.client });
-  res.status(201).json({ quote: withStringId(doc) });
+  res.status(201).json({ quote: normalizeQuote(withStringId(doc)) });
+}
+
+/**
+ * Server-side print/PDF gate (added 2026-07-16) — previously printing a Quotation was 100%
+ * client-side (`window.print()`, no network call at all — see QuoteDocument.tsx), so an incomplete
+ * document could always be printed by opening the browser's print dialog directly. The frontend
+ * now calls this endpoint first and only proceeds to `window.print()` on success; a direct call to
+ * this URL for an incomplete quote is blocked the same way. Requires `quotations:export` (the same
+ * permission that already gates the print button's visibility) rather than `:edit`, since printing
+ * doesn't modify the document.
+ */
+async function handlePrintQuote(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  await requirePermission(req, "quotations:export");
+  const quotes = await quotesCollection();
+  const target = await quotes.findOne({ _id: id });
+  if (!target) throw new HttpError(404, "ไม่พบใบเสนอราคา");
+
+  const validation = validateQuotationForPrint({
+    client: target.client,
+    salesperson: target.salesperson,
+    contactName: target.contactName,
+    contactPhone: target.contactPhone,
+    contactEmail: target.contactEmail,
+    address: target.address,
+    taxId: target.taxId,
+    deliveryMethod: target.deliveryMethod,
+    deliveryAddress: target.deliveryAddress,
+    project: target.project,
+    poRef: target.poRef,
+    paymentTerms: target.paymentTerms,
+    issueDate: target.issueDate,
+    expiryDate: target.expiryDate,
+    jobTypeCode: target.jobTypeCode,
+    remarks: target.remarks,
+    lines: target.lines,
+    followUpDate: target.followUpDate,
+    isPotentialOpportunity: target.isPotentialOpportunity,
+    checklistGroups: withDefaultChecklistGroups(target.checklistGroups, target.jobTypeCode),
+  });
+  if (!validation.valid) {
+    throw new HttpError(422, "กรุณากรอกข้อมูลที่จำเป็นให้ครบก่อนพิมพ์/ส่งออก PDF", {
+      code: "DOCUMENT_INCOMPLETE",
+      details: { fieldErrors: validation.fieldErrors, groupErrors: validation.groupErrors },
+    });
+  }
+  res.status(200).json({ ok: true });
 }
 
 async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: string) {
@@ -497,7 +567,8 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
 
   // Workflow drafts may not move `interest` (plain-edit-only field) — `sanitizePartialQuoteFields`
   // never looks at it, so it's already excluded without needing a second field allowlist.
-  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(draft);
+  const existingChecklistGroups = withDefaultChecklistGroups(target.checklistGroups, target.jobTypeCode);
+  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(draft, existingChecklistGroups);
   if ("jobTypeCode" in draft) {
     const jobTypeMaster = await loadJobTypeMaster();
     const { jobTypeCode, jobTypeName } = validateJobType(draft.jobTypeCode, jobTypeMaster, { required: false });
@@ -540,6 +611,44 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
   const effectiveDiscount = update.discount ?? target.discount;
   update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount);
 
+  // Required-field/mandatory-selection gate (added 2026-07-16) — every transition except back-to-
+  // Draft ("rejected") and abandoning the quote ("cancelled") must leave the document complete.
+  // "ร่าง" itself may stay incomplete forever; nothing past it may. Validates the *effective*
+  // document (already-saved fields overlaid with this request's draft), not just what changed, so
+  // a field left incomplete on an earlier save still blocks a later submit/approve/etc.
+  const VALIDATION_EXEMPT_ACTIONS = new Set<ApprovalAction>(["rejected", "cancelled"]);
+  if (!VALIDATION_EXEMPT_ACTIONS.has(action)) {
+    const effectiveForValidation: QuotationValidationInput = {
+      client: update.client ?? target.client,
+      salesperson: update.salesperson ?? target.salesperson,
+      contactName: update.contactName ?? target.contactName,
+      contactPhone: update.contactPhone ?? target.contactPhone,
+      contactEmail: update.contactEmail ?? target.contactEmail,
+      address: update.address ?? target.address,
+      taxId: update.taxId ?? target.taxId,
+      deliveryMethod: update.deliveryMethod ?? target.deliveryMethod,
+      deliveryAddress: update.deliveryAddress ?? target.deliveryAddress,
+      project: update.project ?? target.project,
+      poRef: update.poRef ?? target.poRef,
+      paymentTerms: update.paymentTerms ?? target.paymentTerms,
+      issueDate: update.issueDate ?? target.issueDate,
+      expiryDate: update.expiryDate ?? target.expiryDate,
+      jobTypeCode: update.jobTypeCode ?? target.jobTypeCode,
+      remarks: update.remarks ?? target.remarks,
+      lines: effectiveLines,
+      followUpDate: update.followUpDate ?? target.followUpDate,
+      isPotentialOpportunity: update.isPotentialOpportunity ?? target.isPotentialOpportunity,
+      checklistGroups: update.checklistGroups ?? existingChecklistGroups,
+    };
+    const validation = validateQuotationForFinalization(effectiveForValidation);
+    if (!validation.valid) {
+      throw new HttpError(422, "กรุณากรอกข้อมูลที่จำเป็นให้ครบก่อนดำเนินการ", {
+        code: "DOCUMENT_INCOMPLETE",
+        details: { fieldErrors: validation.fieldErrors, groupErrors: validation.groupErrors },
+      });
+    }
+  }
+
   update.status = transition.to;
   update.createdByUserId = target.createdByUserId || ctx.user.id;
   update.updatedBy = ctx.user.id;
@@ -577,7 +686,7 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
     { quoteId: id, customerName: updated.client },
   );
 
-  res.status(200).json({ quote: withStringId(updated) });
+  res.status(200).json({ quote: normalizeQuote(withStringId(updated)) });
 }
 
 async function createWorkflowNotifications(
@@ -699,6 +808,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (parts.length === 1) return handleOne(req, res, parts[0]);
     if (parts.length === 2 && parts[1] === "duplicate") return handleDuplicate(req, res, parts[0]);
     if (parts.length === 2 && parts[1] === "workflow") return handleWorkflow(req, res, parts[0]);
+    if (parts.length === 2 && parts[1] === "print") return handlePrintQuote(req, res, parts[0]);
     throw new HttpError(404, "Not found");
   });
 }

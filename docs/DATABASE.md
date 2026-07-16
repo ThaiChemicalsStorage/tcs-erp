@@ -386,6 +386,9 @@ permission.
 type ScopeOfWorkStatus = "Draft" | "Final";
 // contactName added 2026-07-15, Codex review High Priority fix (was previously dropped entirely).
 interface ScopeOfWorkCustomerSnapshot { companyName: string; contactName: string; address: string; taxId: string; phone: string; email: string; projectName: string; }
+// ChecklistOption/ChecklistGroup moved to src/lib/documentRequirements.ts on 2026-07-16 (re-exported
+// here for compatibility) so Quotation's own new `checklistGroups` field (see below) can share the
+// exact same model/validation instead of a second parallel type.
 interface ChecklistOption { key: string; label: string; checked: boolean; }
 interface ChecklistGroup { key: string; title: string; selectionType: "single" | "multiple"; options: ChecklistOption[]; note?: string; }
 interface ScopeOfWorkSpecLine { id: string; text: string; }
@@ -443,12 +446,32 @@ guarantee — see the doc comment in `api/_lib/scopeOfWorkHandler.ts`'s `handleU
 `checklistGroups` reproduces the reference PDF's printed checkbox/radio groups (Safety, TOR/
 Requirement from customer, เอกสารส่งถึง, ปจ.2, งานขนส่ง, Logo, Name plate, Test Report — split into
 `testReportType`/`testReportLevel`, เงื่อนไขการวางบิล, เงื่อนไขการส่งมอบงาน) as a reusable,
-Job-Type-agnostic structure (`buildDefaultChecklistGroups()`) — every option starts unchecked except
-two Job-Type-driven suggestions the spec explicitly named (`LI` → `testReportType.frpLining`,
-`TA` → `testReportType.frpTank`), both still freely editable. A `PATCH` can only toggle `checked`/
-set a group's optional `note` — group/option `key`s, `title`s, and `selectionType` are always
-matched against the record's own already-persisted structure, never trusted from the client, so a
-direct API call can't inject a new group or rename a label.
+Job-Type-agnostic structure (`buildDefaultChecklistGroups()`, now in `src/lib/documentRequirements.ts`)
+— every option starts unchecked except two Job-Type-driven suggestions the spec explicitly named
+(`LI` → `testReportType.frpLining`, `TA` → `testReportType.frpTank`), both still freely editable. A
+`PATCH` can only toggle `checked`/set a group's optional `note` — group/option `key`s, `title`s, and
+`selectionType` are always matched against the record's own already-persisted structure, never
+trusted from the client, so a direct API call can't inject a new group or rename a label.
+
+**2026-07-16, required-field validation pass**: 8 of these 11 groups (`safety`, `transportation`,
+`logo`, `billingConditions`, `documentsToSend`, `namePlate`, `deliveryDocFormat`, `pj2`) are now
+mandatory — at least one option must be checked before Finalize/Print (`validateChecklistGroups()`,
+`src/lib/documentRequirements.ts`); `torRequirement`/`testReportType`/`testReportLevel` remain
+optional. A plain "อื่น ๆ" option was added to `safety`/`transportation`/`namePlate`/
+`documentsToSend` (Logo already had "Etc.") so the spec's "selecting Other requires a detail" rule
+has something to validate against — selecting it (or, for `safety`, its "TOR" option) makes the
+group's `note` required too. See "Required-Field Validation" in
+[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
+
+**2026-07-16, Codex review fix pass (same day)**: fixed 2 High Priority defects the review found —
+(1) each of the four groups above now also initializes `note: ""` in `buildDefaultChecklistGroups()`
+(previously only Logo did, so `ChecklistGroupCard` — which only renders its detail input when
+`note !== undefined` — never actually showed the input for the other three, making the "Other
+requires detail" rule unsatisfiable from the normal UI even though the validator already enforced
+it); `withDefaultChecklistGroups()` also backfills the missing `note` onto an already-saved record.
+(2) Creating a Scope of Work now deep-copies the source quotation's own `checklistGroups` (checked
+options + notes) instead of resetting to `buildDefaultChecklistGroups()` — see "Snapshot Behavior" in
+[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 
 `items` starts as a 1:1 copy of the source quotation's `QuoteLine[]` (`mapLineToScopeItem()`) —
 `description`→`name`, `specifications`(string, newline-split) + `subDetails[]` → `specifications:
@@ -551,6 +574,7 @@ interface Quote {
     sourceHash: string;
     capturedAt: string;
   };
+  checklistGroups?: ChecklistGroup[];    // added 2026-07-16 — "ข้อกำหนดเอกสารและการส่งมอบ" section, same shared model as ScopeOfWork.checklistGroups (src/lib/documentRequirements.ts); optional only because a quote saved before this field existed won't have it in storage — always normalized to a full set before being sent to the client (normalizeQuote() in api/handlers/quotes.ts)
 }
 
 // The frozen-at-save-time copy stored on Quote.customerSnapshot (src/lib/customers.ts) — built
@@ -562,7 +586,7 @@ interface CustomerSnapshot {
   taxId: string; deliveryMethod: string; projectName: string; deliveryAddress: string;
 }
 ```
-All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session. `customerId`/`customerSnapshot` (added 2026-07-14, replacing the short-lived `issuerCompanyId`/`issuerCompanySnapshot` pair from 2026-07-13) are set by `POST /api/quotes` and (Draft-only, for `customerId` specifically) `PATCH /api/quotes/:id`/`POST /api/quotes/:id/workflow` — see `resolveCustomerIdUpdate()`/`buildCustomerSnapshot()` in `api/handlers/quotes.ts`, and [MODULES/Customer.md](./MODULES/Customer.md). `quotationTemplateId`/`quotationTemplateName`/`quotationTemplateVersion` (added 2026-07-14) are frozen provenance metadata set only by `POST /api/quotes` when a quote is created from the Create Quotation wizard's Preview step — the client sends only `quotationTemplateId`; `quotationTemplateName`/`quotationTemplateVersion` are always re-derived server-side from the matched `quotation_templates` record (`validateQuotationTemplate()` in `api/_lib/quoteValidation.ts`, mirroring `validateJobType()`), never trusted from the client, and structurally excluded from `PATCH /api/quotes/:id`'s field whitelist so they can never change after creation. All three are optional — a quote created without the wizard (or before this feature existed) simply has them `undefined`. `QuoteLine.isSectionHeader` (added 2026-07-14) similarly defaults to `undefined`/falsy on every pre-existing line — see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Template → Quote Snapshot Semantics."
+All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session. `customerId`/`customerSnapshot` (added 2026-07-14, replacing the short-lived `issuerCompanyId`/`issuerCompanySnapshot` pair from 2026-07-13) are set by `POST /api/quotes` and (Draft-only, for `customerId` specifically) `PATCH /api/quotes/:id`/`POST /api/quotes/:id/workflow` — see `resolveCustomerIdUpdate()`/`buildCustomerSnapshot()` in `api/handlers/quotes.ts`, and [MODULES/Customer.md](./MODULES/Customer.md). `quotationTemplateId`/`quotationTemplateName`/`quotationTemplateVersion` (added 2026-07-14) are frozen provenance metadata set only by `POST /api/quotes` when a quote is created from the Create Quotation wizard's Preview step — the client sends only `quotationTemplateId`; `quotationTemplateName`/`quotationTemplateVersion` are always re-derived server-side from the matched `quotation_templates` record (`validateQuotationTemplate()` in `api/_lib/quoteValidation.ts`, mirroring `validateJobType()`), never trusted from the client, and structurally excluded from `PATCH /api/quotes/:id`'s field whitelist so they can never change after creation. All three are optional — a quote created without the wizard (or before this feature existed) simply has them `undefined`. `QuoteLine.isSectionHeader` (added 2026-07-14) similarly defaults to `undefined`/falsy on every pre-existing line — see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Template → Quote Snapshot Semantics." `checklistGroups` (added 2026-07-16) is server-generated at creation (`buildDefaultChecklistGroups(jobTypeCode)`) and accepted/sanitized on `PATCH`/workflow-draft the same way `ScopeOfWork.checklistGroups` already was (`sanitizeChecklistGroups()`, `api/_lib/documentRequirements.ts`) — see "Required-Field Validation" in [MODULES/Quotation.md](./MODULES/Quotation.md).
 
 Indexes added 2026-07-09 (`quotes` had none beyond default `_id` before this): `{ status: 1 }`, `{ createdByUserId: 1 }` (already used for ownership checks), `{ issueDate: 1 }` (needed for the Dashboard's monthly revenue aggregation — see below). Added 2026-07-10: `{ jobTypeCode: 1 }`, `{ salesperson: 1 }`, `{ followUpDate: 1 }`, serving the Dashboard filters/grouping; later the same day, `{ isPotentialOpportunity: 1 }` and `{ client: 1 }` (Expected Sales/forecast filtering and customer-analytics grouping, respectively — both already-hot query paths that had no supporting index). No soft-delete field — the `ยกเลิก` (Cancelled) terminal workflow status already serves that role, so a `createdAt`/`updatedAt`/`isDeleted`/`department` index (all requested by a generic Dashboard index checklist) would be moot: `Quote` has no `createdAt`/`updatedAt` fields (`issueDate`/`date`/`updatedBy` serve that role instead) and no `isDeleted`/`department` field at all (`User.department`, itself free text, is what Dashboard department filtering actually joins against — see below).
 

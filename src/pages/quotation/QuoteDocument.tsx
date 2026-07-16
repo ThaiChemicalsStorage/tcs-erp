@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronRight, Printer, Copy, Save, Send, CheckCircle2, Building2, Hash, CalendarDays,
   ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList,
@@ -10,6 +10,7 @@ import type { User } from "../../lib/users";
 import {
   type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type ApprovalAction, type QuotePermissions,
   statusIcon, statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
+  printQuote,
 } from "../../lib/quotes";
 import type { Customer } from "../../lib/customers";
 import { fetchScopeOfWorksByQuotation, createScopeOfWorkFromQuotation, type ScopeOfWorkSummary } from "../../lib/scopeOfWork";
@@ -18,9 +19,24 @@ import { InterestButtons } from "./InterestButtons";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { CustomerSelector } from "./CustomerSelector";
 import { PrintDocument } from "./PrintDocument";
+import { ChecklistGroupCard } from "./ChecklistGroupCard";
 import type { QuotationWizardResult } from "./QuotationTemplateWizard";
 import { BrandMark } from "../../components/BrandMark";
+import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
+import { FieldError } from "../../components/FieldError";
+import { ValidationSummary } from "../../components/ValidationSummary";
+import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
+import { buildDefaultChecklistGroups, validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS } from "../../lib/documentRequirements";
+import { validateQuotationForFinalization, quotationRequiredFields } from "../../lib/validation/quotationValidation";
+import { mergeServerValidationErrors } from "../../lib/validation/types";
 import { useI18n } from "../../lib/i18n";
+
+const BLOCKED_TOOLTIP = "กรุณากรอกข้อมูลและเลือกหัวข้อที่จำเป็นให้ครบก่อนดำเนินการ";
+/** Workflow actions exempt from the completeness gate — "rejected" sends the quote back to Draft
+ * (which may stay incomplete) and "cancelled" abandons it outright; every other transition moves
+ * toward a final status and must leave the document complete. Mirrors the server's own
+ * VALIDATION_EXEMPT_ACTIONS in api/handlers/quotes.ts — the two must never drift apart. */
+const VALIDATION_EXEMPT_ACTIONS = new Set<ApprovalAction>(["rejected", "cancelled"]);
 
 const DEFAULT_TERMS = "1. ราคานี้ยังไม่รวมค่าขนส่งและค่าติดตั้ง\n2. ราคามีผลภายใน 30 วันนับจากวันที่ในเอกสาร\n3. การส่งมอบภายใน 45 วันทำการหลังได้รับ PO\n4. การชำระเงินมัดจำ 30% ก่อนเริ่มผลิต";
 
@@ -85,7 +101,7 @@ export function QuoteDocument({
   onSave: (data: QuoteDraftFields) => void;
   onDuplicate: () => void;
   onInterestChange: (v: QuoteInterest) => void;
-  onWorkflowAction: (action: ApprovalAction, comment: string, draft: QuoteDraftFields) => void;
+  onWorkflowAction: (action: ApprovalAction, comment: string, draft: QuoteDraftFields) => Promise<void>;
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
@@ -142,6 +158,11 @@ export function QuoteDocument({
   const [jobTypeName, setJobTypeName] = useState(quote?.jobTypeName ?? wizardResult?.jobTypeName ?? "");
   const [isPotentialOpportunity, setIsPotentialOpportunity] = useState(quote?.isPotentialOpportunity ?? false);
   const [followUpDate, setFollowUpDate] = useState(quote?.followUpDate ?? "");
+  // "ข้อกำหนดเอกสารและการส่งมอบ" checklist groups (added 2026-07-16) — the server always returns a
+  // fully-normalized `checklistGroups` for an existing quote (see normalizeQuote() in
+  // api/handlers/quotes.ts), so `quote?.checklistGroups` is only ever missing for a brand-new,
+  // not-yet-saved quote, where the same default-builder the server would use seeds the initial UI.
+  const [checklistGroups, setChecklistGroups] = useState(quote?.checklistGroups ?? buildDefaultChecklistGroups(quote?.jobTypeCode ?? wizardResult?.jobTypeCode ?? ""));
   const disabled = !permissions.canEdit;
 
   // ── Customer selection (added 2026-07-14, replacing an earlier — wrong — "issuer company"
@@ -260,6 +281,7 @@ export function QuoteDocument({
     jobTypeName,
     isPotentialOpportunity,
     followUpDate,
+    checklistGroups,
     // Only sent when it actually changed from what the quote already had — avoids tripping the
     // server's Draft-only guard on every unrelated save of an already-non-Draft quote (see
     // api/handlers/quotes.ts's resolveCustomerIdUpdate()). A brand-new quote always sends it
@@ -270,6 +292,67 @@ export function QuoteDocument({
     // on update). Server re-derives quotationTemplateName/Version from this id; never send those.
     ...(mode === "new" && quotationTemplateId ? { quotationTemplateId } : {}),
   });
+
+  // ── Required-field/mandatory-selection validation (added 2026-07-16) ─────────────────────────
+  // Mirrors validateQuotationForFinalization() server-side exactly (same shared function, see
+  // src/lib/validation/quotationValidation.ts) — recomputed on every render from the live on-screen
+  // draft so Print/Submit/Approve/etc. reflect the current, possibly-just-edited state, not the
+  // last-saved one.
+  const clientValidation = useMemo(
+    () => validateQuotationForFinalization({
+      client, salesperson, contactName, contactPhone, contactEmail, address, taxId,
+      deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate,
+      jobTypeCode, remarks, lines, checklistGroups, followUpDate, isPotentialOpportunity,
+    }),
+    [client, salesperson, contactName, contactPhone, contactEmail, address, taxId, deliveryMethod, deliveryAddress,
+      project, poRef, paymentTerms, issueDate, expiryDate, jobTypeCode, remarks, lines, checklistGroups,
+      followUpDate, isPotentialOpportunity],
+  );
+  // A `422 DOCUMENT_INCOMPLETE` from the server (print/workflow — see handlePrintClick/confirmAction
+  // below) is merged in on top of the live client-side result, added 2026-07-16 (Codex review Medium
+  // Priority fix) — previously a server-only rejection (e.g. a race against a just-saved change) was
+  // surfaced only as a toast, never reflected in the inline field/group errors or the summary.
+  const [serverValidationErrors, setServerValidationErrors] = useState<{ fieldErrors: Record<string, string>; groupErrors: Record<string, string[]> } | null>(null);
+  const validation = mergeServerValidationErrors(clientValidation, serverValidationErrors);
+  const checklistValidation = useMemo(() => validateChecklistGroups(checklistGroups), [checklistGroups]);
+  const lineErrors = useMemo(() => {
+    const errs: Record<number, string> = {};
+    for (const [key, message] of Object.entries(validation.fieldErrors)) {
+      if (key.startsWith("lines.")) errs[Number(key.slice(6))] = message;
+    }
+    return errs;
+  }, [validation.fieldErrors]);
+  const validationSummaryMessages = [...Object.values(validation.fieldErrors), ...Object.values(validation.groupErrors).flat()];
+  const totalRequiredChecks = Object.values(quotationRequiredFields).filter((f) => f.required).length + MANDATORY_CHECKLIST_GROUP_KEYS.length + 1;
+  const summaryRef = useRef<HTMLDivElement>(null);
+
+  const guardedWorkflowAction = (action: ApprovalAction) => {
+    if (!VALIDATION_EXEMPT_ACTIONS.has(action) && !validation.valid) {
+      showToast(BLOCKED_TOOLTIP);
+      summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    openAction(action);
+  };
+
+  const handlePrintClick = async () => {
+    if (!validation.valid) {
+      showToast(BLOCKED_TOOLTIP);
+      summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    setServerValidationErrors(null);
+    try {
+      await printQuote(quote!.id);
+      window.print();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "ไม่สามารถพิมพ์ได้");
+      if (err instanceof ApiError && err.code === "DOCUMENT_INCOMPLETE") {
+        setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
+        summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  };
 
   // Warn on an accidental tab close/refresh while there are unsaved edits — a plain JSON diff
   // against the form's state at mount is a cheap, good-enough "is this dirty" check for a leave-
@@ -298,14 +381,29 @@ export function QuoteDocument({
 
   const commentRequired = pendingAction === "rejected" || pendingAction === "customer_rejected" || pendingAction === "cancelled";
   const openAction = (a: ApprovalAction) => { setPendingAction(a); setActionComment(""); setActionError(""); };
-  const confirmAction = () => {
+  const confirmAction = async () => {
     if (!pendingAction) return;
+    // Defensive re-check — guardedWorkflowAction() already keeps this modal from opening for a
+    // gated action on an incomplete document, but the server is the actual source of truth
+    // (see api/handlers/quotes.ts's handleWorkflow); this just avoids a pointless round trip.
+    if (!VALIDATION_EXEMPT_ACTIONS.has(pendingAction) && !validation.valid) { setActionError(BLOCKED_TOOLTIP); return; }
     if (commentRequired && !actionComment.trim()) { setActionError(t("quotation.errorCommentRequired")); return; }
-    // Pass the current on-screen draft, not just the action — otherwise any unsaved edit
-    // (e.g. line items changed but "บันทึก" not yet clicked) is silently discarded when the
-    // workflow transition is applied to the last-saved quote record instead.
-    onWorkflowAction(pendingAction, actionComment.trim(), currentDraft());
-    setPendingAction(null);
+    setServerValidationErrors(null);
+    try {
+      // Pass the current on-screen draft, not just the action — otherwise any unsaved edit
+      // (e.g. line items changed but "บันทึก" not yet clicked) is silently discarded when the
+      // workflow transition is applied to the last-saved quote record instead.
+      await onWorkflowAction(pendingAction, actionComment.trim(), currentDraft());
+      setPendingAction(null);
+    } catch (err) {
+      // QuotationPage.tsx's handleWorkflowAction already showed a toast and rethrew — this only
+      // adds the inline field/group highlighting a server-side rejection wouldn't otherwise get
+      // (2026-07-16, Codex review Medium Priority fix). Keep the modal open so the user can see why.
+      if (err instanceof ApiError && err.code === "DOCUMENT_INCOMPLETE") {
+        setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
+        summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
   };
 
   // Signature integration: preparer = quote creator (or current user for a brand-new quote); approver = whoever most recently approved.
@@ -349,8 +447,14 @@ export function QuoteDocument({
         )}
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={validation.missingCount} />
           {permissions.canExport && (
-            <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button
+              onClick={handlePrintClick}
+              disabled={!validation.valid}
+              title={!validation.valid ? BLOCKED_TOOLTIP : undefined}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!validation.valid ? "opacity-40 cursor-not-allowed hover:border-border hover:text-muted-foreground" : ""}`}
+            >
               <Printer size={13} /> {t("quotation.printPdf")}
             </button>
           )}
@@ -371,12 +475,12 @@ export function QuoteDocument({
           )}
 
           {permissions.canSubmit && (
-            <button onClick={() => openAction("submitted")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button onClick={() => guardedWorkflowAction("submitted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <Send size={13} /> {t("quotation.action.submitted")}
             </button>
           )}
           {permissions.canApprove && (
-            <button onClick={() => openAction("approved")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors">
+            <button onClick={() => guardedWorkflowAction("approved")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <ThumbsUp size={13} /> {t("quotation.action.approved")}
             </button>
           )}
@@ -386,27 +490,27 @@ export function QuoteDocument({
             </button>
           )}
           {permissions.canSendToCustomer && (
-            <button onClick={() => openAction("sent_to_customer")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#3b6fc9] text-white rounded-lg font-semibold hover:bg-[#2f5aa3] transition-colors">
+            <button onClick={() => guardedWorkflowAction("sent_to_customer")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#3b6fc9] text-white rounded-lg font-semibold hover:bg-[#2f5aa3] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <Send size={13} /> {t("quotation.action.sentToCustomer")}
             </button>
           )}
           {permissions.canMarkCustomerAccepted && (
-            <button onClick={() => openAction("customer_accepted")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#1f9d8a] text-white rounded-lg font-semibold hover:bg-[#188577] transition-colors">
+            <button onClick={() => guardedWorkflowAction("customer_accepted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#1f9d8a] text-white rounded-lg font-semibold hover:bg-[#188577] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <CheckCircle2 size={13} /> {t("quotation.action.customerAccepted")}
             </button>
           )}
           {permissions.canMarkCustomerRejected && (
-            <button onClick={() => openAction("customer_rejected")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#e08a3c] text-white rounded-lg font-semibold hover:bg-[#c97627] transition-colors">
+            <button onClick={() => guardedWorkflowAction("customer_rejected")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#e08a3c] text-white rounded-lg font-semibold hover:bg-[#c97627] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <XCircle size={13} /> {t("quotation.action.customerRejected")}
             </button>
           )}
           {permissions.canMarkWon && (
-            <button onClick={() => openAction("marked_won")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#157347] text-white rounded-lg font-semibold hover:bg-[#125f3b] transition-colors">
+            <button onClick={() => guardedWorkflowAction("marked_won")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#157347] text-white rounded-lg font-semibold hover:bg-[#125f3b] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <Trophy size={13} /> {t("quotation.action.markedWon")}
             </button>
           )}
           {permissions.canMarkLost && (
-            <button onClick={() => openAction("marked_lost")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#8a94a6] text-white rounded-lg font-semibold hover:bg-[#767f90] transition-colors">
+            <button onClick={() => guardedWorkflowAction("marked_lost")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#8a94a6] text-white rounded-lg font-semibold hover:bg-[#767f90] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <Frown size={13} /> {t("quotation.action.markedLost")}
             </button>
           )}
@@ -419,6 +523,10 @@ export function QuoteDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
+        <div ref={summaryRef}>
+          <ValidationSummary missingCount={validation.missingCount} messages={validationSummaryMessages} />
+        </div>
+
         {/* Document header band */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 flex flex-wrap items-start justify-between gap-4 print:hidden">
@@ -462,44 +570,51 @@ export function QuoteDocument({
                   )}
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.clientName")} <span className="text-[#e05252]">*</span></label>
+                  <RequiredFieldLabel>{t("quotation.field.clientName")}</RequiredFieldLabel>
                   <input disabled={disabled} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={client} onChange={(e) => setClient(e.target.value)} />
+                  <FieldError message={validation.fieldErrors.client} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactName")}</label>
+                    <RequiredFieldLabel>{t("quotation.field.contactName")}</RequiredFieldLabel>
                     <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder={t("quotation.field.contactNamePlaceholder")} />
+                    <FieldError message={validation.fieldErrors.contactName} />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactPhone")}</label>
+                    <RequiredFieldLabel>{t("quotation.field.contactPhone")}</RequiredFieldLabel>
                     <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="0XX-XXX-XXXX" />
+                    <FieldError message={validation.fieldErrors.contactPhone} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactEmail")}</label>
+                  <RequiredFieldLabel required={false}>{t("quotation.field.contactEmail")}</RequiredFieldLabel>
                   <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="name@company.com" />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.address")}</label>
+                  <RequiredFieldLabel>{t("quotation.field.address")}</RequiredFieldLabel>
                   <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t("quotation.field.addressPlaceholder")} />
+                  <FieldError message={validation.fieldErrors.address} />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.taxId")}</label>
+                  <RequiredFieldLabel required={false}>{t("quotation.field.taxId")}</RequiredFieldLabel>
                   <input disabled={disabled} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder={t("quotation.field.taxIdPlaceholder")} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryMethod")}</label>
+                    <RequiredFieldLabel>{t("quotation.field.deliveryMethod")}</RequiredFieldLabel>
                     <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder={t("quotation.field.deliveryMethodPlaceholder")} />
+                    <FieldError message={validation.fieldErrors.deliveryMethod} />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.project")}</label>
+                    <RequiredFieldLabel>{t("quotation.field.project")}</RequiredFieldLabel>
                     <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={project} onChange={(e) => setProject(e.target.value)} />
+                    <FieldError message={validation.fieldErrors.project} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryAddress")}</label>
+                  <RequiredFieldLabel>{t("quotation.field.deliveryAddress")}</RequiredFieldLabel>
                   <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t("quotation.field.deliveryAddressPlaceholder")} />
+                  <FieldError message={validation.fieldErrors.deliveryAddress} />
                 </div>
               </div>
             </div>
@@ -512,33 +627,37 @@ export function QuoteDocument({
                     <input readOnly className="w-full text-xs font-mono text-[#c9a84c] font-semibold bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.poRef")}</label>
+                    <RequiredFieldLabel required={false}>{t("quotation.field.poRef")}</RequiredFieldLabel>
                     <input disabled={disabled} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</label>
+                    <RequiredFieldLabel className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</RequiredFieldLabel>
                     <input disabled={disabled} type="date" className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+                    <FieldError message={validation.fieldErrors.issueDate} />
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</label>
+                    <RequiredFieldLabel className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</RequiredFieldLabel>
                     <input disabled={disabled} type="date" className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+                    <FieldError message={validation.fieldErrors.expiryDate} />
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.salesperson")}</label>
+                  <RequiredFieldLabel>{t("quotation.field.salesperson")}</RequiredFieldLabel>
                   <input disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={salesperson} onChange={(e) => setSalesperson(e.target.value)} />
+                  <FieldError message={validation.fieldErrors.salesperson} />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.paymentTerms")}</label>
+                  <RequiredFieldLabel>{t("quotation.field.paymentTerms")}</RequiredFieldLabel>
                   <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
                     {paymentTermsOptions.map((opt) => <option key={opt}>{opt}</option>)}
                   </select>
+                  <FieldError message={validation.fieldErrors.paymentTerms} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.jobType")} {mode === "new" && <span className="text-[#e05252]">*</span>}</label>
+                    <RequiredFieldLabel>{t("quotation.field.jobType")}</RequiredFieldLabel>
                     <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
                       {/* A brand-new quote must be assigned a real Job Type — required server-side
                           too (see api/_lib/quoteValidation.ts) — so the blank "unclassified" choice
@@ -553,6 +672,7 @@ export function QuoteDocument({
                         <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>
                       ))}
                     </select>
+                    <FieldError message={validation.fieldErrors.jobTypeCode} />
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
@@ -590,7 +710,31 @@ export function QuoteDocument({
 
         </div>
 
-        <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} />
+        {/* ข้อกำหนดเอกสารและการส่งมอบ — added 2026-07-16, required-field validation pass. Shares the
+            same ChecklistGroup model/component as Scope of Work (see ChecklistGroupCard.tsx); when a
+            Scope of Work is created from this quotation, these selections are copied over as a
+            one-time snapshot (see docs/MODULES/ScopeOfWork.md). */}
+        <div className="bg-card border border-border rounded-xl p-5 print:hidden">
+          <p className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ข้อกำหนดเอกสารและการส่งมอบ</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {checklistGroups.map((group, idx) => (
+              <ChecklistGroupCard
+                key={group.key}
+                group={group}
+                disabled={disabled}
+                required={(MANDATORY_CHECKLIST_GROUP_KEYS as readonly string[]).includes(group.key)}
+                error={checklistValidation.groupErrors[group.key]}
+                onChange={(next) => {
+                  const groups = [...checklistGroups];
+                  groups[idx] = next;
+                  setChecklistGroups(groups);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+
+        <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} lineErrors={lineErrors} noLinesError={validation.fieldErrors.lines} />
 
         {/* Remarks + Signature — screen preview only; print output is PrintDocument below */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">

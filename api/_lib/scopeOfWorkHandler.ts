@@ -11,8 +11,11 @@ import {
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty, sanitizeBoolean } from "./quoteValidation.js";
+import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeChecklistGroups } from "./documentRequirements.js";
+import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint } from "../../src/lib/validation/scopeOfWorkValidation.js";
+import type { ChecklistGroup } from "../../src/lib/documentRequirements.js";
 import type {
-  ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkStatus, ChecklistGroup, ChecklistOption,
+  ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkStatus,
   ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkSignatory,
   ScopeOfWorkCustomerSnapshot,
 } from "../../src/lib/scopeOfWork.js";
@@ -82,55 +85,6 @@ async function nextJobSequence(
   return result?.seq ?? 1;
 }
 
-// ─── Job-Type default checklist groups (server-authoritative structure) ──────────────────────────
-
-/**
- * Reproduces the printed checkbox/radio groups from the reference PDF ("Scope Of Work
- * PQ202607-174-LI-SK บริษัท เค ไทย ไฮดรอลิค จำกัด.pdf") as a reusable, Job-Type-agnostic
- * structure — every group applies to every Job Type (LI/TA/SC/BF/future codes); only the Test
- * Report type's suggested default varies (see below). Every option starts unchecked except the
- * two explicitly named-in-spec suggestions — nothing here is ever forced/mandatory, all of it
- * stays freely editable after creation. Blue handwritten check-marks from the sample PDF are
- * never reproduced as real data — this always starts from a clean, unchecked structure.
- */
-function buildDefaultChecklistGroups(jobTypeCode: string): ChecklistGroup[] {
-  const opt = (key: string, label: string, checked = false): ChecklistOption => ({ key, label, checked });
-  return [
-    { key: "safety", title: "Safety", selectionType: "single", options: [opt("100", "100%"), opt("general", "ทั่วไป")] },
-    { key: "torRequirement", title: "TOR, Requirement from customer", selectionType: "multiple", options: [opt("tor", "TOR, Requirement from customer")] },
-    {
-      key: "documentsToSend", title: "เอกสารส่งถึง", selectionType: "multiple",
-      options: [opt("purchase", "Purchase"), opt("project", "Project"), opt("factory", "Factory"), opt("technic", "Technic"), opt("service", "Service")],
-    },
-    { key: "pj2", title: "เอกสาร ปจ.2", selectionType: "single", options: [opt("has", "มี ปจ.2"), opt("none", "ไม่มี ปจ.2")] },
-    { key: "transportation", title: "งานขนส่ง", selectionType: "single", options: [opt("has", "มีขนส่ง"), opt("none", "ไม่มีขนส่ง"), opt("ems", "EMS")] },
-    {
-      key: "logo", title: "Logo", selectionType: "single", note: "",
-      options: [opt("huma", "มี — HUMA"), opt("greensphere", "มี — Greensphere"), opt("etc", "มี — Etc. (โปรดระบุ)"), opt("none", "ไม่มี")],
-    },
-    {
-      key: "namePlate", title: "Name plate", selectionType: "single",
-      options: [opt("aluminium", "มี — Aluminium"), opt("sticker", "มี — Sticker"), opt("sus", "มี — SUS"), opt("none", "ไม่มี")],
-    },
-    {
-      // Job-Type-driven suggested default (per spec's explicit LI/TA examples only) — SC/BF/other
-      // codes get no suggestion, structure only. Always editable afterward.
-      key: "testReportType", title: "Test Report — ประเภท", selectionType: "single",
-      options: [
-        opt("frpTank", "FRP Tank", jobTypeCode === "TA"),
-        opt("frpLining", "FRP Lining", jobTypeCode === "LI"),
-        opt("pm", "PM"),
-      ],
-    },
-    { key: "testReportLevel", title: "Test Report — ระดับรายงาน", selectionType: "single", options: [opt("full", "Report full option"), opt("normal", "Report normal option")] },
-    { key: "billingConditions", title: "เงื่อนไขการวางบิล (สัญญา)", selectionType: "single", options: [opt("has", "มี"), opt("none", "ไม่มี")] },
-    {
-      key: "deliveryDocFormat", title: "เงื่อนไขการส่งมอบงาน", selectionType: "single",
-      options: [opt("companyForm", "แบบฟอร์มบริษัท"), opt("customerForm", "แบบฟอร์มลูกค้า (แนบไฟล์)")],
-    },
-  ];
-}
-
 // ─── Quotation -> Scope of Work snapshot mapping ──────────────────────────────────────────────────
 
 function mapLineToScopeItem(line: QuoteFields["lines"][number]): ScopeOfWorkItem {
@@ -178,17 +132,36 @@ async function resolveDefaultSeller(quote: QuoteFields, ctx: AuthContext): Promi
   return { name: salesperson, userId: match ? match._id.toString() : "", date: "" };
 }
 
+/** Deep-copies a checklist-groups array (fresh option objects per group) — used both here (snapshot
+ * at Scope of Work creation) and by `handleDuplicate` below, so a later edit to one copy's option
+ * objects can never be an aliased mutation of another record's array. */
+function cloneChecklistGroups(groups: ChecklistGroup[]): ChecklistGroup[] {
+  return groups.map((g) => ({ ...g, options: g.options.map((o) => ({ ...o })) }));
+}
+
 /**
  * The fields pulled/derived from a quotation at Scope of Work creation time — everything else
- * (checklistGroups' checked state, header fields like drawingCode/deliveryDate, signatures) starts
- * blank/default and is filled in by the user afterward. Reused by both `handleCreate` and
- * `handleRefresh` ("อัปเดตข้อมูลจากใบเสนอราคา") so the two can never drift apart in what counts as
- * "quotation-derived" content.
+ * (header fields like drawingCode/deliveryDate, signatures) starts blank/default and is filled in by
+ * the user afterward. Reused by both `handleCreate` and `handleRefresh` ("อัปเดตข้อมูลจากใบเสนอราคา")
+ * so the two can never drift apart in what counts as "quotation-derived" content.
+ *
+ * `checklistGroups` (2026-07-16, Codex review High Priority fix): a Scope of Work's "ข้อกำหนด
+ * เอกสารและการส่งมอบ" selections must start as a **snapshot of the quotation's own already-completed
+ * selections**, not a fresh unchecked default — per the business requirement's explicit "Copy the
+ * required document selections from the Quotation into the Scope of Work... store them as a Scope
+ * of Work snapshot." A complete Quotation previously produced an incomplete Scope of Work with every
+ * mandatory group reset to blank. Falls back to `buildDefaultChecklistGroups()` only when the source
+ * quotation itself predates this field (`quote.checklistGroups` undefined) — an honest "nothing to
+ * copy yet" default, never a fake completed selection. **Only used by `handleCreate`, deliberately
+ * NOT by `handleRefresh`**: the same requirement says editing the Quotation later must never silently
+ * change an already-created Scope of Work, so a re-copy on refresh would be wrong — the snapshot is
+ * one-time-at-creation, exactly like every other "quotation-derived" field's semantics, and the
+ * checklist afterward belongs to the Scope of Work's own independent edit history.
  */
 function deriveFromQuotation(quote: QuoteFields & { _id: string }): {
   quotationNumber: string; jobTypeCode: string; jobTypeName: string; quotationSalesperson: string;
   customerSnapshot: ScopeOfWorkCustomerSnapshot; customerPoNumber: string; deliveryLocation: string;
-  remarks: string; items: ScopeOfWorkItem[]; paymentDescription: string;
+  remarks: string; items: ScopeOfWorkItem[]; paymentDescription: string; checklistGroups: ChecklistGroup[];
 } {
   return {
     quotationNumber: quote._id,
@@ -203,6 +176,9 @@ function deriveFromQuotation(quote: QuoteFields & { _id: string }): {
     remarks: quote.remarks,
     items: quote.lines.map(mapLineToScopeItem),
     paymentDescription: quote.paymentTerms,
+    checklistGroups: quote.checklistGroups
+      ? cloneChecklistGroups(quote.checklistGroups)
+      : buildDefaultChecklistGroups(quote.jobTypeCode),
   };
 }
 
@@ -223,7 +199,6 @@ function canEditScope(ctx: AuthContext, doc: { createdBy: string }): boolean {
 
 const MAX_ITEMS = 300;
 const MAX_SPEC_LINES = 100;
-const MAX_CHECKLIST_NOTE = 500;
 
 function sanitizeSpecLine(raw: unknown, itemIdx: number, specIdx: number): ScopeOfWorkSpecLine {
   const r = (raw ?? {}) as Record<string, unknown>;
@@ -254,47 +229,6 @@ function sanitizeItems(raw: unknown): ScopeOfWorkItem[] {
   if (!Array.isArray(raw)) throw new HttpError(400, "รูปแบบรายการไม่ถูกต้อง");
   if (raw.length > MAX_ITEMS) throw new HttpError(400, `มีรายการมากเกินไป (สูงสุด ${MAX_ITEMS} รายการ)`);
   return raw.map((it, i) => sanitizeScopeItem(it, i));
-}
-
-/**
- * Validates an incoming `checklistGroups` payload against the record's own already-persisted
- * groups — a group/option is only ever recognized by matching `key` against what the server
- * itself generated at creation (`buildDefaultChecklistGroups`), so a client can toggle `checked`/
- * set a group's free-text `note`, but can never inject a new group, rename a label, or change a
- * group's `selectionType`. For a `"single"` group, if more than one option arrives checked, only
- * the first (in the server's own option order) is kept — a defensive clamp, not a hard rejection.
- */
-function sanitizeChecklistGroups(raw: unknown, existing: ChecklistGroup[]): ChecklistGroup[] {
-  if (!Array.isArray(raw)) throw new HttpError(400, "รูปแบบเช็คลิสต์ไม่ถูกต้อง");
-  const incomingByKey = new Map<string, Record<string, unknown>>();
-  for (const g of raw) {
-    if (typeof g === "object" && g !== null && typeof (g as Record<string, unknown>).key === "string") {
-      incomingByKey.set((g as Record<string, unknown>).key as string, g as Record<string, unknown>);
-    }
-  }
-  return existing.map((group) => {
-    const incoming = incomingByKey.get(group.key);
-    if (!incoming) return group;
-    const incomingOptions = Array.isArray(incoming.options) ? incoming.options : [];
-    const checkedByKey = new Map<string, boolean>();
-    for (const o of incomingOptions) {
-      if (typeof o === "object" && o !== null && typeof (o as Record<string, unknown>).key === "string") {
-        checkedByKey.set((o as Record<string, unknown>).key as string, (o as Record<string, unknown>).checked === true);
-      }
-    }
-    let options: ChecklistOption[] = group.options.map((opt) => ({ ...opt, checked: checkedByKey.get(opt.key) ?? false }));
-    if (group.selectionType === "single") {
-      let seenChecked = false;
-      options = options.map((opt) => {
-        if (!opt.checked) return opt;
-        if (seenChecked) return { ...opt, checked: false };
-        seenChecked = true;
-        return opt;
-      });
-    }
-    const note = typeof incoming.note === "string" ? sanitizeShortText(incoming.note.slice(0, MAX_CHECKLIST_NOTE), `หมายเหตุของ ${group.title}`) : group.note;
-    return { ...group, options, ...(group.note !== undefined || note !== undefined ? { note: note ?? "" } : {}) };
-  });
 }
 
 function sanitizePercent(v: unknown): number | null {
@@ -335,6 +269,13 @@ async function sanitizeSignatory(raw: unknown, label: string): Promise<ScopeOfWo
 function toSummary(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkSummary {
   const full = withStringId(doc);
   return { id: full.id, scopeNumber: full.scopeNumber, quotationId: full.quotationId, status: full.status, updatedAt: full.updatedAt };
+}
+
+/** Fills in any mandatory checklist group entirely missing from a stored record (see
+ * withDefaultChecklistGroups()) before sending it to the client — never written back to the
+ * database by this alone. See normalizeQuote() in api/handlers/quotes.ts for the equivalent. */
+function normalizeScope(scope: ScopeOfWork): ScopeOfWork {
+  return { ...scope, checklistGroups: withDefaultChecklistGroups(scope.checklistGroups, scope.jobTypeCode) };
 }
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
@@ -395,7 +336,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       customerSnapshot: derived.customerSnapshot,
       deliveryLocation: derived.deliveryLocation,
       shippingContact: "", shippingPhone: "", billingContact: "", billingPhone: "",
-      checklistGroups: buildDefaultChecklistGroups(derived.jobTypeCode),
+      checklistGroups: derived.checklistGroups,
       items: derived.items,
       paymentConditions: { downPaymentPct: null, finalPaymentPct: null, method: "", description: derived.paymentDescription, notes: "" },
       remarks: derived.remarks,
@@ -422,7 +363,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   await writeScopeAuditEntry(ctx, "Scope of Work Created", `สร้าง Scope of Work ${created.scopeNumber} จากใบเสนอราคา ${quotationId}`, {
     scopeId: created._id.toString(), scopeNumber: created.scopeNumber, quoteId: quotationId,
   });
-  res.status(201).json({ scopeOfWork: withStringId(created) satisfies ScopeOfWork });
+  res.status(201).json({ scopeOfWork: normalizeScope(withStringId(created)) satisfies ScopeOfWork });
 }
 
 async function loadScopeOrThrow(id: string): Promise<WithId<ScopeOfWorkFields>> {
@@ -432,10 +373,44 @@ async function loadScopeOrThrow(id: string): Promise<WithId<ScopeOfWorkFields>> 
   return doc;
 }
 
+/** Maps the stored document into the shape the shared required-field validators expect — a plain
+ * object of just the fields they need, not the full Mongo document. See src/lib/validation/
+ * scopeOfWorkValidation.ts. `withDefaultChecklistGroups` guards against a record saved before a
+ * mandatory group existed (see "Existing Document Compatibility" in the validation spec). */
+function toValidationInput(doc: WithId<ScopeOfWorkFields>) {
+  return {
+    customerSnapshot: doc.customerSnapshot,
+    issueDate: doc.issueDate,
+    deliveryDate: doc.deliveryDate,
+    drawingCode: doc.drawingCode,
+    secondaryCode: doc.secondaryCode,
+    customerPoNumber: doc.customerPoNumber,
+    deliveryLocation: doc.deliveryLocation,
+    shippingContact: doc.shippingContact,
+    shippingPhone: doc.shippingPhone,
+    billingContact: doc.billingContact,
+    billingPhone: doc.billingPhone,
+    checklistGroups: withDefaultChecklistGroups(doc.checklistGroups, doc.jobTypeCode),
+    items: doc.items,
+    paymentConditions: doc.paymentConditions,
+    remarks: doc.remarks,
+    seller: doc.seller,
+    approver: doc.approver,
+  };
+}
+
+function throwIfIncomplete(validation: { valid: boolean; fieldErrors: Record<string, string>; groupErrors: Record<string, string[]> }, message: string): void {
+  if (validation.valid) return;
+  throw new HttpError(422, message, {
+    code: "DOCUMENT_INCOMPLETE",
+    details: { fieldErrors: validation.fieldErrors, groupErrors: validation.groupErrors },
+  });
+}
+
 async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
   await requirePermission(req, "scopeOfWork:view");
   const doc = await loadScopeOrThrow(id);
-  res.status(200).json({ scopeOfWork: withStringId(doc) });
+  res.status(200).json({ scopeOfWork: normalizeScope(withStringId(doc)) });
 }
 
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
@@ -462,7 +437,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("shippingPhone" in body) update.shippingPhone = sanitizeShortText(body.shippingPhone, "เบอร์โทรผู้ติดต่อส่งของ");
   if ("billingContact" in body) update.billingContact = sanitizeShortText(body.billingContact, "ชื่อผู้ติดต่อวางบิล");
   if ("billingPhone" in body) update.billingPhone = sanitizeShortText(body.billingPhone, "เบอร์โทรผู้ติดต่อวางบิล");
-  if ("checklistGroups" in body) update.checklistGroups = sanitizeChecklistGroups(body.checklistGroups, doc.checklistGroups);
+  if ("checklistGroups" in body) update.checklistGroups = sanitizeChecklistGroups(body.checklistGroups, withDefaultChecklistGroups(doc.checklistGroups, doc.jobTypeCode));
   if ("items" in body) update.items = sanitizeItems(body.items);
   if ("paymentConditions" in body) update.paymentConditions = sanitizePaymentConditions(body.paymentConditions);
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
@@ -500,7 +475,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   await writeScopeAuditEntry(ctx, "Scope of Work Updated", `แก้ไข Scope of Work ${updated.scopeNumber}`, {
     scopeId: id, scopeNumber: updated.scopeNumber, quoteId: updated.quotationId,
   });
-  res.status(200).json({ scopeOfWork: withStringId(updated) });
+  res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
 async function handleFinalize(req: VercelRequest, res: VercelResponse, id: string) {
@@ -508,6 +483,10 @@ async function handleFinalize(req: VercelRequest, res: VercelResponse, id: strin
   const ctx = await requirePermission(req, "scopeOfWork:finalize");
   const doc = await loadScopeOrThrow(id);
   if (doc.status === "Final") throw new HttpError(400, "Scope of Work นี้เป็นสถานะ Final อยู่แล้ว");
+  throwIfIncomplete(
+    validateScopeOfWorkForFinalization(toValidationInput(doc)),
+    "กรุณากรอกข้อมูลที่จำเป็นให้ครบก่อนยืนยันสถานะ Final",
+  );
 
   const scopeOfWorks = await scopeOfWorksCollection();
   const now = nowIso();
@@ -517,7 +496,7 @@ async function handleFinalize(req: VercelRequest, res: VercelResponse, id: strin
   await writeScopeAuditEntry(ctx, "Scope of Work Finalized", `ยืนยันสถานะ Final ของ Scope of Work ${updated.scopeNumber}`, {
     scopeId: id, scopeNumber: updated.scopeNumber, quoteId: updated.quotationId,
   });
-  res.status(200).json({ scopeOfWork: withStringId(updated) });
+  res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
 async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: string) {
@@ -549,7 +528,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
       scopeNumber, yearMonth, jobSequence, secondaryCode,
       issueDate,
       items: source.items.map((it) => ({ ...it, id: randomUUID(), specifications: it.specifications.map((s) => ({ ...s, id: randomUUID() })) })),
-      checklistGroups: source.checklistGroups.map((g) => ({ ...g, options: g.options.map((o) => ({ ...o })) })),
+      checklistGroups: cloneChecklistGroups(source.checklistGroups),
       status: "Draft",
       version: 1,
       seller: { name: ctx.user.fullName, userId: ctx.user.id, date: "" },
@@ -573,7 +552,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
   await writeScopeAuditEntry(ctx, "Scope of Work Duplicated", `ทำสำเนา Scope of Work จาก ${source.scopeNumber} เป็น ${created.scopeNumber}`, {
     scopeId: created._id.toString(), scopeNumber: created.scopeNumber, quoteId: source.quotationId,
   });
-  res.status(201).json({ scopeOfWork: withStringId(created) satisfies ScopeOfWork });
+  res.status(201).json({ scopeOfWork: normalizeScope(withStringId(created)) satisfies ScopeOfWork });
 }
 
 /** "อัปเดตข้อมูลจากใบเสนอราคา" — an explicit, user-triggered re-pull of every quotation-derived
@@ -616,13 +595,17 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
   await writeScopeAuditEntry(ctx, "Scope of Work Refreshed", `อัปเดตข้อมูลจากใบเสนอราคาให้ Scope of Work ${updated.scopeNumber}`, {
     scopeId: id, scopeNumber: updated.scopeNumber, quoteId: updated.quotationId,
   });
-  res.status(200).json({ scopeOfWork: withStringId(updated) });
+  res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
 async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:print");
   const doc = await loadScopeOrThrow(id);
+  throwIfIncomplete(
+    validateScopeOfWorkForPrint({ ...toValidationInput(doc), status: doc.status }),
+    "กรุณากรอกข้อมูลที่จำเป็นให้ครบก่อนพิมพ์/ส่งออก PDF",
+  );
   await writeScopeAuditEntry(ctx, "Scope of Work Printed", `พิมพ์ / ส่งออก Scope of Work ${doc.scopeNumber}`, {
     scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId,
   });

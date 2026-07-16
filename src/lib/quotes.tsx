@@ -5,6 +5,7 @@ import { apiFetch } from "./apiClient.js";
 import type { TranslationKey } from "./i18n";
 import type { CustomerSnapshot } from "./customers";
 import type { TemplateSection, TemplateTermLine } from "./quotationTemplates";
+import type { ChecklistGroup } from "./documentRequirements";
 
 export type QuoteStatus =
   | "ร่าง"
@@ -175,6 +176,19 @@ export interface Quote {
     sourceHash: string;
     capturedAt: string;
   };
+  /**
+   * "ข้อกำหนดเอกสารและการส่งมอบ" checklist groups (Safety/ขนส่ง/Logo/เงื่อนไขการวางบิล/เอกสารส่งถึง/
+   * Nameplate/เงื่อนไขการส่งมอบงาน/ปจ.2, ฯลฯ) — added 2026-07-16 (required-field validation pass),
+   * reusing the same `ChecklistGroup` model Scope of Work already had. Server-generated at creation
+   * time (`buildDefaultChecklistGroups()`, api/_lib/documentRequirements.ts) from the quote's Job
+   * Type, same convention as Scope of Work's own `checklistGroups`. Optional here only because a
+   * quote created before this field existed won't have it in storage yet — `withDefaultChecklistGroups()`
+   * fills in the missing (unchecked) groups on read so validation always sees the full mandatory
+   * set instead of crashing/skipping. When a Scope of Work is created from this quotation, these
+   * selections are copied into its own `checklistGroups` as a one-time snapshot (see
+   * docs/MODULES/ScopeOfWork.md) — editing one afterward never changes the other.
+   */
+  checklistGroups?: ChecklistGroup[];
 }
 
 export type QuoteDraftFields = Pick<
@@ -184,6 +198,7 @@ export type QuoteDraftFields = Pick<
   | "deliveryMethod" | "deliveryAddress" | "project"
   | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks"
   | "jobTypeCode" | "jobTypeName" | "isPotentialOpportunity" | "followUpDate"
+  | "checklistGroups"
   // Client only ever sends the id — the server always re-derives `customerSnapshot` itself from
   // the submitted Customer Information fields, the same "never trust a client-supplied derived
   // value" rule `amount`/`jobTypeName` already follow. See api/handlers/quotes.ts.
@@ -452,6 +467,12 @@ export async function updateQuote(id: string, fields: QuoteUpdateFields): Promis
 export async function duplicateQuote(id: string): Promise<Quote> {
   const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}/duplicate`, { method: "POST" });
   return quote;
+}
+/** Server-side print/PDF completeness gate (added 2026-07-16) — call this before `window.print()`.
+ * Throws `ApiError` (422, DOCUMENT_INCOMPLETE) if the quote is missing required fields/selections,
+ * so a direct browser print can never bypass validation. See api/handlers/quotes.ts. */
+export async function printQuote(id: string): Promise<void> {
+  await apiFetch<void>(`/quotes/${id}/print`, { method: "POST" });
 }
 export async function performWorkflowAction(
   id: string,

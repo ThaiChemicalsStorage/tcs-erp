@@ -172,6 +172,46 @@ Labels: `text-xs text-muted-foreground block mb-1`/`mb-1.5` (**2026-07-13**: `te
 
 **Field-pair grids** (two related inputs side by side, e.g. contact name/phone, issue/expiry date): always `grid-cols-1 sm:grid-cols-2`, never bare `grid-cols-2` — a bare 2-column grid forces two inputs into half a mobile screen each, which is how the quotation editor's Critical mobile-usability finding happened (2026-07-13, see CHANGELOG.md). This applies to any new field-pair grid you add, in any form.
 
+### Required-Field Validation Components (added 2026-07-16)
+Formalizes the pre-existing hand-repeated pattern (`<span className="text-[#e05252]">*</span>` next
+to a label, `text-xs text-[#e05252] mt-1` error text) into shared components, first used by the
+Quotation/Scope of Work completion-validation pass — reuse these for any new required-field UI
+instead of re-inlining the markup:
+- **`src/components/RequiredFieldLabel.tsx`** — `<RequiredFieldLabel>ชื่อลูกค้า</RequiredFieldLabel>`
+  renders the label text + a red `*` (pass `required={false}` for an explicitly-optional field to
+  render the label with no marker, e.g. an email/tax-ID field configured optional in
+  `quotationRequiredFields`/`scopeOfWorkRequiredFields`).
+- **`src/components/FieldError.tsx`** — `<FieldError message={validation.fieldErrors.contactName} />`,
+  renders nothing when `message` is undefined, safe to always mount right under a field.
+- **`src/components/ValidationSummary.tsx`** — one top-of-form banner:
+  "ยังไม่สามารถดำเนินการต่อได้ / กรุณากรอกข้อมูลที่จำเป็นให้ครบ N รายการ" plus up to 8 itemized
+  messages. Not itself the enforcement — see Required-Field Validation Architecture below.
+- **`src/components/DocumentCompletionIndicator.tsx`** — compact "N%" progress chip for a toolbar,
+  a user aid only, never the actual gate.
+- **`src/pages/quotation/ChecklistGroupCard.tsx`** (renamed from `ScopeOfWorkChecklistGroup.tsx`,
+  since Quotation now renders the identical checkbox/radio-group card for its own checklist groups)
+  — takes `required`/`error` props for the red-asterisk-in-title + inline error variant.
+
+### Required-Field Validation Architecture (Quotation + Scope of Work, added 2026-07-16, buttons corrected 2026-07-16 same-day fix pass)
+Real enforcement is never UI-only. `src/lib/validation/quotationValidation.ts`/
+`scopeOfWorkValidation.ts` export the same pure functions the frontend calls to compute
+`{valid, fieldErrors, groupErrors, missingCount}` on every render, and the server calls (value-
+imported directly into the API bundle, no duplicated logic) before Print/Finalize/every
+non-Draft-preserving workflow transition — a `422 DOCUMENT_INCOMPLETE` blocks the request even if a
+client somehow bypassed the disabled button. Buttons that require a complete document carry a real
+HTML `disabled` attribute plus `opacity-40 cursor-not-allowed` styling and a `title=` tooltip
+explaining why (**corrected from an earlier same-day pass that used only the styling/click-guard,
+not a real `disabled` attribute — flagged Medium Priority by an independent Codex review as not
+meeting accessible-disabled-control semantics**). The `onClick` guard (`guardedWorkflowAction()`/
+`handlePrintClick()` in `QuoteDocument.tsx`, the equivalent in `ScopeOfWorkDocument.tsx`) is kept as
+a harmless defensive no-op for the now-unreachable "somehow still clicked" case — the server 422 is
+the actual enforcement boundary regardless of what the button's `disabled` state does. A server-
+returned `422`'s `fieldErrors`/`groupErrors` are merged into the on-screen validation
+(`mergeServerValidationErrors()`, `src/lib/validation/types.ts`) so a server-only rejection is
+visibly highlighted inline, not just toasted. See [MODULES/Quotation.md](../MODULES/Quotation.md)/
+[MODULES/ScopeOfWork.md](../MODULES/ScopeOfWork.md) "Required-Field Validation" for the exact
+required-field/mandatory-group lists.
+
 ### Tables
 Header row: `bg-muted/40` (or `/20`, `/30`), cells `text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider`. Body rows: `border-b border-border/50 hover:bg-secondary/30 transition-colors`. Sortable columns (Product list) show a chevron icon next to the active sort column, click toggles asc/desc. **Always wrap the `<table>` itself in a `<div className="overflow-x-auto">`** (nested inside the outer `bg-card border rounded-xl overflow-hidden` card so rounded corners still clip) so a narrow viewport scrolls the table horizontally instead of squeezing every column — `QuoteList.tsx`/`ProductList.tsx`/`AuditLogPage.tsx`/`UserManagementPage.tsx` were missing this until 2026-07-13; every other table already had it. Long free-text columns likely to overflow in practice (customer/client name, product name) should get `truncate max-w-[…]` plus a `title="..."` tooltip with the full value, matching `UserManagementPage.tsx`'s user-name column — don't let a long name force the whole row/table wider.
 

@@ -1,313 +1,202 @@
-# Codex Review Report — Scope of Work Module
+# Codex Review Report — Quotation and Scope of Work Required-Field Validation
 
-**Review date:** 2026-07-15  
-**Scope:** Static code/documentation audit of the new Scope of Work module. Application source was not modified.
+**Review date:** 2026-07-16
+**Method:** Static review only. No application source, configuration, dependency, formatting, or commit changes were made.
 
 ## Executive Summary
 
-The module is substantially implemented: a Scope of Work can be created from a quotation, copied data is stored as an independent snapshot, items are editable, server-side sequence allocation and unique indexes are present, checklist state is saved, signatures are supported, and API permissions are enforced.
+Shared validation helpers, required markers, Thai inline errors, summaries, and server-side `422 DOCUMENT_INCOMPLETE` responses are implemented for both documents. Draft saves are intentionally allowed, while Quotation workflow transitions, Scope Finalization, and their API print gates use the shared validation functions.
 
-There are no confirmed Critical issues. Three High Priority gaps prevent full acceptance: the quotation contact and salesperson are not retained in the Scope of Work snapshot, the required suffix code is an ungoverned optional free-text field and is omitted on creation, and Global Search has no Scope of Work integration. A visual PDF/browser-print test and lint/build could not be run because this WSL1 environment has no usable `node` binary and no PDF rendering utility.
+Two High Priority defects prevent acceptance: Scope of Work creation discards the Quotation's selected document-requirement groups instead of snapshotting them; and four mandatory groups have conditional “Other” detail validation but no editable detail field in the UI. Final-action controls are visually dimmed and guarded, but they are not actually disabled. Static review also found incomplete validation coverage for several visible editable fields and semantic date checks at finalization.
 
 ## Critical Issues
 
-None confirmed. The server uses an atomic MongoDB counter and unique indexes on both `scopeNumber` and `{yearMonth, jobSequence}`. This prevents duplicate persisted codes under normal concurrent creation. The create/duplicate handlers should still translate a rare `E11000` error into a controlled retry/conflict response, but the database constraint prevents the duplicate itself.
+None confirmed. Finalization and print endpoints independently revalidate server-side and return structured 422 errors. A client-only validation bypass was not found.
 
 ## High Priority Issues
 
-1. **Quotation contact and salesperson are not pulled/stored.** `buildCustomerSnapshot()` stores company/address/tax/phone/email/project, but not `quote.contactName`; shipping and billing contacts/phones start blank. `seller` is set to the user who creates the Scope of Work, not `quote.salesperson`. This fails the stated data-pull requirement for customer contact and salesperson, and loses the generic quotation contact even though it is real quotation data. Evidence: `api/_lib/scopeOfWorkHandler.ts`, `ScopeOfWorkCustomerSnapshot`, `buildCustomerSnapshot()`, and `handleCreate()`.
-2. **Suffix code does not meet the required configured job-code format.** New documents generate `PQ{YYYYMM}-{sequence}-{jobTypeCode}` because `secondaryCode` is always blank. The final segment is an editable, free-text field explicitly marked as an unresolved business question; it is not server-configured or validated as a suffix policy. The required format includes `-{suffixCode}` (for example `-SK`). Evidence: `computeScopeNumber()`, `handleCreate()`, and `docs/MODULES/ScopeOfWork.md` “Open Business Question”.
-3. **Scope of Work is absent from Global Search.** The search result contract, handler collections, projections, UI groups, and indexes contain quotations/customers/products/templates/pages/users only. It cannot be searched by Scope number, quotation number, customer, Job Type, PO, or status. Evidence: `src/lib/search.ts` and `api/_lib/searchHandler.ts`.
+1. **Quotation selections are not copied into Scope of Work.** `handleCreate()` in `api/_lib/scopeOfWorkHandler.ts` sets `checklistGroups: buildDefaultChecklistGroups(...)`, discarding the source Quotation's checked options and notes. This violates the required Quotation-to-Scope snapshot behavior and makes a complete Quotation create an incomplete Scope with blank mandatory groups.
+2. **“Other” detail validation is impossible from the normal UI for Safety, ขนส่ง, Nameplate, and เอกสารส่งถึง.** `validateChecklistGroups()` requires `group.note` for these selections, but `buildDefaultChecklistGroups()` only defines `note: ""` for Logo. `ChecklistGroupCard` renders the detail input only when `note !== undefined`; therefore normal users cannot satisfy the validator for the other four groups. The API can accept a note, so this is an inconsistent client/server workflow rather than a missing server rule.
+3. **Conditional requirements are incomplete.** Safety's `TOR / Requirement from customer` does not require a detail; billing has no custom-detail option; delivery “customer form (attach file)” has neither attachment nor date/day-specific rule; and ปจ.2 has no supporting-detail model or validation. These requested conditional cases cannot be demonstrated as enforced.
 
 ## Medium Priority Issues
 
-1. **A4 portrait is not explicitly specified or visually verified.** The only shared print rule is `@page { margin: 12mm; }`; there is no `size: A4 portrait`. Actual browser/PDF output was not testable here.
-2. **Multi-page item detail can split poorly.** Main item rows have `breakInside: avoid`, but their following specifications/remarks row does not. A description/specification block can split across pages. The table header is correctly in `<thead>`, so it should repeat in compliant browsers.
-3. **No explicit source-quotation authorization is checked on refresh.** Create checks `quotations:view`; refresh reads the linked quotation after only Scope edit/ownership authorization. With the current broad quotation-view model this is not an observed exposure, but future quotation record-level access would need the same source access check.
-4. **Some required section terminology is not directly represented.** The code has billing-contract conditions and payment conditions, but no separately named “Contract inspection” group. Confirm this mapping against the reference/business terminology.
+1. **Final-action buttons are not disabled.** Quotation Print/Submit/Approve/Send and Scope Print/Finalize omit the HTML `disabled` attribute when incomplete. They use dimming, tooltip text, and click guards, which block normal activation, but do not meet the requested disabled-control behavior.
+2. **Required-field policy does not cover every visible editable field centrally.** The central maps omit visible Quotation follow-up date, potential-opportunity checkbox, line unit price/discount, and several optional editors; Scope maps omit payment `method`, `notes`, signatory dates, and item remarks/specification rows as explicit configuration. Some are reasonable optional values, but they are not explicitly declared optional in the promised central configurations.
+3. **Finalization validators only test nonblank date strings.** `validateQuotationForFinalization()` and `validateScopeOfWorkForFinalization()` do not call `validateIsoDateOrEmpty()`. PATCH/create sanitizers validate newly submitted dates, but malformed legacy/persisted values can meet the finalization check merely by being nonblank.
+4. **Save-Draft errors are only surfaced as a toast.** Field/group errors from a server 422 are structured, but the document editors do not map returned `fieldErrors`/`groupErrors` back into form state. Current client-side validation is usually shown, but a server-only/race failure is not highlighted inline.
 
 ## Low Priority Issues
 
-1. Delete confirmation says a deleted document can be restored by an administrator, but no restore endpoint/UI was found.
-2. The print checkbox uses a literal `✓` in a custom box. This avoids browser-native checkbox rendering differences, but should be tested in target PDF printers/fonts.
+1. The completion counter is an aggregate count, not a per-field completion explanation.
+2. Browser `window.print()` remains inherently available from the browser UI after a page renders; the protected API gate prevents the application print flow and direct print endpoint bypass, but cannot technically stop a user invoking the browser's own print command on already-rendered HTML.
+3. Automated runtime/API tests for the required bypass scenarios were not found; conclusions are static.
 
-## Reference PDF Layout Review
+## Quotation Required Field Review
 
-The supplied PDF is present as a one-page PDF: `public/Scope Of Work PQ202607-174-LI-SK บริษัท เค ไทย ไฮดรอลิค จำกัด.pdf`. This environment lacks PDF rendering/extraction tools, so an independent visual inspection of its actual pixels, handwritten annotations, and exact A4 geometry was not possible.
+Quotation has a central `quotationRequiredFields` configuration. Required strings use trimmed blank checks; line descriptions, units, quantities (>0), and specifications are checked before final workflow/print. Server sanitizers reject malformed strings, non-finite numbers, and invalid dates on writes. Empty/non-header line collections are blocked.
 
-The implementation’s documented/reference mapping and print component include the expected title, two-column header, checklist grid, four-column item table, notes, and seller/approver signature table. The print component deliberately excludes blue handwritten values and pricing. The outstanding visual acceptance items are exact field/section parity, column spacing, A4 portrait, checkbox glyph output, and multipage output.
+Partially implemented: price and discount are numeric-sanitized on server writes but not included in finalization required-field policy; editable follow-up date is not in the central optional map. Server-generated fields (ID, amount, dates/history/snapshots) are correctly excluded from user-required checks.
 
-## Quotation Data Pull Review
+## Scope of Work Required Field Review
 
-Implemented from the selected quotation: customer company/address/tax/phone/email/project (customer snapshot first), quotation number, PO, Job Type code/name, delivery address, payment terms, remarks, item description, specifications, sub-details, quantity, unit, and line notes.
+Scope of Work has a central `scopeOfWorkRequiredFields` configuration. Required strings are trimmed, at least one non-header item is required, item quantity must exceed zero, and each item needs a nonblank specification. Payment percentages, when used, must both be supplied and total 100%. Finalization requires an approver; Draft printing intentionally does not.
 
-Missing/incorrect: `contactName` is not copied; shipping/billing contact fields are blank rather than populated from the available generic contact; no quotation salesperson snapshot exists and seller becomes the creating user. No unrelated collection is used for the copied quotation data.
+Partially implemented: semantic date validation is only at persistence, optional visible fields are not consistently centralized, and item sanitizer converts an invalid quantity type to `null` rather than immediately rejecting it on Draft save.
 
-## Customer and Item Snapshot Review
+## Mandatory Selection Group Review
 
-Implemented. `quotationId`, a copied `customerSnapshot`, copied item/specification data, copied Job Type, PO, remarks, payment description, and edited Scope of Work fields are persisted. Later quotation/customer/product changes do not update an existing Scope of Work unless a user explicitly calls refresh; Final records cannot refresh. The customer snapshot is sourced from `quote.customerSnapshot` before legacy quote fields, avoiding issuer company/Profile confusion.
+All eight required groups are built and rendered in both forms: Safety, ขนส่ง, Logo, เงื่อนไขการวางบิล, เอกสารส่งถึง, Nameplate, เงื่อนไขการส่งมอบงาน, and ปจ.2. They receive red markers, Thai inline errors, and server/client shared validation. Single groups render radio controls and are server-clamped to one value; เอกสารส่งถึง is multiple-choice and requires at least one checkbox.
 
-## Job-Code Generation Review
+No mandatory group is silently selected. Only non-mandatory test-report suggestions are preselected for LI/TA, which is documented as a job-type business suggestion. However, conditional detail entry is broken for four Other choices as described in High Priority issue 2.
 
-Implemented: generation is server-side; `nextJobSequence()` uses MongoDB `findOneAndUpdate` with `$inc`/upsert; year/month comes from the Scope issue date; Job Type is copied from the quotation; unique indexes protect `scopeNumber` and `{yearMonth, jobSequence}`; the number is locked on Final except through a new duplicate.
+## Conditional Validation Review
 
-Partial: suffix is not configurable as a governed setting and is blank by default, so the generated code does not initially match the required four-segment format. Creation/update/duplicate do not catch/retry a duplicate-key failure, although the uniqueness constraints stop duplicate storage.
+Implemented: Logo Etc. detail; generic Other detail rules in validation; transportation/nameplate/document-destination Other rules server-side; Scope payment percentage pair/sum rule.
 
-## Handwritten/Editable Field Review
+Missing/partial: UI detail inputs for four Other rules; Safety TOR detail; billing custom detail; delivery customer-form attachment and date/day condition; ปจ.2 supporting detail. “Other” notes also do not visibly identify which conditional selection caused the requirement beyond the group-level Thai error.
 
-No hardcoded blue handwritten sample contacts, phone numbers, dates, notes, or signatures were found. Drawing/delivery/shipping/billing fields are blank and editable; approver starts blank; payment percentages start blank; print renders live values or blanks. Seller is populated from the authenticated creator, which is real ERP data rather than a sample signature.
+## Frontend Validation UX Review
 
-## Checkbox and Radio Review
+Implemented: required markers for configured fields/groups, Thai inline field/group errors, top summary, incomplete-group border highlighting, preserved React form state after local failure, completion indicator, tooltip explanation, and summary scrolling on blocked action.
 
-Safety, document destination/type, transportation, logo, name plate, Test Report type/level, billing-contract conditions, delivery document format, and payment conditions exist. Single-selection groups use radio inputs in the editor and are server-clamped to one checked value; multiple groups use checkboxes. The server persists only known group/option keys and print renders custom square/check-mark symbols, not browser-native controls.
+Partial: blocked controls are not semantically disabled; scroll targets the summary rather than focusing the first invalid control; server-returned error maps are not applied after failed requests. There is no visible required marker for every editable field because several values are omitted from central policy.
 
-Partial: LI/TA receive predefined Test Report suggestions, which are intentional but should be business-approved as non-random defaults; actual print state could not be exercised. “Contract inspection” is not explicitly named.
+## Server-Side Validation Review
 
-## Item and Manual Item Review
+Implemented: Quotation workflow applies shared validation before all non-exempt transitions from Draft; Scope finalization applies shared validation; both print endpoints revalidate persisted values; direct API calls require permissions; rejected incomplete actions return HTTP 422 with `code: DOCUMENT_INCOMPLETE`, `fieldErrors`, and `groupErrors`. Request payload sanitization uses explicit allowlists, so client `isComplete`/completion flags are not mass-assignable.
 
-Implemented. Quotation order is preserved, section headers are retained, and descriptions, quantities, units, specifications/sub-details, and customer-facing line notes are copied. Users can add, edit, delete, duplicate, and drag-reorder manual items/specification lines. Price, discount, VAT, internal tags, and internal notes are not copied or printed.
+Partial: validation utilities are imported from `src/lib`, coupling server deployment to frontend source layout; semantic date validation is not rerun by the finalization functions for old data.
 
-## Print / PDF Review
+## Draft and Workflow Review
 
-Implemented structurally: print-only document, title, two-column header, custom checkbox symbols, item table, remarks, signature table, `<thead>` header, and hidden editor/toolbars. Blank values render as blank lines rather than sample placeholders; pricing/internal data has no print path.
+Incomplete drafts can be saved. Incomplete Quotations cannot be submitted, approved, sent, accepted, won, or printed through the application endpoint. Incomplete Scope documents cannot become Final or print. Reopen normalizes missing checklist groups as unchecked, preserving values rather than silently completing them.
 
-Partial/unverified: no explicit A4 portrait page size; no browser/PDF visual run; no practical multi-page test; specification rows may split from their item row. The reference PDF could not be rendered in this environment.
+Cancellation/rejection are intentionally validation-exempt status changes. Confirm business policy: the stated “cannot change to a final status” objective may require a decision whether cancellation of an incomplete draft is acceptable.
 
-## Signature Review
+## Print / PDF Protection Review
 
-Implemented. Seller and approver blocks have names, dates, optional linked-user saved signature images, and blank signature/date lines when absent. No sample handwritten signature is copied. Note that seller defaults to the creating user rather than the quotation salesperson (High Priority data mapping issue).
+`POST /api/quotes/:id/print` and `POST /api/scope-of-works/:id/print` require export/print permissions and run the same completeness validators before returning success; incomplete records get 422. The UI calls these gates before `window.print()`. Checked states are rendered from stored state in print components, and incomplete old records normalize to unchecked, not fake values.
 
-## RBAC and Security Review
+No server-generated PDF export endpoint was found. Direct application print URLs/APIs do not bypass validation; native browser printing of rendered client HTML remains outside server control.
 
-Implemented server-side as `scopeOfWork:view`, `create`, `edit`, `finalize` (the approve equivalent), `print`, and `delete`; the requested `approve`/`manage` names do not exist literally. Direct API endpoints enforce these permissions, edit/delete additionally enforce owner-or-finalize-holder access, Final locks edits, and creation also requires `quotations:view`. Rewrites route Scope APIs to the authenticated quotations handler.
+## Quotation-to-Scope-of-Work Snapshot Review
 
-No confirmed direct URL/API RBAC bypass was found by static review. Runtime authorization tests were not possible without a working application/database.
+Most source data is copied by value into Scope (customer snapshot, job type, PO, delivery location, remarks, payment description, and cloned item/specification structures). Scope edits do not write back to Quotation, and later Quotation edits only affect Scope through the explicit refresh endpoint.
 
-## Existing Quotation Regression Review
+Missing: required document-selection checked states and notes are not copied at creation. Refresh likewise deliberately leaves Scope checklist groups untouched, so it cannot repair the missing initial snapshot. This is a High Priority data-flow defect.
 
-Static review indicates quotation routes remain separate and Scope creation reads/copies rather than mutates the quotation. Existing quotations with usable fields can create a Scope; zero-item quotations have an editor warning and manual-item option. The quotation toolbar opens the most recently updated Scope when one exists. Concurrent/duplicate creation results in distinct server-assigned codes; multiple Scope documents per quotation are intentionally supported via duplicate.
+## Existing Document Compatibility Review
 
-Live quotation open/edit/save regression testing was not possible in this environment.
+Old records lacking checklist data load through `withDefaultChecklistGroups()` with unchecked mandatory groups. They do not crash, are not automatically finalized/printed, and can be manually completed. Normalization is response-only and not a destructive migration.
 
-## Global Search Integration Review
+Partial: malformed legacy date strings can pass finalization's nonblank-date test; a runtime migration/old-record test was not possible in this environment.
 
-Missing. No Scope of Work collection/query/result/UI/RBAC search branch exists, so none of the required six search keys are supported.
+## Security and Bypass Review
 
-## No Fake Data Review
+Workflow transitions enforce allowed source statuses, ownership/role permission checks, and complete-document validation. Scope Final records are immutable. Print endpoints require permission and do not trust the frontend completion indicator. Sanitizers reject unknown checklist structure/options and clamp radio selections.
 
-No sample PDF handwritten values were hardcoded into the Scope model, API defaults, or print component. Checklist labels are fixed document structure, not customer data. Customer/job/item fields are quotation-derived; seller is authenticated-user data. The only concern is omission of real quotation `contactName`/`salesperson`, not fabricated values.
+No confirmed unauthorized status-update or mass-assignment bypass was found statically. Runtime authorization testing was not possible.
 
 ## Documentation Review
 
-Strong module/API/RBAC documentation exists and candidly records the unresolved suffix and contact-mapping decisions. That documentation confirms, rather than resolves, the two High Priority requirement gaps. Add the Global Search status and final business policy for suffix/contact/seller mapping.
+Documentation and inline comments describe the shared validation pass, print gate, draft behavior, and compatibility approach. It currently overstates the Quotation-to-Scope requirement-copy behavior: comments in `QuoteDocument.tsx` and module documentation say selections are copied, while `handleCreate()` initializes new defaults. Documentation must be corrected alongside the implementation.
 
 ## Requirements Checklist
 
-- [x] Scope of Work can be created from quotation
-- [x] Customer name pulled from quotation
-- [x] Job Type pulled from quotation
-- [x] Items pulled from quotation
-- [x] Quantity/unit pulled correctly
-- [x] New manual items supported
-- [!] Job code generated correctly
-- [x] Job code unique and server-generated
-- [x] Blue handwritten values not hardcoded
-- [!] Missing fields editable
-- [!] Checkbox sections implemented
-- [x] Checkbox states saved
-- [!] Checkbox states print correctly
-- [x] Internal cost/notes hidden
-- [x] Snapshot stored
-- [x] Quotation changes do not mutate old Scope of Work
-- [x] Seller signature section exists
-- [x] Approver signature section exists
-- [!] A4 print layout works
-- [!] Multi-page layout works
-- [x] RBAC enforced
-- [!] Existing quotations still work
+- [!] All visible fields required by default
+- [!] Optional fields centrally configured
+- [x] Whitespace-only values rejected
+- [x] Safety required
+- [x] ขนส่ง required
+- [x] Logo required
+- [x] เงื่อนไขการวางบิล required
+- [x] เอกสารส่งถึง required
+- [x] Nameplate required
+- [x] เงื่อนไขการส่งมอบงาน required
+- [x] ปจ.2 required
+- [!] Other details conditionally required
+- [x] Empty item rows rejected
+- [x] Save Draft allowed when incomplete
+- [x] Continue blocked when incomplete
+- [x] Submit blocked when incomplete
+- [x] Approve blocked when incomplete
+- [x] Print/PDF blocked when incomplete
+- [x] Frontend validation exists
+- [x] Server validation exists
+- [x] Direct print URL blocked
+- [x] Workflow API bypass blocked
+- [ ] Quotation values copied into Scope of Work
+- [!] Scope of Work snapshot stored
+- [!] Existing records remain compatible
 - [ ] Build passes if checked
 - [!] Documentation updated
 
 ## Suggested Fix Plan for Claude Code
 
-1. Define and server-enforce the suffix source/configuration; generate the complete four-part code on creation and handle duplicate-key errors predictably.
-2. Add a frozen quotation contact and salesperson snapshot; decide how generic contact maps to shipping/billing fields without inventing data.
-3. Preserve the current snapshot/explicit-refresh behavior and add automated tests proving quotation/customer edits do not mutate old Scope documents.
-4. Keep internal prices/notes excluded and add a print regression test confirming this.
-5. Add/confirm the exact required contract-inspection/checklist mapping and test saved/printed radio/checkbox states.
-6. Set `@page` explicitly to A4 portrait; test one-page and long multi-page PDF output and keep item/spec blocks together.
-7. Add Scope of Work Global Search queries/results for number, quotation, customer, Job Type, PO, and status, behind `scopeOfWork:view`.
-8. Add API/RBAC integration tests for all endpoints and source-quotation access.
-9. Clarify delete/restore UX and seller workflow.
-10. Update module/API/RBAC documentation after the above decisions, then run lint/build in a Node-capable environment.
+1. Fix server-side Quotation-to-Scope snapshot mapping: deep-copy source `checklistGroups` including checked options and notes at Scope creation; keep Scope independent; add tests.
+2. Add a visible note/detail editor for every conditional Other option, preserve/sanitize it server-side, and validate Safety TOR, billing custom/percentages, delivery attachment/date/day, and ปจ.2 details according to confirmed business rules.
+3. Apply real `disabled` attributes and accessible disabled explanations to final actions while retaining server validation and click guards.
+4. Put every editable field in the central required/optional policy; rerun ISO/date and numeric semantic validation during finalization/print, including legacy records.
+5. Apply server 422 `fieldErrors`/`groupErrors` into inline UI state and focus the first invalid input.
+6. Add API/RBAC tests for direct workflow/print calls, `isComplete` injection, stale payloads, old records, conditional selections, and snapshot immutability.
+7. Correct documentation to match the actual snapshot behavior once fixed.
 
 ## Verification Limits
 
-`npm run lint` and `npm run build` were attempted but could not execute: `node` is not installed/usable here and npm reports WSL1 is unsupported. PDF visual review was blocked because `pdfinfo`, `pdftotext`, and a PDF renderer were unavailable. These are verification limitations, not passing results.
+`npm run lint` and `npm run build` were both attempted. Neither started: npm reported `WSL 1 is not supported` and `Could not determine Node.js install directory`. No packages were installed and no source files were changed. Runtime/database/PDF visual tests were therefore not performed.
 
 ---
 
-## Claude Fix Status (2026-07-15)
-
-Fix pass against this report's findings, run in a Node-capable environment (so — unlike the review
-itself — `tsc`/`lint`/`build` were actually executable here). Full itemized diff in `CHANGELOG.md`'s
-"2026-07-15 — Scope of Work: Codex review fix pass" entry; full field-level writeup in
-`docs/MODULES/ScopeOfWork.md`.
+## Claude Fix Status (2026-07-16, same day)
 
 ### Critical issues fixed
+None were confirmed by the review, so none were needed.
 
-None reported by this review (0 Critical found) — nothing to fix in this category. The review's
-one Critical-adjacent recommendation (translate a rare `E11000` duplicate-key error into a
-controlled response instead of an unhandled 500) was still implemented defensively: `handleCreate`/
-`handleDuplicate` (`api/_lib/scopeOfWorkHandler.ts`) now retry up to 3 times, re-reserving a fresh
-sequence number each time, before returning a clean `409` if every attempt collides.
+### High Priority issues fixed
+1. **Quotation-to-Scope checklist snapshot** — `deriveFromQuotation()` (`api/_lib/scopeOfWorkHandler.ts`) now deep-copies `quote.checklistGroups` (`cloneChecklistGroups()`, fresh option objects, no aliasing) when the source quotation has one, instead of resetting to `buildDefaultChecklistGroups()`. Falls back to defaults only when the quotation itself predates the field — an honest "nothing to copy" default, never a fabricated completed selection. Applied only at `handleCreate`, deliberately not `handleRefresh` (matches every other quotation-derived field's one-time-snapshot semantics and the explicit "editing the Quotation later must not silently change an existing Scope of Work" rule).
+2. **Unreachable "Other"/TOR detail input** — `buildDefaultChecklistGroups()` (`src/lib/documentRequirements.ts`) now initializes `note: ""` on `safety`/`transportation`/`namePlate`/`documentsToSend` (previously only Logo), so `ChecklistGroupCard`'s conditional detail input actually renders for all four. `withDefaultChecklistGroups()` backfills the missing `note` onto an already-saved record (never touching `checked` state or an existing note). `safety`'s "TOR" option was also added to `OTHER_OPTION_KEYS`, since the business rule says "If TOR **or** Other is selected" — previously only "Other" triggered the requirement.
 
-### High Priority issues fixed (3 of 3)
+### Remaining issues
+- **Billing "Custom" schedule detail, delivery "customer form" attachment/date rule, ปจ.2 supporting-detail model** — not built. Each would require inventing a business option catalog that doesn't exist today and was never confirmed — both this fix task's and the original validation task's instructions explicitly rule out fabricating business options/values. Tracked in TODO.md pending real business input.
+- **Native browser print** — `window.print()` is a browser capability available on any rendered page; no server-side gate can prevent invoking it directly once the page has loaded (only the *application's own* Print button/print-triggering API calls are gated, and are). Not fixable at this layer, matches the review's own Low Priority note.
+- **Shared validation code under `src/lib`** — the review noted this couples API deployment to frontend source layout. This is this codebase's existing, standing, already-documented architecture (see `docs/CLAUDE.md`'s Coding Standards on `src/lib` files transitively imported into `api/`), predating this feature and used by many other modules (`roles.ts`, `permissions.ts`, `quotes.tsx` types, etc.) — not a defect introduced by this pass, and changing it would be an unrelated architectural redesign out of scope for this fix task.
+- **`sanitizeScopeItem()` coerces an invalid `quantity` type to `null` rather than rejecting the write** — pre-existing behavior of the Scope of Work item sanitizer, unrelated to required-field validation specifically (it's about malformed-input handling, not completeness), out of scope per "do not redesign unrelated modules."
+- **No automated bypass/snapshot/old-record/conditional-validation tests** — this project has no automated test infrastructure anywhere (a longstanding, separately-tracked decision, see RBAC.md "Known Gaps"), not something this fix task introduces in isolation.
+- **Per-field programmatic focus on the first invalid control** — still summary-level scroll only (`ValidationSummary`), not a ref per field; unchanged from the original pass, out of scope for this fix-only task.
 
-1. **Quotation contact/salesperson not pulled/stored** — fixed. `ScopeOfWorkCustomerSnapshot`
-   gained `contactName` (frozen from `quote.customerSnapshot.contactName`/`quote.contactName`);
-   `ScopeOfWork` gained a new frozen, non-editable `quotationSalesperson` field (from
-   `quote.salesperson`, refreshed only by the explicit refresh action); the default `seller`
-   signatory now prefers `quote.salesperson` (resolving a matching real user by `fullName` for the
-   print signature-image link) instead of unconditionally defaulting to the creating user.
-2. **Suffix code didn't meet the required job-code format** — fixed. `secondaryCode` is now a
-   **required** field on `POST /api/scope-of-works` (server-validated non-empty; a client prompt in
-   `QuoteDocument.tsx` collects it before the create call fires), so every newly-generated
-   `scopeNumber` always has its full 4-segment format from the moment of creation. Its business
-   *meaning* is deliberately still not invented — see "Remaining issues" below.
-3. **No Global Search integration** — fixed. `GET /api/search` gained a `scopeOfWorks` result group
-   (`searchScopeOfWorks()`, `api/_lib/searchHandler.ts`), gated by `scopeOfWork:view`, matching all
-   6 keys the review named (scope number, quotation number, customer, Job Type, PO, status).
-   `GlobalSearch.tsx` renders it; clicking a result opens the source quotation then that Scope of
-   Work's editor (new deep-link state in `App.tsx`/`QuotationPage.tsx`).
+### Required fields implemented
+No change from the prior pass's field list — the fixes here were about *reachability* and *classification completeness*, not adding new required fields. Newly **explicitly classified as optional** (previously silently absent from the central config, per Medium Priority #2): Quotation's `followUpDate`, `isPotentialOpportunity`, `unitPrice`/`discount` (documented via `QUOTATION_LINE_OPTIONAL_NUMERIC_FIELDS`); Scope of Work's `paymentConditions.method`/`.notes`, `seller.date`/`approver.date`, item `remark` (via `SCOPE_ITEM_OPTIONAL_FIELDS`).
 
-### Medium/Low issues also fixed this pass
+### Mandatory groups implemented
+Unchanged (8 of 11 groups, same as before). What changed: the "Other requires detail" conditional is now actually satisfiable in the UI for all 5 groups that have it (`logo`, `safety`, `transportation`, `namePlate`, `documentsToSend`), not just Logo; `safety` additionally treats its "TOR" option the same as "Other."
 
-- A4 portrait made explicit (`@page { size: A4 portrait; margin: 12mm; }`, `src/styles/index.css`).
-- Item rows and their own following specification/remark row are now grouped into one unbreakable
-  `<tbody style="break-inside: avoid">` each (`ScopeOfWorkPrintDocument.tsx`) — closes the
-  "specification block can split from its item row across a page break" finding.
-- `refresh` now also requires `quotations:view` (previously only Scope of Work edit/ownership
-  authorization was checked before reading the linked quotation — matches `create`'s existing rule).
-- Delete-confirmation wording corrected to stop implying a restore capability that doesn't exist.
+### Conditional rules implemented
+"Other"/"Etc." detail requirement: now reachable and enforced for all 5 applicable groups (previously only enforceable for Logo from the UI). Safety "TOR" now also requires detail. Payment-percentage-sum-to-100 rule: unchanged, already correct. Billing custom / delivery attachment-date / ปจ.2 detail: **not implemented** — see Remaining Issues.
 
-### Remaining issues (not fixed, by design or deferred)
+### Server validation result
+Unchanged in shape (still `422 { code: "DOCUMENT_INCOMPLETE", fieldErrors, groupErrors }`), now semantically stronger: finalization validators reject a non-blank-but-malformed date (`isValidIsoDateOrEmpty()`) where they previously only checked non-blank. `npx tsc --noEmit` (frontend) and `npx tsc --noEmit -p tsconfig.api.json` (API) both pass clean.
 
-- **`secondaryCode`'s business *meaning*** is still unconfirmed — its *presence* is now required
-  (this pass), but what it should represent, or whether it should be a selectable list instead of
-  free text, remains an open question for the business, per the original task's explicit
-  instruction not to invent one. See `MODULES/ScopeOfWork.md` "Open Business Question."
-- **No restore endpoint/UI** for a soft-deleted Scope of Work (Low Priority) — the misleading UI
-  text was fixed, but a real restore action was not added this pass (no confirmed need yet).
-- **No separately-named "Contract inspection" checklist group** (Medium) — this pass followed the
-  reference PDF as the literal source of truth for exact labels/grouping (per the original task
-  instruction), which has no directly equivalent printed group; the spec's suggested category list
-  and the PDF's actual groups don't map 1:1. Flagged for business confirmation, not resolved by
-  invention.
-- **No un-finalize action** — unchanged from the original pass; "ทำสำเนา" remains the documented way
-  to keep working from a copy of a `Final` record.
-- **No automated API/RBAC integration tests** — this project has no automated test infrastructure
-  anywhere (a longstanding, separately-tracked decision, not something this single fix pass should
-  introduce in isolation).
+### Print/PDF protection result
+Unchanged behavior (both print endpoints still revalidate server-side before returning success) — the fixes here were client-side (real `disabled` attribute on the Print button, plus the checklist-snapshot/detail-input bugs which affect what counts as "complete" in the first place, not the print gate's own logic).
 
-### Job-code implementation
+### Workflow protection result
+Unchanged — `handleWorkflow`'s completeness gate and its `rejected`/`cancelled` exemption are untouched by this fix pass. The review's note that this exemption "may require a business-policy decision" is acknowledged but not itself an implementation defect; still tracked as an open confirmation item.
 
-`PQ{yearMonth}-{jobSequence}-{jobTypeCode}-{secondaryCode}`, entirely server-generated. `jobSequence`
-is an atomically-reserved per-calendar-month counter (`scope_{yearMonth}` in the shared `counters`
-collection, `$inc`/upsert via `findOneAndUpdate` — same pattern as quotation numbering). Uniqueness
-is guaranteed by a unique `{yearMonth, jobSequence}` index (the `scopeNumber` unique index is a
-defense-in-depth backstop, not the primary mechanism). `secondaryCode` is now required at creation
-(this pass's High #2 fix) and freely editable afterward. Editing `issueDate` into a different
-calendar month re-reserves a fresh sequence number for that month, closing a real collision risk the
-original implementation itself already anticipated and fixed before this review ran. A bounded
-retry (up to 3 attempts) now wraps the insert against the near-impossible case of a duplicate-key
-race (this pass's addition).
+### Snapshot result
+**Fixed** — this was the pass's primary High Priority finding. A Scope of Work created from a complete Quotation now actually starts with that Quotation's checklist selections/notes checked, not blank. Verified by code inspection of `deriveFromQuotation()`/`handleCreate()`/`cloneChecklistGroups()`; not yet verified against a live database (see Manual test result below).
 
-### Quotation fields pulled
+### Existing-document compatibility
+Extended: `withDefaultChecklistGroups()` now also backfills a missing `note: ""` onto an existing group (previously it only appended wholly-missing groups). Still never touches `checked` state, never invents a selection, and is response-only (never a destructive write). A record whose `options` array itself predates the "อื่น ๆ"/"tor" option additions still won't retroactively gain those specific options — only a wholly-missing group or a missing `note` field are backfilled — tracked as a known, low-impact limitation (the module is one day old in production) in TODO.md.
 
-Company name, contact name (this pass's fix), address, tax ID, phone, email, project name (all via
-`customerSnapshot`, snapshot-first with a legacy-field fallback), salesperson (new
-`quotationSalesperson` field, this pass's fix), quotation number, PO reference, Job Type code/name,
-delivery address, payment terms (into `paymentConditions.description`), remarks, and every line
-item's description/specifications/sub-details/quantity/unit/notes. Never pulled: unit price,
-discount, VAT, internal tags, internal notes — Scope of Work never carries pricing or internal data.
+### Files changed
+`api/_lib/scopeOfWorkHandler.ts` (checklist-snapshot fix, `cloneChecklistGroups()` helper), `src/lib/documentRequirements.ts` (note-field initialization + backfill, TOR conditional rule), `src/lib/validation/dateUtils.ts` (new), `src/lib/validation/types.ts` (`mergeServerValidationErrors()`), `src/lib/validation/quotationValidation.ts` (date semantics, new optional-field entries), `src/lib/validation/scopeOfWorkValidation.ts` (date semantics, new optional-field entries), `src/pages/quotation/QuoteDocument.tsx` (real `disabled`, server-error merge), `src/pages/quotation/ScopeOfWorkDocument.tsx` (real `disabled`, server-error merge), `src/pages/quotation/QuotationPage.tsx` (rethrow so the document component can also catch), `api/handlers/quotes.ts` (pass `followUpDate`/`isPotentialOpportunity` into validation inputs), plus documentation (`CLAUDE.md`, `PROJECT_STATUS.md`, `CHANGELOG.md`, `TODO.md`, `DATABASE.md`, `API.md`, `UI_GUIDELINES.md`, `IMPLEMENTATION_CHECKLIST.md`, `MODULES/Quotation.md`, `MODULES/ScopeOfWork.md`, `SESSION_LOG.md`).
 
-### Editable fields
+### lint result
+`npm run lint` — 0 errors (2 pre-existing warnings in `src/lib/i18n.tsx`, unrelated to this change).
 
-Drawing code, delivery date, delivery location, shipping/billing contact name+phone, secondary code
-(post-creation), checklist checked/note state, all item fields (add/remove/duplicate/reorder/edit),
-payment conditions (percentages/method/description/notes), remarks, seller/approver (name/linked
-user/date). Read-only/system-derived: scope number, quotation number, customer snapshot fields
-(refreshed only via the explicit refresh action), `quotationSalesperson`.
+### build result
+`npm run build` — clean (`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build` all succeed).
 
-### Checkbox implementation
-
-11 groups (`buildDefaultChecklistGroups()`), `"single"` (radio-style, server-clamped to at most one
-checked option) or `"multiple"` (independent checkboxes) selection types, server-side key/label/
-selectionType integrity (a client can only toggle `checked`/set a group's `note`, never inject new
-structure). Persisted on every `PATCH`; print renders a literal `✓`-in-a-box glyph per option, not a
-native form control, so checked/unchecked state renders identically across browsers/PDF exporters.
-
-### Snapshot behavior
-
-Unchanged from the original pass, confirmed still correct by this review: creation copies (never
-live-references) the quotation's data; editing a Scope of Work never touches the quotation; later
-quotation/customer/product edits never silently change an already-created Scope of Work; only the
-explicit "อัปเดตข้อมูลจากใบเสนอราคา" action re-pulls quotation-derived fields on demand (now also
-refreshing `quotationSalesperson`, this pass's addition), gated by the same authorization `create`
-requires (this pass's Medium fix).
-
-### Print/PDF behavior
-
-A4 portrait now explicit; checklist checked state renders via custom glyphs; no pricing/internal
-notes anywhere in the print path; item+detail row pairs now grouped so a page break can't split
-them (this pass's fix); shared `<thead>` still repeats every page. Not independently re-verified in
-an actual browser/PDF renderer this pass either (no such tooling available in this environment) —
-still a documented, open manual-verification item.
-
-### Signature behavior
-
-`seller` now defaults from the quotation's real assigned salesperson (with a real-user lookup for
-the signature image) instead of unconditionally the creating user (this pass's fix); `approver`
-still always starts blank — never an invented approval. Both remain fully editable. No sample
-handwritten signature is ever copied from the reference PDF.
-
-### RBAC result
-
-No change to the permission model itself — the review found no confirmed bypass. One gap closed:
-`refresh` now requires `quotations:view` in addition to its existing Scope of Work edit/ownership
-check (this pass's Medium fix), matching `create`'s existing requirement. The review's note that
-"approve"/"manage" aren't literal permission names is accurate and intentional — `scopeOfWork:finalize`
-is the approve-equivalent action, and there is no `scopeOfWork:manage` superset (the task's
-requested permission list was exactly the 6 granular ones).
-
-### Files changed (this fix pass)
-
-`src/lib/scopeOfWork.ts`, `api/_lib/scopeOfWorkHandler.ts`, `api/_lib/searchHandler.ts`,
-`src/lib/search.ts`, `src/components/GlobalSearch.tsx`, `src/App.tsx`,
-`src/pages/quotation/QuotationPage.tsx`, `src/pages/quotation/QuoteDocument.tsx`,
-`src/pages/quotation/ScopeOfWorkDocument.tsx`, `src/pages/quotation/ScopeOfWorkPrintDocument.tsx`,
-`src/styles/index.css`, `src/lib/i18n.tsx`, plus documentation
-(`docs/MODULES/ScopeOfWork.md`, `docs/{CLAUDE,PROJECT_STATUS,CHANGELOG,TODO,DATABASE,API,RBAC,
-UI_GUIDELINES,IMPLEMENTATION_CHECKLIST}.md`, this file).
-
-### Lint result
-
-`npm run lint` — clean (0 errors; 2 pre-existing warnings in `src/lib/i18n.tsx` unrelated to this
-module, present before this pass).
-
-### Build result
-
-`npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, and `npm run build` (which itself runs
-`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`) all pass clean.
-
-### Manual test result
-
-Not performed — this environment has no `MONGODB_URI`/live database access and no browser, the same
-sandboxed-session limitation documented across every prior pass in this repo (see
-`PROJECT_STATUS.md` "Known Risks"). All fixes above are verified by `tsc`/`lint`/`build` passing
-clean and by direct code reading against this report's specific findings, not by exercising the
-running application. The 25-step manual verification checklist from the fix task (create from a
-quotation, verify pulled data, generate/verify job codes under concurrency, checkbox persistence,
-print/PDF comparison against the reference, unauthorized-access test, etc.) remains an open,
-explicitly-tracked TODO item.
+### manual test result
+Not performed — no MongoDB Atlas/Vercel CLI access in this sandboxed environment, the same limitation this review's own "Verification Limits" section hit attempting `npm run lint`/`npm run build` in its environment. The manual verification checklist (updated in TODO.md to call out the specific fixed scenarios) should be run against a live deployment before this is considered fully closed.

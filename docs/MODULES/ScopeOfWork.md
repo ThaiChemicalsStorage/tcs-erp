@@ -177,6 +177,81 @@ quotation's `paymentTerms` string into `description` at creation time; the sampl
 split is **never** saved as a universal default — both percentage fields start blank unless the
 quotation itself already had that data.
 
+## Required-Field Validation (added 2026-07-16)
+
+Previously only `secondaryCode` was required (at creation only) — every header field, all 11
+checklist groups, items, and payment conditions could be saved, submitted for Final, and printed
+completely blank. Now enforced identically client- and server-side via
+`src/lib/validation/scopeOfWorkValidation.ts` (same pure functions value-imported into both bundles).
+
+**Required fields** (`scopeOfWorkRequiredFields`, whitespace-only counts as empty):
+`customerSnapshot.companyName`/`.contactName`/`.address`/`.phone`, `issueDate`, `deliveryDate`,
+`drawingCode`, `secondaryCode`, `deliveryLocation`, `shippingContact`, `shippingPhone`,
+`billingContact`, `billingPhone`, `paymentConditions.description`, `seller.name`. **Optional
+exceptions**: `customerSnapshot.taxId`/`.email`, `customerPoNumber`, `remarks`.
+
+**Items** (`validateScopeOfWorkItems()`): at least one non-header item; every non-header item needs
+a non-blank `name`/`unit`, `quantity > 0`, and at least one non-blank specification line.
+
+**Mandatory checklist selections**: 8 of the 11 groups above (`safety`, `transportation`, `logo`,
+`billingConditions`, `documentsToSend`, `namePlate`, `deliveryDocFormat`, `pj2`) now require at
+least one checked option; `torRequirement`/`testReportType`/`testReportLevel` stay optional.
+Selecting an "อื่น ๆ"/"Etc." option (added to `safety`/`transportation`/`namePlate`/
+`documentsToSend`'s option lists specifically for this rule — Logo already had "Etc.") makes that
+group's `note` required too — as does `safety`'s "TOR / Requirement from customer" option, per the
+business rule's explicit "If TOR or Other is selected, require a reference/detail field."
+
+**2026-07-16, Codex review fix pass** (0 Critical, 2 High + 4 Medium found and fixed against this
+same-day validation pass — see `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status"): **High** — the
+checklist snapshot bug (see "Snapshot Behavior" above); the "อื่น ๆ"/TOR detail rule was
+server-enforced but **unreachable from the normal UI** for `safety`/`transportation`/`namePlate`/
+`documentsToSend` (`buildDefaultChecklistGroups()` only initialized `note: ""` for Logo, and
+`ChecklistGroupCard` only renders its detail input when `note !== undefined`) — fixed by
+initializing `note: ""` on all four groups, plus backfilling it onto any already-saved record
+missing it (`withDefaultChecklistGroups()`). **Medium**: Print/Finalize buttons now carry a real
+HTML `disabled` attribute (previously only dimmed + click-guarded, not semantically disabled);
+`issueDate`/`deliveryDate`/`seller.date`/`approver.date` are now checked for a real calendar date at
+finalization, not just non-blank (`isValidIsoDateOrEmpty()`, `src/lib/validation/dateUtils.ts`); a
+server-returned `422`'s `fieldErrors`/`groupErrors` are now merged into the on-screen validation
+result (`mergeServerValidationErrors()`) instead of only showing as a toast; `paymentConditions.method`/
+`.notes`, `seller.date`/`approver.date`, and per-item `remark` are now explicitly declared optional
+in the central config rather than silently absent from it.
+
+**Deliberately not built this pass** (would require inventing unconfirmed business option
+catalogs — see "Deliberate scope decisions" in CHANGELOG.md): billing "Custom" schedule detail,
+delivery "customer form" attachment/date-or-day rule, and a supporting-detail model for ปจ.2 beyond
+its existing มี/ไม่มี selection. The review flagged these as incomplete; they remain open, tracked
+in TODO.md, pending a confirmed business rule rather than a fabricated one.
+
+**Payment percentages**: if either `downPaymentPct`/`finalPaymentPct` is set, both must be and must
+sum to exactly 100% — never a hardcoded 40/60 split; if neither is set (the free-text
+`method`/`description` fields carry the billing condition instead), no percentage check applies.
+
+**Seller/approver**: `seller.name` is always required (it defaults from the quotation's salesperson
+at creation, so this is rarely actually missing in practice). `approver.name` is required **only
+when Finalizing** — printing a still-Draft record doesn't need one yet, matching "Seller/approver
+information when reaching the relevant workflow stage."
+
+**Enforcement points**: `POST /:id/print` (`validateScopeOfWorkForPrint()` — approver only required
+if already `Final`) and `POST /:id/finalize` (`validateScopeOfWorkForFinalization()` — approver
+always required). A `422 { code: "DOCUMENT_INCOMPLETE", fieldErrors, groupErrors }` blocks the
+request even if a client bypassed the frontend. **Save Draft/PATCH/refresh remain unaffected** — a
+Draft record may stay incomplete indefinitely.
+
+**Frontend**: same shared components as Quotation (`RequiredFieldLabel`/`FieldError`/
+`ValidationSummary`/`DocumentCompletionIndicator`, `ChecklistGroupCard` — renamed from
+`ScopeOfWorkChecklistGroup.tsx` since Quotation now reuses the identical component). Print/"ยืนยัน
+Final" stay visible but styled disabled with a tooltip when incomplete; clicking anyway shows a
+toast + scrolls to the summary rather than silently doing nothing.
+
+**Existing-document compatibility**: every Scope of Work record already had `checklistGroups` set at
+creation (mandatory field, never optional in this schema), so no record can be missing a whole group
+outright — `withDefaultChecklistGroups()` still normalizes on every server response as a defensive
+safety net. A record saved before this pass simply won't have the new "อื่น ๆ" option *within* an
+existing group until the record is next edited/refreshed (only a wholly-missing group gets
+backfilled, not a new option inside one already present) — not expected to affect real data given
+this module is only one day old in production.
+
 ## Signatures
 
 `seller`/`approver` — each `{ name, userId, date }`. `approver` always starts fully blank. `seller`
@@ -200,16 +275,31 @@ assigned to.
 ## Snapshot Behavior
 
 Creating a Scope of Work copies (never live-references) the quotation's customer info/items/Job
-Type/PO/remarks into its own document. Editing a Scope of Work afterward never touches the source
-quotation, and later edits to the quotation, Customer master data, or Product master data never
-silently change an already-created Scope of Work. An explicit **"อัปเดตข้อมูลจากใบเสนอราคา"**
-action (`POST /api/scope-of-works/:id/refresh`) re-pulls only the quotation-derived fields
-(`customerSnapshot`, `customerPoNumber`, `deliveryLocation`, `remarks`, `items`, `quotationNumber`,
-`quotationSalesperson`) — everything the user filled in by hand (checklist state, payment
-conditions, shipping/billing contact, signatures, `secondaryCode`, `drawingCode`, `deliveryDate`) is
-left untouched. The client shows a confirm dialog before calling this ("จะเขียนทับข้อมูล...
-ยืนยันหรือไม่?"). Refresh requires `quotations:view` in addition to Scope of Work edit/ownership
-authorization (2026-07-15, Codex review Medium fix — matches the same check `create` already had).
+Type/PO/remarks **and, as of 2026-07-16, the quotation's own `checklistGroups`** into its own
+document. Editing a Scope of Work afterward never touches the source quotation, and later edits to
+the quotation, Customer master data, or Product master data never silently change an already-created
+Scope of Work. An explicit **"อัปเดตข้อมูลจากใบเสนอราคา"** action (`POST /api/scope-of-works/:id/refresh`)
+re-pulls only the quotation-derived fields (`customerSnapshot`, `customerPoNumber`, `deliveryLocation`,
+`remarks`, `items`, `quotationNumber`, `quotationSalesperson`) — everything the user filled in by hand
+(checklist state, payment conditions, shipping/billing contact, signatures, `secondaryCode`,
+`drawingCode`, `deliveryDate`) is left untouched. The client shows a confirm dialog before calling
+this ("จะเขียนทับข้อมูล... ยืนยันหรือไม่?"). Refresh requires `quotations:view` in addition to Scope
+of Work edit/ownership authorization (2026-07-15, Codex review Medium fix — matches the same check
+`create` already had).
+
+**Checklist snapshot (added 2026-07-16, Codex review High Priority fix)**: `handleCreate()`
+previously called `buildDefaultChecklistGroups()` for a brand-new, always-unchecked structure,
+discarding whatever the source quotation's own checklist selections already were — a complete
+Quotation produced an incomplete Scope of Work with every mandatory group reset to blank, and the
+required "copy the required document selections from the Quotation" behavior simply didn't exist.
+`deriveFromQuotation()` now deep-copies `quote.checklistGroups` (`cloneChecklistGroups()`, fresh
+option objects so neither document's array is an aliased reference to the other) when the source
+quotation has one, falling back to `buildDefaultChecklistGroups()` only for a quotation that itself
+predates the field (an honest "nothing to copy yet" default, never a fake completed selection).
+**Deliberately only at creation, not on refresh** — matching every other quotation-derived field's
+semantics here, but explicitly required by the business rule too ("editing the Quotation later must
+not silently change an existing Scope of Work"): the checklist becomes the Scope of Work's own
+independent, freely-editable copy the moment it's created.
 
 ## Status / Lifecycle
 

@@ -215,6 +215,10 @@ export function QuotationPage({
       toast.show(t("quotation.actionCompletedToast").replace("{action}", t(approvalActionLabelKey[action])));
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("quotation.workflowErrorToast"));
+      // Rethrown (2026-07-16, Codex review Medium Priority fix) so QuoteDocument.tsx's own
+      // confirmAction() can also catch it and map a 422 DOCUMENT_INCOMPLETE's fieldErrors/
+      // groupErrors into inline highlighting — this toast is shown either way.
+      throw err;
     }
   };
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import type { User } from "../../lib/users";
 import {
@@ -8,9 +8,18 @@ import {
 } from "../../lib/scopeOfWork";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { ScopeOfWorkChecklistGroup } from "./ScopeOfWorkChecklistGroup";
+import { ChecklistGroupCard } from "./ChecklistGroupCard";
 import { ScopeOfWorkItemsEditor } from "./ScopeOfWorkItemsEditor";
 import { ScopeOfWorkPrintDocument } from "./ScopeOfWorkPrintDocument";
+import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
+import { FieldError } from "../../components/FieldError";
+import { ValidationSummary } from "../../components/ValidationSummary";
+import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
+import { validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS } from "../../lib/documentRequirements";
+import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint, scopeOfWorkRequiredFields } from "../../lib/validation/scopeOfWorkValidation";
+import { mergeServerValidationErrors } from "../../lib/validation/types";
+
+const BLOCKED_TOOLTIP = "กรุณากรอกข้อมูลและเลือกหัวข้อที่จำเป็นให้ครบก่อนดำเนินการ";
 
 function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
   return {
@@ -33,16 +42,18 @@ function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
   };
 }
 
-function SignatoryEditor({ label, value, onChange, users, disabled }: {
+function SignatoryEditor({ label, value, onChange, users, disabled, required, error }: {
   label: string;
   value: ScopeOfWorkSignatory;
   onChange: (next: ScopeOfWorkSignatory) => void;
   users: User[];
   disabled: boolean;
+  required?: boolean;
+  error?: string;
 }) {
   return (
     <div>
-      <p className="text-[10px] text-muted-foreground font-mono mb-1.5">{label}</p>
+      <p className="text-[10px] text-muted-foreground font-mono mb-1.5">{label} {required && <span className="text-[#e05252]">*</span>}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
         <select
           disabled={disabled}
@@ -71,6 +82,7 @@ function SignatoryEditor({ label, value, onChange, users, disabled }: {
         value={value.date}
         onChange={(e) => onChange({ ...value, date: e.target.value })}
       />
+      <FieldError message={error} />
     </div>
   );
 }
@@ -103,6 +115,11 @@ export function ScopeOfWorkDocument({
   const [saving, setSaving] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"finalize" | "refresh" | "delete" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const summaryRef = useRef<HTMLDivElement>(null);
+  // A `422 DOCUMENT_INCOMPLETE` from the server (print/finalize) merged on top of the live
+  // client-side result — added 2026-07-16, Codex review Medium Priority fix, see QuoteDocument.tsx's
+  // identical pattern.
+  const [serverValidationErrors, setServerValidationErrors] = useState<{ fieldErrors: Record<string, string>; groupErrors: Record<string, string[]> } | null>(null);
 
   // `scope`/`loadError` reset to their initial values (null/false) via a fresh mount whenever
   // `scopeOfWorkId` changes — the parent renders this component with `key={scopeOfWorkId}` for
@@ -144,6 +161,23 @@ export function ScopeOfWorkDocument({
   const editable = canEdit && isDraft;
   const updateField = <K extends keyof ScopeOfWork>(field: K, value: ScopeOfWork[K]) => setScope((prev) => (prev ? { ...prev, [field]: value } : prev));
 
+  // ── Required-field/mandatory-selection validation (added 2026-07-16) ─────────────────────────
+  // Mirrors validateScopeOfWorkForFinalization/Print() server-side exactly (same shared functions,
+  // see src/lib/validation/scopeOfWorkValidation.ts). `printValidation` doesn't require an approver
+  // signature while still Draft (that's only a Finalize-time requirement); `finalizeValidation`
+  // always does — used to gate "ยืนยัน Final" specifically, everything else uses the more lenient one.
+  const clientPrintValidation = validateScopeOfWorkForPrint(scope);
+  const clientFinalizeValidation = validateScopeOfWorkForFinalization(scope);
+  const printValidation = mergeServerValidationErrors(clientPrintValidation, serverValidationErrors);
+  const finalizeValidation = mergeServerValidationErrors(clientFinalizeValidation, serverValidationErrors);
+  const checklistValidation = validateChecklistGroups(scope.checklistGroups);
+  const itemErrors: Record<string, string> = {};
+  for (const [key, message] of Object.entries(finalizeValidation.fieldErrors)) {
+    if (key.startsWith("items.")) itemErrors[key.slice(6)] = message;
+  }
+  const summaryMessages = [...Object.values(finalizeValidation.fieldErrors), ...Object.values(finalizeValidation.groupErrors).flat()];
+  const totalRequiredChecks = Object.values(scopeOfWorkRequiredFields).filter((f) => f.required).length + MANDATORY_CHECKLIST_GROUP_KEYS.length + 1 + 1;
+
   const save = async () => {
     if (!scope) return;
     try {
@@ -160,12 +194,38 @@ export function ScopeOfWorkDocument({
 
   const handlePrint = async () => {
     if (!scope) return;
+    if (!printValidation.valid) {
+      showToast(BLOCKED_TOOLTIP);
+      summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    setServerValidationErrors(null);
     try {
       await logScopeOfWorkPrinted(scope.id);
-    } catch {
-      // Printing itself must never be blocked by an audit-log write failure — this only logs.
+    } catch (err) {
+      // The print endpoint now also re-validates server-side (see handlePrint in
+      // api/_lib/scopeOfWorkHandler.ts) — a 422 there means the client-side check above raced with
+      // a real change and must still block printing. Any other failure (e.g. the audit-log write
+      // itself hiccuping) must never block printing.
+      if (err instanceof ApiError && err.status === 422) {
+        showToast(err.message);
+        if (err.code === "DOCUMENT_INCOMPLETE") {
+          setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
+          summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        return;
+      }
     }
     window.print();
+  };
+
+  const handleFinalizeClick = () => {
+    if (!finalizeValidation.valid) {
+      showToast(BLOCKED_TOOLTIP);
+      summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    setConfirmAction("finalize");
   };
 
   const handleDuplicate = async () => {
@@ -181,6 +241,7 @@ export function ScopeOfWorkDocument({
 
   const runConfirmedAction = async () => {
     if (!scope || !confirmAction) return;
+    if (confirmAction === "finalize") setServerValidationErrors(null);
     try {
       if (confirmAction === "finalize") {
         const updated = await finalizeScopeOfWork(scope.id);
@@ -197,6 +258,10 @@ export function ScopeOfWorkDocument({
       }
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "ดำเนินการไม่สำเร็จ");
+      if (confirmAction === "finalize" && err instanceof ApiError && err.code === "DOCUMENT_INCOMPLETE") {
+        setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
+        summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     } finally {
       setConfirmAction(null);
     }
@@ -218,8 +283,14 @@ export function ScopeOfWorkDocument({
         </span>
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={finalizeValidation.missingCount} />
           {canPrint && (
-            <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button
+              onClick={handlePrint}
+              disabled={!printValidation.valid}
+              title={!printValidation.valid ? BLOCKED_TOOLTIP : undefined}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!printValidation.valid ? "opacity-40 cursor-not-allowed" : ""}`}
+            >
               <Printer size={13} /> พิมพ์ / PDF
             </button>
           )}
@@ -239,7 +310,12 @@ export function ScopeOfWorkDocument({
             </button>
           )}
           {canFinalize && isDraft && (
-            <button onClick={() => setConfirmAction("finalize")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors">
+            <button
+              onClick={handleFinalizeClick}
+              disabled={!finalizeValidation.valid}
+              title={!finalizeValidation.valid ? BLOCKED_TOOLTIP : undefined}
+              className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors ${!finalizeValidation.valid ? "opacity-40 cursor-not-allowed" : ""}`}
+            >
               <CheckCircle2 size={13} /> ยืนยัน Final
             </button>
           )}
@@ -252,6 +328,10 @@ export function ScopeOfWorkDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
+        <div ref={summaryRef}>
+          <ValidationSummary missingCount={finalizeValidation.missingCount} messages={summaryMessages} />
+        </div>
+
         {/* Header fields */}
         <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 print:hidden">
@@ -264,65 +344,74 @@ export function ScopeOfWorkDocument({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-b border-border">
             <div className="p-6 border-b sm:border-b-0 sm:border-r border-border space-y-2.5">
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">ชื่อลูกค้า</label>
+                <RequiredFieldLabel>ชื่อลูกค้า</RequiredFieldLabel>
                 <input readOnly className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none opacity-80" value={scope.customerSnapshot.companyName} />
+                <FieldError message={finalizeValidation.fieldErrors["customerSnapshot.companyName"]} />
               </div>
-              {scope.customerSnapshot.contactName && (
-                <div>
-                  <label className="text-xs text-muted-foreground block mb-1">ชื่อผู้ติดต่อ (จากใบเสนอราคา)</label>
-                  <input readOnly className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none opacity-80" value={scope.customerSnapshot.contactName} />
-                </div>
-              )}
+              <div>
+                <RequiredFieldLabel>ชื่อผู้ติดต่อ (จากใบเสนอราคา)</RequiredFieldLabel>
+                <input readOnly className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none opacity-80" value={scope.customerSnapshot.contactName} />
+                <FieldError message={finalizeValidation.fieldErrors["customerSnapshot.contactName"]} />
+              </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">รหัสงาน</label>
                 <input readOnly className="w-full text-xs font-mono text-[#c9a84c] font-semibold bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={scope.scopeNumber} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">รหัสอ้างอิงท้ายงาน (ยังต้องยืนยันความหมายทางธุรกิจ)</label>
+                <RequiredFieldLabel>รหัสอ้างอิงท้ายงาน (ยังต้องยืนยันความหมายทางธุรกิจ)</RequiredFieldLabel>
                 <input disabled={!editable} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.secondaryCode} onChange={(e) => updateField("secondaryCode", e.target.value)} placeholder="เช่น SK" />
+                <FieldError message={finalizeValidation.fieldErrors.secondaryCode} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">รหัส Drawing</label>
+                <RequiredFieldLabel>รหัส Drawing</RequiredFieldLabel>
                 <input disabled={!editable} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.drawingCode} onChange={(e) => updateField("drawingCode", e.target.value)} />
+                <FieldError message={finalizeValidation.fieldErrors.drawingCode} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">สถานที่ส่งของ</label>
+                <RequiredFieldLabel>สถานที่ส่งของ</RequiredFieldLabel>
                 <input disabled={!editable} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.deliveryLocation} onChange={(e) => updateField("deliveryLocation", e.target.value)} />
+                <FieldError message={finalizeValidation.fieldErrors.deliveryLocation} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">ชื่อผู้ติดต่อส่งของ</label>
+                  <RequiredFieldLabel>ชื่อผู้ติดต่อส่งของ</RequiredFieldLabel>
                   <input disabled={!editable} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.shippingContact} onChange={(e) => updateField("shippingContact", e.target.value)} />
+                  <FieldError message={finalizeValidation.fieldErrors.shippingContact} />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">เบอร์โทรผู้ติดต่อส่งของ</label>
+                  <RequiredFieldLabel>เบอร์โทรผู้ติดต่อส่งของ</RequiredFieldLabel>
                   <input disabled={!editable} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.shippingPhone} onChange={(e) => updateField("shippingPhone", e.target.value)} />
+                  <FieldError message={finalizeValidation.fieldErrors.shippingPhone} />
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">ชื่อผู้ติดต่อวางบิล</label>
+                  <RequiredFieldLabel>ชื่อผู้ติดต่อวางบิล</RequiredFieldLabel>
                   <input disabled={!editable} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.billingContact} onChange={(e) => updateField("billingContact", e.target.value)} />
+                  <FieldError message={finalizeValidation.fieldErrors.billingContact} />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">เบอร์โทรผู้ติดต่อวางบิล</label>
+                  <RequiredFieldLabel>เบอร์โทรผู้ติดต่อวางบิล</RequiredFieldLabel>
                   <input disabled={!editable} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.billingPhone} onChange={(e) => updateField("billingPhone", e.target.value)} />
+                  <FieldError message={finalizeValidation.fieldErrors.billingPhone} />
                 </div>
               </div>
             </div>
             <div className="p-6 space-y-2.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">วันที่</label>
+                  <RequiredFieldLabel>วันที่</RequiredFieldLabel>
                   <input disabled={!editable} type="date" className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.issueDate} onChange={(e) => updateField("issueDate", e.target.value)} />
+                  <FieldError message={finalizeValidation.fieldErrors.issueDate} />
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">วันที่ส่งของ/ส่งแบบอนุมัติ</label>
+                  <RequiredFieldLabel>วันที่ส่งของ/ส่งแบบอนุมัติ</RequiredFieldLabel>
                   <input disabled={!editable} type="date" className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.deliveryDate} onChange={(e) => updateField("deliveryDate", e.target.value)} />
+                  <FieldError message={finalizeValidation.fieldErrors.deliveryDate} />
                 </div>
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">เอกสารใบสั่งซื้อเลขที่ (PO)</label>
+                <RequiredFieldLabel required={false}>เอกสารใบสั่งซื้อเลขที่ (PO)</RequiredFieldLabel>
                 <input disabled={!editable} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.customerPoNumber} onChange={(e) => updateField("customerPoNumber", e.target.value)} />
               </div>
               <div>
@@ -342,10 +431,12 @@ export function ScopeOfWorkDocument({
           <p className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>เช็คลิสต์เงื่อนไขงาน</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {scope.checklistGroups.map((group, idx) => (
-              <ScopeOfWorkChecklistGroup
+              <ChecklistGroupCard
                 key={group.key}
                 group={group}
                 disabled={!editable}
+                required={(MANDATORY_CHECKLIST_GROUP_KEYS as readonly string[]).includes(group.key)}
+                error={checklistValidation.groupErrors[group.key]}
                 onChange={(next) => {
                   const groups = [...scope.checklistGroups];
                   groups[idx] = next;
@@ -373,7 +464,13 @@ export function ScopeOfWorkDocument({
           </div>
         )}
 
-        <ScopeOfWorkItemsEditor items={scope.items} onChange={(items) => updateField("items", items)} disabled={!editable} />
+        <ScopeOfWorkItemsEditor
+          items={scope.items}
+          onChange={(items) => updateField("items", items)}
+          disabled={!editable}
+          itemErrors={itemErrors}
+          noItemsError={finalizeValidation.fieldErrors.items}
+        />
 
         {/* Payment conditions */}
         <div className="bg-card border border-border rounded-xl p-5 print:hidden">
@@ -392,9 +489,15 @@ export function ScopeOfWorkDocument({
               <input disabled={!editable} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.paymentConditions.method} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, method: e.target.value })} placeholder="เช่น Cash, Credit" />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs text-muted-foreground block mb-1">รายละเอียดการชำระเงิน</label>
+              <RequiredFieldLabel>รายละเอียดการชำระเงิน</RequiredFieldLabel>
               <textarea disabled={!editable} rows={3} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed disabled:opacity-60" value={scope.paymentConditions.description} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, description: e.target.value })} />
+              <FieldError message={finalizeValidation.fieldErrors["paymentConditions.description"]} />
             </div>
+            {finalizeValidation.fieldErrors["paymentConditions.percentTotal"] && (
+              <div className="sm:col-span-2">
+                <FieldError message={finalizeValidation.fieldErrors["paymentConditions.percentTotal"]} />
+              </div>
+            )}
             <div className="sm:col-span-2">
               <label className="text-xs text-muted-foreground block mb-1">หมายเหตุการชำระเงิน</label>
               <textarea disabled={!editable} rows={2} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed disabled:opacity-60" value={scope.paymentConditions.notes} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, notes: e.target.value })} />
@@ -410,8 +513,8 @@ export function ScopeOfWorkDocument({
           </div>
           <div className="bg-card border border-border rounded-xl p-5 space-y-4">
             <p className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ผู้ขาย / ผู้อนุมัติ</p>
-            <SignatoryEditor label="ผู้ขาย" value={scope.seller} onChange={(v) => updateField("seller", v)} users={users} disabled={!editable} />
-            <SignatoryEditor label="ผู้อนุมัติ" value={scope.approver} onChange={(v) => updateField("approver", v)} users={users} disabled={!editable} />
+            <SignatoryEditor label="ผู้ขาย" value={scope.seller} onChange={(v) => updateField("seller", v)} users={users} disabled={!editable} required error={finalizeValidation.fieldErrors["seller.name"]} />
+            <SignatoryEditor label="ผู้อนุมัติ" value={scope.approver} onChange={(v) => updateField("approver", v)} users={users} disabled={!editable} required error={finalizeValidation.fieldErrors["approver.name"]} />
           </div>
         </div>
 

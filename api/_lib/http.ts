@@ -1,10 +1,22 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+/**
+ * `code`/`details` (added for the Quotation/Scope of Work required-field validation pass) let a
+ * caller attach a structured, machine-readable payload alongside the human-readable Thai
+ * `message` — e.g. `code: "DOCUMENT_INCOMPLETE"` plus `details: { fieldErrors, groupErrors }` so
+ * the frontend can highlight the exact invalid fields/checklist groups instead of only showing a
+ * toast. Both optional and unused by every pre-existing `HttpError` call site (they still throw
+ * plain `HttpError(status, message)`, spreading to `undefined` and disappearing from the response).
+ */
 export class HttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code?: string;
+  details?: Record<string, unknown>;
+  constructor(status: number, message: string, options?: { code?: string; details?: Record<string, unknown> }) {
     super(message);
     this.status = status;
+    this.code = options?.code;
+    this.details = options?.details;
   }
 }
 
@@ -14,7 +26,7 @@ export function sendJson(res: VercelResponse, status: number, body: unknown) {
 
 export function sendError(res: VercelResponse, err: unknown) {
   if (err instanceof HttpError) {
-    sendJson(res, err.status, { error: err.message });
+    sendJson(res, err.status, { error: err.message, ...(err.code ? { code: err.code } : {}), ...(err.details ?? {}) });
     return;
   }
   console.error(err);

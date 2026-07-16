@@ -1,4 +1,11 @@
 import { apiFetch } from "./apiClient.js";
+import type { ChecklistOption, ChecklistGroup } from "./documentRequirements.js";
+
+// Re-exported for backward compatibility — `ChecklistOption`/`ChecklistGroup` moved to
+// documentRequirements.ts (2026-07-16) so Quotation can share the same checklist-group model
+// without depending on this Scope-of-Work-specific module. Every existing import of these two
+// types from "./scopeOfWork" (this file) keeps working unchanged.
+export type { ChecklistOption, ChecklistGroup };
 
 /**
  * Scope of Work (added 2026-07-15) — a printable job document generated from an existing
@@ -36,33 +43,6 @@ export interface ScopeOfWorkCustomerSnapshot {
   phone: string;
   email: string;
   projectName: string;
-}
-
-/** A single checkbox/radio option inside a `ChecklistGroup` — printed structure from the
- * reference PDF, values always start unchecked unless a Job-Type default explicitly suggests one
- * (see `defaultChecklistGroupsForJobType` in `api/_lib/scopeOfWorkHandler.ts`). Blue handwritten
- * check-marks from the sample PDF are never imported as real data. */
-export interface ChecklistOption {
-  key: string;
-  label: string;
-  checked: boolean;
-}
-
-/**
- * A printed checkbox/radio group from the reference PDF (e.g. "Safety", "Test Report"). Reusable
- * across every Job Type's Scope of Work — see docs/MODULES/ScopeOfWork.md "Checklist Groups" for
- * the exact PDF-to-group mapping. `selectionType: "single"` means the UI enforces at most one
- * checked option at a time (radio-style); `"multiple"` allows any number checked independently.
- * `note` is optional free text for an "Etc. (โปรดระบุ)"-style option (e.g. Logo's "Etc." choice)
- * — kept at the group level rather than inventing per-option free text, to match the PDF's actual
- * single blank-line-to-specify affordance.
- */
-export interface ChecklistGroup {
-  key: string;
-  title: string;
-  selectionType: "single" | "multiple";
-  options: ChecklistOption[];
-  note?: string;
 }
 
 /** One printed item row (e.g. "1. FRP Lining for concrete floors") — copied from the source

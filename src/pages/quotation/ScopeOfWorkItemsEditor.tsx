@@ -1,6 +1,7 @@
 import { Fragment, useRef, useState } from "react";
 import { Plus, Trash2, Copy, GripVertical, StickyNote } from "lucide-react";
 import { type ScopeOfWorkItem, newScopeItemId, newScopeSpecLineId, blankScopeOfWorkItem } from "../../lib/scopeOfWork";
+import { FieldError } from "../../components/FieldError";
 
 /**
  * Editable table for a Scope of Work's item list — copied at creation time from the source
@@ -14,10 +15,17 @@ export function ScopeOfWorkItemsEditor({
   items,
   onChange,
   disabled,
+  itemErrors,
+  noItemsError,
 }: {
   items: ScopeOfWorkItem[];
   onChange: (items: ScopeOfWorkItem[]) => void;
   disabled: boolean;
+  /** ScopeOfWorkItem.id -> Thai error message, from validateScopeOfWorkItems() (src/lib/validation/
+   * scopeOfWorkValidation.ts) — added 2026-07-16, required-field validation pass. */
+  itemErrors?: Record<string, string>;
+  /** Shown above the table when there are zero non-header items at all. */
+  noItemsError?: string;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const dragIndex = useRef<number | null>(null);
@@ -81,6 +89,7 @@ export function ScopeOfWorkItemsEditor({
           </div>
         )}
       </div>
+      {noItemsError && <div className="px-5 pt-3"><FieldError message={noItemsError} /></div>}
 
       <div className="overflow-x-auto">
         <table className="w-full">
@@ -127,6 +136,7 @@ export function ScopeOfWorkItemsEditor({
 
               const isExpanded = expanded.has(item.id);
               const hasSpecs = item.specifications.some((s) => s.text.trim()) || item.remark.trim();
+              const itemError = itemErrors?.[item.id];
               return (
                 <Fragment key={item.id}>
                   <tr
@@ -135,13 +145,14 @@ export function ScopeOfWorkItemsEditor({
                     onDragOver={(e) => { e.preventDefault(); setOverIndex(idx); }}
                     onDragEnd={() => { setOverIndex(null); dragIndex.current = null; }}
                     onDrop={(e) => { e.preventDefault(); if (dragIndex.current !== null && dragIndex.current !== idx) reorder(dragIndex.current, idx); setOverIndex(null); dragIndex.current = null; }}
-                    className={`border-b border-border/50 hover:bg-secondary/30 transition-colors group ${overIndex === idx ? "bg-[#c9a84c]/10" : ""}`}
+                    className={`border-b border-border/50 hover:bg-secondary/30 transition-colors group ${overIndex === idx ? "bg-[#c9a84c]/10" : itemError ? "bg-[#e05252]/5" : ""}`}
                   >
                     <td className="px-4 py-3 text-center text-xs font-mono text-muted-foreground align-top cursor-grab flex items-center justify-center gap-1">
                       <GripVertical size={12} className="text-muted-foreground/60" /> {itemNumbers[idx]}
                     </td>
                     <td className="px-4 py-3 align-top">
                       <input disabled={disabled} className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors disabled:opacity-60" value={item.name} onChange={(e) => updateItem(item.id, "name", e.target.value)} placeholder="ชื่อรายการ" />
+                      <FieldError message={itemError} />
                     </td>
                     <td className="px-4 py-3 align-top">
                       <input disabled={disabled} type="number" className="w-20 text-xs text-right text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors disabled:opacity-60" value={item.quantity ?? ""} onChange={(e) => updateItem(item.id, "quantity", e.target.value === "" ? null : parseFloat(e.target.value) || 0)} min={0} />

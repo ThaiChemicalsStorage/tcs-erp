@@ -6,6 +6,7 @@ import {
 import type { Product, ProductCategory } from "../../lib/products";
 import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, lineHasDetails, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
 import { ProductPickerModal } from "../products/ProductPickerModal";
+import { FieldError } from "../../components/FieldError";
 import { useI18n } from "../../lib/i18n";
 
 function insertAtCursor(textarea: HTMLTextAreaElement, prefix: string, value: string, onChange: (v: string) => void) {
@@ -176,6 +177,8 @@ export function LineItemsEditor({
   onDiscountChange,
   products,
   categories,
+  lineErrors,
+  noLinesError,
 }: {
   lines: QuoteLine[];
   onChange: (lines: QuoteLine[]) => void;
@@ -183,6 +186,12 @@ export function LineItemsEditor({
   onDiscountChange: (n: number) => void;
   products: Product[];
   categories: ProductCategory[];
+  /** QuoteLine.id -> Thai error message, from validateQuotationLines() (src/lib/validation/
+   * quotationValidation.ts) — added 2026-07-16, required-field validation pass. Highlights the
+   * first missing/invalid field on each incomplete line. */
+  lineErrors?: Record<number, string>;
+  /** Shown above the table when there are zero non-header lines at all. */
+  noLinesError?: string;
 }) {
   const { t } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -244,6 +253,7 @@ export function LineItemsEditor({
         </div>
       </div>
       <ProductPickerModal open={pickerOpen} products={products} categories={categories} onSelect={addLineFromProduct} onClose={() => setPickerOpen(false)} />
+      {noLinesError && <div className="px-5 pt-3"><FieldError message={noLinesError} /></div>}
 
       <div className="overflow-x-auto">
         <table className="w-full">
@@ -283,12 +293,14 @@ export function LineItemsEditor({
 
               const isExpanded = expanded.has(line.id);
               const hasDetails = lineHasDetails(line);
+              const lineError = lineErrors?.[line.id];
               return (
                 <Fragment key={line.id}>
-                  <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
+                  <tr className={`border-b border-border/50 hover:bg-secondary/30 transition-colors group ${lineError ? "bg-[#e05252]/5" : ""}`}>
                     <td className="px-4 py-3 text-center text-xs font-mono text-muted-foreground align-top">{itemNumbers[idx]}</td>
                     <td className="px-4 py-3 align-top">
                       <input className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.description} onChange={(e) => updateLine(line.id, "description", e.target.value)} placeholder={t("quotation.lineItems.descriptionPlaceholder")} />
+                      <FieldError message={lineError} />
                     </td>
                     <td className="px-4 py-3 align-top">
                       <input className="w-20 text-xs text-center text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unit} onChange={(e) => updateLine(line.id, "unit", e.target.value)} />
