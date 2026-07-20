@@ -278,8 +278,8 @@ export function TemplateManagementPage({
                   <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.name")}</th>
                   <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.jobType")}</th>
                   <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.version")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.sections")}</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.items")}</th>
+                  <th className="px-4 py-3 text-center text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.sections")}</th>
+                  <th className="px-4 py-3 text-center text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.items")}</th>
                   <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.status")}</th>
                   <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.source")}</th>
                   <th className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("templates.col.updatedAt")}</th>
@@ -293,8 +293,8 @@ export function TemplateManagementPage({
                     <td className="px-4 py-3 text-sm text-foreground font-medium max-w-[200px] truncate" title={tpl.templateName}>{tpl.templateName}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{tpl.jobTypeCode}</td>
                     <td className="px-4 py-3 text-xs font-mono text-muted-foreground whitespace-nowrap">{tpl.version}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{tpl.sectionCount}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{tpl.itemCount}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground text-center whitespace-nowrap">{tpl.sectionCount}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground text-center whitespace-nowrap">{tpl.itemCount}</td>
                     <td className="px-4 py-3">
                       <StatusBadge
                         status={tpl.isDeleted ? "archived" : tpl.isActive ? "active" : "inactive"}

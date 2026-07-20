@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-07-20 (later still) — Center-align Section/Item count columns on Quotation Templates list
+
+User-reported polish: the "จำนวน Section"/"จำนวนรายการ" column header and values on
+`TemplateManagementPage.tsx`'s list table were left-aligned like the surrounding text columns, which
+read awkwardly for a short numeric count. Both `<th>`s and `<td>`s now use `text-center` instead of
+`text-left`. Purely visual, no data/behavior change. `tsc --noEmit` and `npm run lint` pass clean.
+
 ## 2026-07-20 (later) — Fix status-badge text wrapping; extract shared `StatusBadge` component
 
 The "ใช้งาน" (active) status badge on the Quotation Templates list was wrapping mid-word onto two
