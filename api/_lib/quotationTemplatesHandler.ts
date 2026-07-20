@@ -14,7 +14,6 @@ import type { Product } from "../../src/lib/products.js";
 import type {
   TemplateImportReport, QuotationTemplateSummary, QuotationTemplate,
   TemplateSection, TemplateItem, TemplateTermLine, TemplateEditableParameter, TemplateItemType,
-  TemplateDynamicField, TemplateFieldType, TemplateFieldOption,
 } from "../../src/lib/quotationTemplates.js";
 
 /**
@@ -64,15 +63,11 @@ async function writeTemplateAuditEntry(
 function computeSourceHash(content: {
   templateName: string; description: string; sourceFileName?: string; sourceSheetName?: string;
   sections: TemplateSection[]; defaultTerms: TemplateTermLine[]; internalNotes: string[];
-  defaultNotes?: string[]; conditions?: QuotationTemplate["conditions"];
 }): string {
   const canonical = JSON.stringify({
     templateName: content.templateName, description: content.description,
     sourceFileName: content.sourceFileName ?? "", sourceSheetName: content.sourceSheetName ?? "",
     sections: content.sections, defaultTerms: content.defaultTerms, internalNotes: content.internalNotes,
-    // Added 2026-07-20 — a content-only change to Notes/Condition (no section/term change) must
-    // still be detected as "updated," not silently treated as identical.
-    defaultNotes: content.defaultNotes ?? [], conditions: content.conditions ?? null,
   });
   return createHash("sha256").update(canonical).digest("hex");
 }
@@ -122,32 +117,6 @@ export async function upsertQuotationTemplates(actorUserId: string): Promise<Tem
   const sheetFingerprint = new Map(workbook?.sheets.map((s) => [s.sheetName, s]) ?? []);
 
   for (const seed of QUOTATION_TEMPLATE_SEEDS) {
-    // Defensive structural check (2026-07-20, Codex review fix pass) — `validateDynamicFieldSchema()`
-    // is otherwise only reached via the admin-form path (`sanitizeItem()`); this hardcoded seed data
-    // bypasses that path entirely (built straight from `templateSeedData.ts`, not client input), so
-    // without this check a future accidental edit to that file (a duplicate field/option key, an
-    // empty option list, a dangling `visibleWhen` reference) would silently persist to MongoDB via
-    // this import/auto-seed path. Catches per-seed rather than letting one broken template's error
-    // propagate and abort the whole loop — an import/auto-seed that processes 4 valid templates and
-    // skips 1 broken one (with a clear warning) is far safer than one that 500s outright, especially
-    // since `seedQuotationTemplatesIfEmpty()` runs from `GET /api/quotation-templates`/`GET
-    // /api/jobtypes` on a fresh/empty database — an unhandled throw here would take those routes down.
-    try {
-      for (const section of seed.sections) {
-        for (const item of section.items) {
-          if (item.dynamicFields && item.dynamicFields.length > 0) {
-            validateDynamicFieldSchema(`${seed.templateCode}: ${item.name}`, item.dynamicFields);
-          }
-        }
-      }
-    } catch (err) {
-      report.warnings.push(
-        `Template "${seed.templateCode}" มีปัญหาโครงสร้างข้อมูล dynamicFields — ข้ามการนำเข้ารายการนี้: ${err instanceof HttpError ? err.message : String(err)}`,
-      );
-      report.skipped.push(seed.templateCode);
-      continue;
-    }
-
     const sourceHash = computeSourceHash(seed);
     report.internalNotesDetected += countInternalNotes(seed);
     const workbookSheet = sheetFingerprint.get(seed.sourceSheetName);
@@ -282,122 +251,6 @@ function sanitizeStringArray(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.filter((s): s is string => typeof s === "string" && s.trim().length > 0) : [];
 }
 
-const DYNAMIC_FIELD_TYPES = new Set<TemplateFieldType>(["dropdown", "radio", "checkboxGroup", "text", "number"]);
-function sanitizeFieldOption(raw: unknown): TemplateFieldOption | null {
-  const o = (raw ?? {}) as Partial<TemplateFieldOption>;
-  const label = String(o.label ?? "").trim();
-  if (!label) return null;
-  return {
-    key: typeof o.key === "string" && o.key ? o.key : randomUUID(),
-    label,
-    ...(typeof o.defaultChecked === "boolean" ? { defaultChecked: o.defaultChecked } : {}),
-    ...(typeof o.omitFromCustomerDisplay === "boolean" ? { omitFromCustomerDisplay: o.omitFromCustomerDisplay } : {}),
-  };
-}
-function sanitizeVisibilityRule(raw: unknown): TemplateDynamicField["visibleWhen"] {
-  if (!raw || typeof raw !== "object") return undefined;
-  const r = raw as { fieldKey?: unknown; equalsAny?: unknown };
-  const fieldKey = typeof r.fieldKey === "string" ? r.fieldKey.trim() : "";
-  if (!fieldKey) return undefined;
-  const equalsAny = Array.isArray(r.equalsAny) ? r.equalsAny.filter((v): v is string => typeof v === "string" && v.trim().length > 0) : [];
-  if (equalsAny.length === 0) return undefined;
-  return { fieldKey, equalsAny };
-}
-/** Admin-authored schema for one item's dynamic fields — same "loose but type-safe, admin-only
- * tool" trust level as `sanitizeItem`/`sanitizeSection` below, not the stricter customer-input
- * validation `quoteValidation.ts` applies to a QuoteLine's dynamic-field *values*. Structurally
- * invalid combinations (empty option lists, duplicate keys, dangling `visibleWhen` references) are
- * NOT silently coerced/dropped here — see `validateDynamicFieldSchema()` below, which runs as a
- * second pass over the whole item and rejects those with a field-specific 400 instead (2026-07-20,
- * Codex review Medium Priority fix — this function alone can only sanitize one field in isolation,
- * it has no visibility into its siblings, so it was never the right place to catch a duplicate key
- * or a dangling cross-field reference). */
-function sanitizeDynamicField(raw: unknown, sortOrder: number): TemplateDynamicField | null {
-  const f = (raw ?? {}) as Partial<TemplateDynamicField>;
-  const label = String(f.label ?? "").trim();
-  if (!label) return null;
-  const type: TemplateFieldType = DYNAMIC_FIELD_TYPES.has(f.type as TemplateFieldType) ? (f.type as TemplateFieldType) : "text";
-  const field: TemplateDynamicField = { key: typeof f.key === "string" && f.key ? f.key : randomUUID(), label, type, sortOrder };
-  if (type === "dropdown" || type === "radio" || type === "checkboxGroup") {
-    field.options = Array.isArray(f.options) ? f.options.map(sanitizeFieldOption).filter((o): o is TemplateFieldOption => o !== null) : [];
-  }
-  if (type === "text" || type === "number") {
-    const unitSuffix = typeof f.unitSuffix === "string" ? f.unitSuffix.trim() : "";
-    if (unitSuffix) field.unitSuffix = unitSuffix;
-    const placeholder = typeof f.placeholder === "string" ? f.placeholder.trim() : "";
-    if (placeholder) field.placeholder = placeholder;
-  }
-  const visibleWhen = sanitizeVisibilityRule(f.visibleWhen);
-  if (visibleWhen) field.visibleWhen = visibleWhen;
-  if (type === "checkboxGroup" && f.generateIncludedExcluded === true) field.generateIncludedExcluded = true;
-  return field;
-}
-/** Second-pass structural validation across one item's FULL dynamic-field list (2026-07-20, Codex
- * review Medium Priority fix) — `sanitizeDynamicField()`/`sanitizeFieldOption()`/
- * `sanitizeVisibilityRule()` above each only ever see one field/option/rule in isolation, so none of
- * them could catch a problem that only exists in the RELATIONSHIP between two fields on the same
- * item. Throws a field-specific 400 (no partial write happens — `sanitizeContent()`'s caller only
- * persists after every item validates) instead of persisting a template whose UI/print/validation
- * behavior would silently break: a dropdown/radio/checkboxGroup with no options is unselectable, a
- * duplicate field or option key makes lookups by key ambiguous, and a `visibleWhen.fieldKey` that
- * doesn't name a real sibling field (or `equalsAny` values that don't name real options of that
- * sibling) can never actually become visible. */
-export function validateDynamicFieldSchema(itemLabel: string, fields: TemplateDynamicField[]): void {
-  const seenFieldKeys = new Set<string>();
-  for (const field of fields) {
-    if (seenFieldKeys.has(field.key)) {
-      throw new HttpError(400, `Template item "${itemLabel}": ฟิลด์ "${field.label}" มี key ซ้ำกับฟิลด์อื่น (${field.key})`);
-    }
-    seenFieldKeys.add(field.key);
-
-    if (field.type === "dropdown" || field.type === "radio" || field.type === "checkboxGroup") {
-      const options = field.options ?? [];
-      if (options.length === 0) {
-        throw new HttpError(400, `Template item "${itemLabel}": ฟิลด์ "${field.label}" ต้องมีตัวเลือกอย่างน้อย 1 ตัวเลือก`);
-      }
-      const seenOptionKeys = new Set<string>();
-      for (const opt of options) {
-        if (seenOptionKeys.has(opt.key)) {
-          throw new HttpError(400, `Template item "${itemLabel}": ฟิลด์ "${field.label}" มีตัวเลือกที่มี key ซ้ำ (${opt.key})`);
-        }
-        seenOptionKeys.add(opt.key);
-      }
-    }
-  }
-  for (const field of fields) {
-    const rule = field.visibleWhen;
-    if (!rule) continue;
-    const controlling = fields.find((f) => f.key === rule.fieldKey);
-    if (!controlling) {
-      throw new HttpError(400, `Template item "${itemLabel}": เงื่อนไขการแสดงผลของฟิลด์ "${field.label}" อ้างอิงฟิลด์ที่ไม่มีอยู่จริง (${rule.fieldKey})`);
-    }
-    if (controlling.options) {
-      const validKeys = new Set(controlling.options.map((o) => o.key));
-      const invalidValues = rule.equalsAny.filter((k) => !validKeys.has(k));
-      if (invalidValues.length > 0) {
-        throw new HttpError(400, `Template item "${itemLabel}": เงื่อนไขการแสดงผลของฟิลด์ "${field.label}" อ้างอิงตัวเลือกที่ไม่มีอยู่จริงในฟิลด์ "${controlling.label}" (${invalidValues.join(", ")})`);
-      }
-    }
-  }
-}
-/** `undefined` means "the admin never enabled the Condition section" (`raw` itself is absent/not an
- * object — the client only ever sends a `conditions` object at all once the toggle is checked, see
- * `toggleConditions()` in TemplateEditorView.tsx). Deliberately does NOT collapse back to `undefined`
- * just because every sub-field is currently blank — an admin who enables Condition and then clears
- * all its text fields (e.g. wants no Warranty/Delivery suffix wording) has still explicitly enabled
- * it; silently reverting that to "disabled" on save would discard their action with no warning and
- * make the checkbox appear unchecked again next time the template is opened. */
-function sanitizeConditions(raw: unknown): QuotationTemplate["conditions"] {
-  if (!raw || typeof raw !== "object") return undefined;
-  const c = raw as Partial<NonNullable<QuotationTemplate["conditions"]>>;
-  return {
-    vatConditionText: String(c.vatConditionText ?? "").trim(),
-    warrantyUnit: String(c.warrantyUnit ?? "").trim(),
-    deliveryUnit: String(c.deliveryUnit ?? "").trim(),
-    paymentPresets: sanitizeStringArray(c.paymentPresets),
-  };
-}
-
 /** Collects every distinct `productId` referenced anywhere in a raw content-draft body, for one
  * batched lookup (see `loadProductMap`) instead of an N+1 query per item. */
 function collectProductIds(body: Record<string, unknown>): string[] {
@@ -439,12 +292,6 @@ async function loadProductMap(productIds: string[]): Promise<Map<string, Product
 function sanitizeItem(raw: unknown, sortOrder: number, productMap: Map<string, Product>): TemplateItem {
   const it = (raw ?? {}) as Partial<TemplateItem>;
   const itemType: TemplateItemType = it.itemType === "subItem" || it.itemType === "specification" ? it.itemType : "item";
-  const dynamicFields = Array.isArray(it.dynamicFields)
-    ? it.dynamicFields.map((f, i) => sanitizeDynamicField(f, i)).filter((f): f is TemplateDynamicField => f !== null)
-    : [];
-  if (dynamicFields.length > 0) {
-    validateDynamicFieldSchema(String(it.name ?? "").trim() || String(it.id ?? "?"), dynamicFields);
-  }
   const item: TemplateItem = {
     id: typeof it.id === "string" && it.id ? it.id : randomUUID(),
     itemType,
@@ -459,7 +306,6 @@ function sanitizeItem(raw: unknown, sortOrder: number, productMap: Map<string, P
     internalNotes: sanitizeStringArray(it.internalNotes),
     visibleToCustomer: it.visibleToCustomer !== false,
     sortOrder,
-    ...(dynamicFields.length ? { dynamicFields } : {}),
   };
   if (typeof it.productId === "string" && it.productId) {
     const product = productMap.get(it.productId);
@@ -498,7 +344,7 @@ function sanitizeTerm(raw: unknown): TemplateTermLine | null {
 interface SanitizedContent {
   templateCode: string; templateName: string; jobTypeCode: string; jobTypeName: string;
   description: string; version: string; sections: TemplateSection[]; defaultTerms: TemplateTermLine[];
-  internalNotes: string[]; defaultNotes: string[]; conditions?: QuotationTemplate["conditions"];
+  internalNotes: string[];
 }
 async function sanitizeContent(body: Record<string, unknown>): Promise<SanitizedContent> {
   const templateCode = String(body.templateCode ?? "").trim();
@@ -508,7 +354,6 @@ async function sanitizeContent(body: Record<string, unknown>): Promise<Sanitized
   if (!templateName) throw new HttpError(400, "กรุณาระบุชื่อ Template");
   if (!jobTypeCode) throw new HttpError(400, "กรุณาเลือกประเภทงาน");
   const productMap = await loadProductMap(collectProductIds(body));
-  const conditions = sanitizeConditions(body.conditions);
   return {
     templateCode, templateName, jobTypeCode,
     jobTypeName: String(body.jobTypeName ?? ""),
@@ -517,8 +362,6 @@ async function sanitizeContent(body: Record<string, unknown>): Promise<Sanitized
     sections: Array.isArray(body.sections) ? body.sections.map((s, i) => sanitizeSection(s, i, productMap)) : [],
     defaultTerms: Array.isArray(body.defaultTerms) ? body.defaultTerms.map(sanitizeTerm).filter((t): t is TemplateTermLine => t !== null) : [],
     internalNotes: sanitizeStringArray(body.internalNotes),
-    defaultNotes: sanitizeStringArray(body.defaultNotes),
-    ...(conditions ? { conditions } : {}),
   };
 }
 
@@ -693,8 +536,6 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
     sections,
     defaultTerms: [...source.defaultTerms],
     internalNotes: [...source.internalNotes],
-    defaultNotes: [...(source.defaultNotes ?? [])],
-    ...(source.conditions ? { conditions: source.conditions } : {}),
     isActive: false,
   };
   const doc: QuotationTemplateFields = {

@@ -39,62 +39,6 @@ export interface TemplateEditableParameter {
 
 export type TemplateItemType = "item" | "subItem" | "specification";
 
-/**
- * Generic dynamic-field schema (added 2026-07-20, FRP Lining template pass) — lets a template item
- * declare structured, conditional inputs (dropdown/radio/checkbox-group/text/number) instead of
- * only the free-text `specifications`/`subDetails`/`editableParameters` above. Reusable by any
- * future template, not tied to FRP Lining: `Quote.lines[].dynamicFields` (src/lib/quotes.tsx) holds
- * the live, per-quotation editable copy; `Quote.templateSnapshot.sections[].items[].dynamicFields`
- * (frozen at creation) is the schema that copy is rendered/validated against. See
- * src/lib/templateDynamicFields.ts for the shared visibility/formatting/Included-Excluded logic and
- * docs/MODULES/QuotationTemplates.md "Dynamic Fields" for the full writeup.
- */
-export type TemplateFieldType = "dropdown" | "radio" | "checkboxGroup" | "text" | "number";
-
-export interface TemplateFieldOption {
-  key: string;
-  label: string;
-  /** checkboxGroup only — this option's checked state in a freshly-applied quotation. */
-  defaultChecked?: boolean;
-  /** dropdown/radio only — when this option is the field's current selected value, the field's own
-   * "{label}: {value}" customer-facing display line is omitted entirely (not printed at all, not
-   * even as e.g. "Concrete Surface Repair: No") instead of the normal "Label: value" text. For an
-   * option whose selection means "not applicable" / "nothing to add" rather than real informational
-   * content. Generic: any current or future dropdown/radio option can opt into this — not specific
-   * to FRP Lining's Concrete Surface Repair "No", which is just its first user. See
-   * `formatFieldDisplay()` in src/lib/templateDynamicFields.ts. */
-  omitFromCustomerDisplay?: boolean;
-}
-
-/** Gates a field's visibility on another field on the SAME item — `equalsAny` matches a
- * dropdown/radio field's current `value`, or (when the controlling field is a checkboxGroup) any
- * one of its currently checked option keys. */
-export interface TemplateFieldVisibilityRule {
-  fieldKey: string;
-  equalsAny: string[];
-}
-
-export interface TemplateDynamicField {
-  key: string;
-  label: string;
-  type: TemplateFieldType;
-  /** dropdown/radio/checkboxGroup only. */
-  options?: TemplateFieldOption[];
-  /** text/number only — appended after the value in customer-facing output, e.g. "mm". */
-  unitSuffix?: string;
-  /** text only — an editing-UI hint/example (e.g. suggested resin brand names), never a
-   * restrictive allowlist and never auto-inserted as a value. */
-  placeholder?: string;
-  visibleWhen?: TemplateFieldVisibilityRule;
-  /** checkboxGroup only — when true, customer-facing output renders an auto-generated
-   * "Included .../Excluded ..." pair (fixed option order) instead of raw checkboxes. Another
-   * dropdown/text field on the same item whose `visibleWhen` targets one of this field's checked
-   * options is appended inline after that option in the Included line (e.g. "Confined Space
-   * Certificate — 2 Roles") — a generic mechanism, not specific to any one option. */
-  generateIncludedExcluded?: boolean;
-  sortOrder: number;
-}
-
 export interface TemplateItem {
   id: string;
   itemType: TemplateItemType;
@@ -130,9 +74,6 @@ export interface TemplateItem {
   productSnapshot?: { code: string; name: string; unit: string; defaultPrice: number };
   visibleToCustomer: boolean;
   sortOrder: number;
-  /** Structured dynamic fields carried by this item (dropdown/radio/checkboxGroup/text/number) —
-   * see `TemplateDynamicField` above. Optional/absent on every item created before this existed. */
-  dynamicFields?: TemplateDynamicField[];
 }
 
 export interface TemplateSection {
@@ -158,26 +99,6 @@ export interface TemplateTermLine {
  * filter — see docs/MODULES/QuotationTemplates.md "Template Management Module." */
 export type TemplateSourceType = "excel_import" | "manual";
 
-/** The "Condition" section's structured content (added 2026-07-20, FRP Lining template pass) —
- * VAT wording, Warranty/Delivery fill-in-the-blank phrasing, and selectable Payment presets.
- * Optional/absent on every template that predates this (they keep using plain `defaultTerms`
- * paymentTerm/warrantyTerm/taxNote lines instead, unaffected). `Quote.vatConditionText`/
- * `warrantyText`/`deliveryDays`/`paymentTerms` (src/lib/quotes.tsx) hold the per-quotation editable
- * copy seeded from this at apply time. */
-export interface TemplateConditionConfig {
-  /** e.g. "Vat 7%: The Above Price Included Vat 7%" — informational wording only, never used to
-   * compute VAT (see `computeTotals()`/`VAT_RATE` in src/lib/quotes.tsx, unaffected). */
-  vatConditionText: string;
-  /** Fixed suffix phrase after the editable Warranty value, e.g. "After Job Completed." */
-  warrantyUnit: string;
-  /** Fixed suffix phrase after the editable Delivery day count, e.g. "Days After Received P/O" */
-  deliveryUnit: string;
-  /** Selectable starting text for the Payment field — the salesperson picks one, then may freely
-   * edit the result (stored as the ordinary `Quote.paymentTerms` string, same field every other
-   * template's payment terms already use). */
-  paymentPresets: string[];
-}
-
 export interface QuotationTemplate {
   id: string;
   templateCode: string;
@@ -202,12 +123,6 @@ export interface QuotationTemplate {
   /** Internal-only notes captured at the template level (not tied to one specific item) — e.g. a
    * general staff reminder found near the top/bottom of a sheet. Never customer-visible. */
   internalNotes: string[];
-  /** Customer-visible starting "หมายเหตุ" (Notes) rows, added 2026-07-20 — copied into
-   * `Quote.notes` at apply time, where the salesperson may freely add/edit/remove/reorder them.
-   * Optional/absent on every template created before this existed (falls back to `[]`). */
-  defaultNotes?: string[];
-  /** See `TemplateConditionConfig` above. Optional/absent on every template that predates it. */
-  conditions?: TemplateConditionConfig;
   isActive: boolean;
   isDeleted: boolean;
   createdAt: string;
@@ -261,8 +176,6 @@ export interface TemplateContentDraft {
   sections: TemplateSection[];
   defaultTerms: TemplateTermLine[];
   internalNotes: string[];
-  defaultNotes?: string[];
-  conditions?: TemplateConditionConfig;
   isActive: boolean;
 }
 

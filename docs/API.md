@@ -109,33 +109,6 @@ Client wrapper functions: `src/lib/quotationTemplates.ts`'s `fetchQuotationTempl
 `setQuotationTemplateArchived(id, isDeleted)`/`createQuotationTemplate(draft)`/
 `updateQuotationTemplate(id, draft)`/`duplicateQuotationTemplate(id, newTemplateCode)`.
 
-**2026-07-20, FRP Lining v2.0 pass**: `TemplateContentDraft` (and therefore the `POST`/`PATCH` body
-above) gained two more optional fields — `defaultNotes: string[]` and `conditions?:
-TemplateConditionConfig` — plus each `TemplateItem` in `sections` may carry a `dynamicFields:
-TemplateDynamicField[]` array (dropdown/radio/checkboxGroup/text/number). Server-side sanitization
-(`sanitizeContent()`/`sanitizeItem()`/`sanitizeDynamicField()` in `quotationTemplatesHandler.ts`) is
-loose-but-typed per individual field, matching this route's existing "admin-only authenticated tool"
-trust level — not the stricter validation `POST/PATCH /api/quotes` applies to a *quote's*
-dynamic-field *values* (see below). `POST .../duplicate` now also copies `defaultNotes`/`conditions`
-(previously would have silently dropped them). `POST .../import` re-ran against the updated
-`LI-FRP-LINING` v2.0 seed reports it as `updated` (same `templateCode`, changed content hash), not
-`created` — no duplicate. See [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Dynamic Fields."
-
-**2026-07-20, Codex review fix pass (Medium)**: `sanitizeItem()` now additionally runs
-`validateDynamicFieldSchema()` — a second pass over an item's FULL `dynamicFields` list (still per
-item, not cross-item) that DOES reject (`400`, field-specific Thai message) rather than
-silently-persist: a dropdown/radio/checkboxGroup with zero options, a duplicate field/option key on
-the same item, or a `visibleWhen.fieldKey`/`equalsAny` that doesn't reference a real sibling
-field/option. Applies to both `POST /api/quotation-templates` and `PATCH /api/quotation-templates/:id`
-(both call `sanitizeContent()` → `sanitizeItem()`). No partial write: the whole request is rejected
-before anything is persisted if any one item fails. `TemplateFieldOption` also gained
-`omitFromCustomerDisplay?: boolean` (dropdown/radio only, sanitized through unchanged) — see
-DATABASE.md and `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status."
-
-**2026-07-20, exact-wording alignment pass**: no route/behavior change — only literal seed-data
-string values changed via the normal `POST /api/quotation-templates/import` re-run path (same
-idempotent updated-not-duplicated semantics as every prior content edit to `templateSeedData.ts`).
-
 ## Scope of Work (`api/_lib/scopeOfWorkHandler.ts`, mounted at `/api/scope-of-works` via `api/handlers/quotes.ts` — added 2026-07-15, fixed against an independent Codex review the same day)
 
 Shares `api/handlers/quotes.ts`'s function file (checked first on the raw pathname, before falling
@@ -255,20 +228,6 @@ No dedicated `DELETE /api/quotes/:id` route exists — matches the pre-migration
 **Correction (2026-07-14)**: the 2026-07-13 "Quotation integration pass" wired an `issuerCompanyId`/`issuerCompanySnapshot` pair (resolved against `company_profiles`) onto every quote-mutating route above — that was built against a misunderstanding of the actual requirement (this ERP only ever has one issuer company) and has been fully replaced by `customerId`/`customerSnapshot` (resolved against `customers`), described in the rows above. `issuerCompanyId`/`issuerCompanySnapshot` are no longer accepted, validated, or returned by any route — quotes saved 2026-07-13–2026-07-14 may still carry stray values for these fields in MongoDB, which are simply ignored (unread, not stripped). See [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) (the module itself was later removed entirely — see "History" there).
 
 **Server-side quote validation** (`api/_lib/quoteValidation.ts`, added 2026-07-10 per the Codex review's Critical finding that quote writes previously copied raw client fields into MongoDB with no schema validation): every free-text field is length-capped and type-checked (a wrong JSON type, e.g. a number where a string is expected, is a `400`, not a silent coercion); `lines[]` entries are validated per-field (`qty`/`unitPrice` non-negative and bounded, `discount` 0–100, array-length caps on `lines`/`tags`/`subDetails` to bound document size); dates (`issueDate`/`expiryDate`/`followUpDate`) must be `""` or a real `YYYY-MM-DD` calendar date; `amount` is always server-derived (see `PATCH` above) via the shared `computeQuoteAmountWithVat()` (`api/_lib/quoteAmounts.ts`, added 2026-07-14 — also backs the Dashboard's before-VAT figures via its sibling `computeQuoteAmountBeforeVat()`, see DATABASE.md), the same totals formula as `computeTotals()` in `src/lib/quotes.tsx` (duplicated, not imported — same JSX-in-that-file reason `quoteWorkflow.ts` duplicates `workflowTransitions`).
-
-**2026-07-20, FRP Lining v2.0 pass**: `POST`/`PATCH /api/quotes/:id` and the workflow route's `draft`
-now also accept `notes: string[]`, `vatConditionText`, `warrantyText`, and `deliveryDays: number |
-null` (each independently optional, sanitized by `sanitizeNotes()`/`sanitizeLongText()`/
-`sanitizeShortText()`/`sanitizeDeliveryDays()` — the last rejects negative values). Each `lines[]`
-entry may also carry `sourceTemplateItemId`/`dynamicFields` — `validateLines()` now takes the quote's
-frozen `templateSnapshot.sections` (on create: the just-matched template's; on edit/workflow: the
-existing quote's own, immutable) and rebuilds `dynamicFields` **strictly** from that line's resolved
-schema: only schema-declared field keys survive, a dropdown/radio value must match one of that
-field's own declared option keys, a checkboxGroup's checked keys must be declared option keys, and a
-"number" field's value must be a non-negative number if present — an arbitrary/forged key or value in
-the request body is silently dropped, never persisted (no separate "arbitrary property" rejection
-needed, since only declared schema fields are ever produced in the first place). See
-[MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Dynamic Fields."
 
 ## Errors
 

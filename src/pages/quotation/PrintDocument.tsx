@@ -4,34 +4,10 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import {
   type Quote, type QuoteLine, fmt, lineSubtotal, computeTotals, bahtText, VAT_RATE,
-  formatQuoteDateThai as fmtThaiDate, formatQuoteDateNumeric as fmtNumericDate,
+  lineHasDetails, formatQuoteDateThai as fmtThaiDate, formatQuoteDateNumeric as fmtNumericDate,
 } from "../../lib/quotes";
-import type { TemplateSection, TemplateConditionConfig } from "../../lib/quotationTemplates";
-import { resolveDynamicFieldSchema, visibleFields, formatFieldDisplay, formatIncludedExcluded } from "../../lib/templateDynamicFields";
 import { FormattedNotes } from "./notesFormat";
 import { BrandMark } from "../../components/BrandMark";
-
-/** Customer-facing display lines for one line's dynamic fields — plain visible fields formatted as
- * "Label: value", plus each `generateIncludedExcluded` checkboxGroup's auto-generated Included/
- * Excluded pair. Never the raw controls, never a hidden/blank field, never `undefined`/`null`. */
-function dynamicFieldPrintLines(sections: TemplateSection[] | undefined, line: QuoteLine): string[] {
-  if (!line.dynamicFields) return [];
-  const schema = resolveDynamicFieldSchema(sections, line.sourceTemplateItemId);
-  if (schema.length === 0) return [];
-  const lines: string[] = [];
-  for (const field of visibleFields(schema, line.dynamicFields)) {
-    if (field.type === "checkboxGroup") {
-      if (!field.generateIncludedExcluded) continue;
-      const { included, excluded } = formatIncludedExcluded(schema, field, line.dynamicFields);
-      if (included) lines.push(included);
-      if (excluded) lines.push(excluded);
-      continue;
-    }
-    const display = formatFieldDisplay(field, line.dynamicFields);
-    if (display) lines.push(display);
-  }
-  return lines;
-}
 
 /** A section-header line with no item directly following it (e.g. every item under it was deleted
  * but the header itself wasn't) is never printed — an empty section heading on the customer PDF
@@ -61,7 +37,6 @@ export function PrintDocument({
   deliveryMethod, deliveryAddress, project,
   poRef, paymentTerms, issueDate, expiryDate, jobTypeName,
   lines, discount, remarks,
-  notes, vatConditionText, warrantyText, deliveryDays, conditions, templateSections,
   preparerUser, approverUser, preparerName, preparerDate, approverName, approverDate,
 }: {
   isDetail: boolean;
@@ -88,15 +63,6 @@ export function PrintDocument({
   lines: QuoteLine[];
   discount: number;
   remarks: string;
-  /** Condition/Notes section content (added 2026-07-20) — each independently optional, matching
-   * `Quote.notes`/`vatConditionText`/`warrantyText`/`deliveryDays`. `templateSections` resolves
-   * each line's dynamic-field schema (see `Quote.templateSnapshot.sections`). */
-  notes?: string[];
-  vatConditionText?: string;
-  warrantyText?: string;
-  deliveryDays?: number | null;
-  conditions?: TemplateConditionConfig;
-  templateSections?: TemplateSection[];
   preparerUser?: User;
   approverUser?: User;
   preparerName: string;
@@ -213,17 +179,7 @@ export function PrintDocument({
               </tr>
             );
           }
-          // Print-specific "does this line actually have anything to show" check — deliberately
-          // NOT the same as `lineHasDetails()` (used by the on-screen editor's expand-indicator),
-          // which lights up whenever any dynamic field has a raw value, even one whose customer
-          // display is suppressed (e.g. Concrete Surface Repair "No", see `formatFieldDisplay()`).
-          // Gating the print row on the raw-value check would render an empty details `<tr>` —
-          // a blank heading/row/spacing with nothing printed inside it — whenever a line's ONLY
-          // content is a suppressed dynamic field. Gating on the actual rendered output instead
-          // guarantees the row only ever appears when there's real content inside it.
-          const dynamicLines = dynamicFieldPrintLines(templateSections, line);
-          const hasDetails = line.specifications.trim() !== "" || line.notes.trim() !== ""
-            || line.subDetails.some((sd) => sd.text.trim() !== "") || dynamicLines.length > 0;
+          const hasDetails = lineHasDetails(line);
           const unitDiscount = line.unitPrice * (line.discount / 100);
           return (
             <Fragment key={line.id}>
@@ -251,12 +207,6 @@ export function PrintDocument({
                       <div key={sd.id} className="flex items-start gap-1 mt-0.5">
                         <Pin size={9} className="mt-0.5 flex-shrink-0 text-[#7a9ac9]" />
                         <span>{sd.text}</span>
-                      </div>
-                    ))}
-                    {dynamicLines.map((text, i) => (
-                      <div key={`df-${i}`} className="flex items-start gap-1 mt-0.5">
-                        <Pin size={9} className="mt-0.5 flex-shrink-0 text-[#7a9ac9]" />
-                        <span>{text}</span>
                       </div>
                     ))}
                   </td>
@@ -294,35 +244,6 @@ export function PrintDocument({
             </td>
           </tr>
         )}
-
-        {(() => {
-          const nonBlankNotes = (notes ?? []).filter((n) => n.trim());
-          if (nonBlankNotes.length === 0) return null;
-          return (
-            <tr>
-              <td colSpan={7} className="pt-4">
-                <p className="text-[11px] font-semibold mb-1">หมายเหตุ</p>
-                {nonBlankNotes.map((n, i) => <p key={i} className="text-[10.5px] leading-relaxed">{n}</p>)}
-              </td>
-            </tr>
-          );
-        })()}
-
-        {(() => {
-          const conditionLines: string[] = [];
-          if (vatConditionText?.trim()) conditionLines.push(vatConditionText.trim());
-          if (warrantyText?.trim()) conditionLines.push(`Warranty : ${warrantyText.trim()} ${conditions?.warrantyUnit || "After Job Completed."}`);
-          if (deliveryDays != null) conditionLines.push(`Delivery : Within ${deliveryDays} ${conditions?.deliveryUnit || "Days After Received P/O"}`);
-          if (conditionLines.length === 0) return null;
-          return (
-            <tr>
-              <td colSpan={7} className="pt-4">
-                <p className="text-[11px] font-semibold mb-1">Condition</p>
-                {conditionLines.map((line, i) => <p key={i} className="text-[10.5px] leading-relaxed">{line}</p>)}
-              </td>
-            </tr>
-          );
-        })()}
 
         <tr>
           <td colSpan={7} className="pt-5 pb-2">

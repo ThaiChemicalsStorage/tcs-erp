@@ -185,18 +185,6 @@ duplicate/activate/deactivate/archive/unarchive) writes a server-side `AuditLogE
 `relatedJobTypeCode` fields. `POST /api/quotes`'s own audit entry now also distinguishes
 "Quotation Created from Template" from "Quotation Created (Blank)".
 
-**2026-07-20, FRP Lining v2.0 (Dynamic Fields) pass**: no new permissions were introduced. A
-template's new `dynamicFields`/`defaultNotes`/`conditions` content is just more fields within the
-same `TemplateContentDraft` payload the existing `quotationTemplates:create`/`:edit`/`:manage` gates
-already cover — same route, same permission check, same "admin-only authenticated tool" trust level
-as every other content field. On the Quotation side, a line's `dynamicFields` *values* are edited
-under the exact same `quotations:edit` + ownership rule as every other quote field (`PATCH
-/api/quotes/:id`) — a salesperson with quote-edit access may change them, and only a real
-`quotationTemplates:edit` holder may change the underlying schema (labels/options/defaults) on the
-master template. Server-side value validation (dropdown/checkbox values must match the frozen
-schema's declared option keys, numbers non-negative) happens regardless of caller identity, in
-`api/_lib/quoteValidation.ts` — see [API.md](./API.md).
-
 Admins can create additional custom roles and edit any non-system role's permission checkboxes via Role Management (`src/pages/admin/RoleManagementPage.tsx`) — gated client-side by `userIsSuperAdmin()`, and **independently re-enforced server-side**: `POST`/`PATCH`/`DELETE /api/roles*` all require the `roles:manage` permission (`api/handlers/roles.ts`), which only the Super Admin role holds (see below), and the server strips any `roles:manage`/`company:manage` permission from a submitted permission list regardless of what the client sent, so there is no way — UI or direct API call — to grant them elsewhere. `roles:manage` and `company:manage` are additionally hardcoded in `SUPER_ADMIN_ONLY_PERMISSIONS` (`permissions.ts`) and `isPermissionLockedToSuperAdmin()` (`src/lib/roles.ts`, the same function used both client- and server-side) — the permission-matrix checkboxes for those two are disabled/locked for every role except Super Admin itself in the UI, and the server independently refuses to persist them onto any other role even if a request is crafted by hand.
 
 **System-role locking, precise as of the 2026-07-09 fix**: the **Super Admin** role (`isSuperAdmin: true`) is fully read-only — name, description, and permissions can never change via `PATCH`, and it can't be deleted. **Administrator** (`isSystem: true` but `isSuperAdmin: false`) is *editable* — its description and permission checkboxes can be changed like any custom role, only its **name** is locked (can't be renamed) and it can't be deleted. Both the client (`RoleManagementPage.tsx`'s `startEdit()`/`nameLocked`) and server (`api/handlers/roles.ts`'s `handleOne()`) key this off `isSuperAdmin` for the edit lock and `isSystem` for the delete lock — **not** off `isSystem` alone for editing, which was a real bug: it previously made the entire Administrator role read-only (including permissions), identical to Super Admin, when only the name should have been locked. Custom (non-`isSystem`) roles remain fully editable and deletable (if unassigned).

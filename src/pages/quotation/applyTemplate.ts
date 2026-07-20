@@ -1,6 +1,5 @@
 import { newLineId, newSubDetailId, type QuoteLine } from "../../lib/quotes";
 import type { QuotationTemplate, TemplateTermLine } from "../../lib/quotationTemplates";
-import { buildDefaultDynamicFieldValues } from "../../lib/templateDynamicFields";
 
 /** Result of copying a Quotation Template into a new quotation draft — see
  * `docs/MODULES/QuotationTemplates.md` "Template Snapshot in Quotation." Deliberately lives here
@@ -11,11 +10,6 @@ export interface AppliedTemplateDraft {
   lines: QuoteLine[];
   paymentTerms: string;
   remarks: string;
-  /** Added 2026-07-20 — see `Quote.notes`/`vatConditionText`/`warrantyText`/`deliveryDays`. */
-  notes: string[];
-  vatConditionText: string;
-  warrantyText: string;
-  deliveryDays: number | null;
 }
 
 function termsByType(terms: TemplateTermLine[], type: TemplateTermLine["type"]): string[] {
@@ -75,7 +69,6 @@ export function applyTemplateToQuoteDraft(template: QuotationTemplate): AppliedT
           text: `${p.label}: ______${p.unit ? ` ${p.unit}` : ""}`,
         })),
       ];
-      const dynamicFieldSchema = item.dynamicFields ?? [];
       lines.push({
         id: newLineId(),
         description: item.name,
@@ -88,34 +81,12 @@ export function applyTemplateToQuoteDraft(template: QuotationTemplate): AppliedT
         tags: [],
         subDetails,
         isSectionHeader: false,
-        ...(dynamicFieldSchema.length
-          ? { sourceTemplateItemId: item.id, dynamicFields: buildDefaultDynamicFieldValues(dynamicFieldSchema) }
-          : {}),
       });
     }
   }
 
-  // A template using the newer `conditions` (Payment presets) leaves `paymentTerms` blank so the
-  // salesperson must actively choose one — auto-selecting the first preset would read as a fake
-  // default. Templates without `conditions` keep the older `defaultTerms` paymentTerm behavior.
-  const paymentTerms = template.conditions?.paymentPresets.length
-    ? ""
-    : termsByType(template.defaultTerms, "paymentTerm").join("\n");
-  // `conditions.warrantyText`/`warrantyUnit` (see below) is the PRIMARY warranty surface for a
-  // template that defines `conditions` — FRP Lining, the only template using it today, deliberately
-  // keeps `defaultTerms` empty for exactly this reason (see templateSeedData.ts). Legacy
-  // `defaultTerms` `warrantyTerm`/`taxNote` lines are still folded into `remarks` unconditionally
-  // (not gated on `conditions` being absent) — for every template that follows FRP Lining's own
-  // convention this is a no-op (empty array in, empty string out), but it means a future template
-  // that combines BOTH `conditions` and non-empty legacy `defaultTerms` warranty lines (nothing in
-  // the admin editor prevents that — the two are independent, unrelated form controls) never
-  // silently loses that content instead of just showing it twice across two sections.
+  const paymentTerms = termsByType(template.defaultTerms, "paymentTerm").join("\n");
   const remarks = [...termsByType(template.defaultTerms, "warrantyTerm"), ...termsByType(template.defaultTerms, "taxNote")].join("\n");
-  const notes = [...(template.defaultNotes ?? [])];
-  const vatConditionText = template.conditions?.vatConditionText ?? "";
-  // Warranty/Delivery values always start blank (see TemplateConditionConfig) — never invented.
-  const warrantyText = "";
-  const deliveryDays = null;
 
-  return { lines, paymentTerms, remarks, notes, vatConditionText, warrantyText, deliveryDays };
+  return { lines, paymentTerms, remarks };
 }
