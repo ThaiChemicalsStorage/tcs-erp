@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import {
   type TemplateContentDraft, type TemplateSection, type TemplateItem, type TemplateTermLine,
+  type TemplateDynamicField, type TemplateFieldType, type TemplateFieldOption, type TemplateConditionConfig,
   fetchQuotationTemplate, createQuotationTemplate, updateQuotationTemplate,
 } from "../../lib/quotationTemplates";
 import type { JobType } from "../../lib/jobTypes";
@@ -29,8 +30,11 @@ function emptySection(sortOrder: number): TemplateSection {
 function emptyDraft(jobTypeCode: string, jobTypeName: string): TemplateContentDraft {
   return {
     templateCode: "", templateName: "", jobTypeCode, jobTypeName, description: "", version: "1.0",
-    sections: [], defaultTerms: [], internalNotes: [], isActive: false,
+    sections: [], defaultTerms: [], internalNotes: [], defaultNotes: [], isActive: false,
   };
+}
+function newDynamicField(sortOrder: number): TemplateDynamicField {
+  return { key: newId(), label: "", type: "text", sortOrder };
 }
 
 /** Multi-line-textarea <-> string[] helper — every free-text list field (specifications,
@@ -89,6 +93,7 @@ export function TemplateEditorView({
           templateCode: full.templateCode, templateName: full.templateName, jobTypeCode: full.jobTypeCode,
           jobTypeName: full.jobTypeName, description: full.description, version: full.version,
           sections: full.sections, defaultTerms: full.defaultTerms, internalNotes: full.internalNotes,
+          defaultNotes: full.defaultNotes ?? [], conditions: full.conditions,
           isActive: full.isActive,
         });
         setOriginalActive(full.isActive);
@@ -150,6 +155,22 @@ export function TemplateEditorView({
   const addTerm = (type: TemplateTermLine["type"]) => setDraft((d) => ({ ...d, defaultTerms: [...d.defaultTerms, { type, text: "" }] }));
   const updateTermText = (index: number, text: string) => setDraft((d) => ({ ...d, defaultTerms: d.defaultTerms.map((term, i) => (i === index ? { ...term, text } : term)) }));
   const deleteTerm = (index: number) => setDraft((d) => ({ ...d, defaultTerms: d.defaultTerms.filter((_, i) => i !== index) }));
+
+  const defaultNotes = draft.defaultNotes ?? [];
+  const addDefaultNote = () => setDraft((d) => ({ ...d, defaultNotes: [...(d.defaultNotes ?? []), ""] }));
+  const updateDefaultNote = (i: number, text: string) => setDraft((d) => ({ ...d, defaultNotes: (d.defaultNotes ?? []).map((n, idx) => (idx === i ? text : n)) }));
+  const deleteDefaultNote = (i: number) => setDraft((d) => ({ ...d, defaultNotes: (d.defaultNotes ?? []).filter((_, idx) => idx !== i) }));
+
+  const conditionsEnabled = !!draft.conditions;
+  const toggleConditions = (enabled: boolean) => setDraft((d) => ({
+    ...d,
+    conditions: enabled ? { vatConditionText: "", warrantyUnit: "After Job Completed.", deliveryUnit: "Days After Received P/O", paymentPresets: [] } : undefined,
+  }));
+  const updateConditions = (fn: (c: TemplateConditionConfig) => TemplateConditionConfig) =>
+    setDraft((d) => (d.conditions ? { ...d, conditions: fn(d.conditions) } : d));
+  const addPaymentPreset = () => updateConditions((c) => ({ ...c, paymentPresets: [...c.paymentPresets, ""] }));
+  const updatePaymentPreset = (i: number, text: string) => updateConditions((c) => ({ ...c, paymentPresets: c.paymentPresets.map((p, idx) => (idx === i ? text : p)) }));
+  const deletePaymentPreset = (i: number) => updateConditions((c) => ({ ...c, paymentPresets: c.paymentPresets.filter((_, idx) => idx !== i) }));
 
   const handleSave = async () => {
     if (!draft.templateCode.trim()) { setError(t("templates.form.error.code")); return; }
@@ -306,6 +327,61 @@ export function TemplateEditorView({
         ))}
       </div>
 
+      <div className="bg-card border border-border rounded-xl p-5 space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground">{t("templates.preview.notes")}</h2>
+          <button onClick={addDefaultNote} className="text-[11px] text-[#c9a84c] hover:text-[#f0c040] transition-colors">+ {t("common.add")}</button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">{t("templates.form.defaultNotesHint")}</p>
+        <div className="space-y-1.5">
+          {defaultNotes.map((n, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input value={n} onChange={(e) => updateDefaultNote(i, e.target.value)} className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              <button onClick={() => deleteDefaultNote(i)} className="p-1 text-muted-foreground hover:text-[#e05252] transition-colors"><Trash2 size={13} /></button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" checked={conditionsEnabled} onChange={(e) => toggleConditions(e.target.checked)} className="w-4 h-4 rounded border-border accent-[#c9a84c]" />
+          <h2 className="text-sm font-semibold text-foreground">{t("templates.preview.conditions")}</h2>
+        </label>
+        {draft.conditions && (
+          <div className="space-y-3 pl-1">
+            <div>
+              <label className="text-[11px] text-muted-foreground block mb-1">{t("quotation.field.vatCondition")}</label>
+              <input value={draft.conditions.vatConditionText} onChange={(e) => updateConditions((c) => ({ ...c, vatConditionText: e.target.value }))} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[11px] text-muted-foreground block mb-1">{t("templates.form.warrantyUnit")}</label>
+                <input value={draft.conditions.warrantyUnit} onChange={(e) => updateConditions((c) => ({ ...c, warrantyUnit: e.target.value }))} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground block mb-1">{t("templates.form.deliveryUnit")}</label>
+                <input value={draft.conditions.deliveryUnit} onChange={(e) => updateConditions((c) => ({ ...c, deliveryUnit: e.target.value }))} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] text-muted-foreground">{t("templates.form.paymentPresets")}</label>
+                <button onClick={addPaymentPreset} className="text-[11px] text-[#c9a84c] hover:text-[#f0c040] transition-colors">+ {t("common.add")}</button>
+              </div>
+              <div className="space-y-1.5">
+                {draft.conditions.paymentPresets.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input value={p} onChange={(e) => updatePaymentPreset(i, e.target.value)} className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                    <button onClick={() => deletePaymentPreset(i)} className="p-1 text-muted-foreground hover:text-[#e05252] transition-colors"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="bg-card border border-border rounded-xl p-5">
         <label className="text-xs font-semibold text-foreground block mb-1">{t("templates.form.internalNotes")}</label>
         <p className="text-[11px] text-muted-foreground mb-1.5">{t("templates.form.internalNotesHint")}</p>
@@ -437,6 +513,10 @@ function ItemEditor({
               ))}
             </div>
           </div>
+          <DynamicFieldsAdminEditor
+            fields={item.dynamicFields ?? []}
+            onChange={(fields) => onChange((it) => ({ ...it, dynamicFields: fields }))}
+          />
           <div>
             <label className="text-[10px] text-muted-foreground block mb-0.5">{t("templates.form.itemInternalNotes")}</label>
             <textarea
@@ -452,6 +532,136 @@ function ItemEditor({
           </label>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Options textarea <-> `TemplateFieldOption[]`, one option per line — `[x]`/`[ ]` prefix toggles
+ * `defaultChecked` for a checkboxGroup field (matching this feature's own business-requirement
+ * input convention); a `!` prefix on a dropdown/radio option toggles `omitFromCustomerDisplay`
+ * (e.g. `!No` — selecting "No" prints nothing for this field at all, rather than "Field: No"; see
+ * `omitFromCustomerDisplay` in src/lib/quotationTemplates.ts, first used by FRP Lining's Concrete
+ * Surface Repair but generic to any dropdown/radio option). A real label that itself needs to start
+ * with a literal `!` is escaped as `\!` (both when writing it out and when parsing it back) so it's
+ * never misread as the suppression marker. Option keys are reused by line position when re-parsing
+ * (not regenerated from the label) so editing a label in place never breaks an existing `visibleWhen`
+ * reference to that option — only inserting/deleting a line in the middle can shift a later option's
+ * key, an accepted tradeoff of a bulk-text editor. */
+function optionsToText(options: TemplateFieldOption[], isCheckbox: boolean): string {
+  return options.map((o) => {
+    if (isCheckbox) return `${o.defaultChecked ? "[x]" : "[ ]"} ${o.label}`;
+    if (o.omitFromCustomerDisplay) return `!${o.label}`;
+    return o.label.startsWith("!") ? `\\${o.label}` : o.label;
+  }).join("\n");
+}
+function parseOptionsText(existing: TemplateFieldOption[], isCheckbox: boolean, text: string): TemplateFieldOption[] {
+  return text.split("\n").map((s) => s.trim()).filter(Boolean).map((line, i) => {
+    if (isCheckbox) {
+      const checkboxMatch = /^\[( |x|X)\]\s*(.*)$/.exec(line);
+      const label = checkboxMatch ? checkboxMatch[2] : line;
+      const defaultChecked = checkboxMatch ? checkboxMatch[1].toLowerCase() === "x" : false;
+      return { key: existing[i]?.key ?? newId(), label, defaultChecked };
+    }
+    if (line.startsWith("\\!")) return { key: existing[i]?.key ?? newId(), label: line.slice(1) };
+    const omitFromCustomerDisplay = line.startsWith("!");
+    const label = omitFromCustomerDisplay ? line.slice(1).trim() : line;
+    return { key: existing[i]?.key ?? newId(), label, ...(omitFromCustomerDisplay ? { omitFromCustomerDisplay: true } : {}) };
+  });
+}
+
+/** Admin editor for one item's `TemplateDynamicField[]` (added 2026-07-20) — a generic, reusable
+ * authoring UI for the dropdown/radio/checkbox-group/text/number field system, not specific to any
+ * one template. See `src/lib/templateDynamicFields.ts` for how these are rendered/evaluated once
+ * applied to a quotation. */
+function DynamicFieldsAdminEditor({
+  fields, onChange,
+}: {
+  fields: TemplateDynamicField[];
+  onChange: (fields: TemplateDynamicField[]) => void;
+}) {
+  const { t } = useI18n();
+  const addField = () => onChange([...fields, newDynamicField(fields.length)]);
+  const updateField = (key: string, patch: Partial<TemplateDynamicField>) => onChange(fields.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+  const deleteField = (key: string) => onChange(fields.filter((f) => f.key !== key));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-0.5">
+        <label className="text-[10px] text-muted-foreground">{t("templates.form.dynamicFields")}</label>
+        <button onClick={addField} className="text-[10px] text-[#c9a84c] hover:text-[#f0c040] transition-colors">+ {t("common.add")}</button>
+      </div>
+      <div className="space-y-2">
+        {fields.map((f) => {
+          const hasOptions = f.type === "dropdown" || f.type === "radio" || f.type === "checkboxGroup";
+          const isCheckbox = f.type === "checkboxGroup";
+          return (
+            <div key={f.key} className="bg-card border border-border rounded p-2 space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={f.label}
+                  onChange={(e) => updateField(f.key, { label: e.target.value })}
+                  placeholder={t("templates.form.dynamicFieldLabel")}
+                  className="flex-1 min-w-0 text-[11px] text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors"
+                />
+                <select
+                  value={f.type}
+                  onChange={(e) => updateField(f.key, { type: e.target.value as TemplateFieldType })}
+                  className="text-[11px] text-foreground bg-secondary border border-border rounded px-1.5 py-1 outline-none appearance-none flex-shrink-0"
+                >
+                  <option value="text">{t("templates.form.dynamicFieldType.text")}</option>
+                  <option value="number">{t("templates.form.dynamicFieldType.number")}</option>
+                  <option value="dropdown">{t("templates.form.dynamicFieldType.dropdown")}</option>
+                  <option value="radio">{t("templates.form.dynamicFieldType.radio")}</option>
+                  <option value="checkboxGroup">{t("templates.form.dynamicFieldType.checkboxGroup")}</option>
+                </select>
+                <button onClick={() => deleteField(f.key)} className="p-0.5 text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0"><X size={11} /></button>
+              </div>
+              {(f.type === "text" || f.type === "number") && (
+                <div className="flex items-center gap-1.5">
+                  <input value={f.unitSuffix ?? ""} onChange={(e) => updateField(f.key, { unitSuffix: e.target.value })} placeholder={t("templates.form.unit")} className="w-24 text-[11px] text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                  <input value={f.placeholder ?? ""} onChange={(e) => updateField(f.key, { placeholder: e.target.value })} placeholder={t("templates.form.dynamicFieldPlaceholderHint")} className="flex-1 min-w-0 text-[11px] text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                </div>
+              )}
+              {hasOptions && (
+                <div>
+                  <label className="text-[10px] text-muted-foreground block mb-0.5">
+                    {isCheckbox ? t("templates.form.dynamicFieldOptionsCheckboxHint") : t("templates.form.dynamicFieldOptionsHint")}
+                  </label>
+                  <textarea
+                    value={optionsToText(f.options ?? [], isCheckbox)}
+                    onChange={(e) => updateField(f.key, { options: parseOptionsText(f.options ?? [], isCheckbox, e.target.value) })}
+                    rows={3}
+                    className="w-full text-[11px] text-foreground bg-secondary border border-border rounded px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y"
+                  />
+                </div>
+              )}
+              {isCheckbox && (
+                <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-foreground">
+                  <input type="checkbox" checked={!!f.generateIncludedExcluded} onChange={(e) => updateField(f.key, { generateIncludedExcluded: e.target.checked })} className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c]" />
+                  {t("templates.form.generateIncludedExcluded")}
+                </label>
+              )}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground flex-shrink-0">{t("templates.form.visibleWhen")}</span>
+                <input
+                  value={f.visibleWhen?.fieldKey ?? ""}
+                  onChange={(e) => updateField(f.key, { visibleWhen: e.target.value ? { fieldKey: e.target.value, equalsAny: f.visibleWhen?.equalsAny ?? [] } : undefined })}
+                  placeholder={t("templates.form.visibleWhenFieldKey")}
+                  className="w-28 text-[11px] text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors"
+                />
+                {f.visibleWhen && (
+                  <input
+                    value={f.visibleWhen.equalsAny.join(", ")}
+                    onChange={(e) => updateField(f.key, { visibleWhen: { fieldKey: f.visibleWhen!.fieldKey, equalsAny: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) } })}
+                    placeholder={t("templates.form.visibleWhenValues")}
+                    className="flex-1 min-w-0 text-[11px] text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors"
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

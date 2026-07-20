@@ -1,6 +1,12 @@
 import { HttpError } from "./http.js";
 import type { QuoteFields } from "./collections.js";
 import { computeQuoteAmountWithVat } from "./quoteAmounts.js";
+import type { TemplateDynamicField, TemplateSection } from "../../src/lib/quotationTemplates.js";
+// Pure, dependency-free (no JSX/browser globals — only `import type` from quotes.tsx, erased at
+// compile time), same convention `quotationTemplates.ts`/`quotes.tsx` document at their own top —
+// safe to value-import here, and the one place this schema-resolution logic should live (client and
+// server must never drift apart on "what does this line's dynamic-field schema look like").
+import { resolveDynamicFieldSchema } from "../../src/lib/templateDynamicFields.js";
 
 /**
  * Server-side quote payload validation — added per the 2026-07-10 Codex review's Critical finding
@@ -59,6 +65,46 @@ export function validateIsoDateOrEmpty(v: unknown, fieldLabel: string): string {
   return v;
 }
 
+/**
+ * Sanitizes one line's `dynamicFields` STRICTLY against its resolved schema (added 2026-07-20) —
+ * only keys the schema actually declares are ever produced (an arbitrary/forged key in the request
+ * body is silently dropped, never persisted), dropdown/radio values must match a declared option
+ * key, checkboxGroup checked keys must be declared option keys, and a "number" field's value must be
+ * a non-negative number if present. Returns `undefined` when the line has no resolvable schema (a
+ * blank-start line, or a `sourceTemplateItemId` that doesn't resolve) — matches `QuoteLine.dynamicFields`
+ * being optional.
+ */
+function sanitizeDynamicFieldValues(
+  raw: unknown, schema: TemplateDynamicField[], lineIndex: number,
+): QuoteFields["lines"][number]["dynamicFields"] {
+  if (schema.length === 0) return undefined;
+  const rawArr = Array.isArray(raw) ? raw : [];
+  const byKey = new Map(rawArr.map((v) => [(v as Record<string, unknown> | null)?.key, v as Record<string, unknown>]));
+  return schema.map((field) => {
+    const v = byKey.get(field.key) ?? {};
+    const label = `"${field.label}" ของรายการที่ ${lineIndex + 1}`;
+    if (field.type === "checkboxGroup") {
+      const validKeys = new Set((field.options ?? []).map((o) => o.key));
+      const checkedOptionKeys = Array.isArray(v.checkedOptionKeys)
+        ? v.checkedOptionKeys.filter((k): k is string => typeof k === "string" && validKeys.has(k))
+        : [];
+      return { key: field.key, checkedOptionKeys };
+    }
+    const value = typeof v.value === "string" ? v.value.trim() : "";
+    if (value) {
+      if ((field.type === "dropdown" || field.type === "radio") && !(field.options ?? []).some((o) => o.key === value)) {
+        throw new HttpError(400, `ค่าของ ${label} ไม่ถูกต้อง`);
+      }
+      if (field.type === "number") {
+        const num = Number(value);
+        if (!Number.isFinite(num) || num < 0) throw new HttpError(400, `ค่าของ ${label} ต้องเป็นตัวเลขไม่ติดลบ`);
+      }
+      if (value.length > MAX_LINE_TEXT) throw new HttpError(400, `ค่าของ ${label} ยาวเกินไป`);
+    }
+    return { key: field.key, value };
+  });
+}
+
 function sanitizeSubDetail(raw: unknown, lineIndex: number, subIndex: number): QuoteFields["lines"][number]["subDetails"][number] {
   if (typeof raw !== "object" || raw === null) throw new HttpError(400, `รายละเอียดย่อยของรายการที่ ${lineIndex + 1} ไม่ถูกต้อง`);
   const r = raw as Record<string, unknown>;
@@ -68,7 +114,7 @@ function sanitizeSubDetail(raw: unknown, lineIndex: number, subIndex: number): Q
   };
 }
 
-function sanitizeLine(raw: unknown, index: number): QuoteFields["lines"][number] {
+function sanitizeLine(raw: unknown, index: number, templateSections: TemplateSection[] | undefined): QuoteFields["lines"][number] {
   if (typeof raw !== "object" || raw === null) throw new HttpError(400, `รายการที่ ${index + 1} ไม่ถูกต้อง`);
   const r = raw as Record<string, unknown>;
   if (!isFiniteNumber(r.id)) throw new HttpError(400, `รหัสรายการที่ ${index + 1} ไม่ถูกต้อง`);
@@ -80,6 +126,14 @@ function sanitizeLine(raw: unknown, index: number): QuoteFields["lines"][number]
   const rawSubDetails = Array.isArray(r.subDetails) ? r.subDetails : [];
   if (rawSubDetails.length > MAX_SUBDETAILS_PER_LINE) throw new HttpError(400, `รายการที่ ${index + 1} มีรายละเอียดย่อยมากเกินไป`);
   const subDetails = rawSubDetails.map((sd, i) => sanitizeSubDetail(sd, index, i));
+
+  // Added 2026-07-20 — `sourceTemplateItemId` only ever comes from a template application (never
+  // client-invented in a meaningful way: an unresolvable id just yields an empty schema below, so
+  // there's no privilege in forging one). `dynamicFields` is then rebuilt STRICTLY from the
+  // resolved schema, never trusted verbatim — see `sanitizeDynamicFieldValues()`.
+  const sourceTemplateItemId = typeof r.sourceTemplateItemId === "string" && r.sourceTemplateItemId ? r.sourceTemplateItemId : undefined;
+  const schema = resolveDynamicFieldSchema(templateSections, sourceTemplateItemId);
+  const dynamicFields = sanitizeDynamicFieldValues(r.dynamicFields, schema, index);
 
   return {
     id: r.id,
@@ -97,15 +151,20 @@ function sanitizeLine(raw: unknown, index: number): QuoteFields["lines"][number]
     // boolean if present": a header line is still a completely ordinary QuoteLine otherwise, so
     // its qty/unitPrice/discount/etc. go through the exact same checks as any other line.
     isSectionHeader: sanitizeBoolean(r.isSectionHeader, `ประเภทหัวข้อของรายการที่ ${index + 1}`),
+    ...(sourceTemplateItemId ? { sourceTemplateItemId } : {}),
+    ...(dynamicFields ? { dynamicFields } : {}),
   };
 }
 
-/** Validates and sanitizes a `lines` array — throws on any malformed line rather than silently dropping/coercing it. */
-export function validateLines(raw: unknown): QuoteFields["lines"] {
+/** Validates and sanitizes a `lines` array — throws on any malformed line rather than silently
+ * dropping/coercing it. `templateSections` (the quote's own frozen `templateSnapshot.sections`, if
+ * any — added 2026-07-20) resolves each line's dynamic-field schema for validation; omit it for a
+ * blank-start quote or one predating this feature. */
+export function validateLines(raw: unknown, templateSections?: TemplateSection[]): QuoteFields["lines"] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new HttpError(400, "รูปแบบรายการสินค้าไม่ถูกต้อง");
   if (raw.length > MAX_LINES) throw new HttpError(400, `มีรายการสินค้ามากเกินไป (สูงสุด ${MAX_LINES} รายการ)`);
-  return raw.map((l, i) => sanitizeLine(l, i));
+  return raw.map((l, i) => sanitizeLine(l, i, templateSections));
 }
 
 /** The VAT-included grand total actually persisted as `Quote.amount` — see `./quoteAmounts.ts`. */
@@ -179,4 +238,22 @@ export function sanitizeBoolean(v: unknown, fieldLabel: string): boolean {
   if (v === undefined) return false;
   if (typeof v !== "boolean") throw new HttpError(400, `${fieldLabel}ต้องเป็นค่าจริง/เท็จ`);
   return v;
+}
+
+const MAX_NOTES = 50;
+/** "หมายเหตุ" (Notes) list — added 2026-07-20. Blank entries are allowed through (an in-progress
+ * "+ Add" row the user hasn't typed into yet), same as `SubDetail.text`; PrintDocument.tsx filters
+ * blanks out of customer-facing output. */
+export function sanitizeNotes(v: unknown): string[] {
+  if (v === undefined) return [];
+  if (!Array.isArray(v)) throw new HttpError(400, "รูปแบบหมายเหตุไม่ถูกต้อง");
+  if (v.length > MAX_NOTES) throw new HttpError(400, `มีหมายเหตุมากเกินไป (สูงสุด ${MAX_NOTES} รายการ)`);
+  return v.map((n, i) => sanitizeText(n, `หมายเหตุที่ ${i + 1}`, MAX_LINE_TEXT));
+}
+
+/** "Delivery: Within {value} ..." day count — added 2026-07-20. `null`/absent means unset (never a
+ * fake default); rejects negative values. */
+export function sanitizeDeliveryDays(v: unknown): number | null {
+  if (v === undefined || v === null || v === "") return null;
+  return sanitizeNumber(v, "จำนวนวันจัดส่ง", { min: 0, max: 3650 });
 }

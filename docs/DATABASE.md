@@ -229,6 +229,26 @@ Master data for classifying every quotation by the kind of work it represents. S
 ```ts
 interface TemplateEditableParameter { label: string; value: string; unit: string; editable: true; }
 type TemplateItemType = "item" | "subItem" | "specification";
+// Added 2026-07-20 — generic structured field system (dropdown/radio/checkbox-group/text/number)
+// with conditional visibility and checkboxGroup's auto-generated Included/Excluded output. See
+// "Dynamic Fields" below and src/lib/templateDynamicFields.ts.
+type TemplateFieldType = "dropdown" | "radio" | "checkboxGroup" | "text" | "number";
+interface TemplateFieldOption {
+  key: string; label: string; defaultChecked?: boolean; /* checkboxGroup only */
+  // Added 2026-07-20 (Codex review fix pass) — dropdown/radio only. When this option is selected,
+  // formatFieldDisplay() (src/lib/templateDynamicFields.ts) omits the field's whole "Label: value"
+  // customer-facing line entirely instead of printing e.g. "Concrete Surface Repair: No" — an option
+  // whose selection means "nothing to report." Generic, first used by FRP Lining's Concrete Surface
+  // Repair "No" option but usable by any dropdown/radio option. Admin-editable via a "!" prefix
+  // convention in TemplateEditorView.tsx's bulk-text options textarea (e.g. "!No").
+  omitFromCustomerDisplay?: boolean;
+}
+interface TemplateFieldVisibilityRule { fieldKey: string; equalsAny: string[]; }
+interface TemplateDynamicField {
+  key: string; label: string; type: TemplateFieldType; options?: TemplateFieldOption[];
+  unitSuffix?: string; placeholder?: string; visibleWhen?: TemplateFieldVisibilityRule;
+  generateIncludedExcluded?: boolean; sortOrder: number;
+}
 interface TemplateItem {
   id: string; itemType: TemplateItemType; itemCode: string; name: string; description: string;
   quantity: number | null; unit: string; specifications: string[]; subDetails: string[];
@@ -236,9 +256,14 @@ interface TemplateItem {
   // Added 2026-07-15 — informational only, never read when applying a template to a quote.
   productSnapshot?: { code: string; name: string; unit: string; defaultPrice: number };
   visibleToCustomer: boolean; sortOrder: number;
+  dynamicFields?: TemplateDynamicField[];  // added 2026-07-20
 }
 interface TemplateSection { id: string; title: string; description: string; sortOrder: number; items: TemplateItem[]; }
 interface TemplateTermLine { type: "paymentTerm" | "warrantyTerm" | "taxNote"; text: string; }
+// Added 2026-07-20 — the "Condition" section's structured content (VAT wording, Warranty/Delivery
+// fixed suffix phrasing, selectable Payment presets). Supersedes plain defaultTerms lines for any
+// template that defines it; older templates without `conditions` are unaffected.
+interface TemplateConditionConfig { vatConditionText: string; warrantyUnit: string; deliveryUnit: string; paymentPresets: string[]; }
 // Added 2026-07-15 — "excel_import" for the 5 workbook seeds, "manual" for anything created/duplicated via Template Management.
 type TemplateSourceType = "excel_import" | "manual";
 interface QuotationTemplate {
@@ -246,6 +271,8 @@ interface QuotationTemplate {
   description: string; version: string; sourceType: TemplateSourceType; sourceFileName: string; sourceSheetName: string; sourceHash: string;
   sourceWorkbookHash?: string;  // added 2026-07-15 (second Codex-review fix pass) — SHA-256 of the real workbook sheet's raw content, computed by api/_lib/templateWorkbookParser.ts; independent of sourceHash (which only reflects the hand-transcribed seed), absent on manual templates
   sections: TemplateSection[]; defaultTerms: TemplateTermLine[]; internalNotes: string[];
+  defaultNotes?: string[];  // added 2026-07-20 — starting customer-visible "หมายเหตุ" rows, copied into Quote.notes at apply time
+  conditions?: TemplateConditionConfig;  // added 2026-07-20
   isActive: boolean; isDeleted: boolean; createdAt: string; updatedAt: string; createdBy: string; updatedBy: string;
 }
 ```
@@ -302,6 +329,36 @@ sheet (`"FRP Tank and LI"`) and therefore share one `sourceWorkbookHash` too —
 fingerprint, not a row-range-level one. Also this pass: `Quote.templateSnapshot` added (see the
 `Quote` schema below) and template item product links (`productId`/`productSnapshot`) are now
 resolved/rebuilt server-side from a real `products` record rather than trusted from the client.
+
+**2026-07-20, FRP Lining v2.0 pass — Dynamic Fields**: `TemplateDynamicField`/`TemplateFieldOption`/
+`TemplateFieldVisibilityRule` (see the code block above) let a template item declare structured
+dropdown/radio/checkboxGroup/text/number inputs instead of only free-text `specifications`/
+`subDetails`/`editableParameters` — generic, not tied to any one template. `visibleWhen` gates a
+field's visibility on another field's current value/checked-option on the same item (evaluated by
+`src/lib/templateDynamicFields.ts`, shared client + server). A `checkboxGroup` field with
+`generateIncludedExcluded: true` renders as an auto-generated "Included .../Excluded ..." pair in
+fixed option order on the customer document — never the raw checkboxes; another field's `visibleWhen`
+targeting one specific checked option (e.g. a Roles-quantity dropdown targeting "Confined Space
+Certificate") is appended inline into that Included line. `QuotationTemplate.defaultNotes` (starting
+customer-visible "หมายเหตุ" rows) and `.conditions` (the "Condition" section's VAT wording/Warranty
++ Delivery suffix phrasing/Payment presets) were added the same pass — see `Quote.notes`/
+`vatConditionText`/`warrantyText`/`deliveryDays`/`templateSnapshot.conditions` below. The existing
+`LI-FRP-LINING` template (`api/_lib/templateSeedData.ts`) was rebuilt around this system as v2.0 (was
+v1.0, a plain Excel transcription) — same `templateCode`, so the idempotent import **updates** the
+existing record rather than creating a duplicate; every quotation already created from v1.0 keeps its
+own frozen, completely unaffected `lines`/`templateSnapshot`. `computeSourceHash()` now also hashes
+`defaultNotes`/`conditions` so a content-only change to either is still detected as "updated." See
+[MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Dynamic Fields."
+
+**2026-07-20, Codex review fix pass**: fixed 1 High + 1 Medium issue in the pass above. `omitFromCustomerDisplay`
+added to `TemplateFieldOption` (see the code block above) — set on `LI-FRP-LINING`'s Concrete Surface
+Repair "No" option so it no longer prints on the customer document; `formatFieldDisplay()` honors it.
+Server-side, `api/_lib/quotationTemplatesHandler.ts` now runs a second validation pass
+(`validateDynamicFieldSchema()`) over each item's full `dynamicFields` list after sanitizing — an
+empty option list on a dropdown/radio/checkboxGroup, a duplicate field/option key, or a
+`visibleWhen.fieldKey`/`equalsAny` that doesn't reference a real sibling field/option now rejects with
+a 400 instead of persisting silently. See [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)
+"Dynamic Fields" and `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status."
 
 ### `CompanyProfile` — REMOVED 2026-07-14
 
@@ -522,6 +579,13 @@ interface SubDetail {
   text: string;
 }
 
+// Added 2026-07-20 — the live, per-line editable copy of a TemplateDynamicField's current value.
+interface QuoteLineDynamicFieldValue {
+  key: string;
+  value?: string;                 // dropdown/radio/text/number
+  checkedOptionKeys?: string[];   // checkboxGroup only
+}
+
 interface QuoteLine {
   id: number;
   description: string;
@@ -534,6 +598,8 @@ interface QuoteLine {
   tags: string[];
   subDetails: SubDetail[];
   isSectionHeader?: boolean;  // added 2026-07-14 — a non-priced section-divider line, copied from a QuotationTemplate section title
+  sourceTemplateItemId?: string;         // added 2026-07-20 — → TemplateItem.id, resolves dynamicFields' schema in Quote.templateSnapshot
+  dynamicFields?: QuoteLineDynamicFieldValue[];  // added 2026-07-20
 }
 
 interface Quote {
@@ -560,6 +626,10 @@ interface Quote {
   issueDate: string;    // yyyy-mm-dd
   expiryDate: string;   // yyyy-mm-dd
   remarks: string;       // real per-quote field now (see Known Issues below) — defaults to Company.termsAndConditions only for brand-new quotes
+  notes?: string[];                  // added 2026-07-20 — structured, add/edit/remove/reorder "หมายเหตุ" rows, distinct from `remarks`; seeded from QuotationTemplate.defaultNotes
+  vatConditionText?: string;         // added 2026-07-20 — display-only wording, never used to compute VAT (computeTotals()/VAT_RATE below unaffected)
+  warrantyText?: string;             // added 2026-07-20 — e.g. "12 Months"; blank by default, never a fake default, never a server-side blocking rule
+  deliveryDays?: number | null;      // added 2026-07-20 — non-negative, "" /absent = unset
   jobTypeCode: string;               // added 2026-07-10, → JobType.code, "" = unclassified (incl. every quote created before this field existed)
   jobTypeName: string;               // added 2026-07-10, snapshot of JobType.name at save time
   isPotentialOpportunity: boolean;   // added 2026-07-10 — sales-marked "likely to close", feeds Dashboard's Expected Sales KPI/forecast
@@ -572,12 +642,13 @@ interface Quote {
   quotationTemplateId?: string;         // added 2026-07-14, → QuotationTemplate.id; set only at create time via the Create Quotation wizard, never editable afterward
   quotationTemplateName?: string;       // added 2026-07-14 — server-derived snapshot of QuotationTemplate.templateName at create time, never client-writable
   quotationTemplateVersion?: string;    // added 2026-07-14 — server-derived snapshot of QuotationTemplate.version at create time, never client-writable
-  templateSnapshot?: {                  // added 2026-07-15 (second Codex-review fix pass) — real structured copy, server-built, frozen at create time, never read by any rendering path (PDF/editor still only read `lines`)
-    sections: TemplateSection[];
+  templateSnapshot?: {                  // added 2026-07-15 (second Codex-review fix pass) — real structured copy, server-built, frozen at create time
+    sections: TemplateSection[];        // 2026-07-20: now ALSO a legitimate live read path — resolves QuoteLine.dynamicFields' schema (see src/lib/templateDynamicFields.ts) and, before, was audit-only like the rest of this object
     defaultTerms: TemplateTermLine[];
     internalNotes: string[];            // deliberately included here (unlike `lines`) — pure internal audit record, gated by the same quote permissions, never rendered
     sourceHash: string;
     capturedAt: string;
+    conditions?: TemplateConditionConfig;  // added 2026-07-20 — the only place a saved quote's Payment-preset options live (see Quote.notes/vatConditionText/warrantyText/deliveryDays above, which hold the actual editable answers)
   };
   // checklistGroups (a "ข้อกำหนดเอกสารและการส่งมอบ" section) briefly existed here 2026-07-16, then
   // was removed the same day per an explicit business decision — see "Required-Field Validation" in

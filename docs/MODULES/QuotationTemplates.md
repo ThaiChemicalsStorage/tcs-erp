@@ -1,6 +1,13 @@
 # Module: Quotation Templates
 
-## Status: ✅ Built (2026-07-14), fixed against an independent Codex review the same day, extended 2026-07-15 with the full Template Management module, fixed against a second independent Codex review the same day
+## Status: ✅ Built (2026-07-14), fixed against an independent Codex review the same day, extended 2026-07-15 with the full Template Management module, fixed against a second independent Codex review the same day, extended 2026-07-20 with a generic Dynamic Fields system (`LI-FRP-LINING` rebuilt as v2.0), fixed against a third independent Codex review the same day (1 High, 1 Medium)
+
+**2026-07-20, FRP Lining v2.0 pass**: added a generic dynamic-field system (dropdown/radio/
+checkbox-group/text/number, with conditional visibility and checkboxGroup's auto-generated
+Included/Excluded output) and rebuilt the existing `LI-FRP-LINING` template around it per a detailed
+business requirement — see "Dynamic Fields" below. No duplicate template was created (same
+`templateCode`/`jobTypeCode` as the 2026-07-14 v1.0 Excel transcription — the idempotent import
+*updates* the existing record; every quotation already created from v1.0 is completely unaffected).
 
 **2026-07-15, second Codex-review fix pass** (see `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix
 Status" for the full writeup): fixed all 3 High Priority + all 3 Medium Priority issues an
@@ -211,6 +218,125 @@ MongoDB indexes (`api/_lib/collections.ts`'s `ensureIndexes()`): `templateCode` 
 
 Seed data — the actual extracted content, all 5 templates — lives in
 `api/_lib/templateSeedData.ts` as `QUOTATION_TEMPLATE_SEEDS: TemplateSeed[]`.
+
+## Dynamic Fields (added 2026-07-20)
+
+A generic, reusable structured-field system attached to `TemplateItem.dynamicFields` — not specific
+to FRP Lining, any current or future template can use it. Shared logic (schema resolution,
+`visibleWhen` evaluation, display formatting, Included/Excluded generation) lives in
+`src/lib/templateDynamicFields.ts`, imported by the Quotation line editor
+(`LineItemsEditor.tsx`), `PrintDocument.tsx`, `TemplatePreview.tsx`, and — for the same value
+validation, not just the display logic — `api/_lib/quoteValidation.ts` server-side. The type itself
+(`src/lib/quotationTemplates.ts`):
+
+```ts
+type TemplateFieldType = "dropdown" | "radio" | "checkboxGroup" | "text" | "number";
+interface TemplateFieldOption { key: string; label: string; defaultChecked?: boolean; omitFromCustomerDisplay?: boolean; }
+interface TemplateFieldVisibilityRule { fieldKey: string; equalsAny: string[]; }
+interface TemplateDynamicField {
+  key: string; label: string; type: TemplateFieldType; options?: TemplateFieldOption[];
+  unitSuffix?: string; placeholder?: string; visibleWhen?: TemplateFieldVisibilityRule;
+  generateIncludedExcluded?: boolean; sortOrder: number;
+}
+```
+
+**Field types**: `dropdown`/`radio` render as a `<select>`/radio-button row respectively, both start
+blank (no default selection — matches the "no fake data" rule); `checkboxGroup` renders as a set of
+checkboxes, each option optionally `defaultChecked` (e.g. FRP Lining's Safety group starts with
+Medical Certificate + Working at Height Certificate checked, the other 3 unchecked); `text`/`number`
+render as a plain input, `number` rejects negative values (client hint via `min={0}`, real
+enforcement server-side).
+
+**Conditional visibility** (`visibleWhen: { fieldKey, equalsAny }`): a field is hidden until another
+field on the *same item* has a matching current value (dropdown/radio) or checked option
+(checkboxGroup). E.g. FRP Lining's "Tank Size / Dimensions" is hidden until "FRP Lining for" is
+Stainless/Steel/FRP Tank; "Resin Type" is hidden until "Corrosion Layer" is Vinyl Ester Resin;
+"Concrete Surface Repair Details" is hidden until "Concrete Surface Repair" (a `radio` Yes/No) is
+Yes. A hidden field is never rendered on the customer document, never an empty row/heading.
+
+**Self-suppression** (`TemplateFieldOption.omitFromCustomerDisplay`, added 2026-07-20, Codex review
+High Priority fix): distinct from `visibleWhen` above — that hides a *different, dependent* field;
+this instead lets a dropdown/radio option suppress its *own controlling field's* display line when
+selected, for an answer that means "nothing to report" rather than real information. FRP Lining's
+Concrete Surface Repair "No" option sets it: selecting No prints nothing for that field at all
+(previously it printed the literal, meaningless "Concrete Surface Repair: No" — the bug an
+independent Codex review caught, see `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status"). It does
+**not** remove the Prepare Surface item's own priced line or its "Surface Preparation Method" value
+— those are separate, always-applicable, always-billable scope regardless of whether concrete repair
+is needed (see "Codex Findings Determined Incorrect" in that same report for the full reasoning: a
+Steel/Stainless/FRP Tank FRP-lining job has no concrete surface at all, so removing the whole line
+would have wrongly hidden real, priced work). Admin-editable in `TemplateEditorView.tsx`'s bulk-text
+options textarea via a `!` prefix (`!No`).
+
+**Included/Excluded generation** (`generateIncludedExcluded: true`, `checkboxGroup` only): renders
+"Included {checked option labels}" / "Excluded {unchecked option labels}" in the group's own fixed
+option order, instead of raw checkboxes — either line is omitted entirely if it would be empty. A
+second dynamic field whose `visibleWhen` targets one specific checked option (e.g. FRP Lining's
+"Number of Roles" dropdown targeting the Safety group's "Confined Space Certificate" option) is
+appended inline into that Included line: `"Confined Space Certificate — 2 Roles"` — a generic
+mechanism (`quantityFieldFor()` in `templateDynamicFields.ts`), not a special case for that one
+option; any future checkbox-with-quantity pattern reuses it automatically.
+
+**Quote-side storage**: `QuoteLine.sourceTemplateItemId` (→ the originating `TemplateItem.id`) +
+`QuoteLine.dynamicFields: QuoteLineDynamicFieldValue[]` (the live, per-quotation-editable *values*
+only — `{ key, value? }` or `{ key, checkedOptionKeys? }`). The *schema* (labels/types/options/
+`visibleWhen`) is never duplicated onto every line; it's resolved by matching `sourceTemplateItemId`
+against `Quote.templateSnapshot.sections[].items[]` — the same frozen-at-creation structured copy
+`Quote.templateSnapshot` already existed for (added 2026-07-15). This is a deliberate, narrow
+exception to that object's original "audit/reconstruction-only, no rendering path reads it" rule
+(still true for `internalNotes`/`sourceHash`/`capturedAt`) — `sections` is now also a legitimate live
+schema source, documented at its declaration in `src/lib/quotes.tsx`.
+
+**"หมายเหตุ" (Notes) and "Condition"**: `QuotationTemplate.defaultNotes: string[]` seeds `Quote.notes`
+(a real add/edit/remove/reorder list, distinct from the older single free-text `remarks`).
+`QuotationTemplate.conditions: TemplateConditionConfig` (`vatConditionText`/`warrantyUnit`/
+`deliveryUnit`/`paymentPresets`) seeds `Quote.vatConditionText`/`warrantyText`/`deliveryDays`/
+`paymentTerms` (the last reusing the *existing* field every other template's payment terms already
+use, rather than inventing a new one) — VAT/Warranty/Delivery/Payment are display-only wording, never
+used to compute VAT (`computeTotals()`/`VAT_RATE` in `src/lib/quotes.tsx` are completely unaffected).
+An empty Warranty shows a red field-specific warning in the editing UI only (`ConditionEditor` in
+`src/pages/quotation/ConditionAndNotesEditor.tsx`) — never printed, never a server-side blocking rule
+(no new entry was added to `quotationRequiredFields` in `src/lib/validation/quotationValidation.ts`).
+Selecting a Payment preset overwrites the editable Payment text with that preset's wording (a
+deliberate, explicit user action); the salesperson may then freely edit the result, and only the
+final edited text ever appears on the customer document — never the raw preset list.
+
+**Admin authoring**: `TemplateEditorView.tsx`'s `DynamicFieldsAdminEditor` lets an admin add/edit/
+delete an item's dynamic fields (label/type/options/unit suffix/placeholder/`visibleWhen`/Included-
+Excluded toggle) — a generic authoring UI, not FRP-Lining-specific. Options are edited as one
+line-per-option textarea; a `checkboxGroup` option's `[x]`/`[ ]` prefix toggles its
+`defaultChecked` state — matches this feature's own business-requirement input convention. A
+dropdown/radio option's `!` prefix (added 2026-07-20, e.g. `!No`) toggles `omitFromCustomerDisplay`
+(see "Self-suppression" above) — the prefix is preserved/re-parsed on every save, so editing an
+unrelated field on the same item never silently drops it. Option
+keys are reused by line **position** when re-parsing the textarea (not regenerated from the label),
+so editing a label in place never breaks an existing `visibleWhen` reference to that option; only
+inserting/deleting a line in the *middle* of the list can shift a later option's key — an accepted
+tradeoff of a bulk-text editor, noted here rather than silently risked. `TemplateManagementPage.tsx`'s
+Notes/Conditions editors follow the same add/edit/remove list pattern as the existing `defaultTerms`
+editor.
+
+**Server-side validation** (`api/_lib/quoteValidation.ts`): a `QuoteLine.dynamicFields` submission is
+rebuilt **strictly** from that line's resolved schema — only schema-declared field keys are ever
+produced (an arbitrary/forged key is silently dropped), a dropdown/radio value must match one of that
+field's own declared option keys, a checkboxGroup's checked keys must be declared option keys, and a
+"number" field's value must be a non-negative number if present. `Quote.deliveryDays` is rejected if
+negative. None of this is customer-visible until Preview/Print/PDF explicitly render it via
+`formatFieldDisplay()`/`formatIncludedExcluded()` — hidden fields, blank values, and unchecked-only
+groups never leave a blank row/heading in customer-facing output.
+
+**Verification**: `src/lib/templateDynamicFields.ts`'s core logic was directly exercised against the
+real `LI-FRP-LINING` v2.0 seed data via a standalone script (not the full app, no live DB needed) —
+confirmed the Safety group's default state produces exactly `"Included Medical Certificate, Working
+at Height Certificate"` / `"Excluded Confined Space Certificate, SCBA, Tripod"` (byte-for-byte match
+to the spec's required examples), the Confined-Space-Roles inline append (`"Confined Space
+Certificate — 2 Roles"`), every `visibleWhen` conditional (Tank Size, Resin Type), and Thickness's
+`"Thickness: 5 mm"` unit-suffix formatting. `tsc`/`tsc -p tsconfig.api.json`/`lint`/`build` all pass
+clean; a local dev server + Playwright check confirmed zero browser console errors on module load.
+Live-database round-trip verification (actually applying the template to a saved quotation, editing
+it, printing it) was **not** possible — same sandboxed-session no-MongoDB-network limitation
+documented throughout this project's history (see PROJECT_STATUS.md "Known Risks") — see "Known
+Limitations" below.
 
 ## Idempotent Import
 
@@ -674,3 +800,29 @@ click.
 - **Reordering uses up/down buttons, not drag-and-drop** — this codebase has no drag-and-drop
   dependency anywhere and one wasn't added for this pass; matches the existing "hand-rolled Tailwind,
   no UI kit" convention (see docs/UI_GUIDELINES.md).
+- **2026-07-20, FRP Lining v2.0 pass — no live MongoDB/browser round-trip verification was possible**,
+  same recurring sandboxed-session limitation as every prior pass. Verified instead: `tsc`/`tsc -p
+  tsconfig.api.json`/`lint`/`build` all pass clean; the dynamic-field core logic (visibility,
+  Included/Excluded generation, display formatting) was directly exercised against the real seed data
+  and matched the spec's exact required examples byte-for-byte (see "Dynamic Fields" → "Verification"
+  above); a local dev server + Playwright confirmed the client bundle loads with zero console errors.
+  **Not** verified: actually applying `LI-FRP-LINING` v2.0 to a real quotation end-to-end, editing its
+  dynamic-field values in the browser, printing/exporting it, or re-running
+  `POST /api/quotation-templates/import` against a live database to confirm it reports `updated` (not
+  `created`) for `LI-FRP-LINING`. Run this task's own manual test plan against a real
+  deployment/local MongoDB connection before considering this pass fully verified.
+- **2026-07-20, Codex review fix pass — same live-verification gap remains**, re-confirmed this pass
+  (`mcp__mongodb__list-databases` returned "connection string is not valid"; no `MONGODB_URI`/
+  `JWT_SECRET` in local `.env.local`). Both fixes (Concrete Surface Repair "No" suppression, template
+  dynamic-field schema validation) were instead directly exercised against the real production
+  modules — not reimplementations — via standalone `tsx` scripts: the exact `LI-FRP-LINING` v2.0
+  Prepare Surface schema produced the correct byte-for-byte output for No/Yes(blank)/Yes(with
+  details), and the real (now-exported) `validateDynamicFieldSchema()` correctly rejected all 5
+  malformed-schema cases and accepted the 2 valid ones tested. `lint`/`build` pass clean. See
+  `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status" for the full write-up.
+- **`DynamicFieldsAdminEditor`'s option-key-by-position reuse** (see "Dynamic Fields" → "Admin
+  authoring" above) is a deliberate simplification, not a full stable-id-per-option editor — deleting
+  or inserting an option line in the middle of the textarea can shift a later option's key and
+  silently break an existing `visibleWhen` reference to it. Editing labels in place (the common case)
+  and appending new options are both safe. A future pass could give each option its own persistent
+  row UI (like `editableParameters`' already does) if this proves a real problem in practice.

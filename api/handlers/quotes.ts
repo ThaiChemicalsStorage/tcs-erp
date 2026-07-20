@@ -10,8 +10,9 @@ import { PERMISSION_LABELS } from "../../src/lib/permissions.js";
 import { nowIso } from "../../src/lib/products.js";
 import {
   validateLines, validateIsoDateOrEmpty, validateJobType, validateQuotationTemplate, computeQuoteAmount,
-  sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeBoolean,
+  sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeBoolean, sanitizeNotes, sanitizeDeliveryDays,
 } from "../_lib/quoteValidation.js";
+import type { TemplateSection } from "../../src/lib/quotationTemplates.js";
 import { validateQuotationForFinalization, validateQuotationForPrint, type QuotationValidationInput } from "../../src/lib/validation/quotationValidation.js";
 
 /**
@@ -132,6 +133,7 @@ async function loadTemplateSnapshot(quotationTemplateId: string): Promise<QuoteF
     internalNotes: doc.internalNotes,
     sourceHash: doc.sourceHash,
     capturedAt: nowIso(),
+    ...(doc.conditions ? { conditions: doc.conditions } : {}),
   };
 }
 
@@ -213,11 +215,11 @@ function cloneLines(lines: QuoteFields["lines"]): QuoteFields["lines"] {
  * validated per-field instead of copied blindly. `interest` is handled by the caller, since only
  * plain edits (not workflow drafts) may move it.
  */
-function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<QuoteFields> {
+function sanitizePartialQuoteFields(body: Record<string, unknown>, templateSections: TemplateSection[] | undefined): Partial<QuoteFields> {
   const update: Partial<QuoteFields> = {};
   if ("client" in body) update.client = sanitizeShortText(body.client, "ชื่อลูกค้า", true);
   if ("salesperson" in body) update.salesperson = sanitizeShortText(body.salesperson, "พนักงานขาย");
-  if ("lines" in body) update.lines = validateLines(body.lines);
+  if ("lines" in body) update.lines = validateLines(body.lines, templateSections);
   if ("discount" in body) update.discount = sanitizeDiscountPct(body.discount);
   if ("contactName" in body) update.contactName = sanitizeShortText(body.contactName, "ชื่อผู้ติดต่อ");
   if ("contactPhone" in body) update.contactPhone = sanitizeShortText(body.contactPhone, "เบอร์โทรผู้ติดต่อ");
@@ -232,6 +234,10 @@ function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<Quot
   if ("issueDate" in body) update.issueDate = validateIsoDateOrEmpty(body.issueDate, "วันที่ออกใบเสนอราคา");
   if ("expiryDate" in body) update.expiryDate = validateIsoDateOrEmpty(body.expiryDate, "วันหมดอายุ");
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
+  if ("notes" in body) update.notes = sanitizeNotes(body.notes);
+  if ("vatConditionText" in body) update.vatConditionText = sanitizeLongText(body.vatConditionText, "เงื่อนไข VAT");
+  if ("warrantyText" in body) update.warrantyText = sanitizeShortText(body.warrantyText, "การรับประกัน");
+  if ("deliveryDays" in body) update.deliveryDays = sanitizeDeliveryDays(body.deliveryDays);
   if ("isPotentialOpportunity" in body) update.isPotentialOpportunity = sanitizeBoolean(body.isPotentialOpportunity, "โอกาสในการขาย");
   if ("followUpDate" in body) update.followUpDate = validateIsoDateOrEmpty(body.followUpDate, "วันที่ติดตาม");
   return update;
@@ -260,7 +266,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     // fields validation needs — this one extra targeted fetch (only when a template was actually
     // matched, never for a blank-start quote) gets the full sections/terms/notes/hash to freeze.
     const templateSnapshot = quotationTemplateId ? await loadTemplateSnapshot(quotationTemplateId) : null;
-    const lines = validateLines(body.lines);
+    const lines = validateLines(body.lines, templateSnapshot?.sections);
     const discount = sanitizeDiscountPct(body.discount);
     // Optional — a quotation may be created against a saved Customer (selected via
     // `src/pages/quotation/CustomerSelector.tsx`) or fully manually entered; either way the
@@ -297,6 +303,10 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       issueDate: validateIsoDateOrEmpty(body.issueDate, "วันที่ออกใบเสนอราคา"),
       expiryDate: validateIsoDateOrEmpty(body.expiryDate, "วันหมดอายุ"),
       remarks: sanitizeLongText(body.remarks, "หมายเหตุ"),
+      notes: sanitizeNotes(body.notes),
+      vatConditionText: sanitizeLongText(body.vatConditionText, "เงื่อนไข VAT"),
+      warrantyText: sanitizeShortText(body.warrantyText, "การรับประกัน"),
+      deliveryDays: sanitizeDeliveryDays(body.deliveryDays),
       jobTypeCode,
       jobTypeName,
       isPotentialOpportunity: sanitizeBoolean(body.isPotentialOpportunity, "โอกาสในการขาย"),
@@ -344,7 +354,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   if (!hasEdit || !(isOwner || hasApprove)) throw new HttpError(403, "Forbidden");
 
   const body: Record<string, unknown> = req.body ?? {};
-  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(body);
+  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(body, target.templateSnapshot?.sections);
   if ("interest" in body) {
     if (!isValidInterest(body.interest)) throw new HttpError(400, "ค่าความสนใจไม่ถูกต้อง");
     update.interest = body.interest;
@@ -543,7 +553,7 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
 
   // Workflow drafts may not move `interest` (plain-edit-only field) — `sanitizePartialQuoteFields`
   // never looks at it, so it's already excluded without needing a second field allowlist.
-  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(draft);
+  const update: Partial<QuoteFields> = sanitizePartialQuoteFields(draft, target.templateSnapshot?.sections);
   if ("jobTypeCode" in draft) {
     const jobTypeMaster = await loadJobTypeMaster();
     const { jobTypeCode, jobTypeName } = validateJobType(draft.jobTypeCode, jobTypeMaster, { required: false });

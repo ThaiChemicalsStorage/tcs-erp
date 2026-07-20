@@ -3,7 +3,7 @@ import { ChevronLeft, FileText, AlertTriangle, RefreshCw, Loader2, PackageOpen }
 import type { JobType } from "../../lib/jobTypes";
 import {
   fetchQuotationTemplates, fetchQuotationTemplate,
-  type QuotationTemplateSummary, type QuotationTemplate,
+  type QuotationTemplateSummary, type QuotationTemplate, type TemplateConditionConfig,
 } from "../../lib/quotationTemplates";
 import { applyTemplateToQuoteDraft, type AppliedTemplateDraft } from "./applyTemplate";
 import { TemplatePreview } from "../../components/TemplatePreview";
@@ -32,6 +32,14 @@ export interface QuotationWizardResult {
         quotationTemplateId: string;
         quotationTemplateName: string;
         quotationTemplateVersion: string;
+        /** The matched template's Condition config (Payment presets, added 2026-07-20), needed by
+         * `QuoteDocument.tsx`'s Condition UI before the quote is ever saved — once saved, the
+         * server freezes the same data into `Quote.templateSnapshot.conditions`. */
+        conditions?: TemplateConditionConfig;
+        /** The matched template's full sections (added 2026-07-20) — needed to resolve dynamic-
+         * field schema (`resolveDynamicFieldSchema()`) before the quote is ever saved, mirroring
+         * `Quote.templateSnapshot.sections` once it is. */
+        sections: QuotationTemplate["sections"];
       })
     | null;
 }
@@ -215,6 +223,8 @@ export function QuotationTemplateWizard({
         quotationTemplateId: fullTemplate.id,
         quotationTemplateName: fullTemplate.templateName,
         quotationTemplateVersion: fullTemplate.version,
+        conditions: fullTemplate.conditions,
+        sections: fullTemplate.sections,
       },
     });
   };

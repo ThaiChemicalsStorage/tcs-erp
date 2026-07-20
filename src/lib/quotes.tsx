@@ -4,7 +4,7 @@ import { type Role, hasPermission } from "./roles";
 import { apiFetch } from "./apiClient.js";
 import type { TranslationKey } from "./i18n";
 import type { CustomerSnapshot } from "./customers";
-import type { TemplateSection, TemplateTermLine } from "./quotationTemplates";
+import type { TemplateSection, TemplateTermLine, TemplateConditionConfig } from "./quotationTemplates";
 
 export type QuoteStatus =
   | "ร่าง"
@@ -62,6 +62,19 @@ export interface SubDetail {
   text: string;
 }
 
+/** The live, per-quotation-editable value of one `TemplateDynamicField` (src/lib/quotationTemplates.ts)
+ * — added 2026-07-20, FRP Lining template pass. Schema (label/type/options/visibility) is never
+ * duplicated onto every line; it's resolved from the frozen `Quote.templateSnapshot.sections[].items[]`
+ * entry matching `QuoteLine.sourceTemplateItemId`, same "snapshot, never live reference" rule as the
+ * rest of a template's applied content. See src/lib/templateDynamicFields.ts. */
+export interface QuoteLineDynamicFieldValue {
+  key: string;
+  /** dropdown/radio/text/number current value. */
+  value?: string;
+  /** checkboxGroup only — currently checked option keys. */
+  checkedOptionKeys?: string[];
+}
+
 export interface QuoteLine {
   id: number;
   description: string;
@@ -81,6 +94,12 @@ export interface QuoteLine {
    * line is a completely ordinary `QuoteLine` otherwise (freely editable/removable), just flagged
    * for display purposes. See docs/MODULES/QuotationTemplates.md. */
   isSectionHeader?: boolean;
+  /** The originating `TemplateItem.id` this line was copied from (added 2026-07-20) — the only way
+   * to resolve `dynamicFields` below back to its schema in `Quote.templateSnapshot`. Absent for any
+   * line not copied from a template, or from a template item with no dynamic fields. */
+  sourceTemplateItemId?: string;
+  /** Current values for this line's dynamic fields, if its source template item declared any. */
+  dynamicFields?: QuoteLineDynamicFieldValue[];
 }
 
 export interface Quote {
@@ -107,6 +126,26 @@ export interface Quote {
   issueDate: string;
   expiryDate: string;
   remarks: string;
+  /**
+   * Structured customer-visible "หมายเหตุ" (Notes) rows (added 2026-07-20) — distinct from `remarks`
+   * (the older single free-text "หมายเหตุ / เงื่อนไข" block, still supported unchanged): a real list
+   * a salesperson can add/edit/remove/reorder, seeded from the applied template's `defaultNotes`.
+   * Optional/absent on every quote created before this existed or not seeded from a template with
+   * `defaultNotes` — an absent/empty list simply prints nothing extra.
+   */
+  notes?: string[];
+  /** "Condition" section fields (added 2026-07-20) — each independently optional/absent, seeded
+   * from the applied template's `conditions` (see `TemplateConditionConfig`) and freely editable
+   * afterward. None of these affect VAT/total calculation (`computeTotals()`/`VAT_RATE` below are
+   * unaffected and remain authoritative) — they are customer-facing wording only. */
+  vatConditionText?: string;
+  /** The editable Warranty value only (e.g. "12 Months"), rendered as "Warranty: {value} {template's
+   * warrantyUnit}." only when non-blank — never a fake default, never a server-enforced requirement
+   * (see docs/MODULES/QuotationTemplates.md "Condition Section"). */
+  warrantyText?: string;
+  /** Number of days for "Delivery: Within {value} {template's deliveryUnit}" — `null`/absent means
+   * unset (never a fake default); rejects negative values server-side. */
+  deliveryDays?: number | null;
   /** Empty string = unclassified (incl. every quote created before this field existed). */
   jobTypeCode: string;
   /** Snapshot of the job type's display name at save time, same snapshot rationale as Product Library line items — renaming a job type later doesn't rewrite historical quotes. */
@@ -174,6 +213,15 @@ export interface Quote {
     internalNotes: string[];
     sourceHash: string;
     capturedAt: string;
+    /**
+     * Added 2026-07-20 — unlike the rest of this object (audit/reconstruction-only, no rendering
+     * path reads it), this field IS read at render/edit time: it's the only place the Condition
+     * section's selectable Payment presets live once a quote is created (the wizard-time draft
+     * carries them separately, see `QuotationWizardResult`). `sections[].items[].dynamicFields`
+     * above is likewise now a legitimate live schema source for `QuoteLine.dynamicFields` — see
+     * src/lib/templateDynamicFields.ts.
+     */
+    conditions?: TemplateConditionConfig;
   };
 }
 
@@ -183,6 +231,7 @@ export type QuoteDraftFields = Pick<
   | "contactName" | "contactPhone" | "contactEmail" | "address" | "taxId"
   | "deliveryMethod" | "deliveryAddress" | "project"
   | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks"
+  | "notes" | "vatConditionText" | "warrantyText" | "deliveryDays"
   | "jobTypeCode" | "jobTypeName" | "isPotentialOpportunity" | "followUpDate"
   // Client only ever sends the id — the server always re-derives `customerSnapshot` itself from
   // the submitted Customer Information fields, the same "never trust a client-supplied derived
@@ -395,9 +444,15 @@ export function lineSubtotal(l: QuoteLine): number {
   return l.qty * l.unitPrice * (1 - l.discount / 100);
 }
 
-/** Whether a line has any notes/sub-details/specifications/tags worth showing in an expand panel or print. */
+/** Whether a line has any notes/sub-details/specifications/tags/dynamic-field values worth showing
+ * in an expand panel or print. A line with dynamic fields but every value still blank/unchecked
+ * does NOT count — matches "hidden fields leave no blank rows," the indicator should only light up
+ * once there's actually something to show. */
 export function lineHasDetails(l: QuoteLine): boolean {
-  return l.notes.trim() !== "" || l.subDetails.some((sd) => sd.text.trim() !== "") || l.specifications.trim() !== "" || l.tags.length > 0;
+  return (
+    l.notes.trim() !== "" || l.subDetails.some((sd) => sd.text.trim() !== "") || l.specifications.trim() !== "" || l.tags.length > 0
+    || !!l.dynamicFields?.some((f) => (f.value?.trim() ?? "") !== "" || (f.checkedOptionKeys?.length ?? 0) > 0)
+  );
 }
 
 export function formatQuoteDateThai(iso: string): string {

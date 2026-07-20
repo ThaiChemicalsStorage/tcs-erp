@@ -18,6 +18,7 @@ import { ApiError } from "../../lib/apiClient";
 import { InterestButtons } from "./InterestButtons";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { CustomerSelector } from "./CustomerSelector";
+import { NotesEditor, ConditionEditor } from "./ConditionAndNotesEditor";
 import { PrintDocument } from "./PrintDocument";
 import type { QuotationWizardResult } from "./QuotationTemplateWizard";
 import { BrandMark } from "../../components/BrandMark";
@@ -150,6 +151,16 @@ export function QuoteDocument({
   const [issueDate, setIssueDate] = useState(quote?.issueDate ?? todayIso());
   const [expiryDate, setExpiryDate] = useState(quote?.expiryDate ?? plusDaysIso(30));
   const [remarks, setRemarks] = useState(quote?.remarks ?? (templateSnapshot?.remarks || company.termsAndConditions || DEFAULT_TERMS));
+  // "Condition" section config (added 2026-07-20) — resolved from whichever of the two
+  // `templateSnapshot` shapes is actually present: the server-frozen `quote.templateSnapshot` for
+  // an existing quote, or the wizard's own pre-save draft for a brand-new one. `templateSections`
+  // is what `LineItemsEditor.tsx`/dynamic-field resolution reads to find each line's schema.
+  const conditions = quote?.templateSnapshot?.conditions ?? templateSnapshot?.conditions;
+  const templateSections = quote?.templateSnapshot?.sections ?? templateSnapshot?.sections;
+  const [notes, setNotes] = useState<string[]>(quote?.notes ?? templateSnapshot?.notes ?? []);
+  const [vatConditionText, setVatConditionText] = useState(quote?.vatConditionText ?? templateSnapshot?.vatConditionText ?? "");
+  const [warrantyText, setWarrantyText] = useState(quote?.warrantyText ?? templateSnapshot?.warrantyText ?? "");
+  const [deliveryDays, setDeliveryDays] = useState<number | null>(quote?.deliveryDays ?? templateSnapshot?.deliveryDays ?? null);
   const [jobTypeCode, setJobTypeCode] = useState(quote?.jobTypeCode ?? wizardResult?.jobTypeCode ?? "");
   // Seeded from the quote's own persisted snapshot, not re-derived from the live `jobTypes` list on
   // every render — jobTypeCode/jobTypeName are a deliberate snapshot (see src/lib/quotes.tsx), so
@@ -272,6 +283,7 @@ export function QuoteDocument({
     client, status: quoteStatus, lines, discount, amount: total,
     salesperson, contactName, contactPhone, contactEmail, address, taxId,
     deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate, remarks,
+    notes, vatConditionText, warrantyText, deliveryDays,
     jobTypeCode,
     jobTypeName,
     isPotentialOpportunity,
@@ -633,9 +645,31 @@ export function QuoteDocument({
                 </div>
                 <div>
                   <RequiredFieldLabel required={false}>{t("quotation.field.paymentTerms")}</RequiredFieldLabel>
-                  <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
-                    {paymentTermsOptions.map((opt) => <option key={opt}>{opt}</option>)}
-                  </select>
+                  {conditions && conditions.paymentPresets.length > 0 ? (
+                    <div className="space-y-1.5">
+                      <select
+                        disabled={disabled}
+                        className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60"
+                        value=""
+                        onChange={(e) => { if (e.target.value) setPaymentTerms(e.target.value); }}
+                      >
+                        <option value="">{t("quotation.field.paymentPresetPrompt")}</option>
+                        {conditions.paymentPresets.map((preset) => <option key={preset} value={preset}>{preset}</option>)}
+                      </select>
+                      <textarea
+                        disabled={disabled}
+                        rows={2}
+                        className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none disabled:opacity-60"
+                        value={paymentTerms}
+                        onChange={(e) => setPaymentTerms(e.target.value)}
+                        placeholder={t("quotation.field.paymentPresetEditPlaceholder")}
+                      />
+                    </div>
+                  ) : (
+                    <select disabled={disabled} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
+                      {paymentTermsOptions.map((opt) => <option key={opt}>{opt}</option>)}
+                    </select>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
@@ -691,7 +725,18 @@ export function QuoteDocument({
 
         </div>
 
-        <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} />
+        <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} templateSections={templateSections} disabled={disabled} />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
+          <NotesEditor notes={notes} onChange={setNotes} disabled={disabled} />
+          <ConditionEditor
+            conditions={conditions}
+            vatConditionText={vatConditionText} onVatConditionTextChange={setVatConditionText}
+            warrantyText={warrantyText} onWarrantyTextChange={setWarrantyText}
+            deliveryDays={deliveryDays} onDeliveryDaysChange={setDeliveryDays}
+            disabled={disabled}
+          />
+        </div>
 
         {/* Remarks + Signature — screen preview only; print output is PrintDocument below */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
@@ -785,6 +830,12 @@ export function QuoteDocument({
           lines={lines}
           discount={discount}
           remarks={remarks}
+          notes={notes}
+          vatConditionText={vatConditionText}
+          warrantyText={warrantyText}
+          deliveryDays={deliveryDays}
+          conditions={conditions}
+          templateSections={templateSections}
           preparerUser={preparerUser}
           approverUser={approverUser}
           preparerName={preparerUser?.fullName ?? salesperson}

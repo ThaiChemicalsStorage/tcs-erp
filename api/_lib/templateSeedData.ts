@@ -1,6 +1,6 @@
 import type {
   QuotationTemplate, TemplateSection, TemplateItem, TemplateItemType,
-  TemplateEditableParameter, TemplateTermLine,
+  TemplateEditableParameter, TemplateTermLine, TemplateDynamicField, TemplateConditionConfig,
 } from "../../src/lib/quotationTemplates.js";
 
 /**
@@ -429,53 +429,141 @@ const frpTankTerms: TemplateTermLine[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LI — FRP Lining (sheet "FRP Tank and LI", rows 0–21 — the "FRP Lining" block)
+// LI — FRP Lining v2.0 (added 2026-07-20, replaces the 2026-07-14 v1.0 Excel transcription below,
+// per an explicit business requirement spec restructuring this template around the new generic
+// dynamic-field system — dropdowns, a Yes/No radio, a fixed Safety checkbox group with defaults and
+// conditional/Included-Excluded output, plus real "หมายเหตุ"/"Condition" content. Same
+// `templateCode`/`jobTypeCode` as before (upsert key — see `upsertQuotationTemplates()` in
+// quotationTemplatesHandler.ts), so re-running the import UPDATES this one record (its content hash
+// changes) rather than creating a duplicate; every quotation already created from v1.0 keeps its own
+// frozen `Quote.templateSnapshot`/`lines`, completely unaffected. See
+// docs/MODULES/QuotationTemplates.md "Dynamic Fields" and "FRP Lining v2.0."
 // ─────────────────────────────────────────────────────────────────────────────
 const FRP_LINING_CODE = "LI-FRP-LINING";
+
+function frpLiningItem(name: string, specs: string[], dynamicFields: TemplateDynamicField[], sortOrder: number): TemplateItem {
+  return {
+    id: itemId(FRP_LINING_CODE), itemType: "item", itemCode: String(sortOrder + 1),
+    name, description: name, quantity: null, unit: "",
+    specifications: specs, subDetails: [], editableParameters: [], internalNotes: [],
+    visibleToCustomer: true, sortOrder, dynamicFields,
+  };
+}
+
 const frpLiningSections: TemplateSection[] = [
-  buildSection(FRP_LINING_CODE, 0, "FRP Lining", [
-    {
-      item: {
-        name: "FRP Lining for",
-        specs: [
-          "Substrate option: New concrete / Existing concrete (Sq.m.)",
-          "Substrate option: SS/SUS tank — ระบุพื้นที่และขนาดถัง (DxH) (Sq.m./mm.)",
-          "Substrate option: FRP tank (Sq.m.)",
+  {
+    id: `sec-${FRP_LINING_CODE}-0`, title: "FRP Lining", description: "", sortOrder: 0,
+    items: [
+      frpLiningItem("FRP Lining", [], [
+        {
+          key: "frpLiningFor", label: "FRP Lining for", type: "dropdown", sortOrder: 0,
+          options: [
+            { key: "newConcrete", label: "New Concrete" },
+            { key: "existingConcrete", label: "Existing Concrete" },
+            { key: "stainlessTank", label: "Stainless Tank" },
+            { key: "steelTank", label: "Steel Tank" },
+            { key: "frpTank", label: "FRP Tank" },
+          ],
+        },
+        {
+          key: "tankSize", label: "Tank Size / Dimensions", type: "text", sortOrder: 1,
+          visibleWhen: { fieldKey: "frpLiningFor", equalsAny: ["stainlessTank", "steelTank", "frpTank"] },
+        },
+        { key: "thickness", label: "Thickness", type: "number", unitSuffix: "mm", sortOrder: 2 },
+        {
+          key: "corrosionLayer", label: "Corrosion Layer", type: "dropdown", sortOrder: 3,
+          options: [
+            { key: "vinylEster", label: "Vinyl Ester Resin" },
+            { key: "isoPhthalic", label: "Iso Phthalic Resin" },
+            { key: "orthoPhthalic", label: "Ortho Phthalic Resin" },
+          ],
+        },
+        {
+          key: "resinType", label: "Resin Type", type: "text", sortOrder: 4,
+          placeholder: "e.g. Swancor 901, Swancor 907, VI003, Derakane 411",
+          visibleWhen: { fieldKey: "corrosionLayer", equalsAny: ["vinylEster"] },
+        },
+        { key: "chemical", label: "Chemical", type: "text", sortOrder: 5 },
+        { key: "temperature", label: "Temperature", type: "text", sortOrder: 6 },
+        { key: "colour", label: "Colour", type: "text", sortOrder: 7 },
+      ], 0),
+    ],
+  },
+  {
+    id: `sec-${FRP_LINING_CODE}-1`, title: "Prepare Surface", description: "", sortOrder: 1,
+    items: [
+      frpLiningItem("Prepare Surface", [], [
+        {
+          key: "surfacePrepMethod", label: "Surface Preparation Method", type: "dropdown", sortOrder: 0,
+          options: [
+            { key: "grinding", label: "Grinding (เจียรขัด)" },
+            { key: "sandblasting", label: "Sandblasting" },
+            { key: "sandblastingSA25", label: "Sandblasting SA2.5" },
+          ],
+        },
+        {
+          key: "concreteSurfaceRepair", label: "Concrete Surface Repair", type: "radio", sortOrder: 1,
+          // "No" means there's no concrete-repair scope to report — its own display line is
+          // omitted entirely (not printed as "Concrete Surface Repair: No") per the business
+          // requirement; the Surface Preparation Method above stays priced/printed regardless,
+          // since it's a separate, always-applicable scope. See `omitFromCustomerDisplay` in
+          // src/lib/quotationTemplates.ts.
+          options: [{ key: "yes", label: "Yes" }, { key: "no", label: "No", omitFromCustomerDisplay: true }],
+        },
+        {
+          key: "concreteSurfaceRepairDetails", label: "Concrete Surface Repair Details", type: "text", sortOrder: 2,
+          visibleWhen: { fieldKey: "concreteSurfaceRepair", equalsAny: ["yes"] },
+        },
+      ], 0),
+    ],
+  },
+  {
+    id: `sec-${FRP_LINING_CODE}-2`, title: "Safety Cost and Accessories", description: "", sortOrder: 2,
+    items: [
+      frpLiningItem(
+        "Safety Cost and Accessories",
+        ["Standard Package Included PPE, Blower, Gas Detector"],
+        [
+          {
+            key: "safetyChecklist", label: "Safety Certificates & Accessories", type: "checkboxGroup", sortOrder: 0,
+            generateIncludedExcluded: true,
+            options: [
+              { key: "medicalCertificate", label: "Medical Certificate", defaultChecked: true },
+              { key: "confinedSpaceCertificate", label: "Confined Space Certificate", defaultChecked: false },
+              { key: "workingAtHeightCertificate", label: "Working at Height Certificate", defaultChecked: true },
+              { key: "scba", label: "SCBA", defaultChecked: false },
+              { key: "tripod", label: "Tripod", defaultChecked: false },
+            ],
+          },
+          {
+            key: "confinedSpaceRoles", label: "Number of Roles", type: "dropdown", sortOrder: 1,
+            visibleWhen: { fieldKey: "safetyChecklist", equalsAny: ["confinedSpaceCertificate"] },
+            options: [
+              { key: "role1", label: "1 Role" }, { key: "role2", label: "2 Roles" },
+              { key: "role3", label: "3 Roles" }, { key: "role4", label: "4 Roles" },
+            ],
+          },
         ],
-        params: [{ label: "Thickness", unit: "mm." }],
-        // Internal notes: a process instruction about hand-signing reduced-thickness cases, and an internal abbreviation legend — neither is customer-facing content.
-        notes: ["หากลดความเซลล์เขียนมือเซนต์กำกับ", "ชื่อย่อ (abbreviation legend): ALL Layer, E, R"],
-      },
-    },
-    { item: { name: "Corrosion layer", specs: ["Vinyl ester resin (SWANCOR / VI003 / 6655)"] } },
-    { item: { name: "Structure layer", params: [{ label: "Structure layer" }] } },
-    { item: { name: "Chemical", params: [{ label: "Chemical" }] } },
-    { item: { name: "Temperature", params: [{ label: "Temperature", unit: "AMB, -…. °C" }] } },
-    { item: { name: "Colour", params: [{ label: "Colour", unit: "Ral… / N/A / To be approved" }] } },
-    {
-      item: { name: "Prepare surface", unit: "Job" },
-      subs: [
-        { name: "Grinding (เจียรขัด)", unit: "Job" },
-        { name: "Sandblasting (พ่นทราย)", unit: "Job" },
-      ],
-    },
-    { item: { name: "Concrete surface repair work" } },
-    {
-      item: { name: "Safety cost and accessories" },
-      subs: [
-        { name: "Medical certificate (ตรวจสุขภาพ)" },
-        { name: "Confined space certificate (ครบ 4 ผู้ หรืออื่นๆระบุ)" },
-        { name: "Working at height certificate (ที่สูง — งานที่สูง)" },
-        { name: "Standard package include PPE, Blower, Gas detector" },
-      ],
-    },
-    { item: { name: "SCBA, Tripod if have" } },
-    { item: { name: "Operating cost", specs: ["Weekday, Weekend, Long weekend", "Thai people only"] } },
-  ]),
+        0,
+      ),
+    ],
+  },
 ];
-const frpLiningTerms: TemplateTermLine[] = [
-  { type: "taxNote", text: "ระบุหักณ ที่จ่ายทั้งใบเสนอราคา" },
-];
+// Condition (VAT/Warranty/Delivery/Payment) and หมายเหตุ (Notes) content — see
+// `TemplateConditionConfig`/`QuotationTemplate.defaultNotes` in src/lib/quotationTemplates.ts. These
+// supersede v1.0's plain `defaultTerms` taxNote for this template; `defaultTerms` stays empty.
+const frpLiningTerms: TemplateTermLine[] = [];
+const frpLiningDefaultNotes: string[] = ["ใบเสนอราคานี้สามารถหัก ณ ที่จ่ายได้"];
+const frpLiningConditions: TemplateConditionConfig = {
+  vatConditionText: "Vat 7%: The Above Price Included Vat 7%",
+  warrantyUnit: "After Job Completed.",
+  deliveryUnit: "Days After Received P/O",
+  paymentPresets: [
+    "40% Down Payment (Cash) 60% After Job Complete (Cash)",
+    "30% Down Payment (Cash) 70% After Job Complete (Credit 30 Days)",
+    "100% After Job Complete (Credit 30 Days)",
+  ],
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Assembly — every template is `Omit<QuotationTemplate, "id"|"isActive"|"isDeleted"|"createdAt"|"updatedAt"|"createdBy"|"updatedBy">`;
@@ -486,6 +574,7 @@ export type TemplateSeed = Pick<
   QuotationTemplate,
   "templateCode" | "templateName" | "jobTypeCode" | "jobTypeName" | "description" | "version"
   | "sourceFileName" | "sourceSheetName" | "sections" | "defaultTerms" | "internalNotes"
+  | "defaultNotes" | "conditions"
 > & { sourceType: "excel_import" };
 
 export const QUOTATION_TEMPLATE_SEEDS: TemplateSeed[] = [
@@ -551,12 +640,14 @@ export const QUOTATION_TEMPLATE_SEEDS: TemplateSeed[] = [
     jobTypeCode: "LI",
     sourceType: "excel_import",
     jobTypeName: "FRP Lining",
-    description: "โครงสร้างใบเสนอราคาสำหรับงานพ่นเคลือบ FRP Lining ครอบคลุมพื้นผิว/ประเภทงาน ความหนา ชั้นเรซิ่น สารเคมี การเตรียมพื้นผิว (เจียร/พ่นทราย) ความปลอดภัยและใบรับรองที่เกี่ยวข้อง",
-    version: "1.0",
+    description: "โครงสร้างใบเสนอราคาสำหรับงานพ่นเคลือบ FRP Lining ครอบคลุม FRP Lining / Prepare Surface / Safety Cost and Accessories พร้อมฟิลด์แบบไดนามิก (Dropdown/Radio/Checkbox) เงื่อนไข VAT/Warranty/Delivery/Payment และหมายเหตุ — v2.0 ปรับโครงสร้างตาม business requirement 2026-07-20",
+    version: "2.0",
     sourceFileName: SOURCE_FILE,
     sourceSheetName: "FRP Tank and LI",
     sections: frpLiningSections,
     defaultTerms: frpLiningTerms,
     internalNotes: [],
+    defaultNotes: frpLiningDefaultNotes,
+    conditions: frpLiningConditions,
   },
 ];

@@ -4,6 +4,128 @@
 
 ---
 
+## 2026-07-20 (latest) — Codex review fix pass: FRP Lining v2.0 (1 High, 1 Medium)
+
+Fixed both issues an independent Codex review found in the FRP Lining v2.0 / generic Dynamic Fields
+pass below (0 Critical, 0 Low). Full write-up: `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status".
+
+**High — Concrete Surface Repair "No" still printed on the customer document.** `formatFieldDisplay()`
+(`src/lib/templateDynamicFields.ts`) printed every visible dropdown/radio field's raw value
+unconditionally, so selecting "No" produced a literal "Concrete Surface Repair: No" line on
+Preview/Print/PDF — the review's reproduction was confirmed exactly as reported. Fixed generically
+(not FRP-Lining-specific): a new `TemplateFieldOption.omitFromCustomerDisplay` flag
+(`src/lib/quotationTemplates.ts`) lets ANY dropdown/radio option declare "selecting me means there's
+nothing to report," which `formatFieldDisplay()` now honors by omitting that field's display line
+entirely; `api/_lib/templateSeedData.ts` sets it on Concrete Surface Repair's "no" option.
+`PrintDocument.tsx`'s per-line details row was also separately fixed to gate on actual printable
+content (specs/notes/subDetails/rendered dynamic-field lines) instead of the editor-oriented
+`lineHasDetails()`, which would otherwise still render an empty, contentless row whenever a line's
+only value was a now-suppressed field. `TemplateEditorView.tsx`'s admin bulk-text options editor
+(`parseOptionsText`/`optionsToText`) was also fixed to preserve/edit the new flag via a `!` prefix
+convention (`!No`) — previously, re-saving an unrelated change to that field's option list would have
+silently dropped the flag on every option, quietly reintroducing the bug through the admin UI.
+**Codex's own literal "remove the entire Prepare Surface section" framing was determined incorrect**
+and NOT implemented — see `docs/CODEX_REVIEW_REPORT.md` "Codex Findings Determined Incorrect" for the
+full reasoning (short version: Surface Preparation Method is a separate, always-applicable, separately
+priced scope on the same line, unrelated to whether concrete repair is needed — e.g. a Steel/Stainless/
+FRP Tank job has no concrete surface at all, so removing the whole priced line whenever Concrete
+Surface Repair = No would wrongly hide real, billable work. The task's own Acceptance Criteria
+checklist says "Concrete Surface Repair is omitted", naming the field, not the section).
+
+**Medium — template dynamic-field schemas weren't structurally validated server-side.**
+`sanitizeDynamicField()`/`sanitizeFieldOption()`/`sanitizeVisibilityRule()`
+(`api/_lib/quotationTemplatesHandler.ts`) each only ever inspected one field/option/rule in isolation,
+so none could catch a problem that only exists in the *relationship* between two fields on the same
+item — an empty option list, two fields/options sharing a key, or a `visibleWhen.fieldKey` pointing at
+a field that doesn't exist. A new second-pass `validateDynamicFieldSchema()` now runs after each
+item's fields are sanitized and rejects each of those with a field-specific 400 (no partial write) —
+verified directly against the real function (exported for testability, matching this codebase's
+existing `quoteValidation.ts` convention) with 5 malformed schemas (each one throwing as expected) and
+2 valid ones (both passing).
+
+**Verification**: both fixes were directly exercised against the real production modules (not
+reimplementations) via standalone `tsx` scripts — confirmed byte-for-byte correct output for
+Yes/No/Yes-with-details on the actual `LI-FRP-LINING` v2.0 seed, and correct accept/reject behavior
+for 7 schema-validation cases. `npm run lint` (0 errors, 2 pre-existing unrelated warnings) and
+`npm run build` (`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`) both pass clean. A live
+browser Print/PDF round-trip and a live `quotation_templates`/`quotes` MongoDB check were not possible
+this pass either — `mcp__mongodb__list-databases` returned "connection string is not valid" and no
+`MONGODB_URI`/`JWT_SECRET` exist locally, the same recurring sandboxed-session limitation every prior
+pass in this project has hit (see PROJECT_STATUS.md "Known Risks").
+
+---
+
+## 2026-07-20 (later still, evening) — FRP Lining v2.0: generic Dynamic Fields system
+
+Implemented the "Create FRP Lining Quotation Template" business requirement. First checked for an
+existing LI/FRP Lining template per the task's own instruction — found one (`LI-FRP-LINING`, v1.0,
+Excel-imported 2026-07-14, `api/_lib/templateSeedData.ts`) — so this pass **rebuilds that same
+template as v2.0** rather than creating a duplicate; same `templateCode`/`jobTypeCode` (the upsert
+key), so the idempotent import updates the existing record, and every quotation already created from
+v1.0 keeps its own frozen `lines`/`templateSnapshot`, completely unaffected.
+
+**New generic schema** (`src/lib/quotationTemplates.ts`): `TemplateDynamicField` (dropdown/radio/
+checkboxGroup/text/number) on `TemplateItem.dynamicFields`, with `visibleWhen` conditional visibility
+and `generateIncludedExcluded` (checkboxGroup only) for auto-generated "Included .../Excluded ..."
+customer-facing text. `TemplateConditionConfig` (VAT wording/Warranty+Delivery suffix phrasing/
+Payment presets) on `QuotationTemplate.conditions`, plus `QuotationTemplate.defaultNotes: string[]`
+for the "หมายเหตุ" section. All reusable by any future template, not FRP-Lining-specific.
+
+**New Quote-side fields** (`src/lib/quotes.tsx`): `QuoteLine.sourceTemplateItemId`/`dynamicFields`
+(the live per-line values only — schema is resolved from the already-existing
+`Quote.templateSnapshot.sections`, not duplicated onto every line), `Quote.notes` (a real
+add/edit/remove/reorder list, distinct from the older single free-text `remarks`),
+`Quote.vatConditionText`/`warrantyText`/`deliveryDays` (Condition section fields — Payment reuses the
+*existing* `Quote.paymentTerms` field rather than inventing a new one). None of this affects the
+authoritative VAT/total calculation (`computeTotals()`/`VAT_RATE`, untouched).
+
+**Shared logic**: new `src/lib/templateDynamicFields.ts` — schema resolution, `visibleWhen`
+evaluation, display formatting, and Included/Excluded generation, used identically by the Quotation
+line editor (`LineItemsEditor.tsx`, new `DynamicFieldsEditor`), print/PDF
+(`PrintDocument.tsx`), the admin/wizard preview (`TemplatePreview.tsx`), and server-side value
+validation (`api/_lib/quoteValidation.ts`) — client and server can never drift apart on what's
+visible or how it's displayed.
+
+**Admin authoring**: `TemplateEditorView.tsx`'s new `DynamicFieldsAdminEditor` (generic — any
+template's items can use it), plus new Notes/Conditions editors at the template level. New
+`ConditionAndNotesEditor.tsx` (`NotesEditor`/`ConditionEditor`) wires the Quotation-side editing UI
+into `QuoteDocument.tsx`, including a Payment-preset dropdown that overwrites the editable
+`paymentTerms` text (never auto-selected — the salesperson must actively choose one) when the applied
+template defines `conditions.paymentPresets`.
+
+**Server-side validation** (`api/_lib/quoteValidation.ts`, `api/_lib/quotationTemplatesHandler.ts`):
+a `QuoteLine.dynamicFields` submission is rebuilt strictly from that line's resolved schema — only
+schema-declared keys ever persist (a forged key is silently dropped), dropdown/radio values must
+match a declared option key, checkboxGroup checked keys must be declared option keys, and "number"
+fields reject negative values; `Quote.deliveryDays` likewise rejects negative values.
+`computeSourceHash()` now also hashes `defaultNotes`/`conditions` so a content-only change to either
+is detected as "updated," not silently skipped; `POST .../duplicate` now also copies
+`defaultNotes`/`conditions` (previously would have silently dropped them — found and fixed during
+this pass, not by a separate review). No new RBAC permissions — every new field rides the same
+existing `quotationTemplates:*`/`quotations:*` gates.
+
+**`LI-FRP-LINING` v2.0 content**: 3 chargeable sections (FRP Lining / Prepare Surface / Safety Cost
+and Accessories, each one priced item carrying its own dynamic fields), `defaultNotes` (the
+withholding-tax note), and `conditions` (VAT 7% wording, "After Job Completed."/"Days After Received
+P/O" suffixes, 3 Payment presets) — see `api/_lib/templateSeedData.ts` and
+[MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Dynamic Fields" for the full field
+list.
+
+**Verification**: `npx tsc --noEmit` (frontend), `npx tsc --noEmit -p tsconfig.api.json` (API),
+`npm run lint`, `npm run build` all pass clean. The core dynamic-field logic was directly exercised
+against the real `LI-FRP-LINING` v2.0 seed data via a standalone script (no live DB needed) — the
+Safety group's default state produces exactly `"Included Medical Certificate, Working at Height
+Certificate"` / `"Excluded Confined Space Certificate, SCBA, Tripod"` (byte-for-byte match to the
+spec's required examples), the Confined-Space-Roles inline append (`"Confined Space Certificate — 2
+Roles"`), every conditional-visibility rule (Tank Size, Resin Type, Concrete Surface Repair Details),
+and Thickness's `"Thickness: 5 mm"` unit-suffix formatting all verified correct. A local dev server +
+Playwright confirmed the client bundle loads with zero browser console errors. **Not verified**: a
+live end-to-end apply/edit/print round-trip against a real MongoDB database, or an actual
+`POST /api/quotation-templates/import` run confirming `LI-FRP-LINING` reports `updated` (not
+`created`) — same recurring sandboxed-session no-database-network limitation as every prior pass (see
+PROJECT_STATUS.md "Known Risks"). See [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)
+"Dynamic Fields" and "Known Limitations."
+
 ## 2026-07-20 (later still) — Center-align Section/Item count columns on Quotation Templates list
 
 User-reported polish: the "จำนวน Section"/"จำนวนรายการ" column header and values on

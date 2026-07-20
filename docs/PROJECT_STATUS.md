@@ -14,6 +14,49 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-20, latest] Codex review fix pass on FRP Lining v2.0 (1 High, 1 Medium, 0 Critical, 0 Low).**
+  Fixed both issues an independent review found in the Dynamic Fields pass below. High: Concrete
+  Surface Repair's "No" was still printing a literal "Concrete Surface Repair: No" line on customer
+  Preview/Print/PDF — fixed with a new generic `TemplateFieldOption.omitFromCustomerDisplay` flag
+  (any dropdown/radio option can now opt out of its own display line when selected, not FRP-specific)
+  plus a `PrintDocument.tsx` fix so the per-line details row never renders empty when its only
+  content is a now-suppressed field. Medium: the template API accepted structurally invalid
+  dynamic-field schemas (empty option lists, duplicate keys, dangling `visibleWhen` references) —
+  fixed with a new `validateDynamicFieldSchema()` second-pass check rejecting each with a
+  field-specific 400. **Codex's literal "remove the whole Prepare Surface section" framing was
+  determined incorrect and not implemented** — Surface Preparation Method is a separate,
+  always-applicable, separately-priced scope on the same line (e.g. still needed for a Steel/
+  Stainless/FRP Tank job that has no concrete surface at all), and the task's own Acceptance Criteria
+  names the *field*, not the section — see `docs/CODEX_REVIEW_REPORT.md` "Codex Findings Determined
+  Incorrect." Both fixes were directly exercised against the real production modules via standalone
+  scripts (not reimplementations), confirming correct output/rejection in every tested case. `lint`/
+  `build` pass clean. **Not verified**: live browser Print/PDF round-trip or a live MongoDB check —
+  same recurring sandboxed-session no-database-network limitation as every pass below (confirmed
+  again this pass via `mcp__mongodb__list-databases`). See CHANGELOG.md and
+  `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status."
+- ✅ **[2026-07-20, later] FRP Lining v2.0 — generic Dynamic Fields system + `LI-FRP-LINING` rebuilt.**
+  Added a reusable structured-field system (`TemplateDynamicField`: dropdown/radio/checkbox-group/
+  text/number, with conditional `visibleWhen` visibility and checkboxGroup's auto-generated
+  Included/Excluded customer-facing output) to the Quotation Template schema, then rebuilt the
+  existing `LI-FRP-LINING` template (2026-07-14 v1.0 Excel transcription → v2.0) around it per a
+  detailed business requirement — no duplicate template created, same `templateCode`/`jobTypeCode`,
+  idempotent import updates the existing record, every quotation already created from v1.0 is
+  completely unaffected. Also added: `QuotationTemplate.defaultNotes`/`.conditions` (seeding a new
+  structured `Quote.notes` list and `vatConditionText`/`warrantyText`/`deliveryDays` Condition
+  fields — VAT/Warranty/Delivery/Payment wording, none of it affecting the authoritative VAT/total
+  calculation), a generic admin authoring UI (`TemplateEditorView.tsx`'s
+  `DynamicFieldsAdminEditor`), live Quotation-editor rendering (`LineItemsEditor.tsx`), and
+  Preview/Print/PDF rendering (`TemplatePreview.tsx`/`PrintDocument.tsx`) — all sharing one core
+  logic module (`src/lib/templateDynamicFields.ts`) so client and server (validation) can never
+  drift apart. Server-side value validation is strict: only schema-declared dynamic-field keys ever
+  persist, dropdown/checkbox values must match declared option keys, numbers reject negatives. No
+  new RBAC permissions — reuses existing `quotationTemplates:*`/`quotations:*` gates. `tsc`
+  (frontend + API)/`lint`/`build` all pass clean; the core visibility/Included-Excluded/formatting
+  logic was directly verified against the real seed data and matched the spec's exact required
+  examples byte-for-byte; a dev server + Playwright confirmed zero console errors on module load.
+  **Not verified**: a live end-to-end apply/edit/print round-trip against a real database — same
+  recurring sandboxed-session limitation as every pass below. See CHANGELOG.md and
+  [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Dynamic Fields."
 - ✅ **[2026-07-20] Cancel/Back visibility — Codex-review fix pass.** Fixed all issues (0 Critical, 1 High,
   3 Medium, 1 Low) an independent review found in the 2026-07-16 pass below: two `QuotationTemplateWizard.tsx`
   "Choose another Job Type" recovery buttons still had the old low-contrast/no-focus treatment (High); the

@@ -4,9 +4,123 @@ import {
   List, ListOrdered, GripVertical, StickyNote, X,
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
-import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, lineHasDetails, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
+import { type QuoteLine, type QuoteLineDynamicFieldValue, type SubDetail, blankLine, newSubDetailId, lineSubtotal, lineHasDetails, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
+import type { TemplateSection } from "../../lib/quotationTemplates";
+import { resolveDynamicFieldSchema, isFieldVisible } from "../../lib/templateDynamicFields";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { useI18n } from "../../lib/i18n";
+
+function DynamicFieldsEditor({
+  templateSections, sourceTemplateItemId, values, onChange, disabled,
+}: {
+  templateSections: TemplateSection[] | undefined;
+  sourceTemplateItemId: string | undefined;
+  values: QuoteLineDynamicFieldValue[];
+  onChange: (values: QuoteLineDynamicFieldValue[]) => void;
+  disabled: boolean;
+}) {
+  const { t } = useI18n();
+  const schema = resolveDynamicFieldSchema(templateSections, sourceTemplateItemId);
+  if (schema.length === 0) return null;
+
+  const valueOf = (key: string): QuoteLineDynamicFieldValue => values.find((v) => v.key === key) ?? { key };
+  const setValue = (key: string, patch: Partial<QuoteLineDynamicFieldValue>) => {
+    const existing = values.some((v) => v.key === key);
+    onChange(existing ? values.map((v) => (v.key === key ? { ...v, ...patch } : v)) : [...values, { key, ...patch }]);
+  };
+
+  return (
+    <div>
+      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.dynamicFieldsTitle")}</p>
+      <div className="space-y-2">
+        {schema.filter((f) => isFieldVisible(f, values)).map((field) => {
+          const current = valueOf(field.key);
+          if (field.type === "checkboxGroup") {
+            const checked = new Set(current.checkedOptionKeys ?? []);
+            return (
+              <div key={field.key}>
+                <label className="text-[11px] text-muted-foreground block mb-1">{field.label}</label>
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  {(field.options ?? []).map((opt) => (
+                    <label key={opt.key} className="flex items-center gap-1.5 text-[11px] text-foreground cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        disabled={disabled}
+                        checked={checked.has(opt.key)}
+                        onChange={(e) => {
+                          const next = new Set(checked);
+                          if (e.target.checked) next.add(opt.key); else next.delete(opt.key);
+                          setValue(field.key, { checkedOptionKeys: Array.from(next) });
+                        }}
+                        className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c] disabled:opacity-60"
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          if (field.type === "dropdown") {
+            return (
+              <div key={field.key}>
+                <label className="text-[11px] text-muted-foreground block mb-1">{field.label}</label>
+                <select
+                  disabled={disabled}
+                  value={current.value ?? ""}
+                  onChange={(e) => setValue(field.key, { value: e.target.value })}
+                  className="w-full text-xs text-foreground bg-card border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60"
+                >
+                  <option value="">—</option>
+                  {(field.options ?? []).map((opt) => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
+                </select>
+              </div>
+            );
+          }
+          if (field.type === "radio") {
+            return (
+              <div key={field.key}>
+                <label className="text-[11px] text-muted-foreground block mb-1">{field.label}</label>
+                <div className="flex items-center gap-3">
+                  {(field.options ?? []).map((opt) => (
+                    <label key={opt.key} className="flex items-center gap-1.5 text-[11px] text-foreground cursor-pointer select-none">
+                      <input
+                        type="radio"
+                        disabled={disabled}
+                        checked={current.value === opt.key}
+                        onChange={() => setValue(field.key, { value: opt.key })}
+                        className="w-3.5 h-3.5 accent-[#c9a84c] disabled:opacity-60"
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          // text / number
+          return (
+            <div key={field.key}>
+              <label className="text-[11px] text-muted-foreground block mb-1">{field.label}</label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type={field.type === "number" ? "number" : "text"}
+                  min={field.type === "number" ? 0 : undefined}
+                  disabled={disabled}
+                  value={current.value ?? ""}
+                  onChange={(e) => setValue(field.key, { value: e.target.value })}
+                  placeholder={field.placeholder}
+                  className="flex-1 min-w-0 text-xs text-foreground bg-card border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                />
+                {field.unitSuffix && <span className="text-[11px] text-muted-foreground flex-shrink-0">{field.unitSuffix}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function insertAtCursor(textarea: HTMLTextAreaElement, prefix: string, value: string, onChange: (v: string) => void) {
   const start = textarea.selectionStart ?? value.length;
@@ -176,6 +290,8 @@ export function LineItemsEditor({
   onDiscountChange,
   products,
   categories,
+  templateSections,
+  disabled = false,
 }: {
   lines: QuoteLine[];
   onChange: (lines: QuoteLine[]) => void;
@@ -183,6 +299,13 @@ export function LineItemsEditor({
   onDiscountChange: (n: number) => void;
   products: Product[];
   categories: ProductCategory[];
+  /** The applied template's sections (added 2026-07-20) — resolves each line's dynamic-field
+   * schema by `sourceTemplateItemId`. Undefined for a blank-start quote or one built before this
+   * feature existed; a line with no matching schema simply shows no dynamic-fields panel. */
+  templateSections?: TemplateSection[];
+  /** Gates only the new dynamic-fields panel below — every pre-existing control in this table was
+   * already always-editable regardless of permission, unchanged here. */
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -215,6 +338,8 @@ export function LineItemsEditor({
     current.splice(to, 0, moved);
     updateLine(lineId, "subDetails", current);
   };
+
+  const updateDynamicFields = (lineId: number, values: QuoteLineDynamicFieldValue[]) => updateLine(lineId, "dynamicFields", values);
 
   const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount);
 
@@ -336,6 +461,15 @@ export function LineItemsEditor({
                           />
                           <SpecificationsEditor value={line.specifications} onChange={(v) => updateLine(line.id, "specifications", v)} />
                           <TagsEditor tags={line.tags} onChange={(tags) => updateLine(line.id, "tags", tags)} />
+                          {line.dynamicFields && (
+                            <DynamicFieldsEditor
+                              templateSections={templateSections}
+                              sourceTemplateItemId={line.sourceTemplateItemId}
+                              values={line.dynamicFields}
+                              onChange={(values) => updateDynamicFields(line.id, values)}
+                              disabled={disabled}
+                            />
+                          )}
                         </div>
                       </td>
                     </tr>

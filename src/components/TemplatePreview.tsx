@@ -1,6 +1,31 @@
 import { Layers, ChevronRight } from "lucide-react";
-import type { QuotationTemplate } from "../lib/quotationTemplates";
+import type { QuotationTemplate, TemplateDynamicField } from "../lib/quotationTemplates";
 import { useI18n } from "../lib/i18n";
+
+/** Static, definition-level rendering of one dynamic field — shows its label/type/options/defaults
+ * for review, never a "current value" (a master template has none). */
+function DynamicFieldDefinition({ field }: { field: TemplateDynamicField }) {
+  const suffixLabel = field.type === "checkboxGroup" ? "Checkbox" : field.type === "radio" ? "Radio" : field.type === "dropdown" ? "Dropdown" : field.unitSuffix ? `Text (${field.unitSuffix})` : "Text";
+  return (
+    <li className="text-[11px] text-muted-foreground">
+      <span className="text-foreground font-medium">{field.label}</span> <span className="text-[10px]">({suffixLabel})</span>
+      {field.options && field.options.length > 0 && (
+        <ul className="list-disc list-inside ml-3">
+          {field.options.map((opt) => (
+            <li key={opt.key}>
+              {opt.label}
+              {field.type === "checkboxGroup" && (opt.defaultChecked ? " [x]" : " [ ]")}
+              {opt.omitFromCustomerDisplay && <span className="italic"> (omitted from customer output when selected)</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {field.visibleWhen && (
+        <span className="text-[10px] italic"> — shown when "{field.visibleWhen.fieldKey}" = {field.visibleWhen.equalsAny.join(", ")}</span>
+      )}
+    </li>
+  );
+}
 
 /**
  * Shared "ดูตัวอย่าง" (Preview) rendering — used by both the Create Quotation wizard's Step 3
@@ -74,11 +99,37 @@ export function TemplatePreview({ template, compact = false }: { template: Quota
                         {item.editableParameters.map((p, i) => <li key={i}>{p.label}: ______{p.unit ? ` ${p.unit}` : ""}</li>)}
                       </ul>
                     )}
+                    {item.dynamicFields && item.dynamicFields.length > 0 && (
+                      <ul className="list-disc list-inside ml-3 mt-0.5 space-y-0.5">
+                        {[...item.dynamicFields].sort((a, b) => a.sortOrder - b.sortOrder).map((f) => <DynamicFieldDefinition key={f.key} field={f} />)}
+                      </ul>
+                    )}
                   </li>
                 ))}
               </ul>
             </div>
           ))}
+
+          {(template.defaultNotes?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-foreground border-b border-border/60 pb-1 mb-1.5">{t("templates.preview.notes")}</p>
+              <ul className="text-xs text-foreground list-disc list-inside">
+                {template.defaultNotes!.map((n, i) => <li key={i}>{n}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {template.conditions && (
+            <div>
+              <p className="text-xs font-semibold text-foreground border-b border-border/60 pb-1 mb-1.5">{t("templates.preview.conditions")}</p>
+              <ul className="text-xs text-foreground list-disc list-inside space-y-0.5">
+                <li>{template.conditions.vatConditionText}</li>
+                <li>Warranty: ______ {template.conditions.warrantyUnit}</li>
+                <li>Delivery: Within ______ {template.conditions.deliveryUnit}</li>
+                {template.conditions.paymentPresets.map((p, i) => <li key={i} className="text-muted-foreground">{p}</li>)}
+              </ul>
+            </div>
+          )}
 
           {template.defaultTerms.length > 0 && (
             <div>
