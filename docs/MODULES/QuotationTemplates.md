@@ -2,6 +2,19 @@
 
 ## Status: ✅ Built (2026-07-14), fixed against an independent Codex review the same day, extended 2026-07-15 with the full Template Management module, fixed against a second independent Codex review the same day
 
+**2026-07-20, rollback note**: a generic "Dynamic Fields" system (dropdown/radio/checkboxGroup/
+text/number nested fields with conditional visibility, plus a Notes/Condition section) was built on
+top of this module and used to rebuild `LI-FRP-LINING` as "v2.0," went through two Codex-review fix
+passes, and was deployed — then `git revert`ed in full the same day per an explicit rollback request
+(not a broad reset — full history preserved, see `docs/CHANGELOG.md` "Revert FRP Lining v2.0 /
+generic Dynamic Fields system"). Nothing in this document describes that removed system anymore;
+`LI-FRP-LINING` is back to the plain v1.0 Excel-transcribed content the rest of this document
+already covers, and every other Quotation Templates capability (list/create/edit/duplicate/activate/
+archive/import/apply-to-quotation/snapshot/RBAC, all documented below) is unaffected — none of it
+ever depended on the removed schema. See `docs/TODO.md` for the one still-required manual follow-up
+(re-running the import against the live database so the MongoDB `LI-FRP-LINING` record itself
+matches this reverted code).
+
 **2026-07-15, second Codex-review fix pass** (see `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix
 Status" for the full writeup): fixed all 3 High Priority + all 3 Medium Priority issues an
 independent review of the Template Management pass found (0 Critical). Summary:

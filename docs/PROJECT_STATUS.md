@@ -14,6 +14,22 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-20, rollback] FRP Lining v2.0 / generic Dynamic Fields system reverted.** Per an
+  explicit rollback request, `git revert`ed the two commits that introduced this work (not a broad
+  `git reset --hard` — full history preserved). Verified scope before reverting (both commits
+  touched only Quotation-Template/Quote files, nothing in Dashboard/Warehouse/Customers/Scope of
+  Work/RBAC) and verified the result after (`git diff --stat` against the last pre-FRP-Lining-v2.0
+  commit produces zero output — byte-identical). `LI-FRP-LINING` is back to its original v1.0
+  Excel-transcribed content; the generic `TemplateDynamicField` schema, `Quote.notes`/
+  `vatConditionText`/`warrantyText`/`deliveryDays`, and the two files this system added are all
+  removed. The other 4 seeded templates and every other Quotation Template feature (list/create/
+  edit/duplicate/activate/archive/import/apply-to-quotation/snapshot/RBAC) are unaffected — they
+  never used any of the reverted schema. `lint`/`build` pass clean. **Not done this pass**: the live
+  MongoDB `quotation_templates` record for `LI-FRP-LINING` was not re-imported against this reverted
+  seed (no live database credentials in this session) — see TODO.md for that required follow-up. Any
+  quotation already created from v2.0 (unverifiable without DB access) remains fully readable/
+  printable regardless, per the existing frozen-snapshot architecture. See CHANGELOG.md for the full
+  writeup.
 - ✅ **[2026-07-20] Cancel/Back visibility — Codex-review fix pass.** Fixed all issues (0 Critical, 1 High,
   3 Medium, 1 Low) an independent review found in the 2026-07-16 pass below: two `QuotationTemplateWizard.tsx`
   "Choose another Job Type" recovery buttons still had the old low-contrast/no-focus treatment (High); the

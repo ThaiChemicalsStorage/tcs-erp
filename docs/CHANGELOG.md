@@ -4,6 +4,75 @@
 
 ---
 
+## 2026-07-20 (rollback) — Revert FRP Lining v2.0 / generic Dynamic Fields system
+
+Per an explicit rollback request, reverted the FRP Lining v2.0 work in full via two `git revert`
+commits (of `699b09d` "FRP Lining v2.0 Dynamic Fields system, Codex-review fix pass, and
+code-review hardening" and `74a768d` "FRP Lining v2.0: exact-wording alignment + Codex review
+round 3") — **not** a broad `git reset --hard`, and not a rewrite of git history: the two original
+commits, their full history, and everything before/unrelated to them remain intact and inspectable.
+
+**Scope verified before reverting**: the two reverted commits were consecutive on `master` (nothing
+else touched the same files in between or since) and, together, touched exactly 26 files — all
+either FRP Lining/Quotation-Template/Quote source files or documentation describing that same work.
+No Dashboard, Warehouse, Customers, Scope of Work, or RBAC permission file was ever touched by
+either commit, so nothing outside Quotation Templates could have been affected either way. The
+commit immediately preceding them ("Center-align Section/Item count columns on Quotation Templates
+list", `74d2b21`, directly below this entry) is unrelated generic Template-list UI polish and was
+left untouched.
+
+**Result — confirmed via `git diff --stat 74d2b21` producing zero output**: the working tree is now
+byte-identical to the last commit before any FRP Lining v2.0 work existed. Concretely:
+- `LI-FRP-LINING` is back to its original v1.0 content — the real Excel-transcribed structure (items
+  with `Prepare surface`/`Grinding`/`Sandblasting` as sub-items, `Concrete surface repair work` and
+  `Operating cost` as their own items, `Safety cost and accessories` with `Standard package include
+  PPE, Blower, Gas detector` as a sub-item) — version `"1.0"`, matching the other 4 seeded templates
+  which were never touched by the v2.0 work in the first place.
+- The generic `TemplateDynamicField`/`TemplateFieldOption`/`TemplateFieldVisibilityRule`/
+  `TemplateConditionConfig` schema, `TemplateItem.dynamicFields`, `QuotationTemplate.defaultNotes`/
+  `.conditions`, and their `Quote`-side counterparts (`QuoteLine.sourceTemplateItemId`/
+  `dynamicFields`, `Quote.notes`/`vatConditionText`/`warrantyText`/`deliveryDays`) are removed —
+  confirmed via a repo-wide grep for `dynamicFields`/`TemplateDynamicField`/
+  `omitFromCustomerDisplay` returning zero matches in `src/`/`api/`.
+- The two new files this system added (`src/lib/templateDynamicFields.ts`,
+  `src/pages/quotation/ConditionAndNotesEditor.tsx`) are deleted.
+- The admin Template editor (`TemplateEditorView.tsx`), the wizard, `LineItemsEditor.tsx`,
+  `PrintDocument.tsx`, `TemplatePreview.tsx`, `applyTemplate.ts`, and `quoteValidation.ts`/
+  `quotationTemplatesHandler.ts` are all back to their pre-FRP-Lining-v2.0 behavior — plain
+  `specifications`/`subDetails`/`editableParameters` only, no nested conditional-field system.
+
+**MongoDB — code/seed reverted, live data NOT independently re-imported this pass**: this rollback
+reverts the *code and seed source*. The live `quotation_templates` collection's `LI-FRP-LINING`
+document will keep whichever content the last successful `POST /api/quotation-templates/import` run
+actually wrote (which may still be v2.0, if that import ran while v2.0 was live) until
+`POST /api/quotation-templates/import` is run again — the idempotent, hash-gated importer will then
+detect the reverted seed's changed content hash and `$set`-update the existing document back to v1.0
+(same `templateCode`, so still no duplicate). This session had no live MongoDB/Vercel credentials to
+run that import directly (the same recurring sandboxed-session limitation as every prior pass on this
+project) — **running the import once against the live database is a required manual follow-up** to
+actually apply this rollback to production data, separate from the code being reverted and deployed.
+
+**Existing Quotations remain fully compatible either way**: a `Quote` never reads the live master
+template — every quote (from any template, at any point) freezes its own independent
+`templateSnapshot` at creation time and renders/validates against that frozen copy forever after (this
+architecture is unchanged by this rollback, since it predates the v2.0 work and was never touched by
+it). If any quotation was actually created from `LI-FRP-LINING` v2.0 while it was live (this session
+could not check — no live database access), it keeps its own frozen `sections`/`dynamicFields`/
+`conditions`/`notes` snapshot data untouched by this rollback and remains fully readable/printable —
+the removed *code* no longer offers a UI to create a NEW v2.0-shaped quote, but it never touched
+already-persisted quote documents, and the `QuoteFields` schema's `notes`/`vatConditionText`/
+`warrantyText`/`deliveryDays`/`dynamicFields` properties are (and always were) optional, so an old
+document that happens to have them set is simply not read/rendered by the reverted code — no crash,
+no `undefined` display, no data deleted.
+
+`npm run lint`/`npm run build` pass clean after the revert; the production bundle also shrank back
+down (`QuotationPage` ~151KB → ~138KB, `TemplateManagementPage` ~44KB → ~35KB, `TemplatePreview`
+~9.8KB → ~7.2KB gzipped-source estimates from the build output), consistent with a clean, complete
+removal rather than a partial one. See `docs/PROJECT_STATUS.md` for the current module status and
+`docs/TODO.md` for the still-required manual MongoDB re-import follow-up.
+
+---
+
 ## 2026-07-20 (later still) — Center-align Section/Item count columns on Quotation Templates list
 
 User-reported polish: the "จำนวน Section"/"จำนวนรายการ" column header and values on

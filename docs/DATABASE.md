@@ -303,6 +303,16 @@ fingerprint, not a row-range-level one. Also this pass: `Quote.templateSnapshot`
 `Quote` schema below) and template item product links (`productId`/`productSnapshot`) are now
 resolved/rebuilt server-side from a real `products` record rather than trusted from the client.
 
+**2026-07-20, rolled back**: a generic `TemplateDynamicField` schema (dropdown/radio/checkboxGroup/
+text/number, conditional `visibleWhen`, checkboxGroup Included/Excluded generation) plus
+`QuotationTemplate.defaultNotes`/`.conditions` and matching `Quote.notes`/`vatConditionText`/
+`warrantyText`/`deliveryDays`/`QuoteLine.dynamicFields` fields were added and used to rebuild
+`LI-FRP-LINING` as a "v2.0" — this entire schema addition was `git revert`ed the same day per an
+explicit rollback request. `LI-FRP-LINING` is back to its original v1.0 content described above; the
+schema shapes documented in this file reflect the current (reverted) state, not that removed
+addition. See `docs/CHANGELOG.md` "Revert FRP Lining v2.0 / generic Dynamic Fields system" for the
+full writeup and MongoDB-compatibility handling.
+
 ### `CompanyProfile` — REMOVED 2026-07-14
 
 The `CompanyProfile`/`BankAccount` client types (`src/lib/companyProfiles.ts`), the

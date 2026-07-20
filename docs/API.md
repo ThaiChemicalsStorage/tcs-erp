@@ -109,6 +109,15 @@ Client wrapper functions: `src/lib/quotationTemplates.ts`'s `fetchQuotationTempl
 `setQuotationTemplateArchived(id, isDeleted)`/`createQuotationTemplate(draft)`/
 `updateQuotationTemplate(id, draft)`/`duplicateQuotationTemplate(id, newTemplateCode)`.
 
+**2026-07-20, rolled back**: `POST`/`PATCH /api/quotation-templates` briefly gained a second
+structural-validation pass (`validateDynamicFieldSchema()`) over a per-item `dynamicFields` array, and
+`POST /api/quotes`/`PATCH /api/quotes/:id` briefly accepted `notes`/`vatConditionText`/`warrantyText`/
+`deliveryDays` fields — all added to support the generic Dynamic Fields system built for `LI-FRP-LINING`
+"v2.0." That entire system was `git revert`ed the same day per an explicit rollback request; none of
+those fields/validations exist in the current API surface. Re-running the import route above against
+the now-reverted seed is still required to bring the live `LI-FRP-LINING` MongoDB record itself back
+to v1.0 content — see `docs/TODO.md`.
+
 ## Scope of Work (`api/_lib/scopeOfWorkHandler.ts`, mounted at `/api/scope-of-works` via `api/handlers/quotes.ts` — added 2026-07-15, fixed against an independent Codex review the same day)
 
 Shares `api/handlers/quotes.ts`'s function file (checked first on the raw pathname, before falling
