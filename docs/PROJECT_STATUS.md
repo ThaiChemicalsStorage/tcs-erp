@@ -14,6 +14,19 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-20, Codex review round 4] Live verification closes the FRP Lining rollback's last
+  gap; discovers an unpushed commit.** A third independent review flagged (High) that the FRP Lining
+  v2.0→v1.0 rollback was code/seed-only, with no confirmation the live MongoDB record matched. Logged
+  into the real production app with the user's go-ahead and confirmed directly: `LI-FRP-LINING` was
+  already genuine v1.0 content (version 1.0, 17 items, original tax-note wording), last edited
+  `14 ก.ค. 2569` for all 5 templates — the audit log showed no import ran between the v2 deploy and
+  its revert, so the live record never actually diverged. Ran the import live anyway for a formal
+  record: `200 OK`, all 5 templates `skipped` (zero writes, timestamps unchanged), confirming exact
+  sync. Separately discovered the Cancel/Back button rollback commit (`8cfc9fe`) was never pushed —
+  a live DOM check showed production still rendering the old (pre-rollback) button classes verbatim.
+  Not pushed this pass either, per the established "push only when asked" convention — see TODO.md.
+  No console errors observed; `lint`/`build` unchanged/clean (no code modified this pass). See
+  CHANGELOG.md and `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status."
 - ✅ **[2026-07-20, second rollback] Cancel/Back button visibility improvement reverted.** Per an
   explicit rollback request, restored every Cancel/Close/Back control (14 call sites, 13 files) to
   its exact pre-2026-07-16 low-contrast style, deleted the `src/lib/buttonStyles.ts` helper it

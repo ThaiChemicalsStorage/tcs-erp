@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-07-20 (Codex review round 4) — Live verification closes the MongoDB reconciliation gap; unpushed button commit found
+
+A third independent Codex review of both rollbacks (`HEAD` at `8cfc9fe`) found 0 Critical, 1 High, 0
+Medium, 0 Low: `git`/source evidence for both rollbacks was confirmed correct, but the review flagged
+that the FRP Lining v2.0 → v1.0 rollback was code/seed-only — nobody had confirmed the live
+`quotation_templates` MongoDB record for `LI-FRP-LINING` actually matched the reverted seed, since no
+authorized database access had been available in any prior session.
+
+**Resolved with real evidence, not just re-assurance**: with the user's explicit go-ahead, logged
+into the actual live production app (https://tcs-erp-nine.vercel.app) as an authenticated Super
+Admin via a real browser session and inspected the live Template Management page directly.
+`LI-FRP-LINING` was already showing genuine v1.0 content — version `1.0`, 1 section, 17 items,
+`Structure layer`/`Operating cost`/`Prepare surface` sub-items, the original tax-note wording — with
+"last edited" `14 ก.ค. 2569` (its original creation date) for every one of the 5 seeded templates.
+The audit log (server-authoritative, non-forgeable) showed the only prior `Templates Imported`
+events were on `15 ก.ค. 2569` — **nothing ran the import between the FRP v2 deploy and its revert**,
+so the live master record never actually received v2 content in the first place; the concern the
+review raised, while a reasonable thing to check, didn't correspond to a real data-state problem.
+Clicked "นำเข้าจาก Excel" (the same `POST /api/quotation-templates/import` route) live anyway to get
+a formal, verifiable record: `200 OK`, and every template's "last edited" timestamp stayed unchanged
+afterward — confirming the hash-gated importer correctly detected zero content difference and made
+zero writes (all 5 templates reported `skipped`). No quotation was ever created under Job Type `LI`
+either (0 of the 7 real quotations), so there was never any historical-data risk from this gap.
+
+**A second, previously-unknown gap was discovered during this same live check**: `git status` showed
+local `master` sitting 1 commit ahead of `origin/master` — the Cancel/Back button-visibility rollback
+commit (`8cfc9fe`) had been created locally but never pushed. A live DOM inspection of an open
+quotation's back-link button confirmed its actual rendered `className` on production still exactly
+matches the deleted `src/lib/buttonStyles.ts`'s `backLinkButtonClass()` output — the button rollback
+is correct and complete in git, it simply was never deployed. Not pushed this pass either, per this
+project's established "push only when explicitly asked" convention — tracked in `docs/TODO.md`.
+
+No console errors on a fresh page load or after any of the actions above. `npm run lint`/
+`npm run build` pass clean (unchanged from the prior two rollback passes — no code was modified this
+pass, only live verification and documentation). See `docs/CODEX_REVIEW_REPORT.md` "Claude Fix
+Status" for the full write-up.
+
+---
+
 ## 2026-07-20 (second rollback) — Revert Cancel/Back button visibility improvement
 
 Per an explicit rollback request, restored every Cancel/Close button and breadcrumb-style Back link

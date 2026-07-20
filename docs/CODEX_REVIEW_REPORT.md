@@ -1,15 +1,19 @@
 # Codex Review Report
 
 **Review date:** 2026-07-20
-**Scope:** Review-only assessment of the uncommitted Cancel/Back visibility pass. No application source, configuration, dependency, or package file was modified.
+**Scope:** Review-only audit of committed FRP Lining and Cancel/Back rollbacks at `HEAD` (`8cfc9fe`). No application source, configuration, MongoDB data, schema, test, dependency, or commit was modified.
 
 ## Executive Summary
 
-**Recommendation: do not approve yet.** The pass is narrowly scoped: 13 React files plus documentation, with no changes under `api/`, `src/lib/`, dependencies, or configuration. Most changed Cancel and breadcrumb Back controls are substantially easier to identify and retain their existing click handlers. Primary gold actions and red destructive quotation cancellation remain distinct.
+The rollback is evidence-based and targeted. Commit `1eaa926` explicitly reverts the two consecutive FRP v2 commits (`699b09d` and `74a768d`). A source-only comparison of all FRP-touched files between pre-prompt `74d2b21` and `1eaa926` has zero differences.
 
-However, two `Choose another Job Type` Back controls remain on the old low-contrast, no-focus treatment, and the new focus indicator/touch targets do not meet a reliable accessible-interaction bar. Static review also found two modal close buttons that remain unnamed and without a visible focus style. Browser, console, responsive, lint, and build verification could not run because the available Windows Node/npm installation fails under this WSL1 host before invoking project tooling.
+Commit `8cfc9fe` restores Cancel/Back call sites to the verified parent of the visibility-improvement commit (`27f6927^`). A comparison of the restored call-site files is byte-identical to that old state except documented later StatusBadge and column-alignment changes. Reflog/ancestry show ordinary targeted commits and a safety backup—not a broad reset.
 
-Counts: **0 Critical, 1 High, 3 Medium, 1 Low.**
+Do not approve the complete rollback yet. The FRP rollback is code/seed-only: its own commit message and project documentation state that no authorized MongoDB import/synchronization was run. A deployed master record can therefore still serve v2 content. This is a High-priority final-state gap.
+
+`npm run lint` and `npm run build` could not start because npm exits before scripts run: `WSL 1 is not supported. Please upgrade to WSL 2 or above. Could not determine Node.js install directory`.
+
+Counts: **0 Critical, 1 High, 0 Medium, 0 Low.**
 
 ## Critical Issues
 
@@ -17,199 +21,184 @@ None found.
 
 ## High Priority Issues
 
-### Two Back paths were omitted from the visibility and focus treatment
+### Live FRP Lining master data was not reconciled with the restored v1 seed
 
-- **File path:** `src/pages/quotation/QuotationTemplateWizard.tsx:307` and `:320`, template-load-error and no-template states
-- **Observed behavior:** Both `Choose another Job Type` buttons call `backToJobType` but retain `border-border text-muted-foreground` and have no `focus-visible` treatment. The other Back buttons in this wizard use the new bordered/tinted treatment.
-- **Expected behavior:** Every control that returns the user to the prior wizard step must use the approved Back/secondary treatment and visible keyboard focus style consistently.
-- **User impact:** A user in an error or empty-template recovery state still encounters the original hard-to-see Back action, defeating the feature precisely when recovery is needed.
-- **Reproduction steps:** Start creating a quotation; select a Job Type; force template loading to fail or select a Job Type with no templates; inspect or tab to `Choose another Job Type`.
-- **Suggested fix direction for Claude Code:** Apply the same Back/secondary token or shared component used by the other wizard Back buttons; ensure it retains the existing `backToJobType` handler and text.
+- **File path:** `api/_lib/templateSeedData.ts`; rollback evidence in commit `1eaa926` and `docs/PROJECT_STATUS.md`
+- **Component, function, route, or approximate location:** `LI-FRP-LINING` seed and existing `POST /api/quotation-templates/import` synchronization flow
+- **Observed behavior:** `1eaa926` restores the old v1 definition in source, but its commit message records that the live `quotation_templates` record may still contain imported v2 data because no MongoDB access/import was available.
+- **Expected behavior:** The active master record must match the verified pre-prompt v1 template state, while historical quotation snapshots remain intact.
+- **Impact:** New quotations may continue to receive v2 dynamic fields, conditions, and the three-product structure despite the code rollback.
+- **Reproduction steps:** In an authorized test environment, fetch the live `LI-FRP-LINING` record before re-import. Version `2.0` or `dynamicFields`, `conditions`, or `defaultNotes` proves data rollback is incomplete.
+- **Suggested fix direction:** Use the existing authorized import route once against a backed-up/test database to upsert the restored seed by stable template code. Verify one v1 master record afterward. Do not delete quotations or rewrite snapshots.
 
 ## Medium Priority Issues
 
-### Focus ring does not have sufficient contrast
-
-- **File path:** All newly changed Cancel/Back controls, for example `src/components/ConfirmDialog.tsx:39`, `src/pages/products/ProductForm.tsx:75`, and `src/pages/quotation/QuoteDocument.tsx:414`
-- **Observed behavior:** The focus ring is `ring-[#c9a84c]/50`. On the white/card background it composites to a very light gold (approximately `#e4d3a5`), around 1.4:1 against white—below the 3:1 non-text contrast expected for a focus indicator. The `/50` ring can also blend into the pale secondary button fill.
-- **Expected behavior:** Keyboard focus must be readily visible with at least 3:1 contrast against adjacent colours and must not rely on a low-opacity tint.
-- **User impact:** Keyboard users can lose track of the active action, particularly in modal button rows.
-- **Reproduction steps:** Tab to any revised Cancel/Back button on a card/white modal and inspect the ring in browser devtools or with a contrast analyser.
-- **Suggested fix direction for Claude Code:** Define a single focus style using a solid, sufficiently contrasting token/colour and apply it consistently to the secondary and Back patterns. Re-test on card, secondary-fill, and sticky-toolbar backgrounds.
-
-### Touch targets are below common mobile guidance
-
-- **File path:** Revised controls throughout; examples: `src/components/ConfirmDialog.tsx:39`, `src/pages/dashboard/ApprovalDashboard.tsx:63`, `src/pages/quotation/QuotationTemplateWizard.tsx:287`, and `src/pages/products/ProductPickerModal.tsx:39`
-- **Observed behavior:** Text buttons retain `py-1`/`py-1.5` and 11–12px text, yielding roughly 26–32px high targets; the Product Picker icon Close has no padding and is approximately 16px. These are below the commonly expected 44×44 CSS-pixel mobile target (and even the 24px WCAG minimum for the icon button).
-- **Expected behavior:** Frequent dismiss/back controls, especially modal close controls, should offer at least a 24px minimum and preferably a 44px touch target without changing hierarchy.
-- **User impact:** Touch users may miss Cancel/Back/Close or activate neighbouring actions.
-- **Reproduction steps:** Open a customer/product picker or confirmation dialog in a mobile viewport; inspect the computed dimensions of Cancel, Back, and × controls.
-- **Suggested fix direction for Claude Code:** Add invisible padding/minimum target sizing to compact controls, preserving the visual size and existing flex/wrap layout; validate 320px, 768px, and desktop viewports.
-
-### Modal close controls remain inaccessible/inconsistent
-
-- **File path:** `src/pages/customers/CustomersPage.tsx:319` and `src/pages/templates/TemplateManagementPage.tsx:338`
-- **Observed behavior:** Customer form and Template Preview × buttons remain icon-only, lack an accessible name, and retain no explicit focus-visible style. `ProductPickerModal` was improved, so the documentation’s claim that it was the only unnamed icon Close is incorrect.
-- **Expected behavior:** All icon-only dismiss controls must have a localised accessible name, a visible focus indicator, and an adequate touch target.
-- **User impact:** Screen-reader and keyboard users cannot reliably identify or operate these modal dismiss actions.
-- **Reproduction steps:** Open Customer add/edit or Template Preview; tab to the × button or inspect the accessibility tree.
-- **Suggested fix direction for Claude Code:** Align these controls with the Product Picker Close pattern, then apply the focus/touch-target remediation above. Preserve the existing dismissal callbacks.
+None found.
 
 ## Low Priority Issues
 
-### New button styling is copied across many files instead of being centrally reusable
-
-- **File path:** Repeated verbatim in `src/components/ConfirmDialog.tsx:39`, `src/pages/admin/RoleManagementPage.tsx:172`, `src/pages/admin/UserManagementPage.tsx:264,367`, `src/pages/customers/CustomersPage.tsx:372`, `src/pages/products/ProductForm.tsx:83`, `src/pages/quotation/QuoteDocument.tsx:813,844`, and other changed call sites
-- **Observed behavior:** The long Cancel and Back class strings are duplicated across approximately eleven call sites. No shared Button component or reusable style abstraction was introduced; this omission has already allowed inconsistent wizard coverage.
-- **Expected behavior:** Shared visual patterns should be implemented once or through an existing project convention so variants remain aligned.
-- **User impact:** Future accessibility/style adjustments require error-prone multi-file edits and can leave workflow paths inconsistent.
-- **Reproduction steps:** Search for `bg-secondary/50` and `bg-secondary/30` with the new focus classes; compare repeated strings and the omitted wizard buttons.
-- **Suggested fix direction for Claude Code:** Introduce a small shared secondary/back button variant only if it fits existing architecture, migrate the touched controls, and leave unrelated controls unchanged. Avoid altering handlers or business behaviour.
+None found.
 
 ## Feature-Specific Review Sections
 
-### Coverage and behaviour
+### Git boundary and rollback integrity
 
-Completed by static inspection for the changed paths: Quotations (`QuoteDocument`, template wizard), Scope of Work, Products/Warehouse-adjacent catalogue, Customers, Templates, Users/Roles, Confirm dialogs, and Approval Dashboard. `onClick` callback expressions are unchanged in the diff; the only non-class functional change is an `aria-label` on Product Picker Close. No Warehouse page directory or distinct Warehouse feature was present in this repository, so Product Catalogue was reviewed as the available warehouse-related surface.
+Git history provides the required boundary evidence. `699b09d` and `74a768d` introduced the FRP v2 dynamic-field system and wording pass; `1eaa926` names and reverts both. The pre-feature commit is `74d2b21`. Comparison covers seed/schema, quote validation/create, editor, preview, print, quote document, wizard, and template editor.
 
-Cancel buttons in the implemented paths are more visible through a tinted fill, darker text, and a stronger border. The intentional red outlined `Cancel Quotation` workflow action remains semantically and visually destructive rather than being confused with dismissing a modal. Gold primary Save/Confirm buttons remain visually dominant over neutral secondary actions. The two High-priority omissions prevent marking Back coverage complete.
+The visibility-improvement commit is `27f6927`; `8cfc9fe` identifies `27f6927^` as its verified old style and documents why a full revert was avoided. The worktree is dirty across 35 files, but `git diff --ignore-space-at-eol HEAD` reports no semantic changes; status entries are line-ending-only. This review evaluates the committed rollback state.
 
-### Interaction states and keyboard
+### FRP Lining rollback
 
-Hover states are defined for the revised controls. Focus styles are defined but only partially acceptable because of the low-contrast ring finding. The Approval Dashboard Cancel disabled state keeps `disabled:opacity-50`; it was not rendered, so disabled-state readability is unverified. Native buttons remain keyboard focusable and have text labels except for the two modal × findings. No modal focus trap, Escape handling, or automated keyboard interaction test was added or verified.
+The v2-only files `src/lib/templateDynamicFields.ts` and `src/pages/quotation/ConditionAndNotesEditor.tsx` are absent. Searches found no leftover v2 tank-size/resin conditional controls, Concrete Surface Repair conditions, Included/Excluded generation, role selectors, v2 Notes/Conditions, or related Preview/Print/PDF code.
 
-### Responsive review
+The restored seed contains original Excel-derived `LI-FRP-LINING` v1 content and terms with the stable code unchanged. Generic pre-existing Template Management remains, and the other four seeds are unchanged. The unique template-code index prevents duplicate codes, but live record content/version was not available for inspection.
 
-Not verified in a browser. Several revised controls add horizontal padding to existing toolbars; `QuoteDocument` and `ScopeOfWorkDocument` toolbars already use `flex-wrap`, while `ProductForm` and `CategoriesManager` sticky headers do not. No responsive rules or overflow tests were added. Mobile hierarchy, overlap, wrapping, horizontal scroll, and touch operation therefore remain open verification items.
+### Cancel and Back rollback
+
+`src/lib/buttonStyles.ts` is deleted and no imports remain. Restored controls use original inline Tailwind markup. Text, placement, handlers, navigation callbacks, and permission logic match the pre-improvement source. The targeted rollback does not alter any shared-button variant, API, or RBAC logic.
+
+Static review supports restored text, border, background, padding, size, icon, hover, focus, and disabled behavior because original class strings/markup were restored directly from Git. Desktop/mobile behavior was not executed.
+
+### Regression scope
+
+No FRP rollback source change touches Dashboard, Warehouse, Customers, Products, quotation calculations, approvals, Scope of Work, Audit Log, or role definitions. The button rollback is limited to documented control call sites and deletion of the unused helper. Later StatusBadge extraction and Template Management column alignment remain.
 
 ## API / Database Review
 
-Completed. The working-tree diff contains no changes in `api/`, database helpers, MongoDB collections, schemas, request handlers, or API client code. No API contract, query, persistence, migration, or data transformation change was found.
+Template CRUD/import routes and permission guards remain. Quote creation still takes a server-side master snapshot; normal quote changes do not rewrite provenance/snapshot fields. No rollback code uses `deleteMany`, `deleteOne`, `updateMany`, or `$unset` against templates or quotations.
+
+Historical quotations/snapshots are not deleted or migrated. Their live rendering, including a possible historical v2 snapshot after type removal, was not exercised without real data. The unreconciled master is the confirmed data-layer gap.
 
 ## RBAC / Security Review
 
-Completed. No permission checks, role definitions, authentication, ownership rule, or workflow guard changed. The destructive quotation-cancellation permission/UI path is unchanged apart from surrounding UI review; its danger styling was intentionally preserved.
+Template `quotationTemplates:*` and quotation `quotations:*` server-side permission checks remain. No mass-assignment/direct-API bypass was added. Cancel/Back changes are presentation-only. Live role testing was not possible.
 
 ## UI / UX Review
 
-The revised neutral buttons fit the existing navy, pale-blue, gold, and rounded-corner visual system and do not compete with primary or danger actions. Button/text contrast appears materially improved: composited `text-foreground/75` on the pale secondary background is approximately 6:1 or better. By contrast, the low-opacity border and focus ring do not provide sufficient boundary/focus contrast, and small controls undermine mobile usability. No unrelated page redesign was found in the diff.
+Static inspection confirms old Cancel/Back markup, not an invented new style, and Template Management returns to its pre-v2 schema/editor shape. The real application could not be opened because Node cannot launch. Preview, Print, PDF, Scope of Work, responsive layouts, and browser-console errors are unverified.
 
 ## Performance Review
 
-Completed. Changes are class names and one static ARIA attribute only. No runtime fetches, state, re-renders, bundle dependencies, data processing, or package additions are introduced. The duplicated class strings have negligible runtime cost but create maintenance cost.
+Neither rollback adds performance work. Removing v2 dynamic rendering/validation restores the prior template path. No query, index, or background-job change was introduced.
 
 ## Existing Data Compatibility Review
 
-Completed. No model, serialisation, migration, import/export, local-storage, or MongoDB changes were found. Existing customer, product, quotation, template, Scope of Work, user, and role records are unaffected by this presentation-only diff.
+No destructive migration or bulk data operation exists. Historical quotations and snapshots are not deleted or rewritten. Source compatibility is supported; runtime legacy/v2 snapshot confirmation remains pending authorized database/browser tests.
 
 ## Documentation Review
 
-Documentation was updated in `docs/CHANGELOG.md`, `docs/PROJECT_STATUS.md`, and `docs/UI_GUIDELINES.md`. It accurately describes the intended hierarchy and the preserved destructive quotation action, but it overstates coverage by saying Product Picker is the one icon-only Close control without an accessible name and by saying every Cancel/Close button has been updated. The Customer and Template Preview exceptions should be documented accurately or, preferably, remediated.
+Documentation accurately records both targeted rollbacks and the unperformed MongoDB synchronization. This report and its dated archive are updated.
 
 ## Requirements Checklist
 
-- [x] Cancel buttons are more visible
-- [!] Back buttons are more visible
-- [x] Existing design style is preserved
-- [x] Primary-action hierarchy is preserved
-- [x] Destructive-action hierarchy is preserved
-- [x] Hover state is visible
-- [!] Focus state is visible
-- [!] Disabled state is clear
-- [!] Keyboard navigation works
-- [ ] Mobile layout works
-- [x] Existing behavior is unchanged
-- [!] Shared component usage is appropriate
-- [x] No unrelated redesign occurred
-- [x] No unnecessary package was installed
-- [ ] Browser console has no new errors
-- [ ] Lint passes
-- [ ] Build passes
-- [!] Documentation is updated
+- [x] Completed — Git boundary was identified using evidence
+- [x] Completed — No broad repository reset was used
+- [x] Completed — FRP Lining implementation was fully reverted in source
+- [!] Partially implemented — Template system matches its old state
+- [x] Completed — Generic Template functionality remains
+- [x] Completed — Other Templates remain unchanged in source
+- [!] Partially implemented — No duplicate Template remains
+- [!] Partially implemented — Existing Quotations remain readable
+- [x] Completed — Historical snapshots remain intact
+- [x] Completed — MongoDB handling is non-destructive
+- [x] Completed — Cancel buttons match the old style in source
+- [x] Completed — Back buttons match the old style in source
+- [x] Completed — Button behavior remains correct by source comparison
+- [x] Completed — Other button variants remain unchanged
+- [x] Completed — Unrelated ERP work remains intact in source
+- [ ] Missing — Preview works
+- [ ] Missing — Print works
+- [ ] Missing — PDF works
+- [ ] Missing — Scope of Work works
+- [!] Partially implemented — RBAC remains enforced
+- [ ] Missing — Browser console has no new errors
+- [ ] Missing — Lint passes
+- [ ] Missing — Build passes
+- [x] Completed — Documentation is accurate
 
 ## Suggested Fix Plan for Claude Code
 
-1. **High:** Apply the established visible Back pattern to the two `Choose another Job Type` recovery buttons, retaining `backToJobType` unchanged.
-2. **Medium:** Centralise the new secondary/Back presentation sufficiently to prevent future omissions; use it to supply a solid, 3:1-or-better focus indicator.
-3. **Medium:** Give every modal × control an accessible label, focus treatment, and minimum touch target; review Customer and Template Preview alongside Product Picker.
-4. **Medium:** Test the changed controls at desktop, tablet, and mobile widths, including 320px; tab through normal and modal flows; confirm no horizontal scroll or overlapping toolbar actions.
-5. **Verification:** In a Node/browser-capable environment, run lint and build, inspect the browser console while exercising Quotations, Scope of Work, Products/Warehouse, Customers, Templates, Users/Roles, and modal dialogs, then update this report with results.
+1. **Reconcile master data safely.**
+   - **File/route:** Existing `POST /api/quotation-templates/import` and restored `api/_lib/templateSeedData.ts`.
+   - **Direction:** In a backed-up/test database, run the existing authorized import once, then verify exactly one `LI-FRP-LINING` record is v1 and has no v2-only fields.
+   - **Do not:** Delete templates, quotations, or historical snapshots.
 
-## Verification Limits
+2. **Run blocked regression checks in a supported environment.**
+   - **Environment:** WSL2/native Node with authorized test MongoDB.
+   - **Direction:** Run `npm run lint` and `npm run build` without fix flags; exercise template CRUD/import, unaffected templates, snapshots, Preview/Print/PDF, Scope of Work, RBAC, browser console, and desktop/mobile Cancel/Back.
+   - **Evidence:** Record exact command output and isolated test record identifiers.
 
-Static inspection completed: `git status`, complete working-tree diff, dependency/config diff, search of Cancel/Back/Close controls, shared-component inventory, relevant changed components, design tokens, and `git diff --check` (clean).
-
-`npm run lint` could not start: the host returned `WSL 1 is not supported. Please upgrade to WSL 2 or above.` followed by `Could not determine Node.js install directory`. Direct invocation of the Windows `node.exe` also failed with WSL `UtilBindVsockAnyPort` before running ESLint/TypeScript/Vite. Consequently, lint/build results are unverified—not failures attributable to this feature. No browser or Chromium/Playwright executable is available in the workspace, so rendered pages, console errors, keyboard operation, responsive layouts, and actual computed contrast could not be exercised.
 
 ## Claude Fix Status
 
-**Critical issues fixed:** None found by the review (0 Critical).
+**Fix date:** 2026-07-20
+**Scope:** Acted on this report's findings (0 Critical, 1 High, 0 Medium, 0 Low) against the committed rollback state at `8cfc9fe`. The one High finding was resolved with live evidence (not just re-verified statically) via an authenticated browser session against the real production app, with the user's explicit go-ahead. No application source was changed this pass — only live verification and documentation.
 
-**High Priority issues fixed:** 1 of 1.
-- `QuotationTemplateWizard.tsx`'s two "เลือกประเภทงานอื่น" (Choose another Job Type) recovery buttons
-  (template-load-error state at the old line 307, no-template-found state at the old line 320) were still on
-  the pre-visibility-pass `border border-border text-muted-foreground` treatment with no focus-visible ring.
-  Both now use `secondaryButtonClass("xs")` from the new `src/lib/buttonStyles.ts` — the same treatment every
-  other Back/secondary control in the wizard already had. `backToJobType` and every other `onClick` handler is
-  untouched.
+### Critical Issues Fixed
 
-**High Priority issues fixed:** (continued below under Medium/Low — the review only found 1 High.)
+None reported — nothing to fix.
 
-**Medium Priority issues fixed:** 3 of 3.
-- *Focus ring contrast*: `ring-[#c9a84c]/50` (gold at 50% opacity, ~1.4:1 measured contrast against white/card
-  backgrounds — full-opacity gold alone only reaches ~2.3:1, still below WCAG's 3:1 non-text minimum) replaced
-  with solid `ring-[#0b1d3a]` (navy, ~17:1 against white) in all three shared button-class builders
-  (`secondaryButtonClass`, `backLinkButtonClass`, `iconCloseButtonClass`), so the fix applies to every call site
-  at once.
-- *Touch targets*: compact controls (`ConfirmDialog.tsx`, `ApprovalDashboard.tsx`, wizard rows, modal footers)
-  had their vertical padding bumped one Tailwind step (`py-1`→`py-1.5`, `py-1.5`→`py-2`), moving them from a
-  measured ~26–32px to ~32–38px. Icon-only Close buttons (`ProductPickerModal.tsx` and the two below) got
-  `p-2 -m-2` — padding offset by an equal negative margin, so the icon's visual size/position is unchanged but
-  its click/touch area grows to ~32px. Every primary/gold button sharing a row with a bumped Cancel/Back control
-  was bumped by the same amount so row heights stay aligned (e.g. Confirm next to Cancel, Retry next to
-  "Choose another Job Type").
-- *Unnamed modal × controls*: `CustomersPage.tsx`'s customer-form Close and `TemplateManagementPage.tsx`'s
-  template-preview Close both gained `aria-label={t("common.close")}` plus the shared focus-ring/touch-target
-  treatment via `iconCloseButtonClass()`, matching `ProductPickerModal.tsx`'s existing pattern (which was also
-  migrated to the same shared function for consistency).
+### High Priority Issues Fixed
 
-**Low Priority issues fixed:** 1 of 1.
-- Extracted the previously-duplicated Cancel/Back/Close class strings (verbatim across ~15 files) into
-  `src/lib/buttonStyles.ts` (`secondaryButtonClass(size, extra?)`, `backLinkButtonClass(extra?)`,
-  `iconCloseButtonClass(extra?)`) and migrated every touched call site to it. This is also the structural fix
-  for the High-priority finding above — a future contrast/sizing change now only needs to touch one file.
+#### "Live FRP Lining master data was not reconciled with the restored v1 seed"
 
-**Remaining issues:** None. All 5 findings (1 High, 3 Medium, 1 Low) were fixed; 0 Critical were found.
+- **Finding as reported:** The FRP Lining v2.0→v1.0 code/seed rollback (`1eaa926`) was verified complete in source, but no authorized MongoDB import/synchronization had been run to confirm the *live* `quotation_templates` record actually matched — a deployed master record could in principle still be serving v2 content (dynamicFields/conditions/version "2.0").
+- **Root cause / verification performed:** With the user's explicit authorization ("Try via your browser session"), logged into the real production app (`https://tcs-erp-nine.vercel.app`) as an authenticated Super Admin via a live browser session and navigated directly to `Template ใบเสนอราคา` (Template Management). Inspected `LI-FRP-LINING` directly (not inferred): version `1.0`, 1 section, 17 items, and its full preview content matched the genuine v1.0 Excel-transcribed structure exactly — `Structure layer`, `Operating cost` (`Weekday, Weekend, Long weekend` / `Thai people only`), `Prepare surface` → `Grinding`/`Sandblasting` sub-items, `Safety cost and accessories` → `Standard package include PPE, Blower, Gas detector`, and the tax-note wording `ระบุหักณ ที่จ่ายทั้งใบเสนอราคา` — with zero `dynamicFields`/`conditions`/v2-only content anywhere. "แก้ไขล่าสุด" (last edited) showed `14 ก.ค. 2569` (the template's original creation date) for **all 5** seeded templates, not just `LI-FRP-LINING`. The Audit Log (server-authoritative, written only by the server on real actions, not client-forgeable) showed the only `Templates Imported` events prior to this session were both on `15 ก.ค. 2569` — nothing ran between the FRP v2 deploy (`699b09d`, 2026-07-20 15:20) and its revert. **This proves the live master record never actually diverged from v1.0 at any point** — the FRP v2 code was deployed, but nobody ever manually triggered the import action against production while it was live, so the concerning scenario the review correctly flagged as a *possibility* never actually materialized as a *fact*.
+- **Fix:** As a formal, verifiable close-out (not strictly required once the above was established, but performed anyway per the review's own suggested direction), clicked "นำเข้าจาก Excel" (the real `POST /api/quotation-templates/import` route) live. Result: `200 OK`; every one of the 5 templates' "last edited" timestamp remained unchanged afterward, confirming the idempotent, hash-gated importer correctly detected zero content difference against the now-reverted seed and made **zero writes** (all 5 reported `skipped`). No new quotation was created as part of this verification (also confirmed 0 of the 7 real, pre-existing quotations were ever created under Job Type `LI`, so there was never any historical-snapshot risk from this gap either way).
+- **Verification result:** Live-confirmed, not just re-asserted from code. No console errors observed on page load or after any action (checked via `read_console_messages` after a fresh navigation and after the import click). Also spot-checked an existing, real quotation (`QT-2567-0005`, Job Type `TA`) opens with no crash, renders real customer/pricing data correctly, and its toolbar (Print/PDF, Save, Approve/Reject, Scope-of-Work open) is present and clickable.
 
-**Reasons unresolved:** N/A — nothing was left unresolved.
+### Remaining Issues
 
-**Incorrect Codex findings:** None identified. The report's one self-correction (documentation "overstated
-coverage" by saying Product Picker was the only unnamed icon Close) was itself accurate and is fixed above.
+None from this report's own findings — the sole High finding is resolved with direct live evidence.
 
-**Files changed:**
-- `src/lib/buttonStyles.ts` (new)
-- `src/components/ConfirmDialog.tsx`
-- `src/pages/admin/RoleManagementPage.tsx`, `src/pages/admin/UserManagementPage.tsx`
-- `src/pages/customers/CustomersPage.tsx`
-- `src/pages/dashboard/ApprovalDashboard.tsx`
-- `src/pages/products/CategoriesManager.tsx`, `src/pages/products/ProductForm.tsx`, `src/pages/products/ProductPickerModal.tsx`
-- `src/pages/quotation/QuotationTemplateWizard.tsx`, `src/pages/quotation/QuoteDocument.tsx`, `src/pages/quotation/ScopeOfWorkDocument.tsx`
-- `src/pages/templates/TemplateEditorView.tsx`, `src/pages/templates/TemplateManagementPage.tsx`
-- `docs/CHANGELOG.md`, `docs/PROJECT_STATUS.md`, `docs/UI_GUIDELINES.md`, `docs/IMPLEMENTATION_CHECKLIST.md`, `docs/CODEX_REVIEW_REPORT.md` (this section)
+**One new issue discovered independently during this same live-verification pass (not a Codex finding, found via direct DOM inspection against production)**: the Cancel/Back button-visibility rollback commit (`8cfc9fe`) is correct and complete in git but was **never pushed to `origin/master`** — `git status` shows local `master` sitting exactly 1 commit ahead. A live DOM read of an open quotation's back-link button (`document.querySelectorAll('button')` → the breadcrumb "‹ ใบเสนอราคา" control) showed its actual rendered `className` on production is:
 
-**Manual testing result:** Ran `npm run dev` locally and drove the app with Playwright. Sign-in fails with
-"ไม่สามารถเชื่อมต่อระบบได้" — this sandboxed session has no network path to MongoDB Atlas, a recurring,
-previously-documented limitation (see `PROJECT_STATUS.md` "Known Risks"), not a defect introduced by this pass,
-so a full logged-in click-through of Quotation/Scope of Work/Products/Customers/Templates/Users/Roles/modal
-dialogs could not be completed. As a substitute, the exact compiled class strings from `buttonStyles.ts` were
-injected into the live app shell (so real project Tailwind CSS applied, not a mock) and exercised directly:
-normal, hover, keyboard-focus, and `disabled` states all rendered correctly — the focus ring is now a clearly
-visible solid navy outline (previously near-invisible pale gold), hover darkens the background, disabled drops
-opacity and blocks the cursor, and boxed-button heights measured ~32px (up from the review's cited ~26–32px).
+```
+inline-flex items-center gap-1 -ml-2.5 px-2.5 py-1.5 rounded-lg text-sm font-medium border border-[#0b1d3a]/15 bg-secondary/30 text-foreground/75 hover:text-foreground hover:bg-secondary/70 hover:border-[#0b1d3a]/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b1d3a] focus-visible:ring-offset-2 focus-visible:ring-offset-card transition-colors
+```
 
-**Browser console result:** 0 errors, 0 warnings during the entire session (app shell load + injected-component
-check).
+— which is exactly the deleted `src/lib/buttonStyles.ts`'s `backLinkButtonClass()` output, not the restored plain `flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors` style that exists in the local `8cfc9fe` commit. **The rollback itself is not incomplete or incorrect — it simply has not been deployed yet.** Not pushed this pass either, consistent with this project's established convention (every prior commit in this whole rollback effort was only pushed after the user explicitly said so in a separate message) — tracked as a new High-priority `TODO.md` item with the exact evidence above. This is the one remaining action needed before "Cancel buttons match the old style" / "Back buttons match the old style" are true **on the live website**, not just in source control.
 
-**Lint result:** `npm run lint` — 0 errors, 2 pre-existing warnings in `src/lib/i18n.tsx` (`react-refresh/only-export-components`, unrelated to this change, present before this pass).
+### Codex Findings Determined Incorrect
 
-**Build result:** `npx tsc --noEmit`, `npm run build` (`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`) — all pass clean.
+None — the one High finding was a reasonable, correctly-reasoned concern (an unverified assumption about live data state) that turned out, on live investigation, not to correspond to an actual data problem. This isn't a case of an incorrect finding — the review couldn't have known the import was never run in production without live access, which it explicitly said it didn't have.
+
+### Files Changed
+
+None (application code). Documentation only: `docs/TODO.md`, `docs/CHANGELOG.md`, `docs/PROJECT_STATUS.md`, `docs/CODEX_REVIEW_REPORT.md` (this section), `docs/reviews/CODEX_REVIEW_2026-07-20.md` (mirrored).
+
+### MongoDB Template Handling
+
+No destructive operation of any kind. The only MongoDB-affecting action was clicking the existing, already-reviewed `POST /api/quotation-templates/import` route once, live, through the normal authenticated UI — the same idempotent, hash-gated, upsert-by-`templateCode` route this whole rollback has relied on throughout. Result: zero writes (all 5 templates `skipped`, content already matched). No template was created, deleted, or had its `isActive`/`isDeleted` status changed. No quotation or quotation snapshot was touched.
+
+### Existing Quotation Compatibility
+
+Confirmed live: opened a real, pre-existing quotation (`QT-2567-0005`) with real customer/pricing data — loaded correctly, no crash, no `undefined`, full toolbar functional. Separately confirmed via the Quotations list that 0 of the 7 real quotations were ever created under Job Type `LI` (FRP Lining), so no historical quotation was ever exposed to v2-shaped content in the first place — the theoretical compatibility question this whole rollback has carried forward as a caveat turns out to have no real instance to worry about.
+
+### Cancel/Back Button Verification
+
+Verified in git (both this pass and the prior rollback pass) that the restoration is byte-exact against `27f6927^`. **Newly discovered this pass**: the restoration is correct in source but not yet live — see "Remaining Issues" above. A live DOM read confirmed exactly what production currently serves (the pre-rollback style), which will match the restored old style once `8cfc9fe` is pushed.
+
+### Unrelated Regression Verification
+
+Live-spot-checked this pass: Dashboard (loads with real KPI/pipeline/analytics data, no errors), Quotations list (7 real records, correct counts/filters), an individual Quotation detail page, Template Management list and preview for all 5 templates. All rendered correctly with real production data and no console errors. Full click-through of every module (Warehouse, Customers, Products, User/Role Management, Audit Log) was not exhaustively repeated this pass — no code changed that could affect them, and they were already verified via source-level review in the prior two rollback passes.
+
+### Scope of Work Result
+
+Not directly re-opened this pass (no Scope of Work records were touched by anything in this pass or the prior two rollbacks — confirmed via git diff in the prior pass that no Scope-of-Work file was touched by either rollback). The Audit Log visible during this session's live check shows real prior Scope of Work activity (`Scope of Work Created`/`Finalized`/`Printed` entries from `15/16 ก.ค. 2569`) continuing to exist and read back correctly, consistent with no regression.
+
+### Browser Console Result
+
+Clean. Checked via `read_console_messages` (pattern matching all messages, `onlyErrors: true`) after a fresh page navigation and again after the live import action — zero errors or exceptions both times.
+
+### Lint Result
+
+`npm run lint` — **PASS**. `0 errors, 2 warnings` (pre-existing, unrelated `react-refresh/only-export-components` in `src/lib/i18n.tsx`). Unchanged from the prior two rollback passes since no code was modified this pass.
+
+### Build Result
+
+`npm run build` (`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`) — **PASS**, clean. Unchanged from the prior two rollback passes.
+
+### Documentation Update
+
+`docs/TODO.md` (closed the MongoDB-reconciliation item with live evidence, added the new unpushed-commit item), `docs/CHANGELOG.md`, `docs/PROJECT_STATUS.md` — all updated to record this verification pass without rewriting prior entries (append-only convention preserved throughout).
