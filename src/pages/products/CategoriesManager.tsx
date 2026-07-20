@@ -3,7 +3,6 @@ import { ChevronRight, Plus, Pencil, Archive, ArchiveRestore, Check, X, Tags } f
 import type { ProductCategory } from "../../lib/products";
 import { createCategory, updateCategory } from "../../lib/products";
 import { useI18n } from "../../lib/i18n";
-import { backLinkButtonClass } from "../../lib/buttonStyles";
 
 export function CategoriesManager({
   categories,
@@ -63,7 +62,7 @@ export function CategoriesManager({
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-        <button onClick={onBack} className={backLinkButtonClass()}>
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("products.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />

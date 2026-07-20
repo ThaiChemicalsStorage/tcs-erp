@@ -17,7 +17,6 @@ import { useToast } from "../../hooks/useToast";
 import { TemplatePreview } from "../../components/TemplatePreview";
 import { useI18n } from "../../lib/i18n";
 import { TemplateEditorView } from "./TemplateEditorView";
-import { iconCloseButtonClass, secondaryButtonClass } from "../../lib/buttonStyles";
 
 type StatusFilter = "all" | "active" | "inactive";
 type SourceFilter = "all" | "excel_import" | "manual";
@@ -335,7 +334,7 @@ export function TemplateManagementPage({
           <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("templates.action.preview")}</p>
-              <button onClick={() => setPreviewTarget(null)} aria-label={t("common.close")} className={iconCloseButtonClass()}><X size={16} /></button>
+              <button onClick={() => setPreviewTarget(null)} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
             </div>
             {previewFull ? <TemplatePreview template={previewFull} /> : (
               <div className="flex items-center justify-center py-10 gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> {t("common.loading")}</div>
@@ -353,8 +352,8 @@ export function TemplateManagementPage({
             <label className="text-xs text-muted-foreground block mb-1">{t("templates.col.code")}</label>
             <input value={duplicateCode} onChange={(e) => setDuplicateCode(e.target.value)} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors mb-4" />
             <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setDuplicateTarget(null)} className={secondaryButtonClass("sm")}>{t("common.cancel")}</button>
-              <button onClick={() => void handleDuplicateConfirm()} disabled={duplicating || !duplicateCode.trim()} className="px-3.5 py-2 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+              <button onClick={() => setDuplicateTarget(null)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+              <button onClick={() => void handleDuplicateConfirm()} disabled={duplicating || !duplicateCode.trim()} className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60">
                 {t("templates.action.duplicate")}
               </button>
             </div>

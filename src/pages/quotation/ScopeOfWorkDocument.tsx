@@ -18,7 +18,6 @@ import { ValidationSummary } from "../../components/ValidationSummary";
 import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
 import { validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS } from "../../lib/documentRequirements";
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint, scopeOfWorkRequiredFields } from "../../lib/validation/scopeOfWorkValidation";
-import { backLinkButtonClass, secondaryButtonClass } from "../../lib/buttonStyles";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
 
 const BLOCKED_TOOLTIP = "กรุณากรอกข้อมูลและเลือกหัวข้อที่จำเป็นให้ครบก่อนดำเนินการ";
@@ -275,7 +274,7 @@ export function ScopeOfWorkDocument({
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       {/* Toolbar */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={onBack} className={backLinkButtonClass()}>
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> กลับไปใบเสนอราคา
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -461,9 +460,9 @@ export function ScopeOfWorkDocument({
             <div className="flex-1">
               <p className="text-xs text-foreground font-medium">ใบเสนอราคานี้ยังไม่มีรายการสินค้า/งานสำหรับสร้าง Scope of Work</p>
               <div className="flex items-center gap-2 mt-2">
-                <button onClick={onBack} className={secondaryButtonClass("xs")}>กลับไปแก้ไขใบเสนอราคา</button>
+                <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">กลับไปแก้ไขใบเสนอราคา</button>
                 {editable && (
-                  <button onClick={() => updateField("items", [blankScopeOfWorkItem()])} className="px-3 py-2 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
+                  <button onClick={() => updateField("items", [blankScopeOfWorkItem()])} className="px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
                     เพิ่มรายการใน Scope of Work ด้วยตนเอง
                   </button>
                 )}

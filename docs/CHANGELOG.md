@@ -4,6 +4,62 @@
 
 ---
 
+## 2026-07-20 (second rollback) — Revert Cancel/Back button visibility improvement
+
+Per an explicit rollback request, restored every Cancel/Close button and breadcrumb-style Back link
+to its exact pre-2026-07-16 style — the low-contrast `border-border`/`text-muted-foreground`
+treatment with no dedicated focus ring, before the 2026-07-16 visibility pass and its 2026-07-20
+Codex-review fix pass (0 Critical, 1 High, 3 Medium, 1 Low) both existed. This is a **targeted,
+git-history-verified rollback**, not a broad reset: a safety backup branch
+(`backup-before-button-rollback-2026-07-20`, at commit `9050a24`) was created before touching
+anything, and every change was verified against real prior commits, never guessed.
+
+**Git boundary identified**: `git log --oneline --all -i --grep="cancel\|back.*button"` found
+`27f6927` ("Fix Cancel/Back button visibility issues from Codex review (1 High, 3 Medium, 1 Low)")
+as the single commit containing both the original 2026-07-16 visibility pass AND the 2026-07-20
+Codex-review fixes to it (both were uncommitted work squashed into one commit at the time, same
+pattern as every other pass in this project's history) — its own commit message confirms this
+("Fixes the 2026-07-20 independent review's findings on the **prior** Cancel/Back visibility pass").
+`27f6927^` (its parent) is the verified "before" state.
+
+**Why a full `git revert 27f6927` was rejected**: attempted first, but it produced merge conflicts
+on `docs/CHANGELOG.md`/`docs/PROJECT_STATUS.md` (both have since gained new, legitimate append-only
+entries from the two FRP Lining rollback passes) and proposed **deleting
+`docs/reviews/CODEX_REVIEW_2026-07-20.md` entirely** — that file was newly created by `27f6927`, but
+has since become the shared canonical dated-archive review record for multiple, completely unrelated
+later reviews (FRP Lining v2.0, its Codex reviews, this session's own rollback documentation) —
+deleting it would have destroyed real, unrelated historical content. Aborted (`git revert --abort`)
+and switched to a surgical, file-by-file restoration instead.
+
+**What was restored, file by file, using `git show 27f6927 -- <file>` as ground truth (never
+guessed)**: reverted the specific button `className` hunks in `src/components/ConfirmDialog.tsx`,
+`src/pages/admin/{RoleManagementPage,UserManagementPage}.tsx`,
+`src/pages/customers/CustomersPage.tsx`, `src/pages/dashboard/ApprovalDashboard.tsx`,
+`src/pages/products/{CategoriesManager,ProductForm,ProductPickerModal}.tsx`,
+`src/pages/quotation/{QuotationTemplateWizard,QuoteDocument,ScopeOfWorkDocument}.tsx`,
+`src/pages/templates/{TemplateEditorView,TemplateManagementPage}.tsx` (14 call sites across 13
+files) back to their original inline Tailwind class strings, removed every now-dead
+`buttonStyles`-related import, and deleted `src/lib/buttonStyles.ts` (confirmed via repo-wide grep
+that nothing else had adopted it since). `docs/UI_GUIDELINES.md`'s added "Cancel / Close / Back"
+section (41 lines) was removed via `git checkout 27f6927^ -- docs/UI_GUIDELINES.md` (that file had
+no other changes since `27f6927`, confirmed via `git log`, so this targeted restore was exact and
+safe). `docs/CHANGELOG.md`/`docs/PROJECT_STATUS.md`/`docs/IMPLEMENTATION_CHECKLIST.md`/
+`docs/CODEX_REVIEW_REPORT.md`/`docs/reviews/CODEX_REVIEW_2026-07-20.md`'s historical entries about
+the original work were deliberately left untouched (append-only) — this entry and matching notes in
+the other status docs record the rollback instead.
+
+**Verification**: `git diff 27f6927^ -- <file>` produced **zero output** for all 11 files touched
+only by the button-visibility work — byte-identical to the verified pre-change state. The 2 files
+that also had legitimate, unrelated later changes (`CustomersPage.tsx`'s `StatusBadge` extraction,
+`TemplateManagementPage.tsx`'s column-alignment fix, both from commits between `27f6927` and the FRP
+Lining work) were checked individually: the diff against `27f6927^` shows only those unrelated
+changes remaining, confirming the button styling was fully restored without touching them. Only
+visual style was touched — no `onClick` handler, navigation target, form-reset logic, API call, or
+RBAC check was changed anywhere (confirmed by inspecting every diff before applying its reversal).
+`npm run lint`/`npm run build` pass clean.
+
+---
+
 ## 2026-07-20 (rollback) — Revert FRP Lining v2.0 / generic Dynamic Fields system
 
 Per an explicit rollback request, reverted the FRP Lining v2.0 work in full via two `git revert`

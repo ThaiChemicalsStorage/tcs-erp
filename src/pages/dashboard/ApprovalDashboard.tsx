@@ -6,7 +6,6 @@ import { useI18n } from "../../lib/i18n";
 import { useToast } from "../../hooks/useToast";
 import { Toast } from "../../components/Toast";
 import { fmtDaysOrDash, fmtShort } from "./format";
-import { secondaryButtonClass } from "../../lib/buttonStyles";
 
 function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; canReject: boolean; onDone: (message: string) => void }) {
   const { t } = useI18n();
@@ -58,10 +57,10 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
             />
             {error && <p className="text-[10px] text-[#e05252]">{error}</p>}
             <div className="flex items-center gap-1.5">
-              <button disabled={busy} onClick={confirmReject} className="px-2.5 py-1.5 text-[11px] bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors disabled:opacity-50">
+              <button disabled={busy} onClick={confirmReject} className="px-2.5 py-1 text-[11px] bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors disabled:opacity-50">
                 {t("dashboard.approval.rejectConfirm")}
               </button>
-              <button disabled={busy} onClick={() => { setRejecting(false); setComment(""); setError(""); }} className={secondaryButtonClass("2xs")}>
+              <button disabled={busy} onClick={() => { setRejecting(false); setComment(""); setError(""); }} className="px-2.5 py-1 text-[11px] border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                 {t("common.cancel")}
               </button>
             </div>

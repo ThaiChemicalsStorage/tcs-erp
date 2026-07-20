@@ -9,7 +9,6 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
-import { secondaryButtonClass } from "../../lib/buttonStyles";
 
 type View = "list" | "create" | "edit" | "view";
 
@@ -170,7 +169,7 @@ export function RoleManagementPage({
             {error && <p className="text-xs text-[#e05252]">{error}</p>}
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <button type="button" onClick={() => { setView("list"); setEditingKey(null); }} className={secondaryButtonClass("md")}>
+              <button type="button" onClick={() => { setView("list"); setEditingKey(null); }} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                 {readOnly ? t("common.close") : t("common.cancel")}
               </button>
               {!readOnly && (

@@ -10,7 +10,6 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
-import { secondaryButtonClass, iconCloseButtonClass } from "../../lib/buttonStyles";
 
 type StatusFilter = "all" | "active" | "inactive";
 
@@ -316,7 +315,7 @@ function CustomerFormModal({
           <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
             {t("customers.form.title")}
           </p>
-          <button onClick={onCancel} aria-label={t("common.close")} className={iconCloseButtonClass()}><X size={16} /></button>
+          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
         </div>
 
         <div className="space-y-3">
@@ -369,11 +368,11 @@ function CustomerFormModal({
         {error && <p className="text-xs text-[#e05252] mt-3">{error}</p>}
 
         <div className="flex items-center justify-end gap-2 mt-5">
-          <button onClick={onCancel} className={secondaryButtonClass("sm")}>{t("common.cancel")}</button>
+          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="px-3.5 py-2 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60"
+            className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60"
           >
             {t("customers.form.save")}
           </button>

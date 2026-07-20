@@ -8,7 +8,6 @@ import {
 import { applyTemplateToQuoteDraft, type AppliedTemplateDraft } from "./applyTemplate";
 import { TemplatePreview } from "../../components/TemplatePreview";
 import { useI18n } from "../../lib/i18n";
-import { backLinkButtonClass, secondaryButtonClass } from "../../lib/buttonStyles";
 
 /**
  * "สร้างใบเสนอราคา" pre-form wizard — added 2026-07-14 per the P'Suki/P'Keng requirement that a
@@ -285,7 +284,7 @@ export function QuotationTemplateWizard({
                 ))}
               </div>
             )}
-            <button onClick={onCancel} className={backLinkButtonClass("mt-6")}>
+            <button onClick={onCancel} className="mt-6 text-sm text-muted-foreground hover:text-foreground transition-colors">
               {t("quotation.wizard.cancel")}
             </button>
           </div>
@@ -302,10 +301,10 @@ export function QuotationTemplateWizard({
                 <AlertTriangle size={22} className="text-[#e08a3c]" />
                 <p className="text-sm text-foreground">{templatesError}</p>
                 <div className="flex gap-2">
-                  <button onClick={() => void loadTemplates(selectedJobType)} className="flex items-center gap-1.5 px-3 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+                  <button onClick={() => void loadTemplates(selectedJobType)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
                     <RefreshCw size={13} /> {t("quotation.wizard.retry")}
                   </button>
-                  <button onClick={backToJobType} className={secondaryButtonClass("xs")}>
+                  <button onClick={backToJobType} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                     {t("quotation.wizard.chooseOtherJobType")}
                   </button>
                 </div>
@@ -315,21 +314,21 @@ export function QuotationTemplateWizard({
                 <PackageOpen size={22} className="text-muted-foreground" />
                 <p className="text-sm text-foreground">{t("quotation.wizard.noTemplateTitle")}</p>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  <button onClick={handleStartBlank} className="flex items-center gap-1.5 px-3 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+                  <button onClick={handleStartBlank} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
                     {t("quotation.wizard.startBlank")}
                   </button>
-                  <button onClick={backToJobType} className={secondaryButtonClass("xs")}>
+                  <button onClick={backToJobType} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                     {t("quotation.wizard.chooseOtherJobType")}
                   </button>
                   {canCreateTemplate && onCreateTemplateForJobType ? (
                     <button
                       onClick={() => onCreateTemplateForJobType(selectedJobType.code, selectedJobType.name)}
-                      className="px-3 py-2 text-xs border border-[#c9a84c]/40 text-[#c9a84c] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
+                      className="px-3 py-1.5 text-xs border border-[#c9a84c]/40 text-[#c9a84c] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
                     >
                       {t("quotation.wizard.createTemplateForJobType")}
                     </button>
                   ) : (
-                    <button onClick={handleNotifyAdmin} className="px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+                    <button onClick={handleNotifyAdmin} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                       {t("quotation.wizard.notifyAdmin")}
                     </button>
                   )}
@@ -358,7 +357,7 @@ export function QuotationTemplateWizard({
                   ))}
                 </div>
                 <div className="mt-6 flex items-center gap-4">
-                  <button onClick={backToJobType} className={backLinkButtonClass()}>
+                  <button onClick={backToJobType} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
                     <ChevronLeft size={14} /> {t("quotation.wizard.back")}
                   </button>
                   <button onClick={handleStartBlank} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2">
@@ -389,10 +388,10 @@ export function QuotationTemplateWizard({
                 <AlertTriangle size={22} className="text-[#e08a3c]" />
                 <p className="text-sm text-foreground">{previewError}</p>
                 <div className="flex gap-2">
-                  <button onClick={() => selectedSummary && void loadPreview(selectedSummary)} className="flex items-center gap-1.5 px-3 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+                  <button onClick={() => selectedSummary && void loadPreview(selectedSummary)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
                     <RefreshCw size={13} /> {t("quotation.wizard.retry")}
                   </button>
-                  <button onClick={backFromPreview} className={secondaryButtonClass("xs")}>
+                  <button onClick={backFromPreview} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                     {t("quotation.wizard.back")}
                   </button>
                 </div>
@@ -405,7 +404,7 @@ export function QuotationTemplateWizard({
                 </div>
 
                 <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <button onClick={backFromPreview} className={backLinkButtonClass()}>
+                  <button onClick={backFromPreview} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
                     <ChevronLeft size={14} /> {t("quotation.wizard.back")}
                   </button>
                   <button onClick={handleUseTemplate} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">

@@ -14,6 +14,19 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-20, second rollback] Cancel/Back button visibility improvement reverted.** Per an
+  explicit rollback request, restored every Cancel/Close/Back control (14 call sites, 13 files) to
+  its exact pre-2026-07-16 low-contrast style, deleted the `src/lib/buttonStyles.ts` helper it
+  introduced, and removed the matching section from `docs/UI_GUIDELINES.md`. A safety backup branch
+  (`backup-before-button-rollback-2026-07-20`) was created first; a full `git revert` of the
+  original commit was attempted but aborted when it proposed deleting
+  `docs/reviews/CODEX_REVIEW_2026-07-20.md` (a file that commit created but which has since become
+  the shared canonical review archive for unrelated later work) — a surgical, file-by-file
+  restoration was used instead, each change verified against `git show`/`git diff` output, never
+  guessed. `git diff <pre-change-commit>` on every affected file produces either zero output (11 of
+  13 files) or shows only unrelated, legitimate later changes (the other 2) — confirming an exact,
+  complete restoration. Only visual style changed; no navigation/behavior/API/RBAC was touched.
+  `lint`/`build` pass clean. See CHANGELOG.md for the full writeup.
 - ✅ **[2026-07-20, rollback] FRP Lining v2.0 / generic Dynamic Fields system reverted.** Per an
   explicit rollback request, `git revert`ed the two commits that introduced this work (not a broad
   `git reset --hard` — full history preserved). Verified scope before reverting (both commits
