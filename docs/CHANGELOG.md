@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-07-20 (later) — Fix status-badge text wrapping; extract shared `StatusBadge` component
+
+The "ใช้งาน" (active) status badge on the Quotation Templates list was wrapping mid-word onto two
+lines ("ใช้" / "งาน"). Root cause: unlike its sibling `<td>`s in the same row, the status cell had no
+`whitespace-nowrap` — Thai script has no spaces, so the browser's dictionary-based line breaking can
+wrap it at a syllable boundary even without one. The same copy-pasted badge markup (missing the same
+class) was found in `CustomersPage.tsx` and `ProductList.tsx` too, so all three were fixed the same
+way. Following a code review of that fix, the duplicated badge markup (archived/active/inactive
+color+label logic, repeated verbatim in all three files) was extracted into a new
+`src/components/StatusBadge.tsx` (`status: "archived" | "active" | "inactive"` + `label`), which all
+three pages now use — the `whitespace-nowrap` fix (and any future styling change) now lives in one
+place instead of three. No behavior change. `tsc --noEmit`, `npm run lint`, `npm run build` all pass
+clean.
+
 ## 2026-07-20 — Cancel/Back visibility: Codex-review fix pass (1 High + 3 Medium + 1 Low)
 
 Fixed every issue an independent review (`docs/CODEX_REVIEW_REPORT.md`, `docs/reviews/CODEX_REVIEW_2026-07-20.md`)

@@ -6,6 +6,7 @@ import {
 import type { Product, ProductCategory } from "../../lib/products";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState } from "../../components/EmptyState";
+import { StatusBadge } from "../../components/StatusBadge";
 import { useI18n } from "../../lib/i18n";
 
 type SortKey = "code" | "name" | "category" | "unit" | "defaultPrice" | "status" | "updatedAt";
@@ -185,11 +186,10 @@ export function ProductList({
                     <td className="px-4 py-3 text-xs text-muted-foreground">{p.unit}</td>
                     <td className="px-4 py-3 text-sm font-mono text-foreground">฿{p.defaultPrice.toLocaleString()}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                        p.archived ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20" : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"
-                      }`}>
-                        {p.archived ? t("common.status.archived") : t("common.status.active")}
-                      </span>
+                      <StatusBadge
+                        status={p.archived ? "archived" : "active"}
+                        label={p.archived ? t("common.status.archived") : t("common.status.active")}
+                      />
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{fmtDate(p.updatedAt)}</td>
                     <td className="px-4 py-3">

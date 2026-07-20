@@ -6,6 +6,7 @@ import {
 } from "../../lib/customers";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState } from "../../components/EmptyState";
+import { StatusBadge } from "../../components/StatusBadge";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
@@ -211,12 +212,10 @@ export function CustomersPage({
                     <td className="px-4 py-3 text-xs text-muted-foreground max-w-[160px] truncate" title={c.email}>{c.email || "—"}</td>
                     <td className="px-4 py-3 text-xs font-mono text-muted-foreground whitespace-nowrap">{c.taxId || "—"}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                        c.isDeleted ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20"
-                        : c.isActive ? "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20" : "bg-[#e08a3c]/10 text-[#e08a3c] border border-[#e08a3c]/20"
-                      }`}>
-                        {c.isDeleted ? t("common.status.archived") : c.isActive ? t("common.status.active") : t("customers.status.inactive")}
-                      </span>
+                      <StatusBadge
+                        status={c.isDeleted ? "archived" : c.isActive ? "active" : "inactive"}
+                        label={c.isDeleted ? t("common.status.archived") : c.isActive ? t("common.status.active") : t("customers.status.inactive")}
+                      />
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{fmtDate(c.updatedAt)}</td>
                     <td className="px-4 py-3">
