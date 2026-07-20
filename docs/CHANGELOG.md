@@ -4,6 +4,78 @@
 
 ---
 
+## 2026-07-20 — Cancel/Back visibility: Codex-review fix pass (1 High + 3 Medium + 1 Low)
+
+Fixed every issue an independent review (`docs/CODEX_REVIEW_REPORT.md`, `docs/reviews/CODEX_REVIEW_2026-07-20.md`)
+found in the 2026-07-16 Cancel/Back visibility pass below (0 Critical). Purely visual/structural, no
+behavior/logic/navigation changes — every `onClick` handler is untouched.
+
+- **High**: `QuotationTemplateWizard.tsx`'s two "เลือกประเภทงานอื่น" (Choose another Job Type) recovery buttons
+  (template-load-error and no-template-found states) still had the old low-contrast, no-focus-ring treatment —
+  they were missed by the 2026-07-16 pass. Fixed to the same treatment as every other Back/secondary control in
+  the wizard; `backToJobType` handler unchanged.
+- **Medium (focus ring contrast)**: every Cancel/Back/Close focus ring used `ring-[#c9a84c]/50` (gold at 50%
+  opacity), which composites to ~1.4:1 contrast against white/card backgrounds — below the WCAG 3:1 minimum for
+  a focus indicator (full-opacity gold alone only reaches ~2.3:1). Changed to solid `ring-[#0b1d3a]` (navy,
+  ~17:1 against white) across all three shared button-class builders (see below).
+- **Medium (touch targets)**: several compact Cancel/Back controls measured ~26–32px tall (`py-1`/`py-1.5` at
+  11–12px text), and `ProductPickerModal.tsx`'s icon-only Close had no padding at all (~16px hit area). Bumped
+  the compact sizes' vertical padding one step, and gave every icon-only Close button `p-2 -m-2` (padding offset
+  by a matching negative margin, so the icon's visual size/position is unchanged but its hit area grows).
+  Neighboring primary/gold buttons in the same row were bumped by the same amount so row heights stay aligned.
+- **Medium (unnamed modal Close buttons)**: `CustomersPage.tsx`'s customer-form × and
+  `TemplateManagementPage.tsx`'s template-preview × had no `aria-label` and no focus-visible style (the
+  2026-07-16 pass's changelog entry incorrectly said `ProductPickerModal` was the only such control). Both now
+  use the same `iconCloseButtonClass()` + `aria-label={t("common.close")}` pattern as `ProductPickerModal`.
+- **Low (duplicated styling)**: the Cancel/Back/Close class strings were copy-pasted verbatim across ~15 files —
+  flagged as the root cause that let the two wizard buttons above go unfixed. Extracted into
+  `src/lib/buttonStyles.ts` (`secondaryButtonClass()`, `backLinkButtonClass()`, `iconCloseButtonClass()`) and
+  migrated every touched call site to it, so the next visual/contrast fix only needs to change one file. See
+  [UI_GUIDELINES.md](./UI_GUIDELINES.md) "Buttons" → "Cancel / Close / Back."
+- Files changed: `src/lib/buttonStyles.ts` (new), `src/components/ConfirmDialog.tsx`,
+  `src/pages/admin/{RoleManagementPage,UserManagementPage}.tsx`, `src/pages/customers/CustomersPage.tsx`,
+  `src/pages/dashboard/ApprovalDashboard.tsx`, `src/pages/products/{CategoriesManager,ProductForm,
+  ProductPickerModal}.tsx`, `src/pages/quotation/{QuotationTemplateWizard,QuoteDocument,
+  ScopeOfWorkDocument}.tsx`, `src/pages/templates/{TemplateEditorView,TemplateManagementPage}.tsx`.
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Manually verified in a local dev server via
+  Playwright (normal/hover/focus/disabled states rendered correctly with the app's real compiled Tailwind CSS,
+  0 console errors); full logged-in click-through of every listed page was not possible — this sandboxed session
+  has no network path to MongoDB Atlas (recurring, pre-existing limitation, see PROJECT_STATUS.md Known Risks),
+  the same constraint every past pass has hit. See `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status" for the
+  full itemized writeup.
+
+## 2026-07-16 (same day, later still) — Improve Cancel/Back button visibility app-wide
+
+Purely visual pass, no behavior/logic changes: every Cancel/Close button and every bare breadcrumb-style
+Back link across the app was hard to notice — the shared bordered-Cancel treatment
+(`border-border` at 10% opacity + `text-muted-foreground`) fails WCAG AA contrast at the app's normal
+button text sizes (12–14px), and the toolbar "Back to Quotations/Products/..." links had *no* button
+chrome at all (bare `text-muted-foreground` text on the page background). Fixed both, using only existing
+design tokens/hex literals already in convention (no new colors, no new component library):
+
+- **Cancel/Close buttons** (`ConfirmDialog.tsx`; every create/edit form's footer Cancel — `ProductForm.tsx`,
+  `CustomersPage.tsx`, `UserManagementPage.tsx` ×2, `RoleManagementPage.tsx`, `TemplateManagementPage.tsx`'s
+  duplicate modal, `TemplateEditorView.tsx`; `ApprovalDashboard.tsx`'s reject-modal Cancel;
+  `QuoteDocument.tsx`'s workflow-action and Scope-of-Work-prompt modal Cancels; `ScopeOfWorkDocument.tsx`'s
+  empty-state Back; `QuotationTemplateWizard.tsx`'s Cancel/step-Back buttons) now get a clearer neutral
+  border, a subtle `bg-secondary` tint, higher-contrast text (`text-foreground/75` instead of
+  `text-muted-foreground`), `font-medium`, and a visible `focus-visible` ring — see
+  [UI_GUIDELINES.md](./UI_GUIDELINES.md) "Buttons" → "Cancel / Close."
+- **Breadcrumb-style Back links** (`ProductForm.tsx`, `CategoriesManager.tsx`, `QuoteDocument.tsx`,
+  `ScopeOfWorkDocument.tsx`, `TemplateEditorView.tsx`, `QuotationTemplateWizard.tsx`) go from bare text to
+  a subtle bordered/tinted chip with the same contrast + focus-ring treatment, `-ml` compensated so the
+  visible icon/text doesn't shift against whatever sits below it — see UI_GUIDELINES.md "Buttons" →
+  "Back links."
+- Deliberately **not** touched: `QuoteDocument.tsx`'s red-outlined "Cancel Quotation" workflow button (a
+  destructive business action intentionally styled like Danger, not a UI dismiss action), and every
+  non-Cancel/Back secondary button sharing the old outline classes (Export, Duplicate, Save Draft, Add
+  Section, Retry, Skip Tour, etc.) — those keep the existing Secondary/outline pattern unchanged.
+- Added `aria-label={t("common.close")}` + a focus ring to `ProductPickerModal.tsx`'s icon-only header
+  Close (×) button — the one icon-only close control in the app with no accessible name.
+- No navigation destinations, cancel/discard logic, or API/RBAC behavior changed — every button's
+  `onClick` handler is untouched; only `className` (plus one `aria-label`) changed.
+  `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean.
+
 ## 2026-07-16 (same day, later) — Remove website URL from printed documents
 
 Investigated a report that a website URL appears at the bottom-left of printed Quotations and Scope

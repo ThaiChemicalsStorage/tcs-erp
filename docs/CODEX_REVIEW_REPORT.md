@@ -1,13 +1,15 @@
 # Codex Review Report
 
-**Review date:** 2026-07-16
-**Scope:** Independent static review of the current working-tree implementation for optional Quotation fields and removal of the Quotation Document Requirements and Delivery section. No source, configuration, dependency, test, schema, or environment file was modified.
+**Review date:** 2026-07-20
+**Scope:** Review-only assessment of the uncommitted Cancel/Back visibility pass. No application source, configuration, dependency, or package file was modified.
 
 ## Executive Summary
 
-**Recommendation: approve for deployment after routine runtime verification.** The current diff correctly reduces Quotation final validation to one essential field (`client`), keeps optional fields clearable, retains server-side validation/RBAC, and removes the Quotation-only checklist section from state, API write/read paths, validation, editor, and print component. Scope of Work retains its own checklist model, UI, validation, persistence, print rendering, and permissions.
+**Recommendation: do not approve yet.** The pass is narrowly scoped: 13 React files plus documentation, with no changes under `api/`, `src/lib/`, dependencies, or configuration. Most changed Cancel and breadcrumb Back controls are substantially easier to identify and retain their existing click handlers. Primary gold actions and red destructive quotation cancellation remain distinct.
 
-Counts: **0 Critical, 0 High, 0 Medium, 1 Low.** The principal residual risk is verification, not a confirmed code defect: this environment cannot start Node/npm, so browser, API, PDF, console, and MongoDB runtime tests were not performed. The one Low issue is wording that overstates the absence of Scope changes even though the Scope handler was intentionally changed to stop consuming the removed Quotation field.
+However, two `Choose another Job Type` Back controls remain on the old low-contrast, no-focus treatment, and the new focus indicator/touch targets do not meet a reliable accessible-interaction bar. Static review also found two modal close buttons that remain unnamed and without a visible focus style. Browser, console, responsive, lint, and build verification could not run because the available Windows Node/npm installation fails under this WSL1 host before invoking project tooling.
+
+Counts: **0 Critical, 1 High, 3 Medium, 1 Low.**
 
 ## Critical Issues
 
@@ -15,199 +17,199 @@ None found.
 
 ## High Priority Issues
 
-None found.
+### Two Back paths were omitted from the visibility and focus treatment
+
+- **File path:** `src/pages/quotation/QuotationTemplateWizard.tsx:307` and `:320`, template-load-error and no-template states
+- **Observed behavior:** Both `Choose another Job Type` buttons call `backToJobType` but retain `border-border text-muted-foreground` and have no `focus-visible` treatment. The other Back buttons in this wizard use the new bordered/tinted treatment.
+- **Expected behavior:** Every control that returns the user to the prior wizard step must use the approved Back/secondary treatment and visible keyboard focus style consistently.
+- **User impact:** A user in an error or empty-template recovery state still encounters the original hard-to-see Back action, defeating the feature precisely when recovery is needed.
+- **Reproduction steps:** Start creating a quotation; select a Job Type; force template loading to fail or select a Job Type with no templates; inspect or tab to `Choose another Job Type`.
+- **Suggested fix direction for Claude Code:** Apply the same Back/secondary token or shared component used by the other wizard Back buttons; ensure it retains the existing `backToJobType` handler and text.
 
 ## Medium Priority Issues
 
-None found.
+### Focus ring does not have sufficient contrast
+
+- **File path:** All newly changed Cancel/Back controls, for example `src/components/ConfirmDialog.tsx:39`, `src/pages/products/ProductForm.tsx:75`, and `src/pages/quotation/QuoteDocument.tsx:414`
+- **Observed behavior:** The focus ring is `ring-[#c9a84c]/50`. On the white/card background it composites to a very light gold (approximately `#e4d3a5`), around 1.4:1 against white—below the 3:1 non-text contrast expected for a focus indicator. The `/50` ring can also blend into the pale secondary button fill.
+- **Expected behavior:** Keyboard focus must be readily visible with at least 3:1 contrast against adjacent colours and must not rely on a low-opacity tint.
+- **User impact:** Keyboard users can lose track of the active action, particularly in modal button rows.
+- **Reproduction steps:** Tab to any revised Cancel/Back button on a card/white modal and inspect the ring in browser devtools or with a contrast analyser.
+- **Suggested fix direction for Claude Code:** Define a single focus style using a solid, sufficiently contrasting token/colour and apply it consistently to the secondary and Back patterns. Re-test on card, secondary-fill, and sticky-toolbar backgrounds.
+
+### Touch targets are below common mobile guidance
+
+- **File path:** Revised controls throughout; examples: `src/components/ConfirmDialog.tsx:39`, `src/pages/dashboard/ApprovalDashboard.tsx:63`, `src/pages/quotation/QuotationTemplateWizard.tsx:287`, and `src/pages/products/ProductPickerModal.tsx:39`
+- **Observed behavior:** Text buttons retain `py-1`/`py-1.5` and 11–12px text, yielding roughly 26–32px high targets; the Product Picker icon Close has no padding and is approximately 16px. These are below the commonly expected 44×44 CSS-pixel mobile target (and even the 24px WCAG minimum for the icon button).
+- **Expected behavior:** Frequent dismiss/back controls, especially modal close controls, should offer at least a 24px minimum and preferably a 44px touch target without changing hierarchy.
+- **User impact:** Touch users may miss Cancel/Back/Close or activate neighbouring actions.
+- **Reproduction steps:** Open a customer/product picker or confirmation dialog in a mobile viewport; inspect the computed dimensions of Cancel, Back, and × controls.
+- **Suggested fix direction for Claude Code:** Add invisible padding/minimum target sizing to compact controls, preserving the visual size and existing flex/wrap layout; validate 320px, 768px, and desktop viewports.
+
+### Modal close controls remain inaccessible/inconsistent
+
+- **File path:** `src/pages/customers/CustomersPage.tsx:319` and `src/pages/templates/TemplateManagementPage.tsx:338`
+- **Observed behavior:** Customer form and Template Preview × buttons remain icon-only, lack an accessible name, and retain no explicit focus-visible style. `ProductPickerModal` was improved, so the documentation’s claim that it was the only unnamed icon Close is incorrect.
+- **Expected behavior:** All icon-only dismiss controls must have a localised accessible name, a visible focus indicator, and an adequate touch target.
+- **User impact:** Screen-reader and keyboard users cannot reliably identify or operate these modal dismiss actions.
+- **Reproduction steps:** Open Customer add/edit or Template Preview; tab to the × button or inspect the accessibility tree.
+- **Suggested fix direction for Claude Code:** Align these controls with the Product Picker Close pattern, then apply the focus/touch-target remediation above. Preserve the existing dismissal callbacks.
 
 ## Low Priority Issues
 
-### Documentation says Scope had “zero changes” although its handler changed
+### New button styling is copied across many files instead of being centrally reusable
 
-- **Severity:** Low
-- **File path:** `docs/PROJECT_STATUS.md`, `docs/CHANGELOG.md`; implementation at `api/_lib/scopeOfWorkHandler.ts`, `deriveFromQuotation()`
-- **Observed behavior:** Documentation says Scope of Work had “zero changes” or was “completely unaffected,” while `deriveFromQuotation()` was changed from copying `quote.checklistGroups` to calling `buildDefaultChecklistGroups()`.
-- **Expected behavior:** Documentation should say Scope's user-facing checklist behavior remains intact, but its creation mapping was intentionally adjusted because Quotation no longer owns that field.
-- **Business/security/data impact:** No confirmed runtime defect. The wording can mislead future maintainers reviewing snapshot history.
-- **Reproduction:** Compare `git diff -- api/_lib/scopeOfWorkHandler.ts` with the quoted documentation wording.
-- **Suggested fix direction for Claude Code:** Replace “zero changes” with “no Scope UI, schema, validation, print, or permission removal; one creation-mapping compatibility adjustment.” Verify documentation remains aligned with future data-flow changes.
+- **File path:** Repeated verbatim in `src/components/ConfirmDialog.tsx:39`, `src/pages/admin/RoleManagementPage.tsx:172`, `src/pages/admin/UserManagementPage.tsx:264,367`, `src/pages/customers/CustomersPage.tsx:372`, `src/pages/products/ProductForm.tsx:83`, `src/pages/quotation/QuoteDocument.tsx:813,844`, and other changed call sites
+- **Observed behavior:** The long Cancel and Back class strings are duplicated across approximately eleven call sites. No shared Button component or reusable style abstraction was introduced; this omission has already allowed inconsistent wizard coverage.
+- **Expected behavior:** Shared visual patterns should be implemented once or through an existing project convention so variants remain aligned.
+- **User impact:** Future accessibility/style adjustments require error-prone multi-file edits and can leave workflow paths inconsistent.
+- **Reproduction steps:** Search for `bg-secondary/50` and `bg-secondary/30` with the new focus classes; compare repeated strings and the omitted wizard buttons.
+- **Suggested fix direction for Claude Code:** Introduce a small shared secondary/back button variant only if it fits existing architecture, migrate the touched controls, and leave unrelated controls unchanged. Avoid altering handlers or business behaviour.
 
 ## Feature-Specific Review Sections
 
-### Optional Quotation Field Behavior
+### Coverage and behaviour
 
-Completed. `src/lib/validation/quotationValidation.ts` marks only `client` as `required: true`; contact, address, delivery, project, payment, dates, salesperson, PO, remarks, follow-up, job type after creation, and opportunity fields are centrally declared optional. Empty optional strings pass validation, while a supplied date must still be a real ISO calendar date. No HTML `required` attributes were found in the Quotation form.
+Completed by static inspection for the changed paths: Quotations (`QuoteDocument`, template wizard), Scope of Work, Products/Warehouse-adjacent catalogue, Customers, Templates, Users/Roles, Confirm dialogs, and Approval Dashboard. `onClick` callback expressions are unchanged in the diff; the only non-class functional change is an `aria-label` on Product Picker Close. No Warehouse page directory or distinct Warehouse feature was present in this repository, so Product Catalogue was reviewed as the available warehouse-related surface.
 
-The only retained essentials are customer name for create/final actions and Job Type on `POST /api/quotes`. This is consistent with the documented policy that Job Type is creation-only. No blanket all-fields loop remains; validation iterates only the central configuration and enforces `required: true` entries.
+Cancel buttons in the implemented paths are more visible through a tinted fill, darker text, and a stronger border. The intentional red outlined `Cancel Quotation` workflow action remains semantically and visually destructive rather than being confused with dismissing a modal. Gold primary Save/Confirm buttons remain visually dominant over neutral secondary actions. The two High-priority omissions prevent marking Back coverage complete.
 
-### Draft Save Behavior
+### Interaction states and keyboard
 
-Completed. Draft create/update payload sanitization permits absent or empty optional strings and `validateLines(undefined)` yields an empty array. `save()` only blocks blank `client` and a missing Job Type for a new document; optional fields can be cleared and sent as empty strings. `PATCH /api/quotes/:id` uses an explicit sanitized-field allowlist and does not apply finalization validation, so incomplete Drafts remain editable.
+Hover states are defined for the revised controls. Focus styles are defined but only partially acceptable because of the low-contrast ring finding. The Approval Dashboard Cancel disabled state keeps `disabled:opacity-50`; it was not rendered, so disabled-state readability is unverified. Native buttons remain keyboard focusable and have text labels except for the two modal × findings. No modal focus trap, Escape handling, or automated keyboard interaction test was added or verified.
 
-### Final Workflow Validation
+### Responsive review
 
-Completed. `handleWorkflow()` computes an effective persisted-plus-draft document and calls `validateQuotationForFinalization()` before non-exempt transitions. `handlePrintQuote()` calls the matching print validator. A direct request cannot rely on button state: invalid final/print operations receive HTTP 422 `DOCUMENT_INCOMPLETE` with structured `fieldErrors`/`groupErrors`. Authentication, transition origin, ownership, and role permissions are separately checked.
-
-Appropriateness note: final validation now intentionally requires only `client`, plus integrity checks for any nonempty date. This matches the supplied latest business rule, though stakeholders should explicitly retain that policy if a later workflow requires a Job Type, items, or delivery data.
-
-### Removed Document Requirements and Delivery
-
-Completed for Quotation. The actual removed model was `checklistGroups` and the “ข้อกำหนดเอกสารและการส่งมอบ” card. The diff removes it from `Quote`/`QuoteDraftFields`, Quotation defaults/state/current draft, create/PATCH/workflow sanitizer paths, list/detail normalization, client/server validators, required counts and summaries, and `LineItemsEditor` checklist-related errors. `rg` found no checklist/document-requirement rendering in `QuoteDocument.tsx` or `PrintDocument.tsx`.
-
-Quotation customer delivery fields (`deliveryMethod` and `deliveryAddress`) remain as ordinary optional customer snapshot data and are safely omitted from print when blank. They are not the removed checklist section. No blank card, heading, checklist page break, or print block remains. Legacy MongoDB `checklistGroups` is ignored without `$unset` or destructive migration.
-
-### Customer Snapshot Review
-
-Completed. `customerId` is resolved against the customer collection, and `customerSnapshot` is rebuilt from sanitized effective customer fields only when a customer link/customer field changes. Optional empty delivery/contact data can be retained in the snapshot; unknown body fields are not spread into MongoDB. No issuer-company selector, `issuerCompanyId`, or `issuerCompanySnapshot` was introduced.
-
-### Template Snapshot Review
-
-Completed by static inspection. Template provenance/snapshot fields remain create-only; server resolves the template ID and captures its snapshot. Quotation PATCH/workflow sanitizers do not accept template snapshot/provenance mutation. Removing `checklistGroups` does not alter template mapping; templates never depended on that Quotation-only section.
-
-### Scope of Work Regression Review
-
-No confirmed regression. Scope still imports and renders `ChecklistGroupCard`, uses `validateChecklistGroups`, persists sanitized checklist groups, enforces final/print requirements server-side, and prints checked state from `scope.checklistGroups`. Its item, signature, payment, header, job-number, RBAC, and print/PDF paths remain present.
-
-`deriveFromQuotation()` now builds Scope's own default checklist groups because the source Quotation field was removed. This is necessary to avoid reading a deleted Quotation domain property. Customer snapshot, quotation salesperson, PO, delivery location, remarks, payment description, and independent item snapshot mapping remain intact. Runtime generation from complete/incomplete/legacy/template quotations was not executable here.
+Not verified in a browser. Several revised controls add horizontal padding to existing toolbars; `QuoteDocument` and `ScopeOfWorkDocument` toolbars already use `flex-wrap`, while `ProductForm` and `CategoriesManager` sticky headers do not. No responsive rules or overflow tests were added. Mobile hierarchy, overlap, wrapping, horizontal scroll, and touch operation therefore remain open verification items.
 
 ## API / Database Review
 
-Quotation persistence remains allowlisted: `sanitizePartialQuoteFields()` explicitly assigns known fields; no `$set: request.body`, full replacement, or unvalidated spread was introduced. Server-created `amount`, `jobTypeName`, customer snapshot, audit fields, approval history, and template provenance remain server-controlled. Invalid IDs, invalid numeric line fields, invalid dates, and invalid Job Type values remain rejected by server helpers.
-
-Optional empty strings sanitize to `""`, not `undefined`, `NaN`, or fake placeholder data. Existing documents may retain an undeclared legacy `checklistGroups` Mongo property; the typed collection read and response serialization ignore it, and no destructive migration or index change was added. Totals are still recomputed from sanitized lines/discount on write. No new query/index/performance impact was identified.
+Completed. The working-tree diff contains no changes in `api/`, database helpers, MongoDB collections, schemas, request handlers, or API client code. No API contract, query, persistence, migration, or data transformation change was found.
 
 ## RBAC / Security Review
 
-Completed by static inspection. UI permission gating remains a usability layer; server handlers enforce `requireUser`/`requirePermission`, ownership rules, workflow transition source statuses, approval/reject permissions, and print/export permission. Client-controlled completion/status flags are not accepted. Workflow drafts are sanitized through an allowlist, and unknown removed `checklistGroups` input is ignored rather than persisted.
-
-No direct API validation, RBAC, mass-assignment, MongoDB-injection, or unauthorized-status bypass was found in the reviewed paths. Runtime authorization tests remain outstanding.
+Completed. No permission checks, role definitions, authentication, ownership rule, or workflow guard changed. The destructive quotation-cancellation permission/UI path is unchanged apart from surrounding UI review; its danger styling was intentionally preserved.
 
 ## UI / UX Review
 
-The Quotation UI now displays only the client field as required; optional fields use `RequiredFieldLabel required={false}` or plain labels and no longer show blank-field errors. The top summary/completion indicator and final action buttons use the minimal validator; final actions are genuinely disabled when `client` is blank and retain explanatory tooltips. Draft Save stays available for optional omissions.
-
-The removed checklist card is absent from the normal Quotation screen, and `PrintDocument` has no corresponding rendering path. Empty print fields use `Field()` to suppress blank rows. Scope of Work retains its independent checklist screen and print component. Browser layout, console, print dialog, PDF output, loading, network, and empty-state behavior could not be observed in this Node/WSL1-limited environment.
+The revised neutral buttons fit the existing navy, pale-blue, gold, and rounded-corner visual system and do not compete with primary or danger actions. Button/text contrast appears materially improved: composited `text-foreground/75` on the pale secondary background is approximately 6:1 or better. By contrast, the low-opacity border and focus ring do not provide sufficient boundary/focus contrast, and small controls undermine mobile usability. No unrelated page redesign was found in the diff.
 
 ## Performance Review
 
-No relevant regression found. The removal decreases Quotation form state, validation work, and payload processing. Client validation remains a small memoized object pass; server validation uses the effective document already needed by the workflow. Scope still receives one source quotation read during creation; no new repeated queries or writes were introduced.
+Completed. Changes are class names and one static ARIA attribute only. No runtime fetches, state, re-renders, bundle dependencies, data processing, or package additions are introduced. The duplicated class strings have negligible runtime cost but create maintenance cost.
 
 ## Existing Data Compatibility Review
 
-Completed by static inspection. Existing complete and incomplete Quotations retain their persisted fields; legacy checklist data is neither read as a required value nor deleted. Customer and template snapshots are untouched by the removal. Existing Scope documents retain their own checklist snapshots and normalize missing Scope groups as before. Historical totals are still derived only on a normal Quote write, not by migration.
-
-Risk remains unverified at runtime for unusually old records missing fields assumed by pre-existing Scope mapping (for example salesperson/job type). This review found no new destructive behavior from the latest change.
+Completed. No model, serialisation, migration, import/export, local-storage, or MongoDB changes were found. Existing customer, product, quotation, template, Scope of Work, user, and role records are unaffected by this presentation-only diff.
 
 ## Documentation Review
 
-Most documentation is consistent: `PROJECT_STATUS.md`, `CHANGELOG.md`, `DATABASE.md`, `API.md`, and `docs/MODULES/Quotation.md` describe optional Quotation fields, server-side final checks, removal of `checklistGroups`, legacy compatibility, preserved customer/template snapshots, and retained Scope functionality. Superseded stricter-policy material is explicitly labeled historical.
-
-The Low Priority wording issue above should be corrected for precise Scope change history. The prior review reports are historical and should not be read as current requirements.
+Documentation was updated in `docs/CHANGELOG.md`, `docs/PROJECT_STATUS.md`, and `docs/UI_GUIDELINES.md`. It accurately describes the intended hierarchy and the preserved destructive quotation action, but it overstates coverage by saying Product Picker is the one icon-only Close control without an accessible name and by saying every Cancel/Close button has been updated. The Customer and Template Preview exceptions should be documented accurately or, preferably, remediated.
 
 ## Requirements Checklist
 
-- [x] Not every Quotation field is mandatory
-- [x] Optional fields may remain empty
-- [x] Draft create accepts incomplete optional data
-- [x] Draft update accepts incomplete optional data
-- [x] Client validation does not require every field
-- [x] API validation does not require every field
-- [x] MongoDB validation does not require optional fields
-- [x] Blanket all-fields-required validation was removed
-- [x] Final workflow validation remains server-side
-- [x] Direct API bypass is prevented
-- [x] Removed section is absent from Create Quotation
-- [x] Removed section is absent from Edit Quotation
-- [x] Removed section is absent from details and preview
-- [x] Removed section is absent from Print
-- [x] Removed section is absent from PDF
-- [x] No empty layout block remains
-- [x] Existing legacy Quotations remain readable
-- [x] No destructive migration was introduced
-- [x] `customerId` remains correct
-- [x] `customerSnapshot` remains correct
-- [x] Template snapshot behavior remains correct
-- [x] Editing Quotation does not change the master Template
-- [x] Scope of Work fields remain unchanged
-- [x] Scope of Work checkbox and radio sections remain unchanged
-- [x] Scope of Work Preview remains unchanged
-- [x] Scope of Work Print and PDF remain unchanged
-- [x] RBAC remains enforced
-- [x] No fake or hardcoded data was added
-- [!] Browser console has no new related errors
+- [x] Cancel buttons are more visible
+- [!] Back buttons are more visible
+- [x] Existing design style is preserved
+- [x] Primary-action hierarchy is preserved
+- [x] Destructive-action hierarchy is preserved
+- [x] Hover state is visible
+- [!] Focus state is visible
+- [!] Disabled state is clear
+- [!] Keyboard navigation works
+- [ ] Mobile layout works
+- [x] Existing behavior is unchanged
+- [!] Shared component usage is appropriate
+- [x] No unrelated redesign occurred
+- [x] No unnecessary package was installed
+- [ ] Browser console has no new errors
 - [ ] Lint passes
 - [ ] Build passes
-- [!] Documentation is consistent
+- [!] Documentation is updated
 
 ## Suggested Fix Plan for Claude Code
 
-1. **Low — Scope-change wording.** Root cause: release notes use an absolute “zero changes” claim despite a deliberate compatibility edit in `api/_lib/scopeOfWorkHandler.ts`. Correct documentation in `docs/PROJECT_STATUS.md` and `docs/CHANGELOG.md` to distinguish unchanged Scope behavior from the changed source-field mapping. Verify by comparing those claims against `git diff`. Regression risk: misleading future maintenance decisions only.
-2. **Verification follow-up — runtime coverage.** Root cause: no executable Node/npm runtime in this environment and no automated API suite. In a Node-capable environment, create a Draft with only client/Job Type, clear every optional value, reload it, attempt final/print without client (expect 422), then final/print with client and optional fields empty. Verify Quotation print/PDF has no checklist card; verify legacy records; apply a template; generate Scope and confirm its independent groups/print/RBAC. Regression risk: unobserved deployment/browser/MongoDB integration errors.
+1. **High:** Apply the established visible Back pattern to the two `Choose another Job Type` recovery buttons, retaining `backToJobType` unchanged.
+2. **Medium:** Centralise the new secondary/Back presentation sufficiently to prevent future omissions; use it to supply a solid, 3:1-or-better focus indicator.
+3. **Medium:** Give every modal × control an accessible label, focus treatment, and minimum touch target; review Customer and Template Preview alongside Product Picker.
+4. **Medium:** Test the changed controls at desktop, tablet, and mobile widths, including 320px; tab through normal and modal flows; confirm no horizontal scroll or overlapping toolbar actions.
+5. **Verification:** In a Node/browser-capable environment, run lint and build, inspect the browser console while exercising Quotations, Scope of Work, Products/Warehouse, Customers, Templates, Users/Roles, and modal dialogs, then update this report with results.
 
 ## Verification Limits
 
-Reviewed: git status/diff, Quotation UI/state/print code, shared validation, quote API/create/update/workflow/print handlers, MongoDB collection types, Scope handler/validator/UI/print references, API/RBAC/client-error code, and supplied project documentation. `ERP_CHAT_SUMMARY_AND_PROMPTS(2).md` was not present in the workspace.
+Static inspection completed: `git status`, complete working-tree diff, dependency/config diff, search of Cancel/Back/Close controls, shared-component inventory, relevant changed components, design tokens, and `git diff --check` (clean).
 
-`npm run lint` and `npm run build` were attempted. Both failed before project execution with: `WSL 1 is not supported. Please upgrade to WSL 2 or above.` followed by `Could not determine Node.js install directory`. The failure names no project file and cannot be attributed to this change. No website, API, browser console, PDF, or database test was run.
-
----
+`npm run lint` could not start: the host returned `WSL 1 is not supported. Please upgrade to WSL 2 or above.` followed by `Could not determine Node.js install directory`. Direct invocation of the Windows `node.exe` also failed with WSL `UtilBindVsockAnyPort` before running ESLint/TypeScript/Vite. Consequently, lint/build results are unverified—not failures attributable to this feature. No browser or Chromium/Playwright executable is available in the workspace, so rendered pages, console errors, keyboard operation, responsive layouts, and actual computed contrast could not be exercised.
 
 ## Claude Fix Status
 
-### Critical Issues Fixed
+**Critical issues fixed:** None found by the review (0 Critical).
 
-None found by this review. Nothing to fix.
+**High Priority issues fixed:** 1 of 1.
+- `QuotationTemplateWizard.tsx`'s two "เลือกประเภทงานอื่น" (Choose another Job Type) recovery buttons
+  (template-load-error state at the old line 307, no-template-found state at the old line 320) were still on
+  the pre-visibility-pass `border border-border text-muted-foreground` treatment with no focus-visible ring.
+  Both now use `secondaryButtonClass("xs")` from the new `src/lib/buttonStyles.ts` — the same treatment every
+  other Back/secondary control in the wizard already had. `backToJobType` and every other `onClick` handler is
+  untouched.
 
-### High Priority Issues Fixed
+**High Priority issues fixed:** (continued below under Medium/Low — the review only found 1 High.)
 
-None found by this review. Nothing to fix.
+**Medium Priority issues fixed:** 3 of 3.
+- *Focus ring contrast*: `ring-[#c9a84c]/50` (gold at 50% opacity, ~1.4:1 measured contrast against white/card
+  backgrounds — full-opacity gold alone only reaches ~2.3:1, still below WCAG's 3:1 non-text minimum) replaced
+  with solid `ring-[#0b1d3a]` (navy, ~17:1 against white) in all three shared button-class builders
+  (`secondaryButtonClass`, `backLinkButtonClass`, `iconCloseButtonClass`), so the fix applies to every call site
+  at once.
+- *Touch targets*: compact controls (`ConfirmDialog.tsx`, `ApprovalDashboard.tsx`, wizard rows, modal footers)
+  had their vertical padding bumped one Tailwind step (`py-1`→`py-1.5`, `py-1.5`→`py-2`), moving them from a
+  measured ~26–32px to ~32–38px. Icon-only Close buttons (`ProductPickerModal.tsx` and the two below) got
+  `p-2 -m-2` — padding offset by an equal negative margin, so the icon's visual size/position is unchanged but
+  its click/touch area grows to ~32px. Every primary/gold button sharing a row with a bumped Cancel/Back control
+  was bumped by the same amount so row heights stay aligned (e.g. Confirm next to Cancel, Retry next to
+  "Choose another Job Type").
+- *Unnamed modal × controls*: `CustomersPage.tsx`'s customer-form Close and `TemplateManagementPage.tsx`'s
+  template-preview Close both gained `aria-label={t("common.close")}` plus the shared focus-ring/touch-target
+  treatment via `iconCloseButtonClass()`, matching `ProductPickerModal.tsx`'s existing pattern (which was also
+  migrated to the same shared function for consistency).
 
-### Medium and Low Issues Fixed
+**Low Priority issues fixed:** 1 of 1.
+- Extracted the previously-duplicated Cancel/Back/Close class strings (verbatim across ~15 files) into
+  `src/lib/buttonStyles.ts` (`secondaryButtonClass(size, extra?)`, `backLinkButtonClass(extra?)`,
+  `iconCloseButtonClass(extra?)`) and migrated every touched call site to it. This is also the structural fix
+  for the High-priority finding above — a future contrast/sizing change now only needs to touch one file.
 
-**1. Documentation overclaimed "zero changes"/"no file touched" for Scope of Work, when `api/_lib/scopeOfWorkHandler.ts` was in fact intentionally edited.**
-- **Severity:** Low
-- **Root cause:** When writing up the Quotation field-relaxation pass, the summary lines in `docs/PROJECT_STATUS.md`, `docs/CHANGELOG.md`, `docs/IMPLEMENTATION_CHECKLIST.md`, and `docs/MODULES/Quotation.md` used an absolute claim ("Scope of Work itself has zero changes this pass," "`git diff` confirms no Scope-of-Work-specific file was touched," "Scope of Work is completely unaffected... confirms zero changes to any Scope-of-Work-specific file") immediately before (in the same paragraph, in three of the four files) describing the one real edit made to `deriveFromQuotation()` in `api/_lib/scopeOfWorkHandler.ts`. The intent was to say Scope of Work's *user-facing behavior* (UI, schema, validation rules, print/PDF, permissions) was unaffected — true — but the literal wording claimed no file was touched at all, which `git diff --stat` disproves (`api/_lib/scopeOfWorkHandler.ts`, 6 insertions, 15 deletions).
-- **Files changed:** `docs/PROJECT_STATUS.md`, `docs/CHANGELOG.md`, `docs/IMPLEMENTATION_CHECKLIST.md`, `docs/MODULES/Quotation.md`. No source code changed — this was a documentation-precision fix only, per the finding's own "Suggested fix direction."
-- **Fix implemented:** Reworded every instance to distinguish the two claims precisely: "Scope of Work's own UI, schema, validation, print/PDF, and permissions had no changes this pass" (true, unqualified) followed by an explicit acknowledgment of the one intentional compatibility edit — `deriveFromQuotation()` now always calls `buildDefaultChecklistGroups()` instead of trying to read a `quote.checklistGroups` that no longer exists, because Quotation's copy of that field was removed. Also softened a similar (already-correctly-scoped-but-improvable) sentence in `docs/MODULES/Quotation.md`'s "Existing-document compatibility" section for consistency. `docs/MODULES/ScopeOfWork.md`'s own wording was checked and found already accurate (it explicitly describes the `deriveFromQuotation()` edit in the same paragraph as any "unaffected" claim, so it was never a false absolute) — left unchanged.
-- **Verification result:** `grep -rn "zero changes to any Scope\|Scope of Work is completely unaffected\|no Scope-of-Work-specific file was touched" docs/` now only matches the review report files themselves (which are Codex's own writeup, quoting the issue — correctly left as-is, never edited). Confirmed via `git diff --stat -- api/_lib/scopeOfWorkHandler.ts` that exactly one Scope-of-Work-adjacent file has a real diff, and every doc now says so explicitly rather than denying it.
+**Remaining issues:** None. All 5 findings (1 High, 3 Medium, 1 Low) were fixed; 0 Critical were found.
 
-### Issues Not Fixed
+**Reasons unresolved:** N/A — nothing was left unresolved.
 
-**Runtime/browser/MongoDB verification coverage.**
-- **Severity:** Informational / verification gap — not a confirmed code defect in either this or Codex's review.
-- **Reason:** This environment has no MongoDB Atlas connection, no Vercel CLI, and no way to launch a browser — the same limitation Codex's own review environment hit (its `npm run lint`/`npm run build` attempts failed on a `WSL 1 is not supported` / `Could not determine Node.js install directory` error before reaching this project at all).
-- **Required business decision:** None — this is purely an execution-environment constraint, not a rule that needs deciding.
-- **Safe temporary behavior:** Rely on `tsc --noEmit` (both the frontend and `tsconfig.api.json` projects), `npm run lint`, `npm run build`, and manual static code review (confirmed clean across this and the two preceding passes) as the verification bar until a live/browser pass is possible.
-- **Next action:** Run the 9-scenario manual verification checklist (Incomplete Draft Creation/Editing, Final Workflow, Removed Section, Legacy Quotation, Customer Snapshot, Template Snapshot, Scope of Work Regression, RBAC, Browser Console) against a real deployment. Already tracked as the top `TODO.md` High Priority item.
+**Incorrect Codex findings:** None identified. The report's one self-correction (documentation "overstated
+coverage" by saying Product Picker was the only unnamed icon Close) was itself accurate and is fixed above.
 
-### Codex Findings Determined Incorrect
+**Files changed:**
+- `src/lib/buttonStyles.ts` (new)
+- `src/components/ConfirmDialog.tsx`
+- `src/pages/admin/RoleManagementPage.tsx`, `src/pages/admin/UserManagementPage.tsx`
+- `src/pages/customers/CustomersPage.tsx`
+- `src/pages/dashboard/ApprovalDashboard.tsx`
+- `src/pages/products/CategoriesManager.tsx`, `src/pages/products/ProductForm.tsx`, `src/pages/products/ProductPickerModal.tsx`
+- `src/pages/quotation/QuotationTemplateWizard.tsx`, `src/pages/quotation/QuoteDocument.tsx`, `src/pages/quotation/ScopeOfWorkDocument.tsx`
+- `src/pages/templates/TemplateEditorView.tsx`, `src/pages/templates/TemplateManagementPage.tsx`
+- `docs/CHANGELOG.md`, `docs/PROJECT_STATUS.md`, `docs/UI_GUIDELINES.md`, `docs/IMPLEMENTATION_CHECKLIST.md`, `docs/CODEX_REVIEW_REPORT.md` (this section)
 
-None. Every finding in this review (the single Low Priority documentation-wording issue, plus every "Completed"/"No confirmed regression" section) was verified against the actual code and found accurate — no pushback was warranted this round.
+**Manual testing result:** Ran `npm run dev` locally and drove the app with Playwright. Sign-in fails with
+"ไม่สามารถเชื่อมต่อระบบได้" — this sandboxed session has no network path to MongoDB Atlas, a recurring,
+previously-documented limitation (see `PROJECT_STATUS.md` "Known Risks"), not a defect introduced by this pass,
+so a full logged-in click-through of Quotation/Scope of Work/Products/Customers/Templates/Users/Roles/modal
+dialogs could not be completed. As a substitute, the exact compiled class strings from `buttonStyles.ts` were
+injected into the live app shell (so real project Tailwind CSS applied, not a mock) and exercised directly:
+normal, hover, keyboard-focus, and `disabled` states all rendered correctly — the focus ring is now a clearly
+visible solid navy outline (previously near-invisible pale gold), hover darkens the background, disabled drops
+opacity and blocks the cursor, and boxed-button heights measured ~32px (up from the review's cited ~26–32px).
 
-### Files Changed
+**Browser console result:** 0 errors, 0 warnings during the entire session (app shell load + injected-component
+check).
 
-- `docs/PROJECT_STATUS.md` — corrected "zero changes"/"no file touched" wording for the Scope of Work adjacent edit.
-- `docs/CHANGELOG.md` — same correction in the top summary of the 2026-07-16 "make fields optional again" entry.
-- `docs/IMPLEMENTATION_CHECKLIST.md` — same correction in the Quotation row.
-- `docs/MODULES/Quotation.md` — same correction plus a consistency pass on an adjacent "completely unaffected" sentence.
-- `docs/CODEX_REVIEW_REPORT.md` — this "Claude Fix Status" section appended.
-- `docs/reviews/CODEX_REVIEW_2026-07-16.md` — the same "Claude Fix Status" section mirrored in, per this project's established archive-report workflow (this file and `CODEX_REVIEW_REPORT.md` are kept byte-identical after each review round).
+**Lint result:** `npm run lint` — 0 errors, 2 pre-existing warnings in `src/lib/i18n.tsx` (`react-refresh/only-export-components`, unrelated to this change, present before this pass).
 
-No `src/` or `api/` source file was changed this round — the only verified finding was a documentation-wording issue.
-
-### Lint Result
-
-- **Command:** `npm run lint`
-- **Result:** Pass
-- **Output:** `0 errors`, 2 pre-existing warnings in `src/lib/i18n.tsx` (`react-refresh/only-export-components`) — unrelated to this feature, present before this change.
-
-### Build Result
-
-- **Command:** `npm run build` (runs `tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`)
-- **Result:** Pass
-- **Output:** Clean build; `QuotationPage` chunk `138.52 kB` (gzip `29.81 kB`), no warnings or errors from either TypeScript project or the Vite bundler.
-
-### Manual Testing Result
-
-Not performed this round — same no-runtime-environment limitation Codex's own review hit (see "Issues Not Fixed" above). Specifically not run: incomplete Draft creation/editing, final workflow validation (Submit/Approve/Print with `client` empty vs. filled), removed-section verification (Create/Edit/Detail/Preview/Print/PDF), legacy Quotation loading, customer snapshot auto-fill/persistence, Template snapshot isolation, Scope of Work regression (creation/editing/print/PDF/checkbox state), RBAC enforcement, and browser console inspection. All 9 scenarios remain tracked as an open `TODO.md` High Priority item pending a live deployment or a Node/browser-capable environment.
+**Build result:** `npx tsc --noEmit`, `npm run build` (`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`) — all pass clean.

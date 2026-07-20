@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import { useI18n } from "../lib/i18n";
+import { secondaryButtonClass } from "../lib/buttonStyles";
 
 export function ConfirmDialog({
   open,
@@ -36,12 +37,12 @@ export function ConfirmDialog({
           </div>
         </div>
         <div className="flex items-center justify-end gap-2">
-          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <button onClick={onCancel} className={secondaryButtonClass("sm")}>
             {cancelLabel ?? t("common.cancel")}
           </button>
           <button
             onClick={onConfirm}
-            className={`px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors ${
+            className={`px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors ${
               danger ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"
             }`}
           >

@@ -14,6 +14,31 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-20] Cancel/Back visibility — Codex-review fix pass.** Fixed all issues (0 Critical, 1 High,
+  3 Medium, 1 Low) an independent review found in the 2026-07-16 pass below: two `QuotationTemplateWizard.tsx`
+  "Choose another Job Type" recovery buttons still had the old low-contrast/no-focus treatment (High); the
+  shared focus ring's `ring-[#c9a84c]/50` measured below WCAG's 3:1 contrast minimum, fixed to solid navy
+  `ring-[#0b1d3a]` (~17:1) (Medium); several compact Cancel/Back controls and one icon-only Close had touch
+  targets as small as ~16–32px, bumped closer to ~32–38px without changing visual button size for icon-only
+  controls (Medium); two more modal × Close buttons (`CustomersPage.tsx`, `TemplateManagementPage.tsx`) lacked
+  an accessible name/focus style, now fixed to match `ProductPickerModal.tsx`'s pattern (Medium); the
+  duplicated class strings behind all of the above were extracted into a new `src/lib/buttonStyles.ts` so future
+  fixes apply in one place (Low). No behavior/navigation/API/RBAC change. `tsc`/`lint`/`build` all pass clean;
+  Playwright-verified in a local dev server (states render correctly, 0 console errors) — full logged-in
+  click-through blocked by the same no-MongoDB-network sandboxed-session limitation noted below. See
+  CHANGELOG.md and `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status."
+- ✅ **[2026-07-16, same day, later still] Cancel/Back button visibility improved app-wide.** Purely
+  visual, no behavior change: every Cancel/Close button (`ConfirmDialog` and every form/modal footer
+  across Customers, Products, Users, Roles, Templates, Quotation, Scope of Work, Approval Dashboard)
+  now uses a clearer border, subtle background tint, higher-contrast text, and a visible keyboard-focus
+  ring instead of the old near-invisible `border-border`/`text-muted-foreground` combination (measured
+  under WCAG AA contrast at the app's actual 12–14px button sizes). Bare breadcrumb-style "Back" links
+  (Product/Quotation/Scope of Work/Template Editor toolbars, Create Quotation wizard steps) — previously
+  plain text with zero button chrome — now get the same treatment as a subtle bordered chip. One
+  icon-only Close (×) button (`ProductPickerModal`) gained an `aria-label`. See CHANGELOG.md and
+  [UI_GUIDELINES.md](./UI_GUIDELINES.md) "Buttons" for the exact classes and which buttons were
+  deliberately left unchanged (the red "Cancel Quotation" destructive workflow action; every
+  non-Cancel/Back secondary button like Export/Duplicate/Retry).
 - ✅ **[2026-07-16, same day] Quotation fields made optional again; Document Requirements and Delivery removed.**
   A newer business decision explicitly overrides the two required-field validation passes
   immediately below: Quotation must not force every field to be completed, and its "ข้อกำหนดเอกสาร

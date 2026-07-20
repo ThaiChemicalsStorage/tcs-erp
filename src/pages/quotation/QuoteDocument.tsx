@@ -29,6 +29,7 @@ import { DocumentCompletionIndicator } from "../../components/DocumentCompletion
 import { validateQuotationForFinalization, quotationRequiredFields } from "../../lib/validation/quotationValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
 import { useI18n } from "../../lib/i18n";
+import { backLinkButtonClass, secondaryButtonClass } from "../../lib/buttonStyles";
 
 const BLOCKED_TOOLTIP = "กรุณากรอกข้อมูลและเลือกหัวข้อที่จำเป็นให้ครบก่อนดำเนินการ";
 /** Workflow actions exempt from the completeness gate — "rejected" sends the quote back to Draft
@@ -411,7 +412,7 @@ export function QuoteDocument({
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       {/* Toolbar */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={onBack} className={backLinkButtonClass()}>
           <ChevronRight size={14} className="rotate-180" /> {t("quotation.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -810,10 +811,10 @@ export function QuoteDocument({
             />
             {actionError && <p className="text-xs text-[#e05252] mt-1.5">{actionError}</p>}
             <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setPendingAction(null)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+              <button onClick={() => setPendingAction(null)} className={secondaryButtonClass("sm")}>{t("common.cancel")}</button>
               <button
                 onClick={confirmAction}
-                className={`px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"}`}
+                className={`px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"}`}
               >
                 {t("quotation.modal.confirm")}
               </button>
@@ -841,11 +842,11 @@ export function QuoteDocument({
             />
             {scopeOfWorkPromptError && <p className="text-xs text-[#e05252] mt-1.5">{scopeOfWorkPromptError}</p>}
             <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setScopeOfWorkPromptOpen(false)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+              <button onClick={() => setScopeOfWorkPromptOpen(false)} className={secondaryButtonClass("sm")}>{t("common.cancel")}</button>
               <button
                 onClick={confirmCreateScopeOfWork}
                 disabled={scopeOfWorkBusy}
-                className="px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] disabled:opacity-60"
+                className="px-3.5 py-2 text-xs rounded-lg font-semibold transition-colors bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] disabled:opacity-60"
               >
                 สร้าง Scope of Work
               </button>

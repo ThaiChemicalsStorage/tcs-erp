@@ -224,9 +224,48 @@ Header row: `bg-muted/40` (or `/20`, `/30`), cells `text-[10px] font-mono font-s
 
 ### Buttons
 - **Primary**: `bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040]`
-- **Secondary/outline**: `border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40`
+- **Secondary/outline** (non-dismiss secondary actions — Export, Duplicate, Save Draft, Add Section, Retry, etc.): `border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40`
 - **Danger**: `bg-[#e05252] text-white hover:bg-[#c94444]` (used in `ConfirmDialog`'s destructive confirm)
 - **Icon-only row actions**: `text-muted-foreground hover:text-[#c9a84c]` (or `hover:text-[#e05252]` for delete), often `opacity-0 group-hover:opacity-100` so they only appear on row hover.
+
+**Cancel / Close / Back (shared `src/lib/buttonStyles.ts`, added 2026-07-16, centralized + fixed 2026-07-20)**:
+every form/modal Cancel/Close button and every breadcrumb-style Back link now shares three small class-builder
+functions instead of each call site copy-pasting its own class string — the 2026-07-16 pass introduced the
+visible-Cancel/visible-Back treatment but left it duplicated verbatim across ~15 files, which is exactly how two
+`QuotationTemplateWizard.tsx` "เลือกประเภทงานอื่น" (Choose another Job Type) recovery buttons were missed and an
+independent review (`docs/CODEX_REVIEW_REPORT.md`, 2026-07-20) caught it. Import from `../../lib/buttonStyles`:
+
+- `secondaryButtonClass(size, extra?)` — boxed Cancel/Close buttons in modals, forms, toolbars.
+  `size` is `"2xs" | "xs" | "sm" | "md"` (`px-2.5 py-1.5 text-[11px]` / `px-3 py-2 text-xs` /
+  `px-3.5 py-2 text-xs` / `px-4 py-2 text-sm`), matching whatever the call site used before.
+- `backLinkButtonClass(extra?)` — breadcrumb-style "‹ Back" links (icon + text, never icon-only), fixed at
+  `px-2.5 py-1.5 -ml-2.5 text-sm`.
+- `iconCloseButtonClass(extra?)` — icon-only dismiss (×) buttons. `p-2 -m-2` keeps the icon's visual size/position
+  unchanged while giving it a larger click/touch target (the invisible-padding technique — a visible border/fill
+  can't be enlarged without changing its visible size, but a borderless icon button can).
+
+All three share one base: `border border-[#0b1d3a]/20 bg-secondary/50 rounded-lg text-foreground/75 font-medium
+hover:bg-secondary hover:border-[#c9a84c]/40 hover:text-foreground` (Back links use the lighter
+`border-[#0b1d3a]/15 bg-secondary/30`/`hover:bg-secondary/70` variant instead), plus one focus ring definition:
+```
+focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b1d3a]
+focus-visible:ring-offset-2 focus-visible:ring-offset-card
+```
+**2026-07-20 fix**: the ring color changed from `ring-[#c9a84c]/50` (gold at 50% opacity) to solid `ring-[#0b1d3a]`
+(navy, no opacity) — the review measured the low-opacity gold ring at ~1.4:1 contrast against white/card
+backgrounds (full-opacity gold alone only reaches ~2.3:1), both below the 3:1 WCAG non-text-contrast minimum for
+a focus indicator; navy reaches ~17:1. **Also 2026-07-20**: vertical padding for the compact `"xs"`/`"sm"`/`"2xs"`
+sizes and the Back-link pattern was bumped one Tailwind step (`py-1`→`py-1.5`, `py-1.5`→`py-2`) — the review
+measured several as ~26–32px tall, below the ~36px+ commonly expected minimum for a comfortable tap target;
+whichever primary/gold button sits beside a bumped Cancel/Back in the same row was bumped by the same amount so
+row heights still line up (e.g. a modal's Cancel + Confirm, a wizard step's Retry + "Choose another Job Type").
+Icon-only Close buttons (`ProductPickerModal.tsx`, `CustomersPage.tsx`, `TemplateManagementPage.tsx`) now all use
+`iconCloseButtonClass()` with an explicit `aria-label={t("common.close")}` — previously only `ProductPickerModal`
+had one.
+
+Do not apply the Cancel treatment to `QuoteDocument.tsx`'s red-outlined "Cancel Quotation" workflow-action button
+(Ban icon, `border-[#e05252]/40 text-[#e05252]`) — that one is a destructive business action named "Cancel"
+(cancelling the quotation itself), not a UI dismiss action, and intentionally keeps the Danger treatment above.
 
 ### Dialogs
 Use `src/components/ConfirmDialog.tsx` for any destructive confirmation — don't build a one-off. Pattern: fixed inset overlay (`bg-[#0b1d3a]/40`), centered card (`max-w-sm`), icon + title + message, Cancel (outline) + Confirm (primary or danger via `danger` prop) buttons.

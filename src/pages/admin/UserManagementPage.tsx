@@ -8,6 +8,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
+import { secondaryButtonClass } from "../../lib/buttonStyles";
 
 type View = "list" | "create" | "edit";
 
@@ -261,7 +262,7 @@ export function UserManagementPage({
             )}
             {error && <p className="text-xs text-[#e05252]">{error}</p>}
             <div className="flex items-center justify-end gap-2 pt-2">
-              <button type="button" onClick={() => { setView("list"); setEditingId(null); }} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+              <button type="button" onClick={() => { setView("list"); setEditingId(null); }} className={secondaryButtonClass("md")}>{t("common.cancel")}</button>
               <button type="submit" className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("common.save")}</button>
             </div>
           </form>
@@ -364,8 +365,8 @@ export function UserManagementPage({
               {error && <p className="text-xs text-[#e05252]">{error}</p>}
             </div>
             <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => { setResetTarget(null); setError(""); }} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-              <button onClick={confirmResetPassword} className="px-3.5 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("users.resetAction")}</button>
+              <button onClick={() => { setResetTarget(null); setError(""); }} className={secondaryButtonClass("sm")}>{t("common.cancel")}</button>
+              <button onClick={confirmResetPassword} className="px-3.5 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("users.resetAction")}</button>
             </div>
           </div>
         </div>

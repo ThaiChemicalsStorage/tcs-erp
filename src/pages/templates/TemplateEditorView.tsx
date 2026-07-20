@@ -10,6 +10,7 @@ import type { JobType } from "../../lib/jobTypes";
 import type { Product, ProductCategory } from "../../lib/products";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { useI18n } from "../../lib/i18n";
+import { backLinkButtonClass, secondaryButtonClass } from "../../lib/buttonStyles";
 
 function newId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -180,7 +181,7 @@ export function TemplateEditorView({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5 max-w-4xl mx-auto w-full">
-      <button onClick={onCancel} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <button onClick={onCancel} className={backLinkButtonClass()}>
         <ChevronLeft size={14} /> {t("quotation.wizard.back")}
       </button>
 
@@ -319,7 +320,7 @@ export function TemplateEditorView({
       {error && <p className="text-xs text-[#e05252]">{error}</p>}
 
       <div className="flex items-center justify-end gap-2 pb-6">
-        <button onClick={onCancel} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+        <button onClick={onCancel} className={secondaryButtonClass("md")}>{t("common.cancel")}</button>
         <button onClick={() => void handleSave()} disabled={saving} className="px-4 py-2 text-sm rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60">
           {saving ? <Loader2 size={14} className="animate-spin" /> : t("templates.form.save")}
         </button>
