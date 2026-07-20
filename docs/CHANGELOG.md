@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-07-20 (latest, wording-precision pass) — FRP Lining v2.0 exact-wording alignment
+
+A follow-up business requirement re-specified `LI-FRP-LINING`'s structure and nested-detail
+behavior in full. Cross-checked every requirement against the already-built v2.0 implementation
+(dynamic fields, conditional visibility, Safety defaults, Included/Excluded, Notes/Condition) from
+the two passes below — structurally everything already matched (3 chargeable products with Unit/
+Selling Price, correct dropdown/radio/checkbox option lists and orders, correct conditional
+visibility rules, correct Confined-Space-Role no-duplicate-print behavior, correct snapshot/RBAC
+architecture) — no structural rebuild was needed or performed.
+
+Found and fixed 5 exact-wording deltas the new spec is explicit about (each quoted verbatim in a
+fenced code block in the requirement):
+- `Thickness` field's unit suffix: `"mm"` → `"mm."` (spec: `Thickness ___ mm.`) — `api/_lib/templateSeedData.ts`.
+- Resin Type placeholder spacing: `"Swancor 901, Swancor 907, ... Derakane 411"` → `"Swancor901,
+  Swancor907, VI003, Derakane411"` (hint text only, never enforced — the field stays free text) — same file.
+- VAT condition text: `"Vat 7%: ..."` → `"Vat 7% : ..."` (space before the colon, matching the spec's
+  literal `Vat 7% : The Above Price Included Vat 7%`) — same file.
+- Warranty/Delivery on-screen label prefixes and print output: `"Warranty:"`/`"Delivery:"` →
+  `"Warranty :"`/`"Delivery :"` (same space-before-colon convention, consistently applied across all
+  three Condition lines per the spec) — `src/lib/i18n.tsx` (both languages) and
+  `src/pages/quotation/PrintDocument.tsx`.
+
+One requirement line ("Only the selected option must appear... Do not add a new field heading that
+is not included in the requirement," under Prepare Surface's Surface Preparation dropdown) was
+ambiguous — it could mean "don't print the field's own label at all" or (more plausibly, given the
+same lineage's earlier explicit acceptance criterion "Surface Preparation Method contains the three
+required Dropdown options," naming that exact label) "don't invent extra unrelated fields." Preserved
+the existing, already-Codex-reviewed labeled behavior (`"Surface Preparation Method: {value}"`)
+rather than guessing — see the note in this session's final report.
+
+Verified all 5 fixes plus every structural requirement (option lists/order, conditional visibility,
+Safety defaults, Included/Excluded exact strings, no-duplicate Confined-Space-Roles line, Notes/
+Condition content) directly against the real `templateSeedData.ts`/`templateDynamicFields.ts`
+modules via a standalone script — every check passed byte-for-byte. `npm run lint`/`npm run build`
+pass clean. **Not verified**: live browser Preview/Print/PDF or a live MongoDB import round-trip —
+same recurring sandboxed-session limitation as every pass below.
+
+---
+
 ## 2026-07-20 (latest) — Codex review fix pass: FRP Lining v2.0 (1 High, 1 Medium)
 
 Fixed both issues an independent Codex review found in the FRP Lining v2.0 / generic Dynamic Fields

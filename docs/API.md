@@ -132,6 +132,10 @@ before anything is persisted if any one item fails. `TemplateFieldOption` also g
 `omitFromCustomerDisplay?: boolean` (dropdown/radio only, sanitized through unchanged) — see
 DATABASE.md and `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status."
 
+**2026-07-20, exact-wording alignment pass**: no route/behavior change — only literal seed-data
+string values changed via the normal `POST /api/quotation-templates/import` re-run path (same
+idempotent updated-not-duplicated semantics as every prior content edit to `templateSeedData.ts`).
+
 ## Scope of Work (`api/_lib/scopeOfWorkHandler.ts`, mounted at `/api/scope-of-works` via `api/handlers/quotes.ts` — added 2026-07-15, fixed against an independent Codex review the same day)
 
 Shares `api/handlers/quotes.ts`'s function file (checked first on the raw pathname, before falling

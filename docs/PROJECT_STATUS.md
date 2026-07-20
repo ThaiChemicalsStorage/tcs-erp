@@ -14,6 +14,19 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-20, latest] FRP Lining v2.0 exact-wording alignment pass.** A follow-up business
+  requirement re-specified the template's structure in full; cross-checked against the already-built
+  implementation below and found it structurally complete (3 chargeable products, correct dropdown/
+  radio/checkbox options and orders, correct conditional visibility, correct Safety defaults/
+  Included-Excluded, correct snapshot/RBAC architecture — no rebuild needed). Fixed 5 exact-wording
+  deltas the new spec explicitly quotes: Thickness's unit suffix (`"mm"` → `"mm."`), the Resin Type
+  placeholder's spacing, and a consistent space-before-colon convention across VAT/Warranty/Delivery
+  Condition text (`"Vat 7%:"` → `"Vat 7% :"`, etc.). One line in the new spec (whether Prepare
+  Surface's dropdown should print without its own field label) was ambiguous; preserved the existing,
+  already-reviewed labeled behavior rather than guess — see CHANGELOG.md for the reasoning. Verified
+  every fix and every structural requirement directly against the real seed/logic modules via a
+  standalone script — all passed byte-for-byte; `lint`/`build` pass clean. **Not verified**: live
+  browser/DB round-trip — same recurring sandboxed-session limitation as every pass below.
 - ✅ **[2026-07-20, latest] Codex review fix pass on FRP Lining v2.0 (1 High, 1 Medium, 0 Critical, 0 Low).**
   Fixed both issues an independent review found in the Dynamic Fields pass below. High: Concrete
   Surface Repair's "No" was still printing a literal "Concrete Surface Repair: No" line on customer

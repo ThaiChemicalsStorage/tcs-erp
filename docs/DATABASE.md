@@ -360,6 +360,11 @@ empty option list on a dropdown/radio/checkboxGroup, a duplicate field/option ke
 a 400 instead of persisting silently. See [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)
 "Dynamic Fields" and `docs/CODEX_REVIEW_REPORT.md` "Claude Fix Status."
 
+**2026-07-20, exact-wording alignment pass**: no schema/type change — a follow-up requirement
+re-specified `LI-FRP-LINING`'s exact customer-facing wording; only literal string VALUES in the seed
+data changed (Thickness's `unitSuffix`, the Resin Type `placeholder`, `conditions.vatConditionText`,
+and the Warranty/Delivery print-label prefixes), not any interface shape above. See CHANGELOG.md.
+
 ### `CompanyProfile` — REMOVED 2026-07-14
 
 The `CompanyProfile`/`BankAccount` client types (`src/lib/companyProfiles.ts`), the

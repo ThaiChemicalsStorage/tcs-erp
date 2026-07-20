@@ -469,7 +469,7 @@ const frpLiningSections: TemplateSection[] = [
           key: "tankSize", label: "Tank Size / Dimensions", type: "text", sortOrder: 1,
           visibleWhen: { fieldKey: "frpLiningFor", equalsAny: ["stainlessTank", "steelTank", "frpTank"] },
         },
-        { key: "thickness", label: "Thickness", type: "number", unitSuffix: "mm", sortOrder: 2 },
+        { key: "thickness", label: "Thickness", type: "number", unitSuffix: "mm.", sortOrder: 2 },
         {
           key: "corrosionLayer", label: "Corrosion Layer", type: "dropdown", sortOrder: 3,
           options: [
@@ -480,7 +480,7 @@ const frpLiningSections: TemplateSection[] = [
         },
         {
           key: "resinType", label: "Resin Type", type: "text", sortOrder: 4,
-          placeholder: "e.g. Swancor 901, Swancor 907, VI003, Derakane 411",
+          placeholder: "e.g. Swancor901, Swancor907, VI003, Derakane411",
           visibleWhen: { fieldKey: "corrosionLayer", equalsAny: ["vinylEster"] },
         },
         { key: "chemical", label: "Chemical", type: "text", sortOrder: 5 },
@@ -555,7 +555,7 @@ const frpLiningSections: TemplateSection[] = [
 const frpLiningTerms: TemplateTermLine[] = [];
 const frpLiningDefaultNotes: string[] = ["ใบเสนอราคานี้สามารถหัก ณ ที่จ่ายได้"];
 const frpLiningConditions: TemplateConditionConfig = {
-  vatConditionText: "Vat 7%: The Above Price Included Vat 7%",
+  vatConditionText: "Vat 7% : The Above Price Included Vat 7%",
   warrantyUnit: "After Job Completed.",
   deliveryUnit: "Days After Received P/O",
   paymentPresets: [

@@ -311,8 +311,8 @@ export function PrintDocument({
         {(() => {
           const conditionLines: string[] = [];
           if (vatConditionText?.trim()) conditionLines.push(vatConditionText.trim());
-          if (warrantyText?.trim()) conditionLines.push(`Warranty: ${warrantyText.trim()} ${conditions?.warrantyUnit || "After Job Completed."}`);
-          if (deliveryDays != null) conditionLines.push(`Delivery: Within ${deliveryDays} ${conditions?.deliveryUnit || "Days After Received P/O"}`);
+          if (warrantyText?.trim()) conditionLines.push(`Warranty : ${warrantyText.trim()} ${conditions?.warrantyUnit || "After Job Completed."}`);
+          if (deliveryDays != null) conditionLines.push(`Delivery : Within ${deliveryDays} ${conditions?.deliveryUnit || "Days After Received P/O"}`);
           if (conditionLines.length === 0) return null;
           return (
             <tr>

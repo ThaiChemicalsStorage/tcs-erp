@@ -826,3 +826,19 @@ click.
   silently break an existing `visibleWhen` reference to it. Editing labels in place (the common case)
   and appending new options are both safe. A future pass could give each option its own persistent
   row UI (like `editableParameters`' already does) if this proves a real problem in practice.
+- **2026-07-20, exact-wording alignment pass — one requirement line left deliberately unresolved,
+  not guessed.** A follow-up business requirement re-specified LI-FRP-LINING in full and included the
+  line "Only the selected option must appear in Quotation Preview, Print, and PDF. Do not add a new
+  field heading that is not included in the requirement" directly under Prepare Surface's Surface
+  Preparation dropdown — which (unlike every other field in that same requirement document) is given
+  no explicit heading text of its own. Read literally, this could mean the field's own
+  `"Surface Preparation Method: {value}"` print label should be suppressed entirely (print just the
+  bare selected value). It was NOT changed: the same requirement lineage's own earlier, explicitly
+  reviewed acceptance criterion names this exact label ("Surface Preparation Method contains the
+  three required Dropdown options"), so removing the label now would contradict that established,
+  already-Codex-reviewed behavior on an ambiguous instruction rather than a clear one. Preserved the
+  current labeled output as the safe, backward-compatible choice. If a future requirement pass
+  confirms the label should in fact be suppressed, that would use the same generic
+  `omitFromCustomerDisplay`-style mechanism this template already established — e.g. a new
+  field-level (not option-level) "print value only, no label" flag on `TemplateDynamicField` — not a
+  one-off special case for this one field.
