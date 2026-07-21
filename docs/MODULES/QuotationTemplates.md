@@ -522,7 +522,13 @@ wizard with that Job Type + Template preselected (reuses the existing Global-Sea
 
 **Create/edit form**: basic fields (Template Code, Name, Job Type select, Description, Version,
 Active checkbox — the checkbox only renders for a `:activate` holder; others see a read-only status
-line, matching the server's own per-dimension permission split) plus a full section/item editor:
+line, matching the server's own per-dimension permission split) plus a full section/item editor.
+**2026-07-21, restyle pass**: the form was rebuilt to visually mirror `QuoteDocument.tsx`/
+`LineItemsEditor.tsx` — a navy/gold document header band (`BrandMark` + status pill), the same
+two-column meta-grid pattern for the basic fields, a table-styled sections/items list (mono uppercase
+column headers, borderless inputs, expandable detail row — `ItemEditor` is now a `<tr>`, not a stacked
+div card), and a 3-column Terms block — purely a visual change, no field/handler/validation logic
+moved. See CHANGELOG.md 2026-07-21.
 - **Sections**: add/rename/delete/reorder (up/down buttons — no drag-and-drop dependency in this
   codebase; matches its established "hand-rolled Tailwind, no UI kit" convention).
 - **Items**: add via "เลือกสินค้า" (opens the existing `ProductPickerModal`, copies

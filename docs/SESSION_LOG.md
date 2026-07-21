@@ -4,6 +4,50 @@
 
 ---
 
+## Session — 2026-07-21, restyle the Quotation Template editor to look like the real quotation
+
+### What was implemented
+- User asked (in Thai) to make the Quotation Template editing screen easier to use — either make it
+  look like the real quotation page, or make it as user-friendly as possible.
+- Read `TemplateEditorView.tsx` (the create/edit form) and compared it against `QuoteDocument.tsx`/
+  `LineItemsEditor.tsx`/`PrintDocument.tsx` (the real quotation's screen and print views) to identify
+  the concrete visual patterns to reuse: the navy/gold document header band, the two-column meta-grid
+  layout for header fields, the table-styled line-items list with mono uppercase column headers, and
+  the printed document's 3-column signature-block layout.
+- Rebuilt `TemplateEditorView.tsx`'s JSX to reuse those patterns exactly (same class names/colors,
+  not an approximation): `BrandMark` + status pill in a navy header band, "ข้อมูล Template"/
+  "การตั้งค่า" meta grid, `Layers`-icon sections card with a real `<table>` for items (`ItemEditor`
+  converted from a stacked div card to a `<tr>`/`Fragment` row + expandable detail row), and a
+  3-column Terms block. No state, handler, validation, or save/load logic was touched — confirmed by
+  diffing that every function signature (`updateSection`, `addItem`, `moveItem`, `handleSave`, etc.)
+  is byte-identical to before, only the `return (...)` JSX changed.
+- Added 5 new i18n keys (Thai + English) for the new section labels/column headers; reused every
+  existing key otherwise.
+- `npx tsc --noEmit` and `npm run lint` both pass clean (0 errors; the 2 warnings are the pre-existing
+  unrelated `i18n.tsx` fast-refresh ones).
+- Attempted a live browser check: `npm run dev` alone can't reach `/api/*` (no serverless functions),
+  so started `npx vercel dev` instead, which correctly detected the project and proxied API routes —
+  but MongoDB Atlas's SRV DNS lookup is blocked from this sandbox (`ECONNREFUSED` on
+  `_mongodb._tcp.tcsdb.zdnus3w.mongodb.net`), so `/api/auth/session` 500s and the app never gets past
+  its own "ไม่สามารถเชื่อมต่อระบบได้" connection-error screen. This is the same class of
+  sandboxed-session network limitation already recorded for the Dashboard module and several prior
+  Quotation Template passes — not something this change caused or could work around.
+- Updated `docs/CHANGELOG.md` and `docs/MODULES/QuotationTemplates.md` ("Create/edit form" section).
+
+### Known limitation
+- Not manually browser-verified this pass, for the DNS/network reason above. The change is
+  low-risk in the sense that matters most for correctness — no data, validation, or save-path code
+  was touched, only the surrounding markup/classes — but the actual rendered layout (spacing, table
+  column widths, whether the expandable item-detail row reads cleanly) has only been checked by
+  reading the JSX, not by looking at it in a browser.
+
+### Recommendation
+- Next time a real browser/deployed environment is available, open Template Management → create or
+  edit a template with a couple of sections/items and confirm the table layout, expand/collapse
+  behavior, and the header band render as intended, especially on a narrow (mobile-width) viewport
+  since the meta grid and Terms block both collapse from multi-column to single-column via Tailwind
+  breakpoints that weren't visually confirmed.
+
 ## Session — 2026-07-16 (same day, later), remove website URL from printed documents
 
 ### What was implemented

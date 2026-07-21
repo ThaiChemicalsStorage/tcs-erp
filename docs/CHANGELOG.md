@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-07-21 — Quotation Template editor restyled to mirror the real quotation document
+
+**Feature**: Visual-only redesign of the Template Management create/edit form
+(`src/pages/templates/TemplateEditorView.tsx`) at the user's request ("ทำหน้าตาให้เหมือนหน้าใบเสนอราคา
+เลยก็ได้หรือปรับแก้ให้ User friendly มากที่สุด") — the form previously read as a generic gray-bordered
+admin settings page with no visual relationship to the quotation it produces. It now reuses the exact
+patterns from `QuoteDocument.tsx`/`LineItemsEditor.tsx`: a navy (`#0b1d3a`)/gold (`#c9a84c`) document
+header band with the `BrandMark` logo and an active/inactive status pill, a two-column meta grid
+("ข้อมูล Template" / "การตั้งค่า") with uppercase mono section labels matching the quotation's
+customer-info/doc-details grid, a table-styled Sections/Items list (mono uppercase column headers,
+borderless inline inputs, hover-highlighted rows, an expandable detail row for
+specifications/sub-details/parameters/internal notes — the same shape as the quotation's line-items
+table), and a 3-column Terms block (payment/warranty/tax side by side) echoing the printed document's
+signature-block layout. No data model, validation, save/load, or permission logic changed — every
+existing handler (`updateSection`/`addItem`/`moveItem`/etc.) is untouched, only the JSX/styling
+around them.
+
+**Files Modified**: `src/pages/templates/TemplateEditorView.tsx` (full JSX restyle, `ItemEditor`
+converted from a stacked-div card to a `<tr>`/`<Fragment>` table row to match `LineItemsEditor.tsx`'s
+row pattern), `src/lib/i18n.tsx` (5 new keys × Thai/English: `templates.form.templateInfo`,
+`templates.form.settingsSection`, `templates.form.col.no`, `templates.form.col.type`,
+`templates.form.col.name`)
+
+**Files Removed**: none
+
+**Reason**: User asked specifically for the template-editing screen to look like the real quotation
+page ("ทำหน้าตาให้เหมือนหน้าใบเสนอราคาเลยก็ได้") rather than the plain form it was.
+
+**Notes**: `npx tsc --noEmit` and `npm run lint` both pass clean. Could not browser-verify live against
+this session's sandboxed environment — `vercel dev` starts and correctly proxies `/api/*` to the real
+serverless handlers, but MongoDB Atlas's SRV DNS lookup (`_mongodb._tcp.tcsdb.zdnus3w.mongodb.net`) is
+network-blocked from this sandbox (`ECONNREFUSED` on `querySrv`), so every API call 500s before the
+authenticated page can render — the same class of sandboxed-session network limitation already
+documented for the Dashboard module in `docs/CLAUDE.md`'s module table, not a defect in this change.
+
+---
+
 ## 2026-07-20 (Codex review round 4) — Live verification closes the MongoDB reconciliation gap; unpushed button commit found
 
 A third independent Codex review of both rollbacks (`HEAD` at `8cfc9fe`) found 0 Critical, 1 High, 0
