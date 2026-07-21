@@ -571,15 +571,19 @@ line, matching the server's own per-dimension permission split) plus a full sect
 **2026-07-21, restyle pass**: the form was rebuilt to visually mirror `QuoteDocument.tsx`/
 `LineItemsEditor.tsx` — a navy/gold document header band (`BrandMark` + status pill), the same
 two-column meta-grid pattern for the basic fields, a table-styled sections/items list (mono uppercase
-column headers, borderless inputs, expandable detail row — `ItemEditor` is now a `<tr>`, not a stacked
-div card), and a 3-column Terms block — purely a visual change, no field/handler/validation logic
-moved. See CHANGELOG.md 2026-07-21.
+column headers, borderless inputs, a detail row below each item — `ItemEditor` is now a `<tr>`, not a
+stacked div card), and a 3-column Terms block — purely a visual change, no field/handler/validation
+logic moved. See CHANGELOG.md 2026-07-21. **2026-07-21, later same day**: that detail row's
+"ดูรายละเอียด"/"ย่อ" (Details/Collapse) toggle was removed on direct user request — the panel
+(Specifications/Editable Parameters/Internal Notes/visible-to-customer checkbox) now always renders
+below every item instead of requiring a click to reveal it; no field or data was removed, only the
+`expanded` toggle state and its button. See CHANGELOG.md 2026-07-21 (latest of all).
 - **Sections**: add/rename/delete/reorder (up/down buttons — no drag-and-drop dependency in this
   codebase; matches its established "hand-rolled Tailwind, no UI kit" convention).
 - **Items**: add via "เลือกสินค้า" (opens the existing `ProductPickerModal`, copies
   name/unit/specifications into the item plus a `productSnapshot` — see "Data Model") or "เพิ่ม
   รายการเอง" (a blank custom item). Each item: name, type (item/subItem/specification), quantity,
-  unit, reorder/duplicate/delete, and an expandable detail panel for specifications (customer-visible
+  unit, reorder/duplicate/delete, and an always-visible detail panel for specifications (customer-visible
   free text — this codebase's existing `TemplateItem` schema has no separate "customer notes"
   field, so a specification line *is* the customer-visible-notes mechanism; `visibleToCustomer` can
   still hide an entire item — and, as of 2026-07-15, actually does: see "Template → Quote Snapshot

@@ -418,7 +418,6 @@ function ItemEditor({
   canMoveDown: boolean;
 }) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(false);
   const [pendingFocusIndex, setPendingFocusIndex] = useState<number | null>(null);
 
   const updateParam = (paramIndex: number, field: "label" | "unit", value: string) => {
@@ -488,9 +487,6 @@ function ItemEditor({
             >
               <Pin size={12} />
             </button>
-            <button onClick={() => setExpanded((v) => !v)} className="text-[10px] text-[#c9a84c] hover:text-[#f0c040] transition-colors px-1 whitespace-nowrap">
-              {expanded ? t("templates.form.collapse") : t("templates.form.expand")}
-            </button>
             <button onClick={onMoveUp} disabled={!canMoveUp} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowUp size={12} /></button>
             <button onClick={onMoveDown} disabled={!canMoveDown} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowDown size={12} /></button>
             <button onClick={onDuplicate} className="p-1 text-muted-foreground hover:text-foreground transition-colors"><Copy size={12} /></button>
@@ -520,51 +516,49 @@ function ItemEditor({
         </tr>
       ))}
 
-      {expanded && (
-        <tr className="border-b border-border/50 bg-muted/10">
-          <td colSpan={6} className="px-4 py-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">{t("templates.form.specifications")}</label>
-                <textarea
-                  value={item.specifications.join("\n")}
-                  onChange={(e) => onChange((it) => ({ ...it, specifications: linesToArray(e.target.value) }))}
-                  rows={2}
-                  className="w-full text-[11px] text-foreground bg-card border border-border rounded px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y"
-                />
+      <tr className="border-b border-border/50 bg-muted/10">
+        <td colSpan={6} className="px-4 py-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">{t("templates.form.specifications")}</label>
+              <textarea
+                value={item.specifications.join("\n")}
+                onChange={(e) => onChange((it) => ({ ...it, specifications: linesToArray(e.target.value) }))}
+                rows={2}
+                className="w-full text-[11px] text-foreground bg-card border border-border rounded px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t("templates.form.editableParameters")}</label>
+                <button onClick={addParam} className="text-[10px] text-[#c9a84c] hover:text-[#f0c040] transition-colors">+ {t("common.add")}</button>
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t("templates.form.editableParameters")}</label>
-                  <button onClick={addParam} className="text-[10px] text-[#c9a84c] hover:text-[#f0c040] transition-colors">+ {t("common.add")}</button>
-                </div>
-                <div className="space-y-1">
-                  {item.editableParameters.map((p, i) => (
-                    <div key={i} className="flex items-center gap-1.5">
-                      <input value={p.label} onChange={(e) => updateParam(i, "label", e.target.value)} placeholder={t("templates.form.paramLabel")} className="flex-1 text-[11px] text-foreground bg-card border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors" />
-                      <input value={p.unit} onChange={(e) => updateParam(i, "unit", e.target.value)} placeholder={t("templates.form.unit")} className="w-20 text-[11px] text-foreground bg-card border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors" />
-                      <button onClick={() => deleteParam(i)} className="p-0.5 text-muted-foreground hover:text-[#e05252] transition-colors"><X size={11} /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">{t("templates.form.itemInternalNotes")}</label>
-                <textarea
-                  value={item.internalNotes.join("\n")}
-                  onChange={(e) => onChange((it) => ({ ...it, internalNotes: linesToArray(e.target.value) }))}
-                  rows={2}
-                  className="w-full text-[11px] text-foreground bg-card border border-[#e08a3c]/40 rounded px-2 py-1.5 outline-none focus:border-[#e08a3c]/60 transition-colors resize-y"
-                />
+              <div className="space-y-1">
+                {item.editableParameters.map((p, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <input value={p.label} onChange={(e) => updateParam(i, "label", e.target.value)} placeholder={t("templates.form.paramLabel")} className="flex-1 text-[11px] text-foreground bg-card border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                    <input value={p.unit} onChange={(e) => updateParam(i, "unit", e.target.value)} placeholder={t("templates.form.unit")} className="w-20 text-[11px] text-foreground bg-card border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                    <button onClick={() => deleteParam(i)} className="p-0.5 text-muted-foreground hover:text-[#e05252] transition-colors"><X size={11} /></button>
+                  </div>
+                ))}
               </div>
             </div>
-            <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-foreground mt-2.5">
-              <input type="checkbox" checked={item.visibleToCustomer} onChange={(e) => onChange((it) => ({ ...it, visibleToCustomer: e.target.checked }))} className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c]" />
-              {t("templates.form.visibleToCustomer")}
-            </label>
-          </td>
-        </tr>
-      )}
+            <div>
+              <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">{t("templates.form.itemInternalNotes")}</label>
+              <textarea
+                value={item.internalNotes.join("\n")}
+                onChange={(e) => onChange((it) => ({ ...it, internalNotes: linesToArray(e.target.value) }))}
+                rows={2}
+                className="w-full text-[11px] text-foreground bg-card border border-[#e08a3c]/40 rounded px-2 py-1.5 outline-none focus:border-[#e08a3c]/60 transition-colors resize-y"
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-foreground mt-2.5">
+            <input type="checkbox" checked={item.visibleToCustomer} onChange={(e) => onChange((it) => ({ ...it, visibleToCustomer: e.target.checked }))} className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c]" />
+            {t("templates.form.visibleToCustomer")}
+          </label>
+        </td>
+      </tr>
     </Fragment>
   );
 }

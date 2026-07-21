@@ -4,6 +4,35 @@
 
 ---
 
+## Session — 2026-07-21 (latest of all), Remove Template item editor's "ดูรายละเอียด" toggle
+
+### What was implemented
+- User asked to remove the "ดูรายละเอียด" (view details) button from the Quotation Template page.
+  Grepped the exact i18n key first (`templates.form.expand`) rather than guessing, found its single
+  usage site in `TemplateEditorView.tsx`'s `ItemEditor` — a toggle for a panel containing real data
+  (Specifications, Editable Parameters, Internal Notes, visible-to-customer checkbox), not a
+  throwaway UI element.
+- Since Specifications was recently established (same session, earlier pass) as the only
+  customer-visible-notes mechanism for template items — and now feeds into an applied quotation's
+  `subDetails` — removing the button in a way that also hid or dropped that data would have been a
+  real regression, not just a UI tweak. Asked via `AskUserQuestion` before touching anything: remove
+  just the button and always show the panel (recommended), or remove the button and the whole panel.
+  User picked "remove the button, keep the data."
+- Implemented: deleted the `expanded` state and the toggle button; the detail `<tr>` now always
+  renders unconditionally. Removed the two now-unused i18n keys (`templates.form.expand`/`.collapse`,
+  TH+EN).
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Verified via a temporary local
+  harness (`TemplateEditorView` in create-new mode) — added a section and item, confirmed the detail
+  panel renders immediately with no click needed and the action column no longer has a text button.
+  Harness deleted before committing.
+- Updated `docs/CHANGELOG.md` and `docs/MODULES/QuotationTemplates.md`.
+
+### Known limitation
+- Not verified against a live deployment — mock-data harness verification only, same
+  sandboxed-environment constraint as every other pass in this log.
+
+---
+
 ## Session — 2026-07-21 (yet later), Quotation typography hierarchy fix
 
 ### What was implemented

@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-07-21 (latest of all) — Quotation Template item editor: remove the "ดูรายละเอียด" expand toggle
+
+**Feature**: Direct user request ("ช่วยเอา ดูรายละเอียด ในหน้า Template ใบเสนอราคาออกไปด้วย" — remove
+the "View details" button from the Quotation Template page too). That button toggled a per-item
+detail panel (Specifications, Editable Parameters, Internal Notes, the visible-to-customer checkbox)
+open/closed in `TemplateEditorView.tsx`'s `ItemEditor`. Confirmed via `AskUserQuestion` before
+touching it, since the panel behind the button carries real data (Specifications is the only
+customer-visible-notes mechanism for template items, and feeds into an applied quotation's
+`subDetails` — see the QuoteLine removal entry above): the user wanted the *button* gone, not the
+fields — the panel should just always be visible instead of requiring a click.
+
+`TemplateEditorView.tsx`: removed the `expanded`/`setExpanded` state and the "ดูรายละเอียด"/"ย่อ"
+toggle button from `ItemEditor`'s action column; the detail `<tr>` (previously `{expanded && (...)}`)
+now always renders unconditionally, directly below each item's own row (and below its pinned
+sub-detail rows, unchanged). No field, data, or handler logic was touched — purely removing the
+show/hide gate. Removed the now-unused `templates.form.expand`/`templates.form.collapse` i18n keys
+(TH + EN).
+
+**Files Modified**: `src/pages/templates/TemplateEditorView.tsx`, `src/lib/i18n.tsx`,
+`docs/MODULES/QuotationTemplates.md`
+
+**Files Removed**: none
+
+**Reason**: Direct user request to remove the toggle button, keeping the underlying data.
+
+**Notes**: `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Browser-verified via a
+temporary local harness mounting `TemplateEditorView` (templateId=null, "create new" mode) —
+added a section and a manual item, confirmed the detail panel (Specifications/Editable
+Parameters/Internal Notes/visible-to-customer) now renders immediately with no click needed, and
+that the action column's icon row (Pin, move up/down, duplicate, delete) no longer has a text
+button. Harness deleted before committing.
+
+---
+
 ## 2026-07-21 (yet later) — Fix quotation page typography: restore label/button vs. content hierarchy
 
 **Feature**: Direct user follow-up to the earlier same-day readability pass ("ปรับแก้หน้าใบเสนอราคาให้ดูสวยขึ้นให้หน่อยรู้สึกว่า fonts มันใหญ่แปลกๆ" — make the quotation page look nicer, the fonts feel weirdly big). The earlier pass had mechanically bumped every `text-xs` on the page to `text-sm`, which — while technically making individual pieces of text bigger — collapsed the whole page onto essentially one text size (buttons, labels, badges, and actual content were all `text-sm`), erasing the visual hierarchy that makes a form read as organized rather than uniformly loud.
