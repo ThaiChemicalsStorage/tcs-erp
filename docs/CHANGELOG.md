@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-07-21 (same day, refinement) — Job Type grid: Templates-first ordering, OTHER still last
+
+**Feature**: Follow-up to the same-day wizard UX pass below — the previous fix only pushed
+`OTHER*`-coded Job Types to the end of the Step 1 grid; this pass adds the other half of the
+request: among the remaining (non-`OTHER`) Job Types, ones that already have an active Template now
+sort before ones that don't, so the grid reads as "pick one of these first" / "these aren't ready
+yet" / "misc catch-all" in that order. `QuotationTemplateWizard.tsx`'s `activeJobTypes` is now a
+stable 3-way partition — `hasTemplate && !isOther` → `!hasTemplate && !isOther` → `isOther` — each
+group keeping its original relative order. Moved the computation to after the `templateCounts` fetch
+it now depends on (previously computed before that state existed), so — like the existing "มี
+Template N แบบ" badges — the grid quietly reorders once the counts resolve rather than sorting on
+stale/empty data.
+
+**Files Modified**: `src/pages/quotation/QuotationTemplateWizard.tsx`
+
+**Files Removed**: none
+
+**Reason**: Direct user follow-up: "เอา Other jobs ไว้ท้ายสุดเลยแล้วจัดเรียงอันไหนที่มี Template ให้เอาไว้อันแรกละเรียงตามกันมา."
+
+**Notes**: `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Not browser-verified —
+same sandboxed MongoDB Atlas DNS-block limitation as every pass this session.
+
+---
+
 ## 2026-07-21 (later) — Create Quotation wizard UX fixes + manual "Add Section" on the quotation line-items editor
 
 **Feature**: Three user-reported usability issues fixed, all in the Create Quotation flow:

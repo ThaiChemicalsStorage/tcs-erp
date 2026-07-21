@@ -85,14 +85,7 @@ export function QuotationTemplateWizard({
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState("");
 
-  // "OTHER"-prefixed Job Types (OTHER, OTHER BF, OTHER SC, OTHER TA — the catch-all fallback
-  // categories) are pushed to the end of the grid instead of sorting alphabetically alongside the
-  // real categories, so the primary Job Types are always the first thing a user sees.
   const activeJobTypesUnsorted = jobTypes.filter((jt) => jt.isActive);
-  const activeJobTypes = [
-    ...activeJobTypesUnsorted.filter((jt) => !jt.code.startsWith("OTHER")),
-    ...activeJobTypesUnsorted.filter((jt) => jt.code.startsWith("OTHER")),
-  ];
 
   // Per-Job-Type active-template counts for the grid's "มี Template N แบบ" / "ยังไม่มี Template"
   // badges — fetched once, unfiltered, independent of `templates` (which only ever holds the
@@ -129,6 +122,21 @@ export function QuotationTemplateWizard({
     if (n === 1) return t("quotation.wizard.badge.one");
     return t("quotation.wizard.badge.many").replace("{n}", String(n));
   };
+
+  // Step 1 grid order: Job Types that already have an active Template come first (so the ones a
+  // user can actually pick a template for are the first thing they see), then Job Types with no
+  // Template yet, and — regardless of Template availability — every "OTHER"-prefixed catch-all
+  // code (OTHER, OTHER BF, OTHER SC, OTHER TA) is pushed to the very end. Each group otherwise
+  // keeps its original relative order (a stable 3-way partition, not a fresh alphabetical sort).
+  // Depends on `templateCounts`, so the grid quietly reorders once that fetch resolves — the same
+  // "badge appears once loaded" behavior `badgeFor` above already has.
+  const isOtherJobType = (code: string) => code.startsWith("OTHER");
+  const hasActiveTemplate = (code: string) => (templateCounts?.get(code) ?? 0) > 0;
+  const activeJobTypes = [
+    ...activeJobTypesUnsorted.filter((jt) => !isOtherJobType(jt.code) && hasActiveTemplate(jt.code)),
+    ...activeJobTypesUnsorted.filter((jt) => !isOtherJobType(jt.code) && !hasActiveTemplate(jt.code)),
+    ...activeJobTypesUnsorted.filter((jt) => isOtherJobType(jt.code)),
+  ];
 
   // Kicks off the actual template fetch for a deep-linked selection — the synchronous "start
   // loading" state above already happened at mount via the lazy initializers, so this effect body

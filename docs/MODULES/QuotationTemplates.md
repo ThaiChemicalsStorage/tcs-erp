@@ -491,14 +491,18 @@ Wired into `QuotationPage.tsx` via a new `"wizard"` view state. Result type:
 `QuoteDocument.tsx`'s new `wizardResult` prop (fresh "new" mounts only).
 
 **2026-07-21, UX pass**: two user-reported usability fixes to the Step 1 Job Type grid/screen —
-(1) Job Types whose code starts with `"OTHER"` (`OTHER`, `OTHER BF`, `OTHER SC`, `OTHER TA` — the
-catch-all fallback categories) are now sorted to the end of the grid instead of interleaving
-alphabetically with the real categories (a client-side partition in `QuotationTemplateWizard.tsx`,
+(1) the grid is now a stable 3-way partition (a client-side sort in `QuotationTemplateWizard.tsx`,
 not a change to `fetchJobTypes()`'s server-side order, since other pages reading the same list — Job
-Type admin, Dashboard filters — weren't asked to change); (2) the Step 1 "ยกเลิก" button was a bare
-muted text link that read as barely-there — restyled to the app's standard outline/secondary button
+Type admin, Dashboard filters — weren't asked to change): Job Types that already have an active
+Template come first, then Job Types with no Template yet, and every `"OTHER"`-prefixed catch-all code
+(`OTHER`, `OTHER BF`, `OTHER SC`, `OTHER TA`) is pushed to the very end regardless of Template
+availability — each group keeps its original relative order otherwise. Depends on the same
+`templateCounts` fetch the "มี Template N แบบ" badges already use, so the grid quietly reorders once
+that resolves, same as the badges themselves; (2) the Step 1 "ยกเลิก" button was a bare muted text
+link that read as barely-there — restyled to the app's standard outline/secondary button
 (`border border-border ... hover:border-[#c9a84c]/40`, per `docs/UI_GUIDELINES.md` "Buttons"), no new
-button style invented.
+button style invented. **Same day, refinement**: the initial pass only pushed `OTHER*` to the end;
+a follow-up request added the has-Template-first ordering for the remaining (non-`OTHER`) Job Types.
 
 ## Global Search Integration
 

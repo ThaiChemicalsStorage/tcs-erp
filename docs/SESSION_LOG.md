@@ -4,6 +4,31 @@
 
 ---
 
+## Session — 2026-07-21 (same day, refinement), Job Type grid: has-Template-first ordering
+
+### What was implemented
+- Immediate follow-up to the session below: the user clarified their original "OTHER jobs last" ask
+  also wanted the *remaining* Job Types sorted so ones with an active Template come before ones
+  without ("เอา Other jobs ไว้ท้ายสุดเลยแล้วจัดเรียงอันไหนที่มี Template ให้เอาไว้อันแรกละเรียงตามกันมา").
+- Changed `QuotationTemplateWizard.tsx`'s `activeJobTypes` from a 2-way partition (non-OTHER / OTHER)
+  to a 3-way stable partition: has-Template-and-not-OTHER → no-Template-and-not-OTHER → OTHER. Had to
+  move the computation down past the `templateCounts` `useState`/`useEffect` block (it previously ran
+  before that state existed in the component body) since it now reads `templateCounts` to know which
+  Job Types have a template — mirrors how the existing "มี Template N แบบ" badge already depends on
+  that same fetch and updates once it resolves.
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean.
+- Updated `docs/CHANGELOG.md` and `docs/MODULES/QuotationTemplates.md`.
+
+### Known limitation
+- Same as the entry below — not browser-verified (sandboxed MongoDB Atlas DNS block). This change is
+  a small, isolated reordering of an existing, already-tested `.filter()`/spread pattern (the 2-way
+  version from the prior pass), which limits risk.
+
+### Recommendation
+- Next real-browser check: confirm the grid actually reorders once template counts finish loading
+  (should be near-instant, but worth watching for a visible "jump" if the fetch is slow) and that the
+  three groups read in the intended order — Templates first, no-Template next, OTHER last.
+
 ## Session — 2026-07-21 (later), Create Quotation wizard feedback: OTHER ordering, Cancel visibility, Add Section
 
 ### What was implemented
