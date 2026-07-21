@@ -4,6 +4,48 @@
 
 ---
 
+## Session — 2026-07-21 (later), Create Quotation wizard feedback: OTHER ordering, Cancel visibility, Add Section
+
+### What was implemented
+- Continuing the same day's Template editor restyle work, the user gave direct feedback on a
+  screenshot of the Create Quotation wizard's Step 1 (Job Type grid) screen: (1) move every
+  `OTHER`-prefixed Job Type to the end of the grid instead of sorting alphabetically alongside the
+  real categories, (2) make the "ยกเลิก" (Cancel) button easier to see, and (3) when creating a
+  quotation directly (not a Template), there's no way to add a Section like the Template editor has.
+- Read `QuotationTemplateWizard.tsx` to find the Step 1 grid (`activeJobTypes.map(...)`) and the
+  Cancel button (a bare `text-sm text-muted-foreground` link, no border — genuinely easy to miss,
+  matching the user's complaint). Fixed the sort with a client-side partition (`OTHER*` codes last,
+  relative order otherwise preserved) rather than changing `fetchJobTypes()`'s server order, since
+  other pages (Job Type admin, Dashboard filters) read the same list unfiltered. Restyled Cancel to
+  the app's existing "Secondary/outline" button pattern from `docs/UI_GUIDELINES.md` — deliberately
+  did not invent a red/danger style, since this is a non-destructive "go back," not a delete.
+- For the third item, traced it to `LineItemsEditor.tsx`: `QuoteLine.isSectionHeader` already existed
+  as a field (added 2026-07-14 for template-applied section dividers) and the row-rendering/print/
+  numbering logic already fully supported it — the only actual gap was that no button ever set it to
+  `true` outside of applying a Template. Added a small `addSectionHeader()` handler + toolbar button
+  mirroring the Template editor's "เพิ่ม Section," reusing `blankLine()` plus the flag. No `QuoteLine`
+  type change, no API/validation change, no PrintDocument change — everything downstream of the flag
+  already worked correctly.
+- Added 1 new i18n key (`quotation.lineItems.addSection`, Thai + English).
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean.
+- Updated `docs/CHANGELOG.md` and `docs/MODULES/QuotationTemplates.md` (Wizard UI section + a new
+  paragraph under "Section-Header Rendering").
+
+### Known limitation
+- Not manually browser-verified this pass — the same sandboxed MongoDB Atlas DNS-block limitation
+  documented in the previous entry (`vercel dev` proxies API routes correctly, but the SRV DNS lookup
+  to Atlas is network-refused from this sandbox, so the app never gets past its own connection-error
+  screen). The Job Type sort and Cancel restyle are pure display-order/class changes with no logic
+  risk; the new Add Section button reuses an already-battle-tested code path (the exact line shape a
+  template apply already produces), which limits the blast radius of not having seen it rendered.
+
+### Recommendation
+- Next time a real browser is available: open the Create Quotation wizard and confirm the OTHER
+  Job Types visually land at the end of the grid and the Cancel button reads as a real button; open
+  a quotation from scratch, click "เพิ่ม Section," confirm the new divider row renders identically to
+  a template-seeded one (§ marker, no unit/qty/price columns, removable), and print/PDF it to confirm
+  the empty-section-not-printed rule still holds.
+
 ## Session — 2026-07-21, restyle the Quotation Template editor to look like the real quotation
 
 ### What was implemented

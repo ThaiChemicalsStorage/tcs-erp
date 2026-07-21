@@ -85,7 +85,14 @@ export function QuotationTemplateWizard({
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [previewError, setPreviewError] = useState("");
 
-  const activeJobTypes = jobTypes.filter((jt) => jt.isActive);
+  // "OTHER"-prefixed Job Types (OTHER, OTHER BF, OTHER SC, OTHER TA — the catch-all fallback
+  // categories) are pushed to the end of the grid instead of sorting alphabetically alongside the
+  // real categories, so the primary Job Types are always the first thing a user sees.
+  const activeJobTypesUnsorted = jobTypes.filter((jt) => jt.isActive);
+  const activeJobTypes = [
+    ...activeJobTypesUnsorted.filter((jt) => !jt.code.startsWith("OTHER")),
+    ...activeJobTypesUnsorted.filter((jt) => jt.code.startsWith("OTHER")),
+  ];
 
   // Per-Job-Type active-template counts for the grid's "มี Template N แบบ" / "ยังไม่มี Template"
   // badges — fetched once, unfiltered, independent of `templates` (which only ever holds the
@@ -284,7 +291,7 @@ export function QuotationTemplateWizard({
                 ))}
               </div>
             )}
-            <button onClick={onCancel} className="mt-6 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={onCancel} className="mt-6 px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-colors">
               {t("quotation.wizard.cancel")}
             </button>
           </div>

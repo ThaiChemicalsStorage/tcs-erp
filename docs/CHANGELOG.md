@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-07-21 (later) — Create Quotation wizard UX fixes + manual "Add Section" on the quotation line-items editor
+
+**Feature**: Three user-reported usability issues fixed, all in the Create Quotation flow:
+1. **Job Type grid ordering** (`QuotationTemplateWizard.tsx` Step 1): Job Types whose code starts
+   with `"OTHER"` (`OTHER`, `OTHER BF`, `OTHER SC`, `OTHER TA`) previously sorted alphabetically
+   alongside the real categories (BF, BI, GA, LI, OTHER, OTHER BF, OTHER SC, OTHER TA, SC, ...) —
+   now partitioned client-side so all `OTHER*` codes render after every non-`OTHER` Job Type, keeping
+   their relative order otherwise. `fetchJobTypes()`'s own server-side order is untouched, since Job
+   Type admin/Dashboard filters read the same list and weren't asked to change.
+2. **Cancel button visibility** (same screen): the Step 1 "ยกเลิก" button was a bare muted-gray text
+   link with no border, easy to miss — restyled to the app's standard outline/secondary button
+   pattern (`border border-border ... hover:border-[#c9a84c]/40`, matching `docs/UI_GUIDELINES.md`
+   "Buttons" and e.g. `TemplateEditorView.tsx`'s own Cancel button), not a new one-off style.
+3. **Manual "Add Section" on the quotation line-items editor** (`LineItemsEditor.tsx`): the Template
+   editor has always had a "เพิ่ม Section" button; a plain quotation built from scratch (not from a
+   Template) had no equivalent — section-header divider lines were only ever reachable by applying a
+   Template. Added a matching "เพิ่ม Section"/"Add Section" button to the line-items toolbar that
+   appends `{ ...blankLine(), isSectionHeader: true }` directly — the exact same line shape a
+   template-applied section header already produces (zero-priced, freely editable/removable, skipped
+   from "No." numbering, hidden from print if no items follow it — all pre-existing behavior, no
+   changes needed there).
+
+**Files Modified**: `src/pages/quotation/QuotationTemplateWizard.tsx` (Job Type sort + Cancel button
+style), `src/pages/quotation/LineItemsEditor.tsx` (new `addSectionHeader` handler + toolbar button),
+`src/lib/i18n.tsx` (1 new key × Thai/English: `quotation.lineItems.addSection`)
+
+**Files Removed**: none
+
+**Reason**: Direct user feedback on the Create Quotation wizard screenshot — OTHER categories
+cluttering the primary grid, an easy-to-miss Cancel button, and a real functional gap (no way to add
+a section divider outside the Template flow).
+
+**Notes**: `npx tsc --noEmit`, `npm run lint`, and `npm run build` all pass clean. Not browser-verified
+this pass — same sandboxed MongoDB Atlas DNS-block limitation recorded in the entry above (`vercel
+dev` proxies `/api/*` correctly but `querySrv` to `_mongodb._tcp.tcsdb.zdnus3w.mongodb.net` is
+network-refused from this sandbox).
+
+---
+
 ## 2026-07-21 — Quotation Template editor restyled to mirror the real quotation document
 
 **Feature**: Visual-only redesign of the Template Management create/edit form

@@ -1,6 +1,6 @@
 import { Fragment, useRef, useState } from "react";
 import {
-  Plus, Trash2, Percent, PackageSearch,
+  Plus, Trash2, Percent, PackageSearch, Layers,
   List, ListOrdered, GripVertical, StickyNote, X,
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
@@ -199,6 +199,7 @@ export function LineItemsEditor({
     onChange(lines.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
 
   const addLine = () => onChange([...lines, blankLine()]);
+  const addSectionHeader = () => onChange([...lines, { ...blankLine(), isSectionHeader: true }]);
   const addLineFromProduct = (product: Product) =>
     onChange([...lines, { ...blankLine(), description: product.name, unit: product.unit, unitPrice: product.defaultPrice, specifications: product.specifications }]);
   const removeLine = (id: number) => onChange(lines.filter((l) => l.id !== id));
@@ -237,6 +238,9 @@ export function LineItemsEditor({
         <div className="flex items-center gap-2">
           <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
             <PackageSearch size={12} /> {t("quotation.lineItems.pickFromCatalog")}
+          </button>
+          <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
+            <Layers size={12} /> {t("quotation.lineItems.addSection")}
           </button>
           <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
             <Plus size={12} /> {t("quotation.lineItems.addManual")}

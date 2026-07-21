@@ -474,12 +474,31 @@ A section-header line with **no items directly following it** (e.g. the user del
 under a section but kept the header) is silently **not printed** on the customer PDF — an empty
 section heading on a real customer document would read as a mistake, not intentional structure.
 
+**2026-07-21**: section-header lines were previously only ever reachable by applying a Template —
+there was no way to add one to a quotation built from scratch (a user-reported gap: "the Template
+editor lets me add a Section, but a plain quotation doesn't"). `LineItemsEditor.tsx` now has its own
+"เพิ่ม Section"/"Add Section" button (next to "เลือกจากคลังสินค้า"/"เพิ่มรายการเอง" in the line-items
+toolbar) that appends a `{ ...blankLine(), isSectionHeader: true }` line directly — same
+zero-priced/freely-editable/removable line as one copied from a template, just user-initiated. No
+`QuoteLine`/API/validation changes were needed since `isSectionHeader` already existed as a normal
+optional field on every line.
+
 ## Wizard UI (screens, states)
 
 See "Business Flow" above for the step-by-step flow. Component: `QuotationTemplateWizard.tsx`.
 Wired into `QuotationPage.tsx` via a new `"wizard"` view state. Result type:
 `QuotationWizardResult = { jobTypeCode, jobTypeName, templateSnapshot }`, consumed by
 `QuoteDocument.tsx`'s new `wizardResult` prop (fresh "new" mounts only).
+
+**2026-07-21, UX pass**: two user-reported usability fixes to the Step 1 Job Type grid/screen —
+(1) Job Types whose code starts with `"OTHER"` (`OTHER`, `OTHER BF`, `OTHER SC`, `OTHER TA` — the
+catch-all fallback categories) are now sorted to the end of the grid instead of interleaving
+alphabetically with the real categories (a client-side partition in `QuotationTemplateWizard.tsx`,
+not a change to `fetchJobTypes()`'s server-side order, since other pages reading the same list — Job
+Type admin, Dashboard filters — weren't asked to change); (2) the Step 1 "ยกเลิก" button was a bare
+muted text link that read as barely-there — restyled to the app's standard outline/secondary button
+(`border border-border ... hover:border-[#c9a84c]/40`, per `docs/UI_GUIDELINES.md` "Buttons"), no new
+button style invented.
 
 ## Global Search Integration
 
