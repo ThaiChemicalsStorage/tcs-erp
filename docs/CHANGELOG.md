@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-07-21 (even later) — Quotation page readability pass: bump text sizes one tier across the whole page
+
+**Feature**: Direct user request ("ช่วยเปลี่ยน fonts หรือขนาดให้มันอ่านง่ายขึ้นด้วยในหน้าใบเสนอราคา" —
+change the fonts/sizes to make the quotation page easier to read). The page's smallest text
+(column headers, eyebrow labels, meta field labels) was `text-[10px]`/`text-[11px]` and the vast
+majority of body/input/button/badge text was `text-xs` (12px) — genuinely small for a page used for
+routine business data entry. Confirmed scope and degree via `AskUserQuestion` before touching ~90
+className instances: the user picked "ปรับขึ้นพอประมาณ" (moderate bump) — 10-11px labels → 12px,
+12px body text → 14px — applied to the whole quotation page, not just the line-items table.
+
+Mechanical two-pass find/replace (via a temporary placeholder token to avoid the second pass
+re-catching values the first pass just wrote) across `src/pages/quotation/QuoteDocument.tsx`
+(65 instances), `LineItemsEditor.tsx` (22), `CustomerSelector.tsx` (4), and `InterestButtons.tsx`
+(2): every `text-[10px]`/`text-[11px]` → `text-xs`, every original `text-xs` → `text-sm`. Pre-existing
+`text-sm` (client-name input, section titles) and the largest tiers (`text-base`/`text-lg`/`text-xl`
+— grand total, "QUOTATION" title) were deliberately left alone — see UI_GUIDELINES.md for the
+accepted tradeoff this creates (some content is now visually closer in size than before).
+
+**Files Modified**: `src/pages/quotation/QuoteDocument.tsx`, `src/pages/quotation/LineItemsEditor.tsx`,
+`src/pages/quotation/CustomerSelector.tsx`, `src/pages/quotation/InterestButtons.tsx`,
+`docs/UI_GUIDELINES.md`
+
+**Files Removed**: none
+
+**Reason**: Direct user request for better readability on the quotation page.
+
+**Notes**: `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Browser-verified via a
+temporary local harness mounting the full `QuoteDocument` (mode="new", mock company/user/permissions,
+no backend) — confirmed the page renders without errors, added a line item, and visually inspected
+every section (customer info, doc meta, line-items table, notes/terms, signatures, footer disclaimer)
+for readability and no overflow/clipping; harness files deleted before committing.
+
+---
+
 ## 2026-07-21 (later still) — Fix quotation line-items table: Unit/Qty/Unit Price values not aligning under their headers
 
 **Feature**: Direct user follow-up with a screenshot showing the Unit/Qty/Unit Price/Discount

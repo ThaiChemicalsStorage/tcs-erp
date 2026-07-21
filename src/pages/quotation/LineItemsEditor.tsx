@@ -32,7 +32,7 @@ function NotesEditor({ value, onChange }: { value: string; onChange: (v: string)
           type="button"
           onClick={() => ref.current && insertAtCursor(ref.current, "• ", value, onChange)}
           title={t("quotation.lineItems.notesBulletTitle")}
-          className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+          className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
         >
           <List size={11} /> {t("quotation.lineItems.notesBullet")}
         </button>
@@ -40,7 +40,7 @@ function NotesEditor({ value, onChange }: { value: string; onChange: (v: string)
           type="button"
           onClick={() => ref.current && insertAtCursor(ref.current, "1. ", value, onChange)}
           title={t("quotation.lineItems.notesNumberedTitle")}
-          className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+          className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
         >
           <ListOrdered size={11} /> {t("quotation.lineItems.notesNumbered")}
         </button>
@@ -51,7 +51,7 @@ function NotesEditor({ value, onChange }: { value: string; onChange: (v: string)
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={t("quotation.lineItems.notesPlaceholder")}
-        className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed"
+        className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed"
       />
     </div>
   );
@@ -112,7 +112,7 @@ function PinnedSubDetailRows({
                 value={sd.text}
                 onChange={(e) => onUpdate(sd.id, e.target.value)}
                 placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
-                className="flex-1 text-xs text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
+                className="flex-1 text-sm text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
               />
               <button onClick={() => onRemove(sd.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover/pin:opacity-100 flex-shrink-0">
                 <Trash2 size={12} />
@@ -129,13 +129,13 @@ function SpecificationsEditor({ value, onChange }: { value: string; onChange: (v
   const { t } = useI18n();
   return (
     <div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.specTitle")}</p>
+      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.specTitle")}</p>
       <textarea
         rows={3}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={t("quotation.lineItems.specPlaceholder")}
-        className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed"
+        className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed"
       />
     </div>
   );
@@ -153,10 +153,10 @@ function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: strin
 
   return (
     <div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.tagsTitle")}</p>
+      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.tagsTitle")}</p>
       <div className="flex flex-wrap gap-1.5 mb-2">
         {tags.map((tag) => (
-          <span key={tag} className="flex items-center gap-1 px-2 py-1 text-[11px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-full">
+          <span key={tag} className="flex items-center gap-1 px-2 py-1 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-full">
             {tag}
             <button onClick={() => onChange(tags.filter((x) => x !== tag))} className="hover:text-[#e05252] transition-colors">
               <X size={10} />
@@ -170,7 +170,7 @@ function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: strin
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
         onBlur={addTag}
         placeholder={t("quotation.lineItems.tagsPlaceholder")}
-        className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+        className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
       />
     </div>
   );
@@ -247,13 +247,13 @@ export function LineItemsEditor({
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
         <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.lineItems.title")}</p>
         <div className="flex items-center gap-2">
-          <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
+          <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
             <PackageSearch size={12} /> {t("quotation.lineItems.pickFromCatalog")}
           </button>
-          <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
+          <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
             <Layers size={12} /> {t("quotation.lineItems.addSection")}
           </button>
-          <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
+          <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
             <Plus size={12} /> {t("quotation.lineItems.addManual")}
           </button>
         </div>
@@ -265,7 +265,7 @@ export function LineItemsEditor({
           <thead>
             <tr className="border-b border-border bg-muted/20">
               {columns.map((h, i) => (
-                <th key={i} className={`px-4 py-2.5 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider ${i === 0 || i === 2 ? "text-center" : i === 1 ? "text-left" : "text-right"} ${i === 0 ? "w-10" : ""} ${i === 7 ? "w-10" : ""}`}>{h}</th>
+                <th key={i} className={`px-4 py-2.5 text-xs font-mono font-semibold text-muted-foreground uppercase tracking-wider ${i === 0 || i === 2 ? "text-center" : i === 1 ? "text-left" : "text-right"} ${i === 0 ? "w-10" : ""} ${i === 7 ? "w-10" : ""}`}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -278,7 +278,7 @@ export function LineItemsEditor({
               if (line.isSectionHeader) {
                 return (
                   <tr key={line.id} className="border-b border-border/50 bg-muted/20 group">
-                    <td className="px-4 py-2.5 text-center text-xs font-mono text-muted-foreground align-top">§</td>
+                    <td className="px-4 py-2.5 text-center text-sm font-mono text-muted-foreground align-top">§</td>
                     <td colSpan={6} className="px-4 py-2.5 align-top">
                       <input
                         className="w-full text-sm font-semibold text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors"
@@ -302,32 +302,32 @@ export function LineItemsEditor({
               return (
                 <Fragment key={line.id}>
                   <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
-                    <td className="px-4 py-3 text-center text-xs font-mono text-muted-foreground align-top">{itemNumbers[idx]}</td>
+                    <td className="px-4 py-3 text-center text-sm font-mono text-muted-foreground align-top">{itemNumbers[idx]}</td>
                     <td className="px-4 py-3 align-top">
                       <input className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.description} onChange={(e) => updateLine(line.id, "description", e.target.value)} placeholder={t("quotation.lineItems.descriptionPlaceholder")} />
                     </td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-center justify-center">
-                        <input className="w-20 text-xs text-center text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unit} onChange={(e) => updateLine(line.id, "unit", e.target.value)} />
+                        <input className="w-20 text-sm text-center text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unit} onChange={(e) => updateLine(line.id, "unit", e.target.value)} />
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-center justify-end">
-                        <input type="number" className="w-20 text-xs text-right text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.qty} onChange={(e) => updateLine(line.id, "qty", parseFloat(e.target.value) || 0)} min={0} />
+                        <input type="number" className="w-20 text-sm text-right text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.qty} onChange={(e) => updateLine(line.id, "qty", parseFloat(e.target.value) || 0)} min={0} />
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-center justify-end">
-                        <input type="number" className="w-32 text-xs text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unitPrice} onChange={(e) => updateLine(line.id, "unitPrice", parseFloat(e.target.value) || 0)} min={0} />
+                        <input type="number" className="w-32 text-sm text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unitPrice} onChange={(e) => updateLine(line.id, "unitPrice", parseFloat(e.target.value) || 0)} min={0} />
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-center justify-end gap-0.5">
-                        <input type="number" className="w-16 text-xs text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.discount} onChange={(e) => updateLine(line.id, "discount", parseFloat(e.target.value) || 0)} min={0} max={100} />
+                        <input type="number" className="w-16 text-sm text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.discount} onChange={(e) => updateLine(line.id, "discount", parseFloat(e.target.value) || 0)} min={0} max={100} />
                         <Percent size={10} className="text-muted-foreground flex-shrink-0" />
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-xs font-mono text-right font-semibold text-foreground align-top">{fmt(lineSubtotal(line))}</td>
+                    <td className="px-4 py-3 text-sm font-mono text-right font-semibold text-foreground align-top">{fmt(lineSubtotal(line))}</td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-center justify-end gap-1">
                         <button
@@ -390,7 +390,7 @@ export function LineItemsEditor({
             <span className="flex items-center gap-2">
               {t("quotation.totals.discount")}
               <span className="flex items-center gap-1 bg-secondary border border-border rounded px-2 py-0.5">
-                <input type="number" className="w-10 text-xs font-mono text-foreground bg-transparent outline-none text-right" value={discount} onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)} min={0} max={100} />
+                <input type="number" className="w-10 text-sm font-mono text-foreground bg-transparent outline-none text-right" value={discount} onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)} min={0} max={100} />
                 <Percent size={10} className="text-muted-foreground" />
               </span>
             </span>

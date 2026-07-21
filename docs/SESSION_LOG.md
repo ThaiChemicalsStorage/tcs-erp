@@ -4,6 +4,51 @@
 
 ---
 
+## Session — 2026-07-21 (even later), Quotation table alignment fix + page-wide readability bump
+
+### What was implemented
+- Follow-up to the pinned-sub-details restyle earlier this session: user reported the Unit/Qty/Unit
+  Price columns in `LineItemsEditor.tsx` weren't lining up under their headers, with a screenshot.
+  Root-caused via `getBoundingClientRect()` math in a local harness (not just eyeballing a
+  screenshot) — the Unit input was center-aligned against a right-aligned header, and Qty/Unit Price
+  inputs weren't wrapped in a `flex justify-end` container like the already-correct Discount column,
+  so their fixed-width boxes sat left-anchored inside a wider auto-sized `<td>`. Fixed both, verified
+  pixel-perfect (header/input centers matched to 0.01px) before committing and pushing.
+- User then sent a near-identical follow-up ("หน่วยมันไม่ตรงกับข้อมูลด้านล่าง") with no new
+  screenshot. Re-verified the fix was both correct (same bounding-box check, still perfect) and
+  actually live in production (`list_deployments` confirmed the fix commit's deployment was
+  `READY`) before responding — asked the user for a fresh screenshot / suggested a hard refresh
+  rather than guessing at a second theoretical cause with no new evidence. (No reply followed in
+  this session; if a hard refresh didn't resolve it, this needs the fresh screenshot to diagnose.)
+- User then asked, unprompted by a screenshot this time, to improve font/size readability on the
+  whole quotation page. Given the scope (~90 `text-xs`/`text-[10-11px]` instances across 4 files)
+  and that a wrong-degree guess would mean redoing a lot of mechanical edits, used
+  `AskUserQuestion` with concrete before/after previews to confirm both scope (whole page vs. table
+  only) and degree (modest vs. large bump) before touching anything — user picked the recommended
+  "moderate" option, whole page. Implemented via a two-pass sed find/replace per file using a
+  temporary placeholder token (`text-xs` → placeholder → `text-[10px]`/`text-[11px]` → `text-xs` →
+  placeholder → `text-sm`) so the second pass couldn't re-catch values the first pass had just
+  written — a real risk with a naive single-pass "text-xs → text-sm" replace.
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean on both passes.
+- Verified visually via temporary local harnesses each time (mounting `LineItemsEditor` alone for
+  the alignment fix, the full `QuoteDocument` in "new" mode for the readability pass — the latter
+  needed fairly complete mock `company`/`currentUser` objects since `PrintDocument.tsx` — always
+  mounted, just `print:hidden` — crashes on `undefined.trim()` if fields like `phone`/`email` are
+  missing; caught and fixed this in the harness, not app code, since it's a test-fixture gap, not a
+  real bug reachable with actual saved data). Harness files deleted before each commit.
+- Updated `docs/CHANGELOG.md`, `docs/MODULES/Quotation.md`, `docs/UI_GUIDELINES.md`.
+
+### Known limitation
+- Not verified against a live deployment for the readability pass specifically (the alignment fix
+  *was* confirmed live via `list_deployments`). Same sandboxed-environment constraint as every other
+  pass in this log for anything needing real MongoDB data — this pass needed none, so the harness
+  verification is relatively high-confidence, just not a production click-through.
+- The user's second alignment report is still open — responded with a diagnostic question instead of
+  a code change, since the existing fix measured pixel-perfect and was confirmed deployed; needs a
+  fresh screenshot to know whether this is a caching artifact or a genuinely different location.
+
+---
+
 ## Session — 2026-07-21 (later still), Pinned sub-detail rows restyle
 
 ### What was implemented

@@ -87,7 +87,7 @@ export function CustomerSelector({
       {open && !disabled && (
         <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-card border border-border rounded-lg shadow-xl py-1">
           {matches.length === 0 ? (
-            <p className="px-3 py-2.5 text-xs text-muted-foreground">{t("quotation.customerSelector.noResults")}</p>
+            <p className="px-3 py-2.5 text-sm text-muted-foreground">{t("quotation.customerSelector.noResults")}</p>
           ) : (
             matches.map((c) => (
               <button
@@ -98,7 +98,7 @@ export function CustomerSelector({
                 className="w-full text-left px-3 py-2 hover:bg-secondary/60 transition-colors"
               >
                 <p className="text-sm text-foreground font-medium truncate">{c.companyName}</p>
-                <p className="text-[11px] text-muted-foreground truncate">
+                <p className="text-xs text-muted-foreground truncate">
                   {[c.contactName, c.phone, c.taxId].filter(Boolean).join(" · ") || t("quotation.customerSelector.noExtraInfo")}
                 </p>
               </button>
