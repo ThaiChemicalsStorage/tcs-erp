@@ -227,16 +227,22 @@ Master data for classifying every quotation by the kind of work it represents. S
 ### `QuotationTemplate` (`src/lib/quotationTemplates.ts`) — added 2026-07-14, extended 2026-07-15
 
 ```ts
-interface TemplateEditableParameter { label: string; value: string; unit: string; editable: true; }
 type TemplateItemType = "item" | "subItem" | "specification";
 interface TemplateItem {
   id: string; itemType: TemplateItemType; itemCode: string; name: string; description: string;
-  quantity: number | null; unit: string; specifications: string[]; subDetails: string[];
-  editableParameters: TemplateEditableParameter[]; internalNotes: string[]; productId?: string;
+  quantity: number | null; unit: string; subDetails: string[]; productId?: string;
   // Added 2026-07-15 — informational only, never read when applying a template to a quote.
   productSnapshot?: { code: string; name: string; unit: string; defaultPrice: number };
-  visibleToCustomer: boolean; sortOrder: number;
+  sortOrder: number;
 }
+// 2026-07-21: `specifications`/`editableParameters`(+its `TemplateEditableParameter` type)/
+// `internalNotes`/`visibleToCustomer` were removed entirely (unused UI, direct user request — see
+// CHANGELOG.md). Real pre-existing `specifications` content is folded into `subDetails` instead —
+// once, defensively, by `TemplateEditorView.tsx` (on load) and `applyTemplate.ts` (on apply) reading
+// a no-longer-typed raw field, so old MongoDB documents that still carry it (no migration script
+// ran) don't lose that content. `editableParameters`/item-level `internalNotes`/`visibleToCustomer`
+// have no such fallback — any old documents' values for those three are simply ignored going
+// forward. Every item is now always treated as customer-visible (no more hide-from-customer gate).
 interface TemplateSection { id: string; title: string; description: string; sortOrder: number; items: TemplateItem[]; }
 interface TemplateTermLine { type: "paymentTerm" | "warrantyTerm" | "taxNote"; text: string; }
 // Added 2026-07-15 — "excel_import" for the 5 workbook seeds, "manual" for anything created/duplicated via Template Management.
@@ -254,10 +260,10 @@ Backs the Create Quotation wizard's Job Type → Template → Preview flow — s
 [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) for the full business flow, the
 Excel-row classification rules used to extract the seed content, and the 5 seeded templates
 (`SC-WET-SCRUBBER`/`SC-ACTIVATED-CARBON`/`BF-BAG-FILTER`/`TA-FRP-TANK`/`LI-FRP-LINING`).
-`internalNotes` (both item-level and template-level) hold real internal-staff review comments
-extracted from the source workbook and are `visibleToCustomer: false` — never copied into a
-quotation, never printed, and never projected by the Global Search endpoint (see "Global Search"
-below). `sourceHash` is a SHA-256 hash over the content-relevant fields, used by the idempotent
+`internalNotes` (template-level; the item-level equivalent was removed 2026-07-21, see the
+`TemplateItem` interface above) holds real internal-staff review comments extracted from the source
+workbook — never copied into a quotation, never printed, and never projected by the Global Search
+endpoint (see "Global Search" below). `sourceHash` is a SHA-256 hash over the content-relevant fields, used by the idempotent
 import (`upsertQuotationTemplates()`, `api/_lib/quotationTemplatesHandler.ts`) to decide
 insert/skip/update by the stable `templateCode` natural key.
 

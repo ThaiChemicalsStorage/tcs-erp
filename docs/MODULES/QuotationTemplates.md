@@ -2,6 +2,19 @@
 
 ## Status: ✅ Built (2026-07-14), fixed against an independent Codex review the same day, extended 2026-07-15 with the full Template Management module, fixed against a second independent Codex review the same day
 
+**2026-07-21, latest of all — per-item Specifications/Editable Parameters/Internal Notes/
+visible-to-customer removed entirely.** Direct user request, following two earlier same-day passes
+that (1) restyled the item editor and (2) removed just the "ดูรายละเอียด" toggle while keeping the
+panel's data always-visible. Once the panel was visible without a click, the user saw it held real,
+live template content and asked for it gone too. `TemplateItem.specifications`/`.editableParameters`
+(+ its `TemplateEditableParameter` type)/`.internalNotes`/`.visibleToCustomer` are now fully removed
+from the type — not hidden, not deprecated. Confirmed scope and the fate of existing data via two
+rounds of `AskUserQuestion` before touching code: remove all four (not a subset), and fold
+pre-existing Specifications content into `subDetails` rather than lose it, since that field also
+feeds an applied quotation's line items (`applyTemplate.ts`). See "Data Model," "Template → Quote
+Snapshot Semantics," and "Template Management Module — Editor" below for the full detail, and
+CHANGELOG.md for the itemized diff.
+
 **2026-07-20, rollback note**: a generic "Dynamic Fields" system (dropdown/radio/checkboxGroup/
 text/number nested fields with conditional visibility, plus a Notes/Condition section) was built on
 top of this module and used to rebuild `LI-FRP-LINING` as "v2.0," went through two Codex-review fix
@@ -162,18 +175,28 @@ Documented here so a future re-import/re-analysis of a revised workbook follows 
   becomes `{ label: "Capacity", value: "" (always blank), unit: "CMH", editable: true }`.
 - **internalNote** — a line containing real internal-staff language directed at a colleague (e.g.
   "รบกวนพี่หมูรีวิวต่อว่าต้องใส่ PP washable ไหม", "หากลดความเซลล์เขียนมือเซนต์กำกับ", "กรณีลดความหนา
-  เขียนมือเซนต์กำกับหน้า Work") — flagged `visibleToCustomer: false` and **never** copied into a
-  quotation or printed (see "Template → Quote snapshot semantics" below). Exactly 3 such rows
+  เขียนมือเซนต์กำกับหน้า Work") — historically flagged `visibleToCustomer: false` and never copied
+  into a quotation or printed (see "Template → Quote snapshot semantics" below). Exactly 3 such rows
   exist in the whole workbook (1 in Wet Scrubber, 1 each in the FRP Lining and FRP Tank blocks).
   The recurring phrase "Sampling port according to Thai law ?" (present in all 3 BOQ sheets) was
   deliberately kept as normal customer-facing specification text, **not** classified as internal —
-  it reads as a real scope question a customer would see, not staff-only chatter.
+  it reads as a real scope question a customer would see, not staff-only chatter. **2026-07-21**:
+  item-level `internalNotes`/`visibleToCustomer` were removed from `TemplateItem` entirely (unused
+  UI, direct user request — see CHANGELOG.md and "Data Model" below); these 3 rows' original text is
+  still preserved verbatim in `api/_lib/templateSeedData.ts`'s `ItemDef.notes` shorthand (kept for
+  traceability against the source workbook) but no longer reaches the built `TemplateItem` object.
 - **paymentTerm / warrantyTerm / taxNote** — payment %/warranty-duration/withholding-tax rows go
   into `defaultTerms`, not regular items.
 - **No prices were ever invented.** The source workbook's Material/Labor/Total Cost columns were
   mostly blank; every template item stores a `quantity` (nullable) and never a price. Applying a
   template to a quotation always sets `unitPrice: 0`/`discount: 0` on every copied line — Sales
   fills in real numbers afterward.
+
+**2026-07-21, classification outcome changed**: the specification/editableParameter distinction
+above still describes how the original seed content was *extracted* from the Excel workbook, but no
+longer describes two separate `TemplateItem` fields — both now fold into the single surviving
+`subDetails: string[]` array (see "Data Model" below), since `specifications`/`editableParameters`
+were removed from the type entirely.
 
 ## Data Model
 
@@ -185,18 +208,25 @@ a *value* import into a `src/lib/*` file pull JSX into the API bundle, the actua
 `src/pages/quotation/applyTemplate.ts`, instead of here):
 
 ```ts
-export interface TemplateEditableParameter { label: string; value: string; unit: string; editable: true; }
 export type TemplateItemType = "item" | "subItem" | "specification";
 export interface TemplateItem {
   id: string; itemType: TemplateItemType; itemCode: string; name: string; description: string;
-  quantity: number | null; unit: string; specifications: string[]; subDetails: string[];
-  editableParameters: TemplateEditableParameter[]; internalNotes: string[]; productId?: string;
+  quantity: number | null; unit: string; subDetails: string[]; productId?: string;
   /** Added 2026-07-15 — a one-time copy of a linked product's catalog fields, taken when added via
    * Template Management's "Select Existing Product." Informational only, never read by
    * `applyTemplateToQuoteDraft()` — templates never carry a price. */
   productSnapshot?: { code: string; name: string; unit: string; defaultPrice: number };
-  visibleToCustomer: boolean; sortOrder: number;
+  sortOrder: number;
 }
+// 2026-07-21: `specifications: string[]` (+ its `TemplateEditableParameter` type),
+// `editableParameters: TemplateEditableParameter[]`, `internalNotes: string[]`, and
+// `visibleToCustomer: boolean` were removed from this interface entirely — an unused UI, per direct
+// user request (see CHANGELOG.md). Real pre-existing `specifications` content is folded into
+// `subDetails` defensively (see `TemplateEditorView.tsx`'s load-time migration and
+// `applyTemplate.ts`'s apply-time fallback, both reading a raw, no-longer-typed field so no old
+// MongoDB document silently loses real spec text); `editableParameters`/item-level
+// `internalNotes`/`visibleToCustomer` have no such fallback — those three are simply gone from any
+// document going forward. Every item is now unconditionally treated as customer-visible.
 export interface TemplateSection { id: string; title: string; description: string; sortOrder: number; items: TemplateItem[]; }
 export interface TemplateTermLine { type: "paymentTerm" | "warrantyTerm" | "taxNote"; text: string; }
 /** Added 2026-07-15 — "excel_import" for the 5 workbook-derived seeds, "manual" for anything
@@ -435,31 +465,30 @@ This is the same non-live-reference guarantee `QuoteLine`/`Product` and `Quote.j
 Conversion rules:
 
 - Each `TemplateSection` becomes one `isSectionHeader: true` divider `QuoteLine`.
-- **An item with `visibleToCustomer: false` is skipped entirely** — added 2026-07-15, second
-  Codex-review fix pass. Previously every item was copied unconditionally regardless of this flag,
-  so marking an item hidden-from-customer in the Template Management editor had no actual effect on
-  an applied quotation. A section whose every item is hidden this way still emits its header line;
-  the pre-existing "don't print a section header with no items following it" PDF rule already covers
-  the resulting empty section without further changes.
-- Each remaining `TemplateItem` becomes one ordinary `QuoteLine`: `description` = `item.name`,
-  `unit`/`qty` copied (`quantity: null` → `qty: 0`), `unitPrice`/`discount` always `0` (never
-  invented, per the "no prices were ever invented" rule above).
-- `subDetails` = `item.specifications` (each non-blank line, one row per line — **2026-07-21**:
-  `QuoteLine.notes`/`.specifications` were removed from the data model entirely as an unused feature,
-  see CHANGELOG.md and [Quotation.md](./Quotation.md) "Per-item sub-details & tags"; `item.
-  specifications` previously joined into that now-gone field, and folds into `subDetails` instead as
-  of this date, so a template item's real spec attributes — e.g. "Material: Steel" — keep reaching
-  the applied quotation and its print output unchanged, just via a different mechanism) **plus**
-  `item.subDetails` (real sub-detail text an admin configured in the editor — **fixed 2026-07-15**,
-  previously silently discarded here even though the editor/API saved it) **plus** one row per
-  `editableParameter`, rendered as fill-in-the-blank text: `"Label: ______ Unit"` (e.g. `"Capacity:
-  ______ CMH"`) — a clear editable prompt, never a fabricated value. Order: specifications first,
-  then the item's own configured sub-details, then generic prompts last.
-- **`internalNotes` (both item-level and template-level) are NEVER copied into `lines`** — dropped
-  entirely by this function, by design, so an internal review comment can never reach a
-  customer-facing quotation or its PDF, even indirectly. (Separately, `Quote.templateSnapshot` — see
-  above — *does* retain them, but purely as an internal, never-rendered audit record; that field is
-  a deliberate exception to this rule, not a contradiction of it.)
+- **Every item is now included, unconditionally** — **2026-07-21**: `TemplateItem.visibleToCustomer`
+  was removed entirely (unused UI, direct user request — see CHANGELOG.md), so the item-skip check
+  that used to sit here (added 2026-07-15, second Codex-review fix pass — "previously every item was
+  copied unconditionally regardless of this flag") is gone too; that pass's fix is effectively
+  superseded by removing the flag it fixed the handling of.
+- Each `TemplateItem` becomes one ordinary `QuoteLine`: `description` = `item.name`, `unit`/`qty`
+  copied (`quantity: null` → `qty: 0`), `unitPrice`/`discount` always `0` (never invented, per the
+  "no prices were ever invented" rule above).
+- `subDetails` = `item.subDetails` (real sub-detail text an admin configured in the editor — **fixed
+  2026-07-15**, previously silently discarded here even though the editor/API saved it) **plus**,
+  defensively, any raw legacy `specifications` content the item might still carry (`legacySpecifications()`
+  in `applyTemplate.ts`, reading a field the `TemplateItem` type no longer declares — see "Data
+  Model" above). **2026-07-21**: `item.specifications`/`.editableParameters` were removed from
+  `TemplateItem` entirely — specifications' real content (e.g. "Material: Steel") is meant to already
+  be sitting in `subDetails` by the time this runs (migrated on next editor-open or seed-data
+  refresh), with the defensive read here as a safety net for any template applied before that
+  happens; the editable-parameter fill-in-the-blank-prompt feature (`"Label: ______ Unit"`) is gone
+  entirely, not replaced.
+- **`internalNotes` is NEVER copied into `lines`** — the template-level field (the item-level
+  equivalent was removed 2026-07-21, see "Data Model" above) is dropped entirely by this function,
+  by design, so an internal review comment can never reach a customer-facing quotation or its PDF,
+  even indirectly. (Separately, `Quote.templateSnapshot` — see above — *does* retain the
+  template-level value, but purely as an internal, never-rendered audit record; that field is a
+  deliberate exception to this rule, not a contradiction of it.)
 - `defaultTerms` of type `paymentTerm` become `Quote.paymentTerms` (newline-joined); `warrantyTerm`
   + `taxNote` lines become `Quote.remarks` (since `Quote` has no dedicated warranty/tax field).
 
@@ -575,28 +604,34 @@ column headers, borderless inputs, a detail row below each item — `ItemEditor`
 stacked div card), and a 3-column Terms block — purely a visual change, no field/handler/validation
 logic moved. See CHANGELOG.md 2026-07-21. **2026-07-21, later same day**: that detail row's
 "ดูรายละเอียด"/"ย่อ" (Details/Collapse) toggle was removed on direct user request — the panel
-(Specifications/Editable Parameters/Internal Notes/visible-to-customer checkbox) now always renders
-below every item instead of requiring a click to reveal it; no field or data was removed, only the
-`expanded` toggle state and its button. See CHANGELOG.md 2026-07-21 (latest of all).
+(Specifications/Editable Parameters/Internal Notes/visible-to-customer checkbox) briefly always
+rendered below every item instead of requiring a click to reveal it (no field or data removed yet at
+that point, only the `expanded` toggle state and its button). **2026-07-21, latest of all — the
+panel itself is now gone**: per a direct follow-up request (after seeing that the panel showed real,
+populated data once always-visible), `specifications`/`editableParameters`/`internalNotes`/
+`visibleToCustomer` were removed from `TemplateItem` entirely, not just hidden — see "Data Model"
+above and CHANGELOG.md. Confirmed via `AskUserQuestion` before implementing, since Specifications
+carried real, live template content (e.g. "Substrate option: SS/SUS tank...") that also feeds an
+applied quotation: pre-existing Specifications content is migrated into `subDetails` (see "Template
+→ Quote Snapshot Semantics" above); Editable Parameters/Internal Notes/visible-to-customer have no
+such migration — an admin's already-typed values for those three are simply gone from the editor
+going forward (old MongoDB documents keep the raw fields untouched, just unused, same as every other
+field-removal in this codebase — no destructive migration ran).
 - **Sections**: add/rename/delete/reorder (up/down buttons — no drag-and-drop dependency in this
   codebase; matches its established "hand-rolled Tailwind, no UI kit" convention).
-- **Items**: add via "เลือกสินค้า" (opens the existing `ProductPickerModal`, copies
-  name/unit/specifications into the item plus a `productSnapshot` — see "Data Model") or "เพิ่ม
-  รายการเอง" (a blank custom item). Each item: name, type (item/subItem/specification), quantity,
-  unit, reorder/duplicate/delete, and an always-visible detail panel for specifications (customer-visible
-  free text — this codebase's existing `TemplateItem` schema has no separate "customer notes"
-  field, so a specification line *is* the customer-visible-notes mechanism; `visibleToCustomer` can
-  still hide an entire item — and, as of 2026-07-15, actually does: see "Template → Quote Snapshot
-  Semantics"), editable parameters (label + unit pairs), and internal notes (visually flagged amber,
-  never shown to the customer). **2026-07-21, pinned sub-details restyle**: `item.subDetails` (also
-  actually reaches the applied quotation as of 2026-07-15, see below) moved out of that expandable
-  panel's shared multi-line textarea into its own per-line "pinned" `<tr>` directly beneath the
-  item's row — gold-tinted highlight, Pin icon, auto-focused input on add — matching the same
-  restyle applied to `LineItemsEditor.tsx` (see [MODULES/Quotation.md](./Quotation.md)). The Pin
-  icon in the item's action column (`item.subDetails.some(s => s.trim())` gates its gold fill) adds
-  a new line; Specifications/Internal Notes keep the original paste-friendly one-line-per-entry
-  textarea (`linesToArray()`) unchanged — only sub-details, the field that maps 1:1 to the reference
-  UI's pinned-line concept, was converted to per-row inputs.
+- **Items**: add via "เลือกสินค้า" (opens the existing `ProductPickerModal`, copies name/unit into
+  the item plus a `productSnapshot` — see "Data Model"; a non-blank `Product.specifications` becomes
+  an initial pinned `subDetails` entry rather than a dedicated field, matching the equivalent
+  quotation-side picker) or "เพิ่มรายการเอง" (a blank custom item). Each item: name, type
+  (item/subItem/specification), quantity, unit, reorder/duplicate/delete, and pinned sub-detail rows
+  — the only remaining per-item "extra content" mechanism (Specifications/Editable
+  Parameters/Internal Notes/visible-to-customer are gone, see above). **2026-07-21, pinned
+  sub-details restyle**: `item.subDetails` (also actually reaches the applied quotation as of
+  2026-07-15, see below) moved out of the (now-removed) expandable panel's shared multi-line
+  textarea into its own per-line "pinned" `<tr>` directly beneath the item's row — gold-tinted
+  highlight, Pin icon, auto-focused input on add — matching the same restyle applied to
+  `LineItemsEditor.tsx` (see [MODULES/Quotation.md](./Quotation.md)). The Pin icon in the item's
+  action column (`item.subDetails.some(s => s.trim())` gates its gold fill) adds a new line.
   **2026-07-15, second Codex-review fix pass — product links are now server-verified**: an
   independent review found that `sanitizeItem()` trusted a caller-submitted `productId`/
   `productSnapshot` verbatim — the UI picker always supplied genuine data, but a direct (authorized)
@@ -605,11 +640,12 @@ below every item instead of requiring a click to reveal it; no field or data was
   `products` record (one query per save, not N+1) *before* sanitizing any item, and `productSnapshot`
   is always rebuilt server-side from that real record — a client-submitted `productSnapshot` is
   never persisted as-is. An unresolvable `productId` (archived, deleted, or fabricated) is silently
-  dropped rather than rejecting the whole save — the item keeps its already-typed name/unit/specs and
-  just becomes an unlinked custom item.
+  dropped rather than rejecting the whole save — the item keeps its already-typed name/unit/subDetails
+  and just becomes an unlinked custom item.
 - **Default Terms**: three grouped lists (payment/warranty/tax), add/remove lines per group.
 - **Template-level internal notes**: a separate free-text list, same customer-hidden guarantee as
-  item-level internal notes.
+  the item-level equivalent used to have (removed 2026-07-21, see "Data Model" above — this
+  template-level field is unaffected).
 
 **Duplicate**: prompts for a new Template Code (pre-filled `<code>-COPY`), calls
 `POST /:id/duplicate`, then opens the new copy directly in the editor — always created
@@ -740,7 +776,9 @@ click.
   `templateSeedData.ts`, and the quote-line conversion rules again for a distinction with no
   behavioral difference from a specification line. `visibleToCustomer` (item-level) still exists as
   a coarser show/hide-the-whole-item toggle. Documented here as a deliberate simplification, not an
-  oversight.
+  oversight. **2026-07-21, moot**: `specifications`/`visibleToCustomer` were both removed from
+  `TemplateItem` entirely a few days later (see "Data Model" above) — `subDetails` is now the one
+  and only per-item "extra content" mechanism, and every item is unconditionally customer-visible.
 - **No version-history/rollback feature.** `version` is a plain string an admin edits by hand; there
   is no way to browse or restore a template's prior content. See "Template Management Module —
   Versioning" above for why this is an intentional, practical choice given that quote-level

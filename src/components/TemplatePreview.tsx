@@ -64,14 +64,9 @@ export function TemplatePreview({ template, compact = false }: { template: Quota
                       {item.name}
                       {item.quantity != null && item.unit ? <span className="text-muted-foreground"> — {item.quantity} {item.unit}</span> : null}
                     </p>
-                    {item.specifications.length > 0 && (
+                    {item.subDetails.length > 0 && (
                       <ul className="text-[11px] text-muted-foreground list-disc list-inside ml-3">
-                        {item.specifications.map((s, i) => <li key={i}>{s}</li>)}
-                      </ul>
-                    )}
-                    {item.editableParameters.length > 0 && (
-                      <ul className="text-[11px] text-[#c9a84c] list-disc list-inside ml-3">
-                        {item.editableParameters.map((p, i) => <li key={i}>{p.label}: ______{p.unit ? ` ${p.unit}` : ""}</li>)}
+                        {item.subDetails.map((s, i) => <li key={i}>{s}</li>)}
                       </ul>
                     )}
                   </li>

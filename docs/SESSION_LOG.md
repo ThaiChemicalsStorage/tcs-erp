@@ -4,6 +4,59 @@
 
 ---
 
+## Session — 2026-07-21 (absolute latest), Remove TemplateItem's Specifications/Params/Notes/visible-to-customer entirely
+
+### What was implemented
+- Direct follow-up to the previous pass (removing just the "ดูรายละเอียด" toggle, keeping the panel's
+  data always-visible): once visible, the user saw the panel held real, live template content (a
+  screenshot showed actual "Substrate option: SS/SUS tank..." spec text and internal sealant-marking
+  notes) and asked for the whole thing removed.
+- Given the real data and that `TemplateItem.specifications` also feeds an applied quotation's line
+  items (a dependency established just a few passes earlier in this same session), used two rounds
+  of `AskUserQuestion` before touching code: confirmed removing all 4 fields (not a subset), and
+  confirmed pre-existing Specifications content should migrate into `subDetails` rather than be lost.
+- Before implementing, traced the full scope by reading `templateSeedData.ts` in detail — discovered
+  a single shared `makeItem()` factory function builds every item across all 5 official templates
+  from a shorthand `ItemDef` (`specs`/`params`/`notes` keys), which meant the ~500-line
+  hand-transcribed seed file needed only ONE function changed, not ~50 individual item literals
+  edited — a much lower-risk implementation path than it first appeared.
+- Implemented real-data safety nets rather than a silent field removal: `TemplateEditorView.tsx`
+  folds legacy `specifications` into `subDetails` the moment an existing template is opened for
+  editing, and `applyTemplate.ts` does the same defensively at apply-time (covering a template
+  applied via the wizard before ever being re-opened in the editor) — both reading a field the type
+  no longer declares, via a runtime cast, clearly commented as a one-time backward-compat measure,
+  not a resurrected feature.
+- Removed the data model fields, the whole detail panel UI, the now-unused
+  `updateParam`/`addParam`/`deleteParam` handlers and `sanitizeParam()`/`TemplateEditableParameter`
+  server-side helpers, and the now-unused i18n keys. Updated `TemplatePreview.tsx`'s full-preview
+  rendering to use `subDetails` instead of the removed fields.
+- `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all
+  pass clean. Verified via a temporary local harness (`TemplateEditorView`, create-new mode, mock
+  product with specifications text) — added a section, picked the product, confirmed its
+  specifications text correctly became a pinned sub-detail row instead of being lost, and that no
+  trace of the removed panel/toggle remains. Harness deleted before committing.
+- Updated `docs/MODULES/QuotationTemplates.md` (substantially — Status header, Data Model code block,
+  Template → Quote Snapshot Semantics, Editor description, and a "moot" note on an old
+  deliberate-decision writeup) and `docs/DATABASE.md`'s `TemplateItem` schema.
+
+### Known limitation
+- Not verified against a live deployment / real MongoDB data — mock-data harness verification only,
+  same sandboxed-environment constraint as every other pass in this log. The migration logic
+  (`migrateLegacySpecifications()`/`legacySpecifications()`) is untested against the actual 5 real
+  templates' real stored content — logically sound and code-reviewed, but not run against production.
+- Editable Parameters/Internal Notes/visible-to-customer values already saved on real templates stay
+  in the raw MongoDB documents (no destructive migration ran) but are permanently unreachable from
+  the app now — an explicitly confirmed tradeoff, not an oversight, but worth knowing if anyone asks
+  "where did the internal note on template X go."
+
+### Recommendation for next session
+- If it's ever useful to recover the dropped Editable Parameters/Internal Notes data for real
+  templates, it's still sitting untouched in MongoDB — a one-off read-only script could surface it
+  without any code changes, same as the equivalent note left for the `QuoteLine.notes`/
+  `.specifications` removal earlier this session.
+
+---
+
 ## Session — 2026-07-21 (latest of all), Remove Template item editor's "ดูรายละเอียด" toggle
 
 ### What was implemented

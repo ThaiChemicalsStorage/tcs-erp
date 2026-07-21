@@ -1,6 +1,5 @@
 import type {
-  QuotationTemplate, TemplateSection, TemplateItem, TemplateItemType,
-  TemplateEditableParameter, TemplateTermLine,
+  QuotationTemplate, TemplateSection, TemplateItem, TemplateItemType, TemplateTermLine,
 } from "../../src/lib/quotationTemplates.js";
 
 /**
@@ -58,10 +57,14 @@ interface ItemDef {
   notes?: string[];
 }
 
-function makeParam(p: ParamDef): TemplateEditableParameter {
-  return { label: p.label, value: p.value ?? "", unit: p.unit ?? "", editable: true };
-}
-
+// 2026-07-21: `specifications`/`editableParameters`/`internalNotes`/`visibleToCustomer` were removed
+// from `TemplateItem` entirely (unused UI, direct user request — see CHANGELOG.md). `def.specs` —
+// real, hand-transcribed spec content from the source Excel workbook, not placeholder data — now
+// folds directly into `subDetails` instead of the removed `specifications` field, so it keeps
+// reaching an applied quotation's line items unchanged. `def.params`/`def.notes` are kept on `ItemDef`
+// and still populated throughout this file's item definitions below (preserving the original
+// row-by-row transcription and its "exactly 3 internal-note rows" documentation above verbatim,
+// should this data ever be needed again) but are no longer read into the built `TemplateItem`.
 function makeItem(templateCode: string, itemType: TemplateItemType, def: ItemDef, sortOrder: number): TemplateItem {
   return {
     id: itemId(templateCode),
@@ -71,11 +74,7 @@ function makeItem(templateCode: string, itemType: TemplateItemType, def: ItemDef
     description: def.name,
     quantity: def.qty ?? null,
     unit: def.unit ?? "",
-    specifications: def.specs ?? [],
-    subDetails: [],
-    editableParameters: (def.params ?? []).map(makeParam),
-    internalNotes: def.notes ?? [],
-    visibleToCustomer: true,
+    subDetails: def.specs ?? [],
     sortOrder,
   };
 }

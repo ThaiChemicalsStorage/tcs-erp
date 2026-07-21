@@ -27,16 +27,6 @@ import { apiFetch } from "./apiClient.js";
  * reference, even by type — precisely to keep this file safe to type-import.
  */
 
-/** A single editable placeholder extracted from the source workbook (e.g. "Capacity: xxxxxx CMH")
- * — never a final value. `value` is always blank at template-definition time; the Sales user fills
- * in the real project value after the template is applied to a quotation. */
-export interface TemplateEditableParameter {
-  label: string;
-  value: string;
-  unit: string;
-  editable: true;
-}
-
 export type TemplateItemType = "item" | "subItem" | "specification";
 
 export interface TemplateItem {
@@ -51,28 +41,25 @@ export interface TemplateItem {
   description: string;
   quantity: number | null;
   unit: string;
-  /** Plain specification/description lines with concrete (non-placeholder) values — shown to the customer. */
-  specifications: string[];
-  /** Free-text sub-detail lines (matches `QuoteLine.subDetails`' shape once copied into a quotation). */
+  /** Free-text sub-detail lines (matches `QuoteLine.subDetails`' shape once copied into a
+   * quotation). **2026-07-21**: this item's `specifications`/`editableParameters`/`internalNotes`/
+   * `visibleToCustomer` fields were removed entirely (unused UI, direct user request — see
+   * CHANGELOG.md); any pre-existing `specifications` content is folded into this array instead (see
+   * `TemplateEditorView.tsx`'s load-time migration and `applyTemplate.ts`'s defensive read), so
+   * customer-visible spec text keeps working through this one remaining mechanism. */
   subDetails: string[];
-  editableParameters: TemplateEditableParameter[];
-  /** Internal review comments / staff-only process notes found in the source row — never copied
-   * into a quotation's customer-facing content or printed. See docs/MODULES/QuotationTemplates.md
-   * "Internal vs. customer-facing content." */
-  internalNotes: string[];
   /** Optionally links to an existing Product Master record — set only when a real match exists;
    * never used to auto-create new Product Master records from template rows. */
   productId?: string;
   /** A one-time copy of the linked product's catalog fields, taken at the moment it was added to
    * this template item (Template Management "Select Existing Product") — informational context for
-   * whoever edits the template later, never a live reference. `name`/`unit`/`specifications` above
+   * whoever edits the template later, never a live reference. `name`/`unit`/`subDetails` above
    * are the actual editable copy the template carries; this is purely provenance metadata (e.g. "this
    * item started from Product ABC-123, catalog price ฿500"). Never read by
    * `applyTemplateToQuoteDraft()` — templates never carry a price, matching the "no prices unless
    * the source explicitly gave one" rule; `unitPrice` on the resulting quote line is always 0
    * regardless of what a linked product's catalog price was. */
   productSnapshot?: { code: string; name: string; unit: string; defaultPrice: number };
-  visibleToCustomer: boolean;
   sortOrder: number;
 }
 

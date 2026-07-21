@@ -22,9 +22,25 @@ function newId(): string {
 function emptyItem(sortOrder: number): TemplateItem {
   return {
     id: newId(), itemType: "item", itemCode: String(sortOrder + 1), name: "", description: "",
-    quantity: null, unit: "", specifications: [], subDetails: [], editableParameters: [],
-    internalNotes: [], visibleToCustomer: true, sortOrder,
+    quantity: null, unit: "", subDetails: [], sortOrder,
   };
+}
+
+/** `specifications` was removed from `TemplateItem` entirely 2026-07-21 (unused UI, direct user
+ * request — see CHANGELOG.md); any pre-existing content (real spec text like "Substrate option:
+ * SS/SUS tank...", not placeholder data) is folded into `subDetails` here, once, the moment an
+ * existing template is opened for editing — so it shows up immediately as pinned rows instead of
+ * silently disappearing, and the next save naturally drops the now-unused raw field. Reads the raw
+ * value defensively since the type no longer declares it. */
+function migrateLegacySpecifications(sections: TemplateSection[]): TemplateSection[] {
+  return sections.map((sec) => ({
+    ...sec,
+    items: sec.items.map((it) => {
+      const raw = (it as unknown as { specifications?: unknown }).specifications;
+      const legacySpecs = Array.isArray(raw) ? raw.filter((s): s is string => typeof s === "string" && s.trim() !== "") : [];
+      return legacySpecs.length === 0 ? it : { ...it, subDetails: [...legacySpecs, ...it.subDetails] };
+    }),
+  }));
 }
 function emptySection(sortOrder: number): TemplateSection {
   return { id: newId(), title: "", description: "", sortOrder, items: [] };
@@ -36,11 +52,12 @@ function emptyDraft(jobTypeCode: string, jobTypeName: string): TemplateContentDr
   };
 }
 
-/** Multi-line-textarea <-> string[] helper — every free-text list field (specifications,
- * subDetails, internalNotes, template-level internalNotes) edits as one line-per-entry textarea
- * rather than N separate add/remove rows, matching how an admin would naturally paste/type a list
- * of scope lines. Blank lines are dropped on blur/save (see the server's own `sanitizeStringArray`,
- * mirrored here so the on-screen count doesn't visibly disagree with what gets saved). */
+/** Multi-line-textarea <-> string[] helper — a free-text list field edits as one line-per-entry
+ * textarea rather than N separate add/remove rows, matching how an admin would naturally
+ * paste/type a list of scope lines. Blank lines are dropped on blur/save (see the server's own
+ * `sanitizeStringArray`, mirrored here so the on-screen count doesn't visibly disagree with what
+ * gets saved). **2026-07-21**: item-level specifications/internalNotes were removed entirely (see
+ * CHANGELOG.md) — this helper is now only used for the template-level internal notes field below. */
 function linesToArray(text: string): string[] {
   return text.split("\n").map((s) => s.trim()).filter(Boolean);
 }
@@ -50,9 +67,11 @@ function linesToArray(text: string): string[] {
  * quotation document's look — navy/gold header band, meta grid, table-style line items — so editing
  * a template reads like a preview of the document it produces rather than a generic settings form).
  * Sections/items CRUD, reorder (up/down — no drag-and-drop dependency in this codebase), "select
- * existing product" vs "add custom item," specifications/sub-details/editable parameters/internal
- * notes per item, and payment/warranty/tax default terms. See
- * docs/MODULES/QuotationTemplates.md "Template Management Module — Editor."
+ * existing product" vs "add custom item," per-item pinned sub-details, and payment/warranty/tax
+ * default terms. **2026-07-21**: per-item specifications/editable parameters/internal notes/
+ * visible-to-customer were removed entirely (unused UI, direct user request) — sub-details is now
+ * the only per-item "extra content" mechanism, matching the same restyle already applied to the
+ * live quotation editor. See docs/MODULES/QuotationTemplates.md "Template Management Module — Editor."
  */
 export function TemplateEditorView({
   templateId,
@@ -93,7 +112,7 @@ export function TemplateEditorView({
         setDraft({
           templateCode: full.templateCode, templateName: full.templateName, jobTypeCode: full.jobTypeCode,
           jobTypeName: full.jobTypeName, description: full.description, version: full.version,
-          sections: full.sections, defaultTerms: full.defaultTerms, internalNotes: full.internalNotes,
+          sections: migrateLegacySpecifications(full.sections), defaultTerms: full.defaultTerms, internalNotes: full.internalNotes,
           isActive: full.isActive,
         });
         setOriginalActive(full.isActive);
@@ -145,7 +164,7 @@ export function TemplateEditorView({
       name: product.name,
       description: product.name,
       unit: product.unit,
-      specifications: product.specifications ? [product.specifications] : [],
+      subDetails: product.specifications.trim() ? [product.specifications.trim()] : [],
       productId: product.id,
       productSnapshot: { code: product.code, name: product.name, unit: product.unit, defaultPrice: product.defaultPrice },
     });
@@ -420,12 +439,6 @@ function ItemEditor({
   const { t } = useI18n();
   const [pendingFocusIndex, setPendingFocusIndex] = useState<number | null>(null);
 
-  const updateParam = (paramIndex: number, field: "label" | "unit", value: string) => {
-    onChange((it) => ({ ...it, editableParameters: it.editableParameters.map((p, i) => (i === paramIndex ? { ...p, [field]: value } : p)) }));
-  };
-  const addParam = () => onChange((it) => ({ ...it, editableParameters: [...it.editableParameters, { label: "", value: "", unit: "", editable: true }] }));
-  const deleteParam = (paramIndex: number) => onChange((it) => ({ ...it, editableParameters: it.editableParameters.filter((_, i) => i !== paramIndex) }));
-
   const addSubDetail = () => {
     setPendingFocusIndex(item.subDetails.length);
     onChange((it) => ({ ...it, subDetails: [...it.subDetails, ""] }));
@@ -515,50 +528,6 @@ function ItemEditor({
           </td>
         </tr>
       ))}
-
-      <tr className="border-b border-border/50 bg-muted/10">
-        <td colSpan={6} className="px-4 py-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">{t("templates.form.specifications")}</label>
-              <textarea
-                value={item.specifications.join("\n")}
-                onChange={(e) => onChange((it) => ({ ...it, specifications: linesToArray(e.target.value) }))}
-                rows={2}
-                className="w-full text-[11px] text-foreground bg-card border border-border rounded px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y"
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] text-muted-foreground uppercase tracking-widest">{t("templates.form.editableParameters")}</label>
-                <button onClick={addParam} className="text-[10px] text-[#c9a84c] hover:text-[#f0c040] transition-colors">+ {t("common.add")}</button>
-              </div>
-              <div className="space-y-1">
-                {item.editableParameters.map((p, i) => (
-                  <div key={i} className="flex items-center gap-1.5">
-                    <input value={p.label} onChange={(e) => updateParam(i, "label", e.target.value)} placeholder={t("templates.form.paramLabel")} className="flex-1 text-[11px] text-foreground bg-card border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors" />
-                    <input value={p.unit} onChange={(e) => updateParam(i, "unit", e.target.value)} placeholder={t("templates.form.unit")} className="w-20 text-[11px] text-foreground bg-card border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors" />
-                    <button onClick={() => deleteParam(i)} className="p-0.5 text-muted-foreground hover:text-[#e05252] transition-colors"><X size={11} /></button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">{t("templates.form.itemInternalNotes")}</label>
-              <textarea
-                value={item.internalNotes.join("\n")}
-                onChange={(e) => onChange((it) => ({ ...it, internalNotes: linesToArray(e.target.value) }))}
-                rows={2}
-                className="w-full text-[11px] text-foreground bg-card border border-[#e08a3c]/40 rounded px-2 py-1.5 outline-none focus:border-[#e08a3c]/60 transition-colors resize-y"
-              />
-            </div>
-          </div>
-          <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-foreground mt-2.5">
-            <input type="checkbox" checked={item.visibleToCustomer} onChange={(e) => onChange((it) => ({ ...it, visibleToCustomer: e.target.checked }))} className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c]" />
-            {t("templates.form.visibleToCustomer")}
-          </label>
-        </td>
-      </tr>
     </Fragment>
   );
 }

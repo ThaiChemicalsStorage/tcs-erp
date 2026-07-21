@@ -1,5 +1,5 @@
 import { newLineId, newSubDetailId, type QuoteLine } from "../../lib/quotes";
-import type { QuotationTemplate, TemplateTermLine } from "../../lib/quotationTemplates";
+import type { QuotationTemplate, TemplateItem, TemplateTermLine } from "../../lib/quotationTemplates";
 
 /** Result of copying a Quotation Template into a new quotation draft — see
  * `docs/MODULES/QuotationTemplates.md` "Template Snapshot in Quotation." Deliberately lives here
@@ -16,6 +16,19 @@ function termsByType(terms: TemplateTermLine[], type: TemplateTermLine["type"]):
   return terms.filter((t) => t.type === type).map((t) => t.text);
 }
 
+/** `specifications`/`editableParameters`/`visibleToCustomer` were removed from `TemplateItem`
+ * entirely 2026-07-21 (unused UI, direct user request — see CHANGELOG.md); `specifications` content
+ * is meant to already be folded into `subDetails` by then (see `TemplateEditorView.tsx`'s load-time
+ * migration, and `templateSeedData.ts`'s `makeItem()` for freshly-imported templates). This reads a
+ * raw, no-longer-typed `specifications` array defensively, purely as a one-time safety net for any
+ * template document that reaches this function (e.g. applied directly via the wizard) before ever
+ * being re-opened/re-saved in the editor — so real, already-configured spec text (e.g. "Material:
+ * Steel") can never silently vanish from an applied quotation just because of this removal. */
+function legacySpecifications(item: TemplateItem): string[] {
+  const raw = (item as unknown as { specifications?: unknown }).specifications;
+  return Array.isArray(raw) ? raw.filter((s): s is string => typeof s === "string" && s.trim() !== "") : [];
+}
+
 /**
  * Converts a full `QuotationTemplate` (fetched via `GET /api/quotation-templates/:id`) into a
  * `QuoteLine[]` + `paymentTerms`/`remarks` starting point for a new quotation — a one-time copy,
@@ -27,30 +40,22 @@ function termsByType(terms: TemplateTermLine[], type: TemplateTermLine["type"]):
  *   `LineItemsEditor.tsx`/`PrintDocument.tsx`).
  * - An item/subItem becomes one ordinary `QuoteLine`: `description`/`unit`/`qty` copied directly
  *   (quantity `null` → `0`, an editable starting point, never invented), `unitPrice`/`discount`
- *   always `0` (this codebase never invents prices), and `item.specifications` **plus**
- *   `item.subDetails` **plus** every editable parameter folded into `subDetails` as individual,
- *   freely editable pinned rows (matching how `subDetails` already works for any other line) — in
- *   that order: specifications first (an item's real spec attributes, e.g. "Material: Steel"), then
- *   an admin's own configured sub-detail lines, then the generic fill-in-the-blank prompts last.
- *   **2026-07-21**: `QuoteLine.notes`/`.specifications` were removed from the data model entirely
- *   (unused feature, removed per user request — see CHANGELOG.md); `item.specifications` now folds
- *   into `subDetails` here instead of a dedicated `specifications` field, so this customer-visible
- *   template content keeps reaching the applied quotation (and its print output) unchanged, just
- *   via the surviving mechanism. **2026-07-15, second Codex-review fix pass (High Priority #3)**:
+ *   always `0` (this codebase never invents prices), and `item.subDetails` copied directly as
+ *   individual, freely editable pinned rows (matching how `subDetails` already works for any other
+ *   line) — plus, defensively, any raw legacy `specifications` content the item might still carry
+ *   (see `legacySpecifications()` above). **2026-07-21**: `item.specifications`/
+ *   `.editableParameters`/`.visibleToCustomer` were removed from `TemplateItem` entirely (unused
+ *   UI, direct user request — see CHANGELOG.md); every item is now always included (no more
+ *   hide-from-customer gate) and the editable-parameter fill-in-the-blank prompts are gone. Real
+ *   specifications content (e.g. "Material: Steel") keeps reaching the applied quotation via
+ *   `subDetails` regardless — either already migrated there by the time this runs, or picked up by
+ *   the defensive fallback. **2026-07-15, second Codex-review fix pass (High Priority #3)**:
  *   `item.subDetails` — real sub-detail text an admin configured in the Template Management editor
- *   — was previously silently discarded here; only editable-parameter prompts were copied. Fixed:
- *   both are now included.
- * - **An item with `visibleToCustomer: false` is skipped entirely** (same pass, same finding) —
- *   previously every item was copied unconditionally regardless of this flag, so marking an item
- *   "hidden from customer documents" in the editor had no actual effect on an applied quotation. A
- *   section whose every item ends up hidden still gets its header line here; `PrintDocument.tsx`
- *   already silently omits a section header with no items following it, so this doesn't need
- *   special-casing here too.
- * - An editable parameter renders as `"Label: ______ Unit"` — a clear fill-in-the-blank prompt,
- *   never a real value (`editableParameter.value` is always blank in the source template anyway).
- * - **Internal notes are never copied** — `item.internalNotes`/`template.internalNotes` are
- *   dropped entirely here, by design, so they can never reach a customer-facing quotation or its
- *   PDF. See "Internal Notes vs Customer-Facing Content" in docs/MODULES/QuotationTemplates.md.
+ *   — was previously silently discarded here; only editable-parameter prompts were copied. Fixed.
+ * - **Internal notes are never copied** — `template.internalNotes` (template-level; the per-item
+ *   equivalent was removed 2026-07-21, see above) is dropped entirely here, by design, so it can
+ *   never reach a customer-facing quotation or its PDF. See "Internal Notes vs Customer-Facing
+ *   Content" in docs/MODULES/QuotationTemplates.md.
  * - `defaultTerms` become `paymentTerms` (payment-term lines only, newline-joined into `Quote`'s
  *   single `paymentTerms` text field) and `remarks` (warranty + tax-note lines, since `Quote` has
  *   no dedicated warranty/tax field — `remarks` is the closest existing free-text field for
@@ -66,14 +71,9 @@ export function applyTemplateToQuoteDraft(template: QuotationTemplate): AppliedT
     });
 
     for (const item of section.items) {
-      if (!item.visibleToCustomer) continue;
       const subDetails = [
-        ...item.specifications.filter((text) => text.trim()).map((text) => ({ id: newSubDetailId(), text })),
+        ...legacySpecifications(item).map((text) => ({ id: newSubDetailId(), text })),
         ...item.subDetails.map((text) => ({ id: newSubDetailId(), text })),
-        ...item.editableParameters.map((p) => ({
-          id: newSubDetailId(),
-          text: `${p.label}: ______${p.unit ? ` ${p.unit}` : ""}`,
-        })),
       ];
       lines.push({
         id: newLineId(),

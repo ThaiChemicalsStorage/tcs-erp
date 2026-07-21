@@ -13,7 +13,7 @@ import type { Permission } from "../../src/lib/permissions.js";
 import type { Product } from "../../src/lib/products.js";
 import type {
   TemplateImportReport, QuotationTemplateSummary, QuotationTemplate,
-  TemplateSection, TemplateItem, TemplateTermLine, TemplateEditableParameter, TemplateItemType,
+  TemplateSection, TemplateItem, TemplateTermLine, TemplateItemType,
 } from "../../src/lib/quotationTemplates.js";
 
 /**
@@ -72,9 +72,10 @@ function computeSourceHash(content: {
   return createHash("sha256").update(canonical).digest("hex");
 }
 
+// 2026-07-21: item-level internalNotes was removed from TemplateItem entirely (see CHANGELOG.md) —
+// this now only counts template-level internal notes, which every current seed leaves empty.
 function countInternalNotes(seed: TemplateSeed): number {
-  return seed.internalNotes.length
-    + seed.sections.reduce((s, sec) => s + sec.items.reduce((s2, it) => s2 + it.internalNotes.length, 0), 0);
+  return seed.internalNotes.length;
 }
 
 /** The real idempotent import/upsert — re-running it against unchanged `QUOTATION_TEMPLATE_SEEDS`
@@ -243,10 +244,6 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
  * src/lib/quotationTemplates.ts. Defensive but not exhaustively strict (an admin-only authenticated
  * tool, not customer-facing input): coerces types, drops malformed entries, ensures every
  * section/item has a stable non-empty id (regenerating one server-side if the client omitted it). */
-function sanitizeParam(raw: unknown): TemplateEditableParameter {
-  const p = (raw ?? {}) as Partial<TemplateEditableParameter>;
-  return { label: String(p.label ?? ""), value: "", unit: String(p.unit ?? ""), editable: true };
-}
 function sanitizeStringArray(raw: unknown): string[] {
   return Array.isArray(raw) ? raw.filter((s): s is string => typeof s === "string" && s.trim().length > 0) : [];
 }
@@ -300,11 +297,7 @@ function sanitizeItem(raw: unknown, sortOrder: number, productMap: Map<string, P
     description: String(it.description ?? it.name ?? "").trim(),
     quantity: typeof it.quantity === "number" && Number.isFinite(it.quantity) ? it.quantity : null,
     unit: String(it.unit ?? ""),
-    specifications: sanitizeStringArray(it.specifications),
     subDetails: sanitizeStringArray(it.subDetails),
-    editableParameters: Array.isArray(it.editableParameters) ? it.editableParameters.map(sanitizeParam) : [],
-    internalNotes: sanitizeStringArray(it.internalNotes),
-    visibleToCustomer: it.visibleToCustomer !== false,
     sortOrder,
   };
   if (typeof it.productId === "string" && it.productId) {

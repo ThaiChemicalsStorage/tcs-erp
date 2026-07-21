@@ -4,6 +4,80 @@
 
 ---
 
+## 2026-07-21 (absolute latest) — Remove TemplateItem.specifications/.editableParameters/.internalNotes/.visibleToCustomer entirely
+
+**Feature**: Direct follow-up to the "ดูรายละเอียด" toggle removal above ("เอาพวกนี้ออกไปด้วย" — remove
+these too, with a screenshot of the now-always-visible panel). Once the panel was visible without a
+click, the user saw it held real, populated data — actual template content like "Substrate option:
+SS/SUS tank... ระบุพื้นที่และขนาดถัง (DxH) (Sq.m./mm.)" and internal notes about sealant markings —
+and asked for the whole panel gone, not just the toggle. Given the real business data and that
+`TemplateItem.specifications` also feeds an applied quotation's line items (via `applyTemplate.ts`,
+from the earlier same-day `QuoteLine.notes`/`.specifications` removal pass), confirmed scope via two
+rounds of `AskUserQuestion` before touching anything: (1) remove all four fields — Specifications,
+Editable Parameters, Internal Notes, and the visible-to-customer checkbox — not a subset; (2) fold
+pre-existing Specifications content into `subDetails` rather than lose it, same remap pattern as the
+earlier pass.
+
+**Data model** (`src/lib/quotationTemplates.ts`): removed `specifications: string[]`,
+`editableParameters: TemplateEditableParameter[]` (+ deleted the now-unused
+`TemplateEditableParameter` interface), `internalNotes: string[]`, and `visibleToCustomer: boolean`
+from `TemplateItem` entirely.
+
+**Migration for real, populated data**: `TemplateItem.specifications` wasn't unused test data — the
+5 official Excel-derived templates (`api/_lib/templateSeedData.ts`) and any admin-edited templates
+carry real spec text there. Two safety nets, both reading the field defensively via a runtime cast
+since the type no longer declares it: (1) `TemplateEditorView.tsx` now folds any legacy
+`specifications` content into `subDetails` the moment an existing template is opened for editing
+(`migrateLegacySpecifications()`), so it shows up immediately as pinned rows and the next save
+naturally drops the raw field; (2) `applyTemplate.ts`'s `legacySpecifications()` does the same fold
+at apply-time, as a fallback for any template applied via the Create Quotation wizard before it's
+ever been re-opened/re-saved in the editor. `api/_lib/templateSeedData.ts`'s shared `makeItem()`
+factory (used by every item definition across all 5 templates) now folds its `def.specs` shorthand
+directly into `subDetails` at the source — the next `POST /api/quotation-templates/import` run will
+pick this up automatically via the existing idempotent-import hash-gate (the content hash changes,
+so it reports `updated`, not `skipped`, for these 5). `def.params`/`def.notes` (editable-parameter
+and internal-note shorthand) are left in place throughout the 500+ line seed file for traceability
+against the source Excel workbook, but are simply no longer read into the built `TemplateItem`.
+
+**Editor** (`TemplateEditorView.tsx`): removed the entire detail panel (Specifications textarea,
+Editable Parameters list + add button, Internal Notes textarea, visible-to-customer checkbox) along
+with `updateParam`/`addParam`/`deleteParam`. `emptyItem()` and `addProductItem()` (the "select
+existing product" flow) updated to match — a product's `specifications` text now becomes an initial
+pinned `subDetails` entry, same as the equivalent quotation-side product picker.
+
+**Apply-to-quotation** (`applyTemplate.ts`): every item is now unconditionally included (the
+`visibleToCustomer` hide-from-customer gate is gone); the editable-parameter fill-in-the-blank-prompt
+feature (`"Label: ______ Unit"`) is gone entirely, not replaced.
+
+**Server** (`api/_lib/quotationTemplatesHandler.ts`): `sanitizeItem()` no longer reads/writes the
+four removed fields; deleted the now-unused `sanitizeParam()` helper; `countInternalNotes()` now
+only counts template-level notes (the item-level sum it used to add is gone).
+
+**Preview** (`src/components/TemplatePreview.tsx`): the full-preview item list now renders
+`item.subDetails` instead of separate `item.specifications`/`.editableParameters` bullet lists.
+
+**Files Modified**: `src/lib/quotationTemplates.ts`, `src/pages/templates/TemplateEditorView.tsx`,
+`src/pages/quotation/applyTemplate.ts`, `api/_lib/quotationTemplatesHandler.ts`,
+`api/_lib/templateSeedData.ts`, `src/components/TemplatePreview.tsx`, `src/lib/i18n.tsx`,
+`docs/MODULES/QuotationTemplates.md`, `docs/DATABASE.md`
+
+**Files Removed**: none
+
+**Reason**: Direct user request, after seeing the real data the always-visible panel exposed.
+
+**Notes**: `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run
+build` all pass clean. Browser-verified via a temporary local harness mounting `TemplateEditorView`
+(create-new mode) with a mock product carrying specifications text — added a section and picked the
+product, confirmed its specifications text correctly became a pinned sub-detail row (not lost) and
+no trace of the removed panel/toggle remains in the action column. Harness deleted before
+committing. **Accepted, explicitly confirmed data tradeoff**: Editable Parameters/Internal
+Notes/visible-to-customer values already saved on real templates in MongoDB stay in the raw document
+(no migration/deletion ran, consistent with this codebase's established pattern for prior field
+removals) but are no longer surfaced or read anywhere in the app; only Specifications content is
+actively rescued via the two defensive folds described above.
+
+---
+
 ## 2026-07-21 (latest of all) — Quotation Template item editor: remove the "ดูรายละเอียด" expand toggle
 
 **Feature**: Direct user request ("ช่วยเอา ดูรายละเอียด ในหน้า Template ใบเสนอราคาออกไปด้วย" — remove
