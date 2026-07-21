@@ -4,6 +4,24 @@
 
 ---
 
+## Session — 2026-07-21 (yet later), Quotation typography hierarchy fix
+
+### What was implemented
+- Direct follow-up to the same-day readability pass: user said the result now felt "fonts มันใหญ่แปลกๆ" (fonts weirdly big) and asked for it to look nicer, with no new screenshot this time.
+- Diagnosed by grepping the actual current `text-sm` count in `QuoteDocument.tsx` (65 instances) before touching anything — confirmed the earlier pass had made almost the *entire* page one uniform text size (buttons, labels, badges, and real content were all `text-sm`), which reads as flat/heavy even though no single element is objectively huge. This didn't need new user input to diagnose; the previous mechanical find-replace was the traceable root cause.
+- Went through every remaining `text-sm` instance in all 4 affected files individually (not another blanket rule) and split them into two intentional tiers: chrome (labels, buttons, badges, fine print) back to `text-xs`; actual content (input values, table data, totals) stayed `text-sm` — preserving the original readability win while restoring visual hierarchy.
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Verified visually via a temporary local harness mounting the full `QuoteDocument` — confirmed buttons are compact again and labels read smaller/muted than their values; harness deleted before committing.
+- Updated `docs/CHANGELOG.md` and amended (not duplicated) the relevant `docs/UI_GUIDELINES.md` entry from the earlier same-day pass to describe the corrected end state.
+- This work was briefly interrupted by a `/doctor` health-check run (separate task, unrelated to this project's code — see the doctor's own report/summary in-conversation, not duplicated here since it's about the Claude Code tool itself, not this app) — resumed cleanly afterward from where it left off.
+
+### Known limitation
+- Not verified against a live deployment — mock-data harness verification only, same sandboxed-environment constraint as every other pass in this log.
+
+### Recommendation for next session
+- If the user asks for a similar readability pass on another page, apply the same two-tier split (chrome vs. content) deliberately from the start, rather than a single mechanical find-replace — that approach is what caused this rework.
+
+---
+
 ## Session — 2026-07-21 (latest), Remove QuoteLine.notes/.specifications entirely
 
 ### What was implemented

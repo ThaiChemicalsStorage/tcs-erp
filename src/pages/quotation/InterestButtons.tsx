@@ -8,7 +8,7 @@ export function InterestButtons({ value, onChange }: { value: QuoteInterest; onC
     <div className="flex items-center gap-1.5">
       <button
         onClick={(e) => { e.stopPropagation(); onChange(value === "น่าสนใจ" ? null : "น่าสนใจ"); }}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold border transition-all duration-150 ${
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 ${
           value === "น่าสนใจ"
             ? "bg-[#2aa36b] text-white border-[#2aa36b] shadow-sm"
             : "bg-transparent text-muted-foreground border-border hover:border-[#2aa36b] hover:text-[#2aa36b]"
@@ -19,7 +19,7 @@ export function InterestButtons({ value, onChange }: { value: QuoteInterest; onC
       </button>
       <button
         onClick={(e) => { e.stopPropagation(); onChange(value === "ไม่น่าสนใจ" ? null : "ไม่น่าสนใจ"); }}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold border transition-all duration-150 ${
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-150 ${
           value === "ไม่น่าสนใจ"
             ? "bg-[#e05252] text-white border-[#e05252] shadow-sm"
             : "bg-transparent text-muted-foreground border-border hover:border-[#e05252] hover:text-[#e05252]"

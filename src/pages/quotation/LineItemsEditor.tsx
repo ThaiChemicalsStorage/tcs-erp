@@ -190,13 +190,13 @@ export function LineItemsEditor({
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
         <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.lineItems.title")}</p>
         <div className="flex items-center gap-2">
-          <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
+          <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
             <PackageSearch size={12} /> {t("quotation.lineItems.pickFromCatalog")}
           </button>
-          <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
+          <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
             <Layers size={12} /> {t("quotation.lineItems.addSection")}
           </button>
-          <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
+          <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
             <Plus size={12} /> {t("quotation.lineItems.addManual")}
           </button>
         </div>

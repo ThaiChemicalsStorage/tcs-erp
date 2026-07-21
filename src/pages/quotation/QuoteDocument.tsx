@@ -411,7 +411,7 @@ export function QuoteDocument({
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       {/* Toolbar */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("quotation.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -420,14 +420,14 @@ export function QuoteDocument({
         </span>
 
         {isDetail && (
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium ${statusStyle[quoteStatus]}`}>
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[quoteStatus]}`}>
             {statusIcon[quoteStatus]} {t(statusLabelKey[quoteStatus])}
           </span>
         )}
 
         {isDetail && permissions.canEdit && (
           <div className="flex items-center gap-2 ml-1 pl-3 border-l border-border">
-            <span className="text-sm text-muted-foreground">{t("quotation.interestLabel")}</span>
+            <span className="text-xs text-muted-foreground">{t("quotation.interestLabel")}</span>
             <InterestButtons value={quote!.interest} onChange={onInterestChange} />
           </div>
         )}
@@ -439,7 +439,7 @@ export function QuoteDocument({
               onClick={handlePrintClick}
               disabled={!validation.valid}
               title={!validation.valid ? BLOCKED_TOOLTIP : undefined}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!validation.valid ? "opacity-40 cursor-not-allowed hover:border-border hover:text-muted-foreground" : ""}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!validation.valid ? "opacity-40 cursor-not-allowed hover:border-border hover:text-muted-foreground" : ""}`}
             >
               <Printer size={13} /> {t("quotation.printPdf")}
             </button>
@@ -448,63 +448,63 @@ export function QuoteDocument({
             <MetricInfoTooltip label={t("quotation.printHint.label")} text={t("quotation.printHint.text")} />
           )}
           {isDetail && permissions.canDuplicate && (
-            <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
               <Copy size={13} /> {t("quotation.duplicateAction")}
             </button>
           )}
           {isDetail && canViewScopeOfWork && (existingScopeOfWork || canCreateScopeOfWork) && (
-            <button onClick={handleScopeOfWorkClick} disabled={scopeOfWorkBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={handleScopeOfWorkClick} disabled={scopeOfWorkBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <ClipboardList size={13} /> {existingScopeOfWork ? "เปิด / แก้ไข Scope of Work" : "สร้าง Scope of Work"}
             </button>
           )}
           {!disabled && (
-            <button onClick={() => save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast"))} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button onClick={() => save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast"))} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
               <Save size={13} /> {mode === "new" ? t("quotation.saveDraft") : t("common.save")}
             </button>
           )}
 
           {permissions.canSubmit && (
-            <button onClick={() => guardedWorkflowAction("submitted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
+            <button onClick={() => guardedWorkflowAction("submitted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <Send size={13} /> {t("quotation.action.submitted")}
             </button>
           )}
           {permissions.canApprove && (
-            <button onClick={() => guardedWorkflowAction("approved")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
+            <button onClick={() => guardedWorkflowAction("approved")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <ThumbsUp size={13} /> {t("quotation.action.approved")}
             </button>
           )}
           {permissions.canReject && (
-            <button onClick={() => openAction("rejected")} className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors">
+            <button onClick={() => openAction("rejected")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors">
               <ThumbsDown size={13} /> {t("quotation.action.rejectBtn")}
             </button>
           )}
           {permissions.canSendToCustomer && (
-            <button onClick={() => guardedWorkflowAction("sent_to_customer")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#3b6fc9] text-white rounded-lg font-semibold hover:bg-[#2f5aa3] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
+            <button onClick={() => guardedWorkflowAction("sent_to_customer")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#3b6fc9] text-white rounded-lg font-semibold hover:bg-[#2f5aa3] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <Send size={13} /> {t("quotation.action.sentToCustomer")}
             </button>
           )}
           {permissions.canMarkCustomerAccepted && (
-            <button onClick={() => guardedWorkflowAction("customer_accepted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#1f9d8a] text-white rounded-lg font-semibold hover:bg-[#188577] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
+            <button onClick={() => guardedWorkflowAction("customer_accepted")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#1f9d8a] text-white rounded-lg font-semibold hover:bg-[#188577] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <CheckCircle2 size={13} /> {t("quotation.action.customerAccepted")}
             </button>
           )}
           {permissions.canMarkCustomerRejected && (
-            <button onClick={() => guardedWorkflowAction("customer_rejected")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#e08a3c] text-white rounded-lg font-semibold hover:bg-[#c97627] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
+            <button onClick={() => guardedWorkflowAction("customer_rejected")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#e08a3c] text-white rounded-lg font-semibold hover:bg-[#c97627] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <XCircle size={13} /> {t("quotation.action.customerRejected")}
             </button>
           )}
           {permissions.canMarkWon && (
-            <button onClick={() => guardedWorkflowAction("marked_won")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#157347] text-white rounded-lg font-semibold hover:bg-[#125f3b] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
+            <button onClick={() => guardedWorkflowAction("marked_won")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#157347] text-white rounded-lg font-semibold hover:bg-[#125f3b] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <Trophy size={13} /> {t("quotation.action.markedWon")}
             </button>
           )}
           {permissions.canMarkLost && (
-            <button onClick={() => guardedWorkflowAction("marked_lost")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-sm bg-[#8a94a6] text-white rounded-lg font-semibold hover:bg-[#767f90] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
+            <button onClick={() => guardedWorkflowAction("marked_lost")} disabled={!validation.valid} title={!validation.valid ? BLOCKED_TOOLTIP : undefined} className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#8a94a6] text-white rounded-lg font-semibold hover:bg-[#767f90] transition-colors ${!validation.valid ? "opacity-40 cursor-not-allowed" : ""}`}>
               <Frown size={13} /> {t("quotation.action.markedLost")}
             </button>
           )}
           {permissions.canCancel && (
-            <button onClick={() => openAction("cancelled")} className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
+            <button onClick={() => openAction("cancelled")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
               <Ban size={13} /> {t("common.cancel")}
             </button>
           )}
@@ -532,8 +532,8 @@ export function QuoteDocument({
             </div>
             <div className="text-right">
               <p className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("quotation.pageTitle")}</p>
-              <p className="text-[#a8bed8] text-sm font-mono mt-1">QUOTATION</p>
-              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/30">
+              <p className="text-[#a8bed8] text-xs font-mono mt-1">QUOTATION</p>
+              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/30">
                 {statusIcon[quoteStatus]}
                 {t(statusLabelKey[quoteStatus])}
               </div>
@@ -546,7 +546,7 @@ export function QuoteDocument({
               <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</p>
               <div className="space-y-2.5">
                 <div>
-                  <label className="text-sm text-muted-foreground block mb-1">{t("quotation.customerSelector.label")}</label>
+                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.customerSelector.label")}</label>
                   <CustomerSelector
                     customers={customers}
                     selectedId={customerId}
@@ -606,7 +606,7 @@ export function QuoteDocument({
               <div className="space-y-2.5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-sm text-muted-foreground block mb-1">{t("quotation.field.quoteNumber")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.quoteNumber")}</label>
                     <input readOnly className="w-full text-sm font-mono text-[#c9a84c] font-semibold bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
                   </div>
                   <div>
@@ -616,12 +616,12 @@ export function QuoteDocument({
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <RequiredFieldLabel required={false} className="text-sm text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</RequiredFieldLabel>
+                    <RequiredFieldLabel required={false} className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</RequiredFieldLabel>
                     <input disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
                     <FieldError message={validation.fieldErrors.issueDate} />
                   </div>
                   <div>
-                    <RequiredFieldLabel required={false} className="text-sm text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</RequiredFieldLabel>
+                    <RequiredFieldLabel required={false} className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</RequiredFieldLabel>
                     <input disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
                     <FieldError message={validation.fieldErrors.expiryDate} />
                   </div>
@@ -655,7 +655,7 @@ export function QuoteDocument({
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
                     <input disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
                   </div>
                 </div>
@@ -668,7 +668,7 @@ export function QuoteDocument({
                     {t("quotation.field.appliedTemplate")}: {quotationTemplateName} (v{quotationTemplateVersion})
                   </p>
                 )}
-                <label className="flex items-center gap-2 cursor-pointer select-none text-sm text-foreground">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-foreground">
                   <input
                     type="checkbox"
                     disabled={disabled}
@@ -680,7 +680,7 @@ export function QuoteDocument({
                 </label>
                 {isDetail && permissions.canEdit && (
                   <div>
-                    <label className="text-sm text-muted-foreground block mb-1">{t("quotation.field.customerInterestLevel")}</label>
+                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.customerInterestLevel")}</label>
                     <InterestButtons value={quote!.interest} onChange={onInterestChange} />
                   </div>
                 )}
@@ -759,7 +759,7 @@ export function QuoteDocument({
 
         <div className="bg-[#0b1d3a]/5 border border-[#0b1d3a]/10 rounded-xl p-4 flex items-start gap-3 print:hidden">
           <div className="w-5 h-5 rounded-full bg-[#c9a84c]/20 flex items-center justify-center flex-shrink-0 mt-0.5"><CheckCircle2 size={11} className="text-[#c9a84c]" /></div>
-          <p className="text-sm text-muted-foreground leading-relaxed">{t("quotation.footerNote")}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{t("quotation.footerNote")}</p>
         </div>
 
         <PrintDocument
@@ -798,8 +798,8 @@ export function QuoteDocument({
           <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setPendingAction(null)} />
           <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
             <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t(approvalActionLabelKey[pendingAction])}</p>
-            <p className="text-sm text-muted-foreground mb-4">{t("quotation.modal.forQuote").replace("{id}", isDetail ? quote!.id : "").replace("{client}", client)}</p>
-            <label className="text-sm text-muted-foreground block mb-1.5">
+            <p className="text-xs text-muted-foreground mb-4">{t("quotation.modal.forQuote").replace("{id}", isDetail ? quote!.id : "").replace("{client}", client)}</p>
+            <label className="text-xs text-muted-foreground block mb-1.5">
               {t("quotation.modal.commentLabel")} {commentRequired ? t("quotation.modal.commentRequired") : t("quotation.modal.commentOptional")}
             </label>
             <textarea
@@ -808,12 +808,12 @@ export function QuoteDocument({
               value={actionComment}
               onChange={(e) => setActionComment(e.target.value)}
             />
-            {actionError && <p className="text-sm text-[#e05252] mt-1.5">{actionError}</p>}
+            {actionError && <p className="text-xs text-[#e05252] mt-1.5">{actionError}</p>}
             <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setPendingAction(null)} className="px-3.5 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+              <button onClick={() => setPendingAction(null)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
               <button
                 onClick={confirmAction}
-                className={`px-3.5 py-1.5 text-sm rounded-lg font-semibold transition-colors ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"}`}
+                className={`px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"}`}
               >
                 {t("quotation.modal.confirm")}
               </button>
@@ -827,10 +827,10 @@ export function QuoteDocument({
           <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setScopeOfWorkPromptOpen(false)} />
           <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
             <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>สร้าง Scope of Work</p>
-            <p className="text-sm text-muted-foreground mb-4">
+            <p className="text-xs text-muted-foreground mb-4">
               กรุณาระบุรหัสอ้างอิงท้ายงาน (เช่น SK) เพื่อใช้ในรหัสงานของ Scope of Work — รูปแบบ PQ{"{"}YYYYMM{"}"}-{"{"}ลำดับ{"}"}-{"{"}ประเภทงาน{"}"}-{"{"}รหัสอ้างอิงท้ายงาน{"}"}
             </p>
-            <label className="text-sm text-muted-foreground block mb-1.5">รหัสอ้างอิงท้ายงาน <span className="text-[#e05252]">*</span></label>
+            <label className="text-xs text-muted-foreground block mb-1.5">รหัสอ้างอิงท้ายงาน <span className="text-[#e05252]">*</span></label>
             <input
               autoFocus
               className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
@@ -839,13 +839,13 @@ export function QuoteDocument({
               onKeyDown={(e) => { if (e.key === "Enter") confirmCreateScopeOfWork(); }}
               placeholder="เช่น SK"
             />
-            {scopeOfWorkPromptError && <p className="text-sm text-[#e05252] mt-1.5">{scopeOfWorkPromptError}</p>}
+            {scopeOfWorkPromptError && <p className="text-xs text-[#e05252] mt-1.5">{scopeOfWorkPromptError}</p>}
             <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setScopeOfWorkPromptOpen(false)} className="px-3.5 py-1.5 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+              <button onClick={() => setScopeOfWorkPromptOpen(false)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
               <button
                 onClick={confirmCreateScopeOfWork}
                 disabled={scopeOfWorkBusy}
-                className="px-3.5 py-1.5 text-sm rounded-lg font-semibold transition-colors bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] disabled:opacity-60"
+                className="px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] disabled:opacity-60"
               >
                 สร้าง Scope of Work
               </button>

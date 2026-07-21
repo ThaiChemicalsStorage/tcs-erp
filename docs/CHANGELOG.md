@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-07-21 (yet later) — Fix quotation page typography: restore label/button vs. content hierarchy
+
+**Feature**: Direct user follow-up to the earlier same-day readability pass ("ปรับแก้หน้าใบเสนอราคาให้ดูสวยขึ้นให้หน่อยรู้สึกว่า fonts มันใหญ่แปลกๆ" — make the quotation page look nicer, the fonts feel weirdly big). The earlier pass had mechanically bumped every `text-xs` on the page to `text-sm`, which — while technically making individual pieces of text bigger — collapsed the whole page onto essentially one text size (buttons, labels, badges, and actual content were all `text-sm`), erasing the visual hierarchy that makes a form read as organized rather than uniformly loud.
+
+Reviewed every remaining `text-sm` instance in `QuoteDocument.tsx` (65), `LineItemsEditor.tsx`, `CustomerSelector.tsx`, and `InterestButtons.tsx` individually and re-classified each as **chrome** (labels, buttons, badges/pills, fine print — reverted to `text-xs`) or **content** (input/select/textarea values, table cell data, totals — kept at `text-sm`). Concretely reverted to `text-xs`: the back-navigation link, the status pill, every toolbar/workflow/modal button (~20), the "QUOTATION" subtitle and header status pill, every field `<label>`/`RequiredFieldLabel` override, the checkbox label, the footer disclaimer, both confirmation modals' helper text and inline errors, `LineItemsEditor.tsx`'s three toolbar buttons, `CustomerSelector.tsx`'s empty-state message, and both `InterestButtons.tsx` toggle buttons. Left at `text-sm`: every form field's actual value, the line-items table's cell values and totals breakdown, the remarks/comment textareas, and the approval-history entries (real content a user reads, not chrome).
+
+**Files Modified**: `src/pages/quotation/QuoteDocument.tsx`, `src/pages/quotation/LineItemsEditor.tsx`, `src/pages/quotation/CustomerSelector.tsx`, `src/pages/quotation/InterestButtons.tsx`, `docs/UI_GUIDELINES.md` (amended the same-day readability-pass entry to describe the corrected outcome, not a separate/duplicate entry)
+
+**Files Removed**: none
+
+**Reason**: Direct user report that the previous pass's uniform size bump looked wrong, not readable-in-a-good-way.
+
+**Notes**: `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Browser-verified via a temporary local harness mounting the full `QuoteDocument` (mode="new", mock company/user/permissions/one line item) — confirmed toolbar buttons are visibly compact again, field labels read smaller/muted than their values, and the line-items table/totals remain at the more-readable size from the original request. Harness deleted before committing.
+
+---
+
 ## 2026-07-21 (latest) — Remove QuoteLine.notes/.specifications entirely (unused feature)
 
 **Feature**: Direct user request ("เอาหมายเหตุ ข้อกำหนดเฉพาะ เอาออกไปเลยส่วนนั้นไม่ใช้แล้ว" — remove
