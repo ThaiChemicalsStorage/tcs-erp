@@ -265,7 +265,7 @@ export function LineItemsEditor({
           <thead>
             <tr className="border-b border-border bg-muted/20">
               {columns.map((h, i) => (
-                <th key={i} className={`px-4 py-2.5 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider ${i === 0 ? "w-10 text-center" : i === 1 ? "text-left" : "text-right"} ${i === 7 ? "w-10" : ""}`}>{h}</th>
+                <th key={i} className={`px-4 py-2.5 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider ${i === 0 || i === 2 ? "text-center" : i === 1 ? "text-left" : "text-right"} ${i === 0 ? "w-10" : ""} ${i === 7 ? "w-10" : ""}`}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -307,13 +307,19 @@ export function LineItemsEditor({
                       <input className="w-full text-sm text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.description} onChange={(e) => updateLine(line.id, "description", e.target.value)} placeholder={t("quotation.lineItems.descriptionPlaceholder")} />
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <input className="w-20 text-xs text-center text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unit} onChange={(e) => updateLine(line.id, "unit", e.target.value)} />
+                      <div className="flex items-center justify-center">
+                        <input className="w-20 text-xs text-center text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unit} onChange={(e) => updateLine(line.id, "unit", e.target.value)} />
+                      </div>
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <input type="number" className="w-20 text-xs text-right text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.qty} onChange={(e) => updateLine(line.id, "qty", parseFloat(e.target.value) || 0)} min={0} />
+                      <div className="flex items-center justify-end">
+                        <input type="number" className="w-20 text-xs text-right text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.qty} onChange={(e) => updateLine(line.id, "qty", parseFloat(e.target.value) || 0)} min={0} />
+                      </div>
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <input type="number" className="w-32 text-xs text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unitPrice} onChange={(e) => updateLine(line.id, "unitPrice", parseFloat(e.target.value) || 0)} min={0} />
+                      <div className="flex items-center justify-end">
+                        <input type="number" className="w-32 text-xs text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.unitPrice} onChange={(e) => updateLine(line.id, "unitPrice", parseFloat(e.target.value) || 0)} min={0} />
+                      </div>
                     </td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-center justify-end gap-0.5">

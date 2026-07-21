@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-07-21 (later still) — Fix quotation line-items table: Unit/Qty/Unit Price values not aligning under their headers
+
+**Feature**: Direct user follow-up with a screenshot showing the Unit/Qty/Unit Price/Discount
+values in `LineItemsEditor.tsx`'s line-items table visibly offset from their column headers. Root
+cause: the table's `<thead>` right-aligns every numeric column's header label, but the Unit input
+was `text-center` (header said `text-right`) and the Qty/Unit Price inputs — unlike the already-correct
+Discount input — weren't wrapped in a `flex justify-end` container, so their fixed-width (`w-20`/
+`w-32`) boxes sat left-anchored inside a wider auto-sized `<td>` instead of hugging its right edge;
+their internal `text-right` only right-aligned text within that narrow box, not against the actual
+column. Fixed: the header's alignment ternary now explicitly centers column index 2 (Unit) instead
+of falling into the generic "everything after description is right-aligned" branch, and the Unit/Qty/
+Unit Price `<input>`s are now each wrapped in a `flex items-center justify-center`/`justify-end` div
+(matching the pattern the Discount column already used correctly), so every column's data now
+genuinely sits under its own header regardless of the input's fixed width.
+
+**Files Modified**: `src/pages/quotation/LineItemsEditor.tsx`
+
+**Files Removed**: none
+
+**Reason**: Direct user report with a screenshot: "ช่วยแก้ตรงนี้ให้หน่อยมันไม่ตรงกับหัวข้อด้านบน."
+
+**Notes**: `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Browser-verified via
+the same temporary local harness pattern as the pinned-sub-details pass above (mounted
+`LineItemsEditor` with mock data reproducing the user's exact reported row — "FRP Vertical Tank" /
+Set / 3 / 300000 — screenshotted before/after, confirmed every value now sits under its header;
+harness files deleted before committing).
+
+---
+
 ## 2026-07-21 (later) — Sub-details restyled as pinned rows in the quotation line-items table + Template editor
 
 **Feature**: User shared a reference screenshot of a quotation line-items grid where an extra
