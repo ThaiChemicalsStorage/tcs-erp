@@ -50,6 +50,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     } catch {
       /* response had no JSON body */
     }
+    // requireUser() in api/_lib/auth.ts throws this exact literal string for a missing/expired/
+    // invalid session cookie on every *authenticated* route — translate it into a real, actionable
+    // message instead of leaking raw English server text. Matched by exact content, not by status
+    // code alone: a wrong-password login attempt is also a 401, but carries its own already-correct,
+    // already-Thai message ("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง") that must pass through unchanged.
+    if (message === "Not authenticated") {
+      message = currentLangIsEnglish() ? "Your session has expired — please sign in again" : "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่";
+    }
     throw new ApiError(res.status, message, { code, fieldErrors, groupErrors });
   }
   if (res.status === 204) return undefined as T;

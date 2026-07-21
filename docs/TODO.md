@@ -153,9 +153,10 @@
 - [x] Notifications module — real feed behind the header bell (`src/components/NotificationBell.tsx`), correct unread-count badge, role-based delivery for quotation events
 - [x] Audit Logs module — now meaningful since real multi-user accounts exist; append-only, read-only
 - [x] Decide the real behavior for Dashboard's "ส่งออกรายงาน"/"+ สร้างคำสั่งซื้อ" buttons — **decided and done 2026-07-09**: removed outright (no real Reports/Orders module exists to back them; a stub handler would just be a different kind of placeholder). Optional CSV export of real dashboard KPIs would be a reasonable low-risk future add if requested.
-- [ ] Wire the global header search (currently decorative on every page)
+- [x] Wire the global header search (currently decorative on every page) — done 2026-07-14, see Global Search entries above.
 - [ ] Add automated tests (none exist yet) — at minimum unit tests for `lib/quotes.tsx` totals math and `lib/products.ts` CRUD helpers. See High Priority above for the (higher-urgency) API-layer testing gap.
 - [ ] Add a CI pipeline (lint + typecheck + build on push) — see High Priority above, now higher-urgency since GitHub is connected to Vercel for auto-deploy.
+- [ ] **`App.tsx` never re-checks the session after initial boot, so a user whose cookie has since expired/gone invalid sees no warning until an action actually fails** (2026-07-21, from a real user report of a confusing "Not authenticated" toast on Approve — see CHANGELOG.md "Translate the raw 'Not authenticated' 401 into a real Thai/English message"). That pass only fixed the *message text* (now "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่" instead of the raw English server string); the UI still shows the user as logged in and lets them keep clicking things that will all fail the same way until they manually log out/in. A real fix would need either a periodic/on-focus session re-check in `App.tsx` that redirects to Sign In the moment a session goes invalid, or a global 401 handler in `apiClient.ts` that forces sign-out UI immediately on any "Not authenticated" response — neither built yet, flag to the user before doing either since both are bigger than a message fix.
 
 ## Medium Priority — Production-readiness follow-ups (2026-07-09 request)
 

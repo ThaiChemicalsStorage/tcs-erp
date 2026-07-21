@@ -4,6 +4,49 @@
 
 ---
 
+## Session — 2026-07-21 (later), "Not authenticated" toast investigation + fix
+
+### What was implemented
+- User asked why clicking Approve on a quotation showed "not authentication," and whether it meant
+  both preparer and approver needed a signature uploaded first. A background research agent traced
+  the full chain: no signature precondition exists anywhere in the approval workflow (signatures are
+  purely cosmetic print/display elements); the toast was the server's literal `"Not authenticated"`
+  string from `requireUser()` in `api/_lib/auth.ts`, passed straight through `apiClient.ts` to the
+  UI untranslated. Explained this to the user (session cookie invalid/expired at click time — 7-day
+  JWT, or the user's account edited/deactivated concurrently, plus `App.tsx` only checks session once
+  at boot with no periodic re-check) and suggested logging out/in.
+- The user then sent a real screenshot proving this was actively happening on a live production
+  quotation (`QT-2567-0007`), not a hypothetical. Before touching code, ran a `check-prod` pass to
+  rule out an actual incident: `get_project`/`get_deployment` confirmed the live deployment matches
+  the latest `master` commit and is `READY`; `curl` to `/api/auth/session` round-tripped to MongoDB
+  cleanly; `get_runtime_errors` (7d window) showed no auth-related error cluster, only a pre-existing
+  unrelated `url.parse()` deprecation warning. Confirmed: not a production bug, not a DB outage — the
+  401 itself was legitimate, only the message text was the actual problem.
+- Implemented the user's explicit follow-up request (translate the message): `apiFetch()` in
+  `src/lib/apiClient.ts` now matches the exact literal `"Not authenticated"` string and replaces it
+  with "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่" / "Your session has expired — please sign in again."
+  **Caught a real bug in my own first draft before committing**: the initial version keyed off
+  `res.status === 401` alone, which would have also clobbered `POST /api/auth/login`'s distinct,
+  already-correct, already-Thai wrong-password message (`ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง`) — also a
+  401. Fixed by matching on exact message content instead of status code before running any checks.
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean.
+- Updated `docs/CHANGELOG.md` and `docs/API.md`.
+
+### Known limitation
+- Not browser-verified — same sandboxed MongoDB Atlas DNS-block limitation as every pass this
+  session, so the actual toast text change hasn't been visually confirmed, only traced through code.
+- The underlying cause of *why* the session went invalid mid-page-view is still unaddressed — this
+  pass only fixes what the user sees when it happens, not the staleness gap (`App.tsx` shows a user
+  as logged in with no re-check until an action fails) or the 7-day-expiry UX. Flagged as a possible
+  future improvement, not implemented since the user's explicit ask was scoped to the message text.
+
+### Recommendation
+- If this recurs frequently for real users (not just test/demo accounts), it's worth adding a real
+  fix beyond message translation: either a periodic/on-focus session re-check in `App.tsx` that
+  redirects to Sign In the moment a session goes invalid (rather than waiting for the next failed
+  action), or a global 401 interceptor in `apiClient.ts` that forces sign-out UI immediately. Neither
+  was built this pass — flag to the user before doing either, since both are bigger than a message fix.
+
 ## Session — 2026-07-21 (same day, third refinement), group OTHER BF/SC/TA before the generic OTHER
 
 ### What was implemented

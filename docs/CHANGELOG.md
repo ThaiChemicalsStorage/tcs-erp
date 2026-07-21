@@ -4,6 +4,41 @@
 
 ---
 
+## 2026-07-21 — Translate the raw "Not authenticated" 401 into a real Thai/English message
+
+**Feature**: A user reported seeing a bare "Not authenticated" toast when clicking Approve on a
+quotation — the server's raw English `requireUser()` error string (`api/_lib/auth.ts:89`) was
+passing straight through `apiClient.ts` to the UI untranslated whenever a session cookie was
+missing/expired/invalid (not related to signatures — confirmed there is no signature-upload
+precondition anywhere in the approval workflow). `src/lib/apiClient.ts`'s `apiFetch()` now matches
+that exact literal error string and replaces it with "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่" (Thai) /
+"Your session has expired — please sign in again" (English) before throwing `ApiError` — every
+caller across the app already just toasts `err.message`, so this one change fixes the message
+everywhere it could appear, not just the approve action.
+
+**Files Modified**: `src/lib/apiClient.ts`, `docs/API.md`
+
+**Files Removed**: none
+
+**Reason**: Direct user report with a screenshot showing the confusing raw-English toast on a real
+production quotation (`QT-2567-0007`).
+
+**Notes**: Matched by exact message content (`message === "Not authenticated"`), not by HTTP status
+code — `POST /api/auth/login`'s own 401 for a wrong password carries a different, already-correct,
+already-Thai message (`ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง`) that must not be clobbered; an earlier draft
+of this fix keyed off `res.status === 401` alone and would have broken that message, caught before
+committing. Also ran a `check-prod` pass first to rule out an actual production incident: the live
+deployment matches the latest `master` commit and is `READY`, `GET /api/auth/session` round-trips to
+MongoDB cleanly (`200 {"user":null,"needsSetup":false}`), and `get_runtime_errors` over the last 7
+days shows no auth-related error cluster — only a pre-existing, unrelated `url.parse()` deprecation
+warning. This confirms the error was a real (if confusing) 401, not a server-side bug or outage; the
+underlying cause (session invalid at click time — expiry, account edited/deactivated concurrently, or
+`App.tsx` never re-checking session while a page sits open) is unchanged, only the message is fixed.
+`npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Not browser-verified — same
+sandboxed MongoDB Atlas DNS-block limitation as every pass this session.
+
+---
+
 ## 2026-07-21 (same day, third refinement) — Job Type grid: OTHER BF/SC/TA grouped just before the generic OTHER
 
 **Feature**: Further follow-up to the Job Type grid ordering work below — `OTHER BF`/`OTHER SC`/
