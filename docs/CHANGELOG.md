@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-21 (same day, second refinement) — Job Type grid: only the exact "OTHER" code moves to the end
+
+**Feature**: Corrects the previous same-day refinement's `code.startsWith("OTHER")` check, which
+also matched `OTHER BF`/`OTHER SC`/`OTHER TA` — those are their own specific sub-categories (Other
+Dust Collector/Wet Scrubber/Fiberglass Tank Related Work), not the generic "Other Jobs" fallback, and
+the user's screenshot made clear only the plain `"OTHER"` tile should be pushed to the very end.
+Narrowed `QuotationTemplateWizard.tsx`'s `isGenericOtherJobType` (renamed from `isOtherJobType`) to
+an exact-equality check (`code === "OTHER"`). `OTHER BF`/`OTHER SC`/`OTHER TA` now sort normally
+alongside every other Job Type in the has-Template/no-Template groups from the prior refinement.
+
+**Files Modified**: `src/pages/quotation/QuotationTemplateWizard.tsx`
+
+**Files Removed**: none
+
+**Reason**: User sent a screenshot of the "OTHER — Other Jobs — ยังไม่มี Template" tile specifically,
+clarifying the scope of the original "push Other to the end" request.
+
+**Notes**: `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Not browser-verified —
+same sandboxed MongoDB Atlas DNS-block limitation as every pass this session.
+
+---
+
 ## 2026-07-21 (same day, refinement) — Job Type grid: Templates-first ordering, OTHER still last
 
 **Feature**: Follow-up to the same-day wizard UX pass below — the previous fix only pushed

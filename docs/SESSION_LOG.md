@@ -4,6 +4,30 @@
 
 ---
 
+## Session — 2026-07-21 (same day, second refinement), narrow "OTHER" to exact match
+
+### What was implemented
+- User sent a screenshot of just the "OTHER — Other Jobs — ยังไม่มี Template" tile to clarify their
+  original "push Other to the end" request — the prior refinement's `code.startsWith("OTHER")` check
+  had over-matched, also pulling `OTHER BF`/`OTHER SC`/`OTHER TA` (real, specific sub-categories —
+  Other Dust Collector/Wet Scrubber/Fiberglass Tank Related Work) into the "generic fallback" bucket
+  when they should have sorted normally by Template availability like everything else.
+- One-line fix in `QuotationTemplateWizard.tsx`: `isOtherJobType` (prefix match) renamed to
+  `isGenericOtherJobType` and changed to `code === "OTHER"` (exact match). The has-Template-first/
+  no-Template/generic-OTHER-last 3-way partition structure from the previous refinement is otherwise
+  unchanged.
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean.
+- Updated `docs/CHANGELOG.md` and `docs/MODULES/QuotationTemplates.md`.
+
+### Known limitation
+- Not browser-verified — same sandboxed MongoDB Atlas DNS-block limitation as every pass this
+  session. This is a single boolean-predicate change with no other logic touched, which limits risk.
+
+### Recommendation
+- Next real-browser check: confirm `OTHER BF`/`OTHER SC`/`OTHER TA` now appear grouped with other
+  Job Types by Template availability (not stuck at the end), and only the plain "OTHER — Other Jobs"
+  tile sits at the very end of the grid.
+
 ## Session — 2026-07-21 (same day, refinement), Job Type grid: has-Template-first ordering
 
 ### What was implemented
