@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-21 (same day, third refinement) — Job Type grid: OTHER BF/SC/TA grouped just before the generic OTHER
+
+**Feature**: Further follow-up to the Job Type grid ordering work below — `OTHER BF`/`OTHER SC`/
+`OTHER TA` were sorting normally among the ordinary has-Template/no-Template Job Types after the
+previous refinement; the user asked for them to also cluster near the end, positioned right before
+the fully generic `"OTHER"` tile. `QuotationTemplateWizard.tsx`'s `activeJobTypes` is now a stable
+4-way partition: (1) ordinary Job Types with an active Template, (2) ordinary Job Types without one,
+(3) `OTHER BF`/`OTHER SC`/`OTHER TA` (a new `isOtherSubcategoryJobType` predicate), (4) the generic
+`"OTHER"` (`isGenericOtherJobType`, unchanged) always last.
+
+**Files Modified**: `src/pages/quotation/QuotationTemplateWizard.tsx`
+
+**Files Removed**: none
+
+**Reason**: Direct user follow-up: "เอา other อันอื่นไว้ก่อนหน้า พวกแบบ Other BF, Other SC, Other TA
+เอาไว้อยู่ก่อน other ปกติด้วยสิ."
+
+**Notes**: `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Not browser-verified —
+same sandboxed MongoDB Atlas DNS-block limitation as every pass this session.
+
+---
+
 ## 2026-07-21 (same day, second refinement) — Job Type grid: only the exact "OTHER" code moves to the end
 
 **Feature**: Corrects the previous same-day refinement's `code.startsWith("OTHER")` check, which

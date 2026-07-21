@@ -509,9 +509,17 @@ once that resolves, same as the badges themselves.
 only the exact `"OTHER"` code ("Other Jobs," the generic fallback) — the *prefix* match had also
 been catching `OTHER BF`/`OTHER SC`/`OTHER TA`, which are their own specific sub-categories (Other
 Dust Collector/Wet Scrubber/Fiberglass Tank Related Work), not the generic fallback. Narrowed the
-check from `code.startsWith("OTHER")` to `code === "OTHER"` — `OTHER BF`/`OTHER SC`/`OTHER TA` now
-sort normally in the has-Template/no-Template groups like any other Job Type; only the exact
-`"OTHER"` tile is pushed to the very end.
+check from `code.startsWith("OTHER")` to `code === "OTHER"` — `OTHER BF`/`OTHER SC`/`OTHER TA` sorted
+normally in the has-Template/no-Template groups like any other Job Type; only the exact `"OTHER"`
+tile was pushed to the very end.
+
+**Same day, third refinement**: a further follow-up asked for `OTHER BF`/`OTHER SC`/`OTHER TA`
+themselves to also be grouped near the end — just *before* the generic `"OTHER"`, not mixed in with
+the ordinary has-Template/no-Template groups. The grid is now a stable 4-way partition: (1) ordinary
+Job Types with a Template, (2) ordinary Job Types without one, (3) `OTHER BF`/`OTHER SC`/`OTHER TA`
+as their own group, (4) the generic `"OTHER"` last. `isGenericOtherJobType` (exact `=== "OTHER"`) is
+unchanged from the prior refinement; a new `isOtherSubcategoryJobType` (`startsWith("OTHER") && code
+!== "OTHER"`) carves out group 3.
 
 ## Global Search Integration
 

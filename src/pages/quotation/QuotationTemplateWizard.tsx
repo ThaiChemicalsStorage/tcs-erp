@@ -123,21 +123,24 @@ export function QuotationTemplateWizard({
     return t("quotation.wizard.badge.many").replace("{n}", String(n));
   };
 
-  // Step 1 grid order: Job Types that already have an active Template come first (so the ones a
-  // user can actually pick a template for are the first thing they see), then Job Types with no
-  // Template yet, and — regardless of Template availability — the generic `"OTHER"` catch-all
-  // ("Other Jobs") is pushed to the very end. Only the exact `"OTHER"` code is treated this way —
-  // `OTHER BF`/`OTHER SC`/`OTHER TA` are their own specific sub-categories (Other Dust Collector/Wet
-  // Scrubber/Fiberglass Tank Related Work), not the generic fallback, so they sort normally with the
-  // rest by Template availability like any other Job Type. Each group otherwise keeps its original
-  // relative order (a stable 3-way partition, not a fresh alphabetical sort). Depends on
-  // `templateCounts`, so the grid quietly reorders once that fetch resolves — the same "badge
-  // appears once loaded" behavior `badgeFor` above already has.
+  // Step 1 grid order, a stable 4-way partition (not a fresh alphabetical sort — each group keeps
+  // its original relative order):
+  //   1. Ordinary Job Types with an active Template — the ones a user can actually pick a template
+  //      for, so they're the first thing seen.
+  //   2. Ordinary Job Types with no Template yet.
+  //   3. The `"OTHER "`-prefixed *specific* sub-categories (`OTHER BF`/`OTHER SC`/`OTHER TA` — Other
+  //      Dust Collector/Wet Scrubber/Fiberglass Tank Related Work) — real, narrower categories, not
+  //      the fully generic fallback, so they sort ahead of it.
+  //   4. The generic `"OTHER"` ("Other Jobs") catch-all, always last.
+  // Depends on `templateCounts`, so groups 1/2 quietly reorder once that fetch resolves — the same
+  // "badge appears once loaded" behavior `badgeFor` above already has.
   const isGenericOtherJobType = (code: string) => code === "OTHER";
+  const isOtherSubcategoryJobType = (code: string) => code.startsWith("OTHER") && code !== "OTHER";
   const hasActiveTemplate = (code: string) => (templateCounts?.get(code) ?? 0) > 0;
   const activeJobTypes = [
-    ...activeJobTypesUnsorted.filter((jt) => !isGenericOtherJobType(jt.code) && hasActiveTemplate(jt.code)),
-    ...activeJobTypesUnsorted.filter((jt) => !isGenericOtherJobType(jt.code) && !hasActiveTemplate(jt.code)),
+    ...activeJobTypesUnsorted.filter((jt) => !isOtherSubcategoryJobType(jt.code) && !isGenericOtherJobType(jt.code) && hasActiveTemplate(jt.code)),
+    ...activeJobTypesUnsorted.filter((jt) => !isOtherSubcategoryJobType(jt.code) && !isGenericOtherJobType(jt.code) && !hasActiveTemplate(jt.code)),
+    ...activeJobTypesUnsorted.filter((jt) => isOtherSubcategoryJobType(jt.code)),
     ...activeJobTypesUnsorted.filter((jt) => isGenericOtherJobType(jt.code)),
   ];
 

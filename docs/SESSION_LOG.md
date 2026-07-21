@@ -4,6 +4,30 @@
 
 ---
 
+## Session — 2026-07-21 (same day, third refinement), group OTHER BF/SC/TA before the generic OTHER
+
+### What was implemented
+- Third follow-up on the same Job Type grid ordering thread: after narrowing "push to the end" to
+  the exact `"OTHER"` code, `OTHER BF`/`OTHER SC`/`OTHER TA` fell back into sorting normally among
+  the ordinary Job Types by Template availability. The user then asked for those three to also
+  cluster together near the end, just ahead of the plain `"OTHER"` tile.
+- Changed `QuotationTemplateWizard.tsx`'s 3-way partition to a 4-way one: has-Template ordinary Job
+  Types, no-Template ordinary Job Types, `OTHER BF`/`OTHER SC`/`OTHER TA` as their own group, generic
+  `"OTHER"` last. Added `isOtherSubcategoryJobType` alongside the existing `isGenericOtherJobType`.
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` all pass clean.
+- Updated `docs/CHANGELOG.md` and `docs/MODULES/QuotationTemplates.md`.
+
+### Known limitation
+- Not browser-verified — same sandboxed MongoDB Atlas DNS-block limitation as every pass this
+  session. This is an additional filter branch on an already-tested partition pattern, low risk.
+
+### Recommendation
+- This ordering logic has now changed three times in one session purely from iterative user
+  feedback on a screenshot — next real-browser check should confirm the final 4-group order actually
+  matches what the user pictured (Template-having → no-Template → OTHER BF/SC/TA → OTHER) before
+  treating this as settled, since verbal/text descriptions of grid ordering have proven easy to
+  under-specify here.
+
 ## Session — 2026-07-21 (same day, second refinement), narrow "OTHER" to exact match
 
 ### What was implemented
