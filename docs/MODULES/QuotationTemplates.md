@@ -578,9 +578,16 @@ moved. See CHANGELOG.md 2026-07-21.
   free text — this codebase's existing `TemplateItem` schema has no separate "customer notes"
   field, so a specification line *is* the customer-visible-notes mechanism; `visibleToCustomer` can
   still hide an entire item — and, as of 2026-07-15, actually does: see "Template → Quote Snapshot
-  Semantics"), sub-details (also actually reach the applied quotation as of 2026-07-15, see below),
-  editable parameters (label + unit pairs), and internal notes (visually flagged amber, never shown
-  to the customer).
+  Semantics"), editable parameters (label + unit pairs), and internal notes (visually flagged amber,
+  never shown to the customer). **2026-07-21, pinned sub-details restyle**: `item.subDetails` (also
+  actually reaches the applied quotation as of 2026-07-15, see below) moved out of that expandable
+  panel's shared multi-line textarea into its own per-line "pinned" `<tr>` directly beneath the
+  item's row — gold-tinted highlight, Pin icon, auto-focused input on add — matching the same
+  restyle applied to `LineItemsEditor.tsx` (see [MODULES/Quotation.md](./Quotation.md)). The Pin
+  icon in the item's action column (`item.subDetails.some(s => s.trim())` gates its gold fill) adds
+  a new line; Specifications/Internal Notes keep the original paste-friendly one-line-per-entry
+  textarea (`linesToArray()`) unchanged — only sub-details, the field that maps 1:1 to the reference
+  UI's pinned-line concept, was converted to per-row inputs.
   **2026-07-15, second Codex-review fix pass — product links are now server-verified**: an
   independent review found that `sanitizeItem()` trusted a caller-submitted `productId`/
   `productSnapshot` verbatim — the UI picker always supplied genuine data, but a direct (authorized)

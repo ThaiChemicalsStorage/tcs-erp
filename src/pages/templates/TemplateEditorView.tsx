@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import {
   ChevronLeft, Plus, Trash2, ArrowUp, ArrowDown, Copy, Package, PencilLine, Loader2, X,
-  FileText, Settings2, Layers, ScrollText, StickyNote, CheckCircle2, Circle,
+  FileText, Settings2, Layers, ScrollText, StickyNote, CheckCircle2, Circle, Pin,
 } from "lucide-react";
 import {
   type TemplateContentDraft, type TemplateSection, type TemplateItem, type TemplateTermLine,
@@ -419,12 +419,22 @@ function ItemEditor({
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const [pendingFocusIndex, setPendingFocusIndex] = useState<number | null>(null);
 
   const updateParam = (paramIndex: number, field: "label" | "unit", value: string) => {
     onChange((it) => ({ ...it, editableParameters: it.editableParameters.map((p, i) => (i === paramIndex ? { ...p, [field]: value } : p)) }));
   };
   const addParam = () => onChange((it) => ({ ...it, editableParameters: [...it.editableParameters, { label: "", value: "", unit: "", editable: true }] }));
   const deleteParam = (paramIndex: number) => onChange((it) => ({ ...it, editableParameters: it.editableParameters.filter((_, i) => i !== paramIndex) }));
+
+  const addSubDetail = () => {
+    setPendingFocusIndex(item.subDetails.length);
+    onChange((it) => ({ ...it, subDetails: [...it.subDetails, ""] }));
+  };
+  const updateSubDetail = (subIndex: number, text: string) =>
+    onChange((it) => ({ ...it, subDetails: it.subDetails.map((s, i) => (i === subIndex ? text : s)) }));
+  const removeSubDetail = (subIndex: number) =>
+    onChange((it) => ({ ...it, subDetails: it.subDetails.filter((_, i) => i !== subIndex) }));
 
   return (
     <Fragment>
@@ -471,6 +481,13 @@ function ItemEditor({
         </td>
         <td className="px-2 py-2.5 align-top">
           <div className="flex items-center justify-end gap-0.5">
+            <button
+              onClick={addSubDetail}
+              title={t("quotation.lineItems.addSubDetail")}
+              className={`p-1 transition-colors ${item.subDetails.some((s) => s.trim()) ? "text-[#c9a84c]" : "text-muted-foreground hover:text-[#c9a84c]"}`}
+            >
+              <Pin size={12} />
+            </button>
             <button onClick={() => setExpanded((v) => !v)} className="text-[10px] text-[#c9a84c] hover:text-[#f0c040] transition-colors px-1 whitespace-nowrap">
               {expanded ? t("templates.form.collapse") : t("templates.form.expand")}
             </button>
@@ -482,6 +499,27 @@ function ItemEditor({
         </td>
       </tr>
 
+      {item.subDetails.map((text, subIndex) => (
+        <tr key={subIndex} className="border-b border-border/50 bg-[#c9a84c]/10 group/pin">
+          <td />
+          <td colSpan={5} className="px-2 py-1.5">
+            <div className="flex items-center gap-2">
+              <Pin size={11} className="text-[#c9a84c]/70 flex-shrink-0" />
+              <input
+                autoFocus={subIndex === pendingFocusIndex}
+                value={text}
+                onChange={(e) => updateSubDetail(subIndex, e.target.value)}
+                placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
+                className="flex-1 text-[11px] text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
+              />
+              <button onClick={() => removeSubDetail(subIndex)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover/pin:opacity-100 flex-shrink-0">
+                <Trash2 size={11} />
+              </button>
+            </div>
+          </td>
+        </tr>
+      ))}
+
       {expanded && (
         <tr className="border-b border-border/50 bg-muted/10">
           <td colSpan={6} className="px-4 py-3">
@@ -491,15 +529,6 @@ function ItemEditor({
                 <textarea
                   value={item.specifications.join("\n")}
                   onChange={(e) => onChange((it) => ({ ...it, specifications: linesToArray(e.target.value) }))}
-                  rows={2}
-                  className="w-full text-[11px] text-foreground bg-card border border-border rounded px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">{t("templates.form.subDetails")}</label>
-                <textarea
-                  value={item.subDetails.join("\n")}
-                  onChange={(e) => onChange((it) => ({ ...it, subDetails: linesToArray(e.target.value) }))}
                   rows={2}
                   className="w-full text-[11px] text-foreground bg-card border border-border rounded px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y"
                 />

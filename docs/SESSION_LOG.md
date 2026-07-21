@@ -4,6 +4,53 @@
 
 ---
 
+## Session — 2026-07-21 (later still), Pinned sub-detail rows restyle
+
+### What was implemented
+- User shared a reference screenshot of a quotation grid with a gold/cream-highlighted "pinned" row
+  (Pin icon + auto-focused input) appearing directly beneath a product row, and asked for the same
+  format — keeping this site's own theme, not the reference image's colors — in both the live
+  quotation editor and the Quotation Template editor.
+- An `Explore` agent first mapped the relevant code: `LineItemsEditor.tsx`'s existing
+  `QuoteLine.subDetails` feature (already printed with a `Pin` icon in `PrintDocument.tsx`) was the
+  closest match, but it lived inside a collapsible sticky-note card, not inline in the table.
+- Used `AskUserQuestion` (with ASCII previews) to confirm scope before touching two files' worth of
+  table JSX — the user picked "pinned row directly under the item row," not a lighter color-only
+  restyle or an unrelated third option.
+- Implemented: `LineItemsEditor.tsx`'s `SubDetailsEditor` (card) replaced with `PinnedSubDetailRows`
+  (inline `<tr>` per sub-detail, gold-tinted, Pin icon, drag handle, auto-focus-on-add via a
+  `pendingFocusId` state); a new Pin button added to the row-actions column; the sticky-note icon's
+  card narrowed to Notes/Specifications/Tags only; the "has content" gold-dot indicator split into
+  two independent booleans so each icon reflects only its own category.
+  `TemplateEditorView.tsx`'s `ItemEditor` got the same treatment for `TemplateItem.subDetails`
+  (a plain `string[]`, so index-based, no drag-reorder added) — Specifications/Internal Notes
+  deliberately kept their original shared multi-line-textarea pattern (a documented, intentional
+  "paste-friendly list" design choice already in the code), since only sub-details maps to the
+  reference UI's per-line "pinned" concept.
+- `npx tsc --noEmit` and `npm run lint` both pass clean.
+- Verified visually via a temporary, self-contained local harness (`harness.html` +
+  `src/devHarness.tsx`, mounting `LineItemsEditor` with mock in-memory data, no backend) since this
+  sandboxed session can't reach the real API/MongoDB (same recurring limitation as every other pass
+  in this log) — confirmed the pinned row appears, highlights gold, auto-focuses, and accepts Thai
+  input; deleted both harness files before committing, leaving no trace in the diff.
+  `TemplateEditorView.tsx`'s equivalent wasn't separately harnessed (its `ItemEditor` isn't exported
+  and needs substantially more mock props); verified instead by matching its colSpan arithmetic and
+  JSX shape against the already browser-confirmed `LineItemsEditor.tsx` pattern.
+- Updated `docs/MODULES/Quotation.md`, `docs/MODULES/QuotationTemplates.md`, `docs/CHANGELOG.md`.
+
+### Known limitation
+- Not verified against a live deployment or real MongoDB data — mock-data harness verification only,
+  same sandboxed-environment constraint as every other pass in this log.
+- `TemplateEditorView.tsx`'s pinned rows were not independently screenshotted (see above) — lower
+  confidence than the quotation-side change, though the code is structurally identical and
+  type/lint-clean.
+
+### Recommendation for next session
+- A real browser click-through of both pages (ideally against a preview deployment or once local
+  MongoDB access is available) would raise confidence, particularly for `TemplateEditorView.tsx`.
+
+---
+
 ## Session — 2026-07-21 (later), "Not authenticated" toast investigation + fix
 
 ### What was implemented

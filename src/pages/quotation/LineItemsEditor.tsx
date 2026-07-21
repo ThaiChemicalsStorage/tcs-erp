@@ -1,10 +1,10 @@
 import { Fragment, useRef, useState } from "react";
 import {
   Plus, Trash2, Percent, PackageSearch, Layers,
-  List, ListOrdered, GripVertical, StickyNote, X,
+  List, ListOrdered, GripVertical, StickyNote, Pin, X,
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
-import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, lineHasDetails, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
+import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { useI18n } from "../../lib/i18n";
 
@@ -57,15 +57,22 @@ function NotesEditor({ value, onChange }: { value: string; onChange: (v: string)
   );
 }
 
-function SubDetailsEditor({
+/** Renders each sub-detail as its own "pinned" row directly under the parent line item's row in
+ * the main table — a highlighted (gold-tinted) inline strip with a Pin icon, mirroring how
+ * `PrintDocument.tsx` prints sub-details with a Pin marker — rather than inside the collapsible
+ * notes/specs/tags card below. `colSpan` covers every column after "No." (description through the
+ * row-actions column) so the pinned strip runs the full width of the row it belongs to. */
+function PinnedSubDetailRows({
+  lineId,
   subDetails,
-  onAdd,
+  focusId,
   onUpdate,
   onRemove,
   onReorder,
 }: {
+  lineId: number;
   subDetails: SubDetail[];
-  onAdd: () => void;
+  focusId: string | null;
   onUpdate: (id: string, text: string) => void;
   onRemove: (id: string) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
@@ -75,46 +82,46 @@ function SubDetailsEditor({
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
   return (
-    <div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.subDetailsTitle")}</p>
-      <div className="space-y-1">
-        {subDetails.map((sd, idx) => (
-          <div
-            key={sd.id}
-            draggable
-            onDragStart={() => { dragIndex.current = idx; }}
-            onDragOver={(e) => { e.preventDefault(); setOverIndex(idx); }}
-            onDragEnd={() => { setOverIndex(null); dragIndex.current = null; }}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (dragIndex.current !== null && dragIndex.current !== idx) onReorder(dragIndex.current, idx);
-              setOverIndex(null);
-              dragIndex.current = null;
-            }}
-            className={`flex items-center gap-1.5 rounded-lg transition-colors ${overIndex === idx ? "bg-[#c9a84c]/10" : ""}`}
-          >
-            <span className="text-muted-foreground cursor-grab active:cursor-grabbing flex-shrink-0" title={t("quotation.lineItems.subDetailsDragTitle")}>
-              <GripVertical size={13} />
+    <>
+      {subDetails.map((sd, idx) => (
+        <tr
+          key={sd.id}
+          draggable
+          onDragStart={() => { dragIndex.current = idx; }}
+          onDragOver={(e) => { e.preventDefault(); setOverIndex(idx); }}
+          onDragEnd={() => { setOverIndex(null); dragIndex.current = null; }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (dragIndex.current !== null && dragIndex.current !== idx) onReorder(dragIndex.current, idx);
+            setOverIndex(null);
+            dragIndex.current = null;
+          }}
+          className={`border-b border-border/50 bg-[#c9a84c]/10 group/pin transition-colors ${overIndex === idx ? "bg-[#c9a84c]/20" : ""}`}
+        >
+          <td className="px-4 py-1.5 align-top">
+            <span className="text-muted-foreground/50 cursor-grab active:cursor-grabbing" title={t("quotation.lineItems.subDetailsDragTitle")}>
+              <GripVertical size={12} />
             </span>
-            <input
-              value={sd.text}
-              onChange={(e) => onUpdate(sd.id, e.target.value)}
-              placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
-              className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
-            />
-            <button onClick={() => onRemove(sd.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1">
-              <Trash2 size={12} />
-            </button>
-          </div>
-        ))}
-      </div>
-      <button
-        onClick={onAdd}
-        className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 text-[11px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium"
-      >
-        <Plus size={11} /> {t("quotation.lineItems.addSubDetail")}
-      </button>
-    </div>
+          </td>
+          <td colSpan={7} className="px-4 py-1.5">
+            <div className="flex items-center gap-2">
+              <Pin size={12} className="text-[#c9a84c]/70 flex-shrink-0" />
+              <input
+                key={`${lineId}-${sd.id}`}
+                autoFocus={sd.id === focusId}
+                value={sd.text}
+                onChange={(e) => onUpdate(sd.id, e.target.value)}
+                placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
+                className="flex-1 text-xs text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
+              />
+              <button onClick={() => onRemove(sd.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover/pin:opacity-100 flex-shrink-0">
+                <Trash2 size={12} />
+              </button>
+            </div>
+          </td>
+        </tr>
+      ))}
+    </>
   );
 }
 
@@ -187,6 +194,7 @@ export function LineItemsEditor({
   const { t } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
 
   const toggleExpand = (id: number) =>
     setExpanded((prev) => {
@@ -204,8 +212,11 @@ export function LineItemsEditor({
     onChange([...lines, { ...blankLine(), description: product.name, unit: product.unit, unitPrice: product.defaultPrice, specifications: product.specifications }]);
   const removeLine = (id: number) => onChange(lines.filter((l) => l.id !== id));
 
-  const addSubDetail = (lineId: number) =>
-    updateLine(lineId, "subDetails", [...(lines.find((l) => l.id === lineId)?.subDetails ?? []), { id: newSubDetailId(), text: "" }]);
+  const addSubDetail = (lineId: number) => {
+    const newId = newSubDetailId();
+    updateLine(lineId, "subDetails", [...(lines.find((l) => l.id === lineId)?.subDetails ?? []), { id: newId, text: "" }]);
+    setPendingFocusId(newId);
+  };
   const updateSubDetail = (lineId: number, subId: string, text: string) =>
     updateLine(lineId, "subDetails", (lines.find((l) => l.id === lineId)?.subDetails ?? []).map((sd) => (sd.id === subId ? { ...sd, text } : sd)));
   const removeSubDetail = (lineId: number, subId: string) =>
@@ -286,7 +297,8 @@ export function LineItemsEditor({
               }
 
               const isExpanded = expanded.has(line.id);
-              const hasDetails = lineHasDetails(line);
+              const hasSubDetails = line.subDetails.some((sd) => sd.text.trim() !== "");
+              const hasCardDetails = line.notes.trim() !== "" || line.specifications.trim() !== "" || line.tags.length > 0;
               return (
                 <Fragment key={line.id}>
                   <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
@@ -313,17 +325,33 @@ export function LineItemsEditor({
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-center justify-end gap-1">
                         <button
+                          onClick={() => addSubDetail(line.id)}
+                          title={t("quotation.lineItems.addSubDetail")}
+                          className={`transition-colors relative ${hasSubDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-0 group-hover:opacity-100"} hover:text-[#c9a84c]`}
+                        >
+                          <Pin size={13} />
+                        </button>
+                        <button
                           onClick={() => toggleExpand(line.id)}
                           title={t("quotation.lineItems.notesIconTitle")}
-                          className={`transition-colors relative ${hasDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-0 group-hover:opacity-100"} hover:text-[#c9a84c]`}
+                          className={`transition-colors relative ${hasCardDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-0 group-hover:opacity-100"} hover:text-[#c9a84c]`}
                         >
                           <StickyNote size={13} />
-                          {hasDetails && !isExpanded && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[#c9a84c]" />}
+                          {hasCardDetails && !isExpanded && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[#c9a84c]" />}
                         </button>
                         <button onClick={() => removeLine(line.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={13} /></button>
                       </div>
                     </td>
                   </tr>
+
+                  <PinnedSubDetailRows
+                    lineId={line.id}
+                    subDetails={line.subDetails}
+                    focusId={pendingFocusId}
+                    onUpdate={(subId, text) => updateSubDetail(line.id, subId, text)}
+                    onRemove={(subId) => removeSubDetail(line.id, subId)}
+                    onReorder={(from, to) => reorderSubDetails(line.id, from, to)}
+                  />
 
                   {isExpanded && (
                     <tr className="border-b border-border/50 bg-muted/10">
@@ -331,13 +359,6 @@ export function LineItemsEditor({
                       <td colSpan={7} className="px-4 pb-4 pt-1">
                         <div className="grid sm:grid-cols-2 gap-4 bg-card border border-border rounded-lg p-4">
                           <NotesEditor value={line.notes} onChange={(v) => updateLine(line.id, "notes", v)} />
-                          <SubDetailsEditor
-                            subDetails={line.subDetails}
-                            onAdd={() => addSubDetail(line.id)}
-                            onUpdate={(subId, text) => updateSubDetail(line.id, subId, text)}
-                            onRemove={(subId) => removeSubDetail(line.id, subId)}
-                            onReorder={(from, to) => reorderSubDetails(line.id, from, to)}
-                          />
                           <SpecificationsEditor value={line.specifications} onChange={(v) => updateLine(line.id, "specifications", v)} />
                           <TagsEditor tags={line.tags} onChange={(tags) => updateLine(line.id, "tags", tags)} />
                         </div>

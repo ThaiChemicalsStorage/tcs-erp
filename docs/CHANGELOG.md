@@ -4,6 +4,69 @@
 
 ---
 
+## 2026-07-21 (later) — Sub-details restyled as pinned rows in the quotation line-items table + Template editor
+
+**Feature**: User shared a reference screenshot of a quotation line-items grid where an extra
+"pinned" row — gold/cream highlight, a Pin icon, an already-focused text input — appears directly
+beneath a product row for typing an additional description line, and asked for the same format
+(same site theme, not the reference image's own navy/white colors) applied to both the live
+quotation editor and the Quotation Template editor. Confirmed scope via `AskUserQuestion` before
+implementing: the existing per-line "sub-details" feature (`QuoteLine.subDetails`) was the closest
+match, but it lived inside a collapsible notes/specs/tags card, not inline in the table — the user
+picked the "pinned row directly under the item row" option.
+
+`src/pages/quotation/LineItemsEditor.tsx`: `SubDetailsEditor` (a card-based list) replaced with
+`PinnedSubDetailRows`, which renders each sub-detail as its own `<tr>` — `bg-[#c9a84c]/10` (the
+site's existing gold accent, not a new color), a `Pin` icon (lucide-react, already used for
+sub-detail bullets in `PrintDocument.tsx`, now reused for the live editor too), the sub-detail text
+input, a drag handle (native HTML5 drag, same mechanism `SubDetailsEditor` already used), and a
+delete button — positioned immediately after the line's main `<tr>`, always visible (no expand
+click required), instead of inside the sticky-note icon's card. A new Pin button in the row-actions
+column (next to the existing sticky-note/trash icons) adds a blank sub-detail and auto-focuses it
+(`autoFocus` + a `pendingFocusId` state, since a freshly-mounted DOM node is the only reliable way
+to focus a newly-added array-mapped input). The sticky-note icon's card keeps Notes/Specifications/
+Tags only; the "has content" gold-dot indicator was split into two independent booleans
+(`hasSubDetails` for the Pin icon, `hasCardDetails` for the sticky-note icon) so each icon reflects
+only its own category.
+
+`src/pages/templates/TemplateEditorView.tsx`: the same treatment for `TemplateItem.subDetails`
+(a `string[]`, not `SubDetail[]` — no stable per-entry id) — its shared multi-line textarea (which
+also covered Specifications/Internal Notes via a documented "paste-friendly list" rationale) is now
+just for Specifications/Internal Notes; sub-details render as per-index pinned `<tr>` rows the same
+way, with the same Pin-button-in-actions-column add/auto-focus pattern. Specifications/Internal
+Notes intentionally kept their original textarea — only sub-details maps to the reference UI's
+per-line "pinned" concept.
+
+`src/lib/i18n.tsx`: `quotation.lineItems.notesIconTitle` (TH/EN) reworded from "Notes / Sub-details"
+to "Notes / Specifications / Tags" since sub-details no longer live behind that icon; the existing
+`addSubDetail`/`subDetailsPlaceholder`/`subDetailsDragTitle` keys were reused as-is (no new i18n
+keys needed for the quotation-side pinned rows). The template-side pinned rows reuse those same
+quotation-namespaced keys directly rather than duplicating them under `templates.*`.
+
+**Files Modified**: `src/pages/quotation/LineItemsEditor.tsx`, `src/pages/templates/TemplateEditorView.tsx`,
+`src/lib/i18n.tsx`, `docs/MODULES/Quotation.md`, `docs/MODULES/QuotationTemplates.md`
+
+**Files Removed**: none
+
+**Reason**: Direct user request with a reference screenshot ("อยากได้ช่องกรอกรายละเอียดสินค้าในหน้า
+ใบเสนอราคาเป็นแบบนี้แต่ยังคงธีมเดิมไว้... ปรับแก้ทั้งในหน้าใบเสนอราคาและเทมเพลต").
+
+**Notes**: `npx tsc --noEmit` and `npm run lint` both pass clean. Browser-verified via a temporary,
+fully self-contained local harness (`harness.html` + `src/devHarness.tsx`, mounting
+`LineItemsEditor` directly with mock in-memory data and no backend calls — created, screenshotted,
+then deleted before committing, since this sandboxed environment cannot reach the real API/MongoDB;
+same limitation documented throughout this file and `docs/SESSION_LOG.md`) — confirmed the pinned
+row appears on clicking the Pin icon, is gold-highlighted, auto-focuses, accepts Thai input, and
+that the separate sticky-note card (Notes/Specifications/Tags) still opens independently and
+unaffected. `TemplateEditorView.tsx`'s `ItemEditor` is not exported and wiring a matching harness
+would need substantially more mock props (job type, products, save handlers); it was instead
+verified by static review against the already browser-confirmed `LineItemsEditor.tsx` pattern — same
+colSpan arithmetic (6 template-grid columns; empty leading `<td/>` + `colSpan={5}` sums to 6, same
+shape as the browser-verified `<td/>` + `colSpan={7}` = 8 total columns in the quotation grid) and
+identical Pin/focus/highlight JSX. Not verified against a live deployment.
+
+---
+
 ## 2026-07-21 — Translate the raw "Not authenticated" 401 into a real Thai/English message
 
 **Feature**: A user reported seeing a bare "Not authenticated" toast when clicking Approve on a
