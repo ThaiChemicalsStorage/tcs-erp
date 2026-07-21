@@ -88,8 +88,6 @@ function sanitizeLine(raw: unknown, index: number): QuoteFields["lines"][number]
     qty: sanitizeNumber(r.qty, `จำนวนของรายการที่ ${index + 1}`, { min: 0, max: 1_000_000 }),
     unitPrice: sanitizeNumber(r.unitPrice, `ราคาต่อหน่วยของรายการที่ ${index + 1}`, { min: 0, max: 1_000_000_000 }),
     discount: sanitizeNumber(r.discount, `ส่วนลดของรายการที่ ${index + 1}`, { min: 0, max: 100 }),
-    notes: sanitizeText(r.notes, `หมายเหตุของรายการที่ ${index + 1}`, MAX_LINE_TEXT),
-    specifications: sanitizeText(r.specifications, `ข้อกำหนดของรายการที่ ${index + 1}`, MAX_LINE_TEXT),
     tags,
     subDetails,
     // Optional, defaults falsy — added 2026-07-14 for Quotation Templates' section-header lines

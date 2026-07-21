@@ -78,9 +78,10 @@ Each quotation `QuoteLine` becomes one `ScopeOfWorkItem` (`mapLineToScopeItem()`
 |---|---|
 | Item number | Computed from array position (section-header items don't get one) |
 | Item name (e.g. "FRP Lining for concrete floors") | `line.description` |
-| Indented specification lines (พื้นที่/ความหนา/วัสดุ/Chemical/Temperature) | `line.specifications` (newline-split) + `line.subDetails[]`, each becomes its own `ScopeOfWorkSpecLine` |
+| Indented specification lines (พื้นที่/ความหนา/วัสดุ/Chemical/Temperature) | `line.subDetails[]`, each becomes its own `ScopeOfWorkSpecLine`. **2026-07-21**: previously also included `line.specifications` (newline-split) — that `QuoteLine` field was removed entirely (unused, see CHANGELOG.md); its content now reaches here indirectly, since `applyTemplate.ts` already folds a template item's specifications into `subDetails` at the quotation stage, before this mapping ever runs |
 | Quantity | `line.qty` |
 | Unit | `line.unit` |
+| Item `remark` | **2026-07-21**: previously seeded from `line.notes` (now removed, see above) — starts blank and is freely editable in `ScopeOfWorkItemsEditor.tsx` afterward, same as any other snapshot field with no upstream source left |
 
 **Never copied**: `unitPrice`, `discount`, `tags` — Scope of Work never shows pricing anywhere
 (editor or print). A `QuoteLine` with `isSectionHeader: true` (a Quotation Template section divider)

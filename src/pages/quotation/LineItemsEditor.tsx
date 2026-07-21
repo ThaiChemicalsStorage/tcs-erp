@@ -1,66 +1,17 @@
 import { Fragment, useRef, useState } from "react";
 import {
   Plus, Trash2, Percent, PackageSearch, Layers,
-  List, ListOrdered, GripVertical, StickyNote, Pin, X,
+  GripVertical, StickyNote, Pin, X,
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
 import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { useI18n } from "../../lib/i18n";
 
-function insertAtCursor(textarea: HTMLTextAreaElement, prefix: string, value: string, onChange: (v: string) => void) {
-  const start = textarea.selectionStart ?? value.length;
-  const end = textarea.selectionEnd ?? value.length;
-  const needsNewlineBefore = start > 0 && value[start - 1] !== "\n";
-  const insertion = `${needsNewlineBefore ? "\n" : ""}${prefix}`;
-  const next = value.slice(0, start) + insertion + value.slice(end);
-  onChange(next);
-  requestAnimationFrame(() => {
-    textarea.focus();
-    const pos = start + insertion.length;
-    textarea.setSelectionRange(pos, pos);
-  });
-}
-
-function NotesEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { t } = useI18n();
-  const ref = useRef<HTMLTextAreaElement>(null);
-  return (
-    <div>
-      <div className="flex items-center gap-1 mb-1.5">
-        <button
-          type="button"
-          onClick={() => ref.current && insertAtCursor(ref.current, "• ", value, onChange)}
-          title={t("quotation.lineItems.notesBulletTitle")}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
-        >
-          <List size={11} /> {t("quotation.lineItems.notesBullet")}
-        </button>
-        <button
-          type="button"
-          onClick={() => ref.current && insertAtCursor(ref.current, "1. ", value, onChange)}
-          title={t("quotation.lineItems.notesNumberedTitle")}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
-        >
-          <ListOrdered size={11} /> {t("quotation.lineItems.notesNumbered")}
-        </button>
-      </div>
-      <textarea
-        ref={ref}
-        rows={4}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={t("quotation.lineItems.notesPlaceholder")}
-        className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed"
-      />
-    </div>
-  );
-}
-
 /** Renders each sub-detail as its own "pinned" row directly under the parent line item's row in
  * the main table — a highlighted (gold-tinted) inline strip with a Pin icon, mirroring how
  * `PrintDocument.tsx` prints sub-details with a Pin marker — rather than inside the collapsible
- * notes/specs/tags card below. `colSpan` covers every column after "No." (description through the
+ * tags card below. `colSpan` covers every column after "No." (description through the
  * row-actions column) so the pinned strip runs the full width of the row it belongs to. */
 function PinnedSubDetailRows({
   lineId,
@@ -122,22 +73,6 @@ function PinnedSubDetailRows({
         </tr>
       ))}
     </>
-  );
-}
-
-function SpecificationsEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const { t } = useI18n();
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1.5">{t("quotation.lineItems.specTitle")}</p>
-      <textarea
-        rows={3}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={t("quotation.lineItems.specPlaceholder")}
-        className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed"
-      />
-    </div>
   );
 }
 
@@ -208,8 +143,16 @@ export function LineItemsEditor({
 
   const addLine = () => onChange([...lines, blankLine()]);
   const addSectionHeader = () => onChange([...lines, { ...blankLine(), isSectionHeader: true }]);
-  const addLineFromProduct = (product: Product) =>
-    onChange([...lines, { ...blankLine(), description: product.name, unit: product.unit, unitPrice: product.defaultPrice, specifications: product.specifications }]);
+  const addLineFromProduct = (product: Product) => {
+    const spec = product.specifications.trim();
+    onChange([...lines, {
+      ...blankLine(),
+      description: product.name,
+      unit: product.unit,
+      unitPrice: product.defaultPrice,
+      subDetails: spec ? [{ id: newSubDetailId(), text: spec }] : [],
+    }]);
+  };
   const removeLine = (id: number) => onChange(lines.filter((l) => l.id !== id));
 
   const addSubDetail = (lineId: number) => {
@@ -273,7 +216,7 @@ export function LineItemsEditor({
             {lines.map((line, idx) => {
               // Section-header line copied from a Quotation Template (see applyTemplate.ts) — a
               // non-priced divider, not an ordinary priced line. Rendered as one full-width row
-              // (editable title, no unit/qty/price/discount/notes) instead of the normal 8-column
+              // (editable title, no unit/qty/price/discount) instead of the normal 8-column
               // layout below.
               if (line.isSectionHeader) {
                 return (
@@ -298,7 +241,7 @@ export function LineItemsEditor({
 
               const isExpanded = expanded.has(line.id);
               const hasSubDetails = line.subDetails.some((sd) => sd.text.trim() !== "");
-              const hasCardDetails = line.notes.trim() !== "" || line.specifications.trim() !== "" || line.tags.length > 0;
+              const hasCardDetails = line.tags.length > 0;
               return (
                 <Fragment key={line.id}>
                   <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors group">
@@ -339,7 +282,7 @@ export function LineItemsEditor({
                         </button>
                         <button
                           onClick={() => toggleExpand(line.id)}
-                          title={t("quotation.lineItems.notesIconTitle")}
+                          title={t("quotation.lineItems.tagsTitle")}
                           className={`transition-colors relative ${hasCardDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-0 group-hover:opacity-100"} hover:text-[#c9a84c]`}
                         >
                           <StickyNote size={13} />
@@ -363,9 +306,7 @@ export function LineItemsEditor({
                     <tr className="border-b border-border/50 bg-muted/10">
                       <td />
                       <td colSpan={7} className="px-4 pb-4 pt-1">
-                        <div className="grid sm:grid-cols-2 gap-4 bg-card border border-border rounded-lg p-4">
-                          <NotesEditor value={line.notes} onChange={(v) => updateLine(line.id, "notes", v)} />
-                          <SpecificationsEditor value={line.specifications} onChange={(v) => updateLine(line.id, "specifications", v)} />
+                        <div className="bg-card border border-border rounded-lg p-4">
                           <TagsEditor tags={line.tags} onChange={(tags) => updateLine(line.id, "tags", tags)} />
                         </div>
                       </td>

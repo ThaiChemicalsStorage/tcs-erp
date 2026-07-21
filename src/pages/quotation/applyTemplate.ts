@@ -27,14 +27,19 @@ function termsByType(terms: TemplateTermLine[], type: TemplateTermLine["type"]):
  *   `LineItemsEditor.tsx`/`PrintDocument.tsx`).
  * - An item/subItem becomes one ordinary `QuoteLine`: `description`/`unit`/`qty` copied directly
  *   (quantity `null` → `0`, an editable starting point, never invented), `unitPrice`/`discount`
- *   always `0` (this codebase never invents prices), `specifications` joined into the line's
- *   specifications text, and `item.subDetails` **plus** every editable parameter folded into
- *   `subDetails` as individual, freely editable rows (matching how `subDetails` already works for
- *   any other line). **2026-07-15, second Codex-review fix pass (High Priority #3)**: `item.
- *   subDetails` — real sub-detail text an admin configured in the Template Management editor — was
- *   previously silently discarded here; only editable-parameter prompts were copied. Fixed: both
- *   are now included, `item.subDetails` first (so an admin's own configured detail lines read
- *   before the generic fill-in-the-blank prompts).
+ *   always `0` (this codebase never invents prices), and `item.specifications` **plus**
+ *   `item.subDetails` **plus** every editable parameter folded into `subDetails` as individual,
+ *   freely editable pinned rows (matching how `subDetails` already works for any other line) — in
+ *   that order: specifications first (an item's real spec attributes, e.g. "Material: Steel"), then
+ *   an admin's own configured sub-detail lines, then the generic fill-in-the-blank prompts last.
+ *   **2026-07-21**: `QuoteLine.notes`/`.specifications` were removed from the data model entirely
+ *   (unused feature, removed per user request — see CHANGELOG.md); `item.specifications` now folds
+ *   into `subDetails` here instead of a dedicated `specifications` field, so this customer-visible
+ *   template content keeps reaching the applied quotation (and its print output) unchanged, just
+ *   via the surviving mechanism. **2026-07-15, second Codex-review fix pass (High Priority #3)**:
+ *   `item.subDetails` — real sub-detail text an admin configured in the Template Management editor
+ *   — was previously silently discarded here; only editable-parameter prompts were copied. Fixed:
+ *   both are now included.
  * - **An item with `visibleToCustomer: false` is skipped entirely** (same pass, same finding) —
  *   previously every item was copied unconditionally regardless of this flag, so marking an item
  *   "hidden from customer documents" in the editor had no actual effect on an applied quotation. A
@@ -57,12 +62,13 @@ export function applyTemplateToQuoteDraft(template: QuotationTemplate): AppliedT
   for (const section of template.sections) {
     lines.push({
       id: newLineId(), description: section.title, unit: "", qty: 0, unitPrice: 0, discount: 0,
-      notes: "", specifications: "", tags: [], subDetails: [], isSectionHeader: true,
+      tags: [], subDetails: [], isSectionHeader: true,
     });
 
     for (const item of section.items) {
       if (!item.visibleToCustomer) continue;
       const subDetails = [
+        ...item.specifications.filter((text) => text.trim()).map((text) => ({ id: newSubDetailId(), text })),
         ...item.subDetails.map((text) => ({ id: newSubDetailId(), text })),
         ...item.editableParameters.map((p) => ({
           id: newSubDetailId(),
@@ -76,8 +82,6 @@ export function applyTemplateToQuoteDraft(template: QuotationTemplate): AppliedT
         qty: item.quantity ?? 0,
         unitPrice: 0,
         discount: 0,
-        notes: "",
-        specifications: item.specifications.join("\n"),
         tags: [],
         subDetails,
         isSectionHeader: false,

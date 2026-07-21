@@ -6,7 +6,6 @@ import {
   type Quote, type QuoteLine, fmt, lineSubtotal, computeTotals, bahtText, VAT_RATE,
   lineHasDetails, formatQuoteDateThai as fmtThaiDate, formatQuoteDateNumeric as fmtNumericDate,
 } from "../../lib/quotes";
-import { FormattedNotes } from "./notesFormat";
 import { BrandMark } from "../../components/BrandMark";
 
 /** A section-header line with no item directly following it (e.g. every item under it was deleted
@@ -201,8 +200,6 @@ export function PrintDocument({
                 <tr>
                   <td />
                   <td colSpan={6} className="px-2 pb-2 text-[10px] text-[#3b5a85]">
-                    {line.specifications.trim() && <p className="italic mb-0.5">{line.specifications}</p>}
-                    <FormattedNotes text={line.notes} />
                     {line.subDetails.filter((sd) => sd.text.trim()).map((sd) => (
                       <div key={sd.id} className="flex items-start gap-1 mt-0.5">
                         <Pin size={9} className="mt-0.5 flex-shrink-0 text-[#7a9ac9]" />

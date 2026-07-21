@@ -443,13 +443,18 @@ Conversion rules:
   the resulting empty section without further changes.
 - Each remaining `TemplateItem` becomes one ordinary `QuoteLine`: `description` = `item.name`,
   `unit`/`qty` copied (`quantity: null` → `qty: 0`), `unitPrice`/`discount` always `0` (never
-  invented, per the "no prices were ever invented" rule above), `specifications` joined into the
-  line's specifications text.
-- `subDetails` = `item.subDetails` (real sub-detail text an admin configured in the editor — **fixed
-  2026-07-15**, previously silently discarded here even though the editor/API saved it) **plus** one
-  row per `editableParameter`, rendered as fill-in-the-blank text: `"Label: ______ Unit"` (e.g.
-  `"Capacity: ______ CMH"`) — a clear editable prompt, never a fabricated value. The item's own
-  configured sub-details come first, generic prompts after.
+  invented, per the "no prices were ever invented" rule above).
+- `subDetails` = `item.specifications` (each non-blank line, one row per line — **2026-07-21**:
+  `QuoteLine.notes`/`.specifications` were removed from the data model entirely as an unused feature,
+  see CHANGELOG.md and [Quotation.md](./Quotation.md) "Per-item sub-details & tags"; `item.
+  specifications` previously joined into that now-gone field, and folds into `subDetails` instead as
+  of this date, so a template item's real spec attributes — e.g. "Material: Steel" — keep reaching
+  the applied quotation and its print output unchanged, just via a different mechanism) **plus**
+  `item.subDetails` (real sub-detail text an admin configured in the editor — **fixed 2026-07-15**,
+  previously silently discarded here even though the editor/API saved it) **plus** one row per
+  `editableParameter`, rendered as fill-in-the-blank text: `"Label: ______ Unit"` (e.g. `"Capacity:
+  ______ CMH"`) — a clear editable prompt, never a fabricated value. Order: specifications first,
+  then the item's own configured sub-details, then generic prompts last.
 - **`internalNotes` (both item-level and template-level) are NEVER copied into `lines`** — dropped
   entirely by this function, by design, so an internal review comment can never reach a
   customer-facing quotation or its PDF, even indirectly. (Separately, `Quote.templateSnapshot` — see

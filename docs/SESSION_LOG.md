@@ -4,6 +4,54 @@
 
 ---
 
+## Session — 2026-07-21 (latest), Remove QuoteLine.notes/.specifications entirely
+
+### What was implemented
+- User asked to remove the per-line "Notes/Specifications" feature entirely, since it's unused.
+  Rather than guess scope, asked two `AskUserQuestion` rounds before touching code: (1) remove only
+  Notes+Specifications or the whole panel including Tags → user chose Notes+Specifications only,
+  keep Tags; (2) hide the UI but keep old data, or actually delete the fields from the data model →
+  user chose full removal from code.
+- Before deleting anything, ran a dedicated `Explore` agent to map every read/write site — this
+  caught two real dependencies that weren't obvious from the editor alone: `applyTemplate.ts` was
+  copying a Quotation Template item's `specifications` into the field about to be deleted (previously
+  documented as the *only* customer-visible-notes mechanism for template items — a real regression
+  risk if just deleted blindly), and `api/_lib/scopeOfWorkHandler.ts` was seeding a generated Scope
+  of Work item's `remark`/`specifications` from `line.notes`/`line.specifications`. Surfaced the
+  template-data-loss risk to the user with a third `AskUserQuestion` before proceeding — they chose
+  to preserve it by remapping into `subDetails` (the already-working pinned-row mechanism from
+  earlier this session) rather than silently dropping real business content.
+- Implemented: removed `notes`/`specifications` from `QuoteLine` (`src/lib/quotes.tsx`), deleted
+  `NotesEditor`/`SpecificationsEditor` from `LineItemsEditor.tsx` (sticky-note panel now shows only
+  Tags), removed the print rendering of both fields from `PrintDocument.tsx` and deleted the now-dead
+  `notesFormat.tsx`, remapped `applyTemplate.ts`'s and the product-picker's specifications copy into
+  `subDetails` instead, updated `scopeOfWorkHandler.ts`'s `mapLineToScopeItem()` to match (remark now
+  starts blank, specLines comes from subDetails alone), updated `api/_lib/quoteValidation.ts`'s
+  server-side sanitizer, and removed the now-unused i18n keys.
+- `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all
+  pass clean.
+- Verified visually via a temporary local harness (`LineItemsEditor` with mock data including a
+  pre-filled tag/sub-detail and a mock product with specifications text) — confirmed the panel now
+  shows only Tags, and that picking the mock product from the catalog created a new pinned sub-detail
+  row from its specifications text rather than losing it. Harness deleted before committing.
+- Updated `docs/MODULES/Quotation.md`, `docs/MODULES/QuotationTemplates.md`,
+  `docs/MODULES/ScopeOfWork.md`, `docs/DATABASE.md`, `docs/CHANGELOG.md`.
+
+### Known limitation
+- Not verified against a live deployment / real MongoDB data — mock-data harness verification only,
+  same sandboxed-environment constraint as every other pass in this log.
+- Old quotations already saved in MongoDB with real `notes`/`specifications` values keep that data in
+  the raw document (no migration ran) but it's no longer displayed anywhere — an explicitly confirmed
+  tradeoff from the second `AskUserQuestion` above, not an oversight, but worth knowing if anyone ever
+  asks "where did the notes on quote X go."
+
+### Recommendation for next session
+- If old `notes`/`specifications` data ever needs to be reviewed for old quotations, it's still in
+  MongoDB (untouched) — a one-off read-only script/query could surface it without needing any UI
+  changes, if that's ever requested.
+
+---
+
 ## Session — 2026-07-21 (even later), Quotation table alignment fix + page-wide readability bump
 
 ### What was implemented

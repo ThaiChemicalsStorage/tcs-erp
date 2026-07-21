@@ -69,8 +69,6 @@ export interface QuoteLine {
   qty: number;
   unitPrice: number;
   discount: number;
-  notes: string;
-  specifications: string;
   tags: string[];
   subDetails: SubDetail[];
   /** True for a line copied from a Quotation Template's section heading (e.g. "Preparation
@@ -388,16 +386,16 @@ export function newSubDetailId(): string {
 }
 
 export function blankLine(): QuoteLine {
-  return { id: newLineId(), description: "", unit: "ชิ้น", qty: 1, unitPrice: 0, discount: 0, notes: "", specifications: "", tags: [], subDetails: [] };
+  return { id: newLineId(), description: "", unit: "ชิ้น", qty: 1, unitPrice: 0, discount: 0, tags: [], subDetails: [] };
 }
 
 export function lineSubtotal(l: QuoteLine): number {
   return l.qty * l.unitPrice * (1 - l.discount / 100);
 }
 
-/** Whether a line has any notes/sub-details/specifications/tags worth showing in an expand panel or print. */
+/** Whether a line has any sub-details/tags worth showing in the print output. */
 export function lineHasDetails(l: QuoteLine): boolean {
-  return l.notes.trim() !== "" || l.subDetails.some((sd) => sd.text.trim() !== "") || l.specifications.trim() !== "" || l.tags.length > 0;
+  return l.subDetails.some((sd) => sd.text.trim() !== "") || l.tags.length > 0;
 }
 
 export function formatQuoteDateThai(iso: string): string {

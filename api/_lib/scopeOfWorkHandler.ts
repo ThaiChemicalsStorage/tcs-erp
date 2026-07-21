@@ -91,11 +91,13 @@ function mapLineToScopeItem(line: QuoteFields["lines"][number]): ScopeOfWorkItem
   if (line.isSectionHeader) {
     return { id: randomUUID(), name: line.description, specifications: [], quantity: null, unit: "", remark: "", isSectionHeader: true };
   }
-  const specLines: ScopeOfWorkSpecLine[] = [
-    ...line.specifications.split("\n").map((s) => s.trim()).filter(Boolean).map((text) => ({ id: randomUUID(), text })),
-    ...line.subDetails.filter((sd) => sd.text.trim()).map((sd) => ({ id: randomUUID(), text: sd.text.trim() })),
-  ];
-  return { id: randomUUID(), name: line.description, specifications: specLines, quantity: line.qty, unit: line.unit, remark: line.notes, isSectionHeader: false };
+  // QuoteLine.notes/.specifications were removed 2026-07-21 (unused feature, see CHANGELOG.md) —
+  // specLines now comes from subDetails alone (which already carries any former specifications
+  // content, folded in at the QuoteLine level — see applyTemplate.ts), and remark starts blank
+  // (freely editable afterward in ScopeOfWorkItemsEditor.tsx, same as any other snapshot field with
+  // no upstream source left to seed it from).
+  const specLines: ScopeOfWorkSpecLine[] = line.subDetails.filter((sd) => sd.text.trim()).map((sd) => ({ id: randomUUID(), text: sd.text.trim() }));
+  return { id: randomUUID(), name: line.description, specifications: specLines, quantity: line.qty, unit: line.unit, remark: "", isSectionHeader: false };
 }
 
 function buildCustomerSnapshot(quote: QuoteFields): ScopeOfWorkCustomerSnapshot {

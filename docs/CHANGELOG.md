@@ -4,6 +4,82 @@
 
 ---
 
+## 2026-07-21 (latest) — Remove QuoteLine.notes/.specifications entirely (unused feature)
+
+**Feature**: Direct user request ("เอาหมายเหตุ ข้อกำหนดเฉพาะ เอาออกไปเลยส่วนนั้นไม่ใช้แล้ว" — remove
+Notes/Specifications, that part isn't used anymore). Confirmed scope via `AskUserQuestion` before
+touching the data model: (1) remove only Notes + Specifications, keep Tags; (2) remove the
+references from code entirely, not just hide the UI. Before implementing, researched every read/
+write site first (an `Explore` agent pass) since this touches more than the obvious editor — most
+notably `applyTemplate.ts`, which was copying a Quotation Template item's `specifications` into the
+now-removed `QuoteLine.specifications` field (previously documented as "the only customer-visible-
+notes mechanism" for template items), and `api/_lib/scopeOfWorkHandler.ts`, which seeded a generated
+Scope of Work item's `remark` from `line.notes` and its `specifications` array from
+`line.specifications` + `line.subDetails`. Confirmed with the user (a second `AskUserQuestion`)
+that template-sourced specifications should be preserved by remapping into `subDetails` (pinned
+rows) rather than silently dropped.
+
+**Data model**: `QuoteLine.notes`/`.specifications` removed from the interface (`src/lib/quotes.tsx`);
+`blankLine()` and `lineHasDetails()` updated to match (the latter now only checks `subDetails`/`tags`).
+
+**Editor** (`LineItemsEditor.tsx`): `NotesEditor` and `SpecificationsEditor` components deleted
+entirely (along with the now-unused `insertAtCursor` bullet/numbered-list helper and the `List`/
+`ListOrdered` icon imports). The sticky-note expand panel now contains only the Tags editor — its
+tooltip changed from "Notes / Specifications / Tags" to just reuse the existing "Tags" label, and its
+gold-dot "has content" indicator now reflects only `tags.length > 0`. `addLineFromProduct()` (the
+"pick from catalog" flow) no longer copies `Product.specifications` into a `specifications` field —
+instead, if the product has non-blank specifications text, it becomes an initial pinned `subDetails`
+entry on the new line, so that content isn't silently lost.
+
+**Print** (`PrintDocument.tsx`): no longer renders `line.specifications` (italic paragraph) or
+`line.notes` (via `<FormattedNotes>`) in a line's details row — sub-details and tags are unaffected.
+`src/pages/quotation/notesFormat.tsx` (`<FormattedNotes>`, only ever used for `line.notes`) deleted
+as dead code.
+
+**Template application** (`applyTemplate.ts`): `item.specifications` (a template item's real spec
+attributes, e.g. "Material: Steel") now folds into the resulting `QuoteLine`'s `subDetails` array
+(one row per non-blank line) instead of a dedicated `specifications` field — ordered before the
+item's own configured `subDetails` and the generic editable-parameter fill-in-the-blank prompts, so
+this customer-visible template content still reaches the applied quotation and its print output.
+
+**Scope of Work** (`api/_lib/scopeOfWorkHandler.ts`'s `mapLineToScopeItem()`): `specLines` now comes
+from `subDetails` alone (which already carries any former specifications content via the
+`applyTemplate.ts` change above); `remark` now starts blank instead of seeding from the removed
+`line.notes` — `ScopeOfWorkItem.remark` itself is untouched and remains freely editable afterward in
+`ScopeOfWorkItemsEditor.tsx`, only its default seed value changed.
+
+**Server-side validation** (`api/_lib/quoteValidation.ts`): `sanitizeLine()` no longer sanitizes
+`notes`/`specifications` (they're no longer part of the type, so this would otherwise be a compile
+error against `QuoteFields["lines"][number]`).
+
+**i18n**: removed the now-unused `quotation.lineItems.notesIconTitle`/`notesBullet(Title)`/
+`notesNumbered(Title)`/`notesPlaceholder`/`specTitle`/`specPlaceholder` keys (TH + EN); the sticky-
+note icon's tooltip now reuses the existing `tagsTitle` key instead of a dedicated one.
+
+**Files Modified**: `src/lib/quotes.tsx`, `src/pages/quotation/LineItemsEditor.tsx`,
+`src/pages/quotation/PrintDocument.tsx`, `src/pages/quotation/applyTemplate.ts`,
+`api/_lib/scopeOfWorkHandler.ts`, `api/_lib/quoteValidation.ts`, `src/lib/i18n.tsx`,
+`docs/MODULES/Quotation.md`, `docs/MODULES/QuotationTemplates.md`, `docs/MODULES/ScopeOfWork.md`,
+`docs/DATABASE.md`
+
+**Files Removed**: `src/pages/quotation/notesFormat.tsx`
+
+**Reason**: Direct user request — the Notes/Specifications feature was unused in practice.
+
+**Notes**: `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run
+build` all pass clean. Browser-verified via a temporary local harness mounting `LineItemsEditor`
+directly (mock data including a pre-filled sub-detail and tag, plus a mock product with
+specifications text) — confirmed the sticky-note panel now shows only Tags, and that picking the
+mock product from the catalog correctly created a new pinned sub-detail row from its specifications
+text instead of losing it; harness files deleted before committing. **Accepted, explicitly
+confirmed data tradeoff**: any quotation already saved in MongoDB with real `notes`/`specifications`
+text on its line items keeps that data in the raw document (no migration/deletion ran, consistent
+with this app's "MongoDB has no schema enforcement, extra untyped fields are harmless" pattern used
+elsewhere) but it is no longer surfaced anywhere in the app (editor, print, or Scope of Work) — the
+user explicitly chose this over hiding the UI while preserving old data on-screen.
+
+---
+
 ## 2026-07-21 (even later) — Quotation page readability pass: bump text sizes one tier across the whole page
 
 **Feature**: Direct user request ("ช่วยเปลี่ยน fonts หรือขนาดให้มันอ่านง่ายขึ้นด้วยในหน้าใบเสนอราคา" —
