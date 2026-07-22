@@ -278,7 +278,7 @@ export function ScopeOfWorkDocument({
           <ChevronRight size={14} className="rotate-180" /> กลับไปใบเสนอราคา
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-medium font-mono" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{scope.scopeNumber}</span>
+        <span className="text-sm text-[#c9a84c] font-mono font-semibold tracking-wide">{scope.scopeNumber}</span>
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isDraft ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20" : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"}`}>
           {isDraft ? "Draft" : "Final"}
         </span>

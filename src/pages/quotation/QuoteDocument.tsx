@@ -415,7 +415,7 @@ export function QuoteDocument({
           <ChevronRight size={14} className="rotate-180" /> {t("quotation.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-medium" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+        <span className="text-sm text-[#c9a84c] font-mono font-semibold tracking-wide">
           {isDetail ? quote!.id : t("quotation.newDoc")}
         </span>
 
