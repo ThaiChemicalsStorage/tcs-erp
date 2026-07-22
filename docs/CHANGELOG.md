@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Add a text search box to the Quotation list
+
+**Feature**: per direct user request ("ในหน้าใบเสนอราคาอยากให้มันสามารถค้นหาใบเสนอราคาได้" — on the
+Quotation page, want to be able to search for quotations), added a search input to `QuoteList.tsx`'s
+filter row (next to the status/Job Type filters, before them in the layout). Matches against **No.
+(`id`), Client (`client`), Salesperson, and PO No. (`poRef`)** — a case-insensitive substring match
+across all four, combined via `.some()` so any one field matching is enough. Purely client-side over
+the already-fetched `quotes` array (no new API route), consistent with the existing status/Job
+Type/client-chip filters on this same page, all of which are also client-side. Clearing the input
+(✕ button, shown only when non-empty) or the existing "no results" empty state (reused, not a new
+one) both already handle the zero-match case. `tsc`/`lint`/`build` all pass clean.
+
+**Files**: `src/pages/quotation/QuoteList.tsx` (new `searchQuery` state + filter clause + input UI),
+`src/lib/i18n.tsx` (new `quotation.searchPlaceholder` key, both languages).
+
+---
+
 ## 2026-07-22 (absolute latest) — Add Quotation Rewrite/Revision feature
 
 **Feature**: a new "Rewrite"/"แก้ไข" toolbar button on the Quotation detail view (`QuoteDocument.tsx`,

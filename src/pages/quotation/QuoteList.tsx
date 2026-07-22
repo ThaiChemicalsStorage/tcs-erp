@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, FileText, Target, X } from "lucide-react";
+import { Plus, FileText, Target, X, Search } from "lucide-react";
 import { EmptyState } from "../../components/EmptyState";
 import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusStyle, statusIcon, statusLabelKey } from "../../lib/quotes";
 import type { JobType } from "../../lib/jobTypes";
@@ -49,10 +49,13 @@ export function QuoteList({
   const [filterStatus, setFilterStatus] = useState<string>(initialFilter?.status ?? FILTER_ALL);
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
   const [clientFilter, setClientFilter] = useState<string>(initialFilter?.client ?? "");
+  const [searchQuery, setSearchQuery] = useState("");
+  const normalizedSearch = searchQuery.trim().toLowerCase();
   const filtered = quotes
     .filter((q) => filterStatus === FILTER_ALL || q.status === filterStatus)
     .filter((q) => filterJobType === FILTER_ALL || q.jobTypeCode === filterJobType)
-    .filter((q) => !clientFilter || q.client === clientFilter);
+    .filter((q) => !clientFilter || q.client === clientFilter)
+    .filter((q) => !normalizedSearch || [q.id, q.client, q.salesperson, q.poRef].some((v) => v.toLowerCase().includes(normalizedSearch)));
 
   const columns = [
     t("quotation.col.id"), t("quotation.col.client"), t("quotation.col.jobType"), t("quotation.col.salesperson"),
@@ -95,6 +98,21 @@ export function QuoteList({
 
       {/* Filter */}
       <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("quotation.searchPlaceholder")}
+            className="w-64 pl-9 pr-8 py-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X size={13} />
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 w-fit flex-wrap">
           <button onClick={() => setFilterStatus(FILTER_ALL)}
             className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === FILTER_ALL ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
