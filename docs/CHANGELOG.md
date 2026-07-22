@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Fix oversized "Not Interested" button (text wrapping to 2 lines)
+
+**Bug fix**: with a screenshot, the "Not Interested" button in `InterestButtons.tsx` (used in
+`QuoteList.tsx`'s Interest column) wrapped its label onto 2 lines in English mode ("Not" / "Interested"),
+making the button noticeably taller than its "Interested" sibling — neither button had
+`whitespace-nowrap`, so the longer English label wrapped whenever the table column had just barely
+not enough width. Added `whitespace-nowrap` to both buttons' text and `flex-shrink-0` to their
+icons; the table's existing `overflow-x-auto` wrapper already handles any resulting horizontal
+overflow, same as every other `whitespace-nowrap` column in this table. Verified visually against a
+temporary mock-data harness with the UI language forced to English (`localStorage.tcs_erp_lang =
+"en"`) — confirmed both buttons now render at the same single-line height. `tsc`/`lint`/`build` all
+pass clean.
+
+**Files**: `src/pages/quotation/InterestButtons.tsx`.
+
+---
+
 ## 2026-07-22 (absolute latest) — Fix Quotation list filter row wrapping into 3 uneven lines
 
 **Bug fix**: direct follow-up, with a screenshot, to the Salesperson filter added just above — at
