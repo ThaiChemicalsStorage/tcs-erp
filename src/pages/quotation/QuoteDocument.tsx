@@ -607,7 +607,7 @@ export function QuoteDocument({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.quoteNumber")}</label>
-                    <input readOnly className="w-full text-sm font-mono text-[#c9a84c] font-semibold bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
+                    <input readOnly className="w-full text-sm font-mono text-[#c9a84c] font-medium bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
                   </div>
                   <div>
                     <RequiredFieldLabel required={false}>{t("quotation.field.poRef")}</RequiredFieldLabel>
