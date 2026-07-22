@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Fix Quotation list filter-row layout imbalance
+
+**Bug fix**: direct follow-up to the search box added just below ("รู้สึกการจัดเรียง layout มันแปลก" —
+the layout feels off). Verified visually via a temporary mock-data harness (`?harness=1` query param
+routed to a throwaway `QuotationPage`/`QuoteList` mount in `main.tsx`, mock quotes/job types) rather
+than guessing — found two real issues: (1) the search input rendered visibly **shorter** than the
+adjacent status-pill bar and Job Type dropdown (their heights weren't explicitly matched, so browser
+default input/select/div height differences showed), and (2) the placeholder text
+("ค้นหาเลขที่ / ชื่อลูกค้า / พนักงานขาย / เลขที่ PO") was too long for the `w-64` box and got truncated
+mid-word. Fixed both: gave the search wrapper, input, pill-bar container, and select an explicit
+matching `h-9`, widened the input to `w-72`, and shortened the placeholder to
+"ค้นหาเลขที่ / ลูกค้า / พนักงานขาย" (still searches `poRef` too, just not named in the shorter label).
+Confirmed the fix visually (heights now align, placeholder fits, typing a client name correctly
+narrows the list to 1 of 5 mock rows) and confirmed zero console errors. Harness deleted and
+`main.tsx` reverted before finishing — never committed. `tsc`/`lint`/`build` all pass clean.
+
+**Files**: `src/pages/quotation/QuoteList.tsx`, `src/lib/i18n.tsx` (shortened
+`quotation.searchPlaceholder`, both languages).
+
+---
+
 ## 2026-07-22 (absolute latest) — Add a text search box to the Quotation list
 
 **Feature**: per direct user request ("ในหน้าใบเสนอราคาอยากให้มันสามารถค้นหาใบเสนอราคาได้" — on the
