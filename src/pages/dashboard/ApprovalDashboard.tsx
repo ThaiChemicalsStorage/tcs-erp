@@ -40,7 +40,7 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
 
   return (
     <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors align-top">
-      <td className="px-3 py-2.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{item.id}</td>
+      <td className="px-3 py-2.5 text-xs font-mono text-[#c9a84c] font-medium whitespace-nowrap">{item.id}</td>
       <td className="px-3 py-2.5 text-xs text-foreground">{item.client}</td>
       <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{item.salesperson}</td>
       <td className="px-3 py-2.5 text-xs font-mono text-foreground font-semibold whitespace-nowrap">{fmtShort(item.amount)}</td>
