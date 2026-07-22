@@ -23,6 +23,7 @@ import {
 import { logAudit } from "./lib/auditLog";
 import { hasTourCompleted, markTourCompleted } from "./lib/tour";
 import { NotificationBell } from "./components/NotificationBell";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { BrandMark } from "./components/BrandMark";
 import { useGuidedTour } from "./components/GuidedTour";
@@ -695,6 +696,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
+          <ErrorBoundary key={effectiveNav}>
           <Suspense fallback={<PageLoading />}>
             {/* Dashboard and Audit Log fetch their own data independently (see AREA 2 in the
                 2026-07-14 progressive-loading pass) — they render immediately regardless of any
@@ -732,6 +734,7 @@ export default function App() {
               : <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
             }
           </Suspense>
+          </ErrorBoundary>
         </div>
       </div>
 

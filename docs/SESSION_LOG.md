@@ -4,6 +4,47 @@
 
 ---
 
+## Session — 2026-07-22 (absolute latest), Fix Scope of Work page crashing to blank white
+
+### What was implemented
+- User reported the new Scope of Work page (shipped earlier this same session) went completely
+  blank white on click — a real production bug caught by actual usage, not by any local check.
+- Reasoned through what could cause a *literal blank screen* rather than a normal error message:
+  checked whether the app has an error boundary anywhere (it doesn't, confirmed by grep) — meaning
+  React's default behavior on any uncaught render exception is to unmount the entire tree. This
+  reframed the investigation: the bug didn't need to be exotic, it just needed to be *any* uncaught
+  exception during render, and the missing error boundary is what turned it into a total blank
+  screen instead of a contained error.
+- Found the likely culprit by re-reading my own `toListItem()` from earlier this session: it read
+  `full.customerSnapshot.companyName`/`jobTypeCode`/etc. straight off the MongoDB document with no
+  fallback. Recognized the specific mechanism — `JSON.stringify()` silently drops `undefined`-valued
+  keys rather than sending `null`, so a record missing a field wouldn't come back as `field: null`,
+  it would come back with the key *absent entirely*, and the client's `.trim()`/`.toLowerCase()`
+  calls on an assumed-always-string field would throw the moment real data included such a record.
+- Fixed defensively in three independent layers rather than just patching the one line that was
+  probably the actual cause: server-side fallbacks in `toListItem()`, client-side re-normalization
+  in `ScopeOfWorkList.tsx` (defense-in-depth, don't trust the network payload blindly either), and —
+  the highest-value fix — a first-ever app-wide `ErrorBoundary`, since the missing-fallback bug
+  could easily have a sibling elsewhere in this large, un-tested codebase, and the *real* problem
+  exposed by this incident is "any bug anywhere blanks the whole app," not just this one field.
+- Verified the fix actually works, not just that it compiles: built a harness with a deliberately
+  malformed mock record (most fields absent, same shape the real bug would have produced) and
+  confirmed it rendered correctly instead of throwing.
+
+### Known limitation
+- The fix is verified against a *simulated* version of the bug (a malformed mock record), not
+  against whatever the actual real-data condition was — this sandboxed session still can't reach
+  the live MongoDB instance to confirm the real record(s) that triggered it, or run the full list→
+  detail navigation end-to-end.
+
+### Recommendation for next session
+- Ask the user to confirm the Scope of Work page now loads correctly in production. If it still
+  crashes, the `ErrorBoundary` should at least now show a visible error screen instead of blank
+  white — ask for a screenshot of *that* screen (or the browser console) to find the true remaining
+  cause, rather than guessing again.
+
+---
+
 ## Session — 2026-07-22 (absolute latest), Add a standalone Scope of Work sidebar page
 
 ### What was implemented

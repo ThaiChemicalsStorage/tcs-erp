@@ -41,6 +41,31 @@ difference is `onBack`/`backLabel` (returns to this page's own list, "กลั�
 instead of "กลับไปใบเสนอราคา"). See "Files" below and [API.md](../API.md) for the new "list
 everything" mode `GET /api/scope-of-works` gained (previously always required a `quotationId`).
 
+**2026-07-22, same-day crash fix — user-reported "หน้าขาวหมดเลย" (page goes completely white)**:
+the standalone list page crashed immediately on real data. Root cause: `toListItem()`
+(`api/_lib/scopeOfWorkHandler.ts`) read fields like `customerSnapshot.companyName`/`jobTypeCode`/
+`quotationNumber` directly off the MongoDB document with no fallback — MongoDB enforces no schema,
+so any record missing one of these (there is real historical precedent for fields being added to
+this collection after some records already existed, e.g. `quotationSalesperson` in the 2026-07-15
+fix pass above) serializes that key as `undefined`, which `JSON.stringify()` **drops from the
+response entirely** rather than sending `null`. The client then found the key genuinely absent and
+crashed calling `.trim()`/`.toLowerCase()` on `undefined` — **during React's render phase**, and
+since this app had no error boundary anywhere (see [ARCHITECTURE.md](../ARCHITECTURE.md)), React's
+default behavior on an uncaught render error is to unmount the entire tree, producing exactly the
+reported blank white screen with no visible error at all.
+
+Fixed in three layers: (1) `toListItem()` now defaults every field (`?? ""`, `?? "Draft"` for
+status) — the same "MongoDB enforces no schema, normalize once" pattern `api/dashboard/index.ts`
+already established; (2) `ScopeOfWorkList.tsx` independently re-normalizes every field client-side
+too, defense-in-depth against any other unexpected shape slipping through; (3) a new app-wide
+`ErrorBoundary` (`src/components/ErrorBoundary.tsx`, wraps the page-content area in `App.tsx`) means
+any *future* bug of this kind degrades to a recoverable "เกิดข้อผิดพลาดที่ไม่คาดคิด" + reload-page
+screen instead of a silent blank crash — a systemic protection, not specific to this one bug.
+Reproduced the exact original crash against a deliberately malformed mock record (missing
+`scopeNumber`/`customerName`/`jobTypeCode`/etc.) in a temporary browser harness, confirmed it no
+longer throws post-fix, then confirmed the harness would have shown the new error screen instead of
+blanking had the fix not held. `tsc`/`lint`/`build` all pass clean.
+
 This is **not related to** Company Profiles / issuer-company selection — that feature was built,
 found to be a misunderstanding, and removed (see `MODULES/CompanyProfiles.md`). This ERP has exactly
 one issuer company; the Scope of Work uses no per-document issuer selection at all.

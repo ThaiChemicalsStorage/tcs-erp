@@ -23,9 +23,26 @@ export function ScopeOfWorkList({
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
-  const jobTypesInList = [...new Set(scopeOfWorks.map((s) => s.jobTypeCode).filter((c) => c.trim()))].sort();
+  // Defensive, matching QuoteList.tsx/api/dashboard's own "MongoDB enforces no schema" normalization
+  // — the server already defaults every field (see toListItem() in scopeOfWorkHandler.ts), but this
+  // is a second, independent line of defense: a record missing a field must degrade to an empty
+  // string here too, never a crash calling `.trim()`/`.toLowerCase()` on `undefined` during render.
+  const items = scopeOfWorks.map((s) => ({
+    ...s,
+    scopeNumber: s.scopeNumber ?? "",
+    customerName: s.customerName ?? "",
+    quotationNumber: s.quotationNumber ?? "",
+    jobTypeCode: s.jobTypeCode ?? "",
+    // Not itself unsafe to leave undefined (indexing `statusStyle[undefined]` just yields an
+    // undefined class name, not a crash), but normalized anyway for the same reason every other
+    // field here is — `s.status` indexes a lookup table, so a real value keeps the badge looking
+    // right instead of silently rendering with no color at all.
+    status: s.status ?? "Draft",
+  }));
 
-  const filtered = scopeOfWorks
+  const jobTypesInList = [...new Set(items.map((s) => s.jobTypeCode).filter((c) => c.trim()))].sort();
+
+  const filtered = items
     .filter((s) => filterStatus === FILTER_ALL || s.status === filterStatus)
     .filter((s) => filterJobType === FILTER_ALL || s.jobTypeCode === filterJobType)
     .filter((s) => !normalizedSearch || [s.scopeNumber, s.customerName, s.quotationNumber, s.jobTypeCode].some((v) => v.toLowerCase().includes(normalizedSearch)));

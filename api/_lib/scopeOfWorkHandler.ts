@@ -266,16 +266,31 @@ function toSummary(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkSummary {
 
 /** Richer row shape for the standalone Scope of Work management page's list (added 2026-07-22) —
  * see `ScopeOfWorkListItem` in src/lib/scopeOfWork.ts for why this is a separate shape from
- * `toSummary()` above, which only ever needs to answer "does one exist for this quotation?" */
+ * `toSummary()` above, which only ever needs to answer "does one exist for this quotation?"
+ *
+ * MongoDB enforces no schema — a record that predates a given field (or one written outside this
+ * app's own API) could have any of these `undefined`, and `JSON.stringify()` silently *drops* an
+ * `undefined`-valued key from the response entirely rather than sending `null` — the client would
+ * then find the key simply missing and crash calling `.trim()`/`.toLowerCase()` on it (a real
+ * incident: this shipped without these fallbacks and the standalone list page went blank white on
+ * first real data, since this app has no top-level error boundary — see App.tsx's `ErrorBoundary`,
+ * added the same day). Every field is defaulted here once, the same "normalize once, not at every
+ * call site" pattern `api/dashboard/index.ts` already uses for `client ?? ""`/`salesperson ?? ""`. */
 function toListItem(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkListItem {
   const full = withStringId(doc);
   return {
-    id: full.id, scopeNumber: full.scopeNumber, secondaryCode: full.secondaryCode,
-    quotationId: full.quotationId, quotationNumber: full.quotationNumber,
-    jobTypeCode: full.jobTypeCode, jobTypeName: full.jobTypeName,
-    customerName: full.customerSnapshot.companyName,
-    issueDate: full.issueDate, deliveryDate: full.deliveryDate,
-    status: full.status, updatedAt: full.updatedAt,
+    id: full.id,
+    scopeNumber: full.scopeNumber ?? "",
+    secondaryCode: full.secondaryCode ?? "",
+    quotationId: full.quotationId ?? "",
+    quotationNumber: full.quotationNumber ?? "",
+    jobTypeCode: full.jobTypeCode ?? "",
+    jobTypeName: full.jobTypeName ?? "",
+    customerName: full.customerSnapshot?.companyName ?? "",
+    issueDate: full.issueDate ?? "",
+    deliveryDate: full.deliveryDate ?? "",
+    status: full.status ?? "Draft",
+    updatedAt: full.updatedAt ?? "",
   };
 }
 

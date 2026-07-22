@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Self-review fix: ErrorBoundary never reset after catching an error
+
+**Bug fix**: reviewing the crash fix below turned up a real gap in the fix itself — `<ErrorBoundary>`
+was wired into `App.tsx` with no `key`, so once it caught an error it stayed in `hasError: true`
+forever. React error boundaries don't auto-reset when their children's content changes, so the user
+would be permanently stuck on the fallback error screen even after clicking a *different* sidebar
+item to a page that would otherwise render fine — undermining the boundary's own stated goal
+("sidebar/header shell stays interactive"). Fixed by giving it `key={effectiveNav}`, the standard
+idiom for forcing a fresh remount (and therefore a state reset) whenever navigation actually
+changes. Also swapped `componentDidCatch`'s hand-rolled inline info type for React's own `ErrorInfo`,
+and added client-side normalization for `status` in `ScopeOfWorkList.tsx` (not itself a crash risk,
+just closing the same defensive gap the other fields already had).
+
+**Verification**: built a throwaway harness mirroring the exact `<ErrorBoundary key={...}>` pattern
+— a crashing page followed by a click to a working one — and confirmed the boundary now recovers
+correctly instead of staying stuck. `tsc --noEmit` (both tsconfigs), `lint`, `build` all pass clean.
+
+**Files**: `src/App.tsx`, `src/components/ErrorBoundary.tsx`, `src/pages/scopeOfWork/ScopeOfWorkList.tsx`.
+
+---
+
+## 2026-07-22 (absolute latest) — Fix Scope of Work page crashing to a blank white screen
+
+**Bug fix**: user reported the new Scope of Work page went completely blank white on click. Root
+cause: `toListItem()` (`api/_lib/scopeOfWorkHandler.ts`, added earlier the same day) read fields
+straight off the MongoDB document with no fallback — a record missing any of them (real historical
+possibility: this collection has had fields added after some records already existed, e.g.
+`quotationSalesperson` in an earlier pass) serializes that key as `undefined`, which
+`JSON.stringify()` drops from the response entirely. The client found the key genuinely absent and
+crashed calling `.trim()`/`.toLowerCase()` on `undefined` during React's render phase — and since
+this app had **no error boundary anywhere**, React's default "unmount the whole tree on an uncaught
+render error" behavior produced exactly the reported blank white screen.
+
+**Fix, three layers**: (1) `toListItem()` now defaults every field (`?? ""`/`?? "Draft"`), same
+"MongoDB enforces no schema" pattern already used in `api/dashboard/index.ts`; (2) `ScopeOfWorkList.tsx`
+independently re-normalizes every field client-side too; (3) new app-wide `ErrorBoundary`
+(`src/components/ErrorBoundary.tsx`, wraps the page-content area in `App.tsx`) so any future crash
+of this kind shows a recoverable error screen instead of blanking silently — closes a real,
+previously-total gap (zero error boundaries existed anywhere in this app before today).
+
+**Verification**: reproduced the exact original crash in a temporary browser harness against a
+deliberately malformed mock record (most fields absent) — confirmed it threw before the fix and
+rendered correctly (empty cells, no crash) after. `tsc --noEmit` (both tsconfigs), `lint`, `build`
+all pass clean.
+
+**Files**: `api/_lib/scopeOfWorkHandler.ts`, `src/pages/scopeOfWork/ScopeOfWorkList.tsx`,
+`src/components/ErrorBoundary.tsx` (new), `src/App.tsx` (wires the boundary in).
+
+---
+
 ## 2026-07-22 (absolute latest) — Add a standalone "Scope of Work" sidebar page
 
 **Feature**: per direct user request, Scope of Work gained its own top-level sidebar entry — a
