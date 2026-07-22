@@ -14,6 +14,19 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-22] Scope of Work got its own standalone sidebar page.** Previously only reachable
+  via a button on the Quotation detail page; now also a top-level "Scope of Work" nav entry (icon
+  `ClipboardList`, gated by `scopeOfWork:view`) for browsing/opening existing records — creation is
+  unchanged, still only via the Quotation-detail button. New `src/pages/scopeOfWork/` folder
+  (`ScopeOfWorkList.tsx` mirrors `QuoteList.tsx`'s summary-cards/search/filter/table pattern;
+  `ScopeOfWorkPage.tsx` owns list↔detail state and reuses the existing `ScopeOfWorkDocument.tsx`
+  for the detail view). `GET /api/scope-of-works` gained a "list everything company-wide" mode
+  (`quotationId` now optional). `tsc`/`lint`/`build` all pass clean; the list UI was visually
+  verified against a mock-data harness. **Not done**: live-deployment verification of the full
+  page/API integration — same sandboxed-session limitation as every entry below. Also investigated
+  (not fixed, no code-level issue found): a "website link" the user saw on the printed Scope of
+  Work document — almost certainly the browser's own native print header, which already has an
+  explanatory tooltip next to the print button; see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 - ⚠️ **[2026-07-22] Added `quotations:viewAll` permission + Salesperson filter — requires a manual production step.**
   A role holding `quotations:view` without the new `quotations:viewAll` now only sees its own
   quotations (server-enforced on `GET /api/quotes` and Global Search's Quotation results); Sales
@@ -513,6 +526,7 @@ Not yet planned.
 - **Quotation Rewrite/Revision (2026-07-22) is unverified against a live deployment/browser** — same sandboxed-session no-MongoDB-network limitation as every prior pass above. `tsc`/`lint`/`build` pass clean and the client bundle loads with zero console errors, but the 8 manual test scenarios in the original feature request (first/second/third rewrite, data-copy fidelity, original-record integrity, repeated-click guard, RBAC, error handling) have not been click-through-verified against real data. See [MODULES/Quotation.md](./MODULES/Quotation.md).
 - **The Dashboard revision-chain de-duplication fix (2026-07-22) is unverified against real rewritten quotation data in a live deployment** — same sandboxed-session limitation. The dedup logic itself was sanity-checked via a synthetic throwaway script, and every downstream widget's arithmetic is unchanged (only which documents feed it changed), but the actual end-to-end numbers (e.g. total pre-tax value with a real rewrite chain in the data) have not been confirmed against a live MongoDB instance. See [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Revision Chain De-duplication."
 - **`quotations:viewAll` (2026-07-22) requires a manual Role Management step this production deployment has not had yet** — until a Super Admin checks it for Administrator/Approver Level 1/Approver Level 2/Viewer, those roles' *existing* users will see only their own quotations after this ships (since `defaultRoles` isn't re-applied to already-seeded role documents), breaking approvers' ability to see quotations they need to review. This is a required action item, not a passive risk — see [TODO.md](./TODO.md) High Priority (top item) and [RBAC.md](./RBAC.md) "Quotation Own-Quotes-Only Viewing."
+- **The new Scope of Work standalone page (2026-07-22) is unverified against a live deployment** — same sandboxed-session limitation. The list UI's client-side rendering/filtering was confirmed via a mock-data harness; the actual `GET /api/scope-of-works` "list everything" mode, the list↔detail navigation, and reusing `ScopeOfWorkDocument.tsx` outside its original Quotation-embedded context have not been exercised against real data. See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 
 ## Technical Debt
 

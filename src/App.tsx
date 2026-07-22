@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -40,6 +40,7 @@ const RoleManagementPage = lazy(() => import("./pages/admin/RoleManagementPage")
 const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) => ({ default: m.AuditLogPage })));
 const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then((m) => ({ default: m.CustomersPage })));
 const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateManagementPage").then((m) => ({ default: m.TemplateManagementPage })));
+const ScopeOfWorkPage = lazy(() => import("./pages/scopeOfWork/ScopeOfWorkPage").then((m) => ({ default: m.ScopeOfWorkPage })));
 
 function PageLoading() {
   return (
@@ -112,7 +113,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
 }
 
 /** Stable routing identifiers — decoupled from the (now translatable) display label, so switching language never breaks navigation. */
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
 
 /** The boot-time domain resources fetched once after sign-in — see `loadDomainData()`/`resourceStatus` below. */
 type ResourceKey = "users" | "roles" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
@@ -153,6 +154,7 @@ const navItems: NavItem[] = [
   { key: "dashboard", icon: LayoutDashboard, labelKey: "nav.dashboard", permission: "dashboard:view" },
   { key: "quotations", icon: FileText, labelKey: "nav.quotations", permission: "quotations:view" },
   { key: "quotationTemplates", icon: Layers, labelKey: "nav.quotationTemplates", permission: "quotationTemplates:view" },
+  { key: "scopeOfWork", icon: ClipboardList, labelKey: "nav.scopeOfWork", permission: "scopeOfWork:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -169,10 +171,14 @@ const navItems: NavItem[] = [
  * Approvals/Approval History page). The former "Company Profiles" entry (multi-issuer master data)
  * was removed 2026-07-14 — this ERP has exactly one issuer company, so a management page for
  * multiple was unused scope; see docs/MODULES/CompanyProfiles.md "Removed (2026-07-14)."
+ * "Scope of Work" got its own top-level entry 2026-07-22 (previously only reachable via a button on
+ * the Quotation detail page, with no standalone browse/list view) — per direct user request; a
+ * Scope of Work is still only ever *created* from that same Quotation-detail button, this page is
+ * purely for browsing/opening ones that already exist. See docs/MODULES/ScopeOfWork.md.
  */
 const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
-  { labelKey: "nav.group.sales", keys: ["quotations", "quotationTemplates", "customers"] },
+  { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "auditLog"] },
 ];
@@ -181,6 +187,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   dashboard: "nav.dashboard",
   quotations: "nav.quotations",
   quotationTemplates: "nav.quotationTemplates",
+  scopeOfWork: "nav.scopeOfWork",
   products: "nav.products",
   customers: "nav.customers",
   users: "nav.users",
@@ -529,6 +536,14 @@ export default function App() {
   const canCreateCustomers = hasPermission(currentUser, roles, "customers:create");
   const canEditCustomers = hasPermission(currentUser, roles, "customers:edit");
   const canArchiveCustomers = hasPermission(currentUser, roles, "customers:archive");
+  // Same flat permission checks QuotationPage.tsx already computes for its own embedded
+  // ScopeOfWorkDocument usage — the standalone page (added 2026-07-22) reuses the exact same
+  // component, so it needs the exact same props.
+  const canCreateScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:create");
+  const canEditScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:edit");
+  const canFinalizeScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:finalize");
+  const canPrintScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:print");
+  const canDeleteScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:delete");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
   // `quotationTemplates:manage` is a legacy superset permission kept for backward compatibility
   // with role assignments made before the granular `quotationTemplates:*` permissions existed (see
@@ -696,6 +711,8 @@ export default function App() {
               ? <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
               : effectiveNav === "auditLog"
               ? <AuditLogPage />
+              : effectiveNav === "scopeOfWork"
+              ? <ScopeOfWorkPage users={users} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} />
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"

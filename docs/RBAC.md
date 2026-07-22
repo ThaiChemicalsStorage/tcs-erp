@@ -207,7 +207,7 @@ access check of its own (unlike `create`, which always required `quotations:view
 
 | Permission | Gates |
 |---|---|
-| `scopeOfWork:view` | `GET /api/scope-of-works` (list) and `GET /api/scope-of-works/:id` (single record) — also required (alongside the action-specific permission below) to read the *source* record on duplicate/refresh, since those actions return/derive from its full content. |
+| `scopeOfWork:view` | `GET /api/scope-of-works` (list — **2026-07-22**: now also gates the "list every Scope of Work company-wide" mode used by the new standalone Scope of Work sidebar page, not just the original by-quotation lookup; no ownership scoping in either mode) and `GET /api/scope-of-works/:id` (single record) — also required (alongside the action-specific permission below) to read the *source* record on duplicate/refresh, since those actions return/derive from its full content. |
 | `scopeOfWork:create` | `POST /api/scope-of-works` (create from a quotation) and `POST /api/scope-of-works/:id/duplicate`. |
 | `scopeOfWork:edit` | `PATCH /api/scope-of-works/:id` and `POST /api/scope-of-works/:id/refresh` — combined with an **ownership** check (see below). |
 | `scopeOfWork:finalize` | `POST /api/scope-of-works/:id/finalize`. Also, independent of ownership, a `scopeOfWork:finalize` holder can edit or delete *any* Draft record, not just their own — the RBAC spec's "Sales Manager: view/edit/finalize" language. |

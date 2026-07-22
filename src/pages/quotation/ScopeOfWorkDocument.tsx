@@ -97,6 +97,7 @@ export function ScopeOfWorkDocument({
   canDelete,
   canCreate,
   onBack,
+  backLabel = "กลับไปใบเสนอราคา",
   onDuplicated,
   showToast,
 }: {
@@ -108,6 +109,10 @@ export function ScopeOfWorkDocument({
   canDelete: boolean;
   canCreate: boolean;
   onBack: () => void;
+  /** Defaults to the original "back to the quotation" framing (QuoteDocument.tsx's embedded usage)
+   * — the standalone Scope of Work management page (added 2026-07-22, ScopeOfWorkPage.tsx) passes
+   * "กลับไปรายการ Scope of Work" instead, since there's no quotation to go back to from there. */
+  backLabel?: string;
   onDuplicated: (newId: string) => void;
   showToast: (msg: string) => void;
 }) {
@@ -275,7 +280,7 @@ export function ScopeOfWorkDocument({
       {/* Toolbar */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
         <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ChevronRight size={14} className="rotate-180" /> กลับไปใบเสนอราคา
+          <ChevronRight size={14} className="rotate-180" /> {backLabel}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
         <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{scope.scopeNumber}</span>

@@ -135,6 +135,25 @@ export interface ScopeOfWorkSummary {
   updatedAt: string;
 }
 
+/** Row shape for the standalone Scope of Work management page's list (added 2026-07-22) — a bit
+ * richer than `ScopeOfWorkSummary` (which only ever needs to answer "does one exist for this
+ * quotation?"), since this powers an actual browsable table with the same kind of at-a-glance
+ * fields `QuoteList.tsx` shows for quotations. Still omits full checklist/item content. */
+export interface ScopeOfWorkListItem {
+  id: string;
+  scopeNumber: string;
+  secondaryCode: string;
+  quotationId: string;
+  quotationNumber: string;
+  jobTypeCode: string;
+  jobTypeName: string;
+  customerName: string;
+  issueDate: string;
+  deliveryDate: string;
+  status: ScopeOfWorkStatus;
+  updatedAt: string;
+}
+
 /** Fields a Scope of Work editor actually submits on PATCH — everything except the id/scopeNumber
  * components/quotationId/status/version/audit fields, which are always server-derived or only
  * change via a dedicated action (finalize/duplicate/refresh). `issueDate`/`secondaryCode` ARE
@@ -163,6 +182,13 @@ export type ScopeOfWorkUpdateFields = Partial<{
 
 export async function fetchScopeOfWorksByQuotation(quotationId: string): Promise<ScopeOfWorkSummary[]> {
   const { scopeOfWorks } = await apiFetch<{ scopeOfWorks: ScopeOfWorkSummary[] }>(`/scope-of-works?quotationId=${encodeURIComponent(quotationId)}`);
+  return scopeOfWorks;
+}
+/** Every non-deleted Scope of Work company-wide, for the standalone management page's list
+ * (added 2026-07-22) — omitting `quotationId` from the query switches the server from its
+ * by-quotation lookup to this "list everything" mode (`api/_lib/scopeOfWorkHandler.ts`). */
+export async function fetchAllScopeOfWorks(): Promise<ScopeOfWorkListItem[]> {
+  const { scopeOfWorks } = await apiFetch<{ scopeOfWorks: ScopeOfWorkListItem[] }>("/scope-of-works");
   return scopeOfWorks;
 }
 export async function fetchScopeOfWork(id: string): Promise<ScopeOfWork> {

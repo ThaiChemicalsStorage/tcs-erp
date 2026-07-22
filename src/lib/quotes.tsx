@@ -431,6 +431,14 @@ export function computeTotals(lines: QuoteLine[], discountPct: number) {
   return { subtotal, discountAmt, afterDiscount, vatAmt, total };
 }
 
+/** True for a quote id ending in a "Rewrite/แก้ไข" revision suffix (e.g. `QT-2567-0041-R2`) — see
+ * `handleRewrite()` in api/handlers/quotes.ts. Purely a display-side check (e.g. QuoteList's
+ * summary cards); the authoritative server-side parsing lives in api/_lib/quoteRevisions.ts, kept
+ * separate since that file is server-only. */
+export function isRevisionQuote(id: string): boolean {
+  return /-R\d+$/.test(id);
+}
+
 export function nextQuoteId(quotes: Quote[]): string {
   const year = 2567;
   const maxNum = quotes

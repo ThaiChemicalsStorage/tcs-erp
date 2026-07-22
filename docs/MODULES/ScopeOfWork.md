@@ -1,6 +1,6 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22
 
 **2026-07-15, Codex review fix pass**: an independent review found 0 Critical and 3 High Priority
 issues (plus several Medium/Low). All 3 High Priority issues fixed same day — see
@@ -27,9 +27,19 @@ exist yet.
 
 A printable job document generated **from an existing quotation**, reproducing the printed
 structure of the reference PDF ("Scope Of Work PQ202607-174-LI-SK บริษัท เค ไทย ไฮดรอลิค จำกัด.pdf",
-`public/`). Reached from the Quotation Detail toolbar (`สร้าง Scope of Work` / `เปิด / แก้ไข Scope
-of Work`) — it is **not** a separate top-level sidebar module; it's an additional document type
-attached to a quotation, the same way the existing print/PDF is.
+`public/`). A Scope of Work is still only ever **created** from the Quotation Detail toolbar
+(`สร้าง Scope of Work` / `เปิด / แก้ไข Scope of Work`) — that flow is unchanged.
+
+**2026-07-22, own top-level sidebar page added** (superseding the "not a separate top-level sidebar
+module" note this section used to carry): per direct user request, a standalone "Scope of Work"
+sidebar entry now exists purely for **browsing/opening records that already exist** — a list page
+(`src/pages/scopeOfWork/ScopeOfWorkList.tsx`, mirroring `QuoteList.tsx`'s summary-cards/search/
+status-filter/table pattern) plus a thin container (`ScopeOfWorkPage.tsx`) that owns list↔detail
+view-switching, exactly like `QuotationPage.tsx` does for quotes. The detail view reuses the
+*exact same* `ScopeOfWorkDocument.tsx` component the Quotation-embedded flow always has — the only
+difference is `onBack`/`backLabel` (returns to this page's own list, "กลับไปรายการ Scope of Work,"
+instead of "กลับไปใบเสนอราคา"). See "Files" below and [API.md](../API.md) for the new "list
+everything" mode `GET /api/scope-of-works` gained (previously always required a `quotationId`).
 
 This is **not related to** Company Profiles / issuer-company selection — that feature was built,
 found to be a misunderstanding, and removed (see `MODULES/CompanyProfiles.md`). This ERP has exactly
@@ -385,8 +395,20 @@ gain a *value* import that transitively pulls in JSX/React.
 - `src/pages/quotation/QuoteDocument.tsx` — the "สร้าง Scope of Work"/"เปิด / แก้ไข Scope of Work"
   toolbar button (fetches whether one already exists per quotation).
 - `src/pages/quotation/QuotationPage.tsx` — the `"scopeOfWork"` view state routing between
-  `QuoteDocument` and `ScopeOfWorkDocument` (no new sidebar nav item — this stays inside the
-  Quotation module, per the task's explicit scope).
+  `QuoteDocument` and `ScopeOfWorkDocument`, used when a Scope of Work is opened directly from a
+  quotation (unchanged by the 2026-07-22 pass below).
+- `src/pages/scopeOfWork/ScopeOfWorkPage.tsx` (**added 2026-07-22**) — the standalone sidebar
+  page's container: fetches every Scope of Work once (`fetchAllScopeOfWorks()`), owns list↔detail
+  view-switching, renders either `ScopeOfWorkList` or the same `ScopeOfWorkDocument` component
+  `QuotationPage.tsx` uses (imported from `../quotation/ScopeOfWorkDocument`) with
+  `backLabel="กลับไปรายการ Scope of Work"`.
+- `src/pages/scopeOfWork/ScopeOfWorkList.tsx` (**added 2026-07-22**) — the browsable list: summary
+  cards (Total/Draft/Final), search (scope number/customer/quotation number/Job Type), Job Type
+  dropdown, status pill filter, table — mirrors `QuoteList.tsx`'s pattern, hardcoded Thai text (not
+  yet wired to `i18n.tsx`, matching every other Scope of Work UI file's existing convention).
+- `src/App.tsx` (**2026-07-22**) — new `"scopeOfWork"` `NavKey`/nav item (icon `ClipboardList`,
+  gated by `scopeOfWork:view`, grouped under "งานขาย" next to Quotations), self-fetching like
+  Dashboard/Audit Log (no `NAV_RESOURCES` entry — it doesn't depend on any boot-time domain fetch).
 
 ## Remaining Business Questions
 

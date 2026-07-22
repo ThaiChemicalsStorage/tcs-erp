@@ -4,6 +4,62 @@
 
 ---
 
+## Session — 2026-07-22 (absolute latest), Add a standalone Scope of Work sidebar page
+
+### What was implemented
+- Also this session (not separately logged before now): added a 6th Quotation-list summary card,
+  "ใบแก้ไข"/"Revisions," counting rewritten quotes via a new client-side `isRevisionQuote(id)` check
+  in `src/lib/quotes.tsx` — a quick, low-risk addition, verified against a mock-data harness.
+- Main task: user asked to remove a "website link" from the printed Scope of Work document, and to
+  add a new page for managing Scope of Work, reached by creating from the Quotation page first,
+  then managing on the new page. Investigated the "link" claim first — read every line of both
+  `ScopeOfWorkDocument.tsx` and `ScopeOfWorkPrintDocument.tsx`, found no rendered link/URL/website
+  field anywhere. Concluded it's almost certainly the browser's own native print header (shows the
+  page URL + date when "Headers and footers" is enabled) — Scope of Work's print button already has
+  a tooltip explaining how to disable it (added in an earlier pass alongside Quotation's identical
+  tip). Explained this to the user via `AskUserQuestion` rather than guessing at a fix for something
+  that isn't in the app's control; the reply only addressed the second (page) question, so this was
+  left as explained, not force-fixed.
+- For the new page, asked a second clarifying question before building: whether clicking "create"
+  on the Quotation page should keep opening the Scope of Work inline (as today) or navigate away to
+  the new page. Answer: keep creation exactly as it is; the new page is purely for browsing/opening
+  records that already exist. This mattered — building the wrong one would have meant reworking a
+  meaningful chunk of navigation logic.
+- Researched `App.tsx`'s existing nav-item pattern in detail (how "Customers" was added as a
+  precedent: `NavKey`, `NAV_RESOURCES`, `navItems`, `NAV_GROUPS`, `NAV_LABEL_KEYS`, permission
+  variables, the render switch) before writing any code, to replicate it exactly rather than
+  inventing a parallel pattern. Deliberately did NOT add `"scopeOfWork"` to `NAV_RESOURCES` — the
+  new page fetches its own data on mount, same as Dashboard/Audit Log, so it doesn't need to wait on
+  (or be blocked by) the shared boot-time domain fetch.
+- Found `GET /api/scope-of-works` already existed but *required* `quotationId` (400 without it) —
+  made it optional rather than adding a whole new route, switching to a "list everything
+  company-wide" mode when absent. Added a richer `ScopeOfWorkListItem` type/`toListItem()` mapper
+  instead of widening the existing `ScopeOfWorkSummary` shape every other caller (the by-quotation
+  lookup) already relies on.
+- Reused the existing `ScopeOfWorkDocument.tsx` component as-is for the new page's detail view
+  rather than duplicating it — added one small optional `backLabel` prop (defaults to the original
+  "กลับไปใบเสนอราคา") so the new page's back button reads correctly ("กลับไปรายการ Scope of Work")
+  without touching the existing Quotation-embedded call site at all.
+- New `ScopeOfWorkList.tsx` written in hardcoded Thai (no `t()`/i18n keys) to match every other
+  Scope of Work UI file's existing convention — confirmed by grepping the rest of the module before
+  writing it, rather than introducing a first-ever translated file there inconsistently.
+- Verified `ScopeOfWorkList.tsx` visually against a temporary mock-data harness (search/filter both
+  confirmed working); the full `ScopeOfWorkPage` container and the new API mode were not reachable
+  the same way (need a real session/DB), so those rest on code-level review plus the type-checker.
+
+### Known limitation
+- **The full page (list→detail navigation, the real API's "list everything" mode, duplicate-from-
+  standalone-page behavior) is unverified against a live deployment** — same sandboxed-session
+  no-MongoDB-network limitation as every other pass this session. Only `ScopeOfWorkList.tsx`'s
+  client-side rendering/search/filtering was actually exercised in a browser.
+
+### Recommendation for next session
+- When live DB access is available: click through list→detail→back on the new Scope of Work page,
+  confirm the API's list-everything mode returns real records with the right fields, and confirm a
+  role without `scopeOfWork:view` genuinely can't see the new sidebar entry.
+
+---
+
 ## Session — 2026-07-22 (absolute latest), Add own-quotes-only viewing permission + Salesperson filter
 
 ### What was implemented

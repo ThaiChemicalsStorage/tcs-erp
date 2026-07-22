@@ -15,7 +15,7 @@ import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeCheckl
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint } from "../../src/lib/validation/scopeOfWorkValidation.js";
 import type { ChecklistGroup } from "../../src/lib/documentRequirements.js";
 import type {
-  ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkStatus,
+  ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
   ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkSignatory,
   ScopeOfWorkCustomerSnapshot,
 } from "../../src/lib/scopeOfWork.js";
@@ -264,6 +264,21 @@ function toSummary(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkSummary {
   return { id: full.id, scopeNumber: full.scopeNumber, quotationId: full.quotationId, status: full.status, updatedAt: full.updatedAt };
 }
 
+/** Richer row shape for the standalone Scope of Work management page's list (added 2026-07-22) —
+ * see `ScopeOfWorkListItem` in src/lib/scopeOfWork.ts for why this is a separate shape from
+ * `toSummary()` above, which only ever needs to answer "does one exist for this quotation?" */
+function toListItem(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkListItem {
+  const full = withStringId(doc);
+  return {
+    id: full.id, scopeNumber: full.scopeNumber, secondaryCode: full.secondaryCode,
+    quotationId: full.quotationId, quotationNumber: full.quotationNumber,
+    jobTypeCode: full.jobTypeCode, jobTypeName: full.jobTypeName,
+    customerName: full.customerSnapshot.companyName,
+    issueDate: full.issueDate, deliveryDate: full.deliveryDate,
+    status: full.status, updatedAt: full.updatedAt,
+  };
+}
+
 /** Fills in any mandatory checklist group entirely missing from a stored record (see
  * withDefaultChecklistGroups()) before sending it to the client — never written back to the
  * database by this alone. See normalizeQuote() in api/handlers/quotes.ts for the equivalent. */
@@ -275,9 +290,20 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "scopeOfWork:view");
   const quotationId = typeof req.query.quotationId === "string" ? req.query.quotationId : "";
-  if (!quotationId) throw new HttpError(400, "กรุณาระบุใบเสนอราคา");
 
   const scopeOfWorks = await scopeOfWorksCollection();
+  // Omitting `quotationId` switches this from "does one exist for this quotation?" (used by
+  // QuoteDocument.tsx's toolbar) to "list every Scope of Work company-wide" — added 2026-07-22 for
+  // the new standalone Scope of Work management page (src/pages/scopeOfWork/ScopeOfWorkPage.tsx).
+  // Same `scopeOfWork:view` gate either way; no ownership/created-by scoping exists for this module
+  // (unlike Quotation's `quotations:viewAll`), matching its existing owner-or-finalize edit/delete
+  // rule rather than inventing a new view-restriction this pass wasn't asked to add.
+  if (!quotationId) {
+    const docs = await scopeOfWorks.find({ isDeleted: false }).sort({ updatedAt: -1 }).toArray();
+    res.status(200).json({ scopeOfWorks: docs.map(toListItem) });
+    return;
+  }
+
   const docs = await scopeOfWorks.find({ quotationId, isDeleted: false }).sort({ updatedAt: -1 }).toArray();
   res.status(200).json({ scopeOfWorks: docs.map(toSummary) });
 }

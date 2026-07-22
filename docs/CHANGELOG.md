@@ -4,6 +4,83 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Add a standalone "Scope of Work" sidebar page
+
+**Feature**: per direct user request, Scope of Work gained its own top-level sidebar entry — a
+dedicated place to browse/open Scope of Work records independently of the quotation they came
+from, "feels like the Quotation list page, for viewing status etc." Confirmed via `AskUserQuestion`
+before building: creation stays exactly as it is today (the "สร้าง Scope of Work" button on the
+Quotation detail toolbar, opening inline within the Quotation module) — this new page is purely an
+additional way to *find and open* records that already exist, not a new creation path.
+
+**Backend**: `GET /api/scope-of-works?quotationId=` — previously `quotationId` was required (400
+without it), used only for QuoteDocument.tsx's "does one already exist for this quotation?" lookup.
+Made optional: omitting it now returns every non-deleted Scope of Work company-wide, in a richer
+`ScopeOfWorkListItem` shape (adds `secondaryCode`/`quotationNumber`/`jobTypeCode`/`jobTypeName`/
+customer name/`issueDate`/`deliveryDate` on top of the original `id`/`scopeNumber`/`quotationId`/
+`status`/`updatedAt`) — kept as a separate type/mapper (`toListItem()` alongside the existing
+`toSummary()`) rather than widening the original summary shape every other caller already relies on.
+Same `scopeOfWork:view` gate either way; no ownership scoping added (this module has no equivalent
+of Quotation's `quotations:viewAll` — not asked for this pass).
+
+**Frontend**: new `src/pages/scopeOfWork/` folder — `ScopeOfWorkList.tsx` (summary cards, search,
+Job Type filter, status pills, table; mirrors `QuoteList.tsx`'s pattern, hardcoded Thai text like
+every other Scope of Work UI file) and `ScopeOfWorkPage.tsx` (thin container owning list↔detail
+view-switching, fetches the full list on mount, self-contained like Dashboard/Audit Log rather than
+depending on `App.tsx`'s boot-time domain fetch). The detail view reuses the *exact same*
+`ScopeOfWorkDocument.tsx` component the Quotation-embedded flow already uses — added it a new
+optional `backLabel` prop (defaults to the original "กลับไปใบเสนอราคา") so this page can pass
+"กลับไปรายการ Scope of Work" instead, since there's no quotation to return to from here. New
+`"scopeOfWork"` `NavKey`/sidebar entry in `App.tsx` (icon `ClipboardList`, gated by
+`scopeOfWork:view`, grouped under "งานขาย" next to Quotations) — deliberately not added to
+`NAV_RESOURCES` (it fetches its own data, same as Dashboard/Audit Log, so it's never gated behind
+the shared boot-time resource loading).
+
+**Also investigated, not fixed**: the user separately mentioned a "website link" appearing on the
+printed Scope of Work document. Read every line of `ScopeOfWorkDocument.tsx`/
+`ScopeOfWorkPrintDocument.tsx` — no link/URL/website field is rendered anywhere in either the
+on-screen or printed output. The much more likely explanation is the browser's own native print
+header (shows the page URL + print date when "Headers and footers" is enabled in the print
+dialog) — which Scope of Work's print button already has a tooltip explaining how to disable
+(same tip Quotation's print button has, added together in an earlier pass). Asked the user to
+confirm which they meant via `AskUserQuestion`; the reply only addressed the sidebar-page question,
+so this is left as explained rather than guessed at further — there is no code-level link to
+remove.
+
+**Verification**: `tsc --noEmit` (both tsconfigs), `lint`, `build` all pass clean — build output
+confirms `ScopeOfWorkDocument` split into its own shared chunk (52.8kB), reused by both
+`QuotationPage` (which shrank accordingly) and the new `ScopeOfWorkPage`. Visually verified
+`ScopeOfWorkList.tsx` against a temporary mock-data harness (`?harness=1`, deleted before
+finishing) — summary cards, search, and filtering all confirmed correct against 3 mock records; the
+full `ScopeOfWorkPage`/detail-view integration and the new API list mode are **not** verified
+against a live deployment (same sandboxed-session no-MongoDB-network limitation as every other pass).
+
+**Files**: `api/_lib/scopeOfWorkHandler.ts` (list-mode change), `src/lib/scopeOfWork.ts`
+(`ScopeOfWorkListItem`, `fetchAllScopeOfWorks()`), `src/pages/quotation/ScopeOfWorkDocument.tsx`
+(`backLabel` prop), `src/pages/scopeOfWork/ScopeOfWorkList.tsx` (new),
+`src/pages/scopeOfWork/ScopeOfWorkPage.tsx` (new), `src/App.tsx` (nav wiring), `src/lib/i18n.tsx`
+(`nav.scopeOfWork`, both languages).
+
+---
+
+## 2026-07-22 (absolute latest) — Add a "Revisions" (ใบแก้ไข) summary card to the Quotation list
+
+**Feature**: per direct user request, with a screenshot of the existing 5 summary cards ("add the
+part showing how many are revision quotes"), added a 6th card counting how many quotes in the list
+are themselves a rewrite (a `-R{n}`-suffixed id — see the Rewrite feature earlier this session). New
+`isRevisionQuote(id)` helper in `src/lib/quotes.tsx` (a client-side regex check, `/-R\d+$/`) — kept
+separate from the server-authoritative `getRevisionRoot()`/`getRevisionNumber()` in
+`api/_lib/quoteRevisions.ts` since that file is server-only; this is purely a display convenience
+over already-fetched data, no new API call. Uses the `GitBranch` icon (matching the Rewrite button's
+own icon for visual consistency) in a distinct purple, since every other card already uses a color
+from the existing palette. Verified visually against a mock-data harness with 3 rewrite-style ids
+mixed into 8 mock quotes — card correctly showed 3. `tsc`/`lint`/`build` all pass clean.
+
+**Files**: `src/lib/quotes.tsx` (`isRevisionQuote()`), `src/pages/quotation/QuoteList.tsx` (new
+summary card), `src/lib/i18n.tsx` (`quotation.revisionCount`, both languages).
+
+---
+
 ## 2026-07-22 (absolute latest) — Fix oversized "Not Interested" button (text wrapping to 2 lines)
 
 **Bug fix**: with a screenshot, the "Not Interested" button in `InterestButtons.tsx` (used in

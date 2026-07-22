@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Plus, FileText, Target, X, Search } from "lucide-react";
+import { Plus, FileText, Target, X, Search, GitBranch } from "lucide-react";
 import { EmptyState } from "../../components/EmptyState";
-import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusStyle, statusIcon, statusLabelKey } from "../../lib/quotes";
+import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusStyle, statusIcon, statusLabelKey, isRevisionQuote } from "../../lib/quotes";
 import type { JobType } from "../../lib/jobTypes";
 import { initials } from "../../lib/users";
 import { InterestButtons } from "./InterestButtons";
@@ -90,6 +90,7 @@ export function QuoteList({
           { label: t("quotation.status.approved"), count: quotes.filter((q) => q.status === "อนุมัติแล้ว").length, color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
           { label: t("quotation.interest.interested"), count: quotes.filter((q) => q.interest === "น่าสนใจ").length, color: "#c9a84c", bg: "from-[#c9a84c]/15 to-[#c9a84c]/5" },
           { label: t("quotation.field.potentialOpportunity"), count: quotes.filter((q) => q.isPotentialOpportunity).length, color: "#1a5fb4", bg: "from-[#1a5fb4]/15 to-[#1a5fb4]/5", icon: Target },
+          { label: t("quotation.revisionCount"), count: quotes.filter((q) => isRevisionQuote(q.id)).length, color: "#7c4dbb", bg: "from-[#7c4dbb]/15 to-[#7c4dbb]/5", icon: GitBranch },
         ].map((s) => {
           const Icon = s.icon ?? FileText;
           return (
