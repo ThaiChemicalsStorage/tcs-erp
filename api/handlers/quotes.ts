@@ -256,9 +256,18 @@ function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<Quot
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
-    await requirePermission(req, "quotations:view");
+    const ctx = await requirePermission(req, "quotations:view");
     const quotes = await quotesCollection();
-    const docs = await quotes.find({}).toArray();
+    // Own-quotes-only scoping (added 2026-07-22, per direct user request) — a role holding
+    // `quotations:view` but not the new `quotations:viewAll` only sees quotes it created itself.
+    // Legacy/seed quotes with an empty `createdByUserId` (ownerless — see the PATCH ownership
+    // check below) are visible to everyone regardless, since there's no real "someone else" to
+    // exclude them for. `quotations:viewAll` holders (and Super Admin, which bypasses every check)
+    // are unaffected and still see every quote, exactly as before this change.
+    const filter = roleHasPermission(ctx.role, "quotations:viewAll")
+      ? {}
+      : { $or: [{ createdByUserId: ctx.user.id }, { createdByUserId: "" }] };
+    const docs = await quotes.find(filter).toArray();
     res.status(200).json({ quotes: docs.map(withStringId) });
     return;
   }

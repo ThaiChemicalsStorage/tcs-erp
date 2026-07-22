@@ -257,6 +257,52 @@ module), so these events can only be written by the handler itself. See
 
 `App.tsx`'s `navItems` array carries an optional `permission` field per entry; `hasPermission(currentUser, roles, item.permission)` filters the rendered list — **items are fully removed from the DOM, not just disabled**, satisfying "hide inaccessible menus completely." A render-time `effectiveNav` guard (not a `useEffect`, to avoid a setState-in-effect cascade) falls back to the Dashboard if `activeNav` somehow points at a module the current user can't see. `Settings` is always visible (every signed-in user can edit their own profile); only its Company tab is conditionally rendered, gated by `company:manage`.
 
+### Quotation Own-Quotes-Only Viewing (added 2026-07-22)
+
+New `quotations:viewAll` permission, per direct user request: a role holding `quotations:view` but
+**not** `quotations:viewAll` only sees quotations it created itself — `quotations:view` alone no
+longer implies "see every quotation in the company," which was the behavior for every role until
+this pass (documented as a deliberate simplification in `API.md`'s `GET /api/quotes` row before this
+change: "no server-side ownership filtering"). Unchecked is the default for any newly created custom
+role, matching the request's framing ("ถ้าไม่ได้ติ๊ก" — if not ticked).
+
+Enforced server-side in two places — both filter by `{ $or: [{ createdByUserId: ctx.user.id },
+{ createdByUserId: "" }] }` when the caller lacks `quotations:viewAll` (Super Admin bypasses this
+entirely, same as every permission check):
+- `GET /api/quotes` (`api/handlers/quotes.ts`) — the list the Quotation page's `QuoteList.tsx` reads
+  from wholesale (this app fetches the full allowed list once at boot, then filters/searches
+  client-side — see `App.tsx`).
+- `GET /api/search`'s Quotation result category (`api/_lib/searchHandler.ts`'s `searchQuotations()`)
+  — without this, a caller without `quotations:viewAll` could trivially discover another user's
+  quotation through the Global Search box even though the list page itself hides it.
+
+Legacy/seed quotes with an empty `createdByUserId` (ownerless — same convention the `PATCH`
+ownership check above already uses) are visible to everyone regardless of `quotations:viewAll`,
+since there's no real "someone else" to exclude them for.
+
+**Default role assignment**: Super Admin (via `ALL_PERMISSIONS`), Administrator, Approver Level 1,
+Approver Level 2, and Viewer all hold `quotations:viewAll` by default — Approvers specifically
+*must* have it, since they can't approve/reject a quote they can't see. **Sales User does not** —
+this is the role the feature was written for, matching its existing description ("สร้างและแก้ไข
+ใบเสนอราคาของตนเอง" — create/edit **their own** quotations).
+
+**⚠️ Deployment/rollout note — read before this ships to an already-provisioned environment**:
+`defaultRoles` (`src/lib/roles.ts`) only seeds the `roles` collection once, on the first-run Setup
+Wizard (`api/handlers/auth.ts`) — it is **never** re-applied to an already-provisioned deployment's
+existing role documents. This means an existing production database's Administrator/Approver
+Level 1/Approver Level 2/Viewer role documents do **not** automatically gain `quotations:viewAll`
+just because this code shipped — **a Super Admin must open Role Management and manually check
+"ดูใบเสนอราคาของผู้อื่นได้ด้วย" for each of those roles (and any custom role that should keep seeing
+everyone's quotations) before or immediately after this deploys**, or every existing Approver
+suddenly can't see the quotations they need to approve. Deliberately **not** auto-migrated: role
+permission lists can be (and often are) hand-customized by an admin after the defaults are seeded, so
+a blind server-side backfill risks silently overwriting an intentional customization — the same
+reasoning already applied to every other permission addition in this project's history (see
+"Quotation Templates" above, which solved the equivalent problem differently — a backward-compatible
+superset permission — specifically to avoid needing a migration at all; that trick doesn't apply
+here since this is a narrowing restriction, not a widening one). Tracked in
+[TODO.md](./TODO.md) as a required manual step, not a silent gap.
+
 ### Quotation Approval Workflow
 
 `QuoteStatus` (`src/lib/quotes.tsx`) has 9 values: `ร่าง` (Draft) → `รออนุมัติ` (Pending Approval) → `อนุมัติแล้ว` (Approved) → `ส่งให้ลูกค้าแล้ว` (Sent to Customer) → `ลูกค้ายอมรับ` (Customer Accepted) → `ปิดการขายสำเร็จ` (Won), or `ลูกค้าปฏิเสธ` (Customer Rejected) → `เสียโอกาส` (Lost); plus a standalone `ยกเลิก` (Cancelled) reachable from Draft/Pending/Approved. `workflowTransitions` encodes the state machine (`{action: {from: QuoteStatus[], to: QuoteStatus}}`). `computeQuotePermissions(quote, isNew, currentUser, roles)` derives which action buttons a given user may see for a given quote, combining permission checks with an **ownership** check (`quote.createdByUserId === currentUser.id`, with approvers/admins allowed to touch quotes they don't own) — this remains client-side, display-only logic. `POST /api/quotes/:id/workflow` independently re-derives and re-checks the same permission + ownership rule server-side via `isWorkflowActionAllowed()` (`api/_lib/quoteWorkflow.ts`, a deliberately duplicated copy of `workflowTransitions`/`ApprovalAction` from `quotes.tsx` — see [ARCHITECTURE.md](./ARCHITECTURE.md) for why it's a duplicate, not an import) and validates the requested transition's `from` state against the quote's actual current status in MongoDB before applying it — a devtools-triggered call to approve a quote you don't have permission for, or to skip a status, is rejected with a `403`/`400` server-side, not just hidden client-side. Every transition appends an `ApprovalHistoryEntry` (`userId`, `userName`, `roleName`, `action`, `comment`, `createdAt`, all server-derived from the authenticated session) to `Quote.approvalHistory` — **never removed, only appended**, rendered on the document as "ประวัติการอนุมัติ." Reject/Customer-Reject/Cancel require a non-empty comment via a modal; other transitions allow an optional one.

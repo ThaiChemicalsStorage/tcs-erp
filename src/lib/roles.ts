@@ -30,6 +30,7 @@ export const defaultRoles: Role[] = [
     permissions: [
       "dashboard:view",
       "quotations:view",
+      "quotations:viewAll",
       "quotations:create",
       "quotations:edit",
       "quotations:delete",
@@ -82,6 +83,7 @@ export const defaultRoles: Role[] = [
     permissions: [
       "dashboard:view",
       "quotations:view",
+      "quotations:viewAll",
       "quotations:edit",
       "quotations:approve",
       "quotations:reject",
@@ -100,6 +102,7 @@ export const defaultRoles: Role[] = [
     permissions: [
       "dashboard:view",
       "quotations:view",
+      "quotations:viewAll",
       "quotations:edit",
       "quotations:approve",
       "quotations:reject",
@@ -115,7 +118,7 @@ export const defaultRoles: Role[] = [
     key: "viewer",
     name: "Viewer",
     description: "ดูข้อมูลได้อย่างเดียว ไม่สามารถสร้าง แก้ไข หรืออนุมัติได้",
-    permissions: ["dashboard:view", "quotations:view", "products:view", "customers:view", "scopeOfWork:view"],
+    permissions: ["dashboard:view", "quotations:view", "quotations:viewAll", "products:view", "customers:view", "scopeOfWork:view"],
     isSuperAdmin: false,
     isSystem: false,
   },

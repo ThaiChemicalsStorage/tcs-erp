@@ -3,6 +3,7 @@ import type { TranslationKey } from "./i18n";
 export type Permission =
   | "dashboard:view"
   | "quotations:view"
+  | "quotations:viewAll"
   | "quotations:create"
   | "quotations:edit"
   | "quotations:delete"
@@ -40,6 +41,7 @@ export type Permission =
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
   "quotations:view",
+  "quotations:viewAll",
   "quotations:create",
   "quotations:edit",
   "quotations:delete",
@@ -78,6 +80,7 @@ export const ALL_PERMISSIONS: Permission[] = [
 export const PERMISSION_LABELS: Record<Permission, string> = {
   "dashboard:view": "ดูแดชบอร์ด",
   "quotations:view": "ดูใบเสนอราคา",
+  "quotations:viewAll": "ดูใบเสนอราคาของผู้อื่นได้ด้วย (ไม่ติ๊ก = เห็นเฉพาะของตนเอง)",
   "quotations:create": "สร้างใบเสนอราคา",
   "quotations:edit": "แก้ไขใบเสนอราคา",
   "quotations:delete": "ลบ/ยกเลิกใบเสนอราคา",
@@ -117,6 +120,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "dashboard:view": "permission.dashboardView",
   "quotations:view": "permission.quotationsView",
+  "quotations:viewAll": "permission.quotationsViewAll",
   "quotations:create": "permission.quotationsCreate",
   "quotations:edit": "permission.quotationsEdit",
   "quotations:delete": "permission.quotationsDelete",
@@ -159,6 +163,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
     labelKey: "nav.quotations",
     permissions: [
       "quotations:view",
+      "quotations:viewAll",
       "quotations:create",
       "quotations:edit",
       "quotations:delete",

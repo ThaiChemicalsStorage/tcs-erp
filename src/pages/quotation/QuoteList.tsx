@@ -48,12 +48,20 @@ export function QuoteList({
   const { t } = useI18n();
   const [filterStatus, setFilterStatus] = useState<string>(initialFilter?.status ?? FILTER_ALL);
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
+  const [filterSalesperson, setFilterSalesperson] = useState<string>(FILTER_ALL);
   const [clientFilter, setClientFilter] = useState<string>(initialFilter?.client ?? "");
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
+  // Distinct salespeople actually present in `quotes` (not a separate master list — salesperson is
+  // a free-text snapshot, not a live user reference, same as everywhere else this field is used).
+  // A caller without `quotations:viewAll` only ever receives their own quotes from the server, so
+  // this list naturally narrows to just themselves for that case — no separate client-side gating
+  // needed.
+  const salespeopleInList = [...new Set(quotes.map((q) => q.salesperson).filter((s) => s.trim()))].sort();
   const filtered = quotes
     .filter((q) => filterStatus === FILTER_ALL || q.status === filterStatus)
     .filter((q) => filterJobType === FILTER_ALL || q.jobTypeCode === filterJobType)
+    .filter((q) => filterSalesperson === FILTER_ALL || q.salesperson === filterSalesperson)
     .filter((q) => !clientFilter || q.client === clientFilter)
     .filter((q) => !normalizedSearch || [q.id, q.client, q.salesperson, q.poRef].some((v) => v.toLowerCase().includes(normalizedSearch)));
 
@@ -133,6 +141,16 @@ export function QuoteList({
           <option value={FILTER_ALL}>{t("quotation.field.jobType")}: {t("quotation.filterAll")}</option>
           {jobTypes.map((jt) => (
             <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>
+          ))}
+        </select>
+        <select
+          value={filterSalesperson}
+          onChange={(e) => setFilterSalesperson(e.target.value)}
+          className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
+        >
+          <option value={FILTER_ALL}>{t("quotation.col.salesperson")}: {t("quotation.filterAll")}</option>
+          {salespeopleInList.map((name) => (
+            <option key={name} value={name}>{name}</option>
           ))}
         </select>
         {clientFilter && (

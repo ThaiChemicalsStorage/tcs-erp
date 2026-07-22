@@ -219,16 +219,25 @@ const SEARCHABLE_PAGES: {
   { id: "settings", titleTh: "โปรไฟล์", titleEn: "Profile", navKey: "settings", permission: null, aliases: ["โปรไฟล์", "profile", "settings", "การตั้งค่า"] },
 ];
 
-async function searchQuotations(query: string): Promise<SearchQuotationResult[]> {
+async function searchQuotations(query: string, ctx: AuthContext): Promise<SearchQuotationResult[]> {
   const quotes = await quotesCollection();
   const rx = containsRegex(query);
+  // Same own-quotes-only scoping as `GET /api/quotes` (2026-07-22, per direct user request) — a
+  // caller without `quotations:viewAll` must not be able to discover another user's quotation
+  // through Global Search, which would otherwise bypass the list-page restriction entirely.
+  const ownershipMatch = roleHasPermission(ctx.role, "quotations:viewAll")
+    ? {}
+    : { $or: [{ createdByUserId: ctx.user.id }, { createdByUserId: "" }] };
   const docs = await quotes.find(
     {
-      $or: [
-        { _id: rx }, { client: rx }, { "customerSnapshot.companyName": rx }, { contactName: rx },
-        { project: rx }, { poRef: rx }, { salesperson: rx }, { jobTypeCode: rx }, { jobTypeName: rx },
-        { status: rx }, { remarks: rx },
-      ],
+      ...ownershipMatch,
+      $and: [{
+        $or: [
+          { _id: rx }, { client: rx }, { "customerSnapshot.companyName": rx }, { contactName: rx },
+          { project: rx }, { poRef: rx }, { salesperson: rx }, { jobTypeCode: rx }, { jobTypeName: rx },
+          { status: rx }, { remarks: rx },
+        ],
+      }],
     },
     {
       projection: {
@@ -392,7 +401,7 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
   }
 
   const [quotationResults, customerResults, productResults, templateResults, scopeOfWorkResults, userResults] = await Promise.all([
-    roleHasPermission(ctx.role, "quotations:view") ? searchQuotations(query) : Promise.resolve([]),
+    roleHasPermission(ctx.role, "quotations:view") ? searchQuotations(query, ctx) : Promise.resolve([]),
     roleHasPermission(ctx.role, "customers:view") ? searchCustomers(query) : Promise.resolve([]),
     roleHasPermission(ctx.role, "products:view") ? searchProducts(query) : Promise.resolve([]),
     // Same read gate as browsing templates while creating a quotation (quotationTemplatesHandler.ts)

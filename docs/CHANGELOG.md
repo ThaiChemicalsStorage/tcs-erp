@@ -4,6 +4,61 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Add own-quotes-only viewing permission + Salesperson filter
+
+**Feature**: per direct user request ("อยากให้สร้างสิทธิ์เพิ่มขึ้นมาว่าจะมีสิทธิ์ที่สามารถดูใบเสนอได้แค่
+ของตัวเองเท่านั้นถ้าไม่ได้ติ๊ก ส่วนอันที่ติ๊กสามารถดูของคนอื่นได้ด้วย" — create a permission where, if
+unchecked, a user can only see their own quotations; checked lets them see everyone's), added a new
+`quotations:viewAll` permission. `quotations:view` alone no longer implies "see every quotation
+company-wide" (the behavior for every role until this pass) — without `quotations:viewAll`, a
+caller only sees quotations they created themselves (plus ownerless legacy/seed quotes, which have
+no real "someone else" to exclude them for).
+
+**Enforcement**: server-side in both places a user could otherwise discover another user's
+quotation — `GET /api/quotes` (the list `QuoteList.tsx` reads from) and Global Search's Quotation
+result category (`searchQuotations()` in `api/_lib/searchHandler.ts` — previously unscoped, which
+would have silently bypassed the list-page restriction). Both filter by
+`{ $or: [{ createdByUserId: ctx.user.id }, { createdByUserId: "" }] }` when the caller lacks
+`quotations:viewAll`; Super Admin bypasses every check as always.
+
+**Default role assignment**: Administrator, Approver Level 1, Approver Level 2, and Viewer all get
+`quotations:viewAll` by default (Approvers *must* have it — they can't approve a quote they can't
+see); Sales User does not, matching its existing "create/edit your own quotations" description —
+exactly the role this feature was written for.
+
+**⚠️ Required manual step for the already-provisioned production deployment**: `defaultRoles` only
+seeds roles once, on first-run setup — it is never re-applied to existing role documents. This means
+production's current Administrator/Approver Level 1/Approver Level 2/Viewer roles will **not**
+automatically gain `quotations:viewAll` just because this code deploys. **A Super Admin must open
+Role Management and manually check "ดูใบเสนอราคาของผู้อื่นได้ด้วย" for each of those roles before/
+immediately after this ships**, or every existing Approver will suddenly be unable to see the
+quotations they need to review — a real workflow break, not just a display change. Deliberately not
+auto-migrated (role permission lists can be hand-customized by an admin after seeding; a blind
+server-side backfill risks silently overwriting an intentional customization). Tracked in
+[TODO.md](./TODO.md).
+
+**UI**: new Salesperson filter dropdown on the Quotation list (`QuoteList.tsx`), right next to the
+existing Job Type dropdown, per the user's explicit request ("แบบกดปุ่มเหมือนเลือกประเภทงาน" — like a
+button, like the Job Type selector). Lists whichever salesperson names actually appear in the
+fetched quotes (client-side only, same as every other filter on this page) — naturally narrows to
+just the caller themselves when they lack `quotations:viewAll`, no separate gating needed.
+
+**Verification**: `tsc --noEmit` (both tsconfigs), `lint`, `build` all pass clean. Visually verified
+the new Salesperson dropdown against a temporary mock-data harness (`?harness=1`, deleted before
+finishing) — dropdown renders correctly styled, and selecting a salesperson correctly narrows 5
+mock quotes down to that person's 2. **Not verified against a live deployment**: the actual
+server-side ownership filtering (own-quotes-only for a role lacking `quotations:viewAll`) requires
+real authenticated sessions with different roles against a live MongoDB instance — same
+sandboxed-session no-network limitation as every other pass. Traced the query logic by hand instead
+(mirrors the existing, already-shipped ownership pattern in `PATCH /api/quotes/:id`).
+
+**Files**: `src/lib/permissions.ts` (new permission, label, i18n key, group), `src/lib/roles.ts`
+(default role assignment), `src/lib/i18n.tsx` (permission label, both languages),
+`api/handlers/quotes.ts` (`GET /api/quotes` ownership filter), `api/_lib/searchHandler.ts`
+(`searchQuotations()` ownership filter), `src/pages/quotation/QuoteList.tsx` (Salesperson filter UI).
+
+---
+
 ## 2026-07-22 (absolute latest) — Fix Dashboard double-counting rewritten quotations
 
 **Bug fix**: per direct user report ("มูลค่าใบเสนอราคารวมก่อนภาษีมันรวมใบที่ rewrite ออกมาด้วย" — the

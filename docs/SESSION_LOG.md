@@ -4,6 +4,58 @@
 
 ---
 
+## Session — 2026-07-22 (absolute latest), Add own-quotes-only viewing permission + Salesperson filter
+
+### What was implemented
+- User asked for a new permission: unchecked = a user can only see their own quotations, checked =
+  can see everyone's — plus a Salesperson filter on the Quotation list styled like the existing Job
+  Type dropdown. Read the existing permission system (`src/lib/permissions.ts`, `src/lib/roles.ts`)
+  and the current `GET /api/quotes`/Global Search implementations before writing anything, since
+  both currently return every quote to any `quotations:view` holder with zero ownership filtering.
+- Added `quotations:viewAll` as a new, orthogonal permission (not a replacement for
+  `quotations:view`) — enforced server-side in `handleList()`'s GET branch (`api/handlers/
+  quotes.ts`) and `searchQuotations()` (`api/_lib/searchHandler.ts`), both filtering to
+  `{ createdByUserId: ctx.user.id }` plus ownerless legacy quotes when the caller lacks it.
+  Deliberately checked Global Search too, not just the list page — the list alone would have been a
+  false sense of security if the same data was still fully discoverable through the search bar.
+- Assigned defaults thoughtfully rather than blanket-granting: Administrator/Approver 1/Approver
+  2/Viewer get `quotations:viewAll` (Approvers *must*, since they review other people's quotes for
+  a living); Sales User does not — exactly the "own-only by default" role the request was written
+  for, and its existing role description already says "ใบเสนอราคาของตนเอง" (their own quotations).
+- Recognized and flagged a real deployment risk before finishing: `defaultRoles` only seeds the
+  `roles` collection once, on first-run setup — it's never re-applied to an already-provisioned
+  deployment's existing role documents. Shipping this without a manual step means every current
+  Approver in production silently loses the ability to see quotations they need to approve the
+  moment this deploys. Documented prominently (TODO.md top item, PROJECT_STATUS.md, RBAC.md,
+  CHANGELOG.md) as a required manual Role Management action, not a passive risk — deliberately
+  chose not to attempt an automatic migration, since existing roles' permission lists may have
+  already been hand-customized by an admin and a blind backfill risks undoing that.
+- Added the Salesperson filter dropdown to `QuoteList.tsx`, deriving its options from whichever
+  salesperson names are actually present in the (now possibly server-restricted) `quotes` array —
+  no separate API call or master list needed, and it naturally narrows to just the current user
+  when they lack `quotations:viewAll`.
+- Visually verified the new dropdown against a temporary mock-data harness (same `?harness=1`
+  pattern used earlier this session) — confirmed it renders correctly and that selecting a
+  salesperson narrows 5 mock quotes down to their 2. Harness deleted, `main.tsx` reverted, before
+  finishing.
+
+### Known limitation
+- **The actual server-side ownership enforcement is unverified against a live deployment** — this
+  requires real authenticated sessions under different roles against a live MongoDB instance, which
+  this sandboxed session cannot reach. The query logic was instead traced by hand against the
+  already-shipped, structurally identical ownership check in `PATCH /api/quotes/:id`.
+- The required Role Management step (granting `quotations:viewAll` to existing production roles)
+  has definitely **not** been performed by this session — it requires a live authenticated Super
+  Admin session in the actual production app, not something achievable from code.
+
+### Recommendation for next session
+- Before (or immediately after) this deploys to production, confirm a Super Admin has manually
+  checked `quotations:viewAll` for Administrator/Approver Level 1/Approver Level 2/Viewer in Role
+  Management. This is the single most operationally important follow-up from today's work — if
+  missed, approvers lose visibility into quotations they need to act on.
+
+---
+
 ## Session — 2026-07-22 (absolute latest), Fix Dashboard double-counting rewritten quotations
 
 ### What was implemented

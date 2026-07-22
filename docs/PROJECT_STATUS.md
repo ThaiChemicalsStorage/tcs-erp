@@ -14,6 +14,18 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ⚠️ **[2026-07-22] Added `quotations:viewAll` permission + Salesperson filter — requires a manual production step.**
+  A role holding `quotations:view` without the new `quotations:viewAll` now only sees its own
+  quotations (server-enforced on `GET /api/quotes` and Global Search's Quotation results); Sales
+  User doesn't get it by default (own-only, as intended), Administrator/Approver 1/Approver
+  2/Viewer do. New Salesperson filter dropdown added to the Quotation list, next to Job Type.
+  `tsc`/`lint`/`build` clean; the Salesperson dropdown was visually verified against a mock-data
+  harness. **Action required**: because `defaultRoles` only seeds once on first-run setup, this
+  production deployment's *existing* role documents will not automatically gain
+  `quotations:viewAll` — **a Super Admin must manually check it for Administrator/Approver Level
+  1/Approver Level 2/Viewer in Role Management**, or every current Approver loses the ability to
+  see quotations they need to approve. See [RBAC.md](./RBAC.md) "Quotation Own-Quotes-Only
+  Viewing" and [TODO.md](./TODO.md).
 - ✅ **[2026-07-22] Fixed Dashboard double-counting rewritten quotations (real user-reported bug).**
   Every Dashboard metric that counts/sums "quotations" was counting each revision of a rewritten
   quote as an independent additional quotation instead of the same one, superseded — e.g. a
@@ -500,6 +512,7 @@ Not yet planned.
 - **`GET /api/users` exposes the full user directory (PII, no secrets) to any authenticated user** — re-assessed by the 2026-07-10 Codex review rather than blindly restricted, since the app relies on the full directory in ways a naive fix would likely break. Tracked as an explicit business-decision item in [TODO.md](./TODO.md), not a silent gap.
 - **Quotation Rewrite/Revision (2026-07-22) is unverified against a live deployment/browser** — same sandboxed-session no-MongoDB-network limitation as every prior pass above. `tsc`/`lint`/`build` pass clean and the client bundle loads with zero console errors, but the 8 manual test scenarios in the original feature request (first/second/third rewrite, data-copy fidelity, original-record integrity, repeated-click guard, RBAC, error handling) have not been click-through-verified against real data. See [MODULES/Quotation.md](./MODULES/Quotation.md).
 - **The Dashboard revision-chain de-duplication fix (2026-07-22) is unverified against real rewritten quotation data in a live deployment** — same sandboxed-session limitation. The dedup logic itself was sanity-checked via a synthetic throwaway script, and every downstream widget's arithmetic is unchanged (only which documents feed it changed), but the actual end-to-end numbers (e.g. total pre-tax value with a real rewrite chain in the data) have not been confirmed against a live MongoDB instance. See [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Revision Chain De-duplication."
+- **`quotations:viewAll` (2026-07-22) requires a manual Role Management step this production deployment has not had yet** — until a Super Admin checks it for Administrator/Approver Level 1/Approver Level 2/Viewer, those roles' *existing* users will see only their own quotations after this ships (since `defaultRoles` isn't re-applied to already-seeded role documents), breaking approvers' ability to see quotations they need to review. This is a required action item, not a passive risk — see [TODO.md](./TODO.md) High Priority (top item) and [RBAC.md](./RBAC.md) "Quotation Own-Quotes-Only Viewing."
 
 ## Technical Debt
 
