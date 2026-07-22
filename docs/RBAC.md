@@ -292,7 +292,7 @@ Wizard (`api/handlers/auth.ts`) — it is **never** re-applied to an already-pro
 existing role documents. This means an existing production database's Administrator/Approver
 Level 1/Approver Level 2/Viewer role documents do **not** automatically gain `quotations:viewAll`
 just because this code shipped — **a Super Admin must open Role Management and manually check
-"ดูใบเสนอราคาของผู้อื่นได้ด้วย" for each of those roles (and any custom role that should keep seeing
+"ดูใบเสนอราคาของผู้อื่น" for each of those roles (and any custom role that should keep seeing
 everyone's quotations) before or immediately after this deploys**, or every existing Approver
 suddenly can't see the quotations they need to approve. Deliberately **not** auto-migrated: role
 permission lists can be (and often are) hand-customized by an admin after the defaults are seeded, so

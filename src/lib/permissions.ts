@@ -80,7 +80,7 @@ export const ALL_PERMISSIONS: Permission[] = [
 export const PERMISSION_LABELS: Record<Permission, string> = {
   "dashboard:view": "ดูแดชบอร์ด",
   "quotations:view": "ดูใบเสนอราคา",
-  "quotations:viewAll": "ดูใบเสนอราคาของผู้อื่นได้ด้วย (ไม่ติ๊ก = เห็นเฉพาะของตนเอง)",
+  "quotations:viewAll": "ดูใบเสนอราคาของผู้อื่น",
   "quotations:create": "สร้างใบเสนอราคา",
   "quotations:edit": "แก้ไขใบเสนอราคา",
   "quotations:delete": "ลบ/ยกเลิกใบเสนอราคา",
