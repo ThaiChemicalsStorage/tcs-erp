@@ -14,6 +14,24 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-22] Quotation Rewrite/Revision feature added.** New "Rewrite"/"แก้ไข" toolbar button
+  on the Quotation detail view (next to the existing Duplicate button, same `quotations:create`
+  gate) creates a new revision of the open quote and navigates straight to it — modeled directly on
+  Duplicate's clone semantics, but the new quote's `_id` is a revision-numbered id derived from the
+  source's own id (`{root}-R{n}`, e.g. `QT-2567-0041-R1`, then `-R2`, ...) instead of an unrelated
+  fresh sequence number. Rewriting an already-rewritten quote correctly advances the number (never
+  `-R1-R1`) since the root is always recovered by stripping the source id's own trailing `-R<n>`
+  suffix — no new schema field was needed. New `POST /api/quotes/:id/rewrite` route, atomic
+  per-chain revision counter (`quote_revision_{root}` in the existing `counters` collection, same
+  pattern as `nextQuoteId()`), bounded 3-attempt insert retry, distinct `"Quotation Rewritten"`
+  audit action, and a button-level busy-state guard against double-clicks. `tsc --noEmit` (both
+  `tsconfig.json` and `tsconfig.api.json`), `lint` (0 errors), and `build` all pass clean; client
+  bundle confirmed to load with zero console errors in a local dev server. **Not done**: a full
+  logged-in click-through against live data — same sandboxed-session no-MongoDB-network limitation
+  as every entry below (Vercel CLI also not installed, so `vercel dev` wasn't an option either); the
+  logic was instead verified by tracing it line-by-line against the already-shipped, equivalent-shape
+  Duplicate action. See CHANGELOG.md, [MODULES/Quotation.md](./MODULES/Quotation.md), API.md,
+  DATABASE.md, RBAC.md.
 - ✅ **[2026-07-20, Codex review round 4] Live verification closes the FRP Lining rollback's last
   gap; discovers an unpushed commit.** A third independent review flagged (High) that the FRP Lining
   v2.0→v1.0 rollback was code/seed-only, with no confirmation the live MongoDB record matched. Logged
@@ -465,6 +483,7 @@ Not yet planned.
 - **All five 2026-07-10 Dashboard/Quotation passes remain unverified against live browser/data**: `tsc`/`lint`/`build` pass clean every time and the code was carefully self-reviewed (each successive pass additionally ran a read-only audit against the actual code — not the prior pass's own summary — and found/fixed real gaps), but no session has managed a full live browser click-through yet. The first pass had no local DB credential/safe test environment available at all. The second through fifth passes **did** have local credentials (`.vercel/.env.development.local`, pulled via a prior `vercel link`) and got as far as running `vercel dev` locally with the real API — but every MongoDB-touching route 500'd all four times with `querySrv ECONNREFUSED _mongodb._tcp.tcsdb.zdnus3w.mongodb.net`: the sandboxed session's Node process cannot resolve MongoDB Atlas's `mongodb+srv://` DNS SRV record, even though the OS-level `nslookup` resolves it fine and raw TCP to the resolved shard host succeeds — reproduced identically on a pre-existing, untouched route (`GET /api/auth/session`) all four times, confirming it's a persistent environment/network limitation, not a defect in any pass's code. The fourth and fifth passes additionally used Playwright to confirm the client bundle itself loads and initializes with zero unrelated console errors up to the login gate, which is the most this environment can verify without real data access. The fifth pass's browser check also surfaced a real, pre-existing, unrelated gap: `App.tsx`'s session-fetch boot effect has no error handling, so the app gets stuck on its loading spinner instead of falling back to the sign-in screen when that fetch throws — logged in [TODO.md](./TODO.md), not fixed (out of scope for a Critical/High-issues fix pass). Treat all Dashboard/Job Type/Quotation-validation/UX-redesign/audit-integrity functionality as implemented-and-carefully-reviewed-but-not-yet-battle-tested until a live pass (e.g. from an unrestricted network, or against a Vercel preview deployment) confirms it end-to-end.
 - **Customer analytics (Dashboard) group by the free-text `Quote.client` string**, not a real Customer entity — name variations/typos will undercount repeat customers and split one real customer across rows. Documented in [MODULES/Dashboard.md](./MODULES/Dashboard.md), not silently assumed; will resolve once real Lead/Customer entities exist. Dashboard **department filtering has the same free-text-join limitation** against `Quote.salesperson`/`User.department` — see [TODO.md](./TODO.md) "Business decision needed" items for what a real fix requires.
 - **`GET /api/users` exposes the full user directory (PII, no secrets) to any authenticated user** — re-assessed by the 2026-07-10 Codex review rather than blindly restricted, since the app relies on the full directory in ways a naive fix would likely break. Tracked as an explicit business-decision item in [TODO.md](./TODO.md), not a silent gap.
+- **Quotation Rewrite/Revision (2026-07-22) is unverified against a live deployment/browser** — same sandboxed-session no-MongoDB-network limitation as every prior pass above. `tsc`/`lint`/`build` pass clean and the client bundle loads with zero console errors, but the 8 manual test scenarios in the original feature request (first/second/third rewrite, data-copy fidelity, original-record integrity, repeated-click guard, RBAC, error handling) have not been click-through-verified against real data. See [MODULES/Quotation.md](./MODULES/Quotation.md).
 
 ## Technical Debt
 

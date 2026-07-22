@@ -190,6 +190,30 @@ async function nextQuoteId(
   return `QT-${QUOTE_YEAR}-${String(seq).padStart(4, "0")}`;
 }
 
+/** Strips a quote id's trailing revision suffix (e.g. `QT-2567-0041-R2` → `QT-2567-0041`) to find
+ * the root quote number a rewrite chain is anchored to, so rewriting an already-rewritten quote
+ * (`-R1`) advances to `-R2` instead of `-R1-R1`. Quote ids never otherwise end in `-R<digits>`, so
+ * this is unambiguous. */
+function rewriteRootId(id: string): string {
+  return id.replace(/-R\d+$/, "");
+}
+
+/** Atomically reserves the next revision number for a rewrite chain, keyed by the chain's root
+ * quote id — same `counters` collection + `findOneAndUpdate($inc)` idiom as `nextQuoteId()` above
+ * (and Scope of Work's `nextJobSequence()`). No bootstrap needed: this is a brand-new counter
+ * namespace with no pre-existing `-R`-suffixed quotes to reconcile against. */
+async function nextRevisionNumber(
+  counters: Awaited<ReturnType<typeof countersCollection>>,
+  rootId: string,
+): Promise<number> {
+  const result = await counters.findOneAndUpdate(
+    { _id: `quote_revision_${rootId}` },
+    { $inc: { seq: 1 } },
+    { returnDocument: "after", upsert: true },
+  );
+  return result?.seq ?? 1;
+}
+
 function thaiDate(d: Date): string {
   return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
 }
@@ -457,6 +481,69 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
   await quotes.insertOne(doc);
   await writeQuoteAuditEntry(ctx, "Quotation Created", `คัดลอกใบเสนอราคาเป็น ${newId} จาก ${id}`, { quoteId: newId, customerName: doc.client });
   res.status(201).json({ quote: withStringId(doc) });
+}
+
+const MAX_REWRITE_ATTEMPTS = 3;
+
+/**
+ * "Rewrite/แก้ไข" — creates a new revision of an existing quote (`{root}-R{n}`, e.g.
+ * `QT-2567-0041-R1`, then `-R2`, ...). Deliberately modeled on `handleDuplicate()` above (same
+ * status-reset/fresh-line/fresh-ownership semantics) — the only real difference is the id: instead
+ * of an unrelated fresh sequence number, it's the source's revision root plus an atomically
+ * reserved next revision number, so the new record is traceable back to its origin purely through
+ * its own `_id` (no new schema field needed). The source quote is never modified. `rootId` is
+ * always derived from the *quote actually being rewritten* (`id`), not from any prior revision's
+ * root passed by the client, so rewriting an `-R1` correctly advances to `-R2`, never `-R1-R1`.
+ */
+async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "quotations:create");
+
+  const [quotes, counters] = await Promise.all([quotesCollection(), countersCollection()]);
+  const source = await quotes.findOne({ _id: id });
+  if (!source) throw new HttpError(404, "ไม่พบใบเสนอราคา");
+
+  const { _id: _sourceId, ...rest } = source;
+  const rootId = rewriteRootId(id);
+  const lines = cloneLines(source.lines);
+
+  for (let attempt = 1; attempt <= MAX_REWRITE_ATTEMPTS; attempt++) {
+    const revisionSeq = await nextRevisionNumber(counters, rootId);
+    const newId = `${rootId}-R${revisionSeq}`;
+    const doc = {
+      _id: newId,
+      ...rest,
+      status: "ร่าง" as const,
+      interest: null,
+      lines,
+      // Recomputed rather than copied from `source.amount` — same defensive invariant as Duplicate.
+      amount: computeQuoteAmount(lines, source.discount),
+      createdByUserId: ctx.user.id,
+      updatedBy: ctx.user.id,
+      approvalHistory: [],
+    };
+    try {
+      await quotes.insertOne(doc);
+    } catch (err) {
+      // Duplicate-key race on `_id` — extremely unlikely since `revisionSeq` is atomically
+      // reserved per root, but retry with a freshly-reserved number rather than surfacing a raw
+      // 500 to the client (same bounded-retry pattern as Scope of Work's insert race, see
+      // scopeOfWorkHandler.ts).
+      const isDuplicateKey = err instanceof Error && err.message.includes("E11000");
+      if (!isDuplicateKey || attempt === MAX_REWRITE_ATTEMPTS) throw err;
+      continue;
+    }
+    // The quote now genuinely exists in MongoDB — everything below is a best-effort side effect.
+    // Its failure must never surface as a client-facing error implying the rewrite itself failed,
+    // since that would be false (a real new quote document was just created).
+    try {
+      await writeQuoteAuditEntry(ctx, "Quotation Rewritten", `สร้างใบเสนอราคาแก้ไข ${newId} จากใบเสนอราคา ${id}`, { quoteId: newId, customerName: doc.client });
+    } catch (auditErr) {
+      console.error(`Rewrite ${newId}: failed to write audit-log entry`, auditErr);
+    }
+    res.status(201).json({ quote: withStringId(doc) });
+    return;
+  }
 }
 
 /**
@@ -780,6 +867,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (parts.length === 0) return handleList(req, res);
     if (parts.length === 1) return handleOne(req, res, parts[0]);
     if (parts.length === 2 && parts[1] === "duplicate") return handleDuplicate(req, res, parts[0]);
+    if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
     if (parts.length === 2 && parts[1] === "workflow") return handleWorkflow(req, res, parts[0]);
     if (parts.length === 2 && parts[1] === "print") return handlePrintQuote(req, res, parts[0]);
     throw new HttpError(404, "Not found");

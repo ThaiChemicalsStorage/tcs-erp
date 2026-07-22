@@ -4,6 +4,65 @@
 
 ---
 
+## Session — 2026-07-22 (absolute latest), Add Quotation Rewrite/Revision feature
+
+### What was implemented
+- Implemented a fully-specified feature request (Rewrite/แก้ไข button, `{root}-R{n}` revision
+  numbering, server-side generation, RBAC, docs) rather than a vague ask, so the main work was
+  research-first: launched a background research agent plus direct file reads to map the existing
+  quotation-number generation (`nextQuoteId()`, atomic `counters` collection), the create API
+  (`POST /api/quotes`), and — most importantly — the existing "Duplicate" action, since it's the
+  closest already-shipped analog (same clone-into-a-new-Draft semantics) and the safest thing to
+  model the new feature on rather than inventing a new pattern from scratch.
+- Decided **not** to add any new schema field (`parentQuoteId`/`revisionOf`/etc.) to track the
+  rewrite relationship — the revision root is recoverable purely by stripping a trailing `-R\d+`
+  suffix off the id itself, so the id string alone encodes the whole chain. This directly matches
+  the request's own "do not invent additional fields" instruction and keeps the change minimal:
+  no `DATABASE.md` `Quote` interface change, no migration.
+- New `POST /api/quotes/:id/rewrite` route (`handleRewrite()` in `api/handlers/quotes.ts`), gated by
+  the same `quotations:create` permission Duplicate uses (no new permission introduced). Revision
+  numbers are reserved atomically via the same `counters` collection + `findOneAndUpdate($inc)`
+  idiom `nextQuoteId()`/Scope of Work's `nextJobSequence()` already use, keyed per-root
+  (`quote_revision_{root}`), with a bounded 3-attempt insert retry mirroring Scope of Work's own
+  duplicate-key race guard.
+- Client-side: new `canRewrite` permission flag (`computeQuotePermissions()`), `rewriteQuote()` API
+  call, a new toolbar button in `QuoteDocument.tsx` right next to Duplicate, and a `handleRewrite()`
+  handler in `QuotationPage.tsx` following the exact same `setQuotes`/`setSelectedId`/toast pattern
+  Duplicate uses (this app has no router — changing `selectedId` while `view` stays `"detail"`
+  triggers `QuoteDocument`'s `key`-based remount onto the new revision). Made `onRewrite` return a
+  `Promise<void>` (unlike the fire-and-forget `onDuplicate`) specifically so the button could track
+  its own busy state and disable itself for the duration of the request — the one piece of new UI
+  plumbing beyond directly mirroring Duplicate, needed to satisfy the request's explicit
+  repeated-click-guard acceptance criterion.
+- `npx tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run lint` (0 errors, 2
+  pre-existing unrelated warnings), `npm run build` all pass clean. Confirmed the client bundle loads
+  with zero console errors in a local dev server.
+- Updated CHANGELOG.md, PROJECT_STATUS.md (Completed Features + Known Risks), TODO.md (High
+  Priority), DATABASE.md (`counters` section), API.md (new route row), RBAC.md (new "Quotation
+  Duplicate / Rewrite" subsection), and MODULES/Quotation.md (new business-flow item + Pages
+  section).
+
+### Known limitation
+- **Not verified against a live deployment/browser** — this sandboxed session has no network path to
+  MongoDB Atlas (confirmed directly: the dev server's own "ไม่สามารถเชื่อมต่อระบบได้" connection-error
+  screen appeared when navigating to it), and the Vercel CLI isn't installed either, so `vercel dev`
+  wasn't an option to at least exercise the real API locally. Same limitation documented against
+  nearly every prior pass in this log/PROJECT_STATUS.md. The 8 manual test scenarios from the
+  original request (first/second/third rewrite, data-copy fidelity, original-record integrity,
+  repeated-click guard, RBAC via UI and direct API, error handling) were not click-through-verified;
+  the implementation was instead checked by tracing it line-by-line against `handleDuplicate()`'s
+  already-shipped, equivalent-shape behavior, which gives high confidence but is not the same as a
+  live verification.
+
+### Recommendation for next session
+- When a network path to MongoDB Atlas (or a Vercel preview deployment) is available, run the 8
+  manual test scenarios from the original feature request end-to-end — particularly the
+  revision-numbering edge cases (rewriting an `-R1` produces `-R2`, not `-R1-R1`) and the
+  repeated-click guard, since both are the parts most worth a real functional confirmation beyond
+  code review.
+
+---
+
 ## Session — 2026-07-21 (absolute latest), Remove TemplateItem's Specifications/Params/Notes/visible-to-customer entirely
 
 ### What was implemented

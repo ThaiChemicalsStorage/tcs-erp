@@ -7,7 +7,7 @@ import { type Role, hasPermission } from "../../lib/roles";
 import type { Customer } from "../../lib/customers";
 import {
   type Quote, type QuoteInterest, type QuoteDraftFields, type ApprovalAction, type QuotationListFilter,
-  createQuote, updateQuote, duplicateQuote, performWorkflowAction, approvalActionLabelKey, computeQuotePermissions, nextQuoteId,
+  createQuote, updateQuote, duplicateQuote, rewriteQuote, performWorkflowAction, approvalActionLabelKey, computeQuotePermissions, nextQuoteId,
 } from "../../lib/quotes";
 import { ApiError } from "../../lib/apiClient";
 import { QuoteList } from "./QuoteList";
@@ -204,6 +204,18 @@ export function QuotationPage({
     }
   };
 
+  const handleRewrite = async () => {
+    if (!selectedQuote) return;
+    try {
+      const created = await rewriteQuote(selectedQuote.id);
+      setQuotes((prev) => [created, ...prev]);
+      setSelectedId(created.id);
+      toast.show(t("quotation.rewriteSuccessToast"));
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : t("quotation.rewriteErrorToast"));
+    }
+  };
+
   const handleWorkflowAction = async (action: ApprovalAction, comment: string, draft: QuoteDraftFields) => {
     if (!selectedQuote) return;
     try {
@@ -308,6 +320,7 @@ export function QuotationPage({
         onBack={() => setView("list")}
         onSave={handleSave}
         onDuplicate={handleDuplicate}
+        onRewrite={handleRewrite}
         onInterestChange={(v) => selectedQuote && setInterest(selectedQuote.id, v)}
         onWorkflowAction={handleWorkflowAction}
         showToast={toast.show}

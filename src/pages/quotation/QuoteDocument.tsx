@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronRight, Printer, Copy, Save, Send, CheckCircle2, Building2, Hash, CalendarDays,
-  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList,
+  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList, GitBranch,
 } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
@@ -70,6 +70,7 @@ export function QuoteDocument({
   onBack,
   onSave,
   onDuplicate,
+  onRewrite,
   onInterestChange,
   onWorkflowAction,
   showToast,
@@ -99,6 +100,10 @@ export function QuoteDocument({
   onBack: () => void;
   onSave: (data: QuoteDraftFields) => void;
   onDuplicate: () => void;
+  /** Creates a new revision (`{root}-R{n}`) of the open quote and navigates to it — returns a
+   * Promise (unlike `onDuplicate`) so this component can disable the button for the duration of
+   * the request, guarding against duplicate revisions from a rapid double-click. */
+  onRewrite: () => Promise<void>;
   onInterestChange: (v: QuoteInterest) => void;
   onWorkflowAction: (action: ApprovalAction, comment: string, draft: QuoteDraftFields) => Promise<void>;
   showToast: (msg: string) => void;
@@ -203,6 +208,16 @@ export function QuoteDocument({
   const [pendingAction, setPendingAction] = useState<ApprovalAction | null>(null);
   const [actionComment, setActionComment] = useState("");
   const [actionError, setActionError] = useState("");
+  const [rewriteBusy, setRewriteBusy] = useState(false);
+  const handleRewriteClick = async () => {
+    if (rewriteBusy) return;
+    setRewriteBusy(true);
+    try {
+      await onRewrite();
+    } finally {
+      setRewriteBusy(false);
+    }
+  };
 
   // ── Scope of Work (added 2026-07-15) ──────────────────────────────────────────────────────────
   // "Does a Scope of Work already exist for this quotation?" — looked up once per opened quotation
@@ -450,6 +465,11 @@ export function QuoteDocument({
           {isDetail && permissions.canDuplicate && (
             <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
               <Copy size={13} /> {t("quotation.duplicateAction")}
+            </button>
+          )}
+          {isDetail && permissions.canRewrite && (
+            <button onClick={handleRewriteClick} disabled={rewriteBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              <GitBranch size={13} /> {t("quotation.rewriteAction")}
             </button>
           )}
           {isDetail && canViewScopeOfWork && (existingScopeOfWork || canCreateScopeOfWork) && (

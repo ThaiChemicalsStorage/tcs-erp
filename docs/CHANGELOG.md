@@ -4,6 +4,70 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Add Quotation Rewrite/Revision feature
+
+**Feature**: a new "Rewrite"/"แก้ไข" toolbar button on the Quotation detail view (`QuoteDocument.tsx`,
+next to the existing "คัดลอก"/Duplicate button, same permission gate) creates a new revision of the
+open quote and navigates straight to it, leaving the source quote completely untouched. Modeled
+directly on the existing Duplicate action (same status-reset-to-Draft/fresh-lines/fresh-ownership/
+empty-approval-history semantics — see `handleDuplicate()`) with one difference: the new quote's id
+is a **revision-numbered id derived from the source's own id**, not an unrelated fresh sequence
+number — `{root}-R{n}`, e.g. `QT-2567-0041-R1`, then `-R2`, `-R3`, ... Rewriting an already-rewritten
+quote (`-R1`) correctly advances to `-R2`, never `-R1-R1`, because the "root" is always derived by
+stripping any existing trailing `-R<digits>` suffix off the id of the quote actually being
+rewritten — no new schema field was needed to track the parent/revision relationship, it's encoded
+entirely in the id string.
+
+**API** (`api/handlers/quotes.ts`): new `POST /api/quotes/:id/rewrite` route (`handleRewrite()`),
+gated by the same `quotations:create` permission Duplicate uses. The revision number is reserved
+**atomically** via the same `counters` collection + `findOneAndUpdate($inc)` idiom `nextQuoteId()`
+already uses for the main sequence (and Scope of Work's `nextJobSequence()`) — keyed by
+`quote_revision_${rootId}` (a brand-new counter namespace, no bootstrap needed). A bounded 3-attempt
+retry (`MAX_REWRITE_ATTEMPTS`) re-reserves a fresh number on the extremely unlikely `E11000`
+duplicate-key race, same defensive pattern as Scope of Work's insert retry. A distinct
+`"Quotation Rewritten"` audit action (not Duplicate's `"Quotation Created"`) is written so Dashboard
+analytics can tell the two apart later if needed. The server always loads the authoritative source
+quote from MongoDB by id — the client never sends quote data to copy.
+
+**Client** (`src/lib/quotes.tsx`): new `rewriteQuote(id)` calling the route above; new
+`QuotePermissions.canRewrite` (`!isNew && hasCreate` — same permission as `canDuplicate`, detail-view
+only). (`src/pages/quotation/QuoteDocument.tsx`): new `onRewrite: () => Promise<void>` prop (returns
+a Promise, unlike `onDuplicate`, specifically so this component can track a local `rewriteBusy` state
+and disable the button for the duration of the request — guards against a rapid double-click
+creating two revisions; the atomic counter reservation already makes concurrent-user duplicates
+impossible regardless). (`src/pages/quotation/QuotationPage.tsx`): new `handleRewrite()` following
+the exact same `setQuotes`/`setSelectedId`/toast pattern as `handleDuplicate()` — `view` stays
+`"detail"`, changing only `selectedId` triggers `QuoteDocument`'s `key`-based remount onto the new
+revision, no new routing/view-state needed (this app has no router at all — see ARCHITECTURE.md).
+On failure, the toast shows the server's error message and the user stays on the current (source)
+quote — no partial/incomplete record is ever left behind since the insert either fully succeeds or
+throws before `res.status(201)`.
+
+**i18n**: new `quotation.rewriteAction` ("แก้ไข"/"Rewrite"), `quotation.rewriteSuccessToast`,
+`quotation.rewriteErrorToast` keys, both languages.
+
+**Scope discipline**: no new permission was added (reuses `quotations:create`, same as Duplicate);
+no new page/route (reuses the existing in-page `key`-remount navigation pattern); Template
+structure/calculation logic/VAT/Dashboard/Warehouse/Scope of Work/Customer master data/approval
+workflow/print output/other buttons are all untouched.
+
+**Verification**: `npx tsc --noEmit`, `npx tsc --noEmit -p tsconfig.api.json`, `npm run lint`
+(0 errors, 2 pre-existing unrelated warnings in `i18n.tsx`), and `npm run build` all pass clean. The
+client bundle was confirmed to load with zero console errors in a local dev server — full logged-in
+click-through of the 8 manual test scenarios (first/second/third rewrite, data-copy fidelity,
+original-record integrity, repeated-click guard, RBAC, error handling) was **not** performed: this
+sandboxed session has no network path to the MongoDB Atlas cluster the Vercel Functions backend
+needs (`vercel dev` isn't available either — CLI not installed), the same documented limitation
+noted against nearly every prior pass in this file (see PROJECT_STATUS.md "Known Risks"). The logic
+was instead verified by tracing it against `handleDuplicate()`'s already-shipped, equivalent-shape
+behavior line-by-line.
+
+**Docs updated**: PROJECT_STATUS.md, CHANGELOG.md (this entry), SESSION_LOG.md, TODO.md, DATABASE.md
+(`counters` section), API.md (new route row), MODULES/Quotation.md (new "Rewrite" business-flow
+item).
+
+---
+
 ## 2026-07-21 (absolute latest) — Remove TemplateItem.specifications/.editableParameters/.internalNotes/.visibleToCustomer entirely
 
 **Feature**: Direct follow-up to the "ดูรายละเอียด" toggle removal above ("เอาพวกนี้ออกไปด้วย" — remove

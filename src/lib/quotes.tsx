@@ -282,6 +282,7 @@ export interface QuotePermissions {
   canCancel: boolean;
   canExport: boolean;
   canDuplicate: boolean;
+  canRewrite: boolean;
 }
 
 export function computeQuotePermissions(quote: Quote | undefined, isNew: boolean, currentUser: User, roles: Role[]): QuotePermissions {
@@ -307,6 +308,10 @@ export function computeQuotePermissions(quote: Quote | undefined, isNew: boolean
     canCancel: !isNew && !!status && ["ร่าง", "รออนุมัติ", "อนุมัติแล้ว"].includes(status) && hasDelete,
     canExport: hasPermission(currentUser, roles, "quotations:export"),
     canDuplicate: hasCreate,
+    // Same permission as Duplicate — a rewrite is also "create a brand-new quote document",
+    // just with a revision-numbered id instead of an unrelated fresh one. Only shown in detail
+    // view (isNew is irrelevant, matching canDuplicate's own semantics).
+    canRewrite: !isNew && hasCreate,
   };
 }
 
@@ -449,6 +454,14 @@ export async function updateQuote(id: string, fields: QuoteUpdateFields): Promis
 }
 export async function duplicateQuote(id: string): Promise<Quote> {
   const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}/duplicate`, { method: "POST" });
+  return quote;
+}
+/** Creates a new revision of `id` — `{root}-R{n}` (server-derives the root by stripping any
+ * existing `-R<n>` suffix and atomically reserves the next revision number), preserving the
+ * source's data with a fresh `_id`/Draft status/empty approval history. The source quote is never
+ * modified. See api/handlers/quotes.ts's `handleRewrite()`. */
+export async function rewriteQuote(id: string): Promise<Quote> {
+  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}/rewrite`, { method: "POST" });
   return quote;
 }
 /** Server-side print/PDF completeness gate (added 2026-07-16) — call this before `window.print()`.

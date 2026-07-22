@@ -637,6 +637,15 @@ interface CounterFields {
 ```
 Lazily bootstrapped from the current max existing `_id` (via `$max`, idempotent under a concurrent-bootstrap race) the first time it's needed after this fix shipped — not backfilled by a migration script, since the bootstrap is self-healing on first use.
 
+Also backs the same-collection Scope of Work per-month job sequence (`scope_{yearMonth}`, see the
+`scope_of_works` section above) and, **added 2026-07-22**, the Quotation Rewrite/Revision feature's
+per-chain revision number (`quote_revision_{rootQuoteId}`, e.g. `"quote_revision_QT-2567-0041"`) —
+`nextRevisionNumber()` in `api/handlers/quotes.ts`, same `findOneAndUpdate($inc, upsert)` idiom, no
+bootstrap needed since it's a brand-new counter namespace with no pre-existing `-R`-suffixed quotes
+to reconcile against. Note there is **no new field anywhere on `Quote`** for the revision
+relationship — the new quote's `_id` itself (`{root}-R{n}`) is the only record of which quote it's a
+revision of; the root is recovered by stripping a trailing `-R\d+` suffix, never stored separately.
+
 ### Dashboard KPI/chart aggregation (`GET /api/dashboard`, added 2026-07-09, majorly expanded 2026-07-10, completed against the full business spec later the same day)
 
 Read-only, no collection of its own — see [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full widget-by-widget breakdown. Key data-model notes:

@@ -263,6 +263,19 @@ module), so these events can only be written by the handler itself. See
 
 **Known simplification**: the two approver roles (Level 1/Level 2) are not sequenced — either can independently approve or reject a quote in "รออนุมัติ." A real two-stage gate (Level 1 must approve before Level 2 can) was not requested by name in the given status diagram (a single "Pending Approval" step) and was scoped out; see [TODO.md](./TODO.md).
 
+### Quotation Duplicate / Rewrite
+
+Both `POST /api/quotes/:id/duplicate` and `POST /api/quotes/:id/rewrite` (the latter added
+2026-07-22 — see [MODULES/Quotation.md](./MODULES/Quotation.md)) are gated by **`quotations:create`**
+only, the same permission that gates creating a brand-new quote from scratch — no dedicated
+`quotations:duplicate`/`:rewrite` permission was introduced, since both actions are "create a new
+quote document" from the RBAC model's point of view, just pre-filled from an existing one. Enforced
+at all three layers: the toolbar button itself (`permissions.canDuplicate`/`canRewrite` in
+`computeQuotePermissions()`, both `!isNew && hasPermission(..., "quotations:create")`), and
+server-side via `requirePermission(req, "quotations:create")` inside `handleDuplicate()`/
+`handleRewrite()` — a direct API call from a user without the permission is rejected `403`
+regardless of what the UI shows.
+
 ### Signature Integration
 
 `QuoteDocument.tsx` looks up the preparer's `User` record via `quote.createdByUserId` and the approver's via the most recent `approved` entry in `approvalHistory`, then renders `user.signatureDataUrl` (uploaded in Settings → Profile, same `ImageUploadField` pattern as the company logo/stamp) as an image on the signature block. If no signature is set, it falls back to the existing blank signature line — **no error is ever shown**, per spec.
