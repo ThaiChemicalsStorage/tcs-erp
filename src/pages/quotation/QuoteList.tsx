@@ -105,19 +105,46 @@ export function QuoteList({
       </div>
 
       {/* Filter */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative h-9 w-72">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("quotation.searchPlaceholder")}
-            className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X size={13} />
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative h-9 w-72">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("quotation.searchPlaceholder")}
+              className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X size={13} />
+              </button>
+            )}
+          </div>
+          <select
+            value={filterJobType}
+            onChange={(e) => setFilterJobType(e.target.value)}
+            className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
+          >
+            <option value={FILTER_ALL}>{t("quotation.field.jobType")}: {t("quotation.filterAll")}</option>
+            {jobTypes.map((jt) => (
+              <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>
+            ))}
+          </select>
+          <select
+            value={filterSalesperson}
+            onChange={(e) => setFilterSalesperson(e.target.value)}
+            className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
+          >
+            <option value={FILTER_ALL}>{t("quotation.col.salesperson")}: {t("quotation.filterAll")}</option>
+            {salespeopleInList.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+          {clientFilter && (
+            <button onClick={() => setClientFilter("")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-[#1a5fb4]/10 text-[#1a5fb4] border border-[#1a5fb4]/20 hover:bg-[#1a5fb4]/15 transition-colors">
+              {t("quotation.col.client")}: {clientFilter} <X size={12} />
             </button>
           )}
         </div>
@@ -133,31 +160,6 @@ export function QuoteList({
             </button>
           ))}
         </div>
-        <select
-          value={filterJobType}
-          onChange={(e) => setFilterJobType(e.target.value)}
-          className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
-        >
-          <option value={FILTER_ALL}>{t("quotation.field.jobType")}: {t("quotation.filterAll")}</option>
-          {jobTypes.map((jt) => (
-            <option key={jt.id} value={jt.code}>{jt.code} — {jt.name}</option>
-          ))}
-        </select>
-        <select
-          value={filterSalesperson}
-          onChange={(e) => setFilterSalesperson(e.target.value)}
-          className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
-        >
-          <option value={FILTER_ALL}>{t("quotation.col.salesperson")}: {t("quotation.filterAll")}</option>
-          {salespeopleInList.map((name) => (
-            <option key={name} value={name}>{name}</option>
-          ))}
-        </select>
-        {clientFilter && (
-          <button onClick={() => setClientFilter("")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-[#1a5fb4]/10 text-[#1a5fb4] border border-[#1a5fb4]/20 hover:bg-[#1a5fb4]/15 transition-colors">
-            {t("quotation.col.client")}: {clientFilter} <X size={12} />
-          </button>
-        )}
       </div>
 
       {/* Table */}

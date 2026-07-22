@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Fix Quotation list filter row wrapping into 3 uneven lines
+
+**Bug fix**: direct follow-up, with a screenshot, to the Salesperson filter added just above — at
+the actual screen width the user was viewing, the filter row (search box, status pill bar, Job
+Type dropdown, Salesperson dropdown) wrapped into 3 uneven lines (search alone on row 1, the wide
+status pill bar alone on row 2, both dropdowns stranded on row 3) instead of a clean layout.
+Restructured `QuoteList.tsx`'s filter section into two explicit rows instead of one single
+`flex-wrap` container: row 1 groups every compact single-control filter together (search, Job Type,
+Salesperson, the client-filter chip when present); row 2 is the status pill bar alone, on its own
+full-width line — it's inherently the widest control (10 buttons) and reads better with room to
+itself rather than competing for wrap space with the compact controls. Verified visually against a
+temporary mock-data harness (`?harness=1`, deleted before finishing) at two window widths — renders
+as the intended clean 2-row layout at both, no 3-line wrap. `tsc`/`lint`/`build` all pass clean.
+
+**Files**: `src/pages/quotation/QuoteList.tsx`.
+
+---
+
 ## 2026-07-22 (absolute latest) — Add own-quotes-only viewing permission + Salesperson filter
 
 **Feature**: per direct user request ("อยากให้สร้างสิทธิ์เพิ่มขึ้นมาว่าจะมีสิทธิ์ที่สามารถดูใบเสนอได้แค่
