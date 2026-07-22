@@ -14,6 +14,21 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-22] Fixed Dashboard double-counting rewritten quotations (real user-reported bug).**
+  Every Dashboard metric that counts/sums "quotations" was counting each revision of a rewritten
+  quote as an independent additional quotation instead of the same one, superseded — e.g. a
+  ฿100,000 quotation rewritten twice inflated the total pre-tax value by 3×. New shared
+  `dedupeQuotesByRevisionChain()` (`api/_lib/quoteRevisions.ts`, reusing the same `-R<digits>`
+  suffix parsing `handleRewrite()` already used) applied to every quote-count/-value data source in
+  `api/dashboard/index.ts` — the shared `docs` array (fixes every KPI/pipeline/salesPerformance/
+  customerAnalytics/jobTypeAnalytics/forecast/approvalDashboard field at once), follow-ups,
+  repeat-customer classification, forecast win rate, monthly closing rate, and revenue trend (the
+  latter four converted from MongoDB `$group` aggregates to raw fetches, since dedup must run
+  before any status-based counting). `tsc`/`lint`/`build` all pass clean; core dedup logic
+  sanity-checked via a throwaway Node script against a synthetic revision chain. **Not done**: live
+  verification against real rewritten quotation data — same sandboxed-session limitation as every
+  entry below. See [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Revision Chain
+  De-duplication."
 - ✅ **[2026-07-22] Quotation Rewrite/Revision feature added.** New "Rewrite"/"แก้ไข" toolbar button
   on the Quotation detail view (next to the existing Duplicate button, same `quotations:create`
   gate) creates a new revision of the open quote and navigates straight to it — modeled directly on
@@ -484,6 +499,7 @@ Not yet planned.
 - **Customer analytics (Dashboard) group by the free-text `Quote.client` string**, not a real Customer entity — name variations/typos will undercount repeat customers and split one real customer across rows. Documented in [MODULES/Dashboard.md](./MODULES/Dashboard.md), not silently assumed; will resolve once real Lead/Customer entities exist. Dashboard **department filtering has the same free-text-join limitation** against `Quote.salesperson`/`User.department` — see [TODO.md](./TODO.md) "Business decision needed" items for what a real fix requires.
 - **`GET /api/users` exposes the full user directory (PII, no secrets) to any authenticated user** — re-assessed by the 2026-07-10 Codex review rather than blindly restricted, since the app relies on the full directory in ways a naive fix would likely break. Tracked as an explicit business-decision item in [TODO.md](./TODO.md), not a silent gap.
 - **Quotation Rewrite/Revision (2026-07-22) is unverified against a live deployment/browser** — same sandboxed-session no-MongoDB-network limitation as every prior pass above. `tsc`/`lint`/`build` pass clean and the client bundle loads with zero console errors, but the 8 manual test scenarios in the original feature request (first/second/third rewrite, data-copy fidelity, original-record integrity, repeated-click guard, RBAC, error handling) have not been click-through-verified against real data. See [MODULES/Quotation.md](./MODULES/Quotation.md).
+- **The Dashboard revision-chain de-duplication fix (2026-07-22) is unverified against real rewritten quotation data in a live deployment** — same sandboxed-session limitation. The dedup logic itself was sanity-checked via a synthetic throwaway script, and every downstream widget's arithmetic is unchanged (only which documents feed it changed), but the actual end-to-end numbers (e.g. total pre-tax value with a real rewrite chain in the data) have not been confirmed against a live MongoDB instance. See [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Revision Chain De-duplication."
 
 ## Technical Debt
 

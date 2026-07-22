@@ -646,6 +646,13 @@ to reconcile against. Note there is **no new field anywhere on `Quote`** for the
 relationship — the new quote's `_id` itself (`{root}-R{n}`) is the only record of which quote it's a
 revision of; the root is recovered by stripping a trailing `-R\d+` suffix, never stored separately.
 
+**2026-07-22, same day**: the `-R\d+` suffix parsing (`getRevisionRoot()`/`getRevisionNumber()`) was
+extracted into a shared `api/_lib/quoteRevisions.ts` so `api/dashboard/index.ts` could reuse it too —
+every Dashboard quote-count/-value aggregate now collapses a rewrite chain (root + every `-R{n}`) to
+one entry (its latest revision) via `dedupeQuotesByRevisionChain()` before counting/summing, fixing a
+real double-counting bug a user reported directly. See
+[MODULES/Dashboard.md](./MODULES/Dashboard.md) "Revision Chain De-duplication."
+
 ### Dashboard KPI/chart aggregation (`GET /api/dashboard`, added 2026-07-09, majorly expanded 2026-07-10, completed against the full business spec later the same day)
 
 Read-only, no collection of its own — see [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full widget-by-widget breakdown. Key data-model notes:

@@ -4,6 +4,43 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Fix Dashboard double-counting rewritten quotations
+
+**Bug fix**: per direct user report ("มูลค่าใบเสนอราคารวมก่อนภาษีมันรวมใบที่ rewrite ออกมาด้วย" — the
+total pre-tax quotation value includes rewritten quotes too), confirmed the bug was real and
+company-wide, not limited to that one KPI: a "Rewrite" (added earlier the same day) creates a
+brand-new MongoDB document per revision (`QT-2567-0041`, `-R1`, `-R2`, ...), and every Dashboard
+metric that counts/sums "quotations" was counting each of those documents independently instead of
+once. Asked the user to confirm scope (one KPI vs. every Dashboard number) before touching code —
+answer: every number.
+
+**Fix**: new shared `getRevisionRoot()`/`getRevisionNumber()`/`dedupeQuotesByRevisionChain()` helper
+(`api/_lib/quoteRevisions.ts`) — the same `-R<digits>` suffix parsing `handleRewrite()`
+(`api/handlers/quotes.ts`) already used to generate revision numbers, extracted so the two can never
+drift apart (`api/handlers/quotes.ts`'s own local copy was removed in favor of this shared one).
+Applied to every quote-count/-value data source in `api/dashboard/index.ts`: the shared `docs` array
+(fixes every KPI, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast's
+`openOpportunities`, approvalDashboard's `pendingList` in one place, since all of them derive from
+`docs`), follow-up reminders, repeat-customer classification, the forecast's historical win rate,
+monthly closing rate, and the revenue trend chart. The latter four were previously MongoDB `$group`
+aggregations — converted to raw document fetches (status filters moved from the Mongo query to
+after-dedup JS filtering) since a chain's true status/outcome/revenue can only be resolved from its
+*latest* revision, which the aggregation pipelines had no way to determine before grouping. See
+[MODULES/Dashboard.md](./MODULES/Dashboard.md) "Revision Chain De-duplication" for the full
+per-widget breakdown and the deliberately-left-un-deduped exceptions (`hasAnyData`'s boolean gate,
+the audit-log-based `activityTimeline`/`salesActivity` event feeds).
+
+**Verification**: `tsc --noEmit` (both tsconfigs), `lint`, `build` all pass clean. The core dedup
+logic was sanity-checked against a synthetic revision chain via a throwaway Node script (correctly
+collapsed a 2-rewrite chain to just its latest revision, left an unrewritten quote and an orphan
+`-R1` untouched). **Not verified against a live deployment with real rewritten quotation data** —
+same sandboxed-session no-MongoDB-network limitation as every other pass in this file.
+
+**Files**: `api/_lib/quoteRevisions.ts` (new), `api/handlers/quotes.ts` (refactored to reuse the
+shared helper), `api/dashboard/index.ts` (dedup applied to 6 data sources).
+
+---
+
 ## 2026-07-22 (absolute latest) — Fix Quotation list filter-row layout imbalance
 
 **Bug fix**: direct follow-up to the search box added just below ("รู้สึกการจัดเรียง layout มันแปลก" —

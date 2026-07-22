@@ -13,6 +13,7 @@ import {
   sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeBoolean,
 } from "../_lib/quoteValidation.js";
 import { validateQuotationForFinalization, validateQuotationForPrint, type QuotationValidationInput } from "../../src/lib/validation/quotationValidation.js";
+import { getRevisionRoot } from "../_lib/quoteRevisions.js";
 
 /**
  * Writes an authoritative, server-side audit-log entry for a quotation mutation — identity
@@ -188,14 +189,6 @@ async function nextQuoteId(
   );
   const seq = result?.seq ?? 1;
   return `QT-${QUOTE_YEAR}-${String(seq).padStart(4, "0")}`;
-}
-
-/** Strips a quote id's trailing revision suffix (e.g. `QT-2567-0041-R2` → `QT-2567-0041`) to find
- * the root quote number a rewrite chain is anchored to, so rewriting an already-rewritten quote
- * (`-R1`) advances to `-R2` instead of `-R1-R1`. Quote ids never otherwise end in `-R<digits>`, so
- * this is unambiguous. */
-function rewriteRootId(id: string): string {
-  return id.replace(/-R\d+$/, "");
 }
 
 /** Atomically reserves the next revision number for a rewrite chain, keyed by the chain's root
@@ -504,7 +497,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   if (!source) throw new HttpError(404, "ไม่พบใบเสนอราคา");
 
   const { _id: _sourceId, ...rest } = source;
-  const rootId = rewriteRootId(id);
+  const rootId = getRevisionRoot(id);
   const lines = cloneLines(source.lines);
 
   for (let attempt = 1; attempt <= MAX_REWRITE_ATTEMPTS; attempt++) {

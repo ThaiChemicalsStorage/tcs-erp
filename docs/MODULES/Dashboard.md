@@ -189,6 +189,74 @@ per-record data-quality surface is worth building. If it ever fires against real
 a signal to inspect those specific quotes by hand (`db.quotes.find({ lines: { $exists: false } })`)
 — not a bug in this calculation rule itself.
 
+## Revision Chain De-duplication (2026-07-22)
+
+**Problem**: a "Rewrite/แก้ไข" action (added 2026-07-22, see [Quotation.md](./Quotation.md)
+"Business Flow" item 6a) creates a brand-new MongoDB document per revision of a quotation —
+`QT-2567-0041`, `QT-2567-0041-R1`, `QT-2567-0041-R2` are 3 separate documents that all represent the
+same logical quotation. Before this fix, every Dashboard metric that counts or sums "quotations"
+counted each of those 3 documents independently — reported by the user directly ("มูลค่าใบเสนอราคารวม
+ก่อนภาษีมันรวมใบที่ rewrite ออกมาด้วย"), a real business-reporting bug, not a display nit: a ฿100,000
+quotation rewritten twice would show up as ฿300,000+ of total value, 3 "quotations," etc.
+
+**Fix (explicit 2026-07-22 business decision)**: every quote-count/-value aggregate must count each
+revision chain **exactly once**, using the chain's **latest revision's data** — never the superseded
+original, never a sum across every revision. If a chain has never been rewritten, its one document
+is trivially "the latest." Implemented via a shared `dedupeQuotesByRevisionChain()` helper
+(`api/_lib/quoteRevisions.ts`) — the same file `handleRewrite()` (`api/handlers/quotes.ts`) uses to
+generate the next revision number, so the `-R<digits>` suffix parsing can never drift between the
+two. Applied to every data source `api/dashboard/index.ts` feeds a quote-count/-value metric from:
+
+- **`docs`** (the shared per-quote array — see "Pre-Tax Amount Rule" above) — fixes `totalQuotations`/
+  `totalQuotationValue`/every other KPI, `pipeline`, `salesPerformance`, `customerAnalytics`'s
+  `topBy*` rankings, `jobTypeAnalytics`, `forecast`'s `openOpportunities`, and
+  `approvalDashboard`'s `pendingList` in one place, since all of them derive from `docs`.
+- **Follow-ups** (`followUpDocsRaw` → `followUpDocs`) — a rewritten quotation with a follow-up date
+  no longer surfaces as two separate reminders.
+- **Repeat-customer classification** (`totalQuoteCountByClient`, feeding `newCustomers`/
+  `repeatCustomers`/`customerAnalytics.repeatCustomerPercentage`) — this was previously a MongoDB
+  `$group` count aggregate (`{ $group: { _id: "$client", count: { $sum: 1 } } }`), company-wide,
+  unfiltered; converted to a raw `find({}, { projection: { client: 1 } })` fetch so the chain can be
+  deduped in JS before counting — otherwise a client whose one real quotation had been rewritten
+  twice would show a count of 3 and be wrongly classified as a repeat customer.
+- **Forecast's historical win rate** (`historicalOutcomeDocsRaw`, trailing 12 months, company-wide) —
+  previously a `$group`-by-status aggregate with `status: { $in: [Won, Lost] }` filtered at the Mongo
+  level; converted to a raw fetch of every status in the window (the status filter can't run before
+  dedup, since a chain's true outcome depends on its *latest* revision's status, which might not be
+  Won/Lost even if an earlier revision was).
+- **Monthly closing rate** (`monthlyOutcomeDocsRaw`) — same conversion, same reasoning, grouped by
+  month+status in JS after dedup instead of via a `$group` pipeline.
+- **Revenue trend** (`revenueTrendDocsRaw`, feeds `revenueTrend`/`revenueByMonth`) — previously
+  queried `status: WON_STATUS` directly at the Mongo level; converted to fetch every status, dedupe,
+  then filter to Won in JS — a chain only contributes revenue if its *latest* revision is Won, using
+  that revision's own `lines`/`discount`, not the original's.
+
+**Deliberately left un-deduped**: `totalQuotationsAllTime` (`quotes.estimatedDocumentCount()`) feeds
+only the `hasAnyData` boolean gate ("is there any business data at all"), never a displayed number —
+every revision is still a real document proving data exists, so double-counting there is harmless.
+`activityTimeline`/`salesActivity` (the Recent Activity Details feed and the 5-category activity
+counter) are audit-log **event** counters, not quotation-count aggregates — a rewrite is a genuine
+event that happened and correctly appears once in `activityTimeline` as its own `"Quotation
+Rewritten"` entry; it isn't in `salesActivity`'s tracked `ACTIVITY_ACTIONS` list at all (only
+Created/Updated/Submitted/Approved/Rejected/Status Changed are), so it was never double-counted
+there either — no change was needed for either widget.
+
+**Cost tradeoff**: four queries (`revenueTrend`, repeat-customer classification, forecast's win
+rate, monthly closing rate) moved from a MongoDB `$group` aggregation to a raw document fetch plus
+JS-side grouping, so dedup can run before any counting/summing happens — this transfers more
+documents per request than the previous aggregation pipelines did. Accepted given this app's scale
+(a single internal company tool, not a high-volume multi-tenant product) and that the majority of
+this file's queries (`docs`, `followUpDocsRaw`) already used this same fetch-then-reduce-in-JS
+pattern rather than server-side aggregation.
+
+**Verification**: `tsc --noEmit` (both tsconfigs), `lint`, `build` all pass clean.
+`dedupeQuotesByRevisionChain()`'s core logic was sanity-checked against a synthetic chain (original
++ 2 rewrites, plus a standalone unrewritten quote, plus an edge case where only an `-R1` exists
+with no fetched root) via a throwaway Node script — correctly collapsed the 2-rewrite chain to just
+its `-R2` entry and left the other cases untouched. **Not verified against a live deployment/browser
+with real rewritten quotation data** — same sandboxed-session no-MongoDB-network limitation as every
+other pass in this project (see PROJECT_STATUS.md "Known Risks").
+
 ## Pages / Components
 
 `src/pages/dashboard/` was split from a single file into:

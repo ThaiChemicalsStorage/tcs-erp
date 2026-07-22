@@ -8,6 +8,7 @@ import {
 import { roleHasPermission } from "../../src/lib/roles.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
 import { computeQuoteAmountBeforeVat } from "../_lib/quoteAmounts.js";
+import { dedupeQuotesByRevisionChain } from "../_lib/quoteRevisions.js";
 
 const WON_STATUS = "ปิดการขายสำเร็จ";
 const LOST_STATUS = "เสียโอกาส";
@@ -348,8 +349,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const [
       totalCustomers, totalLeads, totalProducts, totalQuotationsAllTime,
-      wonRevenueDocsRaw, productsByCategoryAgg, categoryDocs,
-      docsRaw, allClientCountsAgg, followUpDocsRaw, historicalOutcomeAgg, monthlyOutcomeAgg,
+      revenueTrendDocsRaw, productsByCategoryAgg, categoryDocs,
+      docsRaw, allClientDocsRaw, followUpDocsRaw, historicalOutcomeDocsRaw, monthlyOutcomeDocsRaw,
       activeJobTypes,
     ] = await Promise.all([
       // Total Customers/Leads/Products, and `categoryBreakdown` below, are deliberately company-wide,
@@ -368,12 +369,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // selection. `kpis.totalQuotations` below is correctly filter-scoped for its own KPI card;
       // conflating the two previously meant an empty-result filter (e.g. "Today" on a quiet day)
       // could hide the entire dashboard behind the empty state even with years of real history.
+      // Left as a raw, un-deduped count on purpose — every revision of a rewritten quotation is
+      // still a real document proving "there is data," so double-counting a rewrite chain here is
+      // harmless (this feeds only a `> 0` boolean gate, never a displayed number — see `hasAnyData`).
       quotes.estimatedDocumentCount(),
-      // Raw (issueDate, amount) for every won quote in scope — bucketed in JS into week/month/quarter/year
-      // series below, rather than four separate $group aggregations for the same underlying rows.
+      // Raw (status, issueDate, lines, discount) for every quote in scope — bucketed in JS into
+      // week/month/quarter/year Won-revenue series below. **No `status: WON_STATUS` filter at the
+      // Mongo level anymore** (2026-07-22, Rewrite double-counting fix) — a rewrite chain's status
+      // must be resolved from its LATEST revision only (see `dedupeQuotesByRevisionChain()`), which
+      // requires fetching every status for a chain, not just the ones already known to be Won; the
+      // WON_STATUS filter is applied in JS below, after dedup.
       quotes.find(
-        { ...salespersonOnlyMatch, status: WON_STATUS, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } },
-        { projection: { issueDate: 1, lines: 1, discount: 1 } },
+        { ...salespersonOnlyMatch, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } },
+        { projection: { status: 1, issueDate: 1, lines: 1, discount: 1 } },
       ).toArray(),
       products.aggregate<{ _id: string; count: number }>([
         { $match: { archived: false } },
@@ -381,7 +389,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ]).toArray(),
       categories.find({}).toArray(),
       quotes.find(fullMatch, { projection }).toArray() as unknown as Promise<QuoteCalcDoc[]>,
-      quotes.aggregate<{ _id: string; count: number }>([{ $group: { _id: "$client", count: { $sum: 1 } } }]).toArray(),
+      // Raw (client) for every quote company-wide — used only to classify each client in the
+      // filtered set as new-vs-repeat (see `totalQuoteCountByClient` below). Was a `$group` count
+      // aggregate; now a raw fetch (2026-07-22, Rewrite double-counting fix) so a rewrite chain can
+      // be deduped to one entry before counting — otherwise a client whose only real quotation had
+      // been rewritten twice would show 3 "quotes" and be misclassified as a repeat customer.
+      quotes.find({}, { projection: { client: 1 } }).toArray() as unknown as Promise<Array<{ _id: string; client?: string }>>,
       // Follow-ups respect the full date-range + salesperson/department filter, same as every other
       // widget — a follow-up tied to a quote issued outside the selected reporting window is excluded,
       // consistent with "the date filter must affect every widget" (see MODULES/Dashboard.md).
@@ -392,14 +405,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Deliberately company-wide only (no salesperson filter) — the forecast's weighting baseline is a
       // trailing-12-month win rate meant to be a stable, low-noise reference; narrowing it to one
       // salesperson's own (much smaller) win/loss sample would make the forecast noisier, not more accurate.
-      quotes.aggregate<{ _id: string; count: number }>([
-        { $match: { status: { $in: [WON_STATUS, LOST_STATUS] }, issueDate: { $gte: lastNMonthKeys(MONTHS_BACK, trendAnchor)[0] } } },
-        { $group: { _id: "$status", count: { $sum: 1 } } },
-      ]).toArray(),
-      quotes.aggregate<{ _id: { month: string; status: string }; count: number }>([
-        { $match: { ...salespersonOnlyMatch, status: { $in: [WON_STATUS, LOST_STATUS] }, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } } },
-        { $group: { _id: { month: { $substr: ["$issueDate", 0, 7] }, status: "$status" }, count: { $sum: 1 } } },
-      ]).toArray(),
+      // **No `status` filter at the Mongo level anymore** (2026-07-22, same Rewrite fix as above) —
+      // every status in the window must be fetched so a chain's latest revision can be resolved
+      // before counting it as Won/Lost; the status filter moves to JS, after dedup.
+      quotes.find(
+        { issueDate: { $gte: lastNMonthKeys(MONTHS_BACK, trendAnchor)[0] } },
+        { projection: { status: 1, issueDate: 1 } },
+      ).toArray(),
+      // Same fix as the two above — was `$group`-ed by {month, status} in Mongo; now a raw fetch so
+      // `dedupeQuotesByRevisionChain()` can run first, then the month+status grouping happens in JS.
+      quotes.find(
+        { ...salespersonOnlyMatch, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } },
+        { projection: { status: 1, issueDate: 1 } },
+      ).toArray(),
       jobTypes.find({ isActive: true }, { projection: { code: 1, name: 1 } }).toArray(),
     ]);
 
@@ -413,7 +431,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // approvalDashboard's pendingList) derives from `docs`, so converting once here instead of at
     // each individual `.reduce()`/`.filter()` call site is both simpler and impossible for any one
     // of them to accidentally miss.
-    const docs = (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0) }));
+    //
+    // **2026-07-22, Rewrite double-counting fix**: also collapsed to one entry per revision chain
+    // here, via `dedupeQuotesByRevisionChain()` — a "Rewrite/แก้ไข" (`handleRewrite()` in
+    // api/handlers/quotes.ts) creates a brand-new quote document per revision (`{root}-R{n}`), so
+    // without this every KPI/pipeline/salesPerformance/customerAnalytics/jobTypeAnalytics/forecast
+    // widget below counted a rewritten quotation once per revision instead of once. Every one of
+    // those widgets derives from `docs`, so deduping here — once — fixes all of them at once,
+    // consistently, using each chain's LATEST revision (never the superseded original, never a sum
+    // across revisions), per explicit 2026-07-22 business decision.
+    const docs = dedupeQuotesByRevisionChain(
+      (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0) })),
+    );
 
     // Data-quality telemetry (2026-07-14, Codex review Medium finding): a doc with `lines` entirely
     // *absent* (not just an empty array — a genuinely new Draft with no items yet legitimately has
@@ -501,7 +530,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       notEvaluated: docs.filter((q) => q.interest !== "น่าสนใจ" && q.interest !== "ไม่น่าสนใจ").length,
     };
 
-    const totalQuoteCountByClient = new Map(allClientCountsAgg.map((c) => [c._id, c.count]));
+    // Deduped by revision chain before grouping by client (2026-07-22, Rewrite double-counting
+    // fix) — otherwise a client whose one real quotation had been rewritten twice would show 3
+    // "quotes" here and be misclassified as a repeat customer below.
+    const totalQuoteCountByClient = new Map<string, number>();
+    for (const d of dedupeQuotesByRevisionChain(allClientDocsRaw as Array<{ _id: string; client?: string }>)) {
+      const client = d.client ?? "";
+      totalQuoteCountByClient.set(client, (totalQuoteCountByClient.get(client) ?? 0) + 1);
+    }
     const clientsInFilteredSet = new Set(docs.filter((q) => q.client.trim()).map((q) => q.client));
     let newCustomers = 0;
     let repeatCustomers = 0;
@@ -608,8 +644,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }).sort((a, b) => b.revenue - a.revenue);
 
     // ── Forecast — live weighted estimate, not stored ────────────────────
-    const wonLast12 = historicalOutcomeAgg.find((o) => o._id === WON_STATUS)?.count ?? 0;
-    const lostLast12 = historicalOutcomeAgg.find((o) => o._id === LOST_STATUS)?.count ?? 0;
+    // Deduped by revision chain (2026-07-22, Rewrite double-counting fix) before counting Won/Lost —
+    // a chain's outcome is whatever its LATEST revision's status is, not every revision's status
+    // summed (e.g. a Won original superseded by a still-open rewrite must no longer count as Won).
+    const historicalOutcomeDocs = dedupeQuotesByRevisionChain(historicalOutcomeDocsRaw as Array<{ _id: string; status: string; issueDate: string }>);
+    const wonLast12 = historicalOutcomeDocs.filter((d) => d.status === WON_STATUS).length;
+    const lostLast12 = historicalOutcomeDocs.filter((d) => d.status === LOST_STATUS).length;
     const historicalWinRate = wonLast12 + lostLast12 > 0 ? wonLast12 / (wonLast12 + lostLast12) : 0;
     // Forecast is a genuinely different concept from the Expected Sales KPI (which is intentionally
     // status-agnostic, see above) — this projects revenue from opportunities that could *still*
@@ -632,7 +672,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     // ── Follow-ups ────────────────────────────────────────────────────────
-    const followUpDocs = (followUpDocsRaw as Array<Pick<QuoteFields, "status" | "client" | "salesperson" | "followUpDate" | "lines" | "discount"> & { _id: string }>)
+    // Deduped by revision chain (2026-07-22, Rewrite double-counting fix) — otherwise a rewritten
+    // quotation with a follow-up date could surface as two separate reminders (one per revision)
+    // instead of one, using whichever revision is actually current.
+    const followUpDocs = dedupeQuotesByRevisionChain(followUpDocsRaw as Array<Pick<QuoteFields, "status" | "client" | "salesperson" | "followUpDate" | "lines" | "discount"> & { _id: string }>)
       .filter((q) => q.followUpDate && !TERMINAL_STATUSES.has(q.status));
     const toFollowUpSummary = (q: (typeof followUpDocs)[number]) => ({
       id: q._id, client: q.client, salesperson: q.salesperson, followUpDate: q.followUpDate, amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0),
@@ -884,11 +927,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── Monthly closing rate — win rate per calendar month, trailing 12 months ──
+    // Deduped by revision chain (2026-07-22, Rewrite double-counting fix) before grouping by
+    // month+status — same reasoning as the forecast's win rate above.
     const monthlyOutcomeMap = new Map<string, { won: number; lost: number }>();
-    for (const o of monthlyOutcomeAgg) {
-      const entry = monthlyOutcomeMap.get(o._id.month) ?? { won: 0, lost: 0 };
-      if (o._id.status === WON_STATUS) entry.won += o.count; else entry.lost += o.count;
-      monthlyOutcomeMap.set(o._id.month, entry);
+    for (const d of dedupeQuotesByRevisionChain(monthlyOutcomeDocsRaw as Array<{ _id: string; status: string; issueDate: string }>)) {
+      if (d.status !== WON_STATUS && d.status !== LOST_STATUS) continue;
+      const month = d.issueDate.slice(0, 7);
+      const entry = monthlyOutcomeMap.get(month) ?? { won: 0, lost: 0 };
+      if (d.status === WON_STATUS) entry.won += 1; else entry.lost += 1;
+      monthlyOutcomeMap.set(month, entry);
     }
     const monthlyClosingRate = lastNMonthKeys(MONTHS_BACK, trendAnchor).map((month) => {
       const { won, lost } = monthlyOutcomeMap.get(month) ?? { won: 0, lost: 0 };
@@ -898,11 +945,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     // ── Revenue trend — weekly/monthly/quarterly/yearly, all bucketed from the same won-quote rows ──
+    // Deduped by revision chain, then filtered to Won (2026-07-22, Rewrite double-counting fix) — a
+    // chain only contributes revenue here if its LATEST revision is Won; a Won original superseded
+    // by a still-open (or since-lost) rewrite must not count, and a chain that only became Won via
+    // a later revision must count using that revision's own amount, not the original's.
+    const revenueTrendDocs = dedupeQuotesByRevisionChain(revenueTrendDocsRaw as Array<{ _id: string; status: string; issueDate: string; lines: QuoteFields["lines"]; discount: number }>)
+      .filter((q) => q.status === WON_STATUS);
     const revenueByWeekMap = new Map<string, number>();
     const revenueByMonthMap = new Map<string, number>();
     const revenueByQuarterMap = new Map<string, number>();
     const revenueByYearMap = new Map<string, number>();
-    for (const r of wonRevenueDocsRaw as Array<{ issueDate: string; lines: QuoteFields["lines"]; discount: number }>) {
+    for (const r of revenueTrendDocs) {
       const [y, m, d] = r.issueDate.split("-").map(Number);
       const date = new Date(Date.UTC(y, m - 1, d));
       const wk = isoWeekKey(date);

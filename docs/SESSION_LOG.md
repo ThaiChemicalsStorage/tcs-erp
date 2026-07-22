@@ -4,6 +4,55 @@
 
 ---
 
+## Session — 2026-07-22 (absolute latest), Fix Dashboard double-counting rewritten quotations
+
+### What was implemented
+- User reported (in Thai) that the Dashboard's total pre-tax quotation value included rewritten
+  quotations' amounts — i.e. a quote and its rewrite(s) were both counted, when only the *latest*
+  revision should count as "the" quotation. Before touching code, read the actual `api/dashboard/
+  index.ts` file (969 lines) to understand its real architecture rather than assuming — discovered
+  the whole file shares one central `docs` array for most widgets, but 4 *other* metrics
+  (repeat-customer classification, forecast win rate, monthly closing rate, revenue trend) are
+  computed from separate MongoDB `$group` aggregate queries that don't touch `docs` at all. This
+  meant the bug was much broader than the one KPI the user pointed at — asked via `AskUserQuestion`
+  whether the fix should apply to every Dashboard number or just that one, since the two options
+  had a large difference in scope/risk; user chose "every number."
+- Extracted the existing `-R<digits>` suffix-parsing logic (previously a private local function
+  inside `api/handlers/quotes.ts`'s Rewrite implementation from earlier this session) into a new
+  shared `api/_lib/quoteRevisions.ts` (`getRevisionRoot()`/`getRevisionNumber()`/
+  `dedupeQuotesByRevisionChain()`), and refactored `quotes.ts` to import it instead of keeping its
+  own copy — the two must never drift apart on what counts as a valid revision suffix.
+- Applied the dedup to 6 places in `api/dashboard/index.ts`: the shared `docs` array (fixes most
+  widgets in one place), follow-ups, and 4 conversions from `$group` aggregate to raw
+  fetch-then-dedupe-then-group-in-JS (repeat-customer counts, forecast win rate, monthly closing
+  rate, revenue trend) — the aggregate pipelines had no way to resolve "what is this chain's actual
+  latest status" before grouping, so they had to become raw fetches with the status filter moved to
+  after the JS-side dedup step.
+- Deliberately left 2 things un-deduped, documented why: `totalQuotationsAllTime` (only feeds a
+  boolean "is there any data" gate, never a displayed number) and `activityTimeline`/`salesActivity`
+  (audit-log event feeds, not quotation-count aggregates — a rewrite is a genuine event that
+  correctly appears once; it isn't even in `salesActivity`'s tracked action list, so it was never
+  double-counted there to begin with).
+- Verified the core dedup logic with a throwaway Node script (not part of the codebase, deleted
+  after) against a synthetic chain: an unrewritten quote, a chain with an original + 2 rewrites, and
+  an edge case where only an `-R1` exists with no fetched root — all 3 behaved correctly.
+  `tsc --noEmit` (both tsconfigs), `lint`, `build` all pass clean.
+
+### Known limitation
+- **Not verified against a live deployment with real rewritten quotation data** — same
+  sandboxed-session no-MongoDB-network limitation as literally every other pass logged in this
+  file. The dedup logic itself was sanity-checked synthetically, and no downstream widget's
+  arithmetic changed (only which documents feed it), but the actual end-to-end numbers against a
+  real chain in production have not been confirmed.
+
+### Recommendation for next session
+- When live DB access is available, create a real quote, rewrite it twice, and confirm every
+  Dashboard number treats the chain as exactly one quotation using the latest revision's data —
+  this is the single most valuable live check left across both of today's Quotation-Rewrite-related
+  passes.
+
+---
+
 ## Session — 2026-07-22 (absolute latest), Add Quotation Rewrite/Revision feature
 
 ### What was implemented
