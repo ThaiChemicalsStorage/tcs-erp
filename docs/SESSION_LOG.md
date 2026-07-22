@@ -4,6 +4,55 @@
 
 ---
 
+## Session — 2026-07-22 (absolute latest), Scope of Work: Rewrite action + Salesperson filter
+
+### What was implemented
+- User asked to mirror two Quotation-page features onto the new standalone Scope of Work page:
+  the "Rewrite/แก้ไข" revision feature, and the Salesperson filter dropdown.
+- Rewrite required one real architectural judgment call before writing any code: Quote's Rewrite
+  applies `{root}-R{n}` directly to `_id` because a Quote's `_id` *is* its human-readable business
+  key, but Scope of Work's `_id` is a genuine MongoDB `ObjectId` — so the revision suffix had to
+  apply to `scopeNumber` instead. Reused the existing `getRevisionRoot()`/atomic-counter pattern
+  from `api/_lib/quoteRevisions.ts` rather than writing a parallel copy, updating only that file's
+  docstring to note the new cross-module reuse (a deliberate effort/risk tradeoff — the file's name
+  stays Quote-specific-sounding, but only its one truly Quote-only export, `dedupeQuotesByRevisionChain()`,
+  actually is).
+- Salesperson filter was simpler: `quotationSalesperson` already existed on the `ScopeOfWork` schema
+  (frozen at creation) but `toListItem()` never surfaced it on the list shape — a one-line add plus
+  the same filter-dropdown/table-column pattern already used for Job Type.
+- While wiring the Rewrite button's `onRewritten` callback into `ScopeOfWorkPage.tsx`, noticed and
+  fixed a real pre-existing gap: "back to list" only switched view state, never re-fetched — so any
+  just-created Duplicate/Rewrite/edit wouldn't show up in the list until a full page reload. Fixed
+  by extracting a reusable `loadList()` and calling it from the back action too.
+- **Self-caught bug before commit**: `npm run lint` (part of the standing pre-completion checklist,
+  run every time regardless of how confident the change feels) flagged a real
+  `react-hooks/rules-of-hooks` violation — the new `rewriteBusy` `useState` had been added right next
+  to its `handleRewrite` function, which happened to sit textually after this component's two early
+  returns (`if (loadError) return...`, `if (!scope) return...`). Moved it up alongside the
+  component's other `useState` declarations, before those returns. This is the same category of
+  mistake most of this session's "review your own code" requests have caught — a reminder that
+  running the actual lint/build/tsc trio catches real classes of bugs that "does this look right"
+  alone won't, especially for hook-ordering issues that are easy to introduce when adding a new
+  piece of local state near where it's *used* rather than near the component's other hooks.
+- Verified visually: mock-data harness for the list page confirmed the Salesperson column and
+  dropdown render and sort correctly. The detail view's Rewrite button was verified by code
+  inspection instead of a live/mocked-fetch harness — its structure is byte-for-byte identical to
+  the already-shipped, already-verified Duplicate button (same gating, same busy-state pattern), so
+  a full harness pass would have re-tested already-proven UI plumbing rather than anything new.
+
+### Known limitation
+- Same standing sandboxed-session limitation as every recent pass: no network path to MongoDB
+  Atlas, so the actual end-to-end Rewrite behavior (real scope-number revision numbering, real
+  audit-log entry, real data-copy fidelity) is unverified against live data — only `tsc`/`lint`/
+  `build` and the harness-verified UI pieces are confirmed.
+
+### Recommendation for next session
+- Once network access allows it (or the user tests in production), click through: rewrite a Scope
+  of Work more than once (confirm `-R1`, `-R2` sequencing, not just `-R1`), confirm the source
+  record is untouched, and confirm the Salesperson filter/column reflect real snapshotted names.
+
+---
+
 ## Session — 2026-07-22 (absolute latest), Fix Scope of Work page crashing to blank white
 
 ### What was implemented

@@ -13,6 +13,7 @@ import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty, sanitizeBoolean } from "./quoteValidation.js";
 import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeChecklistGroups } from "./documentRequirements.js";
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint } from "../../src/lib/validation/scopeOfWorkValidation.js";
+import { getRevisionRoot } from "./quoteRevisions.js";
 import type { ChecklistGroup } from "../../src/lib/documentRequirements.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
@@ -79,6 +80,23 @@ async function nextJobSequence(
 ): Promise<number> {
   const result = await counters.findOneAndUpdate(
     { _id: `scope_${yearMonth}` },
+    { $inc: { seq: 1 } },
+    { returnDocument: "after", upsert: true },
+  );
+  return result?.seq ?? 1;
+}
+
+/** Atomically reserves the next revision number for a "Rewrite/แก้ไข" chain (see `handleRewrite()`
+ * below), keyed by the chain's root `scopeNumber` — same `counters` collection +
+ * `findOneAndUpdate($inc)` idiom as `nextJobSequence()` above and Quotation's `nextRevisionNumber()`
+ * (`api/handlers/quotes.ts`). No bootstrap needed: a brand-new counter namespace with no
+ * pre-existing `-R`-suffixed scope numbers to reconcile against. */
+async function nextScopeRevisionNumber(
+  counters: Awaited<ReturnType<typeof countersCollection>>,
+  rootScopeNumber: string,
+): Promise<number> {
+  const result = await counters.findOneAndUpdate(
+    { _id: `scope_revision_${rootScopeNumber}` },
     { $inc: { seq: 1 } },
     { returnDocument: "after", upsert: true },
   );
@@ -287,6 +305,10 @@ function toListItem(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkListItem {
     jobTypeCode: full.jobTypeCode ?? "",
     jobTypeName: full.jobTypeName ?? "",
     customerName: full.customerSnapshot?.companyName ?? "",
+    // Added 2026-07-22 for the standalone list page's Salesperson filter, mirroring QuoteList.tsx —
+    // `ScopeOfWork.quotationSalesperson` is a frozen-at-creation-time snapshot of the source
+    // quotation's salesperson, same provenance rationale as every other snapshotted field here.
+    quotationSalesperson: full.quotationSalesperson ?? "",
     issueDate: full.issueDate ?? "",
     deliveryDate: full.deliveryDate ?? "",
     status: full.status ?? "Draft",
@@ -589,6 +611,71 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
   res.status(201).json({ scopeOfWork: normalizeScope(withStringId(created)) satisfies ScopeOfWork });
 }
 
+/**
+ * "Rewrite/แก้ไข" (added 2026-07-22, per direct user request — mirrors Quotation's identical
+ * feature, see `handleRewrite()` in api/handlers/quotes.ts) — creates a new revision of an existing
+ * Scope of Work. Same clone semantics as `handleDuplicate()` above (fresh `_id`/item/spec ids,
+ * status reset to Draft, fresh seller/blank approver) — the real difference is the new record's
+ * `scopeNumber`: a revision-suffixed id derived from the source's own (`{root}-R{n}`, e.g.
+ * `PQ202607-6-TA-SK-R1`, then `-R2`) instead of an unrelated freshly-reserved job sequence, and
+ * `yearMonth`/`jobSequence`/`secondaryCode`/`issueDate` all carry over unchanged from the source
+ * (via the `...rest` spread, deliberately never overridden here) rather than being regenerated the
+ * way Duplicate regenerates them — a rewrite is "a new revision of the same job," not a new one.
+ * `rootScopeNumber` is always derived from the *record actually being rewritten*, so rewriting an
+ * already-rewritten `-R1` correctly advances to `-R2`, never `-R1-R1` — same guarantee Quotation's
+ * Rewrite gives, via the same shared `getRevisionRoot()`. The source record is never modified.
+ */
+async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "scopeOfWork:create");
+  // Same defense-in-depth as handleDuplicate — reading the source's full content needs `:view` too.
+  if (!roleHasPermission(ctx.role, "scopeOfWork:view")) throw new HttpError(403, "Forbidden");
+  const source = await loadScopeOrThrow(id);
+
+  const [scopeOfWorks, counters] = await Promise.all([scopeOfWorksCollection(), countersCollection()]);
+  const rootScopeNumber = getRevisionRoot(source.scopeNumber);
+  const now = nowIso();
+
+  const { _id: _sourceId, ...rest } = source;
+  let created: (ScopeOfWorkFields & { _id: ObjectId }) | null = null;
+  let lastRewriteErr: unknown;
+  for (let attempt = 0; attempt < MAX_SCOPE_NUMBER_ATTEMPTS && !created; attempt++) {
+    const revisionSeq = await nextScopeRevisionNumber(counters, rootScopeNumber);
+    const scopeNumber = `${rootScopeNumber}-R${revisionSeq}`;
+    const doc: ScopeOfWorkFields = {
+      ...rest,
+      scopeNumber,
+      items: source.items.map((it) => ({ ...it, id: randomUUID(), specifications: it.specifications.map((s) => ({ ...s, id: randomUUID() })) })),
+      checklistGroups: cloneChecklistGroups(source.checklistGroups),
+      status: "Draft",
+      version: 1,
+      seller: { name: ctx.user.fullName, userId: ctx.user.id, date: "" },
+      approver: { name: "", userId: "", date: "" },
+      createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+      isDeleted: false,
+    };
+    try {
+      const result = await scopeOfWorks.insertOne(doc);
+      created = { ...doc, _id: result.insertedId };
+    } catch (err) {
+      // Duplicate-key race on the reserved revision number — extremely unlikely since
+      // `revisionSeq` is atomically reserved, but retried rather than surfaced as a raw 500, same
+      // bounded-retry pattern as handleDuplicate() above and Quotation's own Rewrite.
+      if (err instanceof MongoServerError && err.code === 11000) { lastRewriteErr = err; continue; }
+      throw err;
+    }
+  }
+  if (!created) {
+    console.error("[scope-of-works] exhausted retries reserving a unique revision scope number on rewrite", lastRewriteErr);
+    throw new HttpError(409, "ไม่สามารถสร้างรหัสงานที่ไม่ซ้ำกันได้ กรุณาลองใหม่อีกครั้ง");
+  }
+
+  await writeScopeAuditEntry(ctx, "Scope of Work Rewritten", `สร้าง Scope of Work แก้ไข ${created.scopeNumber} จาก ${source.scopeNumber}`, {
+    scopeId: created._id.toString(), scopeNumber: created.scopeNumber, quoteId: source.quotationId,
+  });
+  res.status(201).json({ scopeOfWork: normalizeScope(withStringId(created)) satisfies ScopeOfWork });
+}
+
 /** "อัปเดตข้อมูลจากใบเสนอราคา" — an explicit, user-triggered re-pull of every quotation-derived
  * field (see `deriveFromQuotation`). Never automatic: a Draft Scope of Work otherwise never
  * silently changes just because the source quotation was edited later. Header fields the user has
@@ -677,6 +764,7 @@ export async function handleScopeOfWork(req: VercelRequest, res: VercelResponse)
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "finalize") return handleFinalize(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "duplicate") return handleDuplicate(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
   throw new HttpError(404, "Not found");

@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-07-22 (absolute latest) — Scope of Work: Rewrite action + Salesperson filter
+
+**Feature**: per direct user request ("เหมือนใบเสนอราคา" — mirroring Quotation's identical feature),
+Scope of Work gained a "แก้ไข" (Rewrite) toolbar action next to "ทำสำเนา" in
+`ScopeOfWorkDocument.tsx` (gated by `scopeOfWork:create`), and the standalone list page gained a
+Salesperson filter dropdown + table column mirroring `QuoteList.tsx`'s own.
+
+**Rewrite mechanics**: new `POST /api/scope-of-works/:id/rewrite` (`handleRewrite()`,
+`api/_lib/scopeOfWorkHandler.ts`). Unlike Quote's own Rewrite (which applies `{root}-R{n}` directly
+to the human-readable `_id`), a Scope of Work's `_id` is a genuine MongoDB `ObjectId` — so the
+revision suffix applies to `scopeNumber` instead, with `yearMonth`/`jobSequence`/`secondaryCode`/
+`issueDate` all passed through unchanged from the source. A new atomic per-root counter
+(`scope_revision_{rootScopeNumber}`) numbers each revision; root recovery reuses `getRevisionRoot()`
+verbatim from `api/_lib/quoteRevisions.ts` rather than a duplicated copy (that file's docstring now
+notes the cross-module reuse — its `dedupeQuotesByRevisionChain()` export stays Quote-only despite
+the filename). Everything else resets exactly like Duplicate: `status: "Draft"`, fresh `seller`/blank
+`approver`, fresh item/spec ids. Writes a `"Scope of Work Rewritten"` audit entry. Both
+`QuotationPage.tsx`'s embedded usage and the standalone `ScopeOfWorkPage.tsx` wire a new `onRewritten`
+callback (mirrors the existing `onDuplicated` shape) — navigates to the new revision's id on success.
+
+**Salesperson filter**: `toListItem()` now also surfaces the already-existing `quotationSalesperson`
+snapshot field (previously only used for the `seller` default, never exposed on the list shape).
+`ScopeOfWorkList.tsx` gained a filter dropdown (distinct names actually present in the fetched list,
+same convention as the Job Type dropdown) and a table column, both positioned to match `QuoteList.tsx`.
+
+**Also fixed while in the area**: a pre-existing staleness gap in `ScopeOfWorkPage.tsx` — its
+"back to list" action only switched view state without re-fetching, so a just-created
+Duplicate/Rewrite/edit wouldn't show up in the list until a full page reload. Now calls a `loadList()`
+re-fetch on the way back.
+
+**Self-review catch**: a first pass placed the new `rewriteBusy` `useState` after this component's
+existing early returns (`if (loadError) return...`, `if (!scope) return...`), which `npm run lint`
+correctly flagged as a `react-hooks/rules-of-hooks` violation (conditional hook call) — moved up
+alongside the component's other `useState` declarations before those early returns, same as every
+other hook in the file.
+
+**Verification**: `tsc --noEmit` (both tsconfigs), `lint`, `build` all pass clean. Visually verified
+via a temporary browser harness with mock list data — salesperson column + filter dropdown render
+and sort correctly (options list confirmed via `read_page`: both names present, alphabetically
+sorted). The detail view's Rewrite button was verified by code inspection (identical
+structure/gating to the already-shipped, already-verified Duplicate button) rather than a live
+fetch-mocked harness, given the sandboxed session's standing MongoDB-network limitation.
+
+**Files**: `api/_lib/quoteRevisions.ts` (docstring only), `api/_lib/scopeOfWorkHandler.ts`,
+`src/lib/scopeOfWork.ts`, `src/pages/quotation/ScopeOfWorkDocument.tsx`,
+`src/pages/quotation/QuotationPage.tsx`, `src/pages/scopeOfWork/ScopeOfWorkPage.tsx`,
+`src/pages/scopeOfWork/ScopeOfWorkList.tsx`.
+
+---
+
 ## 2026-07-22 (absolute latest) — Self-review fix: ErrorBoundary never reset after catching an error
 
 **Bug fix**: reviewing the crash fix below turned up a real gap in the fix itself — `<ErrorBoundary>`

@@ -12,6 +12,14 @@
  * what it was rewritten from). This is the one shared place both `api/handlers/quotes.ts`
  * (generating the next revision number) and `api/dashboard/index.ts` (every quote-count/-value
  * aggregate) parse the `-R<digits>` suffix, so the two can never drift apart.
+ *
+ * **2026-07-22, same day, also reused by Scope of Work**: `handleRewrite()` in
+ * `api/_lib/scopeOfWorkHandler.ts` reuses `getRevisionRoot()`/`getRevisionNumber()` from here
+ * verbatim for its own `scopeNumber` revision suffix (e.g. `PQ202607-6-TA-SK` → `-R1` → `-R2`) —
+ * the `-R<digits>` convention and its parsing are generic string operations with nothing
+ * Quote-specific about them, so sharing them avoids two independent regexes drifting apart. Despite
+ * the filename, `dedupeQuotesByRevisionChain()` below is the only *Quote*-specific export — Scope
+ * of Work has no equivalent Dashboard-style aggregate that would need it.
  */
 
 /** Strips a quote id's trailing revision suffix (e.g. `QT-2567-0041-R2` → `QT-2567-0041`). Quote ids

@@ -289,6 +289,7 @@ export function QuotationPage({
           canCreate={canCreateScopeOfWork}
           onBack={() => setView("detail")}
           onDuplicated={(newId) => setScopeOfWorkId(newId)}
+          onRewritten={(newId) => setScopeOfWorkId(newId)}
           showToast={toast.show}
         />
         <Toast message={toast.message} />

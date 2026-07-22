@@ -1,6 +1,33 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22
+
+**2026-07-22, Rewrite + Salesperson filter** (per direct user request, "เหมือนใบเสนอราคา" — mirroring
+Quotation's identical feature): a "แก้ไข" (Rewrite) toolbar button now sits next to "ทำสำเนา" in
+`ScopeOfWorkDocument.tsx` (gated by `scopeOfWork:create`, same as Duplicate), calling the new
+`POST /:id/rewrite` route (see [API.md](../API.md)). Unlike Quote's `_id` (a human-readable business
+key the `-R{n}` suffix applies to directly), a Scope of Work's `_id` is a genuine MongoDB `ObjectId`
+— so the revision suffix is applied to `scopeNumber` instead (`{root}-R{n}`, root recovered via
+`getRevisionRoot()`, reused verbatim from `api/_lib/quoteRevisions.ts` rather than duplicated —
+that file's docstring now notes the cross-module reuse; despite the filename, only its Quote-specific
+`dedupeQuotesByRevisionChain()` export stays Quote-only). A new atomic per-root counter
+(`scope_revision_{rootScopeNumber}` in the shared `counters` collection) numbers each revision;
+`yearMonth`/`jobSequence`/`secondaryCode`/`issueDate` all pass through unchanged from the source
+(only `scopeNumber` itself changes) — everything else resets exactly like Duplicate (`status: Draft`,
+fresh `seller`/blank `approver`, fresh item/spec ids). A `"Scope of Work Rewritten"` audit entry is
+written. Both `QuotationPage.tsx`'s embedded usage and the standalone `ScopeOfWorkPage.tsx` wire the
+new `onRewritten` callback the same way `onDuplicated` already works — navigate to the new revision's
+id. Also added: a `quotationSalesperson` column + filter dropdown (mirroring `QuoteList.tsx`'s own
+Salesperson filter) to `ScopeOfWorkList.tsx` — the field already existed in `ScopeOfWork` (frozen
+snapshot, see "Signatures" below) but `toListItem()` didn't surface it and the list didn't filter/show
+it. While implementing this, also fixed a pre-existing staleness gap in `ScopeOfWorkPage.tsx`: its
+"back to list" action now re-fetches (`loadList()`) instead of just switching view state, so a
+just-created Duplicate/Rewrite/edit shows up immediately instead of requiring a full page reload.
+`tsc`/`lint`/`build` all pass clean; verified visually via a temporary browser harness against mock
+list data (salesperson column + filter dropdown render/sort correctly) — the detail view's Rewrite
+button itself was verified by code inspection (identical structure/gating to the already-shipped
+Duplicate button) rather than a live fetch-mocked harness, given the sandboxed session's standing
+MongoDB-network limitation (see PROJECT_STATUS.md).
 
 **2026-07-15, Codex review fix pass**: an independent review found 0 Critical and 3 High Priority
 issues (plus several Medium/Low). All 3 High Priority issues fixed same day — see
@@ -431,6 +458,7 @@ gain a *value* import that transitively pulls in JSX/React.
   cards (Total/Draft/Final), search (scope number/customer/quotation number/Job Type), Job Type
   dropdown, status pill filter, table — mirrors `QuoteList.tsx`'s pattern, hardcoded Thai text (not
   yet wired to `i18n.tsx`, matching every other Scope of Work UI file's existing convention).
+  **Same day, later**: added a `quotationSalesperson` table column + filter dropdown.
 - `src/App.tsx` (**2026-07-22**) — new `"scopeOfWork"` `NavKey`/nav item (icon `ClipboardList`,
   gated by `scopeOfWork:view`, grouped under "งานขาย" next to Quotations), self-fetching like
   Dashboard/Audit Log (no `NAV_RESOURCES` entry — it doesn't depend on any boot-time domain fetch).

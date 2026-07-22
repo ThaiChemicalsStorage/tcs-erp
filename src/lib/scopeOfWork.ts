@@ -148,6 +148,8 @@ export interface ScopeOfWorkListItem {
   jobTypeCode: string;
   jobTypeName: string;
   customerName: string;
+  /** Added 2026-07-22 for the list page's Salesperson filter — see `ScopeOfWork.quotationSalesperson`. */
+  quotationSalesperson: string;
   issueDate: string;
   deliveryDate: string;
   status: ScopeOfWorkStatus;
@@ -220,6 +222,13 @@ export async function finalizeScopeOfWork(id: string): Promise<ScopeOfWork> {
 }
 export async function duplicateScopeOfWork(id: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/duplicate`, { method: "POST" });
+  return scopeOfWork;
+}
+/** Creates a new revision (`{root}-R{n}`) of `id`, added 2026-07-22 to mirror Quotation's identical
+ * feature — see `handleRewrite()` in api/_lib/scopeOfWorkHandler.ts. The source record is never
+ * modified. */
+export async function rewriteScopeOfWork(id: string): Promise<ScopeOfWork> {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/rewrite`, { method: "POST" });
   return scopeOfWork;
 }
 export async function refreshScopeOfWorkFromQuotation(id: string): Promise<ScopeOfWork> {

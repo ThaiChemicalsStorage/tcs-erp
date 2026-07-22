@@ -14,6 +14,20 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-22] Scope of Work: Rewrite action + Salesperson filter, mirroring Quotation's own features.**
+  New "แก้ไข" (Rewrite) toolbar button (`ScopeOfWorkDocument.tsx`, gated by `scopeOfWork:create`) and
+  `POST /api/scope-of-works/:id/rewrite` — creates a new revision with `{root}-R{n}` applied to
+  `scopeNumber` (not `_id`, since a Scope of Work's `_id` is a real MongoDB `ObjectId`, unlike Quote's
+  business-key `_id`), reusing `getRevisionRoot()` from `api/_lib/quoteRevisions.ts` rather than a
+  duplicated copy. Also added a Salesperson filter dropdown + table column to the standalone list
+  page (`quotationSalesperson` was already snapshotted server-side but never surfaced on the list
+  shape or filterable). Fixed a pre-existing staleness gap in `ScopeOfWorkPage.tsx`'s "back to list"
+  action (now re-fetches) while in the area. Self-review (`npm run lint`) caught a real
+  `react-hooks/rules-of-hooks` violation (a new `useState` placed after existing early returns) before
+  it shipped — fixed by moving it up with the component's other hooks. `tsc`/`lint`/`build` all pass
+  clean; the list's new column/filter verified visually via a mock-data harness, the Rewrite button
+  verified by code inspection against the already-shipped Duplicate button's identical structure. See
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 - ✅ **[2026-07-22] Fixed the Scope of Work page crashing to a blank white screen (real user-reported bug, same day it shipped).**
   Root cause: `toListItem()` had no fallback for missing MongoDB fields, and `JSON.stringify()`
   drops `undefined`-valued keys entirely — the client found a key genuinely absent and crashed
@@ -536,6 +550,7 @@ Not yet planned.
 - **The Dashboard revision-chain de-duplication fix (2026-07-22) is unverified against real rewritten quotation data in a live deployment** — same sandboxed-session limitation. The dedup logic itself was sanity-checked via a synthetic throwaway script, and every downstream widget's arithmetic is unchanged (only which documents feed it changed), but the actual end-to-end numbers (e.g. total pre-tax value with a real rewrite chain in the data) have not been confirmed against a live MongoDB instance. See [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Revision Chain De-duplication."
 - **`quotations:viewAll` (2026-07-22) requires a manual Role Management step this production deployment has not had yet** — until a Super Admin checks it for Administrator/Approver Level 1/Approver Level 2/Viewer, those roles' *existing* users will see only their own quotations after this ships (since `defaultRoles` isn't re-applied to already-seeded role documents), breaking approvers' ability to see quotations they need to review. This is a required action item, not a passive risk — see [TODO.md](./TODO.md) High Priority (top item) and [RBAC.md](./RBAC.md) "Quotation Own-Quotes-Only Viewing."
 - **The new Scope of Work standalone page (2026-07-22) is still not fully verified against a live deployment** — the list page did reach real production data once and crashed (see the fix entry above, now resolved and re-confirmed in a harness); the list↔detail navigation and reusing `ScopeOfWorkDocument.tsx` outside its original Quotation-embedded context still haven't been exercised against real data from this sandboxed session. Worth a real click-through once network access allows it, precisely because the list page alone already surfaced one real bug. See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
+- **Scope of Work's new Rewrite action (2026-07-22) is unverified against a live deployment/browser** — same sandboxed-session no-MongoDB-network limitation as Quotation's own Rewrite feature above. `tsc`/`lint`/`build` pass clean and the button's wiring/gating was verified by code inspection against the already-shipped, already-verified Duplicate button, but the actual end-to-end scope-number-revision/audit-log/data-copy behavior has not been click-through-verified against real data. See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 
 ## Technical Debt
 

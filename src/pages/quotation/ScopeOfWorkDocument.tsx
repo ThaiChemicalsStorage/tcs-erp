@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch } from "lucide-react";
 import type { User } from "../../lib/users";
 import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory,
-  fetchScopeOfWork, updateScopeOfWork, finalizeScopeOfWork, duplicateScopeOfWork,
+  fetchScopeOfWork, updateScopeOfWork, finalizeScopeOfWork, duplicateScopeOfWork, rewriteScopeOfWork,
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
 } from "../../lib/scopeOfWork";
 import { ApiError } from "../../lib/apiClient";
@@ -99,6 +99,7 @@ export function ScopeOfWorkDocument({
   onBack,
   backLabel = "กลับไปใบเสนอราคา",
   onDuplicated,
+  onRewritten,
   showToast,
 }: {
   scopeOfWorkId: string;
@@ -114,6 +115,11 @@ export function ScopeOfWorkDocument({
    * "กลับไปรายการ Scope of Work" instead, since there's no quotation to go back to from there. */
   backLabel?: string;
   onDuplicated: (newId: string) => void;
+  /** Added 2026-07-22, mirroring `onDuplicated` above — called with the new revision's id once
+   * "Rewrite/แก้ไข" succeeds, same self-contained-API-call-then-report-the-id shape this component
+   * already uses for Duplicate (unlike Quotation's Rewrite, where the API call itself lives in the
+   * parent — kept consistent with this component's own existing convention instead). */
+  onRewritten: (newId: string) => void;
   showToast: (msg: string) => void;
 }) {
   const [scope, setScope] = useState<ScopeOfWork | null>(null);
@@ -126,6 +132,7 @@ export function ScopeOfWorkDocument({
   // client-side result — added 2026-07-16, Codex review Medium Priority fix, see QuoteDocument.tsx's
   // identical pattern.
   const [serverValidationErrors, setServerValidationErrors] = useState<{ fieldErrors: Record<string, string>; groupErrors: Record<string, string[]> } | null>(null);
+  const [rewriteBusy, setRewriteBusy] = useState(false);
 
   // `scope`/`loadError` reset to their initial values (null/false) via a fresh mount whenever
   // `scopeOfWorkId` changes — the parent renders this component with `key={scopeOfWorkId}` for
@@ -245,6 +252,20 @@ export function ScopeOfWorkDocument({
     }
   };
 
+  const handleRewrite = async () => {
+    if (!scope || rewriteBusy) return;
+    setRewriteBusy(true);
+    try {
+      const created = await rewriteScopeOfWork(scope.id);
+      showToast(`สร้าง Scope of Work แก้ไข ${created.scopeNumber} แล้ว`);
+      onRewritten(created.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "สร้าง Scope of Work แก้ไขไม่สำเร็จ");
+    } finally {
+      setRewriteBusy(false);
+    }
+  };
+
   const runConfirmedAction = async () => {
     if (!scope || !confirmAction) return;
     if (confirmAction === "finalize") setServerValidationErrors(null);
@@ -309,6 +330,11 @@ export function ScopeOfWorkDocument({
           {canCreate && (
             <button onClick={handleDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
               <Copy size={13} /> ทำสำเนา
+            </button>
+          )}
+          {canCreate && (
+            <button onClick={handleRewrite} disabled={rewriteBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              <GitBranch size={13} /> แก้ไข
             </button>
           )}
           {editable && (

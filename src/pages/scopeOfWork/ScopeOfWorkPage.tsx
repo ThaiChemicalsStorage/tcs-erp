@@ -37,6 +37,17 @@ export function ScopeOfWorkPage({
   const [loadError, setLoadError] = useState(false);
   const toast = useToast();
 
+  // Extracted so returning from the detail view can re-fetch too (see `onBack` below) — without
+  // this, creating a Rewrite/Duplicate/edit while viewing a record and then going "back to list"
+  // would show a stale list missing whatever just changed, until a full page reload.
+  const loadList = () => {
+    setLoading(true);
+    setLoadError(false);
+    fetchAllScopeOfWorks()
+      .then((list) => { setScopeOfWorks(list); setLoading(false); })
+      .catch(() => { setLoadError(true); setLoading(false); });
+  };
+
   useEffect(() => {
     let cancelled = false;
     fetchAllScopeOfWorks()
@@ -48,6 +59,10 @@ export function ScopeOfWorkPage({
   const openScopeOfWork = (id: string) => {
     setSelectedId(id);
     setView("detail");
+  };
+  const backToList = () => {
+    setView("list");
+    loadList();
   };
 
   if (view === "detail" && selectedId) {
@@ -62,9 +77,10 @@ export function ScopeOfWorkPage({
           canPrint={canPrint}
           canDelete={canDelete}
           canCreate={canCreate}
-          onBack={() => setView("list")}
+          onBack={backToList}
           backLabel="กลับไปรายการ Scope of Work"
           onDuplicated={(newId) => setSelectedId(newId)}
+          onRewritten={(newId) => setSelectedId(newId)}
           showToast={toast.show}
         />
         <Toast message={toast.message} />
@@ -89,7 +105,7 @@ export function ScopeOfWorkPage({
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
         <p className="text-sm text-muted-foreground">ไม่สามารถโหลดข้อมูล Scope of Work ได้</p>
         <button
-          onClick={() => { setLoading(true); setLoadError(false); fetchAllScopeOfWorks().then((list) => { setScopeOfWorks(list); setLoading(false); }).catch(() => { setLoadError(true); setLoading(false); }); }}
+          onClick={loadList}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
         >
           ลองใหม่

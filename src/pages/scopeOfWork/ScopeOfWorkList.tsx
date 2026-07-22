@@ -20,6 +20,7 @@ export function ScopeOfWorkList({
 }) {
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
+  const [filterSalesperson, setFilterSalesperson] = useState<string>(FILTER_ALL);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -33,6 +34,7 @@ export function ScopeOfWorkList({
     customerName: s.customerName ?? "",
     quotationNumber: s.quotationNumber ?? "",
     jobTypeCode: s.jobTypeCode ?? "",
+    quotationSalesperson: s.quotationSalesperson ?? "",
     // Not itself unsafe to leave undefined (indexing `statusStyle[undefined]` just yields an
     // undefined class name, not a crash), but normalized anyway for the same reason every other
     // field here is — `s.status` indexes a lookup table, so a real value keeps the badge looking
@@ -41,10 +43,15 @@ export function ScopeOfWorkList({
   }));
 
   const jobTypesInList = [...new Set(items.map((s) => s.jobTypeCode).filter((c) => c.trim()))].sort();
+  // Salesperson filter (added 2026-07-22, per direct request "เหมือนหน้าใบเสนอราคา") — mirrors
+  // QuoteList.tsx's own dropdown exactly: distinct names actually present in the fetched list, not
+  // a separate master list, since `quotationSalesperson` is a frozen snapshot, not a live reference.
+  const salespeopleInList = [...new Set(items.map((s) => s.quotationSalesperson).filter((n) => n.trim()))].sort();
 
   const filtered = items
     .filter((s) => filterStatus === FILTER_ALL || s.status === filterStatus)
     .filter((s) => filterJobType === FILTER_ALL || s.jobTypeCode === filterJobType)
+    .filter((s) => filterSalesperson === FILTER_ALL || s.quotationSalesperson === filterSalesperson)
     .filter((s) => !normalizedSearch || [s.scopeNumber, s.customerName, s.quotationNumber, s.jobTypeCode].some((v) => v.toLowerCase().includes(normalizedSearch)));
 
   return (
@@ -99,6 +106,16 @@ export function ScopeOfWorkList({
               <option key={code} value={code}>{code}</option>
             ))}
           </select>
+          <select
+            value={filterSalesperson}
+            onChange={(e) => setFilterSalesperson(e.target.value)}
+            className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
+          >
+            <option value={FILTER_ALL}>พนักงานขาย: ทั้งหมด</option>
+            {salespeopleInList.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
           {[FILTER_ALL, "Draft", "Final"].map((s) => (
@@ -131,7 +148,7 @@ export function ScopeOfWorkList({
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              {["รหัสงาน", "ลูกค้า", "ประเภทงาน", "ใบเสนอราคา", "วันที่ส่งของ", "สถานะ", "แก้ไขล่าสุด"].map((h) => (
+              {["รหัสงาน", "ลูกค้า", "พนักงานขาย", "ประเภทงาน", "ใบเสนอราคา", "วันที่ส่งของ", "สถานะ", "แก้ไขล่าสุด"].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -141,6 +158,7 @@ export function ScopeOfWorkList({
               <tr key={s.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer" onClick={() => onOpen(s.id)}>
                 <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{s.scopeNumber}</td>
                 <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[220px] truncate" title={s.customerName}>{s.customerName}</td>
+                <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{s.quotationSalesperson || "—"}</td>
                 <td className="px-4 py-3.5 text-xs">
                   {s.jobTypeCode ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-muted text-muted-foreground font-mono text-[10px]">
