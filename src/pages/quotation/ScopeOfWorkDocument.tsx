@@ -278,7 +278,7 @@ export function ScopeOfWorkDocument({
           <ChevronRight size={14} className="rotate-180" /> กลับไปใบเสนอราคา
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-mono font-semibold tracking-wide">{scope.scopeNumber}</span>
+        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{scope.scopeNumber}</span>
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isDraft ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20" : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"}`}>
           {isDraft ? "Draft" : "Final"}
         </span>
@@ -362,7 +362,7 @@ export function ScopeOfWorkDocument({
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">รหัสงาน</label>
-                <input readOnly className="w-full text-xs font-mono text-[#c9a84c] font-semibold bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={scope.scopeNumber} />
+                <input readOnly className="w-full text-xs font-mono text-[#c9a84c] font-medium bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={scope.scopeNumber} />
               </div>
               <div>
                 <RequiredFieldLabel>รหัสอ้างอิงท้ายงาน (ยังต้องยืนยันความหมายทางธุรกิจ)</RequiredFieldLabel>
