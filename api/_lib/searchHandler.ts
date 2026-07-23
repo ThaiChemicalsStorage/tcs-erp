@@ -319,17 +319,27 @@ async function searchUsers(query: string): Promise<SearchUserResult[]> {
   });
 }
 
-async function searchScopeOfWorks(query: string): Promise<SearchScopeOfWorkResult[]> {
+async function searchScopeOfWorks(query: string, ctx: AuthContext): Promise<SearchScopeOfWorkResult[]> {
   const scopeOfWorks = await scopeOfWorksCollection();
   const rx = containsRegex(query);
+  // Same own-records-only scoping as the standalone Scope of Work list page (2026-07-23, per direct
+  // user request mirroring `searchQuotations()`'s identical `quotations:viewAll` treatment above) —
+  // a caller without `scopeOfWork:viewAll` must not be able to discover another user's Scope of Work
+  // through Global Search, which would otherwise bypass the list page's restriction entirely.
+  const ownershipMatch = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
+    ? {}
+    : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }] };
   const docs = await scopeOfWorks.find(
     {
       isDeleted: false,
-      $or: [
-        { scopeNumber: rx }, { quotationId: rx }, { quotationNumber: rx },
-        { "customerSnapshot.companyName": rx }, { jobTypeCode: rx }, { jobTypeName: rx },
-        { customerPoNumber: rx }, { status: rx },
-      ],
+      ...ownershipMatch,
+      $and: [{
+        $or: [
+          { scopeNumber: rx }, { quotationId: rx }, { quotationNumber: rx },
+          { "customerSnapshot.companyName": rx }, { jobTypeCode: rx }, { jobTypeName: rx },
+          { customerPoNumber: rx }, { status: rx },
+        ],
+      }],
     },
     {
       projection: { scopeNumber: 1, quotationId: 1, quotationNumber: 1, customerSnapshot: 1, jobTypeCode: 1, jobTypeName: 1, status: 1 },
@@ -409,7 +419,7 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
     (roleHasPermission(ctx.role, "quotations:create") || roleHasPermission(ctx.role, "quotationTemplates:manage"))
       ? searchTemplates(query) : Promise.resolve([]),
     // Scope of Work (added 2026-07-15, Codex review High Priority fix — see docs/MODULES/ScopeOfWork.md).
-    roleHasPermission(ctx.role, "scopeOfWork:view") ? searchScopeOfWorks(query) : Promise.resolve([]),
+    roleHasPermission(ctx.role, "scopeOfWork:view") ? searchScopeOfWorks(query, ctx) : Promise.resolve([]),
     roleHasPermission(ctx.role, "users:manage") ? searchUsers(query) : Promise.resolve([]),
   ]);
   const pages = searchPages(query, ctx);

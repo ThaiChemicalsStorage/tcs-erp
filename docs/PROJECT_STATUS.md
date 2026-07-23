@@ -14,6 +14,17 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ⚠️ **[2026-07-23] Scope of Work: own-records-only viewing (`scopeOfWork:viewAll`) — requires a manual production step.**
+  Per direct user request, mirrors Quotation's `quotations:viewAll`: a role holding `scopeOfWork:view`
+  but not the new `scopeOfWork:viewAll` now only sees its own records on the standalone Scope of Work
+  list page and in Global Search. The by-quotation existence check, single-record `GET`, and
+  duplicate/rewrite's source-record read are deliberately left unfiltered (see
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) for why — filtering those risks either a
+  duplicate-creation trap or a broken "link exists but 403s" UX). Default grants mirror Quotation's
+  exactly. `tsc`/`lint`/`build` all pass clean; no new client-side rendering logic, so no dev harness
+  needed — verified by tracing the query composition against the already-shipped `quotations:viewAll`
+  equivalent. **Action required**: existing production role documents won't automatically gain the
+  new permission — see [TODO.md](./TODO.md).
 - ✅ **[2026-07-23] Scope of Work: Cash/Credit dropdown + separate days field for payment installments.**
   Direct same-day follow-up to the multi-installment pass below — replaced each row's free-text
   payment method with a structured Cash/Credit `<select>` dropdown plus a separate day-count input

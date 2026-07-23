@@ -4,7 +4,67 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Scope of Work: Cash/Credit dropdown + days field
+## Session — 2026-07-23 (absolute latest), Scope of Work: own-records-only viewing
+
+### What was implemented
+- User asked, on the same day as the payment-schedule work: "หน้า scope of work อยากให้ทำสิทธิ์เพิ่ม
+  มาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — add a permission to the Scope of Work page like the
+  one Quotation already has, for viewing other people's records. This is a direct reference to
+  `quotations:viewAll` (shipped 2026-07-22), so the implementation mirrored it deliberately rather
+  than designing something new.
+- **Real judgment call**: Quotation's `quotations:viewAll` only ever had one read path to gate (`GET
+  /api/quotes`, plus Global Search). Scope of Work has extra read paths Quotation doesn't — a
+  by-quotation existence check used by the Quotation-detail toolbar, a single-record `GET`, and
+  duplicate/rewrite's own source-record read. A literal "filter every read path by ownership" mirror
+  would have broken a real workflow: the by-quotation check exists specifically so a Sales user
+  opening a quotation can tell "does a Scope of Work already exist for this?" — filtering that by
+  ownership would hide a colleague's already-created record and likely cause the user to create a
+  duplicate one instead of opening the existing one. And filtering the single-record `GET` while
+  leaving that same link unfiltered would produce a worse, self-contradictory UX (link says it
+  exists, click 403s). Decided to scope the ownership filter to exactly two places: the standalone
+  "browse everything" list page (the literal "หน้า scope of work" the user referred to) and Global
+  Search (the same discovery-surface precedent `quotations:viewAll` already established) — leaving
+  every other read path, and every write path (`update`/`delete`/`refresh`/`finalize`/`print`,
+  already governed by their own independent ownership-or-finalize/permission checks), untouched.
+- Added `scopeOfWork:viewAll` to the `Permission` union/labels/i18n keys/`PERMISSION_GROUPS`
+  (`src/lib/permissions.ts`) and to `administrator`/`approver_1`/`approver_2`/`viewer`'s default
+  permission lists (not `sales_user`) — same role-assignment pattern as `quotations:viewAll`.
+- Backend: added the same `{ $or: [{ createdBy: ctx.user.id }, { createdBy: "" }] }` ownership
+  filter `quotations:viewAll` uses, to `handleList()`'s list-all branch and `searchScopeOfWorks()`
+  (which needed a new `ctx` parameter and an `$and`-wrapped text-search clause to coexist with the
+  new top-level ownership `$or` — copied `searchQuotations()`'s exact composition rather than
+  reinventing one).
+- No frontend code changes were needed at all — confirmed by grepping how `quotations:viewAll`
+  touches the frontend: it doesn't, beyond one explanatory comment in `QuoteList.tsx`. The Salesperson
+  filter dropdown, the list rendering, everything already just displays whatever the server hands
+  back — same will be true for `ScopeOfWorkList.tsx` once real ownership-scoped data exists.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- No dev harness built for this pass, unlike the two payment-schedule passes earlier the same
+  session — there's no new client-side rendering logic to harness (the list page's code is
+  completely unchanged; only what MongoDB query populates it changed). Verified instead by directly
+  comparing the new query composition line-by-line against `searchQuotations()`'s already-shipped,
+  already-verified equivalent.
+- Same standing sandboxed-session limitation as every recent entry: real ownership-scoped behavior
+  against actual MongoDB data (a Sales User genuinely only seeing their own records, an Approver
+  seeing everyone's, a legacy ownerless record staying visible to everyone) is unverified this
+  session.
+
+### Recommendation for next session
+- **Before this deploys to production**: a Super Admin must manually grant `scopeOfWork:viewAll` to
+  Administrator/Approver Level 1/Approver Level 2/Viewer via Role Management — `defaultRoles` only
+  seeds once, so existing role documents won't gain it automatically. Flagged in TODO.md; skipping
+  this step will make every current Approver suddenly unable to see the Scope of Work records they
+  need to finalize.
+- Once network access allows it, verify: a Sales User only sees own records on the list page and in
+  search; an Approver (once granted) sees everyone's; opening a colleague's Scope of Work via the
+  quotation-detail toolbar link still works for a Sales User without `viewAll` (confirming the
+  deliberate by-quotation/single-record exemption behaves as designed, not as an oversight).
+
+---
+
+## Session — 2026-07-23, Scope of Work: Cash/Credit dropdown + days field
 
 ### What was implemented
 - Direct same-day follow-up: right after shipping the multi-installment payment schedule (see the

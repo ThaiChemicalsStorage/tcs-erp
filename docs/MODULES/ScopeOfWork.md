@@ -1,6 +1,25 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23
+
+**2026-07-23, Own-Records-Only Viewing** (per direct user request, "หน้า scope of work อยากให้ทำสิทธิ์
+เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — mirroring Quotation's `quotations:viewAll`): new
+`scopeOfWork:viewAll` permission. A role holding `scopeOfWork:view` but not `scopeOfWork:viewAll`
+now only sees, on the standalone `ScopeOfWorkList.tsx` page (and in Global Search's Scope of Work
+results), records it created itself — same `{ $or: [{ createdBy: ctx.user.id }, { createdBy: "" }]
+}` filter shape as `quotations:viewAll`. Default grants mirror Quotation's exactly: Super Admin/
+Administrator/Approver Level 1/Approver Level 2/Viewer all hold it, **Sales User does not**.
+Deliberately left unfiltered: the by-quotation existence check (`GET /api/scope-of-works?
+quotationId=`, used by `QuoteDocument.tsx`'s toolbar to detect "does a Scope of Work already exist
+for this quotation"), the single-record `GET /api/scope-of-works/:id`, and duplicate/rewrite's
+source-record read — filtering any of those would either risk a duplicate-creation UX trap (hiding
+a colleague's existing record from the existence check) or a self-contradictory "link says it
+exists, click 403s" experience (filtering the single-record GET but not the link that leads to it).
+See [RBAC.md](../RBAC.md) "Scope of Work Own-Records-Only Viewing" for the full reasoning, and note
+the same **manual Role Management step required on an already-provisioned production deployment**
+(`defaultRoles` only seeds once — existing role documents don't retroactively gain the new
+permission). `tsc`/`lint`/`build` all pass clean; not yet verified against a live deployment (same
+standing sandboxed-session MongoDB-network limitation as every recent pass, see PROJECT_STATUS.md).
 
 **2026-07-22, Rewrite + Salesperson filter** (per direct user request, "เหมือนใบเสนอราคา" — mirroring
 Quotation's identical feature): a "แก้ไข" (Rewrite) toolbar button now sits next to "ทำสำเนา" in
@@ -459,7 +478,9 @@ exactly the 6 keys the review named: scope number, quotation number, customer na
 code/name, PO number, and status. Clicking a result (`GlobalSearch.tsx`) opens the source
 quotation's detail view, then jumps straight into that Scope of Work's editor — the same
 "App.tsx state → QuotationPage's `initialScopeOfWorkDeepLink`" deep-link pattern already used for
-notification clicks and the Quotation Templates wizard's search result.
+notification clicks and the Quotation Templates wizard's search result. **2026-07-23**: also scoped
+by `scopeOfWork:viewAll` — a caller without it only gets their own records back from this search
+category, matching the standalone list page's own scoping (see "Own-Records-Only Viewing" above).
 
 ## RBAC / API / Data Model
 

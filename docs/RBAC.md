@@ -19,16 +19,16 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **Users** (`src/lib/users.ts`): a `User` is both the employee record and the account — `employeeId`, `fullName`, `username`, `email`, `passwordHash`, `phone`, `department`, `position`, `roleKey`, `status` (`active`/`inactive`), `profilePictureDataUrl`, `signatureDataUrl`. `employeeId`/`username`/`email` are enforced unique. **Position and Role are deliberately separate fields** — Position is a free-text job title (with suggestions: CEO, Director, General Manager, Sales Manager, Sales Executive, Engineer, HR, Accounting, Purchasing, Warehouse) with no bearing on permissions; Role is the RBAC role, assigned independently by an admin.
 
-**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 35-key `Permission` union — `dashboard:view`; `quotations:view/create/edit/delete/approve/reject/export`; `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below); `scopeOfWork:view/create/edit/finalize/print/delete` (added 2026-07-15, see "Scope of Work" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) Six default `Role`s ship out of the box:
+**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 37-key `Permission` union — `dashboard:view`; `quotations:view/viewAll/create/edit/delete/approve/reject/export` (`:viewAll` added 2026-07-22, see "Quotation Own-Quotes-Only Viewing" below); `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below); `scopeOfWork:view/viewAll/create/edit/finalize/print/delete` (`:viewAll` added 2026-07-23, see "Scope of Work Own-Records-Only Viewing" below; the other 6 added 2026-07-15, see "Scope of Work" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) Six default `Role`s ship out of the box:
 
 | Role | `isSuperAdmin` | `isSystem` | Summary |
 |---|---|---|---|
 | Super Admin | ✅ | ✅ (undeletable) | Every permission, always — `roleHasPermission()` short-circuits to `true` regardless of the stored list |
-| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15) + full Scope of Work access (all 6 `scopeOfWork:*` permissions). No `roles:manage`/`company:manage`. |
-| Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Also `scopeOfWork:view/create/edit/print` — can create/edit a Scope of Work from a quotation they can access and print it, but not finalize or delete one. Maps to the request's "Sales Executive." |
-| Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Also `scopeOfWork:view/edit/finalize/print` (no `:create`/`:delete` — edits/finalizes Sales' drafts rather than starting new ones). Maps to "Sales Manager." |
+| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15) + full Scope of Work access (all 7 `scopeOfWork:*` permissions, incl. `:viewAll` added 2026-07-23). No `roles:manage`/`company:manage`. |
+| Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Also `scopeOfWork:view/create/edit/print` — can create/edit a Scope of Work from a quotation they can access and print it, but not finalize or delete one. **Does not hold `quotations:viewAll` or `scopeOfWork:viewAll`** — only sees quotations/Scope of Work records it created itself (see the two "Own-Records-Only Viewing" sections below). Maps to the request's "Sales Executive." |
+| Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Also `scopeOfWork:view/viewAll/edit/finalize/print` (no `:create`/`:delete` — edits/finalizes Sales' drafts rather than starting new ones; `scopeOfWork:viewAll` added 2026-07-23, alongside the pre-existing `quotations:viewAll` — an Approver must be able to see everyone's records to act on them). Maps to "Sales Manager." |
 | Approver Level 2 | — | — | Same rights as Level 1 in this build, including the same Scope of Work grants (see Known Simplifications below). Maps to "CEO." |
-| Viewer | — | — | `*:view` only (incl. `customers:view`, `scopeOfWork:view`). |
+| Viewer | — | — | `*:view` only (incl. `customers:view`, `scopeOfWork:view`), plus `quotations:viewAll`/`scopeOfWork:viewAll` — a read-only role that can't act on anything still needs to be able to *see* everything to be useful as a viewer. |
 
 **No new permission was added for the 2026-07-10 Job Type / Executive Dashboard pass.** `GET /api/jobtypes` reuses `quotations:view` (already required to touch a quote); `POST`/`PATCH /api/jobtypes` reuse `company:manage` (Super Admin only, matching the existing precedent for company-wide configuration data like bank/VAT/T&C). `GET /api/dashboard` continues to reuse `dashboard:view`, which every default role already has — two of its response sections (`activityTimeline`, `approvalDashboard`) are additionally gated per-caller by the `auditLog:view`/`quotations:approve` the caller already has, rather than a new dashboard-specific permission.
 
@@ -202,12 +202,14 @@ access check of its own (unlike `create`, which always required `quotations:view
 `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status" and
 [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 
-6 new permissions gate the feature end-to-end, enforced server-side in
-`api/_lib/scopeOfWorkHandler.ts` (never just hidden client-side):
+6 permissions (7 as of 2026-07-23, see "Scope of Work Own-Records-Only Viewing" below) gate the
+feature end-to-end, enforced server-side in `api/_lib/scopeOfWorkHandler.ts` (never just hidden
+client-side):
 
 | Permission | Gates |
 |---|---|
-| `scopeOfWork:view` | `GET /api/scope-of-works` (list — **2026-07-22**: now also gates the "list every Scope of Work company-wide" mode used by the new standalone Scope of Work sidebar page, not just the original by-quotation lookup; no ownership scoping in either mode) and `GET /api/scope-of-works/:id` (single record) — also required (alongside the action-specific permission below) to read the *source* record on duplicate/refresh, since those actions return/derive from its full content. |
+| `scopeOfWork:view` | `GET /api/scope-of-works` (list — **2026-07-22**: now also gates the "list every Scope of Work company-wide" mode used by the new standalone Scope of Work sidebar page, not just the original by-quotation lookup) and `GET /api/scope-of-works/:id` (single record) — also required (alongside the action-specific permission below) to read the *source* record on duplicate/refresh, since those actions return/derive from its full content. **2026-07-23**: the "list every Scope of Work company-wide" mode is now additionally scoped by `scopeOfWork:viewAll` — see below; the by-quotation lookup, single-record `GET`, and duplicate/refresh's source-record read remain unaffected by `:viewAll` (deliberately — see below). |
+| `scopeOfWork:viewAll` | Added **2026-07-23** — see "Scope of Work Own-Records-Only Viewing" below. |
 | `scopeOfWork:create` | `POST /api/scope-of-works` (create from a quotation) and `POST /api/scope-of-works/:id/duplicate`. |
 | `scopeOfWork:edit` | `PATCH /api/scope-of-works/:id` and `POST /api/scope-of-works/:id/refresh` — combined with an **ownership** check (see below). |
 | `scopeOfWork:finalize` | `POST /api/scope-of-works/:id/finalize`. Also, independent of ownership, a `scopeOfWork:finalize` holder can edit or delete *any* Draft record, not just their own — the RBAC spec's "Sales Manager: view/edit/finalize" language. |
@@ -242,10 +244,11 @@ source quotation at all) — enforced alongside `scopeOfWork:create`, not a sepa
 the usual edit/ownership check.
 
 Default grants: **Sales User** gets `view/create/edit/print` (create/edit their own drafts, no
-finalize/delete); **Approver Level 1/2** get `view/edit/finalize/print` (no `create` — they act on
-Sales' drafts rather than starting new ones, though `:finalize` alone still lets them edit/delete
-any Draft per the ownership rule above); **Administrator**/**Super Admin** get all 6; **Viewer** gets
-`view` only. See the role table above.
+finalize/delete, and — as of 2026-07-23 — no `viewAll` either, so their own list is also scoped to
+their own records); **Approver Level 1/2** get `view/viewAll/edit/finalize/print` (no `create` —
+they act on Sales' drafts rather than starting new ones, though `:finalize` alone still lets them
+edit/delete any Draft per the ownership rule above); **Administrator**/**Super Admin** get all 7;
+**Viewer** gets `view/viewAll` only. See the role table above.
 
 Audit logging: every action (create/update/finalize/duplicate/refresh/print/delete) writes a
 server-side `AuditLogEntry` via `writeScopeAuditEntry()`, module `"Scope of Work"` — `POST
@@ -302,6 +305,65 @@ reasoning already applied to every other permission addition in this project's h
 superset permission — specifically to avoid needing a migration at all; that trick doesn't apply
 here since this is a narrowing restriction, not a widening one). Tracked in
 [TODO.md](./TODO.md) as a required manual step, not a silent gap.
+
+### Scope of Work Own-Records-Only Viewing (added 2026-07-23)
+
+New `scopeOfWork:viewAll` permission, per a direct user request ("หน้า scope of work อยากให้ทำสิทธิ์
+เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — "on the Scope of Work page I'd like a permission
+added like the quotation one, for viewing others'") — mirrors `quotations:viewAll` above. A role
+holding `scopeOfWork:view` but **not** `scopeOfWork:viewAll` now only sees, on the standalone Scope
+of Work management page's list, records it created itself. Unchecked is the default for any newly
+created custom role, same convention as `quotations:viewAll`.
+
+Enforced server-side in two places — both filter by `{ $or: [{ createdBy: ctx.user.id },
+{ createdBy: "" }] }` when the caller lacks `scopeOfWork:viewAll` (Super Admin bypasses this
+entirely, same as every permission check):
+- `GET /api/scope-of-works` (no `quotationId` — the "list every Scope of Work company-wide" mode
+  backing the standalone `src/pages/scopeOfWork/ScopeOfWorkPage.tsx`).
+- `GET /api/search`'s Scope of Work result category (`api/_lib/searchHandler.ts`'s
+  `searchScopeOfWorks()`) — without this, a caller without `scopeOfWork:viewAll` could trivially
+  discover another user's Scope of Work through the Global Search box even though the list page
+  itself hides it.
+
+**Deliberately NOT applied** to three other places a Scope of Work record's content is read,
+unlike Quotation's simpler single-list-page shape:
+- `GET /api/scope-of-works?quotationId=` (the by-quotation existence check `QuoteDocument.tsx`'s
+  toolbar uses — "does a Scope of Work already exist for this quotation?"). The caller must already
+  have `quotations:view` to be looking at that quotation at all; hiding a colleague's already-
+  created record here would risk them creating a duplicate one instead of opening the existing one,
+  which is a worse outcome than the record simply staying visible via this one narrow path.
+- `GET /api/scope-of-works/:id` (opening a specific record — reached either from the now-filtered
+  list above, or from the still-unfiltered by-quotation link above). Filtering this too would make
+  the by-quotation link show "a Scope of Work exists" while `403`-ing the click straight after —
+  broken, self-contradictory UX. Direct record access stays governed by whatever legitimate
+  navigation path led there, same as it always was.
+- `POST /api/scope-of-works/:id/duplicate` and `/rewrite` — both already require `scopeOfWork:create`
+  + `scopeOfWork:view` to read their source record; not additionally restricted by `:viewAll`, same
+  reasoning as the single-record `GET` above.
+
+`update`/`delete`/`refresh`/`finalize`/`print` are untouched — those already have their own
+independent authorization (`canEditScope()`'s owner-or-`scopeOfWork:finalize` rule, or a plain
+`scopeOfWork:finalize`/`:print` check) that this pass wasn't asked to change, the same split
+`quotations:viewAll` already has (it doesn't touch `quotations:approve`/`:reject` either).
+
+Legacy/seed records with an empty `createdBy` (ownerless — same convention the edit/delete
+ownership check above already uses) are visible to everyone regardless of `scopeOfWork:viewAll`,
+since there's no real "someone else" to exclude them for.
+
+**Default role assignment**: Super Admin (via `ALL_PERMISSIONS`), Administrator, Approver Level 1,
+Approver Level 2, and Viewer all hold `scopeOfWork:viewAll` by default — Approvers specifically
+*must* have it, since they finalize Sales' drafts company-wide, not just their own. **Sales User
+does not** — matching its existing description ("สร้างและแก้ไขใบเสนอราคาของตนเอง" — create/edit
+**their own** [quotations and, by the same logic, their own Scope of Work]).
+
+**⚠️ Deployment/rollout note — same caveat as `quotations:viewAll` above, read before this ships
+to an already-provisioned environment**: `defaultRoles` only seeds once, on first-run setup — an
+existing production database's Administrator/Approver Level 1/Approver Level 2/Viewer role
+documents do **not** automatically gain `scopeOfWork:viewAll` just because this code shipped. **A
+Super Admin must open Role Management and manually check "ดู Scope of Work ของผู้อื่น" for each of
+those roles** before or immediately after this deploys, or every existing Approver suddenly can't
+see the Scope of Work records they need to finalize. Same deliberate no-auto-migration reasoning as
+`quotations:viewAll` — tracked in [TODO.md](./TODO.md) as a required manual step.
 
 ### Quotation Approval Workflow
 

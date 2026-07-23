@@ -703,7 +703,10 @@ list per category. Key data-model notes:
   `quotationNumber`/`customerSnapshot.companyName`/`jobTypeCode`/`jobTypeName`/`customerPoNumber`/
   `status` against non-deleted `scope_of_works` documents. Gated by `scopeOfWork:view` — a category
   the caller lacks that permission for comes back as an empty array, same convention as every other
-  category here.
+  category here. **2026-07-23**: also scoped by `scopeOfWork:viewAll` — a caller without it only
+  matches against records it created itself (`createdBy === ctx.user.id`, plus ownerless legacy
+  records), same `$or` ownership clause `quotations` below already uses. See
+  [RBAC.md](./RBAC.md) "Scope of Work Own-Records-Only Viewing".
 - Every category (`quotations`, `customers`, `products`, `users`) queries via a case-insensitive,
   unanchored `$regex` `$or` across several fields, with the query string passed through
   `escapeRegExp()` first (matching the existing helper already duplicated in

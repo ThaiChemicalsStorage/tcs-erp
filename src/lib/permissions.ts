@@ -32,6 +32,7 @@ export type Permission =
   | "quotationTemplates:archive"
   | "quotationTemplates:import"
   | "scopeOfWork:view"
+  | "scopeOfWork:viewAll"
   | "scopeOfWork:create"
   | "scopeOfWork:edit"
   | "scopeOfWork:finalize"
@@ -70,6 +71,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "quotationTemplates:archive",
   "quotationTemplates:import",
   "scopeOfWork:view",
+  "scopeOfWork:viewAll",
   "scopeOfWork:create",
   "scopeOfWork:edit",
   "scopeOfWork:finalize",
@@ -109,6 +111,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "quotationTemplates:archive": "เก็บถาวร/กู้คืน Template ใบเสนอราคา",
   "quotationTemplates:import": "นำเข้า Template จากไฟล์ Excel",
   "scopeOfWork:view": "ดู Scope of Work",
+  "scopeOfWork:viewAll": "ดู Scope of Work ของผู้อื่น",
   "scopeOfWork:create": "สร้าง Scope of Work",
   "scopeOfWork:edit": "แก้ไข Scope of Work",
   "scopeOfWork:finalize": "ยืนยันสถานะ Final ของ Scope of Work",
@@ -149,6 +152,7 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "quotationTemplates:archive": "permission.quotationTemplatesArchive",
   "quotationTemplates:import": "permission.quotationTemplatesImport",
   "scopeOfWork:view": "permission.scopeOfWorkView",
+  "scopeOfWork:viewAll": "permission.scopeOfWorkViewAll",
   "scopeOfWork:create": "permission.scopeOfWorkCreate",
   "scopeOfWork:edit": "permission.scopeOfWorkEdit",
   "scopeOfWork:finalize": "permission.scopeOfWorkFinalize",
@@ -179,6 +183,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "quotationTemplates:archive",
       "quotationTemplates:import",
       "scopeOfWork:view",
+      "scopeOfWork:viewAll",
       "scopeOfWork:create",
       "scopeOfWork:edit",
       "scopeOfWork:finalize",

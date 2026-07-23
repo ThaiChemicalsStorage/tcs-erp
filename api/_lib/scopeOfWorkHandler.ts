@@ -370,18 +370,27 @@ function normalizeScope(scope: ScopeOfWork): ScopeOfWork {
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
-  await requirePermission(req, "scopeOfWork:view");
+  const ctx = await requirePermission(req, "scopeOfWork:view");
   const quotationId = typeof req.query.quotationId === "string" ? req.query.quotationId : "";
 
   const scopeOfWorks = await scopeOfWorksCollection();
   // Omitting `quotationId` switches this from "does one exist for this quotation?" (used by
   // QuoteDocument.tsx's toolbar) to "list every Scope of Work company-wide" — added 2026-07-22 for
   // the new standalone Scope of Work management page (src/pages/scopeOfWork/ScopeOfWorkPage.tsx).
-  // Same `scopeOfWork:view` gate either way; no ownership/created-by scoping exists for this module
-  // (unlike Quotation's `quotations:viewAll`), matching its existing owner-or-finalize edit/delete
-  // rule rather than inventing a new view-restriction this pass wasn't asked to add.
   if (!quotationId) {
-    const docs = await scopeOfWorks.find({ isDeleted: false }).sort({ updatedAt: -1 }).toArray();
+    // Own-records-only scoping (added 2026-07-23, per direct user request mirroring Quotation's
+    // `quotations:viewAll`) — a caller without `scopeOfWork:viewAll` only sees, on the standalone
+    // browse-everything page, records it created itself. Legacy/seed records with an empty
+    // `createdBy` (ownerless — same convention `isOwnerOf()` uses) stay visible to everyone
+    // regardless, since there's no real "someone else" to exclude them for. Deliberately NOT applied
+    // to the by-quotation lookup below — that's an existence check ("does a Scope of Work already
+    // exist for THIS quotation, which the caller can already see via quotations:view"), not a browse
+    // view, and hiding a colleague's already-created record there would risk the caller creating a
+    // duplicate one instead of opening the existing one.
+    const ownershipMatch = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
+      ? {}
+      : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }] };
+    const docs = await scopeOfWorks.find({ isDeleted: false, ...ownershipMatch }).sort({ updatedAt: -1 }).toArray();
     res.status(200).json({ scopeOfWorks: docs.map(toListItem) });
     return;
   }

@@ -4,7 +4,61 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Scope of Work: Cash/Credit dropdown + days for payment installments
+## 2026-07-23 (absolute latest) — Scope of Work: own-records-only viewing (`scopeOfWork:viewAll`)
+
+**Feature**: per direct user request ("หน้า scope of work อยากให้ทำสิทธิ์เพิ่มมาเหมือนของใบเสนอราคา
+ที่เป็นดูของผู้อื่นได้" — add a permission to the Scope of Work page like the quotation one, for
+viewing others'), new `scopeOfWork:viewAll` permission mirroring the existing `quotations:viewAll`
+(added 2026-07-22). A role holding `scopeOfWork:view` but not `scopeOfWork:viewAll` now only sees
+its own records on the standalone Scope of Work list page and in Global Search.
+
+**Scope decision — narrower than a literal 1:1 mirror of Quotation's feature**: Quotation only has
+one place its list is read from (`GET /api/quotes`), so `quotations:viewAll` cleanly gates that one
+route plus Global Search. Scope of Work has 3 additional read paths Quotation doesn't: a
+by-quotation existence check (`GET /api/scope-of-works?quotationId=`, used by `QuoteDocument.tsx`'s
+toolbar to detect "does a Scope of Work already exist for this quotation"), a single-record `GET
+/api/scope-of-works/:id`, and duplicate/rewrite's own source-record read. Filtering all of these by
+ownership would have created two bad outcomes: (1) hiding a colleague's already-created record from
+the by-quotation existence check risks the caller creating a duplicate Scope of Work instead of
+opening the existing one — worse than just leaving it visible via that one narrow, already-
+permission-gated (`quotations:view`) path; (2) filtering the single-record `GET` while leaving the
+by-quotation link unfiltered would produce a broken UX where the link says a record exists but
+clicking it 403s. So the ownership filter applies only to the "list every Scope of Work
+company-wide" mode (the actual "Scope of Work page" the user referred to) and Global Search — every
+other read path is unchanged.
+
+**Backend**: `handleList()`'s list-all branch and `searchScopeOfWorks()` (now taking `ctx`)
+(`api/_lib/scopeOfWorkHandler.ts`, `api/_lib/searchHandler.ts`) both add `{ $or: [{ createdBy:
+ctx.user.id }, { createdBy: "" }] }` when the caller lacks `scopeOfWork:viewAll`, identical shape to
+`quotations:viewAll`'s existing `createdByUserId` filter. `searchScopeOfWorks()`'s query gained a
+`$and`-wrapped text-search `$or` (mirroring `searchQuotations()`'s exact composition) so it can
+coexist with the new ownership `$or` without a duplicate top-level key.
+
+**Permissions/roles**: `scopeOfWork:viewAll` added to `Permission` (`src/lib/permissions.ts`, right
+after `scopeOfWork:view` in the type union/`ALL_PERMISSIONS`/labels/i18n keys/`PERMISSION_GROUPS`)
+and to `src/lib/roles.ts`'s default `administrator`/`approver_1`/`approver_2`/`viewer` roles —
+`sales_user` deliberately does not get it, same split as `quotations:viewAll`.
+
+**Files Modified**: `src/lib/permissions.ts`, `src/lib/roles.ts`, `src/lib/i18n.tsx`, `api/_lib/scopeOfWorkHandler.ts`, `api/_lib/searchHandler.ts`, `docs/RBAC.md`, `docs/API.md`, `docs/DATABASE.md`, `docs/MODULES/ScopeOfWork.md`, `docs/CLAUDE.md`, `docs/TODO.md`
+
+**Reason**: Direct user request — mirror Quotation's own-quotes-only viewing permission for Scope of
+Work.
+
+**Verification**: `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean. No
+new client-side rendering logic was added (the list page already renders whatever the server
+returns, unchanged — same as how `QuoteList.tsx` needed zero code changes for `quotations:viewAll`),
+so no dev harness was built for this pass; verified by tracing the query composition against
+`searchQuotations()`'s already-shipped, already-verified equivalent. Live browser/API verification
+against real MongoDB data (confirming a Sales User genuinely only sees their own records, an
+Approver sees everyone's once manually granted, and the by-quotation/single-record paths stay
+correctly unfiltered) could not be completed this session — same standing sandboxed-environment
+limitation as every recent entry. **⚠️ Requires a manual Role Management step on this production
+deployment** — `defaultRoles` only seeds once; see [RBAC.md](./RBAC.md) "Scope of Work
+Own-Records-Only Viewing" and [TODO.md](./TODO.md).
+
+---
+
+## 2026-07-23 — Scope of Work: Cash/Credit dropdown + days for payment installments
 
 **Feature**: direct same-day follow-up to the multi-installment payment schedule pass below
 ("ไม่คือสามารถแก้ไขเปอร์เซ็น แก้ไขว่าจะเลือกเป็น Cash หรือ Credit") — each installment row's
