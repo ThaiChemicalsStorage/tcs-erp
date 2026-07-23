@@ -4,7 +4,35 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Feature: Delivery Order (new module, generated from Scope of Work)
+## 2026-07-23 (absolute latest) — Fix: Delivery Order excludes the Down Payment installment
+
+**Bug/gap**: direct user follow-up right after the Delivery Order module shipped — "ลืมบอกว่าใบส่ง
+มอบงานจะไม่มี down payment เลย" (forgot to mention: a Delivery Order never has a Down Payment page).
+A deposit paid before any goods/work are delivered has nothing to "deliver," so it shouldn't appear
+as one of this document's installment pages — unlike Scope of Work's own payment schedule, where it
+legitimately belongs.
+
+**Fix**: new `isDownPaymentLabel()` (`api/_lib/deliveryOrderHandler.ts`) matches the exact label
+`PAYMENT_TERM_PRESETS` itself uses for a down payment ("Down Payment", case-insensitive/trimmed).
+Applied in two places: `deriveInstallmentsFromScope()` (so a fresh create or an explicit "อัปเดต
+ข้อมูลจาก Scope of Work" never generates a Down Payment page), and a new defensive `stripDownPayment()`/
+`toClient()` wrapper applied at every response site (create/get/update/refresh/finalize), so a record
+created in the brief window before this fix shipped self-heals on its very next read — no migration
+script needed, and it self-heals in storage too on its next save (`PATCH` replaces the whole
+`installments` array with whatever the client — which never saw the Down Payment row — sends back).
+
+**Files Modified**: `api/_lib/deliveryOrderHandler.ts`.
+
+**Verification**: `npx tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+Logic verified via a standalone Node script: Down Payment excluded on create; case/whitespace-
+insensitive label matching; no false-positive exclusion for a label that merely contains "Down
+Payment" as a substring (e.g. "Down Payment 2"); a stale already-stored record with a Down Payment
+row gets it stripped on read. Not verified against a live deployment/browser — same standing
+sandboxed-session limitation as every other pass.
+
+---
+
+## 2026-07-23 — Feature: Delivery Order (new module, generated from Scope of Work)
 
 **Feature**: direct user request — "ช่วยทำหน้าใบส่งมอบสินค้าให้หน่อยเอาไฟล์มาให้แล้วอยู่ไหนโฟล์เดอร์
 public...ดึงข้อมูลแบบไฟล์ pdf...พวกสินค้าจะดึงมาจากหน้า scope of work ส่วนพวกข้อมูลบริษัทให้ดึงมาจาก

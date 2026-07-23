@@ -76,6 +76,17 @@ function deriveItemsFromScope(scope: WithId<ScopeOfWorkFields>): DeliveryOrderIt
     }));
 }
 
+/** A Delivery Order never has a page for the Down Payment installment — added 2026-07-23, per
+ * direct user follow-up ("ลืมบอกว่าใบส่งมอบงานจะไม่มี down payment เลย"): a deposit paid before any
+ * goods/work are actually delivered has nothing to "deliver," so it has no place on this document
+ * type, unlike Scope of Work's payment schedule (which legitimately lists it). Matched against the
+ * exact label `PAYMENT_TERM_PRESETS`' own "Down Payment" rows use (case-insensitive, trimmed) —
+ * a plain string match rather than fuzzy free-text guessing, same "exact key, not fuzzy" convention
+ * `DocumentRecipientsPicker.tsx`'s department matching already follows. */
+function isDownPaymentLabel(label: string): boolean {
+  return label.trim().toLowerCase() === "down payment";
+}
+
 /**
  * Builds/reconciles `installments` against the Scope of Work's *current* payment schedule — matched
  * by the stable installment `id` (payment installments keep their id across a plain edit, same
@@ -83,10 +94,11 @@ function deriveItemsFromScope(scope: WithId<ScopeOfWorkFields>): DeliveryOrderIt
  * exists on the Scope of Work keeps its user-entered `itemIds`/`documentNumber`/`issueDate`/`remark`
  * (stale `itemIds` pointing at a since-removed item are dropped, never left dangling); a brand-new
  * installment (added to the Scope of Work after this Delivery Order was created) gets a fresh blank
- * page with an auto-drafted `remark`; an installment removed from the Scope of Work simply stops
- * appearing here (its page is dropped, nothing to reconcile). `pct`/`label`/`paymentType`/`days`
- * always mirror the Scope of Work's own values — never independently client-editable on this
- * document, see `sanitizeInstallmentsUpdate()` below.
+ * page with an auto-drafted `remark`; an installment removed from the Scope of Work — or labeled
+ * "Down Payment", see `isDownPaymentLabel()` — simply stops appearing here (its page is dropped,
+ * nothing to reconcile). `pct`/`label`/`paymentType`/`days` always mirror the Scope of Work's own
+ * values — never independently client-editable on this document, see `sanitizeInstallmentsUpdate()`
+ * below.
  */
 function deriveInstallmentsFromScope(
   scope: WithId<ScopeOfWorkFields>,
@@ -95,20 +107,31 @@ function deriveInstallmentsFromScope(
   const paymentConditions = normalizePaymentConditions(scope.paymentConditions);
   const existingById = new Map(existing.map((i) => [i.id, i]));
   const currentItemIds = new Set(scope.items.filter((it) => !it.isSectionHeader).map((it) => it.id));
-  return paymentConditions.installments.map((src) => {
-    const base = { id: src.id, pct: src.pct, label: src.label, paymentType: src.paymentType, days: src.days };
-    const prev = existingById.get(src.id);
-    if (prev) {
-      return {
-        ...base,
-        itemIds: prev.itemIds.filter((itemId) => currentItemIds.has(itemId)),
-        documentNumber: prev.documentNumber,
-        issueDate: prev.issueDate,
-        remark: prev.remark,
-      };
-    }
-    return { ...base, itemIds: [], documentNumber: "", issueDate: "", remark: draftInstallmentRemark(base) };
-  });
+  return paymentConditions.installments
+    .filter((src) => !isDownPaymentLabel(src.label))
+    .map((src) => {
+      const base = { id: src.id, pct: src.pct, label: src.label, paymentType: src.paymentType, days: src.days };
+      const prev = existingById.get(src.id);
+      if (prev) {
+        return {
+          ...base,
+          itemIds: prev.itemIds.filter((itemId) => currentItemIds.has(itemId)),
+          documentNumber: prev.documentNumber,
+          issueDate: prev.issueDate,
+          remark: prev.remark,
+        };
+      }
+      return { ...base, itemIds: [], documentNumber: "", issueDate: "", remark: draftInstallmentRemark(base) };
+    });
+}
+
+/** Defensive filter applied at every read path (not just `deriveInstallmentsFromScope()` above) —
+ * a Delivery Order created before this pass shipped may already have a stored Down Payment page;
+ * this strips it from every response without requiring a migration script or a manual "อัปเดตข้อมูล
+ * จาก Scope of Work" click. A record only actually loses the stored row for good once it's next
+ * saved through `handleUpdate()`/`handleRefresh()` — reads alone never write back. */
+function stripDownPayment(installments: DeliveryOrderInstallment[]): DeliveryOrderInstallment[] {
+  return installments.filter((i) => !isDownPaymentLabel(i.label));
 }
 
 function toSummary(doc: WithId<DeliveryOrderFields>): DeliveryOrderSummary {
@@ -122,10 +145,17 @@ function toListItem(doc: WithId<DeliveryOrderFields>): DeliveryOrderListItem {
     scopeOfWorkId: full.scopeOfWorkId ?? "",
     scopeNumber: full.scopeNumber ?? "",
     customerCompanyName: full.customerCompanyName ?? "",
-    installmentCount: Array.isArray(full.installments) ? full.installments.length : 0,
+    installmentCount: Array.isArray(full.installments) ? stripDownPayment(full.installments).length : 0,
     status: full.status ?? "Draft",
     updatedAt: full.updatedAt ?? "",
   };
+}
+/** The one place a full `DeliveryOrder` is prepared for a client response — every route below calls
+ * this instead of `withStringId()` directly, so `stripDownPayment()` is never accidentally skipped
+ * on a new response shape added later. */
+function toClient(doc: WithId<DeliveryOrderFields>) {
+  const full = withStringId(doc);
+  return { ...full, installments: stripDownPayment(full.installments) };
 }
 
 async function loadDeliveryOrderOrThrow(id: string): Promise<WithId<DeliveryOrderFields>> {
@@ -204,14 +234,14 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     `สร้างใบส่งมอบสินค้าสำหรับ Scope of Work ${scope.scopeNumber}`,
     { scopeNumber: scope.scopeNumber, scopeOfWorkId },
   );
-  res.status(201).json({ deliveryOrder: withStringId(created) });
+  res.status(201).json({ deliveryOrder: toClient(created) });
 }
 
 async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "deliveryOrder:view");
   const doc = await loadDeliveryOrderOrThrow(id);
-  res.status(200).json({ deliveryOrder: withStringId(doc) });
+  res.status(200).json({ deliveryOrder: toClient(doc) });
 }
 
 const MAX_INSTALLMENT_ROWS = 50;
@@ -266,7 +296,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Updated", `แก้ไขใบส่งมอบสินค้าของ Scope of Work ${updated.scopeNumber}`, {
     scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
   });
-  res.status(200).json({ deliveryOrder: withStringId(updated) });
+  res.status(200).json({ deliveryOrder: toClient(updated) });
 }
 
 async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string) {
@@ -296,7 +326,7 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
   await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Refreshed", `อัปเดตข้อมูลใบส่งมอบสินค้าจาก Scope of Work ${updated.scopeNumber}`, {
     scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
   });
-  res.status(200).json({ deliveryOrder: withStringId(updated) });
+  res.status(200).json({ deliveryOrder: toClient(updated) });
 }
 
 async function handleFinalize(req: VercelRequest, res: VercelResponse, id: string) {
@@ -313,7 +343,7 @@ async function handleFinalize(req: VercelRequest, res: VercelResponse, id: strin
   await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Finalized", `ยืนยันสถานะ Final ของใบส่งมอบสินค้า ${updated.scopeNumber}`, {
     scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
   });
-  res.status(200).json({ deliveryOrder: withStringId(updated) });
+  res.status(200).json({ deliveryOrder: toClient(updated) });
 }
 
 async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {

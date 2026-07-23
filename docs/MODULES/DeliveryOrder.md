@@ -1,6 +1,22 @@
 # Module: Delivery Order
 
-## Status: ✅ Built (2026-07-23)
+## Status: ✅ Built (2026-07-23), Down Payment exclusion fix same day
+
+**2026-07-23, same-day fix**: per a direct user follow-up ("ลืมบอกว่าใบส่งมอบงานจะไม่มี down payment
+เลย" — forgot to mention, a Delivery Order never has a Down Payment page), the Down Payment
+installment is now excluded from every Delivery Order — a deposit paid before any goods/work are
+actually delivered has nothing to "deliver," so it has no place on this document type, unlike Scope
+of Work's own payment schedule (which legitimately lists it). `isDownPaymentLabel()`
+(`api/_lib/deliveryOrderHandler.ts`) matches the exact label `PAYMENT_TERM_PRESETS`' own "Down
+Payment" rows use (case-insensitive, trimmed) — excluded both when building/reconciling installments
+(`deriveInstallmentsFromScope()`, covers create and refresh) and defensively at every read path
+(`stripDownPayment()`/`toClient()`, so a record created in the brief window before this fix shipped
+self-heals on its very next read, no migration script needed — and self-heals in storage too on its
+next save, since `PATCH` replaces the whole `installments` array with whatever the client — which
+never saw the Down Payment row to begin with — sends back). `tsc`/`lint`/`build` all pass clean;
+verified via a standalone Node script (exclusion on create, case/whitespace-insensitive matching, no
+false-positive on a label that merely contains "Down Payment" as a substring, and defensive
+stripping of an already-stored stale record).
 
 New document type, "ใบส่งมอบสินค้าและบริการ" (Delivery Order & Service Order), added per direct user
 request: "ช่วยทำหน้าใบส่งมอบสินค้าให้หน่อย...ดึงข้อมูลแบบไฟล์ pdf...สินค้าจะดึงมาจากหน้า scope of
@@ -25,9 +41,10 @@ each showing only the items the preparer marks as covered by that shipment.
    instruction "ข้อมูลบริษัทให้ดึงมาจากใบเสนอราคา." **Items** (`DeliveryOrderItem[]`) are snapshotted
    from the Scope of Work's `items` (name/quantity/unit/specifications only — a non-priced section
    divider row is excluded entirely, it makes no sense to "select" onto a delivery page).
-3. **Installments** (`DeliveryOrderInstallment[]`) are built 1:1 from the Scope of Work's
+3. **Installments** (`DeliveryOrderInstallment[]`) are built from the Scope of Work's
    `paymentConditions.installments` (same `id`, `pct`, `label`, `paymentType`, `days` — always a
-   mirror of the Scope of Work's own payment schedule, never independently editable here) plus
+   mirror of the Scope of Work's own payment schedule, never independently editable here) — **except
+   Down Payment, which never gets a page** (see "Status" above) — plus
    fields specific to this document: `itemIds` (which of the snapshotted items are ticked as
    included in this installment's shipment — **starts empty**, per the direct instruction "งวดนี้จะมี
    ให้ติ๊กว่าเอาสินค้าตัวไหนไปบ้าง"), `documentNumber`/`issueDate` ("เลขที่"/"วันที่" — always blank by

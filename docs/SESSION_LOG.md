@@ -4,7 +4,42 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Feature: new Delivery Order module
+## Session — 2026-07-23 (absolute latest), Fix: Delivery Order excludes Down Payment
+
+### What was implemented
+- Immediately after reporting the new Delivery Order module as deployed, the user sent a single
+  terse follow-up: "ลืมบอกว่าใบส่งมอบงานจะไม่มี down payment เลย" (forgot to mention: it should never
+  have a Down Payment page). A small, well-scoped fix rather than a design revisit — the business
+  rule is simple (a deposit collected before delivery has nothing to deliver) and fits cleanly as an
+  exclusion filter on the same `deriveInstallmentsFromScope()` function built earlier this session.
+- Matched against the exact string `PAYMENT_TERM_PRESETS` itself already uses for a down payment row
+  ("Down Payment") rather than trying to infer "is this a deposit" from `pct`/ordering/anything else
+  — the simplest correct signal available, and consistent with how this codebase already treats
+  labels/keys as exact-match identifiers elsewhere (checklist option keys, department names) rather
+  than reaching for fuzzy heuristics.
+- Since the module had only just deployed, there was a real (if narrow) chance a Delivery Order was
+  already created with a stored Down Payment row before this fix shipped. Rather than assume zero
+  such records exist and only fix the generation path, added a second defensive layer
+  (`stripDownPayment()`, applied at every response site via a new `toClient()` wrapper) so any
+  already-stored stale row is invisible to the client immediately, without needing a migration script
+  or a manual refresh click — and gets purged from storage for good on the record's next ordinary
+  save, as an emergent property of `PATCH` replacing the whole `installments` array with whatever the
+  client (which never saw the stale row) sends back.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- No live browser/database check available (same standing limitation as every pass this session).
+  Verified the exclusion logic via a standalone Node script: a fresh `deriveInstallmentsFromScope()`
+  call correctly drops the Down Payment row; label matching is case/whitespace-insensitive but
+  doesn't false-positive on a label that merely contains "Down Payment" as a substring (e.g. "Down
+  Payment 2"); a hand-built stale stored record with a Down Payment row correctly has it stripped by
+  `stripDownPayment()`.
+- Pushed and confirmed deployed via the Vercel MCP tools (readyState `READY`, matching commit SHA)
+  before reporting done.
+
+---
+
+## Session — 2026-07-23, Feature: new Delivery Order module
 
 ### What was implemented
 - The largest single-turn feature of the session: a genuinely new document type/module, not an

@@ -14,6 +14,12 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] Fix: Delivery Order excludes the Down Payment installment.**
+  Same-day follow-up after the Delivery Order module shipped — a deposit paid before any goods are
+  delivered has nothing to "deliver," so it never gets a page on this document. Excluded both at
+  create/refresh time and defensively on every read (self-heals an already-created record without a
+  migration script). `tsc`/`lint`/`build` all pass clean; verified via a standalone Node script. See
+  [MODULES/DeliveryOrder.md](./MODULES/DeliveryOrder.md).
 - ✅ **[2026-07-23] New module: Delivery Order (generated from Scope of Work).**
   Direct user request — a new "ใบส่งมอบสินค้าและบริการ" document type generated from an existing
   Scope of Work, reproducing a company reference PDF exactly: customer info pulled from the
