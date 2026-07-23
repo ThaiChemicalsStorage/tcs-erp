@@ -4,7 +4,64 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Scope of Work: real Document Recipients + email routing
+## 2026-07-23 (absolute latest) — Scope of Work: in-app notification + recipient list visibility
+
+**Feature**: direct same-day follow-up to the Document Recipients pass below, after the user
+confirmed the email itself now works ("กดส่งได้ปกติหมดแล้ว...ได้อีเมล์มาแล้ว"). Two more asks: "อยาก
+รู้ว่าทำยังไงถึงให้มันไปโผล่ในหน้า scope of work ของเราเวลาที่มีคนอื่นส่งมา" (how does it show up on
+our Scope of Work page when someone else sends it to us) and "อยากให้ขึ้นแจ้งเตือนในระบบด้วย" (also
+want an in-system notification).
+
+**Root cause of "doesn't show up"**: the *previous* pass's `scopeOfWork:viewAll` own-records-only
+filter meant a document recipient who didn't create the record — and lacked `viewAll` — had
+literally no way to find it again on the standalone list/search once the one-time email/notification
+was gone. This pass closes that gap.
+
+**In-app notification**: `Notification` (`src/lib/notifications.ts`) gained a `scope_of_work_
+document_sent` type and `relatedScopeId`/`relatedScopeNumber` fields (naming mirrors
+`AuditLogEntry`'s identical fields). `handleSendDocumentNotifications()`
+(`api/_lib/scopeOfWorkHandler.ts`) now writes one `Notification` per resolved recipient alongside
+the email, regardless of that individual's own email outcome — the two channels are independent.
+`NotificationBell.tsx` got a `Mail` icon for the new type; `App.tsx`'s `onNavigate` now checks
+`relatedScopeId` before `relatedQuoteId` and calls a new `navigateToScopeOfWorkStandalone()`, which
+sets a new `scopeOfWorkDeepLinkId` state and switches to the `scopeOfWork` nav. `ScopeOfWorkPage.tsx`
+gained `initialScopeOfWorkId`/`onScopeOfWorkIdConsumed` props using the exact same "adjust state
+during rendering" pattern `QuotationPage.tsx`'s `initialQuoteId` already uses, so a click jumps
+straight to that record's detail view.
+
+**List/search visibility**: `handleList()`'s list-everything branch and `searchScopeOfWorks()`
+(`api/_lib/scopeOfWorkHandler.ts`, `api/_lib/searchHandler.ts`) both gained a `recipientMatch` — a
+`$or` of `{ "documentRecipients.<key>": ctx.user.id }` for each of the 6 real department keys in
+`DOCUMENT_RECIPIENT_DEPARTMENTS` — added to the existing own-records-only filter. A caller who was
+picked as a document recipient can now find the record on their own list/search even without
+`scopeOfWork:viewAll` and even if they didn't create it.
+
+**Known, deliberately-not-fixed limitation**: the email's own "เปิดดูใน TCS ERP" link still only
+opens the app's homepage, not the specific record — this app has no URL-based router (`App.tsx`
+holds a plain `activeNav` string), so a plain `<a href>` from an external email genuinely cannot
+restore in-memory navigation state on page load the way the in-app notification click does. Adding
+real deep-linking from email would need app-wide URL/query-param routing, a materially larger
+change flagged but not attempted this pass.
+
+**Files Modified**: `src/lib/notifications.ts`, `src/components/NotificationBell.tsx`, `src/App.tsx`, `src/pages/scopeOfWork/ScopeOfWorkPage.tsx`, `api/_lib/scopeOfWorkHandler.ts`, `api/_lib/searchHandler.ts`, `api/_lib/systemSeed.ts`, `docs/RBAC.md`, `docs/API.md`, `docs/DATABASE.md`, `docs/MODULES/ScopeOfWork.md`, `docs/MODULES/Notifications.md`, `docs/CLAUDE.md`
+
+**Reason**: Direct user follow-up request — recipients need a standing way to find documents sent
+to them, not just a one-time link, plus an in-app signal matching the rest of the app's existing
+notification conventions.
+
+**Verification**: `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+Live end-to-end verification (a recipient without `viewAll` actually seeing the record appear on
+their list, the bell notification arriving and deep-linking correctly) was not attempted this
+session — the user had already independently confirmed the underlying email send works against
+real production data (via Vercel deployment/runtime-log checks earlier in the session), and this
+pass is a comparatively low-risk, well-precedented addition (the exact same deep-link/query-filter
+patterns already shipped and used for Quotation's own notifications/`quotations:viewAll`). Recommend
+the user click through the new bell notification and confirm list visibility once they test the
+next real send.
+
+---
+
+## 2026-07-23 — Scope of Work: real Document Recipients + email routing
 
 **Feature**: per direct user request ("ในส่วนนี้ให้เพิ่มบัญชีเข้าไปด้วย... อยากให้ลิงค์ข้อมูลกับแผนก
 ที่จะเลือกตอนสร้างพนักงานเพราะจะต้องส่งเอกสารไปให้คนนั้นๆที่อยู่ในแต่ละแผนก" — add "บัญชี" to the

@@ -4,7 +4,64 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Scope of Work: real Document Recipients + email routing
+## Session — 2026-07-23 (absolute latest), Scope of Work: in-app notification + recipient list visibility
+
+### What was implemented
+- Direct continuation of the Document Recipients work below, same session, after the user
+  independently set up `RESEND_API_KEY` in Vercel, redeployed, and confirmed (via a real test send
+  through Resend's sandbox sender to their own account email) that the email pipeline genuinely
+  works in production — verified from this side too, via the Vercel MCP tools (`get_project`
+  showed the latest deployment `READY`/`production` matching the just-pushed commit, and
+  `get_runtime_errors` showed nothing email-related).
+- User then asked two follow-up questions in one message: how does a document "show up" on the
+  recipient's own Scope of Work page when someone else sends it to them, and could there also be
+  an in-system (bell) notification.
+- **Real root-cause finding before writing any code**: the *previous* pass's `scopeOfWork:viewAll`
+  own-records-only filter — which I built and shipped earlier this same session — had an
+  unintended interaction with this new feature. A document recipient who didn't create the record
+  and lacked `viewAll` (the common case: a Sales User in Purchase/Accounting/etc. picked as a
+  recipient) had literally no standing way to find the record again once the one-time email or
+  notification link was gone — the list/search would simply never show it to them. This wasn't
+  caught in the earlier pass because the Document Recipients feature (which creates this specific
+  cross-user visibility need) didn't exist yet when `viewAll` was designed. Worth noting as a
+  concrete example of why "does this closed-off list/search filter interact badly with a *later*
+  feature" needs re-checking each time something new gets layered on top, not just checked once.
+- Reused every pattern already established rather than inventing new ones: the in-app notification
+  reuses the exact `Notification`/`NotificationBell.tsx`/`relatedQuoteId`-style deep-link machinery
+  Quotation's own workflow notifications already use (just added a `relatedScopeId` sibling field
+  and a matching `App.tsx` navigation branch); `ScopeOfWorkPage.tsx`'s new deep-link prop pair
+  copies `QuotationPage.tsx`'s `initialQuoteId` "adjust state during rendering" pattern verbatim;
+  the list/search visibility fix reuses the exact `$or` ownership-filter shape the `viewAll` pass
+  itself introduced, just extended with one more clause.
+- **One real technical judgment call**: MongoDB has no native "does this object's any array value
+  contain X" operator without `$expr`/`$objectToArray`. Rather than reach for that, queried each of
+  the 6 known department keys individually (`{ "documentRecipients.purchase": userId }`, etc.,
+  `$or`'d together) — simpler, indexable, and correct since the department set is small and fixed
+  (`DOCUMENT_RECIPIENT_DEPARTMENTS`), not truly dynamic.
+- Also asked the user directly (rather than guessing) whether the email itself should try to
+  deep-link — confirmed this app has no URL-based router at all (`App.tsx` is a plain `activeNav`
+  string switch), so a plain email `<a href>` genuinely cannot restore in-memory navigation state.
+  Documented this as a known, deliberately-not-fixed limitation rather than a bug, and pointed out
+  that the in-app notification (which doesn't need a URL, since it's all internal React state)
+  already solves the "get me to the record" need for anyone who's actually signed into the app.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- No dev harness built for this pass — the new logic is either a pure MongoDB query-filter addition
+  (no new client rendering to harness) or a direct structural copy of an already-shipped,
+  already-verified pattern (`QuotationPage.tsx`'s deep-link handling). Verified by side-by-side code
+  comparison against those originals instead.
+- Not live-verified this session: an actual recipient without `viewAll` seeing the record appear on
+  their list, or the bell notification arriving and deep-linking correctly. Flagged in TODO.md.
+
+### Recommendation for next session
+- Have a Sales User (without `scopeOfWork:viewAll`) get picked as a document recipient on a record
+  they didn't create, then confirm: it appears on their own Scope of Work list; a bell notification
+  arrives; clicking the notification opens that exact record's detail view.
+
+---
+
+## Session — 2026-07-23, Scope of Work: real Document Recipients + email routing
 
 ### What was implemented
 - User showed a screenshot of the "เอกสารส่งถึง" checklist (Purchase/Project/Factory/Technic/

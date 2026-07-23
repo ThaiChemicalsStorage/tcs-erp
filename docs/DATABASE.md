@@ -137,9 +137,14 @@ interface Role {
 
 ### `Notification` (`src/lib/notifications.ts`)
 ```ts
+// quotation_won/lost/cancelled added 2026-07-10 (fifth pass); scope_of_work_document_sent added
+// 2026-07-23 — the first type not tied to the quotation approval workflow at all, see
+// MODULES/ScopeOfWork.md "Document Recipients".
 type NotificationType =
   | "quotation_submitted" | "quotation_approved" | "quotation_rejected"
-  | "quotation_high_value" | "quotation_customer_accepted" | "quotation_customer_rejected";
+  | "quotation_high_value" | "quotation_customer_accepted" | "quotation_customer_rejected"
+  | "quotation_won" | "quotation_lost" | "quotation_cancelled"
+  | "scope_of_work_document_sent";
 
 interface Notification {
   id: string;
@@ -149,6 +154,10 @@ interface Notification {
   description: string;
   module: string;
   relatedQuoteId?: string;
+  // relatedScopeId/relatedScopeNumber added 2026-07-23 — same naming convention as
+  // AuditLogEntry.relatedScopeId/.relatedScopeNumber below.
+  relatedScopeId?: string;
+  relatedScopeNumber?: string;
   createdAt: string;
   read: boolean;
 }
@@ -716,8 +725,13 @@ list per category. Key data-model notes:
   the caller lacks that permission for comes back as an empty array, same convention as every other
   category here. **2026-07-23**: also scoped by `scopeOfWork:viewAll` — a caller without it only
   matches against records it created itself (`createdBy === ctx.user.id`, plus ownerless legacy
-  records), same `$or` ownership clause `quotations` below already uses. See
-  [RBAC.md](./RBAC.md) "Scope of Work Own-Records-Only Viewing".
+  records) **or that named it as a document recipient** (same-day second pass — a `$or` of
+  `{ "documentRecipients.<key>": ctx.user.id }` for each of the 6 real department keys in
+  `DOCUMENT_RECIPIENT_DEPARTMENTS`, dot-path querying into specific known object keys rather than
+  a generic "any array value under this object" query, which Mongo has no native operator for
+  without `$expr`/`$objectToArray`). Same clause added to `GET /api/scope-of-works`'s list-everything
+  mode. See [RBAC.md](./RBAC.md) "Scope of Work Own-Records-Only Viewing" and
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients".
 - Every category (`quotations`, `customers`, `products`, `users`) queries via a case-insensitive,
   unanchored `$regex` `$or` across several fields, with the query string passed through
   `escapeRegExp()` first (matching the existing helper already duplicated in

@@ -6,7 +6,7 @@ import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import {
   scopeOfWorksCollection, quotesCollection, usersCollection, countersCollection, auditLogCollection,
-  toObjectId, withStringId, type ScopeOfWorkFields, type QuoteFields,
+  notificationsCollection, toObjectId, withStringId, type ScopeOfWorkFields, type QuoteFields,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
@@ -16,6 +16,7 @@ import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint } from 
 import { getRevisionRoot } from "./quoteRevisions.js";
 import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/lib/documentRequirements.js";
 import { normalizePaymentConditions, normalizeDocumentRecipients } from "../../src/lib/scopeOfWork.js";
+import type { NotificationType } from "../../src/lib/notifications.js";
 import { sendEmail, isEmailConfigured } from "./email.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
@@ -418,16 +419,20 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   if (!quotationId) {
     // Own-records-only scoping (added 2026-07-23, per direct user request mirroring Quotation's
     // `quotations:viewAll`) — a caller without `scopeOfWork:viewAll` only sees, on the standalone
-    // browse-everything page, records it created itself. Legacy/seed records with an empty
+    // browse-everything page, records it created itself **or that named them as a document
+    // recipient** (added same day, second pass — see "Document Recipients": a Purchase-department
+    // recipient who never created the record still needs to be able to find it on their own list,
+    // not just via the one-time email/notification link). Legacy/seed records with an empty
     // `createdBy` (ownerless — same convention `isOwnerOf()` uses) stay visible to everyone
     // regardless, since there's no real "someone else" to exclude them for. Deliberately NOT applied
     // to the by-quotation lookup below — that's an existence check ("does a Scope of Work already
     // exist for THIS quotation, which the caller can already see via quotations:view"), not a browse
     // view, and hiding a colleague's already-created record there would risk the caller creating a
     // duplicate one instead of opening the existing one.
+    const recipientMatch = DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => ({ [`documentRecipients.${d.key}`]: ctx.user.id }));
     const ownershipMatch = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
       ? {}
-      : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }] };
+      : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }, ...recipientMatch] };
     const docs = await scopeOfWorks.find({ isDeleted: false, ...ownershipMatch }).sort({ updatedAt: -1 }).toArray();
     res.status(200).json({ scopeOfWorks: docs.map(toListItem) });
     return;
@@ -889,6 +894,34 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
     if (r.status === "rejected") console.error(`[scope-of-works] failed to email recipient ${userDocs[i]?.email}`, r.reason);
   });
   const failedCount = results.length - sentCount;
+
+  // In-app notification (bell) alongside the email — added 2026-07-23, per direct user request
+  // ("อยากให้ขึ้นแจ้งเตือนในระบบด้วย"). Fired for every resolved recipient regardless of that
+  // individual's own email send outcome above (a bounced/rejected address shouldn't also silently
+  // suppress the in-app signal — the two channels are independent). Hand-rolled here rather than
+  // calling `notifyScopeOfWorkDocumentSent()` (src/lib/notifications.ts), same convention
+  // `api/handlers/quotes.ts`'s workflow-notification writer already follows for the quotation
+  // builders — that function's synthetic `id` is redundant with Mongo's own generated `_id`.
+  type NotifDoc = {
+    recipientUserId: string; type: NotificationType; title: string; description: string;
+    module: string; relatedScopeId: string; relatedScopeNumber: string; createdAt: string; read: boolean;
+  };
+  const notifCreatedAt = nowIso();
+  const notifDocs: NotifDoc[] = userDocs.map((u) => ({
+    recipientUserId: u._id.toString(),
+    type: "scope_of_work_document_sent",
+    title: "มีเอกสาร Scope of Work ส่งถึงคุณ",
+    description: `${ctx.user.fullName} ส่งเอกสาร Scope of Work ${doc.scopeNumber} (${doc.customerSnapshot.companyName}) ถึงคุณ`,
+    module: "Scope of Work",
+    relatedScopeId: id,
+    relatedScopeNumber: doc.scopeNumber,
+    createdAt: notifCreatedAt,
+    read: false,
+  }));
+  if (notifDocs.length > 0) {
+    const notifications = await notificationsCollection();
+    await notifications.insertMany(notifDocs);
+  }
 
   await writeScopeAuditEntry(
     ctx, "Scope of Work Document Notification Sent",

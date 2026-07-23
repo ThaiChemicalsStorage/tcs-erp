@@ -77,6 +77,7 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   quotation_won: { label: "ปิดการขายสำเร็จ", module: "ใบเสนอราคา" },
   quotation_lost: { label: "ปิดการขายไม่สำเร็จ", module: "ใบเสนอราคา" },
   quotation_cancelled: { label: "ใบเสนอราคาถูกยกเลิก", module: "ใบเสนอราคา" },
+  scope_of_work_document_sent: { label: "มีเอกสาร Scope of Work ส่งถึงคุณ", module: "Scope of Work" },
 };
 
 /** Idempotent. Mirrors the NotificationType union in src/lib/notifications.ts — scaffolding, not read by any live code path yet. */

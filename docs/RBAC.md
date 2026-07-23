@@ -316,14 +316,23 @@ of Work management page's list, records it created itself. Unchecked is the defa
 created custom role, same convention as `quotations:viewAll`.
 
 Enforced server-side in two places — both filter by `{ $or: [{ createdBy: ctx.user.id },
-{ createdBy: "" }] }` when the caller lacks `scopeOfWork:viewAll` (Super Admin bypasses this
-entirely, same as every permission check):
+{ createdBy: "" }, ...recipientMatch] }` when the caller lacks `scopeOfWork:viewAll` (Super Admin
+bypasses this entirely, same as every permission check):
 - `GET /api/scope-of-works` (no `quotationId` — the "list every Scope of Work company-wide" mode
   backing the standalone `src/pages/scopeOfWork/ScopeOfWorkPage.tsx`).
 - `GET /api/search`'s Scope of Work result category (`api/_lib/searchHandler.ts`'s
   `searchScopeOfWorks()`) — without this, a caller without `scopeOfWork:viewAll` could trivially
   discover another user's Scope of Work through the Global Search box even though the list page
   itself hides it.
+
+**`recipientMatch` (added 2026-07-23, same-day second pass, per a direct user follow-up)**: a
+`{ "documentRecipients.<key>": ctx.user.id }` clause for each of the 6 real department keys in
+`DOCUMENT_RECIPIENT_DEPARTMENTS` (`src/lib/documentRequirements.ts`) — a caller who was explicitly
+picked as a document recipient (see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document
+Recipients") can find the record on their own list/search even if they didn't create it and lack
+`viewAll`. Without this, a recipient's only way to ever find the record again (after the one-time
+email/in-app-notification link) would be nothing at all — a real usability gap, not just a
+theoretical one, since the notification/email are one-time pointers, not a standing view.
 
 **Deliberately NOT applied** to three other places a Scope of Work record's content is read,
 unlike Quotation's simpler single-list-page shape:

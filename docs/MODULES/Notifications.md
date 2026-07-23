@@ -10,12 +10,14 @@ Tell each user, specifically, when a quotation event relevant to them happens �
 
 1. **Bell** (header, always visible): no badge when the signed-in user has 0 unread notifications; a red badge with the unread count otherwise, capped at displaying "99+" beyond 99.
 2. **Panel** (click the bell): a dropdown listing every notification addressed to the current user (newest first), each showing an icon (per `NotificationType`), title, description, module label, relative time ("X นาทีที่แล้ว" etc.), and an unread visual highlight (gold tint + dot).
-3. **Actions**: click a notification to mark it read and navigate. **As of 2026-07-10 (Codex review fix)**, a click with a `relatedQuoteId` deep-links straight to that quote's detail view (a `quotationDeepLinkId` prop lifted to `App.tsx`, separate from the pre-existing `quotationListFilter` the Dashboard's pipeline/follow-up click-through uses) — previously it only switched to the quotation list module with no specific record selected. "อ่านทั้งหมด" marks every notification for this user read; a per-row trash icon deletes one notification.
-4. **Delivery is role-based, not broadcast** — built server-side by `createWorkflowNotifications()` in `api/handlers/quotes.ts`'s `POST /api/quotes/:id/workflow` handler, querying real `users`/`roles` MongoDB collections at the moment of each transition (not client-side, not trusted from the request):
-   - Submit → every **active** user holding `quotations:approve`
-   - Submit, and quote total ≥ `HIGH_VALUE_THRESHOLD` (฿500,000) → also every active `approver_2` user, as a separate high-value notification
-   - Approve/Reject/Customer Accepted/Customer Rejected → the quote's creator (`createdByUserId`)
-   - **Won/Lost/Cancelled** (added 2026-07-10, fifth pass) → the quote's creator — previously these three terminal transitions silently notified no one, unlike every other transition; found by an independent Codex re-review
+3. **Actions**: click a notification to mark it read and navigate. **As of 2026-07-10 (Codex review fix)**, a click with a `relatedQuoteId` deep-links straight to that quote's detail view (a `quotationDeepLinkId` prop lifted to `App.tsx`, separate from the pre-existing `quotationListFilter` the Dashboard's pipeline/follow-up click-through uses) — previously it only switched to the quotation list module with no specific record selected. **2026-07-23**: a click with a `relatedScopeId` instead deep-links to that Scope of Work's detail view on the standalone Scope of Work page (`scopeOfWorkDeepLinkId` prop lifted to `App.tsx`, checked before `relatedQuoteId` in `onNavigate` — the two are mutually exclusive per notification). "อ่านทั้งหมด" marks every notification for this user read; a per-row trash icon deletes one notification.
+4. **Delivery is role-based or explicitly-picked, not broadcast** — built server-side, querying real `users`/`roles` MongoDB collections at the moment of the triggering event (not client-side, not trusted from the request):
+   - **Quotation workflow** (`createWorkflowNotifications()` in `api/handlers/quotes.ts`'s `POST /api/quotes/:id/workflow` handler):
+     - Submit → every **active** user holding `quotations:approve`
+     - Submit, and quote total ≥ `HIGH_VALUE_THRESHOLD` (฿500,000) → also every active `approver_2` user, as a separate high-value notification
+     - Approve/Reject/Customer Accepted/Customer Rejected → the quote's creator (`createdByUserId`)
+     - **Won/Lost/Cancelled** (added 2026-07-10, fifth pass) → the quote's creator — previously these three terminal transitions silently notified no one, unlike every other transition; found by an independent Codex re-review
+   - **Scope of Work document routing** (added 2026-07-23, `handleSendDocumentNotifications()` in `api/_lib/scopeOfWorkHandler.ts`'s `POST /api/scope-of-works/:id/send-documents`) → every user explicitly picked as a document recipient (see [ScopeOfWork.md](./ScopeOfWork.md) "Document Recipients") — **not role-based**, a human explicitly chose these specific people, unlike every quotation-workflow notification above. Fired for every resolved recipient regardless of that individual's own outbound-email success/failure (the in-app notification and the email are independent channels).
 5. Real cross-user, cross-device delivery — another user's browser sees the new notification (and updated unread badge) the next time it fetches `GET /api/notifications`, no same-browser/same-session limitation.
 
 ## Pages
@@ -32,7 +34,7 @@ None — lives entirely in the header, not a dedicated page. (No "view all notif
 
 ## APIs
 
-`GET /api/notifications`, `PATCH /api/notifications/:id` (mark read), `POST /api/notifications/mark-all-read`, `DELETE /api/notifications/:id` — see [API.md](../API.md) Notifications section. Creation isn't a direct client-callable route; it's a side effect of `POST /api/quotes/:id/workflow` (see Business Flow above).
+`GET /api/notifications`, `PATCH /api/notifications/:id` (mark read), `POST /api/notifications/mark-all-read`, `DELETE /api/notifications/:id` — see [API.md](../API.md) Notifications section. Creation isn't a direct client-callable route; it's a side effect of `POST /api/quotes/:id/workflow` and, as of 2026-07-23, `POST /api/scope-of-works/:id/send-documents` too (see Business Flow above).
 
 ## Permissions
 
@@ -43,14 +45,15 @@ None of its own — delivery is inherently role-based (see Business Flow), but r
 - Correct bell badge behavior (hidden/count/99+)
 - Full dropdown panel: icon/title/description/module/relative-time/read-unread
 - Mark read / mark all read / delete
-- Click-to-navigate — deep-links to the specific quotation when `relatedQuoteId` is set (2026-07-10)
+- Click-to-navigate — deep-links to the specific quotation when `relatedQuoteId` is set (2026-07-10), or the specific Scope of Work when `relatedScopeId` is set (2026-07-23)
 - Role-based delivery tied to the quotation approval workflow, server-enforced
-- **9 notification types** (added `quotation_won`/`quotation_lost`/`quotation_cancelled` 2026-07-10, fifth pass, each with its own `NotificationBell.tsx` icon — Trophy/TrendingDown/XOctagon) covering every workflow transition, not just the original 6
+- **10 notification types** (added `quotation_won`/`quotation_lost`/`quotation_cancelled` 2026-07-10, fifth pass; `scope_of_work_document_sent` 2026-07-23) — each with its own `NotificationBell.tsx` icon (Trophy/TrendingDown/XOctagon for the three 2026-07-10 additions, Mail for the 2026-07-23 one)
+- **2026-07-23**: first notification type not tied to the quotation approval workflow at all — `scope_of_work_document_sent`, delivered to explicitly-picked people rather than everyone holding a permission (see Business Flow above)
 
 ## Future Improvements
 
-- Notification types beyond quotations (e.g. user-management events) once there's a concrete need
 - A dedicated "view all notifications" page if the dropdown panel ever proves insufficient
+- The "เปิดดูใน TCS ERP" link inside the Scope of Work document-recipient *email* (as opposed to the in-app notification, which already deep-links correctly via internal React state) still only opens the app's homepage — this app has no URL-based router (`App.tsx` holds a plain `activeNav` string, see [ARCHITECTURE.md](../ARCHITECTURE.md)), so a plain `<a href>` from an external email genuinely cannot restore in-memory navigation state on page load. Real deep-linking from an email would need URL/query-param-based routing added app-wide — a materially larger change than this pass, not attempted here.
 
 ## Known Issues
 

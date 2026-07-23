@@ -14,7 +14,18 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
-- ⚠️ **[2026-07-23] Scope of Work: real Document Recipients + email routing — requires a manual production step (Resend API key).**
+- ✅ **[2026-07-23] Scope of Work: in-app notification + recipient list visibility.**
+  Direct same-day follow-up after the user confirmed real email delivery works in production —
+  a document recipient now also gets an in-app bell notification (new `scope_of_work_document_sent`
+  type, deep-links straight to the record) and can find the record on their own Scope of Work
+  list/search even without `scopeOfWork:viewAll` and without having created it (a new
+  `documentRecipients`-matching clause on both query filters). Closes a real gap the previous
+  own-records-only viewing pass introduced: a non-creator recipient previously had no standing way
+  to find a document sent to them again after the one-time link. `tsc`/`lint`/`build` all pass
+  clean. Known, deliberately-not-fixed limitation: the *email's* own link still can't deep-link
+  (no app-wide URL router exists) — only the in-app notification can. See
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients".
+- ✅ **[2026-07-23] Scope of Work: real Document Recipients + email routing — `RESEND_API_KEY` now set, confirmed working live.**
   Per direct user request, the "เอกสารส่งถึง" checklist gained a 6th option (Accounting) and is now
   backed by real people: `User.department` changed from free text to a controlled `<select>`
   matching the checklist's own department labels exactly, a new `DocumentRecipientsPicker.tsx`
@@ -23,10 +34,11 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
   attachment (this app has no server-side PDF generation) — a plain HTML notification with a link
   back into the app. `tsc`/`lint`/`build` all pass clean; the recipient-picker UI verified via a
   temporary dev harness (candidate filtering + multi-department selection both confirmed correct,
-  zero console errors). **Action required**: `RESEND_API_KEY` must be added to Vercel's environment
-  variables before the send button does anything beyond returning a clear "not configured" error —
-  see [TODO.md](./TODO.md). See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document
-  Recipients".
+  zero console errors). **Confirmed live 2026-07-23, same day**: the user added `RESEND_API_KEY`
+  to Vercel, redeployed (verified `READY`/`production` via the Vercel MCP tools), tested via
+  Resend's sandbox sender against their own confirmed email address, and received the email —
+  the send pipeline genuinely works end-to-end in production, not just locally-typechecked. See
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients".
 - ⚠️ **[2026-07-23] Scope of Work: own-records-only viewing (`scopeOfWork:viewAll`) — requires a manual production step.**
   Per direct user request, mirrors Quotation's `quotations:viewAll`: a role holding `scopeOfWork:view`
   but not the new `scopeOfWork:viewAll` now only sees its own records on the standalone Scope of Work

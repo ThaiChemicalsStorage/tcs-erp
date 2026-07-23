@@ -296,13 +296,35 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   client state), then calls `POST /api/scope-of-works/:id/send-documents`
   (`handleSendDocumentNotifications()`, `api/_lib/scopeOfWorkHandler.ts`). Only departments that are
   BOTH currently checked AND have ≥1 picked recipient are actually emailed; recipients are deduped
-  across departments so a person picked under two checked options gets one email, not two. Gated by
-  `scopeOfWork:print` (a distribution/export action, not a content edit — no new permission was
-  added, and like Print it has no ownership check and works on a `"Final"` record too). Sends via
-  `api/_lib/email.ts`'s `sendEmail()` (Resend REST API, see [ARCHITECTURE.md](../ARCHITECTURE.md))
-  in parallel per recipient (`Promise.allSettled`, so one bad address doesn't block the others),
-  writes a `"Scope of Work Document Notification Sent"` audit entry, and returns
-  `{ sentCount, failedCount, recipientCount }` for the UI toast.
+  across departments so a person picked under two checked options gets one email/notification, not
+  two. Gated by `scopeOfWork:print` (a distribution/export action, not a content edit — no new
+  permission was added, and like Print it has no ownership check and works on a `"Final"` record
+  too). Sends via `api/_lib/email.ts`'s `sendEmail()` (Resend REST API, see
+  [ARCHITECTURE.md](../ARCHITECTURE.md)) in parallel per recipient (`Promise.allSettled`, so one bad
+  address doesn't block the others), writes a `"Scope of Work Document Notification Sent"` audit
+  entry, and returns `{ sentCount, failedCount, recipientCount }` for the UI toast.
+- **In-app notification + recipient list visibility** (added 2026-07-23, same-day second pass, per
+  direct user follow-up — "อยากรู้ว่าทำยังไงถึงให้มันไปโผล่ในหน้า scope of work ของเราเวลาที่มีคนอื่น
+  ส่งมา... อยากให้ขึ้นแจ้งเตือนในระบบด้วย"): sending now does two more things besides the email —
+  (1) writes one in-app `Notification` (`type: "scope_of_work_document_sent"`, bell icon `Mail`) per
+  resolved recipient, regardless of that individual's own email outcome — see
+  [Notifications.md](./Notifications.md). Clicking it deep-links straight to the record on the
+  standalone Scope of Work page (`relatedScopeId` → `App.tsx`'s `scopeOfWorkDeepLinkId` →
+  `ScopeOfWorkPage.tsx`'s `initialScopeOfWorkId` prop, same "adjust state during rendering" pattern
+  `QuotationPage.tsx`'s `initialQuoteId` already uses). (2) `GET /api/scope-of-works` (list-everything
+  mode) and `GET /api/search`'s `scopeOfWorks` category are both now **also** visible to a caller
+  who was picked as a document recipient, even without `scopeOfWork:viewAll` and even if they didn't
+  create the record — a `$or` of `{ "documentRecipients.<key>": ctx.user.id }` for each of the 6 real
+  department keys, added to the existing own-records-only filter (see
+  [RBAC.md](../RBAC.md) "Scope of Work Own-Records-Only Viewing"). Without this, a recipient who
+  never clicks the notification/email link (or whose email bounced) would have had literally no way
+  to find the document again through the app's own UI.
+- **Known limitation, not fixed this pass**: the "เปิดดูใน TCS ERP" link inside the *email* itself
+  still only opens the app's homepage, not the specific record — this app has no URL-based router
+  (see [ARCHITECTURE.md](../ARCHITECTURE.md)), so a plain link from an external email genuinely
+  cannot restore in-memory navigation state on page load the way the in-app notification click
+  above does. The reliable way to jump straight to a specific record today is the in-app
+  notification bell, not the email link.
 - **Not built this pass**: attaching the actual printed document (PDF) to the email — this app has
   no server-side PDF generation (Print/PDF export is entirely browser-native, `window.print()`); the
   email is a plain HTML notification with the job's key fields and a link back into the app, not a

@@ -10,7 +10,8 @@ export type NotificationType =
   | "quotation_customer_rejected"
   | "quotation_won"
   | "quotation_lost"
-  | "quotation_cancelled";
+  | "quotation_cancelled"
+  | "scope_of_work_document_sent";
 
 export interface Notification {
   id: string;
@@ -20,6 +21,11 @@ export interface Notification {
   description: string;
   module: string;
   relatedQuoteId?: string;
+  /** Added 2026-07-23 for "scope_of_work_document_sent" — same optional/backward-compatible
+   * provenance as `relatedQuoteId`, naming convention matches `AuditLogEntry.relatedScopeId`/
+   * `.relatedScopeNumber` (src/lib/auditLog.ts). */
+  relatedScopeId?: string;
+  relatedScopeNumber?: string;
   createdAt: string;
   read: boolean;
 }
@@ -100,6 +106,25 @@ export function notifyQuotationCustomerRejected(recipientUserIds: string[], quot
     description: `ลูกค้าปฏิเสธใบเสนอราคา ${quoteId} (${client})${reason ? ` — เหตุผล: ${reason}` : ""}`,
     module: "ใบเสนอราคา",
     relatedQuoteId: quoteId,
+  });
+}
+
+/** Added 2026-07-23, Scope of Work "Document Recipients" feature — sent alongside the actual email
+ * (see api/_lib/email.ts) when "ส่งอีเมลแจ้งผู้รับเอกสาร" runs, so a recipient sees it in-app too,
+ * not only in their inbox. Server-side (`handleSendDocumentNotifications()`,
+ * api/_lib/scopeOfWorkHandler.ts) hand-rolls this same shape directly rather than calling this
+ * function — same convention `api/handlers/quotes.ts`'s workflow-notification writer already
+ * follows for the quotation builders above, since the server never needs this function's synthetic
+ * `id`/`recipientUserId`-per-array-element convenience, only the doc shape. Kept here as the
+ * canonical field reference. */
+export function notifyScopeOfWorkDocumentSent(recipientUserIds: string[], scopeId: string, scopeNumber: string, customerName: string, sentBy: string): Notification[] {
+  return buildFor(recipientUserIds, {
+    type: "scope_of_work_document_sent",
+    title: "มีเอกสาร Scope of Work ส่งถึงคุณ",
+    description: `${sentBy} ส่งเอกสาร Scope of Work ${scopeNumber} (${customerName}) ถึงคุณ`,
+    module: "Scope of Work",
+    relatedScopeId: scopeId,
+    relatedScopeNumber: scopeNumber,
   });
 }
 

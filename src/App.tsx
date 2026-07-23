@@ -242,6 +242,12 @@ export default function App() {
    * Priority fix) — opens the source quotation's detail view, then jumps straight into that Scope
    * of Work's editor (see `QuotationPage.tsx`'s `initialScopeOfWorkDeepLink`). */
   const [scopeOfWorkDeepLink, setScopeOfWorkDeepLink] = useState<{ quotationId: string; scopeOfWorkId: string } | null>(null);
+  /** Set by a "scope_of_work_document_sent" notification click (added 2026-07-23) — jumps straight
+   * to that record's detail view on the standalone Scope of Work page. Distinct from
+   * `scopeOfWorkDeepLink` above (which requires a `quotationId` and opens the quotation-embedded
+   * view instead) since a document recipient may not be the quotation's owner/salesperson and this
+   * is the more natural landing spot for "a document was sent to me." */
+  const [scopeOfWorkDeepLinkId, setScopeOfWorkDeepLinkId] = useState<string | null>(null);
   /** Set by the Create Quotation wizard's "สร้าง Template ใหม่สำหรับประเภทงานนี้" action — opens
    * Template Management's create form pre-filled with that Job Type (see
    * `TemplateManagementPage.tsx`'s `initialCreateForJobType` prop). `seq` follows the same
@@ -410,6 +416,10 @@ export default function App() {
   const navigateToScopeOfWork = (quotationId: string, scopeOfWorkId: string) => {
     setScopeOfWorkDeepLink({ quotationId, scopeOfWorkId });
     setActiveNav("quotations");
+  };
+  const navigateToScopeOfWorkStandalone = (scopeOfWorkId: string) => {
+    setScopeOfWorkDeepLinkId(scopeOfWorkId);
+    setActiveNav("scopeOfWork");
   };
   const navigateToCreateTemplateForJobType = (jobTypeCode: string, jobTypeName: string) => {
     templateCreateSeq.current += 1;
@@ -649,7 +659,10 @@ export default function App() {
               onMarkRead={markNotificationRead}
               onMarkAllRead={markAllNotificationsRead}
               onDelete={deleteNotification}
-              onNavigate={(n) => { if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId); }}
+              onNavigate={(n) => {
+                if (n.relatedScopeId) navigateToScopeOfWorkStandalone(n.relatedScopeId);
+                else if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId);
+              }}
             />
           </div>
           <div className="relative" data-tour="user-menu">
@@ -714,7 +727,7 @@ export default function App() {
               : effectiveNav === "auditLog"
               ? <AuditLogPage />
               : effectiveNav === "scopeOfWork"
-              ? <ScopeOfWorkPage users={users} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} />
+              ? <ScopeOfWorkPage users={users} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"

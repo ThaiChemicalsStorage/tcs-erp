@@ -22,6 +22,8 @@ export function ScopeOfWorkPage({
   canPrint,
   canDelete,
   canCreate,
+  initialScopeOfWorkId,
+  onScopeOfWorkIdConsumed,
 }: {
   users: User[];
   canEdit: boolean;
@@ -29,6 +31,11 @@ export function ScopeOfWorkPage({
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
+  /** Set by a notification click (added 2026-07-23, "scope_of_work_document_sent" — see
+   * App.tsx's `onNavigate`) — jumps straight to that record's detail view instead of just the
+   * list. Same "adjust state during rendering" pattern as `QuotationPage.tsx`'s `initialQuoteId`. */
+  initialScopeOfWorkId?: string | null;
+  onScopeOfWorkIdConsumed?: () => void;
 }) {
   const [view, setView] = useState<"list" | "detail">("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -64,6 +71,21 @@ export function ScopeOfWorkPage({
     setView("list");
     loadList();
   };
+
+  // React's "adjust state during rendering" pattern (not an effect — this only touches this
+  // component's own local state), mirroring QuotationPage.tsx's identical `initialQuoteId`
+  // handling. Reacts to every change of `initialScopeOfWorkId`, not just once per mount, so a
+  // second notification click while this page is already open showing some other record still
+  // jumps straight to the newly-clicked one.
+  const [appliedScopeOfWorkId, setAppliedScopeOfWorkId] = useState<string | null>(null);
+  if (initialScopeOfWorkId && initialScopeOfWorkId !== appliedScopeOfWorkId) {
+    setAppliedScopeOfWorkId(initialScopeOfWorkId);
+    setSelectedId(initialScopeOfWorkId);
+    setView("detail");
+  }
+  useEffect(() => {
+    if (initialScopeOfWorkId) onScopeOfWorkIdConsumed?.();
+  }, [initialScopeOfWorkId, onScopeOfWorkIdConsumed]);
 
   if (view === "detail" && selectedId) {
     return (
