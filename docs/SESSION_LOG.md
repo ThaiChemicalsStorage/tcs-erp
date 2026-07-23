@@ -4,7 +4,46 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Scope of Work: clearer Document Recipients checkbox UX
+## Session — 2026-07-23 (absolute latest), Fix: "อื่น ๆ" displaced by the backfilled Accounting option
+
+### What was implemented
+- User reported, tersely: fix the "เอกสารส่งถึง" section on the Scope of Work page, put "อื่นๆ" at
+  the very bottom before the "โปรดระบุ" box.
+- On first read this sounded like it might already be true — the *builder*'s own option list
+  (`buildDefaultChecklistGroups()`) already lists "other" last. Re-checked the *backfill* path
+  instead (`withDefaultChecklistGroups()`, extended earlier the same day to add the new
+  "Accounting" option onto pre-existing records) and found the actual bug: it appended any missing
+  option at the very end of whatever the record already had — for a legacy record whose stored
+  order was `[..., service, other]`, that puts the newly-backfilled "accounting" *after* "other",
+  not before it. This exactly matches what the user was looking at and reporting.
+- Notable: my own doc comment on that backfill logic, written earlier the same day, explicitly
+  called this exact scenario a "minor cosmetic ordering difference... not worth extra complexity"
+  — a real user hitting it and reporting it as broken is the correction to that judgment call, not
+  a new bug introduced since. Worth remembering: "not worth fixing" calls made without a concrete
+  user in front of the screen are exactly the ones most likely to get relitigated once someone
+  actually looks at the real output.
+- Fixed properly rather than special-casing `documentsToSend`: rebuilt the backfill logic to walk
+  the current builder's own canonical option order and look up each key's existing checked state
+  (or default to unchecked if new), for every checklist group generically — not just this one. This
+  is a strictly more correct general behavior for what "backward-compatible with the current
+  default structure" should mean, not a narrow patch.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- No live browser check available (Playwright MCP tools are still disconnected this session, from
+  the earlier `taskkill /IM node.exe` cleanup). Instead wrote a standalone plain-Node simulation of
+  the exact reorder/backfill logic against a hand-built legacy-shaped stored group (5 options,
+  "service" and "other" both checked, no "accounting") and confirmed the output order and checked
+  states directly: `purchase → project → factory → technic → service(checked) → accounting →
+  other(checked)` — correct order, correct preserved state.
+
+### Recommendation for next session
+- Open an existing (pre-2026-07-23) Scope of Work record in the real app and visually confirm
+  "อื่น ๆ" now renders last in the "เอกสารส่งถึง" checklist, immediately above the note box.
+
+---
+
+## Session — 2026-07-23, Scope of Work: clearer Document Recipients checkbox UX
 
 ### What was implemented
 - User sent a screenshot of the shipped `DocumentRecipientsPicker` and said, plainly, that they

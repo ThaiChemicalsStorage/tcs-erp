@@ -4,7 +4,38 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Scope of Work: clearer Document Recipients checkbox UX
+## 2026-07-23 (absolute latest) — Fix: "อื่น ๆ" no longer displaced by the backfilled Accounting option
+
+**Bug**: direct user report — on an existing (pre-2026-07-23) Scope of Work record, the "เอกสาร
+ส่งถึง" checklist showed "อื่น ๆ" (Other) in the middle of the list instead of last, right before
+the "โปรดระบุ" (please specify) note box.
+
+**Root cause**: `withDefaultChecklistGroups()`'s option-backfill logic (added earlier the same day
+for the new "Accounting" option) appended any missing option at the very end of the existing
+array. A legacy record's stored order was `[..., service, other]` — appending "accounting" after
+that produced `[..., service, other, accounting]`, putting "Accounting" *after* "อื่น ๆ" instead of
+before it. The doc comment at the time even called this out as an accepted "minor cosmetic
+difference," which — per this report — was wrong to accept.
+
+**Fix**: `withDefaultChecklistGroups()` now rebuilds each backfilled group's `options` by walking
+the current builder's own canonical order and looking up each key's existing entry (preserving its
+`checked` state) or falling back to a fresh unchecked default, instead of just appending what's
+missing. Verified with a standalone Node simulation of the exact function logic against a
+legacy-shaped stored group: result is `purchase → project → factory → technic → service(checked) →
+accounting → other(checked)` — "other" correctly last again, "accounting" correctly inserted
+before it, both records' pre-existing checked state untouched.
+
+**Files Modified**: `src/lib/documentRequirements.ts`, `docs/MODULES/ScopeOfWork.md`
+
+**Reason**: Direct user report of visibly wrong checklist ordering on an existing record.
+
+**Verification**: `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean,
+plus the standalone logic simulation described above (Playwright browser tools remain disconnected
+this session, so no live-UI screenshot check was possible).
+
+---
+
+## 2026-07-23 — Scope of Work: clearer Document Recipients checkbox UX
 
 **Feature**: direct user report against the shipped Document Recipients picker — a screenshot
 showed the color-only toggle-chip design (subtle gold tint when selected) wasn't a clear enough

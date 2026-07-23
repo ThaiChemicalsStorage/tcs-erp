@@ -219,17 +219,24 @@ export function withDefaultChecklistGroups(existing: ChecklistGroup[] | undefine
     if (!def) return g;
     let next = g;
     if (def.note !== undefined && next.note === undefined) next = { ...next, note: "" };
-    // Backfill any option the current builder generates that this stored group predates — added
-    // 2026-07-23 when `documentsToSend` gained a 6th "accounting" option (see
-    // DOCUMENT_RECIPIENT_DEPARTMENTS above): without this, a record saved before that pass would be
-    // permanently frozen at its original 6-option list, never able to route to Accounting at all.
-    // Appended at the end (after "other"), not inserted at the option's "correct" position among the
-    // others — a minor cosmetic order difference from a freshly-created record, not worth the extra
-    // complexity of positional insertion for what's otherwise unordered checkbox state. Never touches
-    // an option this group already has, checked or not.
-    const existingOptionKeys = new Set(next.options.map((o) => o.key));
-    const missingOptions = def.options.filter((o) => !existingOptionKeys.has(o.key));
-    if (missingOptions.length > 0) next = { ...next, options: [...next.options, ...missingOptions.map((o) => ({ ...o }))] };
+    // Backfill any option the current builder generates that this stored group predates, AND
+    // reorder every option to match the builder's own canonical order — added 2026-07-23 when
+    // `documentsToSend` gained a 6th "accounting" option (see DOCUMENT_RECIPIENT_DEPARTMENTS
+    // above). **Reworked the same day** after a direct user report: the first version only
+    // appended a missing option at the very end of the existing list, which put a newly-backfilled
+    // "accounting" AFTER "อื่น ๆ" on any pre-2026-07-23 record — "other" is supposed to always be
+    // the last option, immediately before the free-text note box, and a client-facing reorder is a
+    // real bug, not a "minor cosmetic difference" as the original version of this comment claimed.
+    // Rebuilds `options` by walking the builder's own order and looking up each key's existing
+    // entry (preserving its `checked` state) or falling back to a fresh unchecked default —
+    // guarantees canonical order for every record, old or new, not just newly-created ones. Any
+    // option the stored group has that the current builder no longer generates (e.g. a since-
+    // removed choice) is preserved, appended after — never silently dropped, per this function's
+    // existing "never removes data" contract.
+    const existingOptionsByKey = new Map(next.options.map((o) => [o.key, o]));
+    const reordered = def.options.map((defOpt) => existingOptionsByKey.get(defOpt.key) ?? { ...defOpt });
+    const extraOptions = next.options.filter((o) => !def.options.some((defOpt) => defOpt.key === o.key));
+    next = { ...next, options: [...reordered, ...extraOptions] };
     return next;
   });
   const missing = defaults.filter((g) => !existingKeys.has(g.key));

@@ -259,10 +259,14 @@ documentRequirements.ts`) rather than listed inline — the same constant also d
 `withDefaultChecklistGroups()` was extended to backfill any *option* the current builder generates
 but a stored group predates (previously it only backfilled entirely missing *groups* and missing
 `note` fields) — without this, every Scope of Work saved before this pass would have been
-permanently frozen at 5 options, unable to route to Accounting at all. The backfilled option is
-appended at the end of the existing list (after "อื่น ๆ"), not inserted at its "correct" position —
-a minor cosmetic ordering difference from a freshly-created record, not worth extra complexity for
-otherwise-unordered checkbox state.
+permanently frozen at 5 options, unable to route to Accounting at all. **Reworked the same day**
+after a direct user report: the first version appended a backfilled option at the very end of the
+existing list, which put "Accounting" *after* "อื่น ๆ" on any pre-2026-07-23 record — wrong, since
+"other" is meant to always render last, immediately before the free-text note box. Now rebuilds
+each group's `options` by walking the current builder's own canonical order and looking up each
+key's existing entry (preserving its `checked` state) or falling back to a fresh unchecked default
+— guarantees correct order for every record, old or new. Any option a stored group has that the
+current builder no longer generates is still preserved, appended after — never silently dropped.
 
 ## Document Recipients (added 2026-07-23)
 

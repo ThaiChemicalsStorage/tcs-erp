@@ -14,6 +14,13 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] Fix: "อื่น ๆ" no longer displaced by the backfilled Accounting checklist option.**
+  Direct user report — on an existing Scope of Work record, "เอกสารส่งถึง"'s backfilled "Accounting"
+  option landed *after* "อื่น ๆ" instead of before it, since the backfill logic just appended
+  missing options at the end. Fixed by rebuilding each backfilled group's options in the current
+  builder's canonical order instead. `tsc`/`lint`/`build` all pass clean, plus a standalone Node
+  logic simulation confirmed the exact fix against a legacy-shaped record. See
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Checklist Groups".
 - ✅ **[2026-07-23] Scope of Work: clearer Document Recipients checkbox UX.**
   Direct user report that the picker's color-only toggle-chip design was confusing — replaced with
   real checkboxes (matching `ChecklistGroupCard.tsx`'s existing convention directly above it) plus
