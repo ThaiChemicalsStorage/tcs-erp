@@ -4,7 +4,55 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Scope of Work: multi-installment payment schedule + presets
+## Session — 2026-07-23 (absolute latest), Scope of Work: Cash/Credit dropdown + days field
+
+### What was implemented
+- Direct same-day follow-up: right after shipping the multi-installment payment schedule (see the
+  entry below), the user came back with "ไม่คือสามารถแก้ไขเปอร์เซ็น แก้ไขว่าจะเลือกเป็น Cash หรือ
+  Credit" — a correction that the free-text "method" field I'd just built wasn't what they wanted;
+  they wanted percentage editing to stay as-is, but the Cash-vs-Credit choice to be a real
+  selectable control, not typed text.
+- The request was genuinely ambiguous between 3 reasonable shapes (plain Cash/Credit dropdown with
+  no day count; dropdown + a separate day-count field; or a dropdown of whole pre-composed strings
+  like "Cash"/"Credit 30 Days"/"Credit 60 Days"). Asked via `AskUserQuestion` rather than guessing —
+  the user picked "dropdown + separate day-count input," the option already marked recommended.
+- Replaced `ScopeOfWorkPaymentInstallment.method: string` with `paymentType: "" | "Cash" | "Credit"`
+  + `days: number | null`. Kept `days` applying to *either* type (not Credit-only) — the user's own
+  first message used "Cash 30 days" for the down payment, not just Credit terms, so a Credit-only
+  day field would have silently dropped that case. Added `formatPaymentMethod()` as a pure derived-
+  string function rather than storing a duplicate composed string, so the printed "Cash"/"Credit 30
+  Days" text can never drift out of sync with the two source fields.
+- **Compounding-legacy judgment call**: `normalizePaymentConditions()` now has to handle 3 possible
+  stored shapes instead of 2, since the intermediate `method`-based `installments` shape from
+  earlier this same session is now itself "legacy" before it likely ever reached a real saved
+  record. Rather than special-casing "was this ever actually used in production," wrote one
+  best-effort `parsePaymentMethodText()` regex parser that handles both the original fixed-pair
+  `method` string and the intermediate array's per-row `method` string identically — simpler than
+  tracking which of the two older shapes a given stored value came from.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- Reused the same temporary dev-harness pattern as the immediately prior entry (`src/dev/
+  PaymentHarness.tsx`, swapped into `main.tsx`, both reverted/deleted after use), this time also
+  printing the `formatPaymentMethod()`-derived string live. Applied the 30/70 preset and confirmed
+  the dropdown/days inputs show the correct Cash/blank and Credit/30 values with a matching derived
+  string; then added a 3rd row and filled it in as Cash + 30 days + 20% "Materials" — the derived
+  output read "30% Down Payment (Cash) / 70% After Job Complete (Credit 30 Days) / 20% Materials
+  (Cash 30 Days)," an exact match to the user's own original 3-installment example. Zero console
+  errors/warnings.
+- Same standing sandboxed-session limitation as every recent entry: a genuine pre-existing legacy
+  record's conversion through `normalizePaymentConditions()` is unverified against real production
+  data this session.
+
+### Recommendation for next session
+- Once network access allows it (or the user checks in production), verify against a real record:
+  create one, save a 3-installment Cash/Credit-mixed schedule, reload the page, and confirm the
+  dropdown/days values round-trip correctly through a real PATCH + GET cycle (not just local React
+  state, which is all the harness above exercised).
+
+---
+
+## Session — 2026-07-23, Scope of Work: multi-installment payment schedule + presets
 
 ### What was implemented
 - User asked (in Thai) for 3 specific named payment-term presets on the Scope of Work page, but

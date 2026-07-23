@@ -4,7 +4,62 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Scope of Work: multi-installment payment schedule + presets
+## 2026-07-23 (absolute latest) — Scope of Work: Cash/Credit dropdown + days for payment installments
+
+**Feature**: direct same-day follow-up to the multi-installment payment schedule pass below
+("ไม่คือสามารถแก้ไขเปอร์เซ็น แก้ไขว่าจะเลือกเป็น Cash หรือ Credit") — each installment row's
+payment method is now a structured Cash/Credit dropdown plus a separate day-count input, instead of
+a free-text field the user had to type "Cash" or "Credit 30 Days" into. Asked the user to clarify
+which of 3 possible UI shapes they wanted (dropdown + separate day-count input, recommended and
+selected; dropdown with no day count; or a dropdown of whole pre-composed strings like "Credit 30
+Days") before implementing, since all 3 were reasonable readings of the request.
+
+**Data model**: `ScopeOfWorkPaymentInstallment.method: string` (`src/lib/scopeOfWork.ts`) replaced
+with `paymentType: "" | "Cash" | "Credit"` (new `ScopeOfWorkPaymentType`) + `days: number | null` —
+`days` deliberately applies to **either** type, not just Credit, since the user's own worked
+example used "Cash 30 days," not just "Credit 30 days." Added `formatPaymentMethod()` — a pure
+function deriving the printed "Cash"/"Credit 30 Days" string from `paymentType`/`days` on demand,
+so the display string can never drift out of sync with a separately-stored value the way a plain
+string field could. `PAYMENT_TERM_PRESETS` updated to populate `paymentType`/`days` instead of
+`method` (e.g. the 30/70 preset's Credit row is now `{ paymentType: "Credit", days: 30 }`).
+
+**Legacy compatibility (now two prior shapes deep)**: `normalizePaymentConditions()` must now
+handle 3 possible stored shapes — the very first fixed `{downPaymentPct, finalPaymentPct, method}`
+pair, this same day's short-lived intermediate `installments` array with a free-text `method`
+string per row (shipped and superseded within the same session, likely with zero real records ever
+saved under it), and the current `paymentType`/`days` shape. Added `parsePaymentMethodText()` — a
+best-effort regex parse of a legacy `method` string ("Cash", "Credit 30 Days", "Cash 30 days") into
+`{paymentType, days}`, falling back to `paymentType: ""` (keeping any day count found) for text
+that names neither Cash nor Credit, rather than guessing wrong.
+
+**Backend**: `sanitizePaymentConditions()`'s per-row sanitizer (`api/_lib/scopeOfWorkHandler.ts`)
+replaced `sanitizeShortText(method)` with `sanitizePaymentType()` (must be `""`/`"Cash"`/`"Credit"`)
+and `sanitizePaymentDays()` (integer, 0–3650, or null).
+
+**Frontend**: `PaymentInstallmentsEditor`'s free-text method `<input>` replaced with a `<select>`
+(— วิธีชำระ —/Cash/Credit) plus a separate number input for days, shown for every row regardless of
+selected type. `ScopeOfWorkPrintDocument.tsx` now calls `formatPaymentMethod()` instead of reading
+a stored `method` field directly.
+
+**Files Modified**: `src/lib/scopeOfWork.ts`, `api/_lib/scopeOfWorkHandler.ts`, `src/pages/quotation/ScopeOfWorkDocument.tsx`, `src/pages/quotation/ScopeOfWorkPrintDocument.tsx`, `docs/CLAUDE.md`, `docs/DATABASE.md`, `docs/MODULES/ScopeOfWork.md`
+
+**Reason**: Direct user request — a structured Cash/Credit choice plus a separate day-count field,
+not free text the salesperson has to type consistently every time.
+
+**Verification**: `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+Re-used the same temporary, isolated dev harness pattern as the prior pass below (`src/dev/
+PaymentHarness.tsx`, deleted after use) — confirmed the 30/70 preset populates the dropdown/days
+inputs correctly (Cash/blank days, Credit/30 days) with a matching `formatPaymentMethod()` output,
+and reproduced the user's own 3-installment example exactly by adding a 3rd row and setting it to
+Cash + 30 days — the derived string read "30% Down Payment (Cash) / 70% After Job Complete (Credit
+30 Days) / 20% Materials (Cash 30 Days)", byte-for-byte matching the user's original message. Zero
+console errors/warnings. Live browser/API verification against real MongoDB data (a genuine
+pre-2026-07-23 legacy record's conversion) remains unverified this session — same standing
+sandboxed-environment limitation as every recent entry.
+
+---
+
+## 2026-07-23 — Scope of Work: multi-installment payment schedule + presets
 
 **Feature**: per direct user request, Scope of Work's Payment Conditions section now supports an
 arbitrary number of payment installments instead of a fixed 2-row down-payment/final-payment pair.

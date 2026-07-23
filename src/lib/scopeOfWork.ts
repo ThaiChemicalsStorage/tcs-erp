@@ -62,18 +62,35 @@ export interface ScopeOfWorkItem {
   isSectionHeader?: boolean;
 }
 
+/** Cash or Credit — a structured dropdown selection rather than free text, so the print/PDF output
+ * and the sum-to-100% validation both read a consistent value instead of parsing arbitrary user
+ * text. `""` means "not yet chosen." */
+export type ScopeOfWorkPaymentType = "" | "Cash" | "Credit";
+
 /** One payment schedule row (e.g. "40% Down Payment (Cash)") — arbitrarily many rows are allowed
  * (not capped at 2), added 2026-07-23 per direct user request for 3+-installment plans (e.g. 20%
- * Down Payment / 40% Materials / 40% After Delivered Date). `label` is the free-text installment
- * name ("Down Payment", "Materials", "After Job Complete", ...) and `method` its own free-text
- * payment method/terms ("Cash", "Credit 30 Days", "Cash 30 days") — kept per-row rather than one
- * shared `method` for the whole schedule, since a real multi-installment plan can legitimately mix
- * Cash and Credit terms across rows. */
+ * Down Payment (Cash 30 days) / 40% Materials (Credit 30 days) / 40% After Delivered Date (Credit
+ * 30 days)). `label` is the free-text installment name ("Down Payment", "Materials", "After Job
+ * Complete", ...). `paymentType`/`days` (added 2026-07-23, same day, per a direct follow-up
+ * request replacing the initial free-text `method` field) are a structured Cash/Credit dropdown
+ * plus an optional day count — `days` applies to either type (the user's own example used "Cash 30
+ * days", not just Credit), kept per-row rather than one shared method for the whole schedule since
+ * a real multi-installment plan can legitimately mix Cash and Credit terms across rows. */
 export interface ScopeOfWorkPaymentInstallment {
   id: string;
   pct: number | null;
   label: string;
-  method: string;
+  paymentType: ScopeOfWorkPaymentType;
+  days: number | null;
+}
+
+/** `"Cash"` / `"Credit 30 Days"` / `""` — the display string derived from a row's structured
+ * `paymentType`/`days`, used for the printed document and the "(...)" hint after each installment's
+ * label. Kept as a pure function (not a stored field) so `paymentType`/`days` stay the single
+ * source of truth — nothing can drift out of sync with a separately-stored string. */
+export function formatPaymentMethod(installment: Pick<ScopeOfWorkPaymentInstallment, "paymentType" | "days">): string {
+  if (!installment.paymentType) return "";
+  return installment.days !== null ? `${installment.paymentType} ${installment.days} Days` : installment.paymentType;
 }
 
 /** Editable payment fields — pulled from the quotation's `paymentTerms` text when available
@@ -93,64 +110,88 @@ export function newPaymentInstallmentId(): string {
   return `pi-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 export function blankPaymentInstallment(): ScopeOfWorkPaymentInstallment {
-  return { id: newPaymentInstallmentId(), pct: null, label: "", method: "" };
+  return { id: newPaymentInstallmentId(), pct: null, label: "", paymentType: "", days: null };
 }
 
 /** 3 quick-select presets a salesperson can apply with one click, then still freely edit (add more
- * rows, retitle a row, change a percentage) — never a silently-assumed default written without the
- * user choosing it. Per direct user request, 2026-07-23. */
+ * rows, retitle a row, change a percentage/type/days) — never a silently-assumed default written
+ * without the user choosing it. Per direct user request, 2026-07-23. */
 export const PAYMENT_TERM_PRESETS: { label: string; installments: Omit<ScopeOfWorkPaymentInstallment, "id">[] }[] = [
   {
     label: "40% Down Payment (Cash) / 60% After Job Complete (Cash)",
     installments: [
-      { pct: 40, label: "Down Payment", method: "Cash" },
-      { pct: 60, label: "After Job Complete", method: "Cash" },
+      { pct: 40, label: "Down Payment", paymentType: "Cash", days: null },
+      { pct: 60, label: "After Job Complete", paymentType: "Cash", days: null },
     ],
   },
   {
     label: "30% Down Payment (Cash) / 70% After Job Complete (Credit 30 Days)",
     installments: [
-      { pct: 30, label: "Down Payment", method: "Cash" },
-      { pct: 70, label: "After Job Complete", method: "Credit 30 Days" },
+      { pct: 30, label: "Down Payment", paymentType: "Cash", days: null },
+      { pct: 70, label: "After Job Complete", paymentType: "Credit", days: 30 },
     ],
   },
   {
     label: "100% After Job Complete (Credit 30 Days)",
     installments: [
-      { pct: 100, label: "After Job Complete", method: "Credit 30 Days" },
+      { pct: 100, label: "After Job Complete", paymentType: "Credit", days: 30 },
     ],
   },
 ];
 
+const VALID_PAYMENT_TYPES: readonly ScopeOfWorkPaymentType[] = ["", "Cash", "Credit"];
+
+/** Best-effort parse of a free-text payment method string (e.g. "Cash", "Credit 30 Days", "Cash 30
+ * days") into the structured `{paymentType, days}` shape — used only when reading a legacy record
+ * whose installment rows predate the 2026-07-23 structured-dropdown change (see
+ * `normalizePaymentConditions()` below). Not exhaustive by design: arbitrary free text that names
+ * neither "Cash" nor "Credit" falls back to `paymentType: ""` (the day count, if any, is still
+ * kept) rather than guessing — the user re-selects it once, same one-time cost as any other
+ * legacy-shape migration in this codebase. */
+function parsePaymentMethodText(text: string): { paymentType: ScopeOfWorkPaymentType; days: number | null } {
+  const dayMatch = /(\d+)\s*Days?/i.exec(text);
+  const days = dayMatch ? parseInt(dayMatch[1], 10) : null;
+  const paymentType: ScopeOfWorkPaymentType = /credit/i.test(text) ? "Credit" : /cash/i.test(text) ? "Cash" : "";
+  return { paymentType, days };
+}
+
 /**
  * Reads a stored `paymentConditions` value and normalizes it to the current `installments`-array
- * shape — a Scope of Work saved before 2026-07-23 still has the legacy `{downPaymentPct,
- * finalPaymentPct, method}` pair in MongoDB (no migration script was run; MongoDB enforces no
- * schema, so old documents are simply read-compatible via this function until they're next saved,
- * at which point the server persists the new shape for good — see `sanitizePaymentConditions()` in
- * api/_lib/scopeOfWorkHandler.ts). Applied server-side to every response (`normalizeScope()`), so
- * the frontend only ever sees the current shape. Exported (not handler-local) since it's also used
- * directly by the handler's finalize/print validation input mapping. */
+ * shape with structured `paymentType`/`days` rows — a Scope of Work saved before 2026-07-23 still
+ * has an older shape in MongoDB (either the very first fixed `{downPaymentPct, finalPaymentPct,
+ * method}` pair, or the same-day intermediate `installments` array whose rows carried a free-text
+ * `method` string instead of `paymentType`/`days` — no migration script was run for either; MongoDB
+ * enforces no schema, so old documents are simply read-compatible via this function until they're
+ * next saved, at which point the server persists the current shape for good — see
+ * `sanitizePaymentConditions()` in api/_lib/scopeOfWorkHandler.ts). Applied server-side to every
+ * response (`normalizeScope()`), so the frontend only ever sees the current shape. Exported (not
+ * handler-local) since it's also used directly by the handler's finalize/print validation input
+ * mapping. */
 export function normalizePaymentConditions(raw: unknown): ScopeOfWorkPaymentConditions {
   const r = (raw ?? {}) as Record<string, unknown>;
   const description = typeof r.description === "string" ? r.description : "";
   const notes = typeof r.notes === "string" ? r.notes : "";
   if (Array.isArray(r.installments)) {
     return {
-      installments: (r.installments as Record<string, unknown>[]).map((it) => ({
-        id: typeof it.id === "string" && it.id ? it.id : newPaymentInstallmentId(),
-        pct: typeof it.pct === "number" ? it.pct : null,
-        label: typeof it.label === "string" ? it.label : "",
-        method: typeof it.method === "string" ? it.method : "",
-      })),
+      installments: (r.installments as Record<string, unknown>[]).map((it) => {
+        const id = typeof it.id === "string" && it.id ? it.id : newPaymentInstallmentId();
+        const pct = typeof it.pct === "number" ? it.pct : null;
+        const label = typeof it.label === "string" ? it.label : "";
+        if (typeof it.paymentType === "string" && (VALID_PAYMENT_TYPES as readonly string[]).includes(it.paymentType)) {
+          return { id, pct, label, paymentType: it.paymentType as ScopeOfWorkPaymentType, days: typeof it.days === "number" ? it.days : null };
+        }
+        // Intermediate same-day shape: a free-text `method` string instead of paymentType/days.
+        const parsed = typeof it.method === "string" ? parsePaymentMethodText(it.method) : { paymentType: "" as ScopeOfWorkPaymentType, days: null };
+        return { id, pct, label, ...parsed };
+      }),
       description,
       notes,
     };
   }
-  const legacyMethod = typeof r.method === "string" ? r.method : "";
+  const legacy = typeof r.method === "string" ? parsePaymentMethodText(r.method) : { paymentType: "" as ScopeOfWorkPaymentType, days: null };
   const installments: ScopeOfWorkPaymentInstallment[] = [];
-  if (typeof r.downPaymentPct === "number") installments.push({ id: newPaymentInstallmentId(), pct: r.downPaymentPct, label: "Down Payment", method: legacyMethod });
-  if (typeof r.finalPaymentPct === "number") installments.push({ id: newPaymentInstallmentId(), pct: r.finalPaymentPct, label: "After Job Complete", method: legacyMethod });
+  if (typeof r.downPaymentPct === "number") installments.push({ id: newPaymentInstallmentId(), pct: r.downPaymentPct, label: "Down Payment", ...legacy });
+  if (typeof r.finalPaymentPct === "number") installments.push({ id: newPaymentInstallmentId(), pct: r.finalPaymentPct, label: "After Job Complete", ...legacy });
   return { installments, description, notes };
 }
 

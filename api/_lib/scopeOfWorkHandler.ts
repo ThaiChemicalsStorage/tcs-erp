@@ -19,7 +19,7 @@ import { normalizePaymentConditions } from "../../src/lib/scopeOfWork.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
   ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkPaymentInstallment,
-  ScopeOfWorkSignatory, ScopeOfWorkCustomerSnapshot,
+  ScopeOfWorkPaymentType, ScopeOfWorkSignatory, ScopeOfWorkCustomerSnapshot,
 } from "../../src/lib/scopeOfWork.js";
 
 /**
@@ -250,6 +250,24 @@ function sanitizePercent(v: unknown): number | null {
 }
 
 const MAX_PAYMENT_INSTALLMENTS = 20;
+const VALID_PAYMENT_TYPES = new Set<ScopeOfWorkPaymentType>(["", "Cash", "Credit"]);
+const MAX_PAYMENT_DAYS = 3650;
+
+function sanitizePaymentType(v: unknown, index: number): ScopeOfWorkPaymentType {
+  if (v === undefined || v === null || v === "") return "";
+  if (typeof v !== "string" || !VALID_PAYMENT_TYPES.has(v as ScopeOfWorkPaymentType)) {
+    throw new HttpError(400, `วิธีการชำระเงินของงวดที่ ${index + 1} ไม่ถูกต้อง`);
+  }
+  return v as ScopeOfWorkPaymentType;
+}
+
+function sanitizePaymentDays(v: unknown, index: number): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > MAX_PAYMENT_DAYS || !Number.isInteger(v)) {
+    throw new HttpError(400, `จำนวนวันของงวดที่ ${index + 1} ไม่ถูกต้อง`);
+  }
+  return v;
+}
 
 function sanitizePaymentInstallment(raw: unknown, index: number): ScopeOfWorkPaymentInstallment {
   if (typeof raw !== "object" || raw === null) throw new HttpError(400, `งวดชำระเงินที่ ${index + 1} ไม่ถูกต้อง`);
@@ -258,7 +276,8 @@ function sanitizePaymentInstallment(raw: unknown, index: number): ScopeOfWorkPay
     id: typeof r.id === "string" && r.id ? r.id : randomUUID(),
     pct: sanitizePercent(r.pct),
     label: sanitizeShortText(r.label, `รายละเอียดงวดชำระเงินที่ ${index + 1}`),
-    method: sanitizeShortText(r.method, `วิธีการชำระเงินของงวดที่ ${index + 1}`),
+    paymentType: sanitizePaymentType(r.paymentType, index),
+    days: sanitizePaymentDays(r.days, index),
   };
 }
 

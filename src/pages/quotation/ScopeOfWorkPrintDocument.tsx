@@ -1,4 +1,4 @@
-import type { ScopeOfWork } from "../../lib/scopeOfWork";
+import { formatPaymentMethod, type ScopeOfWork } from "../../lib/scopeOfWork";
 import type { User } from "../../lib/users";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
 
@@ -91,11 +91,14 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, sellerUser, approverUser
               ))}
               <div className="break-inside-avoid">
                 <p className="font-bold text-[9.5px] mb-0.5 underline">การเก็บเงิน</p>
-                {s.paymentConditions.installments.map((installment) => (
-                  <p key={installment.id} className="text-[9.5px] leading-[1.5]">
-                    {installment.pct !== null ? `${installment.pct}% ` : ""}{installment.label || "-"}{installment.method ? ` (${installment.method})` : ""}
-                  </p>
-                ))}
+                {s.paymentConditions.installments.map((installment) => {
+                  const method = formatPaymentMethod(installment);
+                  return (
+                    <p key={installment.id} className="text-[9.5px] leading-[1.5]">
+                      {installment.pct !== null ? `${installment.pct}% ` : ""}{installment.label || "-"}{method ? ` (${method})` : ""}
+                    </p>
+                  );
+                })}
                 {s.paymentConditions.description.trim() && <p className="text-[9.5px] leading-[1.5] whitespace-pre-line">{s.paymentConditions.description}</p>}
                 {s.paymentConditions.notes.trim() && <p className="text-[9px] italic text-[#5a7299] whitespace-pre-line">{s.paymentConditions.notes}</p>}
               </div>

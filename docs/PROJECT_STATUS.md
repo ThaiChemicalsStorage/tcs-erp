@@ -14,6 +14,15 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] Scope of Work: Cash/Credit dropdown + separate days field for payment installments.**
+  Direct same-day follow-up to the multi-installment pass below — replaced each row's free-text
+  payment method with a structured Cash/Credit `<select>` dropdown plus a separate day-count input
+  (`paymentType`/`days` instead of `method: string`), since the user clarified they wanted a
+  selectable choice, not typed text. `days` applies to either Cash or Credit (matches the user's own
+  "Cash 30 days" example). Asked the user to pick between 3 reasonable UI shapes before building.
+  `tsc`/`lint`/`build` all pass clean; interaction-verified via a temporary dev harness — reproduced
+  the user's own 3-installment example exactly (byte-for-byte matching formatted output). See
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 - ✅ **[2026-07-23] Scope of Work: multi-installment payment schedule + 3 quick-select presets.**
   Per direct user request, replaced the fixed 2-row down-payment/final-payment payment schedule
   with an arbitrary-length `installments` array (each row has its own label/percentage/method), so

@@ -3,6 +3,7 @@ import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Load
 import type { User } from "../../lib/users";
 import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
+  type ScopeOfWorkPaymentType,
   fetchScopeOfWork, updateScopeOfWork, finalizeScopeOfWork, duplicateScopeOfWork, rewriteScopeOfWork,
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
   blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS,
@@ -129,13 +130,13 @@ function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
       {installments.length > 0 && (
         <div className="space-y-1.5">
           {installments.map((row) => (
-            <div key={row.id} className="flex items-center gap-1.5">
+            <div key={row.id} className="flex items-center gap-1.5 flex-wrap">
               <input
                 disabled={disabled}
                 value={row.label}
                 onChange={(e) => updateRow(row.id, { label: e.target.value })}
                 placeholder="เช่น Down Payment"
-                className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                className="flex-1 min-w-[120px] text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
               />
               <input
                 disabled={disabled}
@@ -147,12 +148,25 @@ function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
                 placeholder="%"
                 className="w-16 text-xs text-right text-foreground bg-secondary border border-border rounded-lg px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
               />
+              <select
+                disabled={disabled}
+                value={row.paymentType}
+                onChange={(e) => updateRow(row.id, { paymentType: e.target.value as ScopeOfWorkPaymentType })}
+                className="text-xs text-foreground bg-secondary border border-border rounded-lg px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60"
+              >
+                <option value="">— วิธีชำระ —</option>
+                <option value="Cash">Cash</option>
+                <option value="Credit">Credit</option>
+              </select>
               <input
                 disabled={disabled}
-                value={row.method}
-                onChange={(e) => updateRow(row.id, { method: e.target.value })}
-                placeholder="เช่น Cash, Credit 30 Days"
-                className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                type="number"
+                min={0}
+                value={row.days ?? ""}
+                onChange={(e) => updateRow(row.id, { days: e.target.value === "" ? null : parseInt(e.target.value, 10) || 0 })}
+                placeholder="จำนวนวัน"
+                title="จำนวนวัน (ถ้ามี)"
+                className="w-24 text-xs text-right text-foreground bg-secondary border border-border rounded-lg px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
               />
               {!disabled && (
                 <button onClick={() => removeRow(row.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1"><Trash2 size={13} /></button>

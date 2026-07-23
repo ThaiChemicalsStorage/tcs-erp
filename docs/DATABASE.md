@@ -415,10 +415,14 @@ interface ScopeOfWorkItem {
   unit: string; remark: string; isSectionHeader?: boolean;
 }
 // installments replaced the previous fixed {downPaymentPct, finalPaymentPct, method} pair on
-// 2026-07-23 — arbitrarily many rows, each with its own label/method, so a genuine 3+-installment
-// plan with mixed payment terms is representable. A pre-2026-07-23 record still has the legacy
-// shape in MongoDB until next saved — see normalizePaymentConditions() in src/lib/scopeOfWork.ts.
-interface ScopeOfWorkPaymentInstallment { id: string; pct: number | null; label: string; method: string; }
+// 2026-07-23 — arbitrarily many rows, each with its own label/paymentType/days, so a genuine
+// 3+-installment plan with mixed payment terms is representable. paymentType is a structured
+// Cash/Credit dropdown (not free text, per a same-day follow-up request), days an optional integer
+// day count applying to either type. A pre-2026-07-23 record (either the very first fixed pair, or
+// the same-day intermediate shape with a free-text `method` string) is read-compatible via
+// normalizePaymentConditions() in src/lib/scopeOfWork.ts until next saved.
+type ScopeOfWorkPaymentType = "" | "Cash" | "Credit";
+interface ScopeOfWorkPaymentInstallment { id: string; pct: number | null; label: string; paymentType: ScopeOfWorkPaymentType; days: number | null; }
 interface ScopeOfWorkPaymentConditions { installments: ScopeOfWorkPaymentInstallment[]; description: string; notes: string; }
 interface ScopeOfWorkSignatory { name: string; userId: string; date: string; }
 interface ScopeOfWork {

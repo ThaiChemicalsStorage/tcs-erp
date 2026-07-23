@@ -234,31 +234,45 @@ label, or change a group's `selectionType` (`sanitizeChecklistGroups()`).
 
 ## Payment Conditions
 
-A dedicated (non-checklist) section: `installments` (an array of `{ id, pct, label, method }` rows
-— e.g. `{ pct: 40, label: "Down Payment", method: "Cash" }`), `description` (free text), `notes`
-(free text). Pulled from the quotation's `paymentTerms` string into `description` at creation time;
-the sample PDF's "40%/60%" split is **never** saved as a universal default — a new record always
-starts with an empty `installments` array unless the quotation itself already had percentage data
-(legacy pre-2026-07-23 records only, via `normalizePaymentConditions()` — see below).
+A dedicated (non-checklist) section: `installments` (an array of `{ id, pct, label, paymentType,
+days }` rows — e.g. `{ pct: 40, label: "Down Payment", paymentType: "Cash", days: null }`),
+`description` (free text), `notes` (free text). Pulled from the quotation's `paymentTerms` string
+into `description` at creation time; the sample PDF's "40%/60%" split is **never** saved as a
+universal default — a new record always starts with an empty `installments` array unless the
+quotation itself already had percentage data (legacy pre-2026-07-23 records only, via
+`normalizePaymentConditions()` — see below). `paymentType` is `"" | "Cash" | "Credit"` (a structured
+dropdown, not free text) and `days` an optional integer day count that applies to **either** type
+(a Cash installment can carry its own day count too, e.g. "Cash 30 days" — not exclusively a Credit
+concept); `formatPaymentMethod()` derives the printed "Cash"/"Credit 30 Days" string from the two
+fields on demand, so nothing can drift out of sync with a separately-stored text value.
 
-**2026-07-23, per direct user request**: replaced the previous fixed `{downPaymentPct,
-finalPaymentPct, method}` pair (exactly 2 installments, one shared payment method) with the
-`installments` array above — arbitrarily many rows, each with its own `label` and `method`, so a
-genuine 3+-installment plan with mixed terms is representable (e.g. "20% Down Payment (Cash 30
-days) / 40% Materials (Credit 30 days) / 40% After Delivered Date (Credit 30 days)"). 3 quick-select
-presets (`PAYMENT_TERM_PRESETS` in `src/lib/scopeOfWork.ts`) populate a common 2-installment
-schedule with one click — "40% Down Payment (Cash) / 60% After Job Complete (Cash)", "30% Down
-Payment (Cash) / 70% After Job Complete (Credit 30 Days)", "100% After Job Complete (Credit 30
-Days)" — but every row (preset-applied or manually added via "+ เพิ่มงวดชำระเงิน") stays fully
-editable/removable afterward; the presets are a starting point, never a locked-in choice.
+**2026-07-23, per direct user request, two same-day passes**: (1) replaced the original fixed
+`{downPaymentPct, finalPaymentPct, method}` pair (exactly 2 installments, one shared free-text
+payment method) with the `installments` array above — arbitrarily many rows, each with its own
+`label`, so a genuine 3+-installment plan is representable (e.g. "20% Down Payment (Cash 30 days) /
+40% Materials (Credit 30 days) / 40% After Delivered Date (Credit 30 days)"). (2) a direct same-day
+follow-up ("ไม่คือสามารถแก้ไขเปอร์เซ็น แก้ไขว่าจะเลือกเป็น Cash หรือ Credit") replaced that first
+pass's free-text `method` field with the structured `paymentType`/`days` pair above — a
+Cash/Credit `<select>` dropdown plus a separate day-count input, rather than typing "Cash" or
+"Credit 30 Days" as plain text. 3 quick-select presets (`PAYMENT_TERM_PRESETS` in
+`src/lib/scopeOfWork.ts`) populate a common 2-installment schedule with one click — "40% Down
+Payment (Cash) / 60% After Job Complete (Cash)", "30% Down Payment (Cash) / 70% After Job Complete
+(Credit 30 Days)", "100% After Job Complete (Credit 30 Days)" — but every row (preset-applied or
+manually added via "+ เพิ่มงวดชำระเงิน") stays fully editable/removable afterward; the presets are
+a starting point, never a locked-in choice.
 
-**Existing document compatibility**: a Scope of Work saved before 2026-07-23 still has the legacy
-`{downPaymentPct, finalPaymentPct, method}` pair in its MongoDB document — no migration script was
-run (MongoDB enforces no schema, so this is safe to defer). `normalizePaymentConditions()` (`src/lib/
-scopeOfWork.ts`) converts a legacy shape into the new `installments` array on every read (called
-from `normalizeScope()`/`toValidationInput()` in `api/_lib/scopeOfWorkHandler.ts`, so the frontend
-and the validators only ever see the current shape); the record is persisted in the new shape for
-good the next time it's saved through `sanitizePaymentConditions()`.
+**Existing document compatibility**: a Scope of Work saved before either 2026-07-23 pass still has
+an older shape in its MongoDB document — either the very first fixed `{downPaymentPct,
+finalPaymentPct, method}` pair, or the same-day intermediate `installments` array whose rows
+carried a free-text `method` string instead of `paymentType`/`days`. No migration script was run
+for either (MongoDB enforces no schema, so this is safe to defer). `normalizePaymentConditions()`
+(`src/lib/scopeOfWork.ts`) converts either older shape into the current `installments` array on
+every read — a best-effort `parsePaymentMethodText()` regex-matches "Cash"/"Credit" and a trailing
+day count out of a legacy free-text `method` string, falling back to `paymentType: ""` (day count
+still kept, if any) for text that names neither — called from `normalizeScope()`/
+`toValidationInput()` in `api/_lib/scopeOfWorkHandler.ts`, so the frontend and the validators only
+ever see the current shape; the record is persisted in the current shape for good the next time
+it's saved through `sanitizePaymentConditions()`.
 
 ## Required-Field Validation (added 2026-07-16)
 
