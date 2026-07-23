@@ -21,6 +21,7 @@ import { ActivityTimeline } from "./ActivityTimeline";
 import { FollowUpReminders } from "./FollowUpReminders";
 import { ApprovalDashboard } from "./ApprovalDashboard";
 import { NotificationSummary } from "./NotificationSummary";
+import { ScopeOfWorkSummary } from "./ScopeOfWorkSummary";
 import {
   RevenueTrendChart, RevenueByJobTypeChart, JobTypeDistributionChart,
   ExpectedSalesForecastChart, ProductsByCategoryChart,
@@ -269,7 +270,7 @@ function DashboardContent({
   const {
     hasAnyData, kpis, interestBreakdown, revenueTrend, categoryBreakdown, pipeline, salesPerformance,
     customerAnalytics, jobTypeAnalytics, forecast, followUps, activityTimeline, salesActivity,
-    approvalDashboard, notificationSummary,
+    approvalDashboard, notificationSummary, scopeOfWork,
   } = stats;
   const interestTotal = interestBreakdown.interested + interestBreakdown.notInterested + interestBreakdown.notEvaluated;
   // Sales Activity Analytics / Revenue Trend are rolling windows that ignore the filter's `from`
@@ -338,6 +339,7 @@ function DashboardContent({
         </div>
 
         <ActivityFollowUpSummary kpis={kpis} onPendingApprovalsClick={() => onNavigateToQuotations({ status: "รออนุมัติ" })} />
+        {scopeOfWork && <ScopeOfWorkSummary data={scopeOfWork} />}
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <RevenueTrendChart trend={revenueTrend} anchorDate={trendAnchorDate} />

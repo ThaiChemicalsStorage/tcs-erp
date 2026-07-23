@@ -14,6 +14,15 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] Dashboard: Scope of Work document count card.** Per direct user request, the
+  Dashboard's supporting-detail section gained a new `ScopeOfWorkSummary.tsx` card (Total/Draft/
+  Final Scope of Work document counts, company-wide, unfiltered) — deliberately not a 5th
+  `ExecutiveSummaryCards` tile, since that row is a documented "exactly 4 cards" requirement.
+  `GET /api/dashboard` gained a matching `scopeOfWork: { total, draft, final } | null` field,
+  gated by `scopeOfWork:view` (same pattern as the existing `approvalDashboard` section).
+  `tsc`/`lint`/`build` all pass clean. Live browser/API verification against real MongoDB data
+  could not be completed this session — same sandboxed-environment limitation as every entry
+  below. See [MODULES/Dashboard.md](./MODULES/Dashboard.md).
 - ✅ **[2026-07-22] Scope of Work: Rewrite action + Salesperson filter, mirroring Quotation's own features.**
   New "แก้ไข" (Rewrite) toolbar button (`ScopeOfWorkDocument.tsx`, gated by `scopeOfWork:create`) and
   `POST /api/scope-of-works/:id/rewrite` — creates a new revision with `{root}-R{n}` applied to

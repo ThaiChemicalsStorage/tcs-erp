@@ -3,7 +3,8 @@ import { withErrorHandling, HttpError } from "../_lib/http.js";
 import { requirePermission } from "../_lib/auth.js";
 import {
   customersCollection, leadsCollection, quotesCollection, productsCollection, categoriesCollection,
-  auditLogCollection, notificationsCollection, usersCollection, jobTypesCollection, withStringId, type QuoteFields,
+  auditLogCollection, notificationsCollection, usersCollection, jobTypesCollection, scopeOfWorksCollection,
+  withStringId, type QuoteFields,
 } from "../_lib/collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
@@ -894,6 +895,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // ── Scope of Work summary — only for callers who can already see Scope of Work ──
+    // Company-wide, all-time count (isDeleted: false, same predicate `fetchAllScopeOfWorks()` uses)
+    // — deliberately unfiltered by the date-range/salesperson/department filter, same conclusion as
+    // Total Customers/Products above: a Scope of Work document doesn't carry its own issueDate/
+    // salesperson (it inherits a quotation's), so joining it back to the filtered quote set just to
+    // honor the filter isn't worth the extra query for what's meant to be a simple "how many SOW
+    // documents exist" count.
+    let scopeOfWork: { total: number; draft: number; final: number } | null = null;
+    if (roleHasPermission(ctx.role, "scopeOfWork:view")) {
+      try {
+        const scopeOfWorks = await scopeOfWorksCollection();
+        const [total, draft, final] = await Promise.all([
+          scopeOfWorks.countDocuments({ isDeleted: false }),
+          scopeOfWorks.countDocuments({ isDeleted: false, status: "Draft" }),
+          scopeOfWorks.countDocuments({ isDeleted: false, status: "Final" }),
+        ]);
+        scopeOfWork = { total, draft, final };
+      } catch (err) {
+        console.error("[dashboard] scopeOfWork query failed", err);
+        scopeOfWork = null;
+      }
+    }
+
     // ── Notification summary — per-caller, same scoping as GET /api/notifications ──
     // Deliberately unfiltered by date-range/salesperson/department, same conclusion as Total
     // Customers/Products above: this is a personal, always-current operational widget ("my own
@@ -1013,6 +1037,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       activityTimeline,
       salesActivity,
       approvalDashboard,
+      scopeOfWork,
       notificationSummary,
       availableSalespeople,
       availableDepartments,

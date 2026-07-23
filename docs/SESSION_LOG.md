@@ -4,6 +4,48 @@
 
 ---
 
+## Session — 2026-07-23 (absolute latest), Dashboard: Scope of Work document count card
+
+### What was implemented
+- User asked (in Thai) to add Scope of Work document counts to the Dashboard.
+- Explored the codebase first to find the right seam: `DashboardPage.tsx` fetches one aggregated
+  `DashboardStats` object per request (`GET /api/dashboard`), rather than each widget doing its own
+  independent fetch — so the natural approach was to add a `scopeOfWork` field to that one response,
+  matching how every other optional/permission-gated section (`approvalDashboard`,
+  `activityTimeline`) already works, rather than a second independent client-side fetch of
+  `fetchAllScopeOfWorks()`.
+- One real judgment call: `ExecutiveSummaryCards.tsx` documents an explicit, repeatedly-reaffirmed
+  "exactly 4 cards" business requirement from an earlier session (P'Keng/P'Kee spec) — adding a 5th
+  tile there would have silently violated a decision the user fought for across several passes. Put
+  the new card in the "supporting detail" section instead (same tier as `ActivityFollowUpSummary`),
+  which is exactly what that section already exists for: real, filter-aware-or-documented-exception
+  data that isn't part of the named-required top overview.
+- Kept the count company-wide/unfiltered rather than trying to join Scope of Work documents back to
+  their originating quotation's `issueDate`/`salesperson` to honor the Dashboard's date/salesperson
+  filter — `ScopeOfWork` has no such field of its own, and the codebase already has a documented
+  precedent for this exact tradeoff (Total Customers/Products/`categoryBreakdown` are all
+  deliberately unfiltered catalog metrics, for the same reason).
+- Backend: 3 `countDocuments()` calls on `scope_of_works` (isDeleted:false, plus Draft/Final),
+  wrapped in the same `roleHasPermission("scopeOfWork:view")` + try/catch pattern already used for
+  `approvalDashboard`. Frontend: new `ScopeOfWorkSummary.tsx` component copying
+  `ActivityFollowUpSummary.tsx`'s tile-row visual pattern almost verbatim (same `ChartCard` wrapper,
+  same tile shape) rather than inventing a new layout.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- Same standing sandboxed-session limitation as every recent entry: no Vercel CLI, no local
+  MongoDB credential, so the real counts against production data are unverified this session —
+  `vercel dev`/live-browser verification was not attempted since it's a known, previously-confirmed
+  dead end (`vercel dev` isn't installed; MongoDB Atlas SRV DNS doesn't resolve in this sandbox even
+  when it is). Confidence is reasonably high anyway since the new card reuses an already-shipped,
+  already-verified permission-gate/tile pattern rather than introducing a new one.
+
+### Recommendation for next session
+- Once network access allows it (or the user checks in production), confirm the Total/Draft/Final
+  counts on the new card match the standalone Scope of Work list page's own counts exactly.
+
+---
+
 ## Session — 2026-07-22 (absolute latest), Scope of Work: Rewrite action + Salesperson filter
 
 ### What was implemented

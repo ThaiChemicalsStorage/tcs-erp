@@ -331,6 +331,17 @@ other pass in this project (see PROJECT_STATUS.md "Known Risks").
   (navigates to the quotation list filtered to that status) since it's the only one with a real
   single-status filter to jump to. Moved into supporting detail as of 2026-07-13, seventh pass,
   same reasoning as `SalesPerformancePanel` above.
+- `ScopeOfWorkSummary.tsx` (added 2026-07-23, per a direct user request to show "how many Scope of
+  Work documents exist" on the Dashboard) — Total/Draft/Final as a compact 3-tile row inside one
+  `ChartCard`, same visual pattern as `ActivityFollowUpSummary` above (informational only, no tile
+  is clickable — there's no Scope of Work list filter to jump to the way Pending Approvals has).
+  Placed in supporting detail, directly after `ActivityFollowUpSummary`. Deliberately **not** added
+  as a 5th `ExecutiveSummaryCards` tile — that row is a documented, repeatedly-reaffirmed "exactly 4
+  cards" business requirement (see `ExecutiveSummaryCards.tsx`'s own doc comment above). Only
+  rendered when the API response's `scopeOfWork` is non-null, i.e. only for callers with
+  `scopeOfWork:view` — every default role that has `dashboard:view` also has `scopeOfWork:view` (see
+  [RBAC.md](../RBAC.md)), so in practice this is visible to everyone who sees the Dashboard at all,
+  but a custom role could theoretically have one without the other.
 
   **KPI presentation history**: originally a single flat `KpiGrid.tsx` (22 uniform cards). 2026-07-10
   (UI/UX redesign) split it into two tiers — `PrimaryKpiCards.tsx` (6 hero cards) +
@@ -437,6 +448,12 @@ None owned by this page — it's a read-only aggregation over `customers`, `lead
 - Approve/Reject actions from the Pending Approvals widget reuse the existing
   `POST /api/quotes/:id/workflow` route (same one the Quotation module's own approval buttons
   call) — no new API route was added for this.
+- **2026-07-23**: response gained a `scopeOfWork: { total, draft, final } | null` field — company-
+  wide, all-time `scope_of_works` counts (`isDeleted: false`, by `status`), `null` unless the caller
+  has `scopeOfWork:view` (same gating pattern as `approvalDashboard`). Unfiltered by the date-range/
+  salesperson/department filter, same reasoning as Total Customers/Products (see "Data-model
+  caveats" above) — a Scope of Work document has no `issueDate`/`salesperson` of its own to filter
+  by. Backs the new `ScopeOfWorkSummary.tsx` component, see "Pages / Components" below.
 
 ## Permissions
 
@@ -529,6 +546,13 @@ pass — see [RBAC.md](../RBAC.md).
 
 ## Known Issues
 
+- **2026-07-23, Scope of Work summary pass**: same sandboxed-session limitation as every prior
+  pass — no Vercel CLI, no local MongoDB credential, so `scopeOfWork`'s real counts against
+  production data are unverified this session. Verified via `tsc --noEmit` (both configs)/
+  `npm run lint`/`npm run build`, all clean; the new `ScopeOfWorkSummary.tsx` follows the exact
+  same permission-gate/null-hide pattern as `ApprovalDashboard.tsx` (already live-verified in
+  earlier passes), so the risk of a live-rendering surprise is low, but a manual click-through
+  against real data is still recommended before considering this fully verified end-to-end.
 - None functional. `totalCustomers`/`totalLeads` correctly read `0` until the CRM module ships
   — this is the intended "empty database → display 0" behavior, not a bug. See "Data-model
   caveats" above for the free-text customer/department-matching and simplified-chart caveats,

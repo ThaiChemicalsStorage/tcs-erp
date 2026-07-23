@@ -4,6 +4,49 @@
 
 ---
 
+## 2026-07-23 (absolute latest) — Dashboard: Scope of Work document count card
+
+**Feature**: per direct user request ("อยากให้เพิ่มข้อมูลของใบ Scope of work ว่ามีกี่ใบ" — add how
+many Scope of Work documents there are), the Dashboard's supporting-detail section gained a new
+`ScopeOfWorkSummary.tsx` card showing Total/Draft/Final Scope of Work document counts, right after
+`ActivityFollowUpSummary`. Deliberately **not** added as a 5th `ExecutiveSummaryCards` tile — that
+row is a documented, repeatedly-reaffirmed "exactly 4 cards" business requirement (see
+`ExecutiveSummaryCards.tsx`'s own doc comment) — so the new metric goes in supporting detail
+instead, same tier as `ActivityFollowUpSummary`/`SalesPerformancePanel`.
+
+**Backend**: `GET /api/dashboard` (`api/dashboard/index.ts`) gained a `scopeOfWork: { total, draft,
+final } | null` field — three `scope_of_works.countDocuments()` calls (`{ isDeleted: false }`, plus
+`status: "Draft"` / `"Final"`), gated by `roleHasPermission(ctx.role, "scopeOfWork:view")` (`null`
+otherwise), same pattern as the existing `approvalDashboard` section (own try/catch so a transient
+failure degrades to a hidden card, not a broken dashboard). Deliberately company-wide/all-time, not
+scoped by the date-range/salesperson/department filter — a Scope of Work document has no
+`issueDate`/`salesperson` of its own to filter by, same reasoning already documented for Total
+Customers/Products/`categoryBreakdown`.
+
+**Frontend**: `DashboardKpis`/`DashboardStats` (`src/lib/dashboard.ts`) gained a new
+`ScopeOfWorkSummary` type + `scopeOfWork` field; new `src/pages/dashboard/ScopeOfWorkSummary.tsx`
+component (3-tile row inside one `ChartCard`, same visual pattern as `ActivityFollowUpSummary`'s
+tiles, informational only — no tile is clickable, there's no Scope of Work list filter to jump to
+the way Pending Approvals has); wired into `DashboardPage.tsx`'s supporting-detail section, guarded
+by `{scopeOfWork && <ScopeOfWorkSummary data={scopeOfWork} />}`. New `dashboard.scopeOfWork.*` i18n
+keys (Thai + English) in `src/lib/i18n.tsx`.
+
+**Files Modified**: `api/dashboard/index.ts`, `src/lib/dashboard.ts`, `src/pages/dashboard/DashboardPage.tsx`, `src/lib/i18n.tsx`, `docs/CLAUDE.md`, `docs/API.md`, `docs/DATABASE.md`, `docs/MODULES/Dashboard.md`
+
+**Files Added**: `src/pages/dashboard/ScopeOfWorkSummary.tsx`
+
+**Reason**: Direct user request to surface the Scope of Work document count on the Dashboard.
+
+**Verification**: `tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run lint`,
+`npm run build` all pass clean. Live browser/API verification against real MongoDB data could
+**not** be completed this session — same pre-existing sandboxed-environment limitation documented
+throughout this changelog (no Vercel CLI, no local MongoDB credential); the new card follows the
+exact same permission-gate/null-hide pattern as `ApprovalDashboard.tsx`, already live-verified in
+earlier passes, so the risk is low, but a manual click-through against real production data is
+still recommended.
+
+---
+
 ## 2026-07-22 (absolute latest) — Scope of Work: Rewrite action + Salesperson filter
 
 **Feature**: per direct user request ("เหมือนใบเสนอราคา" — mirroring Quotation's identical feature),

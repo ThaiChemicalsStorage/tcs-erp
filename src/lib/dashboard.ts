@@ -192,6 +192,13 @@ export interface NotificationSummary {
   byType: Record<string, number>;
 }
 
+/** Company-wide, all-time (isDeleted: false) — not scoped by the Dashboard date/salesperson/department filter, see api/dashboard/index.ts. */
+export interface ScopeOfWorkSummary {
+  total: number;
+  draft: number;
+  final: number;
+}
+
 export interface InterestBreakdown {
   interested: number;
   notInterested: number;
@@ -231,6 +238,8 @@ export interface DashboardStats {
   salesActivity: SalesActivityTrend | null;
   /** Null when the caller lacks quotations:approve — the frontend hides the Approval Dashboard section entirely in that case. */
   approvalDashboard: ApprovalDashboard | null;
+  /** Null when the caller lacks scopeOfWork:view — the frontend hides the Scope of Work card entirely in that case. */
+  scopeOfWork: ScopeOfWorkSummary | null;
   notificationSummary: NotificationSummary;
   availableSalespeople: string[];
   /** Distinct `User.department` free-text values across all users — see Dashboard docs for the free-text-matching caveat (no real Department entity yet). */
