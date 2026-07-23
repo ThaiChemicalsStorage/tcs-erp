@@ -25,12 +25,18 @@ export function DocumentRecipientsPicker({
   users,
   value,
   onChange,
+  message,
+  onMessageChange,
   disabled,
 }: {
   documentsToSendGroup: ChecklistGroup | undefined;
   users: User[];
   value: Record<string, string[]>;
   onChange: (next: Record<string, string[]>) => void;
+  /** Free text prepended above the auto-generated summary in the email — see
+   * `ScopeOfWork.documentRecipientMessage`'s doc comment (added 2026-07-23). */
+  message: string;
+  onMessageChange: (next: string) => void;
   disabled: boolean;
 }) {
   if (!documentsToSendGroup) return null;
@@ -102,6 +108,22 @@ export function DocumentRecipientsPicker({
             </div>
           );
         })}
+      </div>
+      <div className="mt-4 pt-4 border-t border-border/70">
+        <label className="block text-xs font-semibold text-foreground mb-1">
+          ข้อความเพิ่มเติมถึงผู้รับ <span className="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+        </label>
+        <p className="text-[11px] text-muted-foreground mb-2">
+          ข้อความนี้จะแสดงด้านบนเนื้อหาอัตโนมัติในอีเมล เช่น ระบุกำหนดเวลา หรือคำแนะนำเพิ่มเติมสำหรับผู้รับ
+        </p>
+        <textarea
+          value={message}
+          onChange={(e) => onMessageChange(e.target.value)}
+          disabled={disabled}
+          rows={2}
+          placeholder="เช่น กรุณาตรวจสอบและตอบกลับภายในวันศุกร์นี้"
+          className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#c9a84c]/50 disabled:opacity-60 resize-y"
+        />
       </div>
     </div>
   );

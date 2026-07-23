@@ -43,6 +43,7 @@ function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
     items: s.items,
     paymentConditions: s.paymentConditions,
     documentRecipients: s.documentRecipients,
+    documentRecipientMessage: s.documentRecipientMessage,
     revisionNote: s.revisionNote,
     remarks: s.remarks,
     seller: s.seller,
@@ -651,6 +652,8 @@ export function ScopeOfWorkDocument({
           users={users}
           value={scope.documentRecipients}
           onChange={(next) => updateField("documentRecipients", next)}
+          message={scope.documentRecipientMessage ?? ""}
+          onMessageChange={(next) => updateField("documentRecipientMessage", next)}
           disabled={!editable}
         />
         {documentsToSendGroup && checkedDocumentsToSendKeys.size > 0 && (

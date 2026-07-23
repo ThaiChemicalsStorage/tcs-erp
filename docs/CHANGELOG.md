@@ -4,7 +4,43 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Feature: in-app "What's New" update log
+## 2026-07-23 (absolute latest) — Feature: Document Recipients custom message + formal email restyle
+
+**Feature**: direct user request, with a screenshot of the plain original email — "อยากให้เพิ่มช่อง
+ใส่ข้อความตรงผู้รับเอกสารในหน้า scope of work เพื่อที่จะแบบเพิ่มข้อความไว้ด้านบนข้อความออโต้ในอีเมล...
+และทำรูปแบบข้อความออโต้ให้ดูทางการมากขึ้นด้วย" (add a text field for a message to appear above the
+auto-generated email content, and make the auto-generated format look more official).
+
+**What was built**:
+- New `ScopeOfWork.documentRecipientMessage: string` field — a "ข้อความเพิ่มเติมถึงผู้รับ (ไม่บังคับ)"
+  textarea added to the bottom of `DocumentRecipientsPicker.tsx`. Non-empty text renders as a
+  highlighted note (gold left border) directly above the auto-generated "Scope of Work {scopeNumber}
+  มีเอกสารที่ต้องการให้ตรวจสอบ/ดำเนินการ" line in the email; blank leaves the email exactly as before
+  this field existed. Unlike `revisionNote`, this field carries over on Duplicate/Rewrite (via the
+  same `...rest` spread `documentRecipients` itself already relies on).
+- The email body itself (`buildDocumentRecipientEmailHtml()`, `api/_lib/scopeOfWorkHandler.ts`) was
+  fully restyled from bare `<p>`/`<ul>` markup to a formal, inline-styled layout matching the app's
+  own navy/gold branding: a navy header band with a "TCS ERP" wordmark, the job's fields rendered as
+  a two-column label/value table instead of a bullet list, a gold call-to-action button in place of
+  a plain text link, and a footer disclaimer. Every style is inline (`style="..."` per element) since
+  most email clients strip `<style>` tags/external stylesheets.
+- Server: `documentRecipientMessage` added to the PATCH sanitizer (`sanitizeLongText`), explicitly
+  set to `""` in `handleCreate()`, and backfilled to `""` in `normalizeScope()` for pre-existing
+  records that predate this field.
+
+**Files Modified**: `src/lib/scopeOfWork.ts`, `api/_lib/scopeOfWorkHandler.ts`,
+`src/pages/quotation/DocumentRecipientsPicker.tsx`, `src/pages/quotation/ScopeOfWorkDocument.tsx`.
+
+**Verification**: `npx tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run lint`,
+`npm run build` all pass clean. The HTML-generation logic (message-above-summary placement, blank
+message correctly omitting the note block, multi-line text converting to `<br>`, and HTML/script
+injection in the message being properly escaped) was verified via a standalone Node script against
+mock data — deleted after verification. Not verified via a live browser/real inbox — Playwright MCP
+remains disconnected this session; see TODO.md.
+
+---
+
+## 2026-07-23 — Feature: in-app "What's New" update log
 
 **Feature**: direct user request — "ทำ update log ให้หน่อย", clarified via a follow-up question to
 mean an in-app feature (not a document or a one-off chat summary): users should be able to see

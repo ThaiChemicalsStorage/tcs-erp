@@ -406,6 +406,7 @@ function normalizeScope(scope: ScopeOfWork): ScopeOfWork {
     documentRecipients: normalizeDocumentRecipients(scope.documentRecipients),
     // Same "record predates this field" defaulting as documentRecipients above.
     revisionNote: scope.revisionNote ?? "",
+    documentRecipientMessage: scope.documentRecipientMessage ?? "",
   };
 }
 
@@ -495,6 +496,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       items: derived.items,
       paymentConditions: { installments: [], description: derived.paymentDescription, notes: "" },
       documentRecipients: {},
+      documentRecipientMessage: "",
       revisionNote: "",
       remarks: derived.remarks,
       seller,
@@ -598,6 +600,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("items" in body) update.items = sanitizeItems(body.items);
   if ("paymentConditions" in body) update.paymentConditions = sanitizePaymentConditions(body.paymentConditions);
   if ("documentRecipients" in body) update.documentRecipients = await sanitizeDocumentRecipients(body.documentRecipients);
+  if ("documentRecipientMessage" in body) update.documentRecipientMessage = sanitizeLongText(body.documentRecipientMessage, "ข้อความถึงผู้รับเอกสาร");
   if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
   if ("seller" in body) update.seller = await sanitizeSignatory(body.seller, "ผู้ขาย");
@@ -843,6 +846,62 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 }
+function nl2br(escaped: string): string {
+  return escaped.replace(/\n/g, "<br>");
+}
+
+/**
+ * Builds the "ส่งอีเมลแจ้งผู้รับเอกสาร" email body — a formal, inline-styled layout (navy/gold, same
+ * palette as the app itself) added 2026-07-23 replacing the original bare `<p>`/`<ul>` markup, per
+ * direct user request that the auto-generated content "ดูทางการมากขึ้น" (look more official). Every
+ * rule is inline (`style="..."`) because most email clients strip `<style>` tags/external
+ * stylesheets. `doc.documentRecipientMessage`, if non-empty, renders as a distinctly highlighted
+ * note directly above the auto-generated summary — added the same pass, per the same user request,
+ * for a way to attach ad-hoc context (e.g. a deadline) the auto-generated fields alone can't say.
+ */
+function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl: string): string {
+  const rows: [string, string][] = [
+    ["ลูกค้า", doc.customerSnapshot.companyName],
+    ["ใบเสนอราคา", doc.quotationNumber],
+    ["ประเภทงาน", `${doc.jobTypeCode} ${doc.jobTypeName}`.trim()],
+    ["วันที่ส่งของ/ส่งแบบอนุมัติ", doc.deliveryDate || "-"],
+  ];
+  const messageBlock = doc.documentRecipientMessage.trim()
+    ? `<div style="background:#f7f1e3;border-left:3px solid #c9a84c;border-radius:4px;padding:12px 16px;margin:0 0 20px;">
+         <p style="margin:0;font-size:13px;line-height:1.6;color:#4a3f22;">${nl2br(escapeHtml(doc.documentRecipientMessage.trim()))}</p>
+       </div>`
+    : "";
+  const rowsHtml = rows
+    .map(
+      ([label, value], i) => `
+      <tr>
+        <td style="padding:8px 0;font-size:13px;color:#767676;white-space:nowrap;vertical-align:top;${i > 0 ? "border-top:1px solid #eee;" : ""}">${escapeHtml(label)}</td>
+        <td style="padding:8px 0 8px 16px;font-size:13px;color:#1a1a1a;font-weight:600;${i > 0 ? "border-top:1px solid #eee;" : ""}">${escapeHtml(value)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  return `
+    <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;max-width:560px;margin:0 auto;background:#f4f4f4;padding:24px 16px;">
+      <div style="background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e4e4e4;">
+        <div style="background:#0b1d3a;padding:22px 28px;">
+          <p style="margin:0;color:#c9a84c;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">TCS ERP</p>
+          <p style="margin:6px 0 0;color:#ffffff;font-size:17px;font-weight:600;">แจ้งเตือนเอกสาร Scope of Work</p>
+        </div>
+        <div style="padding:26px 28px;">
+          ${messageBlock}
+          <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#1a1a1a;">
+            Scope of Work <strong style="color:#0b1d3a;">${escapeHtml(doc.scopeNumber)}</strong> มีเอกสารที่ต้องการให้ตรวจสอบ/ดำเนินการ
+          </p>
+          <table style="width:100%;border-collapse:collapse;">${rowsHtml}</table>
+          <div style="margin-top:26px;text-align:center;">
+            <a href="${appUrl}" style="display:inline-block;background:#c9a84c;color:#0b1d3a;text-decoration:none;font-weight:700;font-size:13px;padding:11px 28px;border-radius:6px;">เปิดดูใน TCS ERP</a>
+          </div>
+        </div>
+      </div>
+      <p style="margin:16px 0 0;font-size:11px;color:#999;text-align:center;">อีเมลนี้ถูกส่งโดยอัตโนมัติจากระบบ TCS ERP กรุณาอย่าตอบกลับอีเมลฉบับนี้</p>
+    </div>`;
+}
 
 /**
  * "ส่งอีเมลแจ้งผู้รับเอกสาร" — added 2026-07-23, per direct user request to actually route the
@@ -885,16 +944,7 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
 
   const appUrl = process.env.APP_URL || "https://tcs-erp-nine.vercel.app";
   const subject = `[Scope of Work] ${doc.scopeNumber} — ${doc.customerSnapshot.companyName}`;
-  const html = `
-    <p>Scope of Work <strong>${escapeHtml(doc.scopeNumber)}</strong> มีเอกสารที่ต้องการให้ตรวจสอบ/ดำเนินการ</p>
-    <ul>
-      <li>ลูกค้า: ${escapeHtml(doc.customerSnapshot.companyName)}</li>
-      <li>ใบเสนอราคา: ${escapeHtml(doc.quotationNumber)}</li>
-      <li>ประเภทงาน: ${escapeHtml(doc.jobTypeCode)} ${escapeHtml(doc.jobTypeName)}</li>
-      <li>วันที่ส่งของ/ส่งแบบอนุมัติ: ${escapeHtml(doc.deliveryDate || "-")}</li>
-    </ul>
-    <p><a href="${appUrl}">เปิดดูใน TCS ERP</a></p>
-  `;
+  const html = buildDocumentRecipientEmailHtml(doc, appUrl);
 
   const results = await Promise.allSettled(userDocs.map((u) => sendEmail({ to: u.email, subject, html })));
   const sentCount = results.filter((r) => r.status === "fulfilled").length;

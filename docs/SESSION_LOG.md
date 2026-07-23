@@ -4,7 +4,58 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Feature: in-app "What's New" update log
+## Session — 2026-07-23 (absolute latest), Feature: Document Recipients custom message + formal email restyle
+
+### What was implemented
+- Direct user request, this time accompanied by a screenshot of the actual plain-text-looking
+  email a recipient had received — concrete evidence made this an easy, unambiguous build rather
+  than one needing a clarifying question: add a text field on the Scope of Work page so a message
+  can be typed in and have it appear above the auto-generated card content in the email, and
+  separately, make the auto-generated content itself look more official.
+- Two genuinely separate asks bundled into one request, handled as two changes: (1) a new
+  persisted field (`documentRecipientMessage`) plus UI to edit it, and (2) a pure presentation
+  change to the existing email-building code, unrelated to the new field except that the new
+  field's content gets slotted into the restyled template.
+- Placement decision for the new field: added it to the bottom of the existing
+  `DocumentRecipientsPicker.tsx` card rather than a new standalone card — it's conceptually part of
+  "what happens when I send this to the picked recipients," so keeping it physically next to the
+  recipient picker and the send button (right below it in the page) keeps the whole flow legible in
+  one place instead of scattering a new box somewhere else on a page that already has many cards.
+- Carry-over decision for the new field: made it persist across Duplicate/Rewrite (via the existing
+  `...rest` spread, no special-casing needed), unlike `revisionNote` from earlier the same session
+  which deliberately always resets. Reasoning: `documentRecipients` (who to notify) already carries
+  over for the same reason — a recurring job's distribution list rarely changes revision to
+  revision — and a message like "please review by Friday" is exactly the kind of thing worth
+  reusing as a starting point on the next revision too, always trivially editable/clearable either
+  way. This is a judgment call, not something the user specified either way — worth revisiting if a
+  future user reports the opposite expectation.
+- Email restyle: converted the original bare `<p>`/`<ul>`/`<a>` markup (no styling at all, hence
+  looking like plain unformatted text in a Gmail-style bubble in the reported screenshot) into a
+  self-contained inline-styled HTML block matching the app's own navy (`#0b1d3a`)/gold (`#c9a84c`)
+  branding — every rule inline via `style="..."` since most email clients (correctly) strip
+  `<style>` tags and external stylesheets, so nothing besides pure inline CSS is portable here.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- No live browser/real-inbox check available (Playwright MCP still disconnected, and this session
+  has no way to actually receive a test email itself). Verified the HTML-generation function's pure
+  logic instead via a standalone Node script: confirmed the custom message renders above the
+  auto-generated summary when present, is cleanly omitted when blank (byte-for-byte the same output
+  shape as before this field existed), multi-line message text becomes `<br>`-separated instead of
+  collapsing to one line, and a deliberately hostile `<script>alert(1)</script>` input in the
+  message field comes back fully HTML-escaped in the output — confirming the existing `escapeHtml()`
+  helper is still applied correctly to the new field, i.e. this doesn't introduce a new
+  HTML-injection vector into outbound email.
+
+### Recommendation for next session
+- Once a real inbox is reachable (or Playwright reconnects), actually trigger a send and visually
+  confirm the restyled email renders correctly across at least Gmail and Outlook's typically
+  stricter inline-CSS support — this was verified as valid, well-formed HTML, not against a real
+  rendering engine.
+
+---
+
+## Session — 2026-07-23, Feature: in-app "What's New" update log
 
 ### What was implemented
 - User's request was terse ("ทำ update log ให้หน่อย" — "make an update log for me"), ambiguous

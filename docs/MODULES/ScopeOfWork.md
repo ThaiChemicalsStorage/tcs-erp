@@ -1,6 +1,6 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23
 
 **2026-07-23, Own-Records-Only Viewing** (per direct user request, "หน้า scope of work อยากให้ทำสิทธิ์
 เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — mirroring Quotation's `quotations:viewAll`): new
@@ -328,6 +328,23 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   [RBAC.md](../RBAC.md) "Scope of Work Own-Records-Only Viewing"). Without this, a recipient who
   never clicks the notification/email link (or whose email bounced) would have had literally no way
   to find the document again through the app's own UI.
+- **Custom message + formal email restyle (added 2026-07-23, third same-day pass)**: direct user
+  request, with a screenshot of the plain original email — a "ข้อความเพิ่มเติมถึงผู้รับ (ไม่บังคับ)"
+  textarea now sits at the bottom of `DocumentRecipientsPicker.tsx`, saved as
+  `ScopeOfWork.documentRecipientMessage: string`. Non-empty text renders as a distinctly highlighted
+  note (`#f7f1e3` background, gold left border) directly **above** the auto-generated
+  "Scope of Work {scopeNumber} มีเอกสารที่ต้องการให้ตรวจสอบ/ดำเนินการ" line in the email — exactly
+  the placement asked for. Blank means the email is unchanged from before this field existed. Unlike
+  `revisionNote`, this field IS carried over on Duplicate/Rewrite (via the same `...rest` spread
+  `documentRecipients` itself already relies on) — a recurring instruction for the same job is more
+  often still relevant on the next revision than not, and it's trivially editable/clearable before
+  the next send either way. The email body itself (`buildDocumentRecipientEmailHtml()`,
+  `api/_lib/scopeOfWorkHandler.ts`) was also fully restyled the same pass, per the same request that
+  it "ดูทางการมากขึ้น" (look more official) — a navy header band with the "TCS ERP" wordmark, the
+  field list rendered as a two-column label/value table instead of a bullet list, a gold call-to-
+  action button instead of a plain text link, and a footer disclaimer, all inline-styled (`style="..."`
+  on every element — most email clients strip `<style>` tags/external stylesheets) rather than the
+  original bare `<p>`/`<ul>` markup.
 - **Known limitation, not fixed this pass**: the "เปิดดูใน TCS ERP" link inside the *email* itself
   still only opens the app's homepage, not the specific record — this app has no URL-based router
   (see [ARCHITECTURE.md](../ARCHITECTURE.md)), so a plain link from an external email genuinely

@@ -256,6 +256,15 @@ export interface ScopeOfWork {
    * against). Independent of `checked` state — unchecking an option doesn't clear its recipients,
    * so re-checking it later remembers the previous picks; only the email-send action reads this. */
   documentRecipients: Record<string, string[]>;
+  /** Free-text note prepended above the auto-generated summary in the "ส่งอีเมลแจ้งผู้รับเอกสาร" email
+   * — added 2026-07-23, per direct user request ("อยากให้เพิ่มช่องใส่ข้อความ...เพิ่มข้อความไว้ด้านบน
+   * ข้อความออโต้ในอีเมล") for a way to add context (e.g. "กรุณาตรวจสอบภายในวันศุกร์นี้ด่วน") that the
+   * auto-generated card content alone can't express. Purely additive — blank means the email shows
+   * only the auto-generated content, same as before this field existed. Unlike `revisionNote`, this
+   * DOES carry over on Duplicate/Rewrite (via the `...rest` spread, same as `documentRecipients`
+   * itself) — a recurring instruction for the same job is more often still relevant to the next
+   * revision than not, and it's always trivially editable/clearable before the next send. */
+  documentRecipientMessage: string;
   /** Free-text summary of what changed in this revision vs. the one it was rewritten from — added
    * 2026-07-23, per direct user request, same field/semantics as `Quote.revisionNote`
    * (src/lib/quotes.tsx). Always starts blank on a brand-new record, a Duplicate, or a fresh
@@ -327,6 +336,7 @@ export type ScopeOfWorkUpdateFields = Partial<{
   items: ScopeOfWorkItem[];
   paymentConditions: ScopeOfWorkPaymentConditions;
   documentRecipients: Record<string, string[]>;
+  documentRecipientMessage: string;
   revisionNote: string;
   remarks: string;
   seller: ScopeOfWorkSignatory;

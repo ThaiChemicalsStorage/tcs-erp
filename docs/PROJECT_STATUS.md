@@ -14,6 +14,14 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] Scope of Work: Document Recipients custom message + formal email restyle.**
+  Direct user request with a screenshot of the plain original email. New "ข้อความเพิ่มเติมถึงผู้รับ"
+  textarea (`ScopeOfWork.documentRecipientMessage`) renders as a highlighted note above the
+  auto-generated email summary; the email itself was fully restyled to a formal navy/gold
+  inline-styled layout (header band, label/value table, gold CTA button, footer disclaimer).
+  `tsc`/`lint`/`build` all pass clean; HTML-generation logic (placement, blank-message omission,
+  multi-line handling, XSS-escaping) verified via a standalone Node script. See
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients".
 - ✅ **[2026-07-23] In-app "What's New" update log.**
   Direct user request for an update log — clarified as an in-app feature. New topbar sparkle icon
   (`WhatsNewPanel.tsx`) next to the notification bell opens a dropdown of recent user-facing

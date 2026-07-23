@@ -455,6 +455,11 @@ interface ScopeOfWork {
   // documentRecipients added 2026-07-23: documentsToSend option key -> picked User.id[]. See
   // MODULES/ScopeOfWork.md "Document Recipients".
   documentRecipients: Record<string, string[]>;
+  // documentRecipientMessage added 2026-07-23 (same-day third pass): free text, rendered above the
+  // auto-generated summary in the "ส่งอีเมลแจ้งผู้รับเอกสาร" email. Unlike revisionNote below, this
+  // IS carried over on Duplicate/Rewrite (via ...rest, same as documentRecipients itself). See
+  // MODULES/ScopeOfWork.md "Document Recipients".
+  documentRecipientMessage: string;
   // revisionNote added 2026-07-23: free text, always "" on create/Duplicate/fresh Rewrite, never
   // inherited from the source record. See MODULES/ScopeOfWork.md "Revision Note".
   revisionNote: string;
