@@ -4,7 +4,63 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Fix: Delivery Order excludes Down Payment
+## Session — 2026-07-23 (absolute latest), Investigation + fix: Delivery Order "nothing prints" report
+
+### What was implemented
+- User reported: ticking an item in the second installment card, then clicking print, produced
+  nothing. This time, rather than guessing at a fix from code reading alone, the Chrome browser
+  automation tools (recently reconnected/available this session, distinct from the still-disconnected
+  Playwright MCP) were used to actually reproduce the exact interaction. Since production auth
+  credentials aren't available in this session, built a small temporary local harness
+  (`dev-print-test.html` + `src/dev/printTestMain.tsx`, both deleted afterward) that renders the real
+  `DeliveryOrderDocument` component with a mocked `fetch()` intercepting `/api/delivery-orders/...`
+  — no backend/auth needed, but every other line of application code (the actual checkbox handler,
+  the actual print-gate check, the actual print component) runs unmodified.
+- First diagnostic pass (comparing dev-server CSS output) produced a red herring: Tailwind v4's Vite
+  dev-mode CSS is incrementally/lazily compiled per-module-graph, so a fresh, narrowly-scoped test
+  entry showed zero `print:*` utility rules — looked like a catastrophic "print never works at all"
+  finding. Caught this before reporting it by checking the *actual production build* (`npm run
+  build` + grep the `dist/` CSS output) instead, which correctly contains every `print:table`/
+  `print:hidden` rule — confirming dev-mode CSS scanning behavior doesn't reflect what ships to
+  users, and averting a false alarm that would have wasted the user's trust on a non-issue.
+- Second pass simulated a REAL click sequence (not just pre-set mock props): navigated to the
+  harness, clicked the actual checkbox via browser automation, confirmed it visually flipped to
+  checked, then clicked the actual "พิมพ์ / PDF" button. The real native print dialog opened (visible
+  as a CDP screenshot timeout — a blocked/frozen renderer is the tell-tale sign of a modal native
+  dialog, dismissed with Escape rather than interacted with further, per the standing rule against
+  triggering browser dialogs) — meaning the print gate passed and `window.print()` fired correctly
+  for the exact reported scenario. The reported "toast blocks print" symptom could not be reproduced.
+- Did find one real, unrelated bug in the process: the signature block printed "ลงนาม บริษัท บริษัท
+  {name}" — a duplicated "บริษัท" — because the hardcoded prefix and the customer/company name
+  (which already includes the full legal "บริษัท ... จำกัด" name) were both present. Fixed to just
+  "ลงนาม {name}". A one-line fix, but only found because of the visual click-through rather than
+  by code review alone (the earlier documentation/code-review passes on this file didn't catch it —
+  a lesson that live rendering catches issues static review misses, even when the "static" review
+  is careful).
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- The signature-line fix itself confirmed via the same local harness's DOM inspection (no more
+  duplicated text). The original "toast instead of print" report remains only partially resolved —
+  most likely explanation (print clicked before the tick registered) documented in TODO.md as a
+  follow-up ask back to the user, rather than closed out as fully understood.
+
+### Recommendation for next session
+- If the user reports the toast still appearing on a genuine tick-then-print sequence, this needs a
+  session where the user can share their own screen/session directly (or Playwright reconnects and
+  can hit the real authenticated production app) — the mocked-backend harness approach reached its
+  limit here since it can only test what the code review already reasoned should happen, not
+  whatever is different about the user's real browser/data/timing.
+- The temporary local-harness-with-mocked-fetch technique (real components, `window.fetch` stubbed
+  in JS rather than needing a running backend) is worth remembering as a reusable pattern for future
+  "can't reproduce, no live credentials" investigations — faster and higher-fidelity than pure code
+  reading, and this session's mistake (trusting dev-mode CSS output instead of checking the real
+  `dist/` build first) is worth remembering too: always verify against the actual build artifact
+  that ships, not a dev-server approximation of it, before concluding something is broken.
+
+---
+
+## Session — 2026-07-23, Fix: Delivery Order excludes Down Payment
 
 ### What was implemented
 - Immediately after reporting the new Delivery Order module as deployed, the user sent a single

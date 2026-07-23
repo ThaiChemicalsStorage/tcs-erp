@@ -1,6 +1,21 @@
 # Module: Delivery Order
 
-## Status: ✅ Built (2026-07-23), Down Payment exclusion fix same day
+## Status: ✅ Built (2026-07-23), Down Payment exclusion + signature-line fix same day
+
+**2026-07-23, same-day fix, signature line**: per a direct user bug report ("ทำไมติ๊กอันล่างแล้วกด
+พิมพ์ออกมาแล้วมันไม่มีอะไรเลยละ") the signature block in `DeliveryOrderPrintDocument.tsx` printed a
+duplicated "บริษัท บริษัท {name}" — the hardcoded "ลงนาม บริษัท " prefix plus
+`customerCompanyName`/`companyHeader.name`, both of which already contain the full "บริษัท ... จำกัด"
+legal name. Fixed to just "ลงนาม {name}", matching the reference PDF's own convention. Found via a
+live interactive reproduction of the exact reported scenario (ticking one item in the second
+installment card, then clicking print) using the real `DeliveryOrderDocument`/
+`DeliveryOrderPrintDocument` components in a temporary local harness with a mocked `fetch` — the
+underlying print-gating logic (`hasAnySelectedItem`) and print CSS (`hidden print:table` — confirmed
+present and correct in the actual production `dist/` build output) both worked exactly as designed
+for that scenario; the user-reported "nothing came out" symptom could not be reproduced through this
+path, so it's most likely the print button was clicked before the checkbox tick registered (the
+warning toast fires before the tick, not after) rather than a code defect independent of the
+duplicated-signature bug this pass did find and fix. See TODO.md for the still-open follow-up ask.
 
 **2026-07-23, same-day fix**: per a direct user follow-up ("ลืมบอกว่าใบส่งมอบงานจะไม่มี down payment
 เลย" — forgot to mention, a Delivery Order never has a Down Payment page), the Down Payment

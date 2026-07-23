@@ -14,6 +14,13 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] Fix: Delivery Order signature line duplicated "บริษัท".**
+  Investigated a user-reported "print produces nothing" bug via a live click-through reproduction
+  (Chrome browser automation against a local harness with a mocked backend, real components) —
+  couldn't reproduce that specific symptom, but found and fixed a real duplicated-text bug in the
+  signature block along the way. `tsc`/`lint`/`build` all pass clean. See
+  [MODULES/DeliveryOrder.md](./MODULES/DeliveryOrder.md); follow-up ask to the user tracked in
+  [TODO.md](./TODO.md).
 - ✅ **[2026-07-23] Fix: Delivery Order excludes the Down Payment installment.**
   Same-day follow-up after the Delivery Order module shipped — a deposit paid before any goods are
   delivered has nothing to "deliver," so it never gets a page on this document. Excluded both at

@@ -4,7 +4,36 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Fix: Delivery Order excludes the Down Payment installment
+## 2026-07-23 (absolute latest) — Fix: Delivery Order signature line duplicated "บริษัท"
+
+**Bug report**: direct user follow-up — "ทำไมติ๊กอันล่างแล้วกดพิมพ์ออกมาแล้วมันไม่มีอะไรเลยละ" (why,
+after ticking the bottom item and printing, nothing comes out).
+
+**Investigation**: built a temporary local harness rendering the real `DeliveryOrderDocument`/
+`DeliveryOrderPrintDocument` components (mocked `fetch`, no auth needed) and reproduced the exact
+reported interaction — ticking the checkbox for an item in the second installment card, then
+clicking "พิมพ์ / PDF" — via real simulated browser clicks, not just static mock props. The print
+gate (`hasAnySelectedItem`) correctly passed and `window.print()` fired as expected; separately
+confirmed the production `dist/` build's actual CSS output contains the `print:table`/`print:hidden`
+rules the print layout depends on. Could not reproduce a "nothing prints" outcome through this path.
+
+**Bug found and fixed along the way**: the signature block printed a duplicated "บริษัท บริษัท
+{name}" — `DeliveryOrderPrintDocument.tsx` hardcoded a "ลงนาม บริษัท " prefix in front of
+`customerCompanyName`/`companyHeader.name`, both of which already contain the full "บริษัท ... จำกัด"
+legal name (e.g. "บริษัท ทดสอบ จำกัด"). Fixed to "ลงนาม {name}", matching the reference PDF.
+
+**Files Modified**: `src/pages/quotation/DeliveryOrderPrintDocument.tsx`.
+
+**Verification**: `npx tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+The fix itself is a one-line text change, visually confirmed via the same local harness (DOM
+`textContent` inspection). The original "nothing prints" report remains only partially explained —
+most likely the print button was clicked before the checkbox tick had registered (the warning toast
+fires on a genuinely-unticked state, not after a successful tick) rather than a reproducible code
+defect; see TODO.md for the follow-up ask to the user.
+
+---
+
+## 2026-07-23 — Fix: Delivery Order excludes the Down Payment installment
 
 **Bug/gap**: direct user follow-up right after the Delivery Order module shipped — "ลืมบอกว่าใบส่ง
 มอบงานจะไม่มี down payment เลย" (forgot to mention: a Delivery Order never has a Down Payment page).

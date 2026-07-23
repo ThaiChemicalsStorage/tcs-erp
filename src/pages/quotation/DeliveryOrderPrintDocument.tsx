@@ -117,8 +117,8 @@ function InstallmentPage({
         <tr>
           <td colSpan={4} className="pt-5" style={{ breakInside: "avoid" }}>
             <div className="grid grid-cols-2 gap-8 text-center">
-              <p className="text-[10px]">ลงนาม บริษัท {deliveryOrder.customerCompanyName || "..."}</p>
-              <p className="text-[10px]">ลงนาม บริษัท {companyHeader.name}</p>
+              <p className="text-[10px]">ลงนาม {deliveryOrder.customerCompanyName || "..."}</p>
+              <p className="text-[10px]">ลงนาม {companyHeader.name}</p>
             </div>
             <div className="grid grid-cols-2 gap-8 mt-6 text-center text-[10px]">
               {["ผู้ตรวจรับสินค้าและงานบริการ", "ผู้ส่งสินค้าและงานบริการ"].map((label) => (
