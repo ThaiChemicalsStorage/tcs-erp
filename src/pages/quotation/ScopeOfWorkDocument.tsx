@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send } from "lucide-react";
 import type { User } from "../../lib/users";
 import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
   type ScopeOfWorkPaymentType,
   fetchScopeOfWork, updateScopeOfWork, finalizeScopeOfWork, duplicateScopeOfWork, rewriteScopeOfWork,
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
-  blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS,
+  blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS, sendScopeOfWorkDocumentNotifications,
 } from "../../lib/scopeOfWork";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { ChecklistGroupCard } from "./ChecklistGroupCard";
+import { DocumentRecipientsPicker } from "./DocumentRecipientsPicker";
 import { ScopeOfWorkItemsEditor } from "./ScopeOfWorkItemsEditor";
 import { ScopeOfWorkPrintDocument } from "./ScopeOfWorkPrintDocument";
 import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
@@ -39,6 +40,7 @@ function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
     checklistGroups: s.checklistGroups,
     items: s.items,
     paymentConditions: s.paymentConditions,
+    documentRecipients: s.documentRecipients,
     remarks: s.remarks,
     seller: s.seller,
     approver: s.approver,
@@ -230,6 +232,7 @@ export function ScopeOfWorkDocument({
   // identical pattern.
   const [serverValidationErrors, setServerValidationErrors] = useState<{ fieldErrors: Record<string, string>; groupErrors: Record<string, string[]> } | null>(null);
   const [rewriteBusy, setRewriteBusy] = useState(false);
+  const [sendingDocs, setSendingDocs] = useState(false);
 
   // `scope`/`loadError` reset to their initial values (null/false) via a fresh mount whenever
   // `scopeOfWorkId` changes — the parent renders this component with `key={scopeOfWorkId}` for
@@ -299,6 +302,28 @@ export function ScopeOfWorkDocument({
       showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Saves first (the server reads recipients from the persisted record, not unsaved client state —
+   * see handleSendDocumentNotifications() in api/_lib/scopeOfWorkHandler.ts), then triggers the
+   * actual email send. Added 2026-07-23. */
+  const handleSendDocuments = async () => {
+    if (!scope || sendingDocs) return;
+    setSendingDocs(true);
+    try {
+      const saved = await updateScopeOfWork(scope.id, toUpdateFields(scope));
+      setScope(saved);
+      const result = await sendScopeOfWorkDocumentNotifications(scope.id);
+      showToast(
+        result.failedCount > 0
+          ? `ส่งอีเมลสำเร็จ ${result.sentCount}/${result.recipientCount} คน (มีบางรายการล้มเหลว)`
+          : `ส่งอีเมลแจ้งผู้รับเอกสารแล้ว (${result.sentCount} คน)`,
+      );
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "ส่งอีเมลไม่สำเร็จ");
+    } finally {
+      setSendingDocs(false);
     }
   };
 
@@ -392,6 +417,11 @@ export function ScopeOfWorkDocument({
   };
 
   const noSourceItems = scope.items.length === 0;
+  const documentsToSendGroup = scope.checklistGroups.find((g) => g.key === "documentsToSend");
+  const checkedDocumentsToSendKeys = new Set((documentsToSendGroup?.options ?? []).filter((o) => o.checked).map((o) => o.key));
+  const hasDocumentRecipientsToSend = Object.entries(scope.documentRecipients).some(
+    ([key, ids]) => checkedDocumentsToSendKeys.has(key) && ids.length > 0,
+  );
 
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
@@ -581,6 +611,29 @@ export function ScopeOfWorkDocument({
             ))}
           </div>
         </div>
+
+        {/* Document recipients — real people to email for whichever "เอกสารส่งถึง" departments are
+            checked above, added 2026-07-23. Card only renders once at least one department is
+            checked (see DocumentRecipientsPicker's own early-return). */}
+        <DocumentRecipientsPicker
+          documentsToSendGroup={documentsToSendGroup}
+          users={users}
+          value={scope.documentRecipients}
+          onChange={(next) => updateField("documentRecipients", next)}
+          disabled={!editable}
+        />
+        {documentsToSendGroup && checkedDocumentsToSendKeys.size > 0 && (
+          <div className="flex justify-end print:hidden -mt-2">
+            <button
+              onClick={handleSendDocuments}
+              disabled={!hasDocumentRecipientsToSend || sendingDocs}
+              title={!hasDocumentRecipientsToSend ? "กรุณาเลือกผู้รับเอกสารอย่างน้อย 1 คน" : undefined}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!hasDocumentRecipientsToSend || sendingDocs ? "opacity-40 cursor-not-allowed" : ""}`}
+            >
+              {sendingDocs ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} ส่งอีเมลแจ้งผู้รับเอกสาร
+            </button>
+          </div>
+        )}
 
         {noSourceItems && (
           <div className="bg-[#e08a3c]/10 border border-[#e08a3c]/30 rounded-xl p-4 flex items-start gap-3 print:hidden">

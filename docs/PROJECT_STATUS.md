@@ -14,6 +14,19 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ⚠️ **[2026-07-23] Scope of Work: real Document Recipients + email routing — requires a manual production step (Resend API key).**
+  Per direct user request, the "เอกสารส่งถึง" checklist gained a 6th option (Accounting) and is now
+  backed by real people: `User.department` changed from free text to a controlled `<select>`
+  matching the checklist's own department labels exactly, a new `DocumentRecipientsPicker.tsx`
+  lets the preparer pick real staff per checked department, and a new "ส่งอีเมลแจ้งผู้รับเอกสาร"
+  button emails them via a new `api/_lib/email.ts` (Resend REST API, no SDK dependency). No PDF
+  attachment (this app has no server-side PDF generation) — a plain HTML notification with a link
+  back into the app. `tsc`/`lint`/`build` all pass clean; the recipient-picker UI verified via a
+  temporary dev harness (candidate filtering + multi-department selection both confirmed correct,
+  zero console errors). **Action required**: `RESEND_API_KEY` must be added to Vercel's environment
+  variables before the send button does anything beyond returning a clear "not configured" error —
+  see [TODO.md](./TODO.md). See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document
+  Recipients".
 - ⚠️ **[2026-07-23] Scope of Work: own-records-only viewing (`scopeOfWork:viewAll`) — requires a manual production step.**
   Per direct user request, mirrors Quotation's `quotations:viewAll`: a role holding `scopeOfWork:view`
   but not the new `scopeOfWork:viewAll` now only sees its own records on the standalone Scope of Work

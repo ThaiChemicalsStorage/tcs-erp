@@ -14,8 +14,9 @@ import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty, sanitizeBo
 import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeChecklistGroups } from "./documentRequirements.js";
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint } from "../../src/lib/validation/scopeOfWorkValidation.js";
 import { getRevisionRoot } from "./quoteRevisions.js";
-import type { ChecklistGroup } from "../../src/lib/documentRequirements.js";
-import { normalizePaymentConditions } from "../../src/lib/scopeOfWork.js";
+import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/lib/documentRequirements.js";
+import { normalizePaymentConditions, normalizeDocumentRecipients } from "../../src/lib/scopeOfWork.js";
+import { sendEmail, isEmailConfigured } from "./email.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
   ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkPaymentInstallment,
@@ -297,6 +298,40 @@ function sanitizePaymentConditions(raw: unknown): ScopeOfWorkPaymentConditions {
   };
 }
 
+const MAX_RECIPIENTS_PER_DEPARTMENT = 20;
+const VALID_RECIPIENT_DEPARTMENT_KEYS = new Set(DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => d.key));
+
+/** `documentRecipients` maps a `documentsToSend` checklist option key to the `User.id`s picked as
+ * that department's actual recipients — added 2026-07-23, see `ScopeOfWork.documentRecipients`'s
+ * doc comment. Unknown keys (not one of `DOCUMENT_RECIPIENT_DEPARTMENTS` — e.g. a stale `"other"`
+ * or a garbage key) are silently dropped rather than rejected, same defensive-clamp philosophy as
+ * `sanitizeChecklistGroups()`'s single-selection clamp — a client can never route to something that
+ * isn't a real department. Every referenced user id is verified to actually exist via one batched
+ * query rather than N individual ones. */
+async function sanitizeDocumentRecipients(raw: unknown): Promise<Record<string, string[]>> {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new HttpError(400, "รูปแบบผู้รับเอกสารไม่ถูกต้อง");
+  const entries = Object.entries(raw as Record<string, unknown>).filter(([key]) => VALID_RECIPIENT_DEPARTMENT_KEYS.has(key));
+  const allIds = new Set<string>();
+  for (const [, value] of entries) {
+    if (!Array.isArray(value)) throw new HttpError(400, "รูปแบบผู้รับเอกสารไม่ถูกต้อง");
+    if (value.length > MAX_RECIPIENTS_PER_DEPARTMENT) throw new HttpError(400, `มีผู้รับเอกสารมากเกินไป (สูงสุด ${MAX_RECIPIENTS_PER_DEPARTMENT} คนต่อแผนก)`);
+    for (const id of value) {
+      if (typeof id !== "string" || !id) throw new HttpError(400, "รูปแบบผู้รับเอกสารไม่ถูกต้อง");
+      allIds.add(id);
+    }
+  }
+  if (allIds.size === 0) return {};
+  const objectIds = [...allIds].map((id) => toObjectId(id)); // throws HttpError(400) on a malformed id
+  const users = await usersCollection();
+  const found = await users.find({ _id: { $in: objectIds } }, { projection: { _id: 1 } }).toArray();
+  const foundIds = new Set(found.map((u) => u._id.toString()));
+  const missing = [...allIds].filter((id) => !foundIds.has(id));
+  if (missing.length > 0) throw new HttpError(400, "ไม่พบผู้ใช้งานที่เลือกเป็นผู้รับเอกสารบางราย");
+  const out: Record<string, string[]> = {};
+  for (const [key, value] of entries) out[key] = [...new Set(value as string[])];
+  return out;
+}
+
 async function sanitizeSignatory(raw: unknown, label: string): Promise<ScopeOfWorkSignatory> {
   const r = (raw ?? {}) as Record<string, unknown>;
   const userId = typeof r.userId === "string" ? r.userId.trim() : "";
@@ -365,6 +400,9 @@ function normalizeScope(scope: ScopeOfWork): ScopeOfWork {
     ...scope,
     checklistGroups: withDefaultChecklistGroups(scope.checklistGroups, scope.jobTypeCode),
     paymentConditions: normalizePaymentConditions(scope.paymentConditions),
+    // A record saved before 2026-07-23 has no `documentRecipients` field in MongoDB at all — see
+    // normalizeDocumentRecipients()'s own doc comment.
+    documentRecipients: normalizeDocumentRecipients(scope.documentRecipients),
   };
 }
 
@@ -449,6 +487,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       checklistGroups: derived.checklistGroups,
       items: derived.items,
       paymentConditions: { installments: [], description: derived.paymentDescription, notes: "" },
+      documentRecipients: {},
       remarks: derived.remarks,
       seller,
       approver: { name: "", userId: "", date: "" },
@@ -550,6 +589,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("checklistGroups" in body) update.checklistGroups = sanitizeChecklistGroups(body.checklistGroups, withDefaultChecklistGroups(doc.checklistGroups, doc.jobTypeCode));
   if ("items" in body) update.items = sanitizeItems(body.items);
   if ("paymentConditions" in body) update.paymentConditions = sanitizePaymentConditions(body.paymentConditions);
+  if ("documentRecipients" in body) update.documentRecipients = await sanitizeDocumentRecipients(body.documentRecipients);
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
   if ("seller" in body) update.seller = await sanitizeSignatory(body.seller, "ผู้ขาย");
   if ("approver" in body) update.approver = await sanitizeSignatory(body.approver, "ผู้อนุมัติ");
@@ -787,6 +827,78 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
   res.status(200).json({ ok: true });
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+}
+
+/**
+ * "ส่งอีเมลแจ้งผู้รับเอกสาร" — added 2026-07-23, per direct user request to actually route the
+ * `documentsToSend` checklist to real people by email (see `ScopeOfWork.documentRecipients`'s doc
+ * comment and docs/MODULES/ScopeOfWork.md "Document Recipients"). Only departments that are BOTH
+ * currently checked in the checklist AND have at least one picked recipient are emailed — a
+ * department with recipients picked earlier but since unchecked is skipped (the picks themselves
+ * are preserved for convenience if re-checked later, but the send action only acts on what's
+ * currently marked "needs to go here"). Gated by `scopeOfWork:print` (not `:edit`) — this is a
+ * distribution/export action like Print, not a content edit, so it deliberately has no ownership
+ * check and works on a `"Final"` record too, same as Print.
+ */
+async function handleSendDocumentNotifications(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "scopeOfWork:print");
+  const doc = await loadScopeOrThrow(id);
+
+  const checklistGroups = withDefaultChecklistGroups(doc.checklistGroups, doc.jobTypeCode);
+  const documentsToSendGroup = checklistGroups.find((g) => g.key === "documentsToSend");
+  const checkedKeys = new Set((documentsToSendGroup?.options ?? []).filter((o) => o.checked).map((o) => o.key));
+  const recipients = normalizeDocumentRecipients(doc.documentRecipients);
+
+  const recipientUserIds = new Set<string>();
+  for (const dept of DOCUMENT_RECIPIENT_DEPARTMENTS) {
+    if (!checkedKeys.has(dept.key)) continue;
+    for (const userId of recipients[dept.key] ?? []) recipientUserIds.add(userId);
+  }
+  if (recipientUserIds.size === 0) {
+    throw new HttpError(400, 'กรุณาเลือกผู้รับเอกสารอย่างน้อย 1 คน สำหรับแผนกที่เลือกไว้ใน "เอกสารส่งถึง"');
+  }
+  if (!isEmailConfigured()) {
+    throw new HttpError(500, "ระบบยังไม่ได้ตั้งค่าการส่งอีเมล (RESEND_API_KEY) กรุณาติดต่อผู้ดูแลระบบ");
+  }
+
+  const users = await usersCollection();
+  const userDocs = await users.find(
+    { _id: { $in: [...recipientUserIds].map((uid) => toObjectId(uid)) } },
+    { projection: { email: 1, fullName: 1 } },
+  ).toArray();
+
+  const appUrl = process.env.APP_URL || "https://tcs-erp-nine.vercel.app";
+  const subject = `[Scope of Work] ${doc.scopeNumber} — ${doc.customerSnapshot.companyName}`;
+  const html = `
+    <p>Scope of Work <strong>${escapeHtml(doc.scopeNumber)}</strong> มีเอกสารที่ต้องการให้ตรวจสอบ/ดำเนินการ</p>
+    <ul>
+      <li>ลูกค้า: ${escapeHtml(doc.customerSnapshot.companyName)}</li>
+      <li>ใบเสนอราคา: ${escapeHtml(doc.quotationNumber)}</li>
+      <li>ประเภทงาน: ${escapeHtml(doc.jobTypeCode)} ${escapeHtml(doc.jobTypeName)}</li>
+      <li>วันที่ส่งของ/ส่งแบบอนุมัติ: ${escapeHtml(doc.deliveryDate || "-")}</li>
+    </ul>
+    <p><a href="${appUrl}">เปิดดูใน TCS ERP</a></p>
+  `;
+
+  const results = await Promise.allSettled(userDocs.map((u) => sendEmail({ to: u.email, subject, html })));
+  const sentCount = results.filter((r) => r.status === "fulfilled").length;
+  results.forEach((r, i) => {
+    if (r.status === "rejected") console.error(`[scope-of-works] failed to email recipient ${userDocs[i]?.email}`, r.reason);
+  });
+  const failedCount = results.length - sentCount;
+
+  await writeScopeAuditEntry(
+    ctx, "Scope of Work Document Notification Sent",
+    `ส่งอีเมลแจ้งผู้รับเอกสารของ Scope of Work ${doc.scopeNumber} (${sentCount}/${userDocs.length} สำเร็จ)`,
+    { scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId },
+  );
+
+  res.status(200).json({ ok: true, sentCount, failedCount, recipientCount: userDocs.length });
+}
+
 async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:delete");
@@ -821,5 +933,6 @@ export async function handleScopeOfWork(req: VercelRequest, res: VercelResponse)
   if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "send-documents") return handleSendDocumentNotifications(req, res, parts[0]);
   throw new HttpError(404, "Not found");
 }

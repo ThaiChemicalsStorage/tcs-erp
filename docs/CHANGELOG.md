@@ -4,7 +4,91 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Scope of Work: own-records-only viewing (`scopeOfWork:viewAll`)
+## 2026-07-23 (absolute latest) — Scope of Work: real Document Recipients + email routing
+
+**Feature**: per direct user request ("ในส่วนนี้ให้เพิ่มบัญชีเข้าไปด้วย... อยากให้ลิงค์ข้อมูลกับแผนก
+ที่จะเลือกตอนสร้างพนักงานเพราะจะต้องส่งเอกสารไปให้คนนั้นๆที่อยู่ในแต่ละแผนก" — add "บัญชี" to the
+Documents Sent To checklist, and link it to the department chosen when creating an employee, since
+documents need to go to the real person in each department), the `documentsToSend` checklist is now
+backed by real people instead of being a plain printed-form checkbox list, and can email them
+directly.
+
+**Scoping conversation**: this request had two genuinely open questions the user was asked to
+resolve before implementing — (1) how deep the "link to department" should go (just add the
+checkbox with no real link; make `department` a controlled dropdown matching the checklist so
+matching is reliable, with a recipient picker; or a fuller architecture the user didn't actually
+want), and (2) since the user's own follow-up clarified they wanted actual email delivery and no
+email-sending infrastructure existed in this codebase at all (confirmed via a targeted grep — no
+nodemailer/SMTP/Resend/SendGrid/etc., zero email-related env vars), which email provider to use.
+User chose "real link with a recipient picker" for (1) and Resend for (2).
+
+**Checklist**: `documentsToSend` gained a 6th option, `{ key: "accounting", label: "Accounting" }`
+(`src/lib/documentRequirements.ts`), generated from a new shared `DOCUMENT_RECIPIENT_DEPARTMENTS`
+constant that also drives the User form's department dropdown (see below) — one source of truth.
+`withDefaultChecklistGroups()` was extended to backfill any *option* the current builder generates
+but a stored group predates (previously only backfilled entirely missing *groups*/`note` fields) —
+without this, every Scope of Work saved before this pass would have been permanently frozen at 5
+options, unable to ever route to Accounting.
+
+**`User.department`**: changed from a free-text `<input list>` (datalist autocomplete hints only,
+never enforced) to a real `<select>` constrained to `DOCUMENT_RECIPIENT_DEPARTMENTS`'s 6 labels —
+the exact same strings as the checklist's own option labels, so matching a checked department to
+real users is a reliable exact-string match, not fuzzy free-text guessing. A pre-existing value that
+doesn't match any of the 6 is kept as a selectable "ค่าเดิม"/legacy-value fallback option rather than
+silently discarded on save. The old `DEPARTMENT_SUGGESTIONS` constant (`src/lib/users.ts`, a
+different, unrelated HR-style department taxonomy — ผู้บริหาร/ฝ่ายขาย/วิศวกรรม/etc.) was removed; it
+had exactly one consumer.
+
+**Data model**: new `ScopeOfWork.documentRecipients: Record<string, string[]>` maps a checked
+department's option key to the `User.id`s picked as its actual recipients — independent of the
+option's `checked` state (unchecking doesn't clear picks, so re-checking later remembers them).
+Backend: `sanitizeDocumentRecipients()` (`api/_lib/scopeOfWorkHandler.ts`) drops any key that isn't
+a real department and verifies every referenced user id actually exists via one batched query;
+`normalizeDocumentRecipients()` (`src/lib/scopeOfWork.ts`) defaults a pre-2026-07-23 record's
+missing field to `{}` on read.
+
+**Email**: new `api/_lib/email.ts` — `sendEmail()` via Resend's plain REST API (a single `fetch`
+POST, no SDK dependency added). New `POST /api/scope-of-works/:id/send-documents`
+(`handleSendDocumentNotifications()`) emails every department that's BOTH currently checked AND has
+≥1 picked recipient, deduped across departments (one email per person, not per department), gated
+by `scopeOfWork:print` (no new permission — this is a distribute/export action like Print, not a
+content edit). Writes a `"Scope of Work Document Notification Sent"` audit entry and returns
+`{ sentCount, failedCount, recipientCount }`.
+
+**Frontend**: new `DocumentRecipientsPicker.tsx` (toggle-chip candidate list per checked
+department, filtered by an exact `User.department` match) renders below the checklist card in
+`ScopeOfWorkDocument.tsx`; a new "ส่งอีเมลแจ้งผู้รับเอกสาร" button saves the record first (the
+server reads recipients from the persisted document, not unsaved client state), then triggers the
+send and toasts the result.
+
+**Files Modified**: `src/lib/documentRequirements.ts`, `src/lib/users.ts`, `src/lib/scopeOfWork.ts`, `src/pages/admin/UserManagementPage.tsx`, `src/pages/quotation/ScopeOfWorkDocument.tsx`, `src/lib/i18n.tsx`, `api/_lib/scopeOfWorkHandler.ts`, `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/DATABASE.md`, `docs/RBAC.md`, `docs/MODULES/ScopeOfWork.md`, `docs/MODULES/UserManagement.md`, `docs/CLAUDE.md`, `docs/TODO.md`
+
+**Files Added**: `api/_lib/email.ts`, `src/pages/quotation/DocumentRecipientsPicker.tsx`
+
+**Reason**: Direct user request — link the Documents Sent To checklist to real staff via their
+department, and actually notify them by email.
+
+**Deliberately not built this pass**: attaching the printed document (PDF) to the email — this app
+has no server-side PDF generation (Print/PDF export is entirely browser-native `window.print()`);
+the email is a plain HTML notification with a link back into the app, not a document-delivery
+replacement for print. No required-field validation was added for recipient-picking (optional,
+layered on top of the existing "≥1 department checked" rule, unchanged).
+
+**Verification**: `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+Interaction-verified via a temporary, isolated dev harness (`src/dev/DocumentRecipientsHarness.tsx`,
+deleted after use) mounting the real `DocumentRecipientsPicker` component with mock users across 3
+departments — confirmed checking a checklist option reveals exactly the matching-department
+candidates, toggling a chip updates the selection state correctly for multiple departments
+simultaneously, and zero console errors/warnings throughout. **⚠️ Not verified and cannot be
+verified this session**: actual email delivery (no `RESEND_API_KEY` exists anywhere in this
+sandboxed session — see TODO.md for the required manual setup step before this feature does
+anything beyond returning a clear "not configured" error), and the full save-then-send round trip
+against a real MongoDB record (same standing sandboxed-environment limitation as every recent
+entry — no Vercel CLI, no local MongoDB credential).
+
+---
+
+## 2026-07-23 — Scope of Work: own-records-only viewing (`scopeOfWork:viewAll`)
 
 **Feature**: per direct user request ("หน้า scope of work อยากให้ทำสิทธิ์เพิ่มมาเหมือนของใบเสนอราคา
 ที่เป็นดูของผู้อื่นได้" — add a permission to the Scope of Work page like the quotation one, for

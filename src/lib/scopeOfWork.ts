@@ -195,6 +195,18 @@ export function normalizePaymentConditions(raw: unknown): ScopeOfWorkPaymentCond
   return { installments, description, notes };
 }
 
+/** A record saved before 2026-07-23 has no `documentRecipients` field in MongoDB at all
+ * (`undefined`) — defaults to `{}` rather than letting the frontend crash calling `.entries()`/
+ * indexing into it. See `ScopeOfWork.documentRecipients`'s own doc comment. */
+export function normalizeDocumentRecipients(raw: unknown): Record<string, string[]> {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (Array.isArray(value)) out[key] = value.filter((v): v is string => typeof v === "string");
+  }
+  return out;
+}
+
 /** A signature block (ผู้ขาย / ผู้อนุมัติ) — name/date always start blank/editable; blue
  * handwritten sample names are never used as default data. `userId` optionally links a real ERP
  * user so their saved `signatureDataUrl` can render at print time, same convention as
@@ -235,6 +247,15 @@ export interface ScopeOfWork {
   checklistGroups: ChecklistGroup[];
   items: ScopeOfWorkItem[];
   paymentConditions: ScopeOfWorkPaymentConditions;
+  /** Real people to email when a `documentsToSend` (เอกสารส่งถึง) checklist option is checked —
+   * added 2026-07-23, per direct user request to actually route this checklist to real staff
+   * instead of it being a plain printed-form checkbox list. Keyed by the checked option's `key`
+   * (e.g. `"purchase"`, `"accounting"` — see `DOCUMENT_RECIPIENT_DEPARTMENTS` in
+   * documentRequirements.ts), each value an array of `User.id`s picked from whoever has that exact
+   * `department` value. Never includes the `"other"` key (free text, no real department to resolve
+   * against). Independent of `checked` state — unchecking an option doesn't clear its recipients,
+   * so re-checking it later remembers the previous picks; only the email-send action reads this. */
+  documentRecipients: Record<string, string[]>;
   remarks: string;
   seller: ScopeOfWorkSignatory;
   approver: ScopeOfWorkSignatory;
@@ -299,6 +320,7 @@ export type ScopeOfWorkUpdateFields = Partial<{
   checklistGroups: ChecklistGroup[];
   items: ScopeOfWorkItem[];
   paymentConditions: ScopeOfWorkPaymentConditions;
+  documentRecipients: Record<string, string[]>;
   remarks: string;
   seller: ScopeOfWorkSignatory;
   approver: ScopeOfWorkSignatory;
@@ -362,6 +384,14 @@ export async function deleteScopeOfWork(id: string): Promise<void> {
 }
 export async function logScopeOfWorkPrinted(id: string): Promise<void> {
   await apiFetch<void>(`/scope-of-works/${id}/print`, { method: "POST" });
+}
+
+/** Emails every user picked in `documentRecipients` (see the field's own doc comment) — one email
+ * per distinct recipient, deduped across departments so a person picked under two checked options
+ * only gets one message. Added 2026-07-23. `sentCount`/`failedCount` let the UI report a partial
+ * failure (e.g. one recipient's address rejected) without treating the whole action as failed. */
+export async function sendScopeOfWorkDocumentNotifications(id: string): Promise<{ sentCount: number; failedCount: number; recipientCount: number }> {
+  return apiFetch<{ sentCount: number; failedCount: number; recipientCount: number }>(`/scope-of-works/${id}/send-documents`, { method: "POST" });
 }
 
 export function newScopeSpecLineId(): string {

@@ -1,6 +1,6 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23
 
 **2026-07-23, Own-Records-Only Viewing** (per direct user request, "หน้า scope of work อยากให้ทำสิทธิ์
 เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — mirroring Quotation's `quotations:viewAll`): new
@@ -220,7 +220,7 @@ structure (`buildDefaultChecklistGroups()`, `api/_lib/scopeOfWorkHandler.ts`):
 |---|---|---|---|
 | `safety` | Safety | single | 100%, ทั่วไป |
 | `torRequirement` | TOR, Requirement from customer | multiple | (one toggle) |
-| `documentsToSend` | เอกสารส่งถึง | multiple | Purchase, Project, Factory, Technic, Service |
+| `documentsToSend` | เอกสารส่งถึง | multiple | Purchase, Project, Factory, Technic, Service, Accounting (added 2026-07-23) |
 | `pj2` | เอกสาร ปจ.2 | single | มี ปจ.2, ไม่มี ปจ.2 |
 | `transportation` | งานขนส่ง | single | มีขนส่ง, ไม่มีขนส่ง, EMS |
 | `logo` | Logo | single (+ free-text `note`) | มี — HUMA, มี — Greensphere, มี — Etc. (โปรดระบุ), ไม่มี |
@@ -250,6 +250,70 @@ Test Report suggestion varies. A `PATCH` can only toggle `checked`/set a group's
 server re-clamps a `"single"` group to at most one checked option and only recognizes group/option
 `key`s it itself generated at creation, so a direct API call can't inject a new group, rename a
 label, or change a group's `selectionType` (`sanitizeChecklistGroups()`).
+
+**2026-07-23, "Accounting" added + existing-record backfill**: `documentsToSend` gained a 6th
+option (`{ key: "accounting", label: "Accounting" }`), per direct user request. Its option list is
+now generated from a shared `DOCUMENT_RECIPIENT_DEPARTMENTS` constant (`src/lib/
+documentRequirements.ts`) rather than listed inline — the same constant also drives the User form's
+`department` dropdown (see "Document Recipients" below), so the two can never drift apart.
+`withDefaultChecklistGroups()` was extended to backfill any *option* the current builder generates
+but a stored group predates (previously it only backfilled entirely missing *groups* and missing
+`note` fields) — without this, every Scope of Work saved before this pass would have been
+permanently frozen at 5 options, unable to route to Accounting at all. The backfilled option is
+appended at the end of the existing list (after "อื่น ๆ"), not inserted at its "correct" position —
+a minor cosmetic ordering difference from a freshly-created record, not worth extra complexity for
+otherwise-unordered checkbox state.
+
+## Document Recipients (added 2026-07-23)
+
+Per a direct user request ("อยากให้ลิงค์ข้อมูลกับแผนกที่จะเลือกตอนสร้างพนักงานเพราะจะต้องส่งเอกสาร
+ไปให้คนนั้นๆที่อยู่ในแต่ละแผนก" — link this checklist to the department chosen when creating an
+employee, because documents need to go to the real person in each department), the `documentsToSend`
+checklist is now backed by real people, not just a printed-form checkbox list:
+
+- **`User.department`** (`src/pages/admin/UserManagementPage.tsx`) changed from a free-text input
+  with datalist autocomplete hints to a real `<select>` constrained to `DOCUMENT_RECIPIENT_DEPARTMENTS`'
+  6 labels (Purchase/Project/Factory/Technic/Service/Accounting) — the exact same strings as the
+  checklist's own option labels, so matching a checked department to real users is an exact string
+  match, not fuzzy free-text guessing. A user whose stored `department` predates this change (the
+  old free-text field could hold anything) is kept as an extra, clearly-labeled "ค่าเดิม"/"legacy
+  value" option in the dropdown rather than silently discarded on save — picking a real option
+  replaces it for good. The previous `DEPARTMENT_SUGGESTIONS` constant (`src/lib/users.ts`, generic
+  HR-style department names like "ฝ่ายขาย"/"วิศวกรรม"/"ไอที") was removed — it had zero other
+  consumers and represented a different, unlinked taxonomy from the one this feature needs.
+- **`ScopeOfWork.documentRecipients: Record<string, string[]>`** (new field) maps a
+  `documentsToSend` option key (e.g. `"purchase"`) to the `User.id`s picked as that department's
+  actual recipients. Independent of the option's `checked` state — unchecking a department doesn't
+  clear its picked recipients, so re-checking it later remembers the previous picks. Never includes
+  the `"other"` key (free text, no real department to resolve candidates against).
+- **`DocumentRecipientsPicker.tsx`** (new component, rendered in `ScopeOfWorkDocument.tsx` right
+  below the checklist card) shows one row per currently-checked department, listing every `User`
+  whose `department` exactly matches that department's label as a toggle chip — picking/unpicking
+  updates `documentRecipients`. A department with zero matching users shows a hint to go set one up
+  in User Management, rather than an empty, unexplained row.
+- **"ส่งอีเมลแจ้งผู้รับเอกสาร"** button (below the picker, visible once ≥1 department is checked):
+  saves the record first (the server reads recipients from the persisted document, not unsaved
+  client state), then calls `POST /api/scope-of-works/:id/send-documents`
+  (`handleSendDocumentNotifications()`, `api/_lib/scopeOfWorkHandler.ts`). Only departments that are
+  BOTH currently checked AND have ≥1 picked recipient are actually emailed; recipients are deduped
+  across departments so a person picked under two checked options gets one email, not two. Gated by
+  `scopeOfWork:print` (a distribution/export action, not a content edit — no new permission was
+  added, and like Print it has no ownership check and works on a `"Final"` record too). Sends via
+  `api/_lib/email.ts`'s `sendEmail()` (Resend REST API, see [ARCHITECTURE.md](../ARCHITECTURE.md))
+  in parallel per recipient (`Promise.allSettled`, so one bad address doesn't block the others),
+  writes a `"Scope of Work Document Notification Sent"` audit entry, and returns
+  `{ sentCount, failedCount, recipientCount }` for the UI toast.
+- **Not built this pass**: attaching the actual printed document (PDF) to the email — this app has
+  no server-side PDF generation (Print/PDF export is entirely browser-native, `window.print()`); the
+  email is a plain HTML notification with the job's key fields and a link back into the app, not a
+  document-delivery replacement for print. No required-field validation was added either — picking
+  recipients is optional, layered on top of the existing "at least one department checked" rule,
+  which is unchanged.
+- **⚠️ Requires manual setup before this feature actually works**: `RESEND_API_KEY` must be added
+  to Vercel's environment variables — the send button returns a clear `500` ("ระบบยังไม่ได้ตั้งค่า
+  การส่งอีเมล") instead of silently failing when it's missing, but nothing in this codebase can set
+  the key itself (a human must sign up at resend.com). See [ARCHITECTURE.md](../ARCHITECTURE.md) and
+  [TODO.md](../TODO.md).
 
 ## Payment Conditions
 
@@ -484,7 +548,7 @@ category, matching the standalone list page's own scoping (see "Own-Records-Only
 
 ## RBAC / API / Data Model
 
-See [RBAC.md](../RBAC.md) "Scope of Work" for the 6 permissions and default-role grants, and
+See [RBAC.md](../RBAC.md) "Scope of Work" for the 7 permissions and default-role grants, and
 [API.md](../API.md) "Scope of Work" for every route. Data model: `ScopeOfWork` in
 `src/lib/scopeOfWork.ts` (also see [DATABASE.md](../DATABASE.md) `ScopeOfWork`) — this file is
 type-imported into the API bundle, so (per the standing rule in `docs/CLAUDE.md`) it must never
@@ -500,9 +564,13 @@ gain a *value* import that transitively pulls in JSX/React.
 - `api/_lib/searchHandler.ts` / `src/lib/search.ts` / `src/components/GlobalSearch.tsx` — the
   `scopeOfWorks` Global Search result group (2026-07-15 fix pass).
 - `src/pages/quotation/ScopeOfWorkDocument.tsx` — the editor page (header fields, checklist grid,
-  items, payment conditions, remarks, signatures, toolbar).
+  items, payment conditions, document recipients, remarks, signatures, toolbar).
 - `src/pages/quotation/ScopeOfWorkItemsEditor.tsx` — the item list editor.
-- `src/pages/quotation/ScopeOfWorkChecklistGroup.tsx` — one checklist group card.
+- `src/pages/quotation/ChecklistGroupCard.tsx` — one checklist group card (renamed 2026-07-16 from
+  `ScopeOfWorkChecklistGroup.tsx`; this file's own name was left stale in this list until now).
+- `src/pages/quotation/DocumentRecipientsPicker.tsx` (**added 2026-07-23**) — the per-department
+  recipient toggle-chip picker under the checklist card, see "Document Recipients" above.
+- `api/_lib/email.ts` (**added 2026-07-23**) — `sendEmail()`, the shared Resend REST API wrapper.
 - `src/pages/quotation/ScopeOfWorkPrintDocument.tsx` — the print/PDF layout.
 - `src/pages/quotation/QuoteDocument.tsx` — the "สร้าง Scope of Work"/"เปิด / แก้ไข Scope of Work"
   toolbar button (fetches whether one already exists per quotation).

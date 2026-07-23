@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Plus, Pencil, KeyRound, UserCheck, UserX, Trash2, Search, ShieldCheck } from "lucide-react";
 import type { User, UserStatus } from "../../lib/users";
-import { createUser, updateUser, deleteUser, isEmployeeIdTaken, isUsernameTaken, isEmailTaken, initials, POSITION_SUGGESTIONS, DEPARTMENT_SUGGESTIONS } from "../../lib/users";
+import { createUser, updateUser, deleteUser, isEmployeeIdTaken, isUsernameTaken, isEmailTaken, initials, POSITION_SUGGESTIONS } from "../../lib/users";
+import { DOCUMENT_RECIPIENT_DEPARTMENTS } from "../../lib/documentRequirements";
 import type { Role } from "../../lib/roles";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -221,8 +222,18 @@ export function UserManagementPage({
               <div><label className={labelCls}>{t("users.field.phone")}</label><input className={inputCls} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
               <div>
                 <label className={labelCls}>{t("users.field.department")}</label>
-                <input className={inputCls} list="dept-suggestions" value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} />
-                <datalist id="dept-suggestions">{DEPARTMENT_SUGGESTIONS.map((d) => <option key={d} value={d} />)}</datalist>
+                <select className={inputCls} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
+                  <option value="">{t("users.field.department.none")}</option>
+                  {DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => <option key={d.key} value={d.label}>{d.label}</option>)}
+                  {/* A legacy value predating this dropdown (added 2026-07-23 — department used to be
+                      free text) is kept selectable rather than silently discarded on save; picking a
+                      real option below replaces it for good. See docs/MODULES/ScopeOfWork.md
+                      "Document Recipients". */}
+                  {form.department && !DOCUMENT_RECIPIENT_DEPARTMENTS.some((d) => d.label === form.department) && (
+                    <option value={form.department}>{form.department} ({t("users.field.department.legacy")})</option>
+                  )}
+                </select>
+                <p className="text-[10px] text-muted-foreground mt-1">{t("users.field.department.hint")}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -4,7 +4,81 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Scope of Work: own-records-only viewing
+## Session — 2026-07-23 (absolute latest), Scope of Work: real Document Recipients + email routing
+
+### What was implemented
+- User showed a screenshot of the "เอกสารส่งถึง" checklist (Purchase/Project/Factory/Technic/
+  Service/อื่นๆ) and asked to add "บัญชี" (Accounting), while also linking the checklist to the
+  department chosen when creating an employee, "because documents need to go to the real person in
+  each department."
+- Researched before touching anything: `documentsToSend` was a hardcoded 5-option checklist with
+  zero link to any other data; `User.department` was 100% free text with autocomplete hints only,
+  disconnected from both the checklist and an existing-but-orphaned `departments` MongoDB
+  collection nothing actually reads. No workflow anywhere in the codebase already did "look up
+  users by department" for any routing purpose.
+- **Asked two clarifying questions before implementing**, since the request was genuinely
+  ambiguous and each answer implied substantially different scope: (1) how deep "link department"
+  should go — just add the checkbox with no real link, vs. a real controlled department field with
+  a recipient picker, vs. a fuller architecture change. User picked the real-link-with-picker
+  option and clarified in the same breath that they specifically wanted actual email delivery,
+  since employee accounts already collect an email address. (2) Since zero email-sending
+  infrastructure existed anywhere in this codebase (confirmed by grepping for nodemailer/SMTP/
+  Resend/SendGrid/etc. — a genuine external-dependency blocker, not something to guess past), asked
+  which provider to use; user picked the recommended option (Resend).
+- **Real judgment calls made while implementing**:
+  - Made `DOCUMENT_RECIPIENT_DEPARTMENTS` (Purchase/Project/Factory/Technic/Service/Accounting) the
+    single source of truth for BOTH the checklist's option list AND the User form's department
+    dropdown, rather than keeping them as two separately-maintained lists that could drift apart —
+    this is what makes the "link" actually reliable (exact string match) instead of best-effort.
+  - Removed the old `DEPARTMENT_SUGGESTIONS` constant (a different, HR-style taxonomy — ผู้บริหาร/
+    ฝ่ายขาย/วิศวกรรม/etc.) rather than keeping both lists side by side — it had exactly one
+    consumer and represented an unrelated concept once department became the document-routing
+    taxonomy; keeping it would have meant two different "what departments exist" answers in the UI.
+  - Chose a fixed `<select>` for `User.department` over keeping free text with better hints — real
+    linking needs exact matches, and free text with typos/inconsistent phrasing would have quietly
+    broken the recipient picker for anyone who didn't type exactly right. Preserved a legacy value
+    as a selectable fallback option rather than silently discarding it on save, matching this
+    codebase's existing pattern for exactly this kind of "old data doesn't fit the new fixed list"
+    situation (e.g. `jobTypeAnalytics`'s deactivated-code handling).
+  - Caught and fixed a real backfill gap before it could bite: `withDefaultChecklistGroups()` only
+    ever backfilled entirely *missing* groups (and missing `note` fields), never missing *options*
+    within an already-present group. Without extending it, every Scope of Work saved before this
+    pass would have been permanently stuck at 5 `documentsToSend` options forever, with no way to
+    ever route to Accounting — this would have been a silent, hard-to-notice bug, not a crash, so
+    worth calling out explicitly here.
+  - No SDK dependency added for Resend — a single `fetch` POST to its REST API is simpler than a
+    new npm package for one API call, and this codebase already has a "prefer the platform's own
+    `fetch` over adding a client library" precedent (`apiClient.ts` itself works the same way).
+  - Scoped the send action to `scopeOfWork:print` rather than inventing a new permission — it's the
+    same category of action (distribute the document outward), and adding a permission for
+    something this narrow would have been unjustified RBAC surface-area growth.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- Built a temporary, isolated dev harness (`src/dev/DocumentRecipientsHarness.tsx`, swapped into
+  `main.tsx`, both reverted/deleted after use) with 3 mock users across 2 departments, driven by
+  Playwright: confirmed checking "Purchase" and "Accounting" checkboxes reveals exactly the
+  matching-department candidates (not users from other departments), and toggling chips for both
+  departments simultaneously updates the recipient-map state correctly and independently
+  (`{"purchase": ["u1"], "accounting": ["u2"]}`). Zero console errors/warnings.
+- **Cannot verify this session, by nature of the feature**: actual email delivery — no
+  `RESEND_API_KEY` exists anywhere in this sandboxed environment, and there's no safe way to
+  fabricate one. This is flagged as a required manual step, not silently assumed to work.
+- Same standing sandboxed-session limitation as every recent entry for the rest of the save/send
+  round trip against real MongoDB data.
+
+### Recommendation for next session
+- **Before this feature does anything real**: a human must sign up at resend.com, get an API key,
+  and add `RESEND_API_KEY` (and ideally `EMAIL_FROM` once a sending domain is verified) to Vercel's
+  environment variables. Flagged in TODO.md as the blocking step.
+- Once that's done, verify end-to-end against production: create/edit a user with a real email,
+  set their department, open a Scope of Work, check the matching department in the checklist,
+  confirm they appear as a pickable recipient, pick them, send, and confirm the email actually
+  arrives with correct content.
+
+---
+
+## Session — 2026-07-23, Scope of Work: own-records-only viewing
 
 ### What was implemented
 - User asked, on the same day as the payment-schedule work: "หน้า scope of work อยากให้ทำสิทธิ์เพิ่ม

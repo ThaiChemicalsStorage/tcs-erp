@@ -19,6 +19,27 @@ export interface ChecklistOption {
   checked: boolean;
 }
 
+/**
+ * The real internal departments a Scope of Work's "เอกสารส่งถึง" (Documents Sent To) checklist can
+ * route paperwork to — added 2026-07-23, per direct user request to actually link this checklist to
+ * real people instead of being a plain printed-form checkbox list. Single source of truth for BOTH
+ * the `documentsToSend` checklist group's option list below AND the `department` dropdown on the
+ * User create/edit form (`src/pages/admin/UserManagementPage.tsx`) — a user's `department` must
+ * match one of these labels exactly for `ScopeOfWorkDocument.tsx`'s recipient picker to find them
+ * (see "Document Recipients" in docs/MODULES/ScopeOfWork.md). Deliberately literal English business
+ * terms, not translated via `t()` — this is persisted business data (the actual department name),
+ * not app UI chrome, same rule already applied to Company default values/audit log text (see
+ * docs/CLAUDE.md's i18n section).
+ */
+export const DOCUMENT_RECIPIENT_DEPARTMENTS: { key: string; label: string }[] = [
+  { key: "purchase", label: "Purchase" },
+  { key: "project", label: "Project" },
+  { key: "factory", label: "Factory" },
+  { key: "technic", label: "Technic" },
+  { key: "service", label: "Service" },
+  { key: "accounting", label: "Accounting" },
+];
+
 export interface ChecklistGroup {
   key: string;
   title: string;
@@ -137,7 +158,10 @@ export function buildDefaultChecklistGroups(jobTypeCode: string): ChecklistGroup
     { key: "torRequirement", title: "TOR, Requirement from customer", selectionType: "multiple", options: [opt("tor", "TOR, Requirement from customer")] },
     {
       key: "documentsToSend", title: "เอกสารส่งถึง", selectionType: "multiple", note: "",
-      options: [opt("purchase", "Purchase"), opt("project", "Project"), opt("factory", "Factory"), opt("technic", "Technic"), opt("service", "Service"), opt("other", "อื่น ๆ")],
+      // Generated from DOCUMENT_RECIPIENT_DEPARTMENTS (added 2026-07-23) rather than listed
+      // separately here, so a department can never exist on the User form's dropdown without also
+      // being a selectable routing option here (or vice versa) — see that constant's doc comment.
+      options: [...DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => opt(d.key, d.label)), opt("other", "อื่น ๆ")],
     },
     { key: "pj2", title: "เอกสาร ปจ.2", selectionType: "single", options: [opt("has", "มี ปจ.2"), opt("none", "ไม่มี ปจ.2")] },
     {
@@ -192,8 +216,21 @@ export function withDefaultChecklistGroups(existing: ChecklistGroup[] | undefine
   const existingKeys = new Set(groups.map((g) => g.key));
   const patched = groups.map((g) => {
     const def = defaultsByKey.get(g.key);
-    if (def && def.note !== undefined && g.note === undefined) return { ...g, note: "" };
-    return g;
+    if (!def) return g;
+    let next = g;
+    if (def.note !== undefined && next.note === undefined) next = { ...next, note: "" };
+    // Backfill any option the current builder generates that this stored group predates — added
+    // 2026-07-23 when `documentsToSend` gained a 6th "accounting" option (see
+    // DOCUMENT_RECIPIENT_DEPARTMENTS above): without this, a record saved before that pass would be
+    // permanently frozen at its original 6-option list, never able to route to Accounting at all.
+    // Appended at the end (after "other"), not inserted at the option's "correct" position among the
+    // others — a minor cosmetic order difference from a freshly-created record, not worth the extra
+    // complexity of positional insertion for what's otherwise unordered checkbox state. Never touches
+    // an option this group already has, checked or not.
+    const existingOptionKeys = new Set(next.options.map((o) => o.key));
+    const missingOptions = def.options.filter((o) => !existingOptionKeys.has(o.key));
+    if (missingOptions.length > 0) next = { ...next, options: [...next.options, ...missingOptions.map((o) => ({ ...o }))] };
+    return next;
   });
   const missing = defaults.filter((g) => !existingKeys.has(g.key));
   return [...patched, ...missing];

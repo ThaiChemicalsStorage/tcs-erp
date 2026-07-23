@@ -33,7 +33,7 @@ Per the 2026-07-09 production-readiness pass, every collection below exists with
 |---|---|---|---|
 | `permissions` | Mirrors `ALL_PERMISSIONS` (`src/lib/permissions.ts`) as documents — forward-looking scaffolding for an eventual admin-configurable permission registry. RBAC still checks the hardcoded TS union, **not** this collection. | Yes, from `ALL_PERMISSIONS`/`PERMISSION_LABELS`/`PERMISSION_GROUPS`/`SUPER_ADMIN_ONLY_PERMISSIONS` | `{ key: 1 }` unique |
 | `sessions` | Scaffolding for future "log out other devices" / session revocation. Nothing writes to it — auth is still pure-JWT (`api/_lib/auth.ts`), unchanged. | No | `{ userId: 1 }`, TTL index `{ expiresAt: 1 }` (`expireAfterSeconds: 0`, auto-purges) |
-| `departments` | Org unit list. **Not** wired into `User.department` (still free text, unchanged — see `User` below). | Yes, generic starter list (ฝ่ายขาย, ฝ่ายจัดซื้อ, ฝ่ายคลังสินค้า, ฝ่ายบัญชี, ฝ่ายทรัพยากรบุคคล, ฝ่ายบริหาร, ฝ่ายไอที) — rename/manage via a future admin UI | `{ code: 1 }` unique |
+| `departments` | Org unit list. **Still not wired into `User.department`** — a separate, unconnected taxonomy (ฝ่ายขาย/ฝ่ายจัดซื้อ/ฝ่ายคลังสินค้า/ฝ่ายบัญชี/ฝ่ายทรัพยากรบุคคล/ฝ่ายบริหาร/ฝ่ายไอที). `User.department` itself gained a *different*, real controlled vocabulary on 2026-07-23 (`DOCUMENT_RECIPIENT_DEPARTMENTS` in `src/lib/documentRequirements.ts` — Purchase/Project/Factory/Technic/Service/Accounting), enforced by the User form's `<select>`, not this orphaned collection — see `User` below and [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients". | Yes, generic starter list (ฝ่ายขาย, ฝ่ายจัดซื้อ, ฝ่ายคลังสินค้า, ฝ่ายบัญชี, ฝ่ายทรัพยากรบุคคล, ฝ่ายบริหาร, ฝ่ายไอที) — rename/manage via a future admin UI | `{ code: 1 }` unique |
 | `positions` | Position/level list. **Not** wired into `User.position` (still free text, unchanged). | Yes, generic starter list (พนักงาน, หัวหน้างาน, ผู้จัดการ, ผู้จัดการทั่วไป, กรรมการผู้จัดการ) | `{ code: 1 }` unique |
 | `customer_contacts` | Secondary contacts beyond a customer's primary contact — **still schema-only**, no API/UI (unrelated to the 2026-07-14 `customers` rewrite below, which uses `Quote`'s own single-contact shape instead of this table). | No | `{ customerId: 1 }` |
 | `leads` | CRM lead/pipeline record, 9-stage `LeadStage` (ลูกค้าใหม่ → ... → ปิดการขายสำเร็จ/เสียโอกาส), `convertedToCustomerId` link. Resolves the open "Lead vs Customer: one entity or two?" question from `MODULES/Customer.md`/`Lead.md` — this pass builds them as **two separate collections**. `GET /api/dashboard`'s `totalLeads` KPI counts this. | No | `{ salesOwnerId: 1 }`, `{ stage: 1 }`, `{ deletedAt: 1 }` |
@@ -93,7 +93,14 @@ interface User {
   username: string;        // enforced unique, used for login
   email: string;           // enforced unique, used for login
   phone: string;
-  department: string;      // free text, suggestions only
+  department: string;      // still a plain string field (no DB-level enum) — but as of 2026-07-23 the
+                            // User create/edit form only offers a fixed <select> of 6 values
+                            // (DOCUMENT_RECIPIENT_DEPARTMENTS: Purchase/Project/Factory/Technic/
+                            // Service/Accounting), so ScopeOfWorkDocument.tsx's recipient picker can
+                            // exact-match against it. A pre-2026-07-23 record may still hold an old
+                            // free-text value until re-saved through the new dropdown (kept as a
+                            // selectable "legacy value" option, never silently overwritten). See
+                            // MODULES/ScopeOfWork.md "Document Recipients".
   position: string;        // free text, suggestions only — deliberately independent of roleKey
   roleKey: string;         // → Role.key
   status: UserStatus;
@@ -435,7 +442,11 @@ interface ScopeOfWork {
   customerSnapshot: ScopeOfWorkCustomerSnapshot; deliveryLocation: string;
   shippingContact: string; shippingPhone: string; billingContact: string; billingPhone: string;
   checklistGroups: ChecklistGroup[]; items: ScopeOfWorkItem[];
-  paymentConditions: ScopeOfWorkPaymentConditions; remarks: string;
+  paymentConditions: ScopeOfWorkPaymentConditions;
+  // documentRecipients added 2026-07-23: documentsToSend option key -> picked User.id[]. See
+  // MODULES/ScopeOfWork.md "Document Recipients".
+  documentRecipients: Record<string, string[]>;
+  remarks: string;
   seller: ScopeOfWorkSignatory; approver: ScopeOfWorkSignatory;
   status: ScopeOfWorkStatus; version: number;
   createdAt: string; updatedAt: string; createdBy: string; updatedBy: string; isDeleted: boolean;

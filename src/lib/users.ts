@@ -55,17 +55,6 @@ export const POSITION_SUGGESTIONS: string[] = [
   "Warehouse",
 ];
 
-export const DEPARTMENT_SUGGESTIONS: string[] = [
-  "ผู้บริหาร",
-  "ฝ่ายขาย",
-  "วิศวกรรม",
-  "ฝ่ายบุคคล",
-  "ฝ่ายบัญชี",
-  "ฝ่ายจัดซื้อ",
-  "คลังสินค้า",
-  "ไอที",
-];
-
 export interface CreateUserFields {
   employeeId: string;
   fullName: string;

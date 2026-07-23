@@ -213,7 +213,7 @@ client-side):
 | `scopeOfWork:create` | `POST /api/scope-of-works` (create from a quotation) and `POST /api/scope-of-works/:id/duplicate`. |
 | `scopeOfWork:edit` | `PATCH /api/scope-of-works/:id` and `POST /api/scope-of-works/:id/refresh` — combined with an **ownership** check (see below). |
 | `scopeOfWork:finalize` | `POST /api/scope-of-works/:id/finalize`. Also, independent of ownership, a `scopeOfWork:finalize` holder can edit or delete *any* Draft record, not just their own — the RBAC spec's "Sales Manager: view/edit/finalize" language. |
-| `scopeOfWork:print` | `POST /api/scope-of-works/:id/print` (writes the print/export audit entry the client calls right before `window.print()`; as of 2026-07-16 also revalidates completeness first — see below). |
+| `scopeOfWork:print` | `POST /api/scope-of-works/:id/print` (writes the print/export audit entry the client calls right before `window.print()`; as of 2026-07-16 also revalidates completeness first — see below). **2026-07-23**: also gates the new `POST /api/scope-of-works/:id/send-documents` ("ส่งอีเมลแจ้งผู้รับเอกสาร") — reused rather than adding a new permission, since this is the same category of action (distribute/export the document to people outside the edit workflow), not a content edit. See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients". |
 | `scopeOfWork:delete` | `DELETE /api/scope-of-works/:id` (soft delete) — combined with the same ownership-or-finalize check as edit. |
 
 **Ownership rule** (`canEditScope()`/`isOwnerOf()` in `api/_lib/scopeOfWorkHandler.ts`, same shape as
