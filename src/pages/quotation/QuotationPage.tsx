@@ -305,6 +305,7 @@ export function QuotationPage({
         key={view === "detail" ? selectedId ?? "new" : "new"}
         mode={view === "detail" ? "detail" : "new"}
         quote={view === "detail" ? selectedQuote : undefined}
+        allQuotes={quotes}
         wizardResult={view === "new" ? wizardResult : null}
         nextId={nextQuoteId(quotes)}
         company={company}

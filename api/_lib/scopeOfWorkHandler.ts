@@ -404,6 +404,8 @@ function normalizeScope(scope: ScopeOfWork): ScopeOfWork {
     // A record saved before 2026-07-23 has no `documentRecipients` field in MongoDB at all — see
     // normalizeDocumentRecipients()'s own doc comment.
     documentRecipients: normalizeDocumentRecipients(scope.documentRecipients),
+    // Same "record predates this field" defaulting as documentRecipients above.
+    revisionNote: scope.revisionNote ?? "",
   };
 }
 
@@ -493,6 +495,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       items: derived.items,
       paymentConditions: { installments: [], description: derived.paymentDescription, notes: "" },
       documentRecipients: {},
+      revisionNote: "",
       remarks: derived.remarks,
       seller,
       approver: { name: "", userId: "", date: "" },
@@ -595,6 +598,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("items" in body) update.items = sanitizeItems(body.items);
   if ("paymentConditions" in body) update.paymentConditions = sanitizePaymentConditions(body.paymentConditions);
   if ("documentRecipients" in body) update.documentRecipients = await sanitizeDocumentRecipients(body.documentRecipients);
+  if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
   if ("seller" in body) update.seller = await sanitizeSignatory(body.seller, "ผู้ขาย");
   if ("approver" in body) update.approver = await sanitizeSignatory(body.approver, "ผู้อนุมัติ");
@@ -690,6 +694,8 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
       approver: { name: "", userId: "", date: "" },
       createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
       isDeleted: false,
+      // Never inherited from the source — see `ScopeOfWork.revisionNote`'s doc comment (src/lib/scopeOfWork.ts).
+      revisionNote: "",
     };
     try {
       const result = await scopeOfWorks.insertOne(doc);
@@ -752,6 +758,8 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
       approver: { name: "", userId: "", date: "" },
       createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
       isDeleted: false,
+      // Never inherited from the source — see `ScopeOfWork.revisionNote`'s doc comment (src/lib/scopeOfWork.ts).
+      revisionNote: "",
     };
     try {
       const result = await scopeOfWorks.insertOne(doc);

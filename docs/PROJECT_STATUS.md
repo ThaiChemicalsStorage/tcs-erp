@@ -14,6 +14,18 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] Auto-generated Revision Note (Quotation + Scope of Work).**
+  Direct user request for an auto-generated "what changed" comment on a rewritten document. Both
+  `QuoteDocument.tsx` and `ScopeOfWorkDocument.tsx` gained a "หมายเหตุการแก้ไข (Revision Note)" card
+  (revisions only) with a one-shot "สร้างสรุปการแก้ไขอัตโนมัติ" button that diffs the current draft
+  against its immediate predecessor and fills a freely-editable `<textarea>` with a Thai bullet-list
+  summary of every changed field/line-item/checklist-selection/payment-installment/document-recipient
+  — never automatic, so it can never silently overwrite a user's own edits. New shared, framework-
+  agnostic `src/lib/revisionDiff.ts`; new `revisionNote: string` field on both `Quote` and
+  `ScopeOfWork`. `tsc`/`lint`/`build` all pass clean; diff logic verified via a standalone `tsx`
+  script against mock data (not a live browser click-through — Playwright still disconnected this
+  session). See [MODULES/Quotation.md](./MODULES/Quotation.md) "Business Flow" item 6b and
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Revision Note".
 - ✅ **[2026-07-23] Fix: "อื่น ๆ" no longer displaced by the backfilled Accounting checklist option.**
   Direct user report — on an existing Scope of Work record, "เอกสารส่งถึง"'s backfilled "Accounting"
   option landed *after* "อื่น ๆ" instead of before it, since the backfill logic just appended

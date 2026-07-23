@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronRight, Printer, Copy, Save, Send, CheckCircle2, Building2, Hash, CalendarDays,
-  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList, GitBranch,
+  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList, GitBranch, Wand2,
 } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
@@ -10,8 +10,9 @@ import type { User } from "../../lib/users";
 import {
   type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type ApprovalAction, type QuotePermissions,
   statusIcon, statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
-  printQuote,
+  printQuote, isRevisionQuote,
 } from "../../lib/quotes";
+import { getRevisionPredecessorId, generateQuoteRevisionSummary } from "../../lib/revisionDiff";
 import type { Customer } from "../../lib/customers";
 import { fetchScopeOfWorksByQuotation, createScopeOfWorkFromQuotation, type ScopeOfWorkSummary } from "../../lib/scopeOfWork";
 import { ApiError } from "../../lib/apiClient";
@@ -54,6 +55,7 @@ const ACTION_ICON: Record<ApprovalAction, React.ReactNode> = {
 export function QuoteDocument({
   mode,
   quote,
+  allQuotes,
   wizardResult,
   nextId,
   company,
@@ -77,6 +79,11 @@ export function QuoteDocument({
 }: {
   mode: "new" | "detail";
   quote?: Quote;
+  /** The full company-wide-or-own-only quote list already loaded at boot (`App.tsx`) — used only
+   * to look up a revision's immediate predecessor for "สร้างสรุปการแก้ไขอัตโนมัติ" (added
+   * 2026-07-23, see src/lib/revisionDiff.ts). No extra fetch: every quote this user can already
+   * see is already in memory app-wide. */
+  allQuotes: Quote[];
   /** Set only in "new" mode, when the quotation was started via the Job Type -> Template wizard
    * (`QuotationTemplateWizard.tsx`). `null`/`undefined` means "start blank" — no fallback to any
    * live template lookup happens here, matching the "template = one-time copy, never a live
@@ -154,6 +161,7 @@ export function QuoteDocument({
   const [issueDate, setIssueDate] = useState(quote?.issueDate ?? todayIso());
   const [expiryDate, setExpiryDate] = useState(quote?.expiryDate ?? plusDaysIso(30));
   const [remarks, setRemarks] = useState(quote?.remarks ?? (templateSnapshot?.remarks || company.termsAndConditions || DEFAULT_TERMS));
+  const [revisionNote, setRevisionNote] = useState(quote?.revisionNote ?? "");
   const [jobTypeCode, setJobTypeCode] = useState(quote?.jobTypeCode ?? wizardResult?.jobTypeCode ?? "");
   // Seeded from the quote's own persisted snapshot, not re-derived from the live `jobTypes` list on
   // every render — jobTypeCode/jobTypeName are a deliberate snapshot (see src/lib/quotes.tsx), so
@@ -286,6 +294,7 @@ export function QuoteDocument({
     client, status: quoteStatus, lines, discount, amount: total,
     salesperson, contactName, contactPhone, contactEmail, address, taxId,
     deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate, remarks,
+    revisionNote,
     jobTypeCode,
     jobTypeName,
     isPotentialOpportunity,
@@ -300,6 +309,22 @@ export function QuoteDocument({
     // on update). Server re-derives quotationTemplateName/Version from this id; never send those.
     ...(mode === "new" && quotationTemplateId ? { quotationTemplateId } : {}),
   });
+
+  // ── Revision note auto-summary (added 2026-07-23, per direct user request) ──────────────────
+  // Only applies to a quote that's actually a revision (`{root}-R{n}`) — the record this one was
+  // rewritten from is already loaded in `allQuotes` (the app's own boot-time full list), so no
+  // extra fetch is needed here (unlike Scope of Work's equivalent, whose records aren't preloaded).
+  const revisionPredecessorId = isDetail && quote ? getRevisionPredecessorId(quote.id) : null;
+  const handleGenerateRevisionNote = () => {
+    if (!revisionPredecessorId) return;
+    const predecessor = allQuotes.find((q) => q.id === revisionPredecessorId);
+    if (!predecessor) {
+      showToast("ไม่พบข้อมูลต้นฉบับสำหรับเปรียบเทียบ (อาจเป็นเพราะสิทธิ์การเข้าถึง)");
+      return;
+    }
+    setRevisionNote(generateQuoteRevisionSummary(predecessor, currentDraft()));
+    showToast("สร้างสรุปการแก้ไขอัตโนมัติแล้ว — ตรวจสอบและแก้ไขเพิ่มเติมได้ตามต้องการ");
+  };
 
   // ── Required-field validation (added 2026-07-16, relaxed back to a minimal set the same day —
   // see docs/MODULES/Quotation.md "Required-Field Validation") ─────────────────────────────────
@@ -750,6 +775,36 @@ export function QuoteDocument({
             </div>
           </div>
         </div>
+
+        {/* Revision note — only for a quote that IS itself a revision (added 2026-07-23) */}
+        {isDetail && quote && isRevisionQuote(quote.id) && (
+          <div className="bg-card border border-border rounded-xl p-5 print:hidden">
+            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+                หมายเหตุการแก้ไข (Revision Note)
+              </p>
+              <button
+                type="button"
+                onClick={handleGenerateRevisionNote}
+                disabled={disabled || !revisionPredecessorId}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Wand2 size={13} /> สร้างสรุปการแก้ไขอัตโนมัติ
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              กดปุ่มด้านบนเพื่อให้ระบบตรวจสอบและสรุปว่าใบนี้แก้ไขอะไรไปจากต้นฉบับ ({revisionPredecessorId || "-"}) เป็นข้อความอัตโนมัติ — แก้ไข/เพิ่มเติมข้อความเองได้ตามต้องการก่อนบันทึก
+            </p>
+            <textarea
+              rows={6}
+              disabled={disabled}
+              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60 font-mono"
+              value={revisionNote}
+              onChange={(e) => setRevisionNote(e.target.value)}
+              placeholder="เช่น • ลูกค้า: &quot;บริษัท A&quot; → &quot;บริษัท B&quot;"
+            />
+          </div>
+        )}
 
         {/* Approval history */}
         {isDetail && quote!.approvalHistory.length > 0 && (

@@ -455,6 +455,9 @@ interface ScopeOfWork {
   // documentRecipients added 2026-07-23: documentsToSend option key -> picked User.id[]. See
   // MODULES/ScopeOfWork.md "Document Recipients".
   documentRecipients: Record<string, string[]>;
+  // revisionNote added 2026-07-23: free text, always "" on create/Duplicate/fresh Rewrite, never
+  // inherited from the source record. See MODULES/ScopeOfWork.md "Revision Note".
+  revisionNote: string;
   remarks: string;
   seller: ScopeOfWorkSignatory; approver: ScopeOfWorkSignatory;
   status: ScopeOfWorkStatus; version: number;
@@ -617,6 +620,7 @@ interface Quote {
   jobTypeName: string;               // added 2026-07-10, snapshot of JobType.name at save time
   isPotentialOpportunity: boolean;   // added 2026-07-10 — sales-marked "likely to close", feeds Dashboard's Expected Sales KPI/forecast
   followUpDate: string;              // added 2026-07-10, yyyy-mm-dd, "" = no follow-up scheduled
+  revisionNote: string;              // added 2026-07-23, free text, always "" on create/Duplicate/fresh Rewrite, never inherited from the source — see MODULES/Quotation.md "Business Flow" item 6b
   createdByUserId: string;             // → User.id, "" for legacy/seed quotes (any editor treated as owner)
   updatedBy: string;                   // → User.id, added 2026-07-09 — set server-side on every plain edit or workflow action, "" until first edit
   approvalHistory: ApprovalHistoryEntry[];  // append-only

@@ -113,6 +113,16 @@ export interface Quote {
   isPotentialOpportunity: boolean;
   /** Empty string = no follow-up scheduled. */
   followUpDate: string;
+  /** Free-text summary of what changed in this revision vs. the one it was rewritten from — added
+   * 2026-07-23, per direct user request. Always starts blank on a brand-new quote, a Duplicate, or
+   * a fresh Rewrite (never inherited from the source, even though most other fields are copied) —
+   * this note is meant to describe changes made *in this* revision, not carry over the previous
+   * revision's own note. `generateQuoteRevisionSummary()` (src/lib/revisionDiff.ts) can auto-fill
+   * an editable starting draft by comparing this revision against its immediate predecessor (see
+   * `getRevisionPredecessorId()` in the same file); the user is always free to edit/replace it
+   * afterward like any other field — the auto-fill is a one-time, explicitly-triggered starting
+   * point, never silently regenerated or overwritten by anything. */
+  revisionNote: string;
   /** User id of the creator, used for ownership-scoped edit permission. Empty string for legacy/seed quotes. */
   createdByUserId: string;
   /** User id of whoever last edited the quote (plain edit or workflow action). Empty string until first edit. */
@@ -180,7 +190,7 @@ export type QuoteDraftFields = Pick<
   | "client" | "status" | "lines" | "discount" | "salesperson"
   | "contactName" | "contactPhone" | "contactEmail" | "address" | "taxId"
   | "deliveryMethod" | "deliveryAddress" | "project"
-  | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks"
+  | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks" | "revisionNote"
   | "jobTypeCode" | "jobTypeName" | "isPotentialOpportunity" | "followUpDate"
   // Client only ever sends the id — the server always re-derives `customerSnapshot` itself from
   // the submitted Customer Information fields, the same "never trust a client-supplied derived

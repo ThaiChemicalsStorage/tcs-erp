@@ -1,6 +1,6 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23
 
 **2026-07-23, Own-Records-Only Viewing** (per direct user request, "หน้า scope of work อยากให้ทำสิทธิ์
 เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — mirroring Quotation's `quotations:viewAll`): new
@@ -345,6 +345,44 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   การส่งอีเมล") instead of silently failing when it's missing, but nothing in this codebase can set
   the key itself (a human must sign up at resend.com). See [ARCHITECTURE.md](../ARCHITECTURE.md) and
   [TODO.md](../TODO.md).
+
+## Revision Note (added 2026-07-23)
+
+Per direct user request ("อยากได้แบบ Comment auto หรืออะไรก็ได้หลังใบที่ถูก rewrite มาว่าแก้ตรงไหนไปได้
+ไหม...ให้ตรวจดูว่าแก้ตรงไหนไปละเป็นข้อความ auto ไปก่อนละค่อยแบบถ้าผู้ใช้อยากเพิ่มหรืออยากแก้ก็สามารถ
+แก้เองได้") — followed by a clarifying question the user answered as "both Quotation and Scope of
+Work" and "detailed, every field" — a revision (a `scopeNumber` produced by the existing Rewrite
+action, ending in `-R<digits>`) now shows a "หมายเหตุการแก้ไข (Revision Note)" card with a
+"สร้างสรุปการแก้ไขอัตโนมัติ" button, right before the Remarks/Signatures section:
+
+- New `ScopeOfWork.revisionNote: string` field, always blank on a brand-new record, Duplicate, or a
+  fresh Rewrite — never inherited from the source record (a revision note describes changes made
+  *within* this revision, so copying the predecessor's note forward would misattribute it).
+- Clicking the button calls `fetchScopeOfWorksByQuotation(scope.quotationId)` (an existing route —
+  every revision of the same job shares one `quotationId`) to resolve the immediate predecessor's
+  real MongoDB id from its `scopeNumber`, fetches that full record, and diffs it against the
+  currently-open draft via `generateScopeOfWorkRevisionSummary()` (new `src/lib/revisionDiff.ts`,
+  shared with Quotation's identical feature below). The result — a Thai bullet list of every changed
+  header field, item (added/removed/changed, matched by array position since item ids are
+  regenerated on every Rewrite/Duplicate), checklist selection (added/removed per group, matched by
+  the group's stable `key`), payment installment (added/removed/changed, matched by the stable
+  installment `id` — unlike items, `paymentConditions` passes through Rewrite/Duplicate untouched, so
+  id-based matching is reliable here), and document recipient (added/removed per department,
+  resolved to real names via the already-loaded `users` list) — is dropped into the note's
+  `<textarea>` as a starting draft.
+- **Explicitly one-shot, never automatic**: the summary only regenerates on a click, so it can never
+  silently overwrite text the user has already started editing themselves — same free-text
+  `<textarea>` either way.
+- `Quote.revisionNote` is the identical feature for Quotation (`src/pages/quotation/QuoteDocument.tsx`),
+  diffed via `generateQuoteRevisionSummary()` in the same `revisionDiff.ts` — the predecessor there is
+  resolved from the already-boot-loaded `allQuotes` array instead of a network fetch, since Quotation
+  data (unlike Scope of Work) is preloaded app-wide. See [Quotation.md](./Quotation.md) "Business Flow"
+  item 6b.
+- **Not built this pass**: no diff for `checklistGroups[].note` beyond the two groups whose `note`
+  field is actually populated in practice, and reordering/insertion mid-array (items, lines) can read
+  as a spurious add+remove pair rather than a "moved" note — documented as a known simplification, not
+  a defect, since Scope of Work editing is overwhelmingly in-place edits and trailing add/remove in
+  real usage.
 
 ## Payment Conditions
 

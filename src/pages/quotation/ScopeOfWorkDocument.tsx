@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2 } from "lucide-react";
 import type { User } from "../../lib/users";
 import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
@@ -7,7 +7,9 @@ import {
   fetchScopeOfWork, updateScopeOfWork, finalizeScopeOfWork, duplicateScopeOfWork, rewriteScopeOfWork,
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
   blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS, sendScopeOfWorkDocumentNotifications,
+  fetchScopeOfWorksByQuotation,
 } from "../../lib/scopeOfWork";
+import { getRevisionPredecessorId, generateScopeOfWorkRevisionSummary } from "../../lib/revisionDiff";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
@@ -41,6 +43,7 @@ function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
     items: s.items,
     paymentConditions: s.paymentConditions,
     documentRecipients: s.documentRecipients,
+    revisionNote: s.revisionNote,
     remarks: s.remarks,
     seller: s.seller,
     approver: s.approver,
@@ -233,6 +236,7 @@ export function ScopeOfWorkDocument({
   const [serverValidationErrors, setServerValidationErrors] = useState<{ fieldErrors: Record<string, string>; groupErrors: Record<string, string[]> } | null>(null);
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [sendingDocs, setSendingDocs] = useState(false);
+  const [generatingRevisionNote, setGeneratingRevisionNote] = useState(false);
 
   // `scope`/`loadError` reset to their initial values (null/false) via a fresh mount whenever
   // `scopeOfWorkId` changes — the parent renders this component with `key={scopeOfWorkId}` for
@@ -324,6 +328,33 @@ export function ScopeOfWorkDocument({
       showToast(err instanceof ApiError ? err.message : "ส่งอีเมลไม่สำเร็จ");
     } finally {
       setSendingDocs(false);
+    }
+  };
+
+  /** "สร้างสรุปการแก้ไขอัตโนมัติ" — added 2026-07-23, per direct user request. Only applies when
+   * `scope.scopeNumber` is itself a revision (`{root}-R{n}`). Unlike Quotation's equivalent, the
+   * predecessor record isn't already loaded client-side (Scope of Work records are fetched
+   * per-id, not preloaded app-wide) — looked up via the existing by-quotation list (every
+   * revision of the same job shares one `quotationId`, unaffected by Rewrite) to find its `id`,
+   * then fetched in full. No new API route needed. */
+  const revisionPredecessorScopeNumber = getRevisionPredecessorId(scope.scopeNumber);
+  const handleGenerateRevisionNote = async () => {
+    if (!revisionPredecessorScopeNumber || generatingRevisionNote) return;
+    setGeneratingRevisionNote(true);
+    try {
+      const siblings = await fetchScopeOfWorksByQuotation(scope.quotationId);
+      const predecessorSummary = siblings.find((s) => s.scopeNumber === revisionPredecessorScopeNumber);
+      if (!predecessorSummary) {
+        showToast("ไม่พบข้อมูลต้นฉบับสำหรับเปรียบเทียบ");
+        return;
+      }
+      const predecessor = await fetchScopeOfWork(predecessorSummary.id);
+      setScope((prev) => (prev ? { ...prev, revisionNote: generateScopeOfWorkRevisionSummary(predecessor, prev, users) } : prev));
+      showToast("สร้างสรุปการแก้ไขอัตโนมัติแล้ว — ตรวจสอบและแก้ไขเพิ่มเติมได้ตามต้องการ");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "สร้างสรุปไม่สำเร็จ");
+    } finally {
+      setGeneratingRevisionNote(false);
     }
   };
 
@@ -685,6 +716,36 @@ export function ScopeOfWorkDocument({
             </div>
           </div>
         </div>
+
+        {/* Revision note — only for a record that IS itself a revision (added 2026-07-23) */}
+        {revisionPredecessorScopeNumber && (
+          <div className="bg-card border border-border rounded-xl p-5 print:hidden">
+            <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+                หมายเหตุการแก้ไข (Revision Note)
+              </p>
+              <button
+                type="button"
+                onClick={handleGenerateRevisionNote}
+                disabled={!editable || generatingRevisionNote}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generatingRevisionNote ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} สร้างสรุปการแก้ไขอัตโนมัติ
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              กดปุ่มด้านบนเพื่อให้ระบบตรวจสอบและสรุปว่าใบนี้แก้ไขอะไรไปจากต้นฉบับ ({revisionPredecessorScopeNumber}) เป็นข้อความอัตโนมัติ — แก้ไข/เพิ่มเติมข้อความเองได้ตามต้องการก่อนบันทึก
+            </p>
+            <textarea
+              rows={6}
+              disabled={!editable}
+              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60 font-mono"
+              value={scope.revisionNote ?? ""}
+              onChange={(e) => updateField("revisionNote", e.target.value)}
+              placeholder="เช่น • วันที่ส่งของ: &quot;2026-07-20&quot; → &quot;2026-07-25&quot;"
+            />
+          </div>
+        )}
 
         {/* Remarks + Signatures */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">

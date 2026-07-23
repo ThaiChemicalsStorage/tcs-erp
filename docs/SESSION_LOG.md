@@ -4,7 +4,60 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Fix: "อื่น ๆ" displaced by the backfilled Accounting option
+## Session — 2026-07-23 (absolute latest), Feature: auto-generated Revision Note (Quotation + Scope of Work)
+
+### What was implemented
+- Direct user request: an auto-generated comment/note after a rewritten document showing what
+  changed, with the user free to add to or edit it afterward. Two clarifying questions were asked
+  and answered: scope = both Quotation and Scope of Work; detail level = every field, in detail.
+- New `src/lib/revisionDiff.ts` — pure, framework-agnostic TS (no JSX/browser globals, safe to
+  value-import into the API bundle even though nothing server-side uses it yet, matching the
+  established `documentRequirements.ts` convention). Duplicates `getRevisionRoot()`/
+  `getRevisionNumber()`/`getRevisionPredecessorId()` from the server-only
+  `api/_lib/quoteRevisions.ts` rather than trying to share them across the frontend/API boundary.
+- `generateQuoteRevisionSummary()` and `generateScopeOfWorkRevisionSummary()` diff every field the
+  user's "every field" answer implied: header/contact/date/terms fields, line items/scope items
+  (matched by array **position**, not id — both `cloneLines()` and Scope of Work's item-cloning
+  regenerate every id on Rewrite/Duplicate, so id-matching would falsely report every line as both
+  removed and added), checklist selections (matched by stable group `key`), payment installments
+  (matched by stable installment `id` — verified `paymentConditions` passes through the `...rest`
+  spread untouched on Rewrite/Duplicate, so id-matching is reliable there unlike for items), and
+  document recipients (resolved to real names via the already-loaded `users` list).
+- New `revisionNote: string` field on both `Quote` and `ScopeOfWork`, always blank on
+  create/Duplicate/fresh Rewrite. Both `QuoteDocument.tsx` and `ScopeOfWorkDocument.tsx` gained a
+  card (revisions only, i.e. id/`scopeNumber` ending in `-R<digits>`) with a
+  "สร้างสรุปการแก้ไขอัตโนมัติ" button that fills the note `<textarea>` on click — deliberately
+  **one-shot, never automatic**, so a regenerate can never silently clobber text the user already
+  typed themselves.
+- Predecessor lookup solved two different ways depending on what data was already available:
+  Quotation's full quote list is already boot-loaded app-wide, so a new `allQuotes` prop threads it
+  down with zero extra network calls; Scope of Work records are fetched per-id with no
+  lookup-by-scopeNumber route, so the existing `fetchScopeOfWorksByQuotation()` (returns every
+  revision's `scopeNumber`+`id` for the shared `quotationId`) resolves the predecessor's real id
+  first, then `fetchScopeOfWork(id)` gets the full record — two round trips, no new backend route.
+
+### Verification
+- `tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run lint`, `npm run build` all
+  pass clean.
+- Playwright MCP tools remain disconnected this session (see the entry below on the
+  `taskkill /IM node.exe` incident) — verified the diff-generation logic instead via a temporary
+  standalone `tsx` script (`npx tsx <script>`) against realistic mock Quote/ScopeOfWork data,
+  confirming correct revision-id parsing and correct diff output for header-field changes,
+  line-item/scope-item changes, checklist selection changes, and document-recipient name
+  resolution. Deleted the script after confirming.
+
+### Recommendation for next session
+- Do a real browser click-through of the new Revision Note button on both document types once
+  Playwright reconnects (or Vercel CLI/live testing becomes available) — logic-level verification
+  is solid but the actual button/textarea UX has not been visually confirmed.
+- Consider, only if a future user asks: an id-aware line/item diff (currently position-based) for
+  cases where a mid-list line is inserted or reordered rather than edited in place — not attempted
+  this pass since it wasn't asked for and the current approach covers the overwhelmingly common
+  in-place-edit/trailing-add-remove cases correctly.
+
+---
+
+## Session — 2026-07-23, Fix: "อื่น ๆ" displaced by the backfilled Accounting option
 
 ### What was implemented
 - User reported, tersely: fix the "เอกสารส่งถึง" section on the Scope of Work page, put "อื่นๆ" at

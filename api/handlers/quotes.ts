@@ -249,6 +249,7 @@ function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<Quot
   if ("issueDate" in body) update.issueDate = validateIsoDateOrEmpty(body.issueDate, "วันที่ออกใบเสนอราคา");
   if ("expiryDate" in body) update.expiryDate = validateIsoDateOrEmpty(body.expiryDate, "วันหมดอายุ");
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
+  if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   if ("isPotentialOpportunity" in body) update.isPotentialOpportunity = sanitizeBoolean(body.isPotentialOpportunity, "โอกาสในการขาย");
   if ("followUpDate" in body) update.followUpDate = validateIsoDateOrEmpty(body.followUpDate, "วันที่ติดตาม");
   return update;
@@ -323,6 +324,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       issueDate: validateIsoDateOrEmpty(body.issueDate, "วันที่ออกใบเสนอราคา"),
       expiryDate: validateIsoDateOrEmpty(body.expiryDate, "วันหมดอายุ"),
       remarks: sanitizeLongText(body.remarks, "หมายเหตุ"),
+      revisionNote: "",
       jobTypeCode,
       jobTypeName,
       isPotentialOpportunity: sanitizeBoolean(body.isPotentialOpportunity, "โอกาสในการขาย"),
@@ -479,6 +481,8 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
     createdByUserId: ctx.user.id,
     updatedBy: ctx.user.id,
     approvalHistory: [],
+    // Never inherited from the source — see `Quote.revisionNote`'s doc comment (src/lib/quotes.tsx).
+    revisionNote: "",
   };
   await quotes.insertOne(doc);
   await writeQuoteAuditEntry(ctx, "Quotation Created", `คัดลอกใบเสนอราคาเป็น ${newId} จาก ${id}`, { quoteId: newId, customerName: doc.client });
@@ -523,6 +527,8 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
       createdByUserId: ctx.user.id,
       updatedBy: ctx.user.id,
       approvalHistory: [],
+      // Never inherited from the source — see `Quote.revisionNote`'s doc comment (src/lib/quotes.tsx).
+      revisionNote: "",
     };
     try {
       await quotes.insertOne(doc);

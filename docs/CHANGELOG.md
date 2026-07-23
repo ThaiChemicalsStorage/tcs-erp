@@ -4,7 +4,61 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Fix: "อื่น ๆ" no longer displaced by the backfilled Accounting option
+## 2026-07-23 (absolute latest) — Feature: auto-generated Revision Note (Quotation + Scope of Work)
+
+**Feature**: direct user request — "อยากได้แบบ Comment auto หรืออะไรก็ได้หลังใบที่ถูก rewrite มาว่า
+แก้ตรงไหนไปสามารถทำได้ไหมคือแบบให้ตรวจดูว่าแก้ตรงไหนไปละเป็นข้อความ auto ไปก่อนละค่อยแบบถ้าผู้ใช้
+อยากเพิ่มหรืออยากแก้ก็สามารถแก้เองสามารถทำได้ไหม" (an auto-generated comment on a rewritten document
+showing what changed, that the user can then edit/add to). Follow-up clarification: scope = both
+Quotation and Scope of Work; detail level = every field.
+
+**What was built**:
+- New `Quote.revisionNote: string` and `ScopeOfWork.revisionNote: string` fields — free text, always
+  `""` on a brand-new record, Duplicate, or a fresh Rewrite (never inherited from the source, since a
+  revision note describes what changed *within* this specific revision).
+- New `src/lib/revisionDiff.ts` (framework-agnostic, safe to value-import from both the Vite bundle
+  and the API bundle, same convention as `documentRequirements.ts`): `getRevisionRoot()`/
+  `getRevisionNumber()`/`getRevisionPredecessorId()` (duplicated from the server-only
+  `api/_lib/quoteRevisions.ts`) plus `generateQuoteRevisionSummary()`/
+  `generateScopeOfWorkRevisionSummary()`, which diff every meaningful field (header fields, line
+  items/scope items by array position, checklist selections by group key, payment installments by
+  stable installment id, document recipients resolved to real names) and produce a Thai bullet-list
+  summary, or "ไม่มีการเปลี่ยนแปลงจากต้นฉบับ" if nothing differs.
+- Both `QuoteDocument.tsx` and `ScopeOfWorkDocument.tsx` show a "หมายเหตุการแก้ไข (Revision Note)"
+  card (only on a revision, id/`scopeNumber` ending in `-R<digits>`) with a
+  "สร้างสรุปการแก้ไขอัตโนมัติ" button that fills the note's `<textarea>` on click — **never
+  automatic**, so it can never silently clobber text the user already typed; the field stays freely
+  editable either way. Quotation resolves its predecessor from the already-boot-loaded `allQuotes`
+  array (new prop, zero extra fetch); Scope of Work resolves it via the existing
+  `fetchScopeOfWorksByQuotation()` + `fetchScopeOfWork()` (two round trips, no new API route needed).
+- Server: `revisionNote` added to `sanitizePartialQuoteFields()`/`ScopeOfWorkUpdateFields`'s
+  sanitizer (`api/handlers/quotes.ts`, `api/_lib/scopeOfWorkHandler.ts`), explicitly reset to `""` in
+  every create/Duplicate/Rewrite handler for both resource types, and backfilled to `""` in
+  `normalizeScope()` for pre-existing Scope of Work records.
+
+**Known simplification (documented, not a defect)**: line/item diffing matches by array position, not
+id — both `cloneLines()` (quotes) and the item-cloning logic in Scope of Work's
+`handleRewrite()`/`handleDuplicate()` regenerate every line/item id on every rewrite/duplicate, so an
+id-based match would falsely report every line as both removed and added. Position-based matching is
+accurate for in-place edits and trailing add/remove, approximate for mid-list reordering/insertion.
+Payment installments, by contrast, keep their ids unchanged across Rewrite/Duplicate (`paymentConditions`
+passes through the `...rest` spread untouched), so `diffPaymentConditions()` safely matches by id.
+
+**Files Modified**: `src/lib/revisionDiff.ts` (new), `src/lib/quotes.tsx`, `src/lib/scopeOfWork.ts`,
+`api/handlers/quotes.ts`, `api/_lib/scopeOfWorkHandler.ts`, `src/pages/quotation/QuoteDocument.tsx`,
+`src/pages/quotation/QuotationPage.tsx`, `src/pages/quotation/ScopeOfWorkDocument.tsx`.
+
+**Verification**: `npx tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run lint`,
+`npm run build` all pass clean. Diff-generation logic verified via a temporary standalone `tsx`
+script against realistic mock data covering header-field changes, line/item changes, checklist
+selection changes, payment installment changes, and document-recipient changes (resolved to real
+names) — deleted after verification. **Not** verified via a live browser click-through — Playwright
+MCP disconnected earlier this session (an overly broad `taskkill /IM node.exe`) and never
+reconnected; see SESSION_LOG.md and TODO.md.
+
+---
+
+## 2026-07-23 — Fix: "อื่น ๆ" no longer displaced by the backfilled Accounting option
 
 **Bug**: direct user report — on an existing (pre-2026-07-23) Scope of Work record, the "เอกสาร
 ส่งถึง" checklist showed "อื่น ๆ" (Other) in the middle of the list instead of last, right before

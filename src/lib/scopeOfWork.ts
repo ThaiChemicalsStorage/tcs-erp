@@ -256,6 +256,12 @@ export interface ScopeOfWork {
    * against). Independent of `checked` state — unchecking an option doesn't clear its recipients,
    * so re-checking it later remembers the previous picks; only the email-send action reads this. */
   documentRecipients: Record<string, string[]>;
+  /** Free-text summary of what changed in this revision vs. the one it was rewritten from — added
+   * 2026-07-23, per direct user request, same field/semantics as `Quote.revisionNote`
+   * (src/lib/quotes.tsx). Always starts blank on a brand-new record, a Duplicate, or a fresh
+   * Rewrite — never inherited from the source. `generateScopeOfWorkRevisionSummary()`
+   * (src/lib/revisionDiff.ts) can auto-fill an editable starting draft; freely editable afterward. */
+  revisionNote: string;
   remarks: string;
   seller: ScopeOfWorkSignatory;
   approver: ScopeOfWorkSignatory;
@@ -321,6 +327,7 @@ export type ScopeOfWorkUpdateFields = Partial<{
   items: ScopeOfWorkItem[];
   paymentConditions: ScopeOfWorkPaymentConditions;
   documentRecipients: Record<string, string[]>;
+  revisionNote: string;
   remarks: string;
   seller: ScopeOfWorkSignatory;
   approver: ScopeOfWorkSignatory;
