@@ -4,7 +4,42 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Scope of Work: in-app notification + recipient list visibility
+## Session — 2026-07-23 (absolute latest), Scope of Work: clearer Document Recipients checkbox UX
+
+### What was implemented
+- User sent a screenshot of the shipped `DocumentRecipientsPicker` and said, plainly, that they
+  were worried users wouldn't understand where they were clicking to choose recipients.
+- Looked at the actual rendered chips in the screenshot: the only signal for "selected" was a
+  subtle gold tint + border color change on an otherwise plain-looking name button — no checkbox,
+  no checkmark, nothing that reads unambiguously as "this person is chosen to receive this."
+- Fixed by switching to real `<input type="checkbox">` elements — deliberately not a new pattern:
+  `ChecklistGroupCard.tsx`, rendered in the exact same document just above this card, already uses
+  plain checkboxes for "pick options in this group," so reusing that exact convention means a user
+  who already understood the checklist above doesn't have to learn a second interaction style for
+  the recipient picker right below it. Also added a per-department selected-count badge (green
+  "เลือกแล้ว N คน" / amber "ยังไม่ได้เลือกผู้รับ") so a department that's checked in the checklist
+  but still has zero recipients picked is visually flagged before the user tries to send.
+
+### Verification
+- `tsc --noEmit`, `npm run lint`, `npm run build` all pass clean.
+- Attempted the same temporary dev-harness + Playwright verification used for every other UI
+  change this session, but the Playwright browser-automation MCP connection had dropped (an
+  earlier `taskkill /IM node.exe` cleanup step, needed to fully stop a stuck dev server, appears to
+  have also killed the MCP server's own Node process) and did not reconnect. Did not attempt a
+  workaround given the small, well-precedented nature of the change — swapping in an interaction
+  pattern (`<input type="checkbox">` + label, `accent-[#c9a84c]` styling) copied directly from
+  `ChecklistGroupCard.tsx`, which was itself already visually verified in earlier passes.
+
+### Recommendation for next session
+- If future UI verification needs the Playwright browser tools, avoid `taskkill /IM node.exe`
+  (kills every Node process indiscriminately, including the MCP server) — kill only the specific
+  dev-server PID instead (e.g. via `netstat`/`Get-Process` to find the exact port owner).
+- Quick manual check next time the app is open: confirm the new checkboxes render/toggle correctly
+  and the selected-count badges update live.
+
+---
+
+## Session — 2026-07-23, Scope of Work: in-app notification + recipient list visibility
 
 ### What was implemented
 - Direct continuation of the Document Recipients work below, same session, after the user

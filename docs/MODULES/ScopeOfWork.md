@@ -288,9 +288,14 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   the `"other"` key (free text, no real department to resolve candidates against).
 - **`DocumentRecipientsPicker.tsx`** (new component, rendered in `ScopeOfWorkDocument.tsx` right
   below the checklist card) shows one row per currently-checked department, listing every `User`
-  whose `department` exactly matches that department's label as a toggle chip — picking/unpicking
-  updates `documentRecipients`. A department with zero matching users shows a hint to go set one up
-  in User Management, rather than an empty, unexplained row.
+  whose `department` exactly matches that department's label — picking/unpicking updates
+  `documentRecipients`. A department with zero matching users shows a hint to go set one up in User
+  Management, rather than an empty, unexplained row. **2026-07-23, same-day UX pass** (direct user
+  report — a color-only toggle-chip design wasn't a clear enough "you're choosing who this gets
+  emailed to" affordance): each candidate is now a real `<input type="checkbox">` + name, matching
+  `ChecklistGroupCard.tsx`'s already-established checkbox convention immediately above this card,
+  inside its own bordered per-department box with a "เลือกแล้ว N คน"/"ยังไม่ได้เลือกผู้รับ" badge
+  next to the department title so it's obvious at a glance which departments still need a pick.
 - **"ส่งอีเมลแจ้งผู้รับเอกสาร"** button (below the picker, visible once ≥1 department is checked):
   saves the record first (the server reads recipients from the persisted document, not unsaved
   client state), then calls `POST /api/scope-of-works/:id/send-documents`

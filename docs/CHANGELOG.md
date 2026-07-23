@@ -4,7 +4,34 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Scope of Work: in-app notification + recipient list visibility
+## 2026-07-23 (absolute latest) — Scope of Work: clearer Document Recipients checkbox UX
+
+**Feature**: direct user report against the shipped Document Recipients picker — a screenshot
+showed the color-only toggle-chip design (subtle gold tint when selected) wasn't a clear enough
+"you're choosing who this gets emailed to" affordance ("อยากให้ทำให้เห็นง่ายขึ้นหน่อยเวลากดติ๊กละ
+กลัวผู้ใช้งงว่าเลือกส่งตรงไหน").
+
+**Fix**: `DocumentRecipientsPicker.tsx` replaced each candidate's toggle-chip button with a real
+`<input type="checkbox">` + name — matching `ChecklistGroupCard.tsx`'s already-established,
+unambiguous checkbox convention rendered directly above this same card, rather than inventing a
+new interaction style. Each department also gained its own bordered box (previously just a plain
+title + wrapped chips) and a "เลือกแล้ว N คน" (green) / "ยังไม่ได้เลือกผู้รับ" (amber) badge next
+to its title, so it's obvious at a glance which checked departments still need at least one
+recipient picked before sending will actually reach them.
+
+**Files Modified**: `src/pages/quotation/DocumentRecipientsPicker.tsx`, `docs/MODULES/ScopeOfWork.md`
+
+**Reason**: Direct user report that the previous design was confusing to a first-time user.
+
+**Verification**: `tsc --noEmit`, `npm run lint`, `npm run build` all pass clean. Not re-verified
+via a live browser harness this pass (the Playwright browser-automation connection had dropped
+earlier in the session and did not reconnect) — confidence is high anyway since this swaps in an
+interaction pattern (`<input type="checkbox">` + label) already shipped and visually verified
+elsewhere in this exact file tree (`ChecklistGroupCard.tsx`), not a novel one.
+
+---
+
+## 2026-07-23 — Scope of Work: in-app notification + recipient list visibility
 
 **Feature**: direct same-day follow-up to the Document Recipients pass below, after the user
 confirmed the email itself now works ("กดส่งได้ปกติหมดแล้ว...ได้อีเมล์มาแล้ว"). Two more asks: "อยาก

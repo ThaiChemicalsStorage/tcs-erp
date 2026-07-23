@@ -14,6 +14,11 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] Scope of Work: clearer Document Recipients checkbox UX.**
+  Direct user report that the picker's color-only toggle-chip design was confusing — replaced with
+  real checkboxes (matching `ChecklistGroupCard.tsx`'s existing convention directly above it) plus
+  a per-department "เลือกแล้ว N คน" selected-count badge. `tsc`/`lint`/`build` all pass clean. See
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients".
 - ✅ **[2026-07-23] Scope of Work: in-app notification + recipient list visibility.**
   Direct same-day follow-up after the user confirmed real email delivery works in production —
   a document recipient now also gets an in-app bell notification (new `scope_of_work_document_sent`

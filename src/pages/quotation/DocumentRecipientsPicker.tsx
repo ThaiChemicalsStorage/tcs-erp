@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import type { User } from "../../lib/users";
 import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../lib/documentRequirements";
 
@@ -8,10 +9,16 @@ import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../lib/d
  * — candidates are `users` filtered by an exact match against `User.department` (now a controlled
  * dropdown sourced from the same `DOCUMENT_RECIPIENT_DEPARTMENTS` list, see
  * `src/pages/admin/UserManagementPage.tsx`), so the match is reliable rather than fuzzy free-text.
- * Toggle-chip UI (not a `<select multiple>`) to match this app's existing tag/chip conventions
- * elsewhere and to comfortably show each candidate's full name at a glance. Purely a selection UI —
- * the actual "send email" action lives in `ScopeOfWorkDocument.tsx` (it needs to save first, since
- * the server reads recipients from the persisted record, not from unsaved client state).
+ * Purely a selection UI — the actual "send email" action lives in `ScopeOfWorkDocument.tsx` (it
+ * needs to save first, since the server reads recipients from the persisted record, not from
+ * unsaved client state).
+ *
+ * **2026-07-23, same-day UX pass**: real `<input type="checkbox">` per candidate (matching
+ * `ChecklistGroupCard.tsx`'s already-established, unambiguous checkbox convention directly above
+ * this card) replaced the original color-only toggle-chip design — a direct user report that the
+ * chip's subtle selected/unselected color difference alone wasn't a clear enough "you're choosing
+ * who this gets emailed to" affordance for a first-time user. Also added a per-department selected
+ * count next to the title, so it's obvious at a glance which departments still need a pick.
  */
 export function DocumentRecipientsPicker({
   documentsToSendGroup,
@@ -44,38 +51,50 @@ export function DocumentRecipientsPicker({
         ผู้รับเอกสาร
       </p>
       <p className="text-[11px] text-muted-foreground mb-3">
-        เลือกพนักงานในแต่ละแผนกที่เลือกไว้ใน "เอกสารส่งถึง" ด้านบน — เมื่อกดส่งอีเมล ระบบจะส่งไปยังอีเมลของพนักงานที่เลือก
+        ติ๊กเลือกพนักงานในแต่ละแผนกที่เลือกไว้ใน "เอกสารส่งถึง" ด้านบน — เมื่อกดปุ่ม "ส่งอีเมลแจ้งผู้รับเอกสาร" ระบบจะส่งอีเมลไปยังพนักงานที่ติ๊กเลือกไว้เท่านั้น
       </p>
-      <div className="space-y-3">
+      <div className="space-y-4">
         {checkedDepartments.map((dept) => {
           const candidates = users.filter((u) => u.department.trim() === dept.label);
           const selected = value[dept.key] ?? [];
+          const selectedCount = selected.filter((id) => candidates.some((c) => c.id === id)).length;
           return (
-            <div key={dept.key}>
-              <p className="text-xs font-medium text-foreground mb-1.5">{dept.label}</p>
+            <div key={dept.key} className="border border-border/70 rounded-lg p-3 bg-secondary/30">
+              <div className="flex items-center gap-2 mb-2">
+                <p className="text-xs font-semibold text-foreground">{dept.label}</p>
+                {candidates.length > 0 && (
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${selectedCount > 0 ? "bg-[#2aa36b]/15 text-[#2aa36b]" : "bg-[#e08a3c]/15 text-[#e08a3c]"}`}>
+                    {selectedCount > 0 ? (
+                      <span className="inline-flex items-center gap-0.5"><Check size={10} /> เลือกแล้ว {selectedCount} คน</span>
+                    ) : (
+                      "ยังไม่ได้เลือกผู้รับ"
+                    )}
+                  </span>
+                )}
+              </div>
               {candidates.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground italic">
                   ยังไม่มีพนักงานที่ตั้งค่าแผนกเป็น "{dept.label}" — ตั้งค่าได้ที่หน้าจัดการผู้ใช้งาน
                 </p>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
                   {candidates.map((u) => {
                     const isSelected = selected.includes(u.id);
                     return (
-                      <button
+                      <label
                         key={u.id}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => toggleRecipient(dept.key, u.id)}
                         title={u.email}
-                        className={`px-2.5 py-1 text-[11px] rounded-lg border transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
-                          isSelected
-                            ? "bg-[#c9a84c]/15 border-[#c9a84c]/40 text-[#c9a84c] font-medium"
-                            : "border-border text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40"
-                        }`}
+                        className={`flex items-center gap-2 text-xs text-foreground select-none rounded-md px-1.5 py-1 -mx-1.5 transition-colors ${disabled ? "" : "cursor-pointer hover:bg-secondary/60"}`}
                       >
-                        {u.fullName}
-                      </button>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={disabled}
+                          onChange={() => toggleRecipient(dept.key, u.id)}
+                          className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c] disabled:opacity-60 flex-shrink-0"
+                        />
+                        <span className={isSelected ? "font-medium text-foreground" : "text-muted-foreground"}>{u.fullName}</span>
+                      </label>
                     );
                   })}
                 </div>
