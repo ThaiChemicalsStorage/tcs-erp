@@ -414,7 +414,12 @@ interface ScopeOfWorkItem {
   id: string; name: string; specifications: ScopeOfWorkSpecLine[]; quantity: number | null;
   unit: string; remark: string; isSectionHeader?: boolean;
 }
-interface ScopeOfWorkPaymentConditions { downPaymentPct: number | null; finalPaymentPct: number | null; method: string; description: string; notes: string; }
+// installments replaced the previous fixed {downPaymentPct, finalPaymentPct, method} pair on
+// 2026-07-23 — arbitrarily many rows, each with its own label/method, so a genuine 3+-installment
+// plan with mixed payment terms is representable. A pre-2026-07-23 record still has the legacy
+// shape in MongoDB until next saved — see normalizePaymentConditions() in src/lib/scopeOfWork.ts.
+interface ScopeOfWorkPaymentInstallment { id: string; pct: number | null; label: string; method: string; }
+interface ScopeOfWorkPaymentConditions { installments: ScopeOfWorkPaymentInstallment[]; description: string; notes: string; }
 interface ScopeOfWorkSignatory { name: string; userId: string; date: string; }
 interface ScopeOfWork {
   id: string; scopeNumber: string; yearMonth: string; jobSequence: number; secondaryCode: string;

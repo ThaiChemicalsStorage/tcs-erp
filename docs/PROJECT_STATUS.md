@@ -14,6 +14,17 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] Scope of Work: multi-installment payment schedule + 3 quick-select presets.**
+  Per direct user request, replaced the fixed 2-row down-payment/final-payment payment schedule
+  with an arbitrary-length `installments` array (each row has its own label/percentage/method), so
+  a genuine 3+-installment plan with mixed payment terms is now representable. 3 preset buttons
+  ("40% Down Payment (Cash) / 60% After Job Complete (Cash)", "30%/70% with Credit 30 Days", "100%
+  After Job Complete (Credit 30 Days)") fill in a common schedule with one click; every row stays
+  freely editable/removable afterward. Existing pre-2026-07-23 records are read-compatible via a
+  new `normalizePaymentConditions()` (no migration script needed). `tsc`/`lint`/`build` all pass
+  clean; interaction-verified via a temporary dev harness mounting the real editor component (preset
+  apply + manual add-row both confirmed correct, zero console errors) — live-data verification
+  blocked by the standing sandboxed-environment limitation. See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 - ✅ **[2026-07-23] Dashboard: Scope of Work document count card.** Per direct user request, the
   Dashboard's supporting-detail section gained a new `ScopeOfWorkSummary.tsx` card (Total/Draft/
   Final Scope of Work document counts, company-wide, unfiltered) — deliberately not a 5th

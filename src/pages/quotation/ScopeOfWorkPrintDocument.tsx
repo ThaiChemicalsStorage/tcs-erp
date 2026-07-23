@@ -91,12 +91,11 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, sellerUser, approverUser
               ))}
               <div className="break-inside-avoid">
                 <p className="font-bold text-[9.5px] mb-0.5 underline">การเก็บเงิน</p>
-                {s.paymentConditions.downPaymentPct !== null && (
-                  <p className="text-[9.5px] leading-[1.5]">{s.paymentConditions.downPaymentPct}% Down payment{s.paymentConditions.method ? ` (${s.paymentConditions.method})` : ""}</p>
-                )}
-                {s.paymentConditions.finalPaymentPct !== null && (
-                  <p className="text-[9.5px] leading-[1.5]">{s.paymentConditions.finalPaymentPct}% After Job Complete{s.paymentConditions.method ? ` (${s.paymentConditions.method})` : ""}</p>
-                )}
+                {s.paymentConditions.installments.map((installment) => (
+                  <p key={installment.id} className="text-[9.5px] leading-[1.5]">
+                    {installment.pct !== null ? `${installment.pct}% ` : ""}{installment.label || "-"}{installment.method ? ` (${installment.method})` : ""}
+                  </p>
+                ))}
                 {s.paymentConditions.description.trim() && <p className="text-[9.5px] leading-[1.5] whitespace-pre-line">{s.paymentConditions.description}</p>}
                 {s.paymentConditions.notes.trim() && <p className="text-[9px] italic text-[#5a7299] whitespace-pre-line">{s.paymentConditions.notes}</p>}
               </div>

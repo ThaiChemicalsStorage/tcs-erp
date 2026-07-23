@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus } from "lucide-react";
 import type { User } from "../../lib/users";
 import {
-  type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory,
+  type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
   fetchScopeOfWork, updateScopeOfWork, finalizeScopeOfWork, duplicateScopeOfWork, rewriteScopeOfWork,
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
+  blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS,
 } from "../../lib/scopeOfWork";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -84,6 +85,88 @@ function SignatoryEditor({ label, value, onChange, users, disabled, required, er
         onChange={(e) => onChange({ ...value, date: e.target.value })}
       />
       <FieldError message={error} />
+    </div>
+  );
+}
+
+/**
+ * Payment schedule editor — arbitrarily many installment rows (not capped at 2), added 2026-07-23
+ * per direct user request. The 3 preset buttons (`PAYMENT_TERM_PRESETS`) replace the whole row set
+ * with a common 2-installment schedule in one click; every row (preset-applied or manually added)
+ * stays fully editable/removable afterward, and a user can freely build a 3+-installment plan (e.g.
+ * 20% Down Payment / 40% Materials / 40% After Delivered Date) that no preset covers.
+ */
+function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
+  installments: ScopeOfWorkPaymentInstallment[];
+  onChange: (next: ScopeOfWorkPaymentInstallment[]) => void;
+  disabled: boolean;
+}) {
+  const updateRow = (id: string, patch: Partial<ScopeOfWorkPaymentInstallment>) =>
+    onChange(installments.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  const removeRow = (id: string) => onChange(installments.filter((row) => row.id !== id));
+  const addRow = () => onChange([...installments, blankPaymentInstallment()]);
+  const applyPreset = (preset: (typeof PAYMENT_TERM_PRESETS)[number]) =>
+    onChange(preset.installments.map((row) => ({ ...row, id: newPaymentInstallmentId() })));
+  const total = installments.reduce((sum, row) => sum + (row.pct ?? 0), 0);
+
+  return (
+    <div className="sm:col-span-2 space-y-2.5">
+      <label className="text-xs text-muted-foreground block">งวดการชำระเงิน</label>
+      {!disabled && (
+        <div className="flex flex-wrap gap-1.5">
+          {PAYMENT_TERM_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => applyPreset(preset)}
+              className="px-2.5 py-1 text-[11px] border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {installments.length > 0 && (
+        <div className="space-y-1.5">
+          {installments.map((row) => (
+            <div key={row.id} className="flex items-center gap-1.5">
+              <input
+                disabled={disabled}
+                value={row.label}
+                onChange={(e) => updateRow(row.id, { label: e.target.value })}
+                placeholder="เช่น Down Payment"
+                className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+              />
+              <input
+                disabled={disabled}
+                type="number"
+                min={0}
+                max={100}
+                value={row.pct ?? ""}
+                onChange={(e) => updateRow(row.id, { pct: e.target.value === "" ? null : parseFloat(e.target.value) || 0 })}
+                placeholder="%"
+                className="w-16 text-xs text-right text-foreground bg-secondary border border-border rounded-lg px-2 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+              />
+              <input
+                disabled={disabled}
+                value={row.method}
+                onChange={(e) => updateRow(row.id, { method: e.target.value })}
+                placeholder="เช่น Cash, Credit 30 Days"
+                className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+              />
+              {!disabled && (
+                <button onClick={() => removeRow(row.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1"><Trash2 size={13} /></button>
+              )}
+            </div>
+          ))}
+          <p className={`text-[10px] font-mono ${total === 100 ? "text-[#2aa36b]" : "text-muted-foreground"}`}>รวม {total}%</p>
+        </div>
+      )}
+      {!disabled && (
+        <button onClick={addRow} className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
+          <Plus size={11} /> เพิ่มงวดชำระเงิน
+        </button>
+      )}
     </div>
   );
 }
@@ -514,18 +597,11 @@ export function ScopeOfWorkDocument({
         <div className="bg-card border border-border rounded-xl p-5 print:hidden">
           <p className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>เงื่อนไขการชำระเงิน</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">เงินมัดจำ (%)</label>
-              <input disabled={!editable} type="number" min={0} max={100} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.paymentConditions.downPaymentPct ?? ""} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, downPaymentPct: e.target.value === "" ? null : parseFloat(e.target.value) || 0 })} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">ชำระส่วนที่เหลือ (%)</label>
-              <input disabled={!editable} type="number" min={0} max={100} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.paymentConditions.finalPaymentPct ?? ""} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, finalPaymentPct: e.target.value === "" ? null : parseFloat(e.target.value) || 0 })} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground block mb-1">วิธีการชำระเงิน</label>
-              <input disabled={!editable} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.paymentConditions.method} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, method: e.target.value })} placeholder="เช่น Cash, Credit" />
-            </div>
+            <PaymentInstallmentsEditor
+              installments={scope.paymentConditions.installments}
+              onChange={(installments) => updateField("paymentConditions", { ...scope.paymentConditions, installments })}
+              disabled={!editable}
+            />
             <div className="sm:col-span-2">
               <RequiredFieldLabel>รายละเอียดการชำระเงิน</RequiredFieldLabel>
               <textarea disabled={!editable} rows={3} className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed disabled:opacity-60" value={scope.paymentConditions.description} onChange={(e) => updateField("paymentConditions", { ...scope.paymentConditions, description: e.target.value })} />

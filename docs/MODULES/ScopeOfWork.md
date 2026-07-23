@@ -234,11 +234,31 @@ label, or change a group's `selectionType` (`sanitizeChecklistGroups()`).
 
 ## Payment Conditions
 
-A dedicated (non-checklist) section: `downPaymentPct`/`finalPaymentPct` (numbers or blank),
-`method` (free text, e.g. "Cash"), `description` (free text), `notes` (free text). Pulled from the
-quotation's `paymentTerms` string into `description` at creation time; the sample PDF's "40%/60%"
-split is **never** saved as a universal default — both percentage fields start blank unless the
-quotation itself already had that data.
+A dedicated (non-checklist) section: `installments` (an array of `{ id, pct, label, method }` rows
+— e.g. `{ pct: 40, label: "Down Payment", method: "Cash" }`), `description` (free text), `notes`
+(free text). Pulled from the quotation's `paymentTerms` string into `description` at creation time;
+the sample PDF's "40%/60%" split is **never** saved as a universal default — a new record always
+starts with an empty `installments` array unless the quotation itself already had percentage data
+(legacy pre-2026-07-23 records only, via `normalizePaymentConditions()` — see below).
+
+**2026-07-23, per direct user request**: replaced the previous fixed `{downPaymentPct,
+finalPaymentPct, method}` pair (exactly 2 installments, one shared payment method) with the
+`installments` array above — arbitrarily many rows, each with its own `label` and `method`, so a
+genuine 3+-installment plan with mixed terms is representable (e.g. "20% Down Payment (Cash 30
+days) / 40% Materials (Credit 30 days) / 40% After Delivered Date (Credit 30 days)"). 3 quick-select
+presets (`PAYMENT_TERM_PRESETS` in `src/lib/scopeOfWork.ts`) populate a common 2-installment
+schedule with one click — "40% Down Payment (Cash) / 60% After Job Complete (Cash)", "30% Down
+Payment (Cash) / 70% After Job Complete (Credit 30 Days)", "100% After Job Complete (Credit 30
+Days)" — but every row (preset-applied or manually added via "+ เพิ่มงวดชำระเงิน") stays fully
+editable/removable afterward; the presets are a starting point, never a locked-in choice.
+
+**Existing document compatibility**: a Scope of Work saved before 2026-07-23 still has the legacy
+`{downPaymentPct, finalPaymentPct, method}` pair in its MongoDB document — no migration script was
+run (MongoDB enforces no schema, so this is safe to defer). `normalizePaymentConditions()` (`src/lib/
+scopeOfWork.ts`) converts a legacy shape into the new `installments` array on every read (called
+from `normalizeScope()`/`toValidationInput()` in `api/_lib/scopeOfWorkHandler.ts`, so the frontend
+and the validators only ever see the current shape); the record is persisted in the new shape for
+good the next time it's saved through `sanitizePaymentConditions()`.
 
 ## Required-Field Validation (added 2026-07-16)
 
@@ -256,7 +276,9 @@ completely blank. Now enforced identically client- and server-side via
 `customerSnapshot.companyName`/`.contactName`/`.address`/`.phone`, `issueDate`, `deliveryDate`,
 `drawingCode`, `secondaryCode`, `deliveryLocation`, `shippingContact`, `shippingPhone`,
 `billingContact`, `billingPhone`, `paymentConditions.description`, `seller.name`. **Optional
-exceptions**: `customerSnapshot.taxId`/`.email`, `customerPoNumber`, `remarks`.
+exceptions**: `customerSnapshot.taxId`/`.email`, `customerPoNumber`, `remarks`. (`paymentConditions.
+method` was removed from this list 2026-07-23 — that field no longer exists at the top level, see
+"Payment Conditions" above; each `installments` row's own `method` is optional, same as before.)
 
 **Items** (`validateScopeOfWorkItems()`): at least one non-header item; every non-header item needs
 a non-blank `name`/`unit`, `quantity > 0`, and at least one non-blank specification line.
@@ -291,9 +313,12 @@ delivery "customer form" attachment/date-or-day rule, and a supporting-detail mo
 its existing มี/ไม่มี selection. The review flagged these as incomplete; they remain open, tracked
 in TODO.md, pending a confirmed business rule rather than a fabricated one.
 
-**Payment percentages**: if either `downPaymentPct`/`finalPaymentPct` is set, both must be and must
-sum to exactly 100% — never a hardcoded 40/60 split; if neither is set (the free-text
-`method`/`description` fields carry the billing condition instead), no percentage check applies.
+**Payment percentages**: if the user has added at least one `installments` row (via a preset or
+manually), every row's percentage must be filled in and all rows together must sum to exactly
+100% — arbitrarily many rows, never a hardcoded split; if no rows exist (the free-text
+`description` field carries the billing condition instead), no percentage check applies.
+Generalized 2026-07-23 from the previous fixed down-payment/final-payment pair — see "Payment
+Conditions" above.
 
 **Seller/approver**: `seller.name` is always required (it defaults from the quotation's salesperson
 at creation, so this is rarely actually missing in practice). `approver.name` is required **only

@@ -37,8 +37,10 @@ export const scopeOfWorkRequiredFields: Record<string, { label: string; required
   "paymentConditions.description": { label: "รายละเอียดการชำระเงิน", required: true },
   // Optional exception (2026-07-16, Codex review Medium Priority fix — every visible editable field
   // must be centrally classified): the percentage-based schedule + description above already carry
-  // the actual billing condition; `method`/`notes` are supplementary free text.
-  "paymentConditions.method": { label: "วิธีการชำระเงิน", required: false },
+  // the actual billing condition; `notes` is supplementary free text. `paymentConditions.method`
+  // was removed 2026-07-23 when the fixed down-payment/final-payment pair became a per-installment
+  // `installments` array — each row's own `method` is validated by `validatePaymentPercentages`
+  // below, not this dotted-path config (which only reaches string leaf fields, not array rows).
   "paymentConditions.notes": { label: "หมายเหตุการชำระเงิน", required: false },
   "seller.name": { label: "ชื่อผู้ขาย", required: true },
   // Optional exception: a signature date is normally filled in at the moment of actually signing,
@@ -89,17 +91,19 @@ export function validateScopeOfWorkItems(items: ScopeOfWorkItem[]): ScopeOfWorkI
 }
 
 /**
- * If the user is using a percentage-based payment schedule (either `downPaymentPct` or
- * `finalPaymentPct` set), both must be filled in and must sum to exactly 100% — the actual
- * quotation/business payment split, never a hardcoded 40/60 assumption. If neither percentage is
- * set, the free-text `method`/`description` fields carry the billing condition instead and no
- * percentage check applies.
+ * If the user has added at least one payment installment row (via a preset or manually — see
+ * `PAYMENT_TERM_PRESETS`/`ScopeOfWorkPaymentInstallment` in scopeOfWork.ts), every row's percentage
+ * must be filled in and all rows together must sum to exactly 100% — arbitrarily many installments
+ * (not capped at 2), the actual quotation/business payment split, never a hardcoded assumption. If
+ * no installment rows exist, the free-text `description` field alone carries the billing condition
+ * and no percentage check applies. Generalized 2026-07-23 from the previous fixed down-payment/
+ * final-payment pair.
  */
 function validatePaymentPercentages(payment: ScopeOfWorkPaymentConditions): string | null {
-  const { downPaymentPct, finalPaymentPct } = payment;
-  if (downPaymentPct === null && finalPaymentPct === null) return null;
-  if (downPaymentPct === null || finalPaymentPct === null) return "กรุณากรอกเปอร์เซ็นต์การชำระเงินให้ครบทั้งเงินมัดจำและส่วนที่เหลือ";
-  if (Math.round((downPaymentPct + finalPaymentPct) * 100) / 100 !== 100) return "เปอร์เซ็นต์การชำระเงิน (เงินมัดจำ + ส่วนที่เหลือ) ต้องรวมเป็น 100%";
+  if (payment.installments.length === 0) return null;
+  if (payment.installments.some((i) => i.pct === null)) return "กรุณากรอกเปอร์เซ็นต์ให้ครบทุกงวดชำระเงิน";
+  const total = payment.installments.reduce((sum, i) => sum + (i.pct ?? 0), 0);
+  if (Math.round(total * 100) / 100 !== 100) return "เปอร์เซ็นต์การชำระเงินทุกงวดรวมกันต้องเป็น 100%";
   return null;
 }
 

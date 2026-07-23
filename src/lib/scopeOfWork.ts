@@ -62,15 +62,96 @@ export interface ScopeOfWorkItem {
   isSectionHeader?: boolean;
 }
 
+/** One payment schedule row (e.g. "40% Down Payment (Cash)") — arbitrarily many rows are allowed
+ * (not capped at 2), added 2026-07-23 per direct user request for 3+-installment plans (e.g. 20%
+ * Down Payment / 40% Materials / 40% After Delivered Date). `label` is the free-text installment
+ * name ("Down Payment", "Materials", "After Job Complete", ...) and `method` its own free-text
+ * payment method/terms ("Cash", "Credit 30 Days", "Cash 30 days") — kept per-row rather than one
+ * shared `method` for the whole schedule, since a real multi-installment plan can legitimately mix
+ * Cash and Credit terms across rows. */
+export interface ScopeOfWorkPaymentInstallment {
+  id: string;
+  pct: number | null;
+  label: string;
+  method: string;
+}
+
 /** Editable payment fields — pulled from the quotation's `paymentTerms` text when available
  * (as free-text `description`), otherwise left blank. The sample PDF's "40% / 60%" split is never
- * saved as a universal default (see docs/MODULES/ScopeOfWork.md "Payment Conditions"). */
+ * saved as a universal default (see docs/MODULES/ScopeOfWork.md "Payment Conditions"). `installments`
+ * replaced the previous fixed `{downPaymentPct, finalPaymentPct, method}` pair on 2026-07-23 — see
+ * `normalizePaymentConditions()` below for how an existing pre-2026-07-23 record's legacy shape is
+ * read. Three quick-select presets (`PAYMENT_TERM_PRESETS`) populate common 2-installment schedules;
+ * the array itself is always freely editable — add/remove/edit rows without limit. */
 export interface ScopeOfWorkPaymentConditions {
-  downPaymentPct: number | null;
-  finalPaymentPct: number | null;
-  method: string;
+  installments: ScopeOfWorkPaymentInstallment[];
   description: string;
   notes: string;
+}
+
+export function newPaymentInstallmentId(): string {
+  return `pi-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+export function blankPaymentInstallment(): ScopeOfWorkPaymentInstallment {
+  return { id: newPaymentInstallmentId(), pct: null, label: "", method: "" };
+}
+
+/** 3 quick-select presets a salesperson can apply with one click, then still freely edit (add more
+ * rows, retitle a row, change a percentage) — never a silently-assumed default written without the
+ * user choosing it. Per direct user request, 2026-07-23. */
+export const PAYMENT_TERM_PRESETS: { label: string; installments: Omit<ScopeOfWorkPaymentInstallment, "id">[] }[] = [
+  {
+    label: "40% Down Payment (Cash) / 60% After Job Complete (Cash)",
+    installments: [
+      { pct: 40, label: "Down Payment", method: "Cash" },
+      { pct: 60, label: "After Job Complete", method: "Cash" },
+    ],
+  },
+  {
+    label: "30% Down Payment (Cash) / 70% After Job Complete (Credit 30 Days)",
+    installments: [
+      { pct: 30, label: "Down Payment", method: "Cash" },
+      { pct: 70, label: "After Job Complete", method: "Credit 30 Days" },
+    ],
+  },
+  {
+    label: "100% After Job Complete (Credit 30 Days)",
+    installments: [
+      { pct: 100, label: "After Job Complete", method: "Credit 30 Days" },
+    ],
+  },
+];
+
+/**
+ * Reads a stored `paymentConditions` value and normalizes it to the current `installments`-array
+ * shape — a Scope of Work saved before 2026-07-23 still has the legacy `{downPaymentPct,
+ * finalPaymentPct, method}` pair in MongoDB (no migration script was run; MongoDB enforces no
+ * schema, so old documents are simply read-compatible via this function until they're next saved,
+ * at which point the server persists the new shape for good — see `sanitizePaymentConditions()` in
+ * api/_lib/scopeOfWorkHandler.ts). Applied server-side to every response (`normalizeScope()`), so
+ * the frontend only ever sees the current shape. Exported (not handler-local) since it's also used
+ * directly by the handler's finalize/print validation input mapping. */
+export function normalizePaymentConditions(raw: unknown): ScopeOfWorkPaymentConditions {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const description = typeof r.description === "string" ? r.description : "";
+  const notes = typeof r.notes === "string" ? r.notes : "";
+  if (Array.isArray(r.installments)) {
+    return {
+      installments: (r.installments as Record<string, unknown>[]).map((it) => ({
+        id: typeof it.id === "string" && it.id ? it.id : newPaymentInstallmentId(),
+        pct: typeof it.pct === "number" ? it.pct : null,
+        label: typeof it.label === "string" ? it.label : "",
+        method: typeof it.method === "string" ? it.method : "",
+      })),
+      description,
+      notes,
+    };
+  }
+  const legacyMethod = typeof r.method === "string" ? r.method : "";
+  const installments: ScopeOfWorkPaymentInstallment[] = [];
+  if (typeof r.downPaymentPct === "number") installments.push({ id: newPaymentInstallmentId(), pct: r.downPaymentPct, label: "Down Payment", method: legacyMethod });
+  if (typeof r.finalPaymentPct === "number") installments.push({ id: newPaymentInstallmentId(), pct: r.finalPaymentPct, label: "After Job Complete", method: legacyMethod });
+  return { installments, description, notes };
 }
 
 /** A signature block (ผู้ขาย / ผู้อนุมัติ) — name/date always start blank/editable; blue

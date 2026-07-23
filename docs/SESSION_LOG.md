@@ -4,7 +4,59 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Dashboard: Scope of Work document count card
+## Session — 2026-07-23 (absolute latest), Scope of Work: multi-installment payment schedule + presets
+
+### What was implemented
+- User asked (in Thai) for 3 specific named payment-term presets on the Scope of Work page, but
+  explicitly wanted the field to stay editable by the salesperson, including schedules with more
+  than 2 installments (their own example: 20% Down Payment (Cash 30 days) / 40% Materials (Credit
+  30 days) / 40% After Delivered Date (Credit 30 days)).
+- Researched the existing data model first and found a real structural blocker: `paymentConditions`
+  was a fixed `{downPaymentPct, finalPaymentPct, method}` pair — capped at exactly 2 installments,
+  one shared payment method for both, and the validator only ever checked those two named fields.
+  Presets alone (without changing the model) could not have represented the user's own 3-installment
+  example, so this was a genuine schema change, not just new buttons on top of the same 2 fields.
+- Changed `ScopeOfWorkPaymentConditions.installments` to an array of `{ id, pct, label, method }`
+  rows — each row carries its own method/terms (not one shared field), directly enabling the mixed
+  Cash/Credit example the user gave. `validatePaymentPercentages()` generalized from "both fixed
+  fields sum to 100" to "every row's percentage is filled in and all rows sum to 100, only checked
+  if at least one row exists" — same opt-in semantic as before, now correct for any row count.
+- **Real judgment call**: this field is already persisted in production MongoDB documents, and the
+  project has no migration-script convention (confirmed by grepping — every prior schema-shape
+  change in this codebase, e.g. checklistGroups' `withDefaultChecklistGroups()`, handles it via a
+  read-time normalizer instead). Wrote `normalizePaymentConditions()` to convert a legacy
+  `{downPaymentPct, finalPaymentPct, method}` record into the new array shape on read, called from
+  both `normalizeScope()` (every API response) and `toValidationInput()` (finalize/print
+  validation) — so an untouched pre-2026-07-23 record keeps working exactly as before, and only
+  gets persisted in the new shape once it's next actually saved.
+- UI: built `PaymentInstallmentsEditor` inside `ScopeOfWorkDocument.tsx`, modeled directly on the
+  existing `ScopeOfWorkItemsEditor.tsx`'s row-editing pattern (label/percentage/method inputs +
+  remove button per row, an add-row button) rather than inventing a new interaction style — plus 3
+  preset buttons that replace the whole row set in one click. `ScopeOfWorkPrintDocument.tsx`'s two
+  hardcoded "Down payment"/"After Job Complete" lines became a `.map()` over the array.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- Built a temporary, isolated dev harness (`src/dev/PaymentHarness.tsx`, briefly swapped into
+  `main.tsx` in place of `App`, both reverted/deleted after use) mounting the real
+  `PaymentInstallmentsEditor` component with local React state, then drove it with Playwright:
+  confirmed clicking the "30%/70% Credit 30 Days" preset populates exactly the 2 expected rows with
+  correct percentages/labels/methods and a live "รวม 100%" total, and that "+ เพิ่มงวดชำระเงิน" adds
+  a genuinely independent 3rd blank row on top of an applied preset — directly exercising the user's
+  own 3-installment scenario. Zero console errors/warnings throughout.
+- Same standing sandboxed-session limitation as every recent entry: no Vercel CLI, no local MongoDB
+  credential, so `normalizePaymentConditions()`'s legacy-record conversion is unverified against a
+  real pre-2026-07-23 document in production — only the new-record/harness-verified UI path is
+  confirmed this session.
+
+### Recommendation for next session
+- Once network access allows it (or the user checks in production), open an existing pre-2026-07-23
+  Scope of Work record and confirm its payment conditions render correctly (converted from the
+  legacy 2-field shape) rather than crashing or showing blank rows.
+
+---
+
+## Session — 2026-07-23, Dashboard: Scope of Work document count card
 
 ### What was implemented
 - User asked (in Thai) to add Scope of Work document counts to the Dashboard.

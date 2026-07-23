@@ -15,10 +15,11 @@ import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeCheckl
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint } from "../../src/lib/validation/scopeOfWorkValidation.js";
 import { getRevisionRoot } from "./quoteRevisions.js";
 import type { ChecklistGroup } from "../../src/lib/documentRequirements.js";
+import { normalizePaymentConditions } from "../../src/lib/scopeOfWork.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
-  ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkSignatory,
-  ScopeOfWorkCustomerSnapshot,
+  ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkPaymentInstallment,
+  ScopeOfWorkSignatory, ScopeOfWorkCustomerSnapshot,
 } from "../../src/lib/scopeOfWork.js";
 
 /**
@@ -248,12 +249,30 @@ function sanitizePercent(v: unknown): number | null {
   return v;
 }
 
+const MAX_PAYMENT_INSTALLMENTS = 20;
+
+function sanitizePaymentInstallment(raw: unknown, index: number): ScopeOfWorkPaymentInstallment {
+  if (typeof raw !== "object" || raw === null) throw new HttpError(400, `งวดชำระเงินที่ ${index + 1} ไม่ถูกต้อง`);
+  const r = raw as Record<string, unknown>;
+  return {
+    id: typeof r.id === "string" && r.id ? r.id : randomUUID(),
+    pct: sanitizePercent(r.pct),
+    label: sanitizeShortText(r.label, `รายละเอียดงวดชำระเงินที่ ${index + 1}`),
+    method: sanitizeShortText(r.method, `วิธีการชำระเงินของงวดที่ ${index + 1}`),
+  };
+}
+
+/** `installments` replaced the previous fixed `{downPaymentPct, finalPaymentPct, method}` pair on
+ * 2026-07-23 — see `ScopeOfWorkPaymentConditions` in src/lib/scopeOfWork.ts. A record saved before
+ * that stays in the legacy shape in MongoDB until it's next edited through this function, at which
+ * point it's persisted in the new shape for good; reads of an untouched legacy record are handled
+ * separately by `normalizePaymentConditions()` (see `normalizeScope()`/`toValidationInput()` below). */
 function sanitizePaymentConditions(raw: unknown): ScopeOfWorkPaymentConditions {
   const r = (raw ?? {}) as Record<string, unknown>;
+  const rawInstallments = Array.isArray(r.installments) ? r.installments : [];
+  if (rawInstallments.length > MAX_PAYMENT_INSTALLMENTS) throw new HttpError(400, `มีงวดชำระเงินมากเกินไป (สูงสุด ${MAX_PAYMENT_INSTALLMENTS} งวด)`);
   return {
-    downPaymentPct: sanitizePercent(r.downPaymentPct),
-    finalPaymentPct: sanitizePercent(r.finalPaymentPct),
-    method: sanitizeShortText(r.method, "วิธีการชำระเงิน"),
+    installments: rawInstallments.map((it, i) => sanitizePaymentInstallment(it, i)),
     description: sanitizeLongText(r.description, "รายละเอียดการชำระเงิน"),
     notes: sanitizeLongText(r.notes, "หมายเหตุการชำระเงิน"),
   };
@@ -318,9 +337,16 @@ function toListItem(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkListItem {
 
 /** Fills in any mandatory checklist group entirely missing from a stored record (see
  * withDefaultChecklistGroups()) before sending it to the client — never written back to the
- * database by this alone. See normalizeQuote() in api/handlers/quotes.ts for the equivalent. */
+ * database by this alone. See normalizeQuote() in api/handlers/quotes.ts for the equivalent.
+ * Also normalizes `paymentConditions` (2026-07-23) into the current `installments`-array shape —
+ * a record saved before that pass still has the legacy `{downPaymentPct, finalPaymentPct, method}`
+ * pair in MongoDB; see `normalizePaymentConditions()` in src/lib/scopeOfWork.ts. */
 function normalizeScope(scope: ScopeOfWork): ScopeOfWork {
-  return { ...scope, checklistGroups: withDefaultChecklistGroups(scope.checklistGroups, scope.jobTypeCode) };
+  return {
+    ...scope,
+    checklistGroups: withDefaultChecklistGroups(scope.checklistGroups, scope.jobTypeCode),
+    paymentConditions: normalizePaymentConditions(scope.paymentConditions),
+  };
 }
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
@@ -394,7 +420,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       shippingContact: "", shippingPhone: "", billingContact: "", billingPhone: "",
       checklistGroups: derived.checklistGroups,
       items: derived.items,
-      paymentConditions: { downPaymentPct: null, finalPaymentPct: null, method: "", description: derived.paymentDescription, notes: "" },
+      paymentConditions: { installments: [], description: derived.paymentDescription, notes: "" },
       remarks: derived.remarks,
       seller,
       approver: { name: "", userId: "", date: "" },
@@ -448,7 +474,7 @@ function toValidationInput(doc: WithId<ScopeOfWorkFields>) {
     billingPhone: doc.billingPhone,
     checklistGroups: withDefaultChecklistGroups(doc.checklistGroups, doc.jobTypeCode),
     items: doc.items,
-    paymentConditions: doc.paymentConditions,
+    paymentConditions: normalizePaymentConditions(doc.paymentConditions),
     remarks: doc.remarks,
     seller: doc.seller,
     approver: doc.approver,

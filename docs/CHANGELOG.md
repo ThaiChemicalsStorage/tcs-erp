@@ -4,7 +4,69 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Dashboard: Scope of Work document count card
+## 2026-07-23 (absolute latest) — Scope of Work: multi-installment payment schedule + presets
+
+**Feature**: per direct user request, Scope of Work's Payment Conditions section now supports an
+arbitrary number of payment installments instead of a fixed 2-row down-payment/final-payment pair.
+Three quick-select presets fill in a common 2-installment schedule with one click — "40% Down
+Payment (Cash) / 60% After Job Complete (Cash)", "30% Down Payment (Cash) / 70% After Job Complete
+(Credit 30 Days)", "100% After Job Complete (Credit 30 Days)" — but every row (whether preset-
+applied or added manually) stays fully editable and removable, so a genuine 3+-installment plan
+with mixed payment terms is now representable, e.g. "20% Down Payment (Cash 30 days) / 40%
+Materials (Credit 30 days) / 40% After Delivered Date (Credit 30 days)".
+
+**Data model**: `ScopeOfWorkPaymentConditions` (`src/lib/scopeOfWork.ts`) replaced its fixed
+`{downPaymentPct, finalPaymentPct, method}` pair with `installments: ScopeOfWorkPaymentInstallment[]`
+— each row is `{ id, pct, label, method }`, so unlike before, each installment can carry its own
+payment method/terms (not one shared `method` for the whole schedule). Added `PAYMENT_TERM_PRESETS`
+(the 3 presets above), `blankPaymentInstallment()`/`newPaymentInstallmentId()` (mirroring the
+existing `blankScopeOfWorkItem()`/`newScopeItemId()` pattern), and `normalizePaymentConditions()` —
+a pre-2026-07-23 record still has the legacy shape in MongoDB (no migration script was run; MongoDB
+enforces no schema, so old documents are simply read-compatible via this function), converted to
+the current shape on every read and persisted in the new shape for good the next time it's saved.
+
+**Validation**: `validatePaymentPercentages()` (`src/lib/validation/scopeOfWorkValidation.ts`)
+generalized from "both fixed fields must sum to 100%" to "every `installments` row's percentage
+must be filled in and all rows together must sum to exactly 100%, only if at least one row exists"
+— same semantic (opt-in percentage-based schedule, free-text `description` alone otherwise), now
+correct for any row count. `paymentConditions.method` removed from the required-fields config (the
+field no longer exists at that path); each row's own `method` stays optional, unchanged.
+
+**Backend**: `sanitizePaymentConditions()`/new `sanitizePaymentInstallment()`
+(`api/_lib/scopeOfWorkHandler.ts`) validate the array on `PATCH` (capped at 20 rows —
+`MAX_PAYMENT_INSTALLMENTS`); `handleCreate`'s default now starts `{ installments: [], description:
+<from quotation>, notes: "" }`; `normalizeScope()` and `toValidationInput()` both call
+`normalizePaymentConditions()` so every response (GET/create/update/finalize/duplicate/rewrite/
+refresh) and every finalize/print validation run sees the current shape regardless of what's
+actually stored.
+
+**Frontend**: `ScopeOfWorkDocument.tsx`'s fixed 2-input payment block replaced with a new
+`PaymentInstallmentsEditor` (module-local component) — 3 preset buttons, an editable row list
+(label/percentage/method inputs + remove button per row, modeled after `ScopeOfWorkItemsEditor.tsx`'s
+row-editing pattern), a running percentage total, and a "+ เพิ่มงวดชำระเงิน" add-row button.
+`ScopeOfWorkPrintDocument.tsx`'s two hardcoded "Down payment"/"After Job Complete" `<p>` lines
+replaced with a `.map()` over `installments`.
+
+**Files Modified**: `src/lib/scopeOfWork.ts`, `src/lib/validation/scopeOfWorkValidation.ts`, `api/_lib/scopeOfWorkHandler.ts`, `src/pages/quotation/ScopeOfWorkDocument.tsx`, `src/pages/quotation/ScopeOfWorkPrintDocument.tsx`, `docs/CLAUDE.md`, `docs/DATABASE.md`, `docs/MODULES/ScopeOfWork.md`
+
+**Reason**: Direct user request — 3 named preset payment schedules the salesperson can pick, while
+staying free to build a custom multi-installment schedule the presets don't cover.
+
+**Verification**: `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+Interaction-verified via a temporary, isolated dev harness (`src/dev/PaymentHarness.tsx`, deleted
+after use, not part of the app's real routing) mounting the real `PaymentInstallmentsEditor`
+component with local React state — confirmed a preset click populates the expected 2 rows with the
+correct percentages/labels/methods and a live "รวม 100%" total, and that "+ เพิ่มงวดชำระเงิน" adds
+a 3rd fully-independent blank row on top of an applied preset (the 3-installment scenario from the
+user's own example) — zero console errors/warnings during the session. Live browser/API
+verification against real MongoDB data (confirming a legacy pre-2026-07-23 record's
+`normalizePaymentConditions()` conversion against actual stored data) could not be completed this
+session — same standing sandboxed-environment limitation as every recent entry (no Vercel CLI, no
+local MongoDB credential).
+
+---
+
+## 2026-07-23 — Dashboard: Scope of Work document count card
 
 **Feature**: per direct user request ("อยากให้เพิ่มข้อมูลของใบ Scope of work ว่ามีกี่ใบ" — add how
 many Scope of Work documents there are), the Dashboard's supporting-detail section gained a new
