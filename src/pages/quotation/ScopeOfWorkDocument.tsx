@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2 } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck } from "lucide-react";
 import type { User } from "../../lib/users";
 import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
@@ -9,6 +9,7 @@ import {
   blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS, sendScopeOfWorkDocumentNotifications,
   fetchScopeOfWorksByQuotation,
 } from "../../lib/scopeOfWork";
+import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOrderFromScope } from "../../lib/deliveryOrder";
 import { getRevisionPredecessorId, generateScopeOfWorkRevisionSummary } from "../../lib/revisionDiff";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -199,6 +200,9 @@ export function ScopeOfWorkDocument({
   canPrint,
   canDelete,
   canCreate,
+  canViewDeliveryOrder,
+  canCreateDeliveryOrder,
+  onOpenDeliveryOrder,
   onBack,
   backLabel = "กลับไปใบเสนอราคา",
   onDuplicated,
@@ -212,6 +216,15 @@ export function ScopeOfWorkDocument({
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
+  /** Gates the "สร้าง/เปิดใบส่งมอบสินค้า" toolbar action (added 2026-07-23, per direct user
+   * request) — mirrors the same "does one already exist?" existence-check pattern QuoteDocument.tsx
+   * uses for its own "สร้าง/เปิด Scope of Work" button. `canCreateDeliveryOrder` alone (without
+   * `canViewDeliveryOrder`) would let a caller create one they then can't see the existence-check
+   * result for on a future visit — both are required together, same as Scope of Work's own
+   * create-button gating in QuoteDocument.tsx. */
+  canViewDeliveryOrder: boolean;
+  canCreateDeliveryOrder: boolean;
+  onOpenDeliveryOrder: (deliveryOrderId: string) => void;
   onBack: () => void;
   /** Defaults to the original "back to the quotation" framing (QuoteDocument.tsx's embedded usage)
    * — the standalone Scope of Work management page (added 2026-07-22, ScopeOfWorkPage.tsx) passes
@@ -238,6 +251,19 @@ export function ScopeOfWorkDocument({
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [sendingDocs, setSendingDocs] = useState(false);
   const [generatingRevisionNote, setGeneratingRevisionNote] = useState(false);
+  // "Does a Delivery Order already exist for this Scope of Work?" (added 2026-07-23, per direct
+  // user request) — same existence-check pattern QuoteDocument.tsx uses for its own "สร้าง/เปิด
+  // Scope of Work" button. Opens the most-recently-updated one if more than one exists.
+  const [existingDeliveryOrder, setExistingDeliveryOrder] = useState<DeliveryOrderSummary | null>(null);
+  const [deliveryOrderBusy, setDeliveryOrderBusy] = useState(false);
+  useEffect(() => {
+    if (!canViewDeliveryOrder) return;
+    let cancelled = false;
+    fetchDeliveryOrdersByScope(scopeOfWorkId)
+      .then((list) => { if (!cancelled) setExistingDeliveryOrder(list[0] ?? null); })
+      .catch(() => { if (!cancelled) setExistingDeliveryOrder(null); });
+    return () => { cancelled = true; };
+  }, [scopeOfWorkId, canViewDeliveryOrder]);
 
   // `scope`/`loadError` reset to their initial values (null/false) via a fresh mount whenever
   // `scopeOfWorkId` changes — the parent renders this component with `key={scopeOfWorkId}` for
@@ -356,6 +382,27 @@ export function ScopeOfWorkDocument({
       showToast(err instanceof ApiError ? err.message : "สร้างสรุปไม่สำเร็จ");
     } finally {
       setGeneratingRevisionNote(false);
+    }
+  };
+
+  /** "สร้าง/เปิดใบส่งมอบสินค้า" (added 2026-07-23, per direct user request) — mirrors
+   * QuoteDocument.tsx's `handleScopeOfWorkClick()`/`confirmCreateScopeOfWork()` exactly, minus the
+   * secondaryCode prompt (a Delivery Order needs no extra input to create — everything it needs is
+   * already on the Scope of Work). */
+  const handleDeliveryOrderClick = async () => {
+    if (!scope || deliveryOrderBusy) return;
+    if (existingDeliveryOrder) {
+      onOpenDeliveryOrder(existingDeliveryOrder.id);
+      return;
+    }
+    setDeliveryOrderBusy(true);
+    try {
+      const created = await createDeliveryOrderFromScope(scope.id);
+      onOpenDeliveryOrder(created.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "ไม่สามารถสร้างใบส่งมอบสินค้าได้");
+    } finally {
+      setDeliveryOrderBusy(false);
     }
   };
 
@@ -494,6 +541,11 @@ export function ScopeOfWorkDocument({
           {canCreate && (
             <button onClick={handleRewrite} disabled={rewriteBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <GitBranch size={13} /> แก้ไข
+            </button>
+          )}
+          {canViewDeliveryOrder && canCreateDeliveryOrder && (
+            <button onClick={handleDeliveryOrderClick} disabled={deliveryOrderBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              <Truck size={13} /> {existingDeliveryOrder ? "เปิดใบส่งมอบสินค้า" : "สร้างใบส่งมอบสินค้า"}
             </button>
           )}
           {editable && (

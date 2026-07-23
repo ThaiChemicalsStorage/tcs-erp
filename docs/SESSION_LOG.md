@@ -4,7 +4,72 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Feature: Document Recipients custom message + formal email restyle
+## Session — 2026-07-23 (absolute latest), Feature: new Delivery Order module
+
+### What was implemented
+- The largest single-turn feature of the session: a genuinely new document type/module, not an
+  extension of an existing one — "ใบส่งมอบสินค้าและบริการ" (Delivery Order & Service Order), built
+  end-to-end from a single dense user request that bundled several distinct asks: pull customer info
+  from the Quotation, pull items from the Scope of Work, match a reference PDF's print layout
+  exactly, split the document per payment installment with per-installment item checkboxes, and add
+  a standalone sidebar page mirroring Scope of Work/Quotation's own pattern.
+- Read the reference PDF (`public/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf`) via the
+  Read tool's PDF support before writing any code — it's a 3-page company form (`FM-SL-05 Rev.01`),
+  one page per payment installment, each with its own full letterhead/header/item table/Remark
+  footer/signature block. This confirmed the "one printed page per installment" structure directly
+  from the source rather than guessing at it from the prose description alone.
+- Deliberately mirrored Scope of Work's architecture wherever the same shape applied, rather than
+  inventing new patterns: same "created from a parent document, stores an independent snapshot,
+  explicit refresh action to re-pull" model Scope of Work already uses relative to Quotation; same
+  7-permission set (`view/viewAll/create/edit/finalize/print/delete`) with identical default-grant
+  shape per role; same standalone-sidebar-page-reusing-the-detail-component pattern
+  (`ScopeOfWorkPage.tsx`/`DeliveryOrderPage.tsx`); same "mount on the existing quotes.ts function
+  file, no new Vercel function slot" sharing convention. This made the implementation almost entirely
+  a matter of careful mechanical extension rather than novel design — the one genuinely new UI/print
+  pattern was the per-installment `break-after: page` multi-table print layout (documented in
+  UI_GUIDELINES.md "Print/PDF" as its own subsection, since every prior print component in this app
+  was one continuously-flowing table, not several independent physical pages from one screen).
+- Scoped deliberately smaller than Scope of Work in a few places, on judgment rather than explicit
+  instruction: no Duplicate/Rewrite action (a Delivery Order tracks one specific job's actual
+  shipment history — a "copy" of it doesn't have an obvious meaning the way copying a quotation or a
+  scope-of-work template does), and no required-field validation gate (Quotation/Scope of Work's
+  `DOCUMENT_INCOMPLETE` machinery is substantial infrastructure; building an equivalent for a new
+  document type wasn't requested and would have roughly doubled this pass's size for a benefit no one
+  asked for — the print button only blocks on the one clearly-necessary case, zero items ticked
+  anywhere). Both are called out explicitly in the module doc as "not built this pass," not silently
+  omitted, so a future session (or user) can decide if they're actually missed.
+- The trickiest piece of actual logic was the refresh reconciliation
+  (`deriveInstallmentsFromScope()`): matching by the Scope of Work payment installment's stable `id`
+  (verified earlier this session, for the Revision Note feature, that installment ids survive a plain
+  edit unlike line-item ids) so a refresh can tell "this installment still exists, keep the user's
+  itemIds/เลขที่/วันที่/remark edits" apart from "this is a brand-new installment, start it blank" and
+  "this installment was removed, drop its page" — all three cases verified against mock data before
+  considering the feature done.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean — on the first
+  attempt, no fix-up pass needed, despite this being the largest single change of the session (12+
+  new/modified files spanning the data model, API handler, RBAC, and 5 new frontend components).
+- No live browser/database check available (same standing sandboxed-session limitation as every
+  other pass this session: no MongoDB credentials, Playwright MCP still disconnected). Verified the
+  create/refresh snapshot-and-reconcile logic instead via a standalone Node script reimplementing
+  `deriveItemsFromScope()`/`deriveInstallmentsFromScope()`'s exact algorithm against mock Scope of
+  Work data — confirmed section-header items are excluded from the snapshot, a fresh installment gets
+  an empty `itemIds` list and a correctly-formatted auto-drafted remark, and a refresh correctly
+  preserves an existing installment's user edits while dropping a now-stale `itemId` reference and
+  handling both a newly-added and a since-removed installment correctly.
+
+### Recommendation for next session
+- Live-verify the actual print output once Playwright reconnects or a real deployment is reachable —
+  this is the one part of the feature that's meaningfully harder to verify purely by logic
+  inspection (does the `break-after: page` CSS actually produce clean page breaks in a real browser
+  print preview, does the company letterhead render correctly with a real logo image, etc.).
+- If a future user reports wanting to "copy" a Delivery Order after all, revisit the "no Duplicate/
+  Rewrite" scoping decision above — it was a judgment call, not a hard architectural constraint.
+
+---
+
+## Session — 2026-07-23, Feature: Document Recipients custom message + formal email restyle
 
 ### What was implemented
 - Direct user request, this time accompanied by a screenshot of the actual plain-text-looking

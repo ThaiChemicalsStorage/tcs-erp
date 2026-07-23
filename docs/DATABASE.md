@@ -24,6 +24,7 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `dashboard` (virtual — no collection) | — | — | `GET /api/dashboard` (`api/dashboard/index.ts`) is a read-only aggregation over `customers`/`leads`/`quotes`/`products`/`categories`/`audit_log`/`notifications`/`job_types`-derived fields already embedded on `quotes` — it doesn't own or write any collection of its own. See Dashboard KPI section below and [MODULES/Dashboard.md](./MODULES/Dashboard.md) for the full breakdown. |
 | `quotation_templates` | MongoDB `ObjectId` | `QuotationTemplate` minus `id` | **Added 2026-07-14** — reusable Job-Type-scoped quotation content (sections/items/editable parameters/default terms) extracted from a real Excel workbook, applied via the new Create Quotation wizard. See "`QuotationTemplate`" below and [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md). |
 | `scope_of_works` | MongoDB `ObjectId` | `ScopeOfWork` minus `id` | **Added 2026-07-15** — a printable job document generated from an existing quotation, reproducing the reference "Scope Of Work PQ202607-174-LI-SK..." PDF's structure (`public/`). Stores its own independent snapshot of every quotation-derived field; editing it never touches the source quotation. See "`ScopeOfWork`" below and [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md). |
+| `delivery_orders` | MongoDB `ObjectId` | `DeliveryOrder` minus `id` | **Added 2026-07-23** — a printable "ใบส่งมอบสินค้าและบริการ" document generated from an existing Scope of Work, reproducing the reference "ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM..." PDF's structure (`public/`), one printed page per payment installment. See "`DeliveryOrder`" below and [MODULES/DeliveryOrder.md](./MODULES/DeliveryOrder.md). |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
 
@@ -546,6 +547,44 @@ specification lines) — never writes back to the quotation.
 Indexes (`ensureIndexes()`, `api/_lib/collections.ts`): `scopeNumber` (unique — a defense-in-depth
 safety net; uniqueness is actually guaranteed by the `{yearMonth, jobSequence}` index below, which
 is also unique), `quotationId`, `status`, `isDeleted`.
+
+### `DeliveryOrder` (`src/lib/deliveryOrder.ts`) — added 2026-07-23
+
+```ts
+interface DeliveryOrderItem {
+  id: string; name: string; quantity: number | null; unit: string;
+  specifications: { id: string; text: string }[];
+}
+interface DeliveryOrderInstallment {
+  id: string;              // mirrors the source ScopeOfWorkPaymentInstallment's id
+  pct: number | null; label: string; paymentType: "" | "Cash" | "Credit"; days: number | null;
+  itemIds: string[];        // which DeliveryOrderItem ids are ticked for this installment's page
+  documentNumber: string;   // "เลขที่" — blank by default
+  issueDate: string;        // "วันที่" — blank by default, yyyy-mm-dd
+  remark: string;           // "Remark:" footer, auto-drafted, freely editable
+}
+interface DeliveryOrder {
+  id: string; scopeOfWorkId: string; scopeNumber: string; quotationId: string;
+  customerCompanyName: string; customerAddress: string;
+  items: DeliveryOrderItem[]; installments: DeliveryOrderInstallment[];
+  status: "Draft" | "Final"; version: number;
+  createdAt: string; updatedAt: string; createdBy: string; updatedBy: string; isDeleted: boolean;
+}
+```
+
+A printable document generated from an existing Scope of Work, reproducing the printed structure of
+the reference PDF ("ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf", `public/`) — see
+[MODULES/DeliveryOrder.md](./MODULES/DeliveryOrder.md) for the full writeup. Created from `POST
+/api/delivery-orders {scopeOfWorkId}`, which snapshots (never live-references) the Scope of Work's
+customer info (itself already sourced from the Quotation) and items into `customerCompanyName`/
+`customerAddress`/`items` — editing a Delivery Order never modifies its source Scope of Work, and
+later edits to the Scope of Work never silently change an already-created Delivery Order (an
+explicit "อัปเดตข้อมูลจาก Scope of Work" action, `POST /:id/refresh`, re-pulls on demand and
+reconciles `installments` against the Scope of Work's current payment schedule by installment `id`).
+No uniqueness constraint on `scopeOfWorkId` — same non-enforced "usually just one" convention Scope
+of Work itself has relative to its own quotation.
+
+Indexes (`ensureIndexes()`, `api/_lib/collections.ts`): `scopeOfWorkId`, `status`, `isDeleted`.
 
 ### `Quote` / `QuoteLine` / `SubDetail` (`src/lib/quotes.tsx`)
 ```ts

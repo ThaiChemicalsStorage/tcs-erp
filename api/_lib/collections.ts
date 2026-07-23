@@ -10,6 +10,7 @@ import type { AuditLogEntry } from "../../src/lib/auditLog.js";
 import type { Quote } from "../../src/lib/quotes.js";
 import type { QuotationTemplate } from "../../src/lib/quotationTemplates.js";
 import type { ScopeOfWork } from "../../src/lib/scopeOfWork.js";
+import type { DeliveryOrder } from "../../src/lib/deliveryOrder.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits. */
 export type UserFields = Omit<User, "id"> & { passwordHash: string };
@@ -99,6 +100,16 @@ export type ScopeOfWorkFields = Omit<ScopeOfWork, "id">;
 export async function scopeOfWorksCollection() {
   const db = await getDb();
   return db.collection<ScopeOfWorkFields>("scope_of_works");
+}
+
+/** Delivery Order (added 2026-07-23) — see `src/lib/deliveryOrder.ts` for the full domain-shape doc
+ * comment and docs/MODULES/DeliveryOrder.md for the PDF-to-field mapping. No uniqueness constraint
+ * on `scopeOfWorkId` (a Scope of Work can in principle have more than one, same non-enforced
+ * "usually just one" convention Scope of Work itself has relative to its own quotation). */
+export type DeliveryOrderFields = Omit<DeliveryOrder, "id">;
+export async function deliveryOrdersCollection() {
+  const db = await getDb();
+  return db.collection<DeliveryOrderFields>("delivery_orders");
 }
 
 // ─── Schema-prep collections (2026-07 production-readiness pass) ──────────
@@ -393,7 +404,7 @@ export async function ensureIndexes() {
     users, roles, products, categories, quotes, notifications, auditLog,
     permissions, departments, positions, customers, customerContacts,
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
-    notificationTypes, jobTypes, quotationTemplates, scopeOfWorks,
+    notificationTypes, jobTypes, quotationTemplates, scopeOfWorks, deliveryOrders,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -401,7 +412,7 @@ export async function ensureIndexes() {
     customersCollection(), customerContactsCollection(),
     leadsCollection(), leadActivitiesCollection(), productTemplatesCollection(),
     quotationCommentsCollection(), quotationTagsCollection(), notificationTypesCollection(),
-    jobTypesCollection(), quotationTemplatesCollection(), scopeOfWorksCollection(),
+    jobTypesCollection(), quotationTemplatesCollection(), scopeOfWorksCollection(), deliveryOrdersCollection(),
   ]);
 
   await Promise.all([
@@ -452,6 +463,9 @@ export async function ensureIndexes() {
     scopeOfWorks.createIndex({ quotationId: 1 }),
     scopeOfWorks.createIndex({ status: 1 }),
     scopeOfWorks.createIndex({ isDeleted: 1 }),
+    deliveryOrders.createIndex({ scopeOfWorkId: 1 }),
+    deliveryOrders.createIndex({ status: 1 }),
+    deliveryOrders.createIndex({ isDeleted: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

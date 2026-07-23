@@ -22,6 +22,9 @@ export function ScopeOfWorkPage({
   canPrint,
   canDelete,
   canCreate,
+  canViewDeliveryOrder,
+  canCreateDeliveryOrder,
+  onOpenDeliveryOrder,
   initialScopeOfWorkId,
   onScopeOfWorkIdConsumed,
 }: {
@@ -31,6 +34,11 @@ export function ScopeOfWorkPage({
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
+  /** Threaded straight through to ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button
+   * (added 2026-07-23) — see that component's own doc comment. */
+  canViewDeliveryOrder: boolean;
+  canCreateDeliveryOrder: boolean;
+  onOpenDeliveryOrder: (deliveryOrderId: string) => void;
   /** Set by a notification click (added 2026-07-23, "scope_of_work_document_sent" — see
    * App.tsx's `onNavigate`) — jumps straight to that record's detail view instead of just the
    * list. Same "adjust state during rendering" pattern as `QuotationPage.tsx`'s `initialQuoteId`. */
@@ -99,6 +107,9 @@ export function ScopeOfWorkPage({
           canPrint={canPrint}
           canDelete={canDelete}
           canCreate={canCreate}
+          canViewDeliveryOrder={canViewDeliveryOrder}
+          canCreateDeliveryOrder={canCreateDeliveryOrder}
+          onOpenDeliveryOrder={onOpenDeliveryOrder}
           onBack={backToList}
           backLabel="กลับไปรายการ Scope of Work"
           onDuplicated={(newId) => setSelectedId(newId)}

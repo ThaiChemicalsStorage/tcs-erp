@@ -4,7 +4,71 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Feature: Document Recipients custom message + formal email restyle
+## 2026-07-23 (absolute latest) — Feature: Delivery Order (new module, generated from Scope of Work)
+
+**Feature**: direct user request — "ช่วยทำหน้าใบส่งมอบสินค้าให้หน่อยเอาไฟล์มาให้แล้วอยู่ไหนโฟล์เดอร์
+public...ดึงข้อมูลแบบไฟล์ pdf...พวกสินค้าจะดึงมาจากหน้า scope of work ส่วนพวกข้อมูลบริษัทให้ดึงมาจาก
+ใบเสนอราคา...ทำหน้าตาตอนกดพิมพ์ให้เหมือนไฟล์ pdf ที่บอกให้เหมือนเป๊ะๆ...จะทำแยกแต่ละงวดที่จะส่งไปให้
+ให้แต่ละแผนก...งวดนี้จะมีให้ติ๊กว่าเอาสินค้าตัวไหนไปบ้าง...ให้ทำหน้าแยกตรง side bar ออกมาด้วยเหมือนกับ
+พวก scope of work กับ ใบเสนอราคา" — a new "ใบส่งมอบสินค้าและบริการ" (Delivery Order & Service Order)
+document type generated from an existing Scope of Work, reproducing a company-provided reference PDF
+(`public/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf`, form code `FM-SL-05 Rev.01`)
+which splits a job's delivery across its payment installments, one printed page per installment.
+
+**What was built**:
+- New `src/lib/deliveryOrder.ts` types (`DeliveryOrder`/`DeliveryOrderItem`/
+  `DeliveryOrderInstallment`) + `api/_lib/deliveryOrderHandler.ts` CRUD handler, mounted from
+  `api/handlers/quotes.ts` at `/api/delivery-orders` (same 12-function-slot-sharing pattern Scope of
+  Work already uses — no new Vercel function file).
+- Created via a "สร้างใบส่งมอบสินค้า" button on `ScopeOfWorkDocument.tsx`'s toolbar (existence-check
+  pattern mirroring Quotation's "สร้าง/เปิด Scope of Work" button) — snapshots customer info from the
+  Scope of Work's own `customerSnapshot` (itself already sourced from the Quotation, per "ข้อมูล
+  บริษัทให้ดึงมาจากใบเสนอราคา") and items from the Scope of Work's `items` (per "สินค้าจะดึงมาจากหน้า
+  scope of work"), and builds one `DeliveryOrderInstallment` per Scope of Work payment installment.
+- Each installment starts with an empty `itemIds` list — a checkbox list in
+  `DeliveryOrderDocument.tsx` lets the preparer tick which items are covered by that shipment, per
+  "งวดนี้จะมีให้ติ๊กว่าเอาสินค้าตัวไหนไปบ้าง" — plus blank-by-default "เลขที่"/"วันที่" fields and an
+  auto-drafted (freely editable) "Remark:" line.
+- `DeliveryOrderPrintDocument.tsx` renders one `<table className="hidden print:table ...">` per
+  installment with `style={{ breakAfter: "page" }}`, matching the reference PDF's one-page-per-
+  installment structure — company letterhead pulled live from Settings → Company Info (not a
+  hardcoded copy of the sample), "เรียน"/"เลขที่"/"วันที่"/"WORK ORDER" header, numbered item table
+  restarting at 1 per page, Remark footer, customer/TCS signature block.
+- New standalone sidebar page (`src/pages/deliveryOrder/`, `Truck` icon, Sales nav group after Scope
+  of Work) for browsing/opening existing records, per "ให้ทำหน้าแยกตรง side bar ออกมาด้วยเหมือนกับพวก
+  scope of work กับ ใบเสนอราคา" — creation is still only ever triggered from the Scope of Work detail
+  toolbar button.
+- 7 new `deliveryOrder:view/viewAll/create/edit/finalize/print/delete` permissions, default grants
+  mirroring Scope of Work's exactly (Sales User: view/create/edit/print; Approver 1/2: view/viewAll/
+  edit/finalize/print; Administrator/Super Admin: all 7; Viewer: view/viewAll).
+
+**Deliberately not built this pass** (kept out of scope, not requested): Duplicate/Rewrite actions,
+required-field validation gating (Quotation/Scope of Work's `DOCUMENT_INCOMPLETE` machinery), Global
+Search integration.
+
+**Files Modified**: `src/lib/deliveryOrder.ts` (new), `api/_lib/deliveryOrderHandler.ts` (new),
+`api/_lib/collections.ts`, `api/handlers/quotes.ts`, `vercel.json`, `src/lib/permissions.ts`,
+`src/lib/roles.ts`, `src/lib/i18n.tsx`, `src/pages/quotation/DeliveryOrderDocument.tsx` (new),
+`src/pages/quotation/DeliveryOrderPrintDocument.tsx` (new), `src/pages/deliveryOrder/
+DeliveryOrderPage.tsx` (new), `src/pages/deliveryOrder/DeliveryOrderList.tsx` (new),
+`src/pages/quotation/ScopeOfWorkDocument.tsx`, `src/pages/scopeOfWork/ScopeOfWorkPage.tsx`,
+`src/pages/quotation/QuotationPage.tsx`, `src/App.tsx`.
+
+**⚠️ Requires a manual Role Management step on an already-provisioned production deployment** —
+`defaultRoles` only seeds once; existing role documents won't retroactively gain the 7 new
+`deliveryOrder:*` permissions. See [RBAC.md](./RBAC.md) "Delivery Order" and [TODO.md](./TODO.md).
+
+**Verification**: `npx tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run lint`,
+`npm run build` all pass clean. The create/refresh snapshot-and-reconcile logic
+(`deriveItemsFromScope()`/`deriveInstallmentsFromScope()`) was verified via a standalone Node script
+against mock data — section-header exclusion, auto-drafted remark text, stale-`itemId` cleanup,
+preserved user edits across a refresh, and new/removed-installment handling all confirmed correct.
+Not verified via a live browser/deployment — same standing sandboxed-session limitation (no live
+MongoDB credentials, Playwright MCP disconnected) as every other pass this session; see TODO.md.
+
+---
+
+## 2026-07-23 — Feature: Document Recipients custom message + formal email restyle
 
 **Feature**: direct user request, with a screenshot of the plain original email — "อยากให้เพิ่มช่อง
 ใส่ข้อความตรงผู้รับเอกสารในหน้า scope of work เพื่อที่จะแบบเพิ่มข้อความไว้ด้านบนข้อความออโต้ในอีเมล...

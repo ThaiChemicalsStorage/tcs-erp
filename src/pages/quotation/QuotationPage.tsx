@@ -40,6 +40,9 @@ export function QuotationPage({
   onNotify,
   canCreateTemplate,
   onCreateTemplateForJobType,
+  canViewDeliveryOrder,
+  canCreateDeliveryOrder,
+  onOpenDeliveryOrder,
 }: {
   quotes: Quote[];
   setQuotes: React.Dispatch<React.SetStateAction<Quote[]>>;
@@ -75,6 +78,11 @@ export function QuotationPage({
    * "สร้าง Template ใหม่สำหรับประเภทงานนี้" affordance, see QuotationTemplateWizard.tsx. */
   canCreateTemplate: boolean;
   onCreateTemplateForJobType: (jobTypeCode: string, jobTypeName: string) => void;
+  /** Threaded straight through to ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button
+   * (added 2026-07-23) — see that component's own doc comment. */
+  canViewDeliveryOrder: boolean;
+  canCreateDeliveryOrder: boolean;
+  onOpenDeliveryOrder: (deliveryOrderId: string) => void;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<"list" | "wizard" | "new" | "detail" | "scopeOfWork">("list");
@@ -287,6 +295,9 @@ export function QuotationPage({
           canPrint={canPrintScopeOfWork}
           canDelete={canDeleteScopeOfWork}
           canCreate={canCreateScopeOfWork}
+          canViewDeliveryOrder={canViewDeliveryOrder}
+          canCreateDeliveryOrder={canCreateDeliveryOrder}
+          onOpenDeliveryOrder={onOpenDeliveryOrder}
           onBack={() => setView("detail")}
           onDuplicated={(newId) => setScopeOfWorkId(newId)}
           onRewritten={(newId) => setScopeOfWorkId(newId)}

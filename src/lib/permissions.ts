@@ -37,7 +37,14 @@ export type Permission =
   | "scopeOfWork:edit"
   | "scopeOfWork:finalize"
   | "scopeOfWork:print"
-  | "scopeOfWork:delete";
+  | "scopeOfWork:delete"
+  | "deliveryOrder:view"
+  | "deliveryOrder:viewAll"
+  | "deliveryOrder:create"
+  | "deliveryOrder:edit"
+  | "deliveryOrder:finalize"
+  | "deliveryOrder:print"
+  | "deliveryOrder:delete";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -77,6 +84,13 @@ export const ALL_PERMISSIONS: Permission[] = [
   "scopeOfWork:finalize",
   "scopeOfWork:print",
   "scopeOfWork:delete",
+  "deliveryOrder:view",
+  "deliveryOrder:viewAll",
+  "deliveryOrder:create",
+  "deliveryOrder:edit",
+  "deliveryOrder:finalize",
+  "deliveryOrder:print",
+  "deliveryOrder:delete",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -117,6 +131,13 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "scopeOfWork:finalize": "ยืนยันสถานะ Final ของ Scope of Work",
   "scopeOfWork:print": "พิมพ์ / ส่งออก Scope of Work",
   "scopeOfWork:delete": "ลบ Scope of Work",
+  "deliveryOrder:view": "ดูใบส่งมอบสินค้า",
+  "deliveryOrder:viewAll": "ดูใบส่งมอบสินค้าของผู้อื่น",
+  "deliveryOrder:create": "สร้างใบส่งมอบสินค้า",
+  "deliveryOrder:edit": "แก้ไขใบส่งมอบสินค้า",
+  "deliveryOrder:finalize": "ยืนยันสถานะ Final ของใบส่งมอบสินค้า",
+  "deliveryOrder:print": "พิมพ์ / ส่งออกใบส่งมอบสินค้า",
+  "deliveryOrder:delete": "ลบใบส่งมอบสินค้า",
 };
 
 /** Translated display label per permission — `PERMISSION_LABELS` (Thai) stays as-is since it's also used to seed the `permissions` collection's stored `label` field; this map is UI-display only. */
@@ -158,6 +179,13 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "scopeOfWork:finalize": "permission.scopeOfWorkFinalize",
   "scopeOfWork:print": "permission.scopeOfWorkPrint",
   "scopeOfWork:delete": "permission.scopeOfWorkDelete",
+  "deliveryOrder:view": "permission.deliveryOrderView",
+  "deliveryOrder:viewAll": "permission.deliveryOrderViewAll",
+  "deliveryOrder:create": "permission.deliveryOrderCreate",
+  "deliveryOrder:edit": "permission.deliveryOrderEdit",
+  "deliveryOrder:finalize": "permission.deliveryOrderFinalize",
+  "deliveryOrder:print": "permission.deliveryOrderPrint",
+  "deliveryOrder:delete": "permission.deliveryOrderDelete",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -189,6 +217,13 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "scopeOfWork:finalize",
       "scopeOfWork:print",
       "scopeOfWork:delete",
+      "deliveryOrder:view",
+      "deliveryOrder:viewAll",
+      "deliveryOrder:create",
+      "deliveryOrder:edit",
+      "deliveryOrder:finalize",
+      "deliveryOrder:print",
+      "deliveryOrder:delete",
     ],
   },
   {

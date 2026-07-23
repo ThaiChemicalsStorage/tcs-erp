@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -43,6 +43,7 @@ const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) =>
 const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then((m) => ({ default: m.CustomersPage })));
 const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateManagementPage").then((m) => ({ default: m.TemplateManagementPage })));
 const ScopeOfWorkPage = lazy(() => import("./pages/scopeOfWork/ScopeOfWorkPage").then((m) => ({ default: m.ScopeOfWorkPage })));
+const DeliveryOrderPage = lazy(() => import("./pages/deliveryOrder/DeliveryOrderPage").then((m) => ({ default: m.DeliveryOrderPage })));
 
 function PageLoading() {
   return (
@@ -115,7 +116,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
 }
 
 /** Stable routing identifiers — decoupled from the (now translatable) display label, so switching language never breaks navigation. */
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
 
 /** The boot-time domain resources fetched once after sign-in — see `loadDomainData()`/`resourceStatus` below. */
 type ResourceKey = "users" | "roles" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
@@ -157,6 +158,7 @@ const navItems: NavItem[] = [
   { key: "quotations", icon: FileText, labelKey: "nav.quotations", permission: "quotations:view" },
   { key: "quotationTemplates", icon: Layers, labelKey: "nav.quotationTemplates", permission: "quotationTemplates:view" },
   { key: "scopeOfWork", icon: ClipboardList, labelKey: "nav.scopeOfWork", permission: "scopeOfWork:view" },
+  { key: "deliveryOrder", icon: Truck, labelKey: "nav.deliveryOrder", permission: "deliveryOrder:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -180,7 +182,7 @@ const navItems: NavItem[] = [
  */
 const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
-  { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "quotationTemplates", "customers"] },
+  { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "auditLog"] },
 ];
@@ -190,6 +192,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   quotations: "nav.quotations",
   quotationTemplates: "nav.quotationTemplates",
   scopeOfWork: "nav.scopeOfWork",
+  deliveryOrder: "nav.deliveryOrder",
   products: "nav.products",
   customers: "nav.customers",
   users: "nav.users",
@@ -249,6 +252,10 @@ export default function App() {
    * view instead) since a document recipient may not be the quotation's owner/salesperson and this
    * is the more natural landing spot for "a document was sent to me." */
   const [scopeOfWorkDeepLinkId, setScopeOfWorkDeepLinkId] = useState<string | null>(null);
+  /** Set by ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button (added 2026-07-23) — jumps
+   * straight to that record's detail view on the standalone Delivery Order page, same pattern as
+   * `scopeOfWorkDeepLinkId` above. */
+  const [deliveryOrderDeepLinkId, setDeliveryOrderDeepLinkId] = useState<string | null>(null);
   /** Set by the Create Quotation wizard's "สร้าง Template ใหม่สำหรับประเภทงานนี้" action — opens
    * Template Management's create form pre-filled with that Job Type (see
    * `TemplateManagementPage.tsx`'s `initialCreateForJobType` prop). `seq` follows the same
@@ -422,6 +429,10 @@ export default function App() {
     setScopeOfWorkDeepLinkId(scopeOfWorkId);
     setActiveNav("scopeOfWork");
   };
+  const navigateToDeliveryOrder = (deliveryOrderId: string) => {
+    setDeliveryOrderDeepLinkId(deliveryOrderId);
+    setActiveNav("deliveryOrder");
+  };
   const navigateToCreateTemplateForJobType = (jobTypeCode: string, jobTypeName: string) => {
     templateCreateSeq.current += 1;
     setTemplateCreateForJobType({ jobTypeCode, jobTypeName, seq: templateCreateSeq.current });
@@ -556,6 +567,16 @@ export default function App() {
   const canFinalizeScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:finalize");
   const canPrintScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:print");
   const canDeleteScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:delete");
+  // Delivery Order (added 2026-07-23) — `canViewDeliveryOrder`/`canCreateDeliveryOrder` gate
+  // ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button (passed into both QuotationPage.tsx
+  // and ScopeOfWorkPage.tsx, since that same component renders from either); the rest back
+  // DeliveryOrderPage.tsx's own detail view, same flat-props convention as Scope of Work above.
+  const canViewDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:view");
+  const canCreateDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:create");
+  const canEditDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:edit");
+  const canFinalizeDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:finalize");
+  const canPrintDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:print");
+  const canDeleteDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:delete");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
   // `quotationTemplates:manage` is a legacy superset permission kept for backward compatibility
   // with role assignments made before the granular `quotationTemplates:*` permissions existed (see
@@ -731,11 +752,13 @@ export default function App() {
               : effectiveNav === "auditLog"
               ? <AuditLogPage />
               : effectiveNav === "scopeOfWork"
-              ? <ScopeOfWorkPage users={users} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
+              ? <ScopeOfWorkPage users={users} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
+              : effectiveNav === "deliveryOrder"
+              ? <DeliveryOrderPage company={company} canEdit={canEditDeliveryOrder} canFinalize={canFinalizeDeliveryOrder} canPrint={canPrintDeliveryOrder} canDelete={canDeleteDeliveryOrder} initialDeliveryOrderId={deliveryOrderDeepLinkId} onDeliveryOrderIdConsumed={() => setDeliveryOrderDeepLinkId(null)} />
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} initialScopeOfWorkDeepLink={scopeOfWorkDeepLink} onScopeOfWorkDeepLinkConsumed={() => setScopeOfWorkDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} initialScopeOfWorkDeepLink={scopeOfWorkDeepLink} onScopeOfWorkDeepLinkConsumed={() => setScopeOfWorkDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} />
               : effectiveNav === "quotationTemplates"
               ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "customers"

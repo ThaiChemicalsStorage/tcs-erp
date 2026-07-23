@@ -256,6 +256,41 @@ server-side `AuditLogEntry` via `writeScopeAuditEntry()`, module `"Scope of Work
 module), so these events can only be written by the handler itself. See
 [DATABASE.md](./DATABASE.md) `AuditLogEntry`'s `relatedScopeId`/`relatedScopeNumber` fields.
 
+### Delivery Order (added 2026-07-23)
+
+7 permissions gate the feature end-to-end, enforced server-side in `api/_lib/deliveryOrderHandler.ts`
+— mirroring Scope of Work's own 7 permissions row-for-row, both in name and default-grant shape:
+
+| Permission | Gates |
+|---|---|
+| `deliveryOrder:view` | `GET /api/delivery-orders` (list — both the by-scope existence check and the "list every Delivery Order company-wide" standalone-page mode) and `GET /api/delivery-orders/:id`. |
+| `deliveryOrder:viewAll` | Scopes the "list every Delivery Order company-wide" mode to own-created-only without it — same shape as `scopeOfWork:viewAll`. The by-scope existence check and single-record `GET` are deliberately unfiltered, same reasoning as Scope of Work's identical carve-outs. |
+| `deliveryOrder:create` | `POST /api/delivery-orders` (create from a Scope of Work) — also requires `scopeOfWork:view` to read the source record. |
+| `deliveryOrder:edit` | `PATCH /api/delivery-orders/:id` and `POST /api/delivery-orders/:id/refresh` — combined with an **ownership** check, same shape as Scope of Work's `canEditScope()`. |
+| `deliveryOrder:finalize` | `POST /api/delivery-orders/:id/finalize`. Also, independent of ownership, lets a holder edit or delete *any* Draft record, not just their own. |
+| `deliveryOrder:print` | Gates the print button client-side (no server-side print-log route exists for this document type — printing is 100% client-side `window.print()`, unlike Quotation/Scope of Work's server print-validation gate). |
+| `deliveryOrder:delete` | `DELETE /api/delivery-orders/:id` (soft delete) — combined with the same ownership-or-finalize check as edit. |
+
+**Creating** a Delivery Order also requires `scopeOfWork:view`; **refreshing** ("อัปเดตข้อมูลจาก
+Scope of Work") requires it too, alongside the usual edit/ownership check — same pattern Scope of
+Work's own creation/refresh routes use against Quotation.
+
+Default grants mirror Scope of Work's exactly: **Sales User** gets `view/create/edit/print` (no
+finalize/delete/viewAll); **Approver Level 1/2** get `view/viewAll/edit/finalize/print` (no
+`create`); **Administrator**/**Super Admin** get all 7; **Viewer** gets `view/viewAll` only.
+
+**⚠️ Same deployment/rollout note as every other permission added this session** (see "Quotation
+Own-Quotes-Only Viewing" above for the full reasoning) — `defaultRoles` only seeds once, so an
+already-provisioned production deployment's existing role documents will **not** automatically gain
+these 7 permissions. A Super Admin must open Role Management and manually grant the appropriate
+Delivery Order permissions to each role before or immediately after this deploys, or nobody except a
+freshly-created Super Admin account will be able to use the feature at all. Tracked in
+[TODO.md](./TODO.md).
+
+Audit logging: every action writes a server-side `AuditLogEntry` via `writeDeliveryOrderAuditEntry()`,
+module `"Delivery Order"` — reuses the already-defined `relatedScopeId`/`relatedScopeNumber` fields
+to point back at the source Scope of Work rather than adding a new `relatedDeliveryOrderId` field.
+
 ### Sidebar / Menu Visibility
 
 `App.tsx`'s `navItems` array carries an optional `permission` field per entry; `hasPermission(currentUser, roles, item.permission)` filters the rendered list — **items are fully removed from the DOM, not just disabled**, satisfying "hide inaccessible menus completely." A render-time `effectiveNav` guard (not a `useEffect`, to avoid a setState-in-effect cascade) falls back to the Dashboard if `activeNav` somehow points at a module the current user can't see. `Settings` is always visible (every signed-in user can edit their own profile); only its Company tab is conditionally rendered, gated by `company:manage`.
