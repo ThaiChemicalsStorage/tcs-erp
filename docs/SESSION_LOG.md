@@ -4,7 +4,56 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Feature: auto-generated Revision Note (Quotation + Scope of Work)
+## Session — 2026-07-23 (absolute latest), Feature: in-app "What's New" update log
+
+### What was implemented
+- User's request was terse ("ทำ update log ให้หน่อย" — "make an update log for me"), ambiguous
+  enough across three very different possible builds (a one-off chat summary, a shareable
+  standalone document/Artifact, or a real in-app feature) that clarifying up front was worth the
+  pause rather than guessing and rebuilding — asked via `AskUserQuestion` with those three framed
+  as concrete options. User picked the in-app "What's New" feature.
+- Built as a static, hand-authored content array (`WHATS_NEW_ENTRIES`, `src/lib/whatsNew.ts`)
+  rather than anything database-backed — this is a short list of end-user-facing announcements
+  that only changes when a developer ships a feature worth telling users about, so a new MongoDB
+  collection + CRUD API + admin UI would be real overhead for no real benefit over editing an array
+  in source control (the same tradeoff already made for `quotationTemplates`' `templateSeedData.ts`
+  and similar hand-maintained content files elsewhere in this codebase).
+- Seeded with the last several days' genuinely user-facing changes from this session (Revision
+  Note, Document Recipients email routing, `scopeOfWork:viewAll`, flexible Payment Conditions, the
+  Dashboard Scope of Work count, the standalone Scope of Work page + Rewrite) — deliberately
+  curated, not a 1:1 mirror of every `docs/CHANGELOG.md` entry; internal fixes/refactors with no
+  visible behavior change for a regular user don't belong in a user-facing update log.
+- UI/component pattern reused `NotificationBell.tsx` wholesale (trigger button + anchored dropdown
+  panel, same card/border/shadow-xl shell) rather than inventing a new dropdown pattern — matches
+  the existing UI_GUIDELINES.md guidance to reuse that visual language for future topbar dropdowns.
+  Differs in two deliberate ways: a `Sparkles` icon instead of `Bell` (visually distinct from real
+  notifications), and a single "seen/unseen" gold dot instead of an unread count, since entries
+  aren't individually actionable/dismissible the way notifications are.
+- "Seen" tracking reused the exact `tour.ts` localStorage convention (per-user id map in one
+  storage key, silently degrades if storage is unavailable) rather than inventing a new persistence
+  approach for what is, at bottom, the same kind of thing: a client-side "has this user already
+  seen X" UI preference, not real business data.
+
+### Verification
+- `tsc --noEmit` (both configs), `npm run lint`, `npm run build` all pass clean.
+- Spot-checked the Thai date formatting (`toLocaleDateString("th-TH", ...)`) via a standalone Node
+  script — confirmed correct Buddhist-calendar year output.
+- No live browser check available (Playwright MCP tools still disconnected this session). The
+  component itself has no complex state machine to simulate outside a browser (a boolean open/close
+  and a boolean seen/unseen, both trivial to reason about directly), so no separate logic-simulation
+  script was written for this one, unlike the Revision Note feature above.
+
+### Recommendation for next session
+- Live-verify the panel actually renders correctly and the gold dot clears on open, in a real
+  browser, once Playwright reconnects.
+- Establish a lightweight habit going forward: whenever a change lands in `docs/CHANGELOG.md` that
+  a regular (non-technical) user would actually notice or care about, consider whether it also
+  belongs as a new `WHATS_NEW_ENTRIES` entry — right now this is a manual judgment call each time,
+  not an enforced or automated step.
+
+---
+
+## Session — 2026-07-23, Feature: auto-generated Revision Note (Quotation + Scope of Work)
 
 ### What was implemented
 - Direct user request: an auto-generated comment/note after a rewritten document showing what

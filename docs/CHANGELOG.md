@@ -4,7 +4,44 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Feature: auto-generated Revision Note (Quotation + Scope of Work)
+## 2026-07-23 (absolute latest) — Feature: in-app "What's New" update log
+
+**Feature**: direct user request — "ทำ update log ให้หน่อย", clarified via a follow-up question to
+mean an in-app feature (not a document or a one-off chat summary): users should be able to see
+what's new in the app themselves without asking, without needing new backend/DB work.
+
+**What was built**:
+- A "มีอะไรใหม่" (What's New) sparkle icon in the topbar, next to the notification bell
+  (`src/components/WhatsNewPanel.tsx`) — clicking it opens a dropdown listing recent feature
+  updates, newest first, each with a date and a short Thai bullet-list description.
+- Content lives in a plain hand-maintained array, `WHATS_NEW_ENTRIES` (`src/lib/whatsNew.ts`) —
+  deliberately not database-backed or auto-generated from `docs/CHANGELOG.md`: these are short,
+  end-user-facing announcements (a different audience/tone than the technical changelog), and a new
+  MongoDB collection + API route would be real overhead for content that changes only when a
+  developer ships a feature anyway. Seeded with the last several days' user-facing updates
+  (Revision Note, Document Recipients email routing, Scope of Work `viewAll`, flexible Payment
+  Conditions, the Dashboard Scope of Work count, the standalone Scope of Work page + Rewrite).
+- A small gold dot badge appears on the icon when there's an entry newer than the last one this
+  specific user opened the panel to see — tracked per-user in `localStorage`
+  (`hasUnseenWhatsNew()`/`markWhatsNewSeen()`), the same convention `src/lib/tour.ts` already uses
+  for guided-tour completion (a client-side UI preference, not business data, so no schema/API
+  change was warranted). Clears the moment the panel is opened, not per-item.
+- New `whatsNew.bellAria`/`whatsNew.title`/`whatsNew.empty` i18n keys (chrome text only — the
+  entries themselves are authored directly in Thai, same convention as audit-log/notification
+  content, since they're persisted-style business content, not app chrome).
+
+**Files Modified**: `src/lib/whatsNew.ts` (new), `src/components/WhatsNewPanel.tsx` (new),
+`src/App.tsx`, `src/lib/i18n.tsx`.
+
+**Verification**: `npx tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`), `npm run lint`,
+`npm run build` all pass clean. Thai date formatting (`toLocaleDateString("th-TH", ...)`) spot-checked
+via a standalone Node script, confirming correct Buddhist-calendar year output (e.g. `23 กรกฎาคม
+2569` for `2026-07-23`). Not verified via a live browser click-through — Playwright MCP remains
+disconnected this session; see TODO.md.
+
+---
+
+## 2026-07-23 — Feature: auto-generated Revision Note (Quotation + Scope of Work)
 
 **Feature**: direct user request — "อยากได้แบบ Comment auto หรืออะไรก็ได้หลังใบที่ถูก rewrite มาว่า
 แก้ตรงไหนไปสามารถทำได้ไหมคือแบบให้ตรวจดูว่าแก้ตรงไหนไปละเป็นข้อความ auto ไปก่อนละค่อยแบบถ้าผู้ใช้

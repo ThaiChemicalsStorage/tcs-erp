@@ -23,6 +23,7 @@ import {
 import { logAudit } from "./lib/auditLog";
 import { hasTourCompleted, markTourCompleted } from "./lib/tour";
 import { NotificationBell } from "./components/NotificationBell";
+import { WhatsNewPanel } from "./components/WhatsNewPanel";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { GlobalSearch } from "./components/GlobalSearch";
 import { BrandMark } from "./components/BrandMark";
@@ -652,6 +653,9 @@ export default function App() {
             onNavigateToTemplate={navigateToTemplate}
             onNavigateToScopeOfWork={navigateToScopeOfWork}
           />
+          <div className="flex-shrink-0">
+            <WhatsNewPanel currentUserId={currentUser.id} />
+          </div>
           <div data-tour="notification-bell" className="flex-shrink-0">
             <NotificationBell
               notifications={notifications}

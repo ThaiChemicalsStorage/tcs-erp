@@ -14,6 +14,14 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-23] In-app "What's New" update log.**
+  Direct user request for an update log — clarified as an in-app feature. New topbar sparkle icon
+  (`WhatsNewPanel.tsx`) next to the notification bell opens a dropdown of recent user-facing
+  feature updates (newest first, dated, short Thai bullet points), sourced from a plain
+  hand-maintained `WHATS_NEW_ENTRIES` array (`src/lib/whatsNew.ts`) rather than a new DB
+  collection/API route. Gold dot badge for "unseen since last opened," tracked per-user in
+  `localStorage` (same convention as `tour.ts`'s guided-tour tracking). `tsc`/`lint`/`build` all
+  pass clean. See [UI_GUIDELINES.md](./UI_GUIDELINES.md) "What's New Panel."
 - ✅ **[2026-07-23] Auto-generated Revision Note (Quotation + Scope of Work).**
   Direct user request for an auto-generated "what changed" comment on a rewritten document. Both
   `QuoteDocument.tsx` and `ScopeOfWorkDocument.tsx` gained a "หมายเหตุการแก้ไข (Revision Note)" card

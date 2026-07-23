@@ -353,6 +353,10 @@ const translations = {
     "notif.hoursAgo": "{n} ชั่วโมงที่แล้ว",
     "notif.daysAgo": "{n} วันที่แล้ว",
 
+    "whatsNew.bellAria": "มีอะไรใหม่",
+    "whatsNew.title": "มีอะไรใหม่",
+    "whatsNew.empty": "ยังไม่มีประกาศอัปเดต",
+
     "common.saveChanges": "บันทึกการเปลี่ยนแปลง",
     "common.savedNote": "บันทึกการเปลี่ยนแปลงแล้ว",
     "common.errorGeneric": "บันทึกไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
@@ -1251,6 +1255,10 @@ const translations = {
     "notif.minutesAgo": "{n} minutes ago",
     "notif.hoursAgo": "{n} hours ago",
     "notif.daysAgo": "{n} days ago",
+
+    "whatsNew.bellAria": "What's new",
+    "whatsNew.title": "What's New",
+    "whatsNew.empty": "No update announcements yet",
 
     "common.saveChanges": "Save Changes",
     "common.savedNote": "Changes saved",

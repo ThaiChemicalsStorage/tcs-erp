@@ -66,6 +66,17 @@ The single source of truth for the app's logo — always use this instead of a n
 ### Notification Bell & Panel (`src/components/NotificationBell.tsx`)
 Bell icon with **no badge at 0 unread** — don't render a "0" badge, that's the one explicit anti-pattern here. When unread > 0: a small red (`bg-[#e05252]`) circular badge, top-right of the bell, showing the count or `"99+"` above 99. Click opens a dropdown panel (`absolute right-0 top-full mt-2`, `w-96`, same card/border/shadow-xl treatment as the user-menu dropdown) with a header (title + "อ่านทั้งหมด" mark-all-read), a scrollable list (`max-h-[28rem] overflow-y-auto`), and per-row: icon in a tinted square, title, description (`line-clamp-2`), module + relative-time metadata, and a hover-reveal delete icon. Unread rows get a subtle gold tint (`bg-[#c9a84c]/[0.06]`) and a small gold dot next to the title — the same "unread" visual language used for sidebar/notification badges elsewhere. Reuse this component for any future notification-style feed rather than building a second dropdown pattern.
 
+### What's New Panel (`src/components/WhatsNewPanel.tsx`, added 2026-07-23)
+Sparkle icon (`lucide-react`'s `Sparkles`, not `Bell`, to visually distinguish it from real
+notifications) placed just left of the notification bell — same trigger-button/dropdown-panel
+shell as `NotificationBell.tsx` (`absolute right-0 top-full mt-2`, `w-96`, card/border/shadow-xl),
+reused rather than invented fresh, per the reuse note above. Differs from the bell in two
+deliberate ways: **no unread count**, just a single small gold dot (`w-2 h-2 rounded-full
+bg-[#c9a84c]`) since entries aren't individually dismissible, only "have you opened the panel since
+the newest entry shipped" — clearing on open, not on a per-item click; and **content is static**
+(`WHATS_NEW_ENTRIES` in `src/lib/whatsNew.ts`, hand-authored Thai announcements, not fetched from
+an API) since this is a short end-user-facing update log, not the technical `docs/CHANGELOG.md`.
+
 ### Global Search (`src/components/GlobalSearch.tsx`, added 2026-07-14, fixed against an
 independent Codex review the same day)
 Replaces the previously decorative, non-functional topbar search input (a bare `<input>` with no
