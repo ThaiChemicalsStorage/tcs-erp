@@ -166,6 +166,30 @@
 
 ## Medium Priority — Other
 
+- [ ] **Manual Scope of Work document number entry (2026-07-24, owner picked "ข้อ 2" then said
+  "ยัง ใส่ไว้ใน TODO ไว้" — recorded, not built).** An OPTIONAL field at creation time: blank =
+  today's auto-generated `PQ{YYYYMM}-{seq}-{jobType}-{secondaryCode}` number exactly as now (users
+  of the auto flow completely unaffected); typed = use the custom number, editable while Draft.
+  Requirements agreed in-conversation: server-side uniqueness check (clear error on duplicate,
+  race-safe); must compose with Rewrite's `-R{n}` suffixing and with Duplicate/the atomic
+  monthly counter (a copy gets a fresh number; future auto numbers must not collide with a
+  manually-typed one); Global Search/lists/email subject already read `scopeNumber` off the record
+  so they should follow for free (verify). **Email threading is unaffected either way** — the
+  thread anchor is the record's internal id, not the document number. Est. 1–2 hours incl.
+  docs/checks.
+- [ ] **"ทวง PO" (chase the sales for the customer PO number + PO file) — proposed 2026-07-24,
+  awaiting the owner's go-ahead** (discussion happened; the conversation moved on before a
+  decision). Proposal on the table: (1) a "ยังไม่มี PO" badge + filter on the Scope of Work list
+  for records with an empty `customerPoNumber`/no PO attachment; (2) a "ทวงเลข PO" button sending
+  an in-app notification (deep-linked, audit-logged, repeatable) to the record's salesperson;
+  (3) optionally a Dashboard "งานที่ยังไม่มี PO" counter. **Blocker discovered while designing:
+  the 2026-07-24 approval workflow locks `customerPoNumber` + attachments on Final records, but a
+  customer PO usually arrives AFTER approval** — the companion proposal is to exempt
+  `customerPoNumber`/attachments/documentRecipients/documentRecipientMessage from the Final lock
+  (they're follow-up data, not approved document content; item lists/payment terms/checklists
+  stay locked). Time-based auto-chasing (e.g. "remind after 3 days") needs cron — deferred to
+  post-migration per the no-Vercel-locked-services rule, noted in SERVER_MIGRATION_PLAN.md's
+  upgrade list when built.
 - [x] Persist the secondary quotation document fields (contact person, phone, address, tax ID, PO reference, issue/expiry dates, payment terms) — done as part of the PDF polish work above, now real fields on `Quote`
 - [x] **Dashboard KPI rework** — **done 2026-07-09**: real KPIs (Total Customers, Total Leads, Total Quotations, Total Products, Revenue, Won Deals, Lost Deals) now come from `GET /api/dashboard`; Customers/Leads correctly showed `0` until those modules shipped. **Total Customers now reflects real data as of 2026-07-14** (see the Customer Management item above) — `api/dashboard/index.ts`'s query was updated from `deletedAt: null` to `isDeleted: false` to match the redefined `Customer` schema. Total Leads still shows `0` (Lead Management remains unbuilt). See [MODULES/Dashboard.md](./MODULES/Dashboard.md).
 - [x] **Dashboard date-range filter** — **done 2026-07-10**: Today/Yesterday/Last 7/14 Days/This Month/Last Month/This Quarter/This Year/Custom Range/All Time + a salesperson filter, all server-side, driving every KPI/chart/table on the page. See [MODULES/Dashboard.md](./MODULES/Dashboard.md).
