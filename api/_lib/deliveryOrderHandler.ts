@@ -371,88 +371,12 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
-// ─── Session-less share view (2026-07-24) ───────────────────────────────────────────────────────
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
-}
-
-/**
- * `GET /api/delivery-orders/:id/view?key=...` — a read-only HTML rendering of the Delivery Order,
- * linked from the Scope of Work document-recipient email when the sender ticks "แนบใบส่งมอบสินค้า"
- * (added 2026-07-24, direct user request). Deliberately NO session auth — same capability-URL
- * pattern (random `shareKey`, minted by scopeOfWorkHandler's send route on first use, opaque 404
- * on mismatch) as attachment downloads, because email recipients open this from a mail client
- * with no app session. This is a *viewing convenience* rendered server-side from the live record
- * (always current, one section per non-deposit installment); the official printable FM-SL-05
- * form remains the in-app print flow (`DeliveryOrderPrintDocument.tsx`) — this page doesn't try
- * to replicate it pixel-for-pixel. Every interpolated value is user-entered data → escaped.
- */
-async function handleShareView(req: VercelRequest, res: VercelResponse, id: string) {
-  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
-  const key = typeof req.query.key === "string" ? req.query.key : "";
-  let doc: WithId<DeliveryOrderFields> | null;
-  try {
-    const deliveryOrders = await deliveryOrdersCollection();
-    doc = await deliveryOrders.findOne({ _id: toObjectId(id) });
-  } catch {
-    doc = null;
-  }
-  // Opaque 404 on every failure mode (bad id, deleted, no key minted yet, wrong key) — never
-  // reveal which part failed to an unauthenticated caller.
-  const shareKey = doc && typeof doc.shareKey === "string" ? doc.shareKey : "";
-  if (!doc || doc.isDeleted || !shareKey || key !== shareKey) throw new HttpError(404, "Not found");
-
-  const itemById = new Map(doc.items.map((it) => [it.id, it]));
-  const sections = stripDepositInstallments(doc.installments).map((inst, idx) => {
-    const items = inst.itemIds.map((iid) => itemById.get(iid)).filter((it): it is DeliveryOrderItem => !!it);
-    const rows = items.length > 0
-      ? items.map((it, i) => `
-          <tr>
-            <td style="border:1px solid #444;padding:6px 10px;text-align:center;vertical-align:top;">${i + 1}</td>
-            <td style="border:1px solid #444;padding:6px 10px;vertical-align:top;">${escapeHtml(it.name)}${it.specifications.length > 0 ? `<div style="color:#555;font-size:12px;margin-top:2px;">${it.specifications.map((s) => escapeHtml(s.text)).join("<br>")}</div>` : ""}</td>
-            <td style="border:1px solid #444;padding:6px 10px;text-align:center;vertical-align:top;">${it.quantity ?? "-"}</td>
-            <td style="border:1px solid #444;padding:6px 10px;text-align:center;vertical-align:top;">${escapeHtml(it.unit)}</td>
-          </tr>`).join("")
-      : `<tr><td colspan="4" style="border:1px solid #444;padding:10px;text-align:center;color:#777;">ยังไม่ได้เลือกรายการสินค้าสำหรับงวดนี้</td></tr>`;
-    return `
-      <div style="margin-top:${idx > 0 ? "36px" : "0"};padding-top:${idx > 0 ? "28px" : "0"};${idx > 0 ? "border-top:2px dashed #bbb;" : ""}">
-        <table style="width:100%;border-collapse:collapse;margin-bottom:10px;"><tr>
-          <td style="font-size:13px;">งวดที่ ${idx + 1}: <strong>${escapeHtml(inst.remark || inst.label)}</strong></td>
-          <td style="font-size:13px;text-align:right;white-space:nowrap;">เลขที่: <strong>${escapeHtml(inst.documentNumber || "-")}</strong>&nbsp;&nbsp;วันที่: <strong>${escapeHtml(inst.issueDate || "-")}</strong></td>
-        </tr></table>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <tr style="background:#f0f0f0;">
-            <th style="border:1px solid #444;padding:6px 10px;width:44px;">No.</th>
-            <th style="border:1px solid #444;padding:6px 10px;">Description</th>
-            <th style="border:1px solid #444;padding:6px 10px;width:70px;">Q'ty</th>
-            <th style="border:1px solid #444;padding:6px 10px;width:70px;">Unit</th>
-          </tr>
-          ${rows}
-        </table>
-      </div>`;
-  }).join("");
-
-  const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="robots" content="noindex,nofollow"><title>ใบส่งมอบสินค้าและบริการ ${escapeHtml(doc.scopeNumber)}</title></head>
-    <body style="margin:0;background:#e9e9e9;font-family:'Times New Roman','Noto Serif Thai',serif;color:#111;">
-      <div style="max-width:760px;margin:24px auto;background:#fff;padding:40px 48px;border:1px solid #ccc;">
-        <p style="margin:0 0 2px;text-align:center;font-size:18px;font-weight:700;">ใบส่งมอบสินค้าและบริการ</p>
-        <p style="margin:0 0 18px;text-align:center;font-size:13px;letter-spacing:1px;">DELIVERY ORDER &amp; SERVICE ORDER</p>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;">
-          <tr><td style="width:110px;padding:2px 0;color:#555;">เอกสารอ้างอิง</td><td style="padding:2px 0;font-weight:600;">${escapeHtml(doc.scopeNumber)} <span style="font-weight:400;color:#777;">(${doc.status === "Final" ? "ฉบับสมบูรณ์" : "ฉบับร่าง"})</span></td></tr>
-          <tr><td style="padding:2px 0;color:#555;vertical-align:top;">เรียน</td><td style="padding:2px 0;font-weight:600;">${escapeHtml(doc.customerCompanyName)}${doc.customerAddress ? `<div style="font-weight:400;color:#333;">${escapeHtml(doc.customerAddress)}</div>` : ""}</td></tr>
-        </table>
-        ${sections || `<p style="text-align:center;color:#777;font-size:13px;">ยังไม่มีงวดส่งมอบในเอกสารนี้</p>`}
-        <p style="margin:28px 0 0;font-size:11px;color:#999;text-align:center;">เอกสารฉบับดูออนไลน์จากระบบ TCS ERP — ข้อมูลเป็นสถานะล่าสุด ณ เวลาที่เปิดดู ฉบับพิมพ์อย่างเป็นทางการออกจากระบบเท่านั้น</p>
-      </div>
-    </body></html>`;
-
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Cache-Control", "no-store");
-  res.status(200).send(html);
-}
+// A session-less capability-URL HTML view (`GET /:id/view?key=`, linked from the Scope of Work
+// recipient email) briefly existed here on 2026-07-24 — removed the same day on direct user
+// request ("เอาที่ติ๊กใบส่งมอบออกไปเลย เดี๋ยวแนบไฟล์เอา"): the preferred flow is printing the
+// official FM-SL-05 form to PDF and attaching it via the Scope of Work's normal ไฟล์แนบ feature.
+// A `shareKey` field may linger on delivery_orders documents that had a link minted during the
+// feature's brief lifetime — harmless, nothing reads it. See CHANGELOG.md 2026-07-24.
 
 export async function handleDeliveryOrder(req: VercelRequest, res: VercelResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/delivery-orders");
@@ -461,7 +385,6 @@ export async function handleDeliveryOrder(req: VercelRequest, res: VercelRespons
     if (req.method === "POST") return handleCreate(req, res);
     return handleList(req, res);
   }
-  if (parts.length === 2 && parts[1] === "view") return handleShareView(req, res, parts[0]);
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "finalize") return handleFinalize(req, res, parts[0]);

@@ -211,20 +211,15 @@ which is itself checked before the plain quotes logic) — no new Vercel functio
 12-function-slot-sharing convention Scope of Work and Quotation Templates already use. New
 `api/_lib/deliveryOrderHandler.ts`. See [API.md](../API.md) for the full route table.
 
-## Share View (added 2026-07-24)
+## Share View (added and removed 2026-07-24, same day)
 
-`GET /api/delivery-orders/:id/view?key=...` (`handleShareView()`) — a **session-less, read-only
-HTML rendering** of the Delivery Order, linked from the Scope of Work document-recipient email when
-the sender ticks "แนบลิงก์ใบส่งมอบสินค้าในอีเมล" (see [ScopeOfWork.md](./ScopeOfWork.md) "Document
-Recipients"). Same capability-URL pattern as Scope of Work attachment downloads: authorization is
-the random `DeliveryOrder.shareKey` (minted by the Scope of Work send route on first use, never
-client-writable — not in `DeliveryOrderUpdateFields`); every failure mode (bad id, deleted record,
-no key minted yet, wrong key) is an identical opaque `404`. Rendered fresh from the live record on
-every open (one section per non-deposit installment: เลขที่/วันที่, ticked-items table with specs,
-Remark; `Cache-Control: no-store`, `noindex`, all interpolated values HTML-escaped since they're
-user-entered). Deliberately **not** a replica of the FM-SL-05 form — it's a viewing convenience
-for email recipients; the official printable document remains the in-app per-milestone print flow
-(`DeliveryOrderPrintDocument.tsx`).
+A session-less capability-URL HTML view (`GET /api/delivery-orders/:id/view?key=...`,
+`handleShareView()`, linked from the Scope of Work recipient email via a
+"แนบลิงก์ใบส่งมอบสินค้าในอีเมล" checkbox) briefly existed — **removed the same day on direct user
+request** ("เอาที่ติ๊กใบส่งมอบออกไปเลย เดี๋ยวแนบไฟล์เอา"): the preferred flow is printing the official
+FM-SL-05 form to PDF and attaching it via the Scope of Work's normal ไฟล์แนบ feature. A `shareKey`
+field may linger on `delivery_orders` documents that had a link minted during the feature's brief
+lifetime — harmless, nothing reads it. See CHANGELOG.md 2026-07-24.
 
 ## Files
 

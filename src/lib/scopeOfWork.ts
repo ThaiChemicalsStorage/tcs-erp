@@ -460,17 +460,8 @@ export async function logScopeOfWorkPrinted(id: string): Promise<void> {
  * per distinct recipient, deduped across departments so a person picked under two checked options
  * only gets one message. Added 2026-07-23. `sentCount`/`failedCount` let the UI report a partial
  * failure (e.g. one recipient's address rejected) without treating the whole action as failed. */
-export async function sendScopeOfWorkDocumentNotifications(
-  id: string,
-  /** `includeDeliveryOrder` (added 2026-07-24): also put a session-less view link to this record's
-   * Delivery Order in the email — server 400s if none exists, so the UI only offers the option
-   * when it knows one does. */
-  options?: { includeDeliveryOrder?: boolean },
-): Promise<{ sentCount: number; failedCount: number; recipientCount: number }> {
-  return apiFetch<{ sentCount: number; failedCount: number; recipientCount: number }>(`/scope-of-works/${id}/send-documents`, {
-    method: "POST",
-    body: JSON.stringify({ includeDeliveryOrder: options?.includeDeliveryOrder === true }),
-  });
+export async function sendScopeOfWorkDocumentNotifications(id: string): Promise<{ sentCount: number; failedCount: number; recipientCount: number }> {
+  return apiFetch<{ sentCount: number; failedCount: number; recipientCount: number }>(`/scope-of-works/${id}/send-documents`, { method: "POST" });
 }
 /** Uploads one attachment (JSON base64 body — see MAX_ATTACHMENT_BYTES) and returns the updated
  * record. The file bytes are stored server-side in the `scope_attachment_files` collection;

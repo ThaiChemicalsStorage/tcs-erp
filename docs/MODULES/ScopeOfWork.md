@@ -328,14 +328,11 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   thread); Duplicate/Rewrite explicitly reset the field (both build the new record by spreading
   the source, so without the reset a copy would reply into the source's thread). Records whose
   first send predates the fix start grouping from their next send onward.
-- **Delivery Order link (added 2026-07-24, direct user request, scoped via AskUserQuestion)**: a
-  "แนบลิงก์ใบส่งมอบสินค้าในอีเมล" checkbox appears next to the send button when a Delivery Order
-  for this record exists — per-send choice (not persisted), passed as `{ includeDeliveryOrder }`.
-  The email gains a "ใบส่งมอบสินค้าและบริการ" block linking the session-less
-  `GET /api/delivery-orders/:id/view?key=` HTML view (see
-  [MODULES/DeliveryOrder.md](./DeliveryOrder.md) "Share View" and [API.md](../API.md)); the server
-  `400`s if none exists, which the UI prevents by only offering the checkbox when it knows one
-  does.
+- **Delivery Order link (added and removed 2026-07-24, same day)**: a "แนบลิงก์ใบส่งมอบสินค้าในอีเมล"
+  checkbox + session-less Delivery Order view link briefly existed here — removed on direct user
+  request ("เอาที่ติ๊กใบส่งมอบออกไปเลย เดี๋ยวแนบไฟล์เอา"): the preferred flow is printing the official
+  FM-SL-05 form to PDF and attaching it via the normal ไฟล์แนบ feature above, which also travels
+  with the email threading. See CHANGELOG.md 2026-07-24.
 - **In-app notification + recipient list visibility** (added 2026-07-23, same-day second pass, per
   direct user follow-up — "อยากรู้ว่าทำยังไงถึงให้มันไปโผล่ในหน้า scope of work ของเราเวลาที่มีคนอื่น
   ส่งมา... อยากให้ขึ้นแจ้งเตือนในระบบด้วย"): sending now does two more things besides the email —

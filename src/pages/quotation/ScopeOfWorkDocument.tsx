@@ -257,9 +257,6 @@ export function ScopeOfWorkDocument({
   // Scope of Work" button. Opens the most-recently-updated one if more than one exists.
   const [existingDeliveryOrder, setExistingDeliveryOrder] = useState<DeliveryOrderSummary | null>(null);
   const [deliveryOrderBusy, setDeliveryOrderBusy] = useState(false);
-  /** "แนบใบส่งมอบสินค้าในอีเมล" — per-send choice (not persisted), offered only when a Delivery
-   * Order for this record is known to exist. See sendScopeOfWorkDocumentNotifications(). */
-  const [includeDeliveryOrderInEmail, setIncludeDeliveryOrderInEmail] = useState(false);
   useEffect(() => {
     if (!canViewDeliveryOrder) return;
     let cancelled = false;
@@ -349,9 +346,7 @@ export function ScopeOfWorkDocument({
     try {
       const saved = await updateScopeOfWork(scope.id, toUpdateFields(scope));
       setScope(saved);
-      const result = await sendScopeOfWorkDocumentNotifications(scope.id, {
-        includeDeliveryOrder: includeDeliveryOrderInEmail && !!existingDeliveryOrder,
-      });
+      const result = await sendScopeOfWorkDocumentNotifications(scope.id);
       showToast(
         result.failedCount > 0
           ? `ส่งอีเมลสำเร็จ ${result.sentCount}/${result.recipientCount} คน (มีบางรายการล้มเหลว)`
@@ -768,18 +763,7 @@ export function ScopeOfWorkDocument({
             Draft check) so an editor can still send a Final record — the server gate
             (`scopeOfWork:edit` on POST /send-documents) matches. */}
         {canEdit && documentsToSendGroup && checkedDocumentsToSendKeys.size > 0 && (
-          <div className="flex items-center justify-end gap-4 flex-wrap print:hidden -mt-2">
-            {existingDeliveryOrder && (
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground select-none cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeDeliveryOrderInEmail}
-                  onChange={(e) => setIncludeDeliveryOrderInEmail(e.target.checked)}
-                  className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c]"
-                />
-                แนบลิงก์ใบส่งมอบสินค้าในอีเมล
-              </label>
-            )}
+          <div className="flex justify-end print:hidden -mt-2">
             <button
               onClick={handleSendDocuments}
               disabled={!hasDocumentRecipientsToSend || sendingDocs}

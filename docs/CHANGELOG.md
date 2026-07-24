@@ -4,7 +4,23 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Threading fix: anchor the FIRST send's `References` too
+## 2026-07-24 (absolute latest) — Removed: Delivery Order link in the recipient email
+
+Direct user request after trying the feature ("เอาที่ติ๊กใบส่งมอบออกไปเลย เดี๋ยวแนบไฟล์เอา") — the
+same-day "แนบลิงก์ใบส่งมอบสินค้าในอีเมล" checkbox + session-less
+`GET /api/delivery-orders/:id/view?key=` HTML view are fully removed; the preferred flow is
+printing the official FM-SL-05 form to PDF and attaching it via the normal ไฟล์แนบ feature (which
+travels with the email threading, kept). Removed: the checkbox/state in
+`ScopeOfWorkDocument.tsx`, the `{ includeDeliveryOrder }` body option + email block in
+`scopeOfWorkHandler.ts`, `handleShareView()` + its route in `deliveryOrderHandler.ts` (a removal
+note remains in place), and `DeliveryOrder.shareKey` from the type. A `shareKey` field may linger
+on `delivery_orders` documents that minted a link during the feature's brief lifetime — harmless,
+nothing reads it. What's New entry reworded to threading-only; docs: ScopeOfWork.md,
+DeliveryOrder.md, API.md. `tsc`/`lint`/`build` clean.
+
+---
+
+## 2026-07-24 — Threading fix: anchor the FIRST send's `References` too
 
 Live test (user screenshot of a real Gmail inbox) showed the "Re:" follow-up arriving as a
 separate conversation: **Resend replaces a custom `Message-ID` with its own**, so the follow-up's

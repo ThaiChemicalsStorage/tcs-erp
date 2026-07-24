@@ -6,7 +6,7 @@ import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import {
   scopeOfWorksCollection, quotesCollection, usersCollection, countersCollection, auditLogCollection,
-  notificationsCollection, scopeAttachmentFilesCollection, deliveryOrdersCollection, toObjectId, withStringId,
+  notificationsCollection, scopeAttachmentFilesCollection, toObjectId, withStringId,
   type ScopeOfWorkFields, type QuoteFields,
 } from "./collections.js";
 import { Binary } from "mongodb";
@@ -1069,13 +1069,7 @@ function nl2br(escaped: string): string {
  * note directly above the auto-generated summary — added the same pass, per the same user request,
  * for a way to attach ad-hoc context (e.g. a deadline) the auto-generated fields alone can't say.
  */
-function buildDocumentRecipientEmailHtml(
-  doc: WithId<ScopeOfWorkFields>,
-  appUrl: string,
-  /** Session-less capability link to the Delivery Order's read-only HTML view — present only when
-   * the sender ticked "แนบใบส่งมอบสินค้า" and one exists (added 2026-07-24, direct user request). */
-  deliveryOrderLink?: { url: string; status: string },
-): string {
+function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl: string): string {
   const rows: [string, string][] = [
     ["ลูกค้า", doc.customerSnapshot.companyName],
     ["ใบเสนอราคา", doc.quotationNumber],
@@ -1114,16 +1108,6 @@ function buildDocumentRecipientEmailHtml(
        </div>`
     : "";
 
-  // Delivery Order link (2026-07-24) — its own block, not an entry in the ไฟล์แนบ list, because
-  // it's a live view of a system document (always current), not an uploaded file snapshot.
-  const deliveryOrderBlock = deliveryOrderLink
-    ? `<div style="margin-top:22px;border-top:1px solid #eee;padding-top:16px;">
-         <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#767676;letter-spacing:.5px;">ใบส่งมอบสินค้าและบริการ</p>
-         <p style="margin:0;font-size:13px;">🚚 <a href="${deliveryOrderLink.url}" style="color:#0b1d3a;font-weight:600;">เปิดดูใบส่งมอบสินค้า ${escapeHtml(doc.scopeNumber)}</a>
-           <span style="color:#999;font-size:11px;">(${escapeHtml(deliveryOrderLink.status === "Final" ? "ฉบับสมบูรณ์" : "ฉบับร่าง")})</span></p>
-       </div>`
-    : "";
-
   return `
     <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;max-width:560px;margin:0 auto;background:#f4f4f4;padding:24px 16px;">
       <div style="background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e4e4e4;">
@@ -1138,7 +1122,6 @@ function buildDocumentRecipientEmailHtml(
           </p>
           <table style="width:100%;border-collapse:collapse;">${rowsHtml}</table>
           ${attachmentsBlock}
-          ${deliveryOrderBlock}
           <div style="margin-top:26px;text-align:center;">
             <a href="${appUrl}" style="display:inline-block;background:#c9a84c;color:#0b1d3a;text-decoration:none;font-weight:700;font-size:13px;padding:11px 28px;border-radius:6px;">เปิดดูใน TCS ERP</a>
           </div>
@@ -1223,27 +1206,7 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
     await scopeOfWorks.updateOne({ _id: doc._id }, { $set: { emailThreadId: threadId } });
   }
 
-  // ── Optional Delivery Order link (2026-07-24, direct user request) — opt-in per send via the
-  // request body; the newest non-deleted Delivery Order of this Scope of Work gets a session-less
-  // capability URL (shareKey generated once, on first use) rendered as its own block in the email.
-  const includeDeliveryOrder = sanitizeBoolean((req.body as { includeDeliveryOrder?: unknown } | undefined)?.includeDeliveryOrder, "ตัวเลือกแนบใบส่งมอบสินค้า");
-  let deliveryOrderLink: { url: string; status: string } | undefined;
-  if (includeDeliveryOrder) {
-    const deliveryOrders = await deliveryOrdersCollection();
-    const doDoc = await deliveryOrders.find({ scopeOfWorkId: id, isDeleted: false }).sort({ updatedAt: -1 }).limit(1).next();
-    if (!doDoc) throw new HttpError(400, "ยังไม่มีใบส่งมอบสินค้าสำหรับ Scope of Work นี้ — สร้างใบส่งมอบก่อน หรือเอาตัวเลือกแนบใบส่งมอบออก");
-    let shareKey = typeof doDoc.shareKey === "string" ? doDoc.shareKey : "";
-    if (!shareKey) {
-      shareKey = randomBytes(24).toString("base64url");
-      await deliveryOrders.updateOne({ _id: doDoc._id }, { $set: { shareKey } });
-    }
-    deliveryOrderLink = {
-      url: `${appUrl}/api/delivery-orders/${doDoc._id.toString()}/view?key=${shareKey}`,
-      status: doDoc.status,
-    };
-  }
-
-  const html = buildDocumentRecipientEmailHtml(doc, appUrl, deliveryOrderLink);
+  const html = buildDocumentRecipientEmailHtml(doc, appUrl);
 
   const results = await Promise.allSettled(userDocs.map((u) => sendEmail({ to: u.email, subject, html, headers })));
   const sentCount = results.filter((r) => r.status === "fulfilled").length;
