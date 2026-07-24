@@ -199,6 +199,13 @@ export interface ScopeOfWorkSummary {
   final: number;
 }
 
+/** Same shape/rules as ScopeOfWorkSummary — Delivery Order document counts, added 2026-07-24. */
+export interface DeliveryOrderSummary {
+  total: number;
+  draft: number;
+  final: number;
+}
+
 export interface InterestBreakdown {
   interested: number;
   notInterested: number;
@@ -240,6 +247,8 @@ export interface DashboardStats {
   approvalDashboard: ApprovalDashboard | null;
   /** Null when the caller lacks scopeOfWork:view — the frontend hides the Scope of Work card entirely in that case. */
   scopeOfWork: ScopeOfWorkSummary | null;
+  /** Null when the caller lacks deliveryOrder:view — the frontend hides the Delivery Order card entirely in that case. */
+  deliveryOrder: DeliveryOrderSummary | null;
   notificationSummary: NotificationSummary;
   availableSalespeople: string[];
   /** Distinct `User.department` free-text values across all users — see Dashboard docs for the free-text-matching caveat (no real Department entity yet). */

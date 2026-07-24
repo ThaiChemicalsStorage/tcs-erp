@@ -342,6 +342,14 @@ other pass in this project (see PROJECT_STATUS.md "Known Risks").
   `scopeOfWork:view` — every default role that has `dashboard:view` also has `scopeOfWork:view` (see
   [RBAC.md](../RBAC.md)), so in practice this is visible to everyone who sees the Dashboard at all,
   but a custom role could theoretically have one without the other.
+- `DeliveryOrderSummary.tsx` (added 2026-07-24, per a direct user request to bring the newer
+  modules' data onto the Dashboard) — Total/Draft/Final for Delivery Orders, mirroring
+  `ScopeOfWorkSummary.tsx` exactly (same tier, same 3-tile `ChartCard` pattern, same
+  null-hides-card gating — here on `deliveryOrder:view`, whose default grants require the manual
+  Role Management step tracked in TODO.md, so on this production deployment the card is invisible
+  to any role that hasn't been granted the permission yet). `DashboardPage.tsx` renders the SOW +
+  DO cards side-by-side in an `xl:grid-cols-2` grid; each falls back to full width alone when the
+  caller can only see one of the two.
 
   **KPI presentation history**: originally a single flat `KpiGrid.tsx` (22 uniform cards). 2026-07-10
   (UI/UX redesign) split it into two tiers — `PrimaryKpiCards.tsx` (6 hero cards) +
@@ -448,6 +456,9 @@ None owned by this page — it's a read-only aggregation over `customers`, `lead
 - Approve/Reject actions from the Pending Approvals widget reuse the existing
   `POST /api/quotes/:id/workflow` route (same one the Quotation module's own approval buttons
   call) — no new API route was added for this.
+- **2026-07-24**: response gained a `deliveryOrder: { total, draft, final } | null` field — same
+  shape/gating/unfiltered rules as `scopeOfWork` below, gated by `deliveryOrder:view`, isolated in
+  its own try/catch. Backs the new `DeliveryOrderSummary.tsx` component.
 - **2026-07-23**: response gained a `scopeOfWork: { total, draft, final } | null` field — company-
   wide, all-time `scope_of_works` counts (`isDeleted: false`, by `status`), `null` unless the caller
   has `scopeOfWork:view` (same gating pattern as `approvalDashboard`). Unfiltered by the date-range/

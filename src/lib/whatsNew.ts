@@ -21,6 +21,15 @@ export interface WhatsNewEntry {
 // Newest first.
 export const WHATS_NEW_ENTRIES: WhatsNewEntry[] = [
   {
+    id: "2026-07-24-dashboard-delivery-order",
+    date: "2026-07-24",
+    title: "Dashboard แสดงข้อมูลใบส่งมอบสินค้าแล้ว",
+    bullets: [
+      "หน้า Dashboard เพิ่มการ์ดสรุป 'ใบส่งมอบสินค้า (Delivery Order)' — จำนวนเอกสารทั้งหมด ฉบับร่าง และฉบับสมบูรณ์ แสดงคู่กับการ์ด Scope of Work เดิม",
+      "เห็นเฉพาะผู้ที่มีสิทธิ์ดูใบส่งมอบสินค้าเท่านั้น เช่นเดียวกับการ์ด Scope of Work",
+    ],
+  },
+  {
     id: "2026-07-24-notification-polling",
     date: "2026-07-24",
     title: "การแจ้งเตือนอัปเดตอัตโนมัติ ไม่ต้องรีเฟรชหน้าอีกต่อไป",

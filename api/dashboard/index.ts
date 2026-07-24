@@ -4,6 +4,7 @@ import { requirePermission } from "../_lib/auth.js";
 import {
   customersCollection, leadsCollection, quotesCollection, productsCollection, categoriesCollection,
   auditLogCollection, notificationsCollection, usersCollection, jobTypesCollection, scopeOfWorksCollection,
+  deliveryOrdersCollection,
   withStringId, type QuoteFields,
 } from "../_lib/collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -918,6 +919,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // ── Delivery Order summary — same shape/rules as the Scope of Work summary above (2026-07-24,
+    // direct user request to bring the newer modules' data onto the Dashboard). Company-wide,
+    // all-time, deliberately unfiltered for the same reason: a Delivery Order inherits its
+    // quotation context via the Scope of Work, so it has no salesperson/issue-date of its own to
+    // filter by. ──
+    let deliveryOrder: { total: number; draft: number; final: number } | null = null;
+    if (roleHasPermission(ctx.role, "deliveryOrder:view")) {
+      try {
+        const deliveryOrders = await deliveryOrdersCollection();
+        const [total, draft, final] = await Promise.all([
+          deliveryOrders.countDocuments({ isDeleted: false }),
+          deliveryOrders.countDocuments({ isDeleted: false, status: "Draft" }),
+          deliveryOrders.countDocuments({ isDeleted: false, status: "Final" }),
+        ]);
+        deliveryOrder = { total, draft, final };
+      } catch (err) {
+        console.error("[dashboard] deliveryOrder query failed", err);
+        deliveryOrder = null;
+      }
+    }
+
     // ── Notification summary — per-caller, same scoping as GET /api/notifications ──
     // Deliberately unfiltered by date-range/salesperson/department, same conclusion as Total
     // Customers/Products above: this is a personal, always-current operational widget ("my own
@@ -1038,6 +1060,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       salesActivity,
       approvalDashboard,
       scopeOfWork,
+      deliveryOrder,
       notificationSummary,
       availableSalespeople,
       availableDepartments,

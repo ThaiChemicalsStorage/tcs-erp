@@ -4,7 +4,28 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Go-Live Checklist recorded in SERVER_MIGRATION_PLAN.md
+## 2026-07-24 (absolute latest) — Dashboard: Delivery Order summary card
+
+Direct user request ("อัปเดตหน้า Dashboard... ไม่ได้เอาข้อมูลพวกหน้าที่สร้างใหม่เข้าไปด้วย") — the
+2026-07-23 Delivery Order module had no Dashboard presence. Added a Total/Draft/Final summary card
+mirroring the existing Scope of Work card exactly:
+
+- `api/dashboard/index.ts`: new `deliveryOrder: { total, draft, final } | null` response field —
+  gated by `deliveryOrder:view` (null hides the card), company-wide/all-time/unfiltered (same
+  documented reasoning as `scopeOfWork`: the document inherits its quotation context, so it has no
+  salesperson/issue-date of its own to filter by), isolated in its own try/catch.
+- New `src/pages/dashboard/DeliveryOrderSummary.tsx` (Truck icon) + `DeliveryOrderSummary` type in
+  `src/lib/dashboard.ts`; `DashboardPage.tsx` renders the SOW + DO cards side-by-side in an
+  `xl:grid-cols-2` grid (each still full-width alone when the caller can only see one).
+- 10 new i18n keys (Thai + English), What's New entry
+  (`2026-07-24-dashboard-delivery-order`).
+- Still supporting-detail tier — the "exactly 4 KPI cards" top-row requirement is untouched.
+
+`tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all pass clean.
+
+---
+
+## 2026-07-24 — Go-Live Checklist recorded in SERVER_MIGRATION_PLAN.md
 
 Docs-only. Direct user request ("อยากให้จดทั้งหมดที่ต้องทำไว้ตอนที่จะขึ้น Server") after discovering
 Resend's sandbox sender can only deliver to the account owner's own address: recorded the complete
