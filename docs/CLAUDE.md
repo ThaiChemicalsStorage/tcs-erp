@@ -186,6 +186,7 @@ See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the maintained completion perce
 | [API.md](./API.md) | Real REST API: every route, method, auth/permission requirement |
 | [UI_GUIDELINES.md](./UI_GUIDELINES.md) | Design tokens and component patterns |
 | [RBAC.md](./RBAC.md) | Roles/permissions model and where each check is enforced (server-side, real) |
+| [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) | ⚠️ **The Vercel deployment is a demo only** — the real production hosting will be a self-managed server (not yet started, deferred until development finishes). Records the agreed migration plan + the "no new Vercel-locked services" rule (added 2026-07-24, per direct user request to write this down so it never needs re-explaining) |
 | [MODULES/](./MODULES/) | Per-module deep dive (Dashboard, Quotation, QuotationTemplates, ScopeOfWork, DeliveryOrder, Product, Lead, Customer, Auth, Settings, CompanyProfiles) |
 
 ---
