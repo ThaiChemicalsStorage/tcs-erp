@@ -1,17 +1,79 @@
+import type { ReactNode } from "react";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { DeliveryOrder, DeliveryOrderInstallment } from "../../lib/deliveryOrder";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
 
 /**
- * Print/PDF output for a Delivery Order — closely follows the printed structure of the reference
- * PDF ("ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf", `public/`): one printed page PER
- * payment installment, each with its own company letterhead, "เรียน"/"เลขที่"/"วันที่"/"WORK ORDER"
- * header, an item table showing only the items ticked for that installment, a "Remark:" footer line,
- * and a customer/TCS signature block. Deliberately does NOT reproduce the sample's blue handwritten
- * เลขที่/วันที่/signature values — those render the live editable field values only, blank where the
- * user hasn't filled them in (same convention `ScopeOfWorkPrintDocument.tsx` already follows), nor
- * any pricing (never shown on this document type, only quantities/units).
+ * Print/PDF output for a Delivery Order — rebuilt 2026-07-24 to visually reproduce the reference
+ * PDF ("ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf", `public/`, company form
+ * FM-SL-05 Rev.01) as closely as possible: a plain black-on-white formal document (Times/Thai-serif,
+ * thin black borders, no app design-system styling), one independent document per payment
+ * milestone. Layout facts taken from a page-image inspection of all 3 reference pages, not just the
+ * extracted text: English letterhead with the round TCS logo top-left and a Facebook/LINE/website
+ * contact row, centered Thai+English titles, a two-column เรียน/เลขที่-วันที่-WORK ORDER section
+ * with underlined value lines, then ONE full-width bordered table (intro statement row → underlined
+ * bold column headers → bold item rows with each spec on its own row → empty filler rows padding
+ * the table to a fixed height so the Remark row lands near the bottom → Remark row), a borderless
+ * two-column signature block, and the FM-SL-05 form code bottom-right (sans-serif, like the
+ * reference). The sample's own customer/items/dates/work-order/remark values are NOT hardcoded —
+ * only the fixed company-form chrome is.
  */
+
+/** The FM-SL-05 form's official English letterhead, reproduced verbatim from the reference PDF.
+ * Deliberately fixed text, not the Settings → Company Info singleton: that singleton holds the
+ * company's Thai identity used by the in-app UI and other documents, while this printed form uses
+ * the company's English letterhead including Facebook/LINE handles that have no data-model field.
+ * The logo and the Thai legal name in the signature block DO come from live company data. */
+const LETTERHEAD = {
+  nameEn: "THAI CHEMICALS STORAGE CO.,LTD.",
+  addressLine1: "200 Jasmine International Tower, 25th Floor, Room 2504, Moo4",
+  addressLine2: "Chaengwatthana Rd, Pak Kret Subdistrict, Pak Kret District, Nonthaburi 11120",
+  tel: "+66(2)-583-3615-6",
+  email: "sales@thaichemicals.com",
+  facebook: "Thai Chemicals Storage Company Limited",
+  lineId: "@thaichemicals",
+  website: "www.thaichemicals.com",
+};
+const FORM_CODE = "FM-SL-05 Rev.01: 11/09/67";
+
+/** Times for Latin glyphs + Noto Serif Thai (loaded in fonts.css) for Thai — together they
+ * reproduce the reference's serif look without depending on Windows-only fonts like Angsana New. */
+const DOC_FONT = "'Times New Roman', 'Noto Serif Thai', serif";
+const LINE = "1px solid #000";
+
+/** Reference behavior: on a short milestone the table is padded with empty bordered rows so the
+ * Remark row and signature block sit in a consistent position near the bottom of the page. This is
+ * the single-page row budget (intro/header/Remark rows excluded) tuned for A4 with the app's global
+ * 12mm @page margin; when real content exceeds it, no filler is added and the document flows onto
+ * additional pages naturally. Purely visual — filler rows are never part of the business data. */
+const SINGLE_PAGE_ROW_TARGET = 30;
+
+function FacebookIcon() {
+  return (
+    <svg viewBox="0 0 24 24" style={{ width: "15px", height: "15px", flexShrink: 0 }} aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#1877F2" />
+      <path fill="#fff" d="M15.6 12.7h-2.4V20h-3v-7.3H8.4V10h1.8V8.5c0-2.1 1.1-3.5 3.4-3.5h2v2.7h-1.5c-.8 0-.9.4-.9 1V10h2.6l-.2 2.7z" />
+    </svg>
+  );
+}
+function LineAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" style={{ width: "15px", height: "15px", flexShrink: 0 }} aria-hidden="true">
+      <rect width="24" height="24" rx="5.5" fill="#06C755" />
+      <path fill="#fff" d="M12 4.9c-4 0-7.2 2.6-7.2 5.9 0 2.9 2.6 5.4 6.1 5.8.24.05.56.16.64.37.07.19.05.48.02.67l-.1.62c-.03.19-.15.73.64.4.79-.33 4.25-2.5 5.8-4.29 1.07-1.17 1.58-2.36 1.58-3.57 0-3.3-3.23-5.9-7.2-5.9z" />
+    </svg>
+  );
+}
+
+/** One value line with the reference's thin black underline — used for the เรียน customer lines. */
+function UnderlinedLine({ children }: { children: ReactNode }) {
+  return (
+    <p style={{ borderBottom: LINE, padding: "0 6px 1px", minHeight: "18px", lineHeight: 1.35 }}>{children}</p>
+  );
+}
+
+const CELL_PAD = "1px 6px";
+const specCellStyle = { borderLeft: LINE, borderBottom: LINE, padding: CELL_PAD };
 
 function InstallmentPage({
   deliveryOrder,
@@ -23,119 +85,200 @@ function InstallmentPage({
   companyHeader: CompanyHeaderInfo;
 }) {
   const pageItems = deliveryOrder.items.filter((it) => installment.itemIds.includes(it.id));
+  const customerLines = [
+    deliveryOrder.customerCompanyName,
+    ...deliveryOrder.customerAddress.split(/\r?\n/),
+  ].filter((l) => l.trim());
+
+  const usedRows = pageItems.reduce(
+    (sum, it) => sum + 1 + it.specifications.filter((sp) => sp.text.trim()).length,
+    0,
+  );
+  const fillerRows = Math.max(0, SINGLE_PAGE_ROW_TARGET - usedRows);
 
   return (
-    <table className="hidden print:table w-full border-collapse text-[#0b1d3a]" style={{ fontSize: "10.5px", breakAfter: "page" }}>
-      <colgroup>
-        <col style={{ width: "6%" }} />
-        <col style={{ width: "68%" }} />
-        <col style={{ width: "13%" }} />
-        <col style={{ width: "13%" }} />
-      </colgroup>
-      <thead>
-        <tr>
-          <td colSpan={4} className="p-0">
-            {/* Company letterhead */}
-            <div className="flex items-start gap-3 pb-2 mb-2 border-b-2 border-[#0b1d3a]">
-              {companyHeader.logoDataUrl && (
-                <img src={companyHeader.logoDataUrl} alt={companyHeader.name} className="w-12 h-12 rounded-full object-contain border border-[#0b1d3a]/15 bg-white p-0.5 flex-shrink-0" />
-              )}
-              <div>
-                <p className="font-bold text-[13px]">{companyHeader.name}</p>
-                {companyHeader.address.trim() && <p className="text-[9.5px] text-[#5a7299] leading-snug">{companyHeader.address}</p>}
-                {(companyHeader.phone.trim() || companyHeader.email.trim()) && (
-                  <p className="text-[9.5px] text-[#5a7299]">
-                    {companyHeader.phone.trim() && <>TEL : {companyHeader.phone}</>}
-                    {companyHeader.phone.trim() && companyHeader.email.trim() && "  "}
-                    {companyHeader.email.trim() && <>E-mail : {companyHeader.email}</>}
-                  </p>
-                )}
+    <div
+      className="hidden print:block"
+      style={{ breakAfter: "page", fontFamily: DOC_FONT, color: "#000", background: "#fff" }}
+    >
+      {/* Letterhead/titles/customer info live OUTSIDE the table: Chromium only repeats a printed
+          <thead> across pages when it's reasonably small, so the thead holds just the intro +
+          column-header rows — those repeat on continuation pages, the letterhead doesn't. */}
+      <div>
+              {/* ── Letterhead ───────────────────────────────────────────── */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "14px" }}>
+                <img
+                  src={companyHeader.logoDataUrl || "/logo.png"}
+                  alt=""
+                  style={{ width: "88px", height: "88px", objectFit: "contain", flexShrink: 0, marginTop: "2px" }}
+                />
+                <div style={{ fontSize: "13px", lineHeight: 1.55 }}>
+                  <p style={{ fontWeight: 700, fontSize: "15px" }}>{LETTERHEAD.nameEn}</p>
+                  <p>{LETTERHEAD.addressLine1}</p>
+                  <p>{LETTERHEAD.addressLine2}</p>
+                  <p>TEL : {LETTERHEAD.tel}&nbsp;&nbsp;&nbsp;&nbsp;E-mail : {LETTERHEAD.email}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "-24px" }}>
+                    <FacebookIcon />
+                    <span>{LETTERHEAD.facebook}</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "70px" }}>
+                      <LineAppIcon />
+                      <span>{LETTERHEAD.lineId}</span>
+                    </span>
+                    <span style={{ color: "#1155cc", textDecoration: "underline", marginLeft: "16px" }}>
+                      {LETTERHEAD.website}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <p className="text-center font-bold text-[15px] tracking-wide" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
-              ใบส่งมอบสินค้าและบริการ
-            </p>
-            <p className="text-center text-[11px] text-[#5a7299] mb-2.5">Delivery Order &amp; Service Order</p>
+              {/* ── Titles ───────────────────────────────────────────────── */}
+              <p style={{ textAlign: "center", fontWeight: 700, fontSize: "18px", marginTop: "6px", lineHeight: 1.4 }}>
+                ใบส่งมอบสินค้าและบริการ
+              </p>
+              <p style={{ textAlign: "center", fontWeight: 700, fontSize: "14px", lineHeight: 1.3 }}>
+                Delivery Order &amp; Service Order
+              </p>
 
-            {/* Two-column header */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-2.5 border-t border-b border-[#0b1d3a]/30 py-2">
-              <div className="space-y-0.5">
-                <p className="text-[10px]"><span className="text-[#5a7299]">เรียน :</span> {deliveryOrder.customerCompanyName || " "}</p>
-                {deliveryOrder.customerAddress.trim() && <p className="text-[10px] whitespace-pre-line pl-[38px]">{deliveryOrder.customerAddress}</p>}
+              {/* ── เรียน / เลขที่-วันที่-WORK ORDER ─────────────────────── */}
+              <div style={{ display: "flex", gap: "24px", marginTop: "10px", marginBottom: "8px", fontSize: "12.5px" }}>
+                <div style={{ flex: "1 1 55%", display: "flex", gap: "8px" }}>
+                  <p style={{ fontWeight: 700, whiteSpace: "nowrap", lineHeight: 1.35 }}>เรียน :</p>
+                  <div style={{ flex: 1 }}>
+                    {(customerLines.length > 0 ? customerLines : [""]).map((line, i) => (
+                      <UnderlinedLine key={i}>{line || " "}</UnderlinedLine>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ flex: "1 1 45%" }}>
+                  {[
+                    { label: "เลขที่", value: installment.documentNumber, thai: true },
+                    { label: "วันที่", value: installment.issueDate ? fmtNumericDate(installment.issueDate) : "", thai: true },
+                    { label: "WORK ORDER", value: deliveryOrder.scopeNumber, thai: false },
+                  ].map(({ label, value, thai }) => (
+                    <div key={label} style={{ display: "flex", alignItems: "flex-end", gap: "10px", minHeight: "22px" }}>
+                      <p style={{ fontWeight: 700, width: "108px", textAlign: "right", whiteSpace: "nowrap", lineHeight: 1.35, ...(thai ? {} : { fontSize: "13.5px" }) }}>
+                        {label}
+                      </p>
+                      <p style={{ flex: 1, borderBottom: LINE, textAlign: "center", lineHeight: 1.35, padding: "0 4px 1px", minHeight: "18px" }}>
+                        {value || " "}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-0.5">
-                <p className="text-[10px]"><span className="text-[#5a7299] inline-block w-16">เลขที่</span> {installment.documentNumber || " "}</p>
-                <p className="text-[10px]"><span className="text-[#5a7299] inline-block w-16">วันที่</span> {installment.issueDate ? fmtNumericDate(installment.issueDate) : " "}</p>
-                <p className="text-[10px]"><span className="text-[#5a7299] inline-block w-16">WORK ORDER</span> <span className="font-mono">{deliveryOrder.scopeNumber}</span></p>
-                <p className="text-[10px]"><span className="text-[#5a7299] inline-block w-16">งวดชำระ</span> {`${installment.pct !== null ? `${installment.pct}% ` : ""}${installment.label}`.trim() || " "}</p>
-              </div>
-            </div>
-          </td>
-        </tr>
-        <tr className="bg-[#1a5fb4] text-white">
-          {["ลำดับ", "รายการ", "จำนวน", "หน่วย"].map((h, i) => (
-            <th key={h} className={`px-2 py-1.5 text-[10px] font-semibold ${i === 0 || i === 2 || i === 3 ? "text-center" : "text-left"}`}>{h}</th>
-          ))}
-        </tr>
-      </thead>
-      {/* Same "item + its spec/detail row share one unbreakable <tbody>" convention as
-          ScopeOfWorkPrintDocument.tsx — keeps a heading from splitting away from its first detail
-          line across a page boundary. */}
-      {pageItems.map((item, idx) => (
-        <tbody key={item.id} style={{ breakInside: "avoid" }}>
-          <tr className="align-top">
-            <td className="px-2 py-1.5 text-center font-mono">{idx + 1}</td>
-            <td className="px-2 py-1.5 font-semibold">{item.name}</td>
-            <td className="px-2 py-1.5 text-center font-mono">{item.quantity ?? ""}</td>
-            <td className="px-2 py-1.5 text-center">{item.unit}</td>
+      </div>
+
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11.5px", lineHeight: 1.25 }}>
+        <colgroup>
+          <col style={{ width: "7%" }} />
+          <col style={{ width: "71%" }} />
+          <col style={{ width: "12%" }} />
+          <col style={{ width: "10%" }} />
+        </colgroup>
+        <thead>
+          {/* ── Intro statement row (table top) ─────────────────────────── */}
+          <tr>
+            <td colSpan={4} style={{ border: LINE, fontWeight: 700, fontSize: "13.5px", padding: "4px 8px" }}>
+              บริษัทฯ ขอส่งมอบสินค้า และงานบริการตามรายการดังต่อไปนี้
+            </td>
           </tr>
-          {item.specifications.filter((sp) => sp.text.trim()).length > 0 && (
+          {/* ── Column headers: underlined bold text, no fill, no vertical separators ── */}
+          <tr style={{ fontWeight: 700, fontSize: "12px" }}>
+            <td style={{ borderLeft: LINE, borderBottom: LINE }} />
+            <td style={{ borderBottom: LINE, padding: "2px 6px 2px 34px" }}>
+              <span style={{ textDecoration: "underline" }}>รายการ</span>
+            </td>
+            <td style={{ borderBottom: LINE, textAlign: "center", padding: CELL_PAD }}>
+              <span style={{ textDecoration: "underline" }}>จำนวน</span>
+            </td>
+            <td style={{ borderRight: LINE, borderBottom: LINE, textAlign: "center", padding: CELL_PAD }}>
+              <span style={{ textDecoration: "underline" }}>หน่วย</span>
+            </td>
+          </tr>
+        </thead>
+
+        {/* Item + its spec rows share one unbreakable <tbody> so a page break can't split a main
+            item from its specifications. Every row carries the reference's horizontal border. */}
+        {pageItems.map((item, idx) => (
+          <tbody key={item.id} style={{ breakInside: "avoid" }}>
+            <tr style={{ fontWeight: 700 }}>
+              <td style={{ ...specCellStyle, textAlign: "center" }}>{idx + 1}</td>
+              <td style={{ borderBottom: LINE, padding: CELL_PAD }}>{item.name}</td>
+              <td style={{ borderBottom: LINE, textAlign: "center", padding: CELL_PAD }}>{item.quantity ?? " "}</td>
+              <td style={{ borderRight: LINE, borderBottom: LINE, textAlign: "center", padding: CELL_PAD }}>{item.unit || " "}</td>
+            </tr>
+            {item.specifications.filter((sp) => sp.text.trim()).map((sp) => (
+              <tr key={sp.id}>
+                <td style={specCellStyle} />
+                <td style={{ borderBottom: LINE, padding: CELL_PAD }}>- {sp.text}</td>
+                <td style={{ borderBottom: LINE }} />
+                <td style={{ borderRight: LINE, borderBottom: LINE }} />
+              </tr>
+            ))}
+          </tbody>
+        ))}
+
+        <tbody>
+          {pageItems.length === 0 && (
             <tr>
-              <td />
-              <td colSpan={3} className="px-2 pb-2 text-[10px] text-[#3b5a85]">
-                {item.specifications.filter((sp) => sp.text.trim()).map((sp) => (
-                  <p key={sp.id}>- {sp.text}</p>
-                ))}
+              <td style={specCellStyle} />
+              <td colSpan={3} style={{ borderRight: LINE, borderBottom: LINE, padding: CELL_PAD, textAlign: "center" }}>
+                ยังไม่ได้เลือกรายการสำหรับงวดนี้
               </td>
             </tr>
           )}
+          {/* Empty filler rows — visual only, keep the Remark row anchored near the page bottom. */}
+          {Array.from({ length: fillerRows }, (_, i) => (
+            <tr key={i} style={{ height: "16px" }}>
+              <td style={specCellStyle} />
+              <td style={{ borderBottom: LINE }} />
+              <td style={{ borderBottom: LINE }} />
+              <td style={{ borderRight: LINE, borderBottom: LINE }} />
+            </tr>
+          ))}
         </tbody>
-      ))}
-      <tbody>
-        {pageItems.length === 0 && (
-          <tr><td colSpan={4} className="px-2 py-4 text-center text-[10px] text-[#5a7299]">ยังไม่ได้เลือกรายการสำหรับงวดนี้</td></tr>
-        )}
 
-        {installment.remark.trim() && (
+        {/* Remark row — this milestone's remark only, last row of the bordered table. */}
+        <tbody style={{ breakInside: "avoid" }}>
           <tr>
-            <td colSpan={4} className="pt-3 pb-1">
-              <p className="text-[10px] whitespace-pre-line"><span className="font-semibold">Remark:</span> {installment.remark}</p>
+            <td colSpan={4} style={{ border: LINE, padding: "3px 8px" }}>
+              <span style={{ fontWeight: 700 }}>Remark :</span>
+              <span style={{ marginLeft: "20px", whiteSpace: "pre-line" }}>{installment.remark}</span>
             </td>
           </tr>
-        )}
+        </tbody>
+      </table>
 
-        <tr>
-          <td colSpan={4} className="pt-5" style={{ breakInside: "avoid" }}>
-            <div className="grid grid-cols-2 gap-8 text-center">
-              <p className="text-[10px]">ลงนาม {deliveryOrder.customerCompanyName || "..."}</p>
-              <p className="text-[10px]">ลงนาม {companyHeader.name}</p>
+      {/* ── Signature block: customer (receiver) left, TCS (sender) right, no borders ── */}
+      <div style={{ breakInside: "avoid" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: "80px", marginTop: "10px", fontSize: "13px" }}>
+          {[
+            { heading: `ลงนาม ${deliveryOrder.customerCompanyName || "................................................"}`, role: "ผู้ตรวจรับสินค้าและงานบริการ" },
+            { heading: `ลงนาม ${companyHeader.name}`, role: "ผู้ส่งสินค้าและงานบริการ" },
+          ].map(({ heading, role }) => (
+            <div key={role}>
+              <p style={{ textAlign: "center", fontWeight: 700, fontSize: "13.5px" }}>{heading}</p>
+              <div style={{ display: "flex", alignItems: "flex-end", gap: "12px", marginTop: "18px" }}>
+                <p style={{ fontWeight: 700, whiteSpace: "nowrap" }}>ลงชื่อ</p>
+                <div style={{ flex: 1, borderBottom: LINE }} />
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-end", marginTop: "18px", marginLeft: "44px" }}>
+                <p>(</p>
+                <div style={{ flex: 1, borderBottom: LINE }} />
+                <p>)</p>
+              </div>
+              <p style={{ textAlign: "center", fontWeight: 700, marginTop: "2px", marginLeft: "44px" }}>{role}</p>
+              <p style={{ fontWeight: 700, marginTop: "10px" }}>วันที่</p>
             </div>
-            <div className="grid grid-cols-2 gap-8 mt-6 text-center text-[10px]">
-              {["ผู้ตรวจรับสินค้าและงานบริการ", "ผู้ส่งสินค้าและงานบริการ"].map((label) => (
-                <div key={label}>
-                  <p className="border-b border-dotted border-[#0b1d3a]/40 pb-3">&nbsp;</p>
-                  <p className="mt-1">ลงชื่อ .......................................................</p>
-                  <p className="mt-1">( ....................................................... )</p>
-                  <p className="mt-1 text-[#5a7299]">{label}</p>
-                  <p className="mt-1">วันที่ ....... / ....... / .......</p>
-                </div>
-              ))}
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+          ))}
+        </div>
+
+        {/* Form code footer — sans-serif in the reference, unlike the rest of the document. */}
+        <p style={{ textAlign: "right", fontSize: "11px", fontFamily: "Arial, Helvetica, sans-serif", marginTop: "4px" }}>
+          {FORM_CODE}
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -154,6 +297,21 @@ export function DeliveryOrderPrintDocument({ deliveryOrder, companyHeader, onlyI
     : deliveryOrder.installments;
   return (
     <>
+      {/* The print tables are display:none on screen, so the browser never encounters their Thai
+          glyphs and would not download Noto Serif Thai until the print dialog is already rendering —
+          silently falling back to whatever Thai system font the machine happens to have. This
+          zero-size probe stays rendered (visibility:hidden, NOT display:none) so the CSS engine
+          fetches both used weights as soon as the Delivery Order detail page mounts. */}
+      <span
+        aria-hidden="true"
+        className="print:hidden"
+        style={{
+          position: "fixed", visibility: "hidden", pointerEvents: "none",
+          width: 0, height: 0, overflow: "hidden", fontFamily: "'Noto Serif Thai', serif",
+        }}
+      >
+        ใบส่งมอบ<b>สินค้าและบริการ</b>
+      </span>
       {installments.map((installment) => (
         <InstallmentPage key={installment.id} deliveryOrder={deliveryOrder} installment={installment} companyHeader={companyHeader} />
       ))}

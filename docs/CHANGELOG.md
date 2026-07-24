@@ -4,7 +4,79 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Delivery Order: separate Delivery Note per payment milestone
+## 2026-07-24 (absolute latest) — Delivery Order print rebuilt to visually match the FM-SL-05 reference PDF
+
+**Requirement**: rebuild the Delivery Note print/PDF layout to match the reference PDF
+(`public/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf`, company form FM-SL-05 Rev.01)
+as closely as possible — a formal black-on-white business document, not an app-styled page — while
+staying fully data-driven (none of the sample's customer/items/dates/work-order/remark values
+hardcoded) and keeping the one-independent-document-per-eligible-milestone behavior from the
+previous pass.
+
+**Reference inspection**: all 3 reference pages were rendered to images (`pdf-to-png-converter`,
+poppler unavailable on this machine) and inspected visually, including zoomed crops of the table
+header, borders, info section, signature block, and letterhead — not just extracted text.
+
+**`DeliveryOrderPrintDocument.tsx` rebuilt from scratch**:
+- **Letterhead**: round TCS logo (live `companyHeader.logoDataUrl`, falling back to the
+  `public/logo.png` project asset) + the form's official English letterhead (name/address/TEL/
+  E-mail) + a Facebook/LINE/website contact row with small inline-SVG brand icons (no emoji). The
+  letterhead text is a fixed `LETTERHEAD` constant reproduced verbatim from the reference —
+  deliberately not the Settings singleton, which holds the Thai identity and has no
+  Facebook/LINE fields; the signature block's Thai legal name still comes from live company data.
+- **Structure**: centered Thai/English titles; two-column เรียน (customer lines each on a thin
+  black underline, multiline address preserved) / เลขที่-วันที่-WORK ORDER (per-milestone number,
+  date, scope number on underlined value lines); then ONE full-width bordered table — intro
+  statement row, underlined bold รายการ/จำนวน/หน่วย column headers (no fill, no vertical column
+  separators, matching the reference), bold main item rows, each specification on its own bordered
+  row, **empty filler rows** padding short milestones to a fixed height so the Remark row lands
+  near the page bottom exactly like the reference (visual only, never business data,
+  `SINGLE_PAGE_ROW_TARGET = 30`), and the milestone's Remark as the table's last row; borderless
+  two-column signature block (customer/ผู้ตรวจรับ left, TCS/ผู้ส่ง right); "FM-SL-05 Rev.01:
+  11/09/67" bottom-right in sans-serif (as in the reference). The previous pass's "งวดชำระ" header
+  line was removed — the reference has no such line; the milestone identifies itself via the Remark.
+- **Fonts**: `'Times New Roman', 'Noto Serif Thai', serif` — Noto Serif Thai added to the existing
+  Google Fonts import (`src/styles/fonts.css`) so the Thai serif look doesn't depend on
+  Windows-only fonts. **Real bug found and fixed during verification**: the print DOM is
+  `display:none` on screen, so the browser never fetched the Thai serif font and the printed
+  output silently fell back to whatever Thai system font the machine had (JS
+  `document.fonts.load()` in an effect also failed — it runs before the Google Fonts stylesheet
+  registers the faces). Fixed with a zero-size always-rendered probe span (visibility:hidden, NOT
+  display:none) containing Thai text in both used weights, which makes the CSS engine itself fetch
+  the fonts on page mount.
+- **Multi-page**: letterhead/titles/info sit OUTSIDE the table (Chromium only repeats a printed
+  `<thead>` when it's small), so overflow pages repeat the intro + column-header rows; an item and
+  its specs share one unbreakable `<tbody>`; Remark + signature render once at the end.
+- **Milestone scoping unchanged**: `onlyInstallmentId` still limits output to the one clicked
+  milestone; verified a `?only=` render produces exactly 1 page with zero sibling-milestone data.
+
+**Visual verification (actually performed, not code-inspection-only)**: a temporary in-project
+harness page (`print-harness.html` + `src/printHarness.tsx`, both deleted after use) rendered the
+real component with mock data under `npm run dev`; headless system Chrome (`puppeteer-core`,
+`page.pdf({ preferCSSPageSize: true })`) generated real A4 PDFs, which were rendered back to images
+and compared side-by-side against the reference pages through 6 iterations (row density, filler
+count, signature spacing, font loading). Scenarios: many-items/many-specs milestone (1 page, like
+ref p1), two-item milestone (filler rows + Remark near bottom, like ref p2/p3), single-milestone
+`?only=` scoping, Thai+English item text, and a 30-item stress test (3 pages, headers repeating,
+signatures only at the end). Chrome console showed only a benign favicon 404.
+
+**Known remaining visual differences (deliberate)**: page margins are the app's global 12mm
+`@page` rule (the reference's ~3mm margins aren't reliably printable and the rule is shared by
+every printed document); the Thai serif is Noto Serif Thai rather than the reference's
+Angsana-like Windows font (guaranteed cross-platform, closest hosted equivalent); browser print
+headers/footers are a per-dialog browser setting that CSS cannot force off (Chrome's default is
+off; headless PDF output has none).
+
+**Files Modified**: `src/pages/quotation/DeliveryOrderPrintDocument.tsx` (rebuilt),
+`src/styles/fonts.css`, `docs/MODULES/DeliveryOrder.md`, `docs/CLAUDE.md`, `docs/PROJECT_STATUS.md`,
+`docs/IMPLEMENTATION_CHECKLIST.md`, `docs/UI_GUIDELINES.md`, `docs/CHANGELOG.md`.
+
+**Verification**: `npm run lint` (0 errors, 2 pre-existing warnings), `npm run build`
+(`tsc -b && tsc --noEmit -p tsconfig.api.json && vite build`) pass clean.
+
+---
+
+## 2026-07-24 — Delivery Order: separate Delivery Note per payment milestone
 
 **Requirement**: each eligible (non-deposit) payment milestone must print as its own completely
 independent Delivery Note — printing "40% Materials" must produce a document containing only that

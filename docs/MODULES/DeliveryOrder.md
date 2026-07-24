@@ -1,6 +1,38 @@
 # Module: Delivery Order
 
-## Status: ✅ Built (2026-07-23), Down Payment exclusion + signature-line fix same day, separate per-milestone printing 2026-07-24
+## Status: ✅ Built (2026-07-23), Down Payment exclusion + signature-line fix same day, separate per-milestone printing + full print-layout rebuild to match the FM-SL-05 reference 2026-07-24
+
+**2026-07-24, print layout rebuilt to visually match the reference PDF**: `DeliveryOrderPrintDocument.tsx`
+was rebuilt from scratch against a page-image inspection (rendered PNGs + zoomed crops, not just
+extracted text) of all 3 pages of the reference (`public/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM
+บริษัท อีจ.pdf`, company form FM-SL-05 Rev.01). The document is now a plain black-on-white formal
+form — no app design-system styling. Structure per printed page: English letterhead (round TCS logo
+from live company data falling back to `public/logo.png`; the letterhead text itself is a fixed
+`LETTERHEAD` constant reproduced from the form — the Settings singleton holds the Thai identity and
+has no Facebook/LINE fields — with inline-SVG Facebook/LINE icons and the website link); centered
+Thai/English titles; two-column เรียน (each customer/address line on a thin black underline) /
+เลขที่-วันที่-WORK ORDER value lines; one full-width bordered table (intro statement row → underlined
+bold รายการ/จำนวน/หน่วย headers, no vertical column separators → bold item rows, each spec on its
+own bordered row → **empty filler rows** padding short milestones so the Remark row lands near the
+page bottom like the reference (`SINGLE_PAGE_ROW_TARGET`, visual only, never business data) → the
+milestone's Remark as the last row); borderless two-column signature block; "FM-SL-05 Rev.01:
+11/09/67" bottom-right in sans-serif. The 2026-07-24 morning pass's "งวดชำระ" header line was
+removed again — the reference has no such line (the Remark identifies the milestone).
+**Fonts**: `'Times New Roman', 'Noto Serif Thai', serif`; Noto Serif Thai was added to
+`src/styles/fonts.css`'s Google import. A real bug was found during verification: the print DOM is
+`display:none` on screen, so the Thai serif font was never downloaded and printing silently fell
+back to system Thai fonts — fixed with a zero-size always-rendered probe span (visibility:hidden)
+that makes the CSS engine fetch both used weights on mount. **Multi-page**: letterhead/titles/info
+sit outside the table so the small `<thead>` (intro + column headers) actually repeats on overflow
+pages (Chromium skips repeating tall theads); item+specs share an unbreakable `<tbody>`;
+Remark/signature render once at the end. **Visually verified** by generating real A4 PDFs with
+headless system Chrome (`puppeteer-core`, temporary harness deleted after use) and comparing
+side-by-side with the reference: one-page dense milestone (≈ ref p1), two-item milestone with
+filler (≈ ref p2/p3), `?only=` single-milestone scoping (exactly 1 page, zero sibling data),
+Thai+English item text, 30-item 3-page stress test. **Deliberate remaining differences**: 12mm
+global `@page` margins (reference's ~3mm isn't reliably printable; rule shared app-wide), Noto
+Serif Thai instead of the reference's Angsana-like Windows-only font, and browser print
+header/footer being a user dialog setting CSS can't force. See CHANGELOG.md 2026-07-24.
 
 **2026-07-24, separate Delivery Note per payment milestone**: each eligible (non-deposit) payment
 milestone now prints as its own completely independent Delivery Note. Three changes:

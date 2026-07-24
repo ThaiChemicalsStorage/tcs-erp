@@ -14,6 +14,19 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-24] Delivery Order print rebuilt to visually match the FM-SL-05 reference PDF.**
+  `DeliveryOrderPrintDocument.tsx` rebuilt from scratch against a page-image inspection of all 3
+  reference pages (`public/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf`): black-on-white
+  Times/Noto-Serif-Thai formal document with English letterhead + Facebook/LINE/website row, thin
+  black bordered table with empty filler rows anchoring the Remark near the page bottom, borderless
+  two-column signature block, FM-SL-05 footer. Fully data-driven (no sample values hardcoded); one
+  independent document per eligible milestone preserved. Found and fixed a real font-loading bug
+  (display:none print DOM meant Thai serif never downloaded → silent system-font fallback). Visually
+  verified by generating real A4 PDFs via headless Chrome against a temporary harness and comparing
+  side-by-side with the reference across 6 iterations, incl. a 3-page stress test. Same day, an
+  earlier pass made printing strictly per-milestone (per-card Print buttons, broadened deposit
+  exclusion to Deposit/เงินมัดจำ/ชำระเงินล่วงหน้า). See
+  [MODULES/DeliveryOrder.md](./MODULES/DeliveryOrder.md) and CHANGELOG.md.
 - ✅ **[2026-07-23] Fix: Delivery Order signature line duplicated "บริษัท".**
   Investigated a user-reported "print produces nothing" bug via a live click-through reproduction
   (Chrome browser automation against a local harness with a mocked backend, real components) —
