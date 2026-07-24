@@ -102,6 +102,30 @@ export async function scopeOfWorksCollection() {
   return db.collection<ScopeOfWorkFields>("scope_of_works");
 }
 
+/** Scope of Work attachment file BYTES (added 2026-07-24, reworked same day from Vercel Blob to
+ * MongoDB after the user clarified the Vercel deployment is only a trial — the real hosting plan
+ * is elsewhere, so file storage must travel with the database). One document per attached file,
+ * kept OUT of the scope_of_works documents so fetching a record never drags megabytes of file
+ * data along. `data` is BSON Binary (raw bytes, no base64 overhead). `downloadKey` is a random
+ * capability token — the download route serves the file to anyone presenting it (email recipients
+ * have no app session in their mail client), same unguessable-URL security model Vercel Blob's
+ * public URLs used. Size discipline lives in the upload route's limits (2 MB/file, 5 files/record
+ * — see src/lib/scopeOfWork.ts), which is what keeps the free Atlas tier from filling up. */
+export interface ScopeAttachmentFileFields {
+  scopeOfWorkId: string;
+  attachmentId: string;
+  downloadKey: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  data: import("mongodb").Binary;
+  createdAt: string;
+}
+export async function scopeAttachmentFilesCollection() {
+  const db = await getDb();
+  return db.collection<ScopeAttachmentFileFields>("scope_attachment_files");
+}
+
 /** Delivery Order (added 2026-07-23) — see `src/lib/deliveryOrder.ts` for the full domain-shape doc
  * comment and docs/MODULES/DeliveryOrder.md for the PDF-to-field mapping. No uniqueness constraint
  * on `scopeOfWorkId` (a Scope of Work can in principle have more than one, same non-enforced

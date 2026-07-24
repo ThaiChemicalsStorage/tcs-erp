@@ -1,13 +1,15 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { WithId, ObjectId } from "mongodb";
 import { MongoServerError } from "mongodb";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import {
   scopeOfWorksCollection, quotesCollection, usersCollection, countersCollection, auditLogCollection,
-  notificationsCollection, toObjectId, withStringId, type ScopeOfWorkFields, type QuoteFields,
+  notificationsCollection, scopeAttachmentFilesCollection, toObjectId, withStringId,
+  type ScopeOfWorkFields, type QuoteFields,
 } from "./collections.js";
+import { Binary } from "mongodb";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty, sanitizeBoolean } from "./quoteValidation.js";
@@ -18,7 +20,6 @@ import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/l
 import { normalizePaymentConditions, normalizeDocumentRecipients } from "../../src/lib/scopeOfWork.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
 import { sendEmail, isEmailConfigured } from "./email.js";
-import { uploadBlobFile, deleteBlobFile } from "./blob.js";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE } from "../../src/lib/scopeOfWork.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
@@ -840,10 +841,17 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
-// ─── Attachments (added 2026-07-24) ────────────────────────────────────────────────────────────
-// Files live in Vercel Blob, never MongoDB (user concern: "กลัว db เต็ม") — see api/_lib/blob.ts.
+// ─── Attachments (added 2026-07-24, reworked to MongoDB storage the same day) ──────────────────
+// Originally built on Vercel Blob; reworked after the user clarified the Vercel deployment is
+// only a trial and the real hosting plan is elsewhere — file bytes now live in the separate
+// `scope_attachment_files` MongoDB collection (see collections.ts) so attachments travel with
+// the database to any future host. The "กลัว db เต็ม" concern is answered with hard limits
+// instead of external storage: 2 MB/file × 5 files/record (see src/lib/scopeOfWork.ts).
 // Managed only through these dedicated routes; `attachments` is deliberately NOT a PATCHable
-// field, so a stale client can't accidentally wipe the array (and with it, track of live blobs).
+// field, so a stale client can't accidentally wipe the array (and with it, track of live files).
+// Downloads are served by an unauthenticated capability-URL route (random `downloadKey`) so the
+// links in recipient emails open without an app session — same security model as the public
+// unguessable Blob URLs the first design used.
 
 /** Pre-2026-07-24 records have no `attachments` field at all. */
 function currentAttachments(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkAttachment[] {
@@ -885,14 +893,24 @@ async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, i
     throw new HttpError(400, `ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
   }
 
-  // Path-safe name for the blob key only — the display name keeps the user's original text.
-  const safeName = fileName.replace(/[\\/:*?"<>|#%]/g, "_");
-  const url = await uploadBlobFile(`scope-of-work/${id}/${safeName}`, data, contentType);
+  const attachmentId = randomUUID();
+  const downloadKey = randomBytes(24).toString("base64url");
+  const files = await scopeAttachmentFilesCollection();
+  await files.insertOne({
+    scopeOfWorkId: id,
+    attachmentId,
+    downloadKey,
+    fileName,
+    contentType,
+    size: data.length,
+    data: new Binary(data),
+    createdAt: nowIso(),
+  });
 
   const attachment: ScopeOfWorkAttachment = {
-    id: randomUUID(),
+    id: attachmentId,
     fileName,
-    url,
+    url: `/api/scope-of-works/${id}/attachments/${attachmentId}/download?key=${downloadKey}`,
     size: data.length,
     contentType,
     uploadedBy: ctx.user.id,
@@ -923,7 +941,8 @@ async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, i
   const target = attachments.find((a) => a.id === attachmentId);
   if (!target) throw new HttpError(404, "ไม่พบไฟล์แนบ");
 
-  await deleteBlobFile(target.url);
+  const files = await scopeAttachmentFilesCollection();
+  await files.deleteOne({ attachmentId });
   const scopeOfWorks = await scopeOfWorksCollection();
   await scopeOfWorks.updateOne(
     { _id: doc._id },
@@ -935,6 +954,26 @@ async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, i
     scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId,
   });
   res.status(200).json({ scopeOfWork: withStringId(updated) });
+}
+
+/** Serves an attachment's bytes. Deliberately NO session auth — access is gated by the random
+ * `downloadKey` capability token baked into the URL instead, because these links go into recipient
+ * emails and a mail client has no app session. The key is 24 random bytes (base64url), the same
+ * unguessable-URL model Vercel Blob's public URLs use; a wrong/missing key is an opaque 404. */
+async function handleAttachmentDownload(req: VercelRequest, res: VercelResponse, id: string, attachmentId: string) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  const key = typeof req.query.key === "string" ? req.query.key : "";
+  if (!key) throw new HttpError(404, "ไม่พบไฟล์แนบ");
+
+  const files = await scopeAttachmentFilesCollection();
+  const file = await files.findOne({ scopeOfWorkId: id, attachmentId });
+  if (!file || file.downloadKey !== key) throw new HttpError(404, "ไม่พบไฟล์แนบ");
+
+  const buffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data.buffer);
+  res.setHeader("Content-Type", file.contentType || "application/octet-stream");
+  res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`);
+  res.setHeader("Cache-Control", "private, max-age=3600");
+  res.status(200).send(buffer);
 }
 
 async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
@@ -989,17 +1028,19 @@ function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl:
     )
     .join("");
 
-  // Attached files (2026-07-24) — direct blob links, openable without an app session (the app has
-  // no URL router for email deep-links; these work in any mail client).
+  // Attached files (2026-07-24) — capability-URL links (random key, no app session needed),
+  // openable straight from any mail client. `url` is stored app-relative; prefix the app origin
+  // for the email context.
   const attachments = Array.isArray(doc.attachments) ? doc.attachments : [];
   const attachmentsBlock = attachments.length > 0
     ? `<div style="margin-top:22px;border-top:1px solid #eee;padding-top:16px;">
          <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#767676;letter-spacing:.5px;">ไฟล์แนบ (${attachments.length})</p>
          ${attachments
-           .map(
-             (a) => `<p style="margin:0 0 6px;font-size:13px;">📎 <a href="${a.url}" style="color:#0b1d3a;font-weight:600;">${escapeHtml(a.fileName)}</a>
-               <span style="color:#999;font-size:11px;">(${(a.size / 1024 / 1024).toFixed(2)} MB)</span></p>`,
-           )
+           .map((a) => {
+             const href = a.url.startsWith("http") ? a.url : `${appUrl}${a.url}`;
+             return `<p style="margin:0 0 6px;font-size:13px;">📎 <a href="${href}" style="color:#0b1d3a;font-weight:600;">${escapeHtml(a.fileName)}</a>
+               <span style="color:#999;font-size:11px;">(${(a.size / 1024 / 1024).toFixed(2)} MB)</span></p>`;
+           })
            .join("")}
        </div>`
     : "";
@@ -1151,5 +1192,8 @@ export async function handleScopeOfWork(req: VercelRequest, res: VercelResponse)
   if (parts.length === 2 && parts[1] === "send-documents") return handleSendDocumentNotifications(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "attachments") return handleAttachmentUpload(req, res, parts[0]);
   if (parts.length === 3 && parts[1] === "attachments") return handleAttachmentDelete(req, res, parts[0], parts[2]);
+  if (parts.length === 4 && parts[1] === "attachments" && parts[3] === "download") {
+    return handleAttachmentDownload(req, res, parts[0], parts[2]);
+  }
   throw new HttpError(404, "Not found");
 }

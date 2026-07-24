@@ -275,14 +275,17 @@ export interface ScopeOfWork {
   seller: ScopeOfWorkSignatory;
   approver: ScopeOfWorkSignatory;
   /** Extra files attached to this record (added 2026-07-24, per direct user request to attach
-   * additional documents where the record is emailed to recipients — "อยากให้ทำให้สามารถแนบไฟล์ได้
-   * ตรงหน้า scope of work ที่จะส่งเอกสารให้ผู้อื่น...กลัว db เต็ม"). The file BYTES deliberately never
-   * touch MongoDB — they live in Vercel Blob storage (`api/_lib/blob.ts`) and this array stores
-   * only lightweight metadata + the blob URL, so attachments can't fill the database up. Managed
-   * exclusively through the dedicated upload/delete routes (never part of a PATCH), and NOT carried
-   * over by Duplicate/Rewrite — copies would share the same underlying blob file, and deleting the
-   * attachment from one record would break the other record's link. Pre-2026-07-24 records lack
-   * the field entirely — read it as `scope.attachments ?? []`. */
+   * additional documents where the record is emailed to recipients). File BYTES live in the
+   * separate `scope_attachment_files` MongoDB collection (api/_lib/collections.ts) — NOT embedded
+   * here, so fetching a record never drags file data along. Storage was originally Vercel Blob but
+   * was reworked to MongoDB the same day once the user clarified the Vercel deployment is only a
+   * trial — files must travel with the database to whatever hosts the system next. The "กลัว db
+   * เต็ม" concern is answered with hard limits (MAX_ATTACHMENT_BYTES / MAX_ATTACHMENTS_PER_SCOPE)
+   * instead of external storage. Managed exclusively through the dedicated upload/delete routes
+   * (never part of a PATCH), and NOT carried over by Duplicate/Rewrite — copies would share the
+   * same underlying file document, and deleting the attachment from one record would break the
+   * other record's link. Pre-2026-07-24 records lack the field entirely — read it as
+   * `scope.attachments ?? []`. */
   attachments: ScopeOfWorkAttachment[];
   status: ScopeOfWorkStatus;
   version: number;
@@ -293,11 +296,14 @@ export interface ScopeOfWork {
   isDeleted: boolean;
 }
 
-/** One attached file's metadata — the actual bytes live in Vercel Blob at `url`, never in MongoDB. */
+/** One attached file's metadata — the actual bytes live in the `scope_attachment_files`
+ * collection, fetched through `url`. */
 export interface ScopeOfWorkAttachment {
   id: string;
   fileName: string;
-  /** Public (unguessable-suffix) Vercel Blob URL — also linked directly in the recipient email. */
+  /** App-relative capability URL (`/api/scope-of-works/.../download?key=<random>`) — opens the
+   * file with no session (the random key IS the authorization), so it also works as a direct link
+   * in the recipient email. The email builder prefixes the app origin. */
   url: string;
   /** Original size in bytes — display only. */
   size: number;
@@ -307,11 +313,13 @@ export interface ScopeOfWorkAttachment {
   uploadedAt: string;
 }
 
-/** Per-file / per-record attachment limits — enforced server-side, mirrored in the UI. The 3 MB
- * per-file cap keeps the JSON-base64 upload body under Vercel's ~4.5 MB serverless request limit
- * (3 MB × 4/3 base64 overhead ≈ 4 MB). */
-export const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
-export const MAX_ATTACHMENTS_PER_SCOPE = 10;
+/** Per-file / per-record attachment limits — enforced server-side, mirrored in the UI. Kept
+ * deliberately tight because the file bytes live in MongoDB (free Atlas tier is 512 MB — at
+ * 2 MB × 5 files/record that's ~50 fully-loaded records per 500 MB, plenty for a trial and easy
+ * to raise later on self-hosted storage). The 2 MB cap also keeps the JSON-base64 upload body
+ * comfortably under Vercel's ~4.5 MB serverless request limit. */
+export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
+export const MAX_ATTACHMENTS_PER_SCOPE = 5;
 
 /** Compact shape for a quotation-detail "does a Scope of Work already exist?" lookup — omits
  * full checklist/item content. */

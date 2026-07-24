@@ -4,7 +4,46 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Scope of Work: file attachments (Vercel Blob, zero MongoDB storage)
+## 2026-07-24 (absolute latest) — Scope of Work attachments reworked: MongoDB storage, Vercel Blob removed
+
+**Context — live testing of the entry below surfaced two Blob issues and one big new fact.** The
+first live upload attempt 503'd: the user's newly-created Blob store provisions **OIDC-style creds**
+(`BLOB_STORE_ID` + `BLOB_WEBHOOK_PUBLIC_KEY`, no `BLOB_READ_WRITE_TOKEN` at all) and the
+configured-check gated on the classic token name (fixed in `da24bea`). The next attempt failed with
+`Cannot use public access on a private store` — the store was created private-access, incompatible
+with the design's email-link requirement. Explaining the public-store requirement prompted the user
+to clarify: **"ที่จริงระบบนี้ไม่ได้จะขึ้น vercel นะ...แค่อยากลองระบบเฉยๆ" — the Vercel deployment is
+only a trial; the real hosting will be elsewhere.** Given the choice (MongoDB storage / recreate the
+store public / shelve), the user picked **MongoDB storage** — files must travel with the database.
+
+**Rework**:
+- File bytes now live in a new **`scope_attachment_files`** collection (one BSON-Binary document
+  per file — never embedded in `scope_of_works`, so fetching a record never drags file data).
+  `api/_lib/blob.ts` and the `@vercel/blob` dependency are deleted; no external setup needed at
+  all (the user's Blob store can be deleted).
+- The "กลัว db เต็ม" concern is now answered with **hard limits instead of external storage**:
+  2 MB/file × 5 files/record (was 3 MB × 10) — ~50 fully-loaded records per 500 MB of free Atlas.
+- **Downloads are unauthenticated capability URLs**: each file gets a random 24-byte
+  `downloadKey`; new `GET /api/scope-of-works/:id/attachments/:attachmentId/download?key=...`
+  serves the bytes (`Content-Disposition: inline`) to anyone with the key — required because the
+  links go into recipient emails, where there is no app session. Wrong/missing key → opaque 404.
+  Same unguessable-URL model the public Blob URLs would have provided.
+- `ScopeOfWorkAttachment.url` stores the app-relative capability path; the recipient email
+  prefixes the app origin. UI hint text updated (no longer claims files avoid the database);
+  What's New entry limits updated.
+
+**Files Modified**: `api/_lib/collections.ts`, `api/_lib/scopeOfWorkHandler.ts`,
+`api/_lib/blob.ts` (deleted), `src/lib/scopeOfWork.ts`,
+`src/pages/quotation/DocumentRecipientsPicker.tsx`, `src/lib/whatsNew.ts`, `package.json`
+(`@vercel/blob` removed), `docs/MODULES/ScopeOfWork.md`, `docs/API.md`, `docs/TODO.md`,
+`docs/CHANGELOG.md`.
+
+**Verification**: `tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build`
+all pass clean; live upload/download/delete verification tracked in TODO.md.
+
+---
+
+## 2026-07-24 — Scope of Work: file attachments (Vercel Blob, zero MongoDB storage)
 
 **Requirement**: direct user request — "อยากให้ทำให้สามารถแนบไฟล์ได้ตรงหน้า scope of work ที่จะส่ง
 เอกสารให้ผู้อื่นให้สามารถแนบไฟล์เพิ่มเติมเข้าไปด้วยละช่วยจัดการให้หน่อยกลัว db เต็ม" — attach extra

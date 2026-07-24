@@ -158,7 +158,7 @@ export function DocumentRecipientsPicker({
           />
         </div>
         <p className="text-[11px] text-muted-foreground mb-2">
-          ไฟล์ที่แนบจะถูกส่งเป็นลิงก์ในอีเมลถึงผู้รับเอกสารด้วย — ตัวไฟล์ถูกเก็บในที่เก็บไฟล์แยกต่างหาก ไม่กินพื้นที่ฐานข้อมูล
+          ไฟล์ที่แนบจะถูกส่งเป็นลิงก์ในอีเมลถึงผู้รับเอกสารด้วย — ระบบจำกัดขนาดและจำนวนไฟล์ไว้เพื่อประหยัดพื้นที่จัดเก็บ
         </p>
         {attachments.length === 0 ? (
           <p className="text-[11px] text-muted-foreground italic">ยังไม่มีไฟล์แนบ</p>

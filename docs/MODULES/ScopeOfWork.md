@@ -363,38 +363,47 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   the key itself (a human must sign up at resend.com). See [ARCHITECTURE.md](../ARCHITECTURE.md) and
   [TODO.md](../TODO.md).
 
-## Attachments (added 2026-07-24)
+## Attachments (added 2026-07-24, reworked to MongoDB storage the same day)
 
 Per direct user request ("อยากให้ทำให้สามารถแนบไฟล์ได้ตรงหน้า scope of work ที่จะส่งเอกสารให้ผู้อื่นให้
 สามารถแนบไฟล์เพิ่มเติมเข้าไปด้วยละช่วยจัดการให้หน่อยกลัว db เต็ม") — extra files (customer PO scans,
 drawings, etc.) can be attached in the "ผู้รับเอกสาร" card (`DocumentRecipientsPicker.tsx`, a
 "ไฟล์แนบ" section between the recipient picker and the custom-message textarea).
 
-- **The file bytes never touch MongoDB** — the explicit driver of the design ("กลัว db เต็ม"). Files
-  are uploaded to **Vercel Blob** (`api/_lib/blob.ts`, `@vercel/blob` package, `access: "public"`
-  with an unguessable random URL suffix); `ScopeOfWork.attachments` stores only a
-  `ScopeOfWorkAttachment` metadata row per file (`{id, fileName, url, size, contentType,
-  uploadedBy, uploadedByName, uploadedAt}` — a few hundred bytes).
-- **Limits**: ≤ 3 MB per file (keeps the JSON-base64 upload body under Vercel's ~4.5 MB serverless
-  request cap), ≤ 10 files per record — enforced server-side, mirrored in the UI.
+- **Storage: MongoDB, deliberately.** The first same-day implementation used Vercel Blob (bytes
+  outside the DB), but the user then clarified the Vercel deployment is **only a trial** — the
+  real hosting plan is elsewhere — and chose MongoDB storage so files travel with the database to
+  any future host (also: their store turned out to be a private-access Blob store, incompatible
+  with the email-link requirement). File BYTES live in the separate **`scope_attachment_files`**
+  collection (one doc per file, BSON Binary, never embedded in `scope_of_works` — fetching a
+  record never drags file data along); `ScopeOfWork.attachments` stores only a
+  `ScopeOfWorkAttachment` metadata row (`{id, fileName, url, size, contentType, uploadedBy,
+  uploadedByName, uploadedAt}`).
+- **The "กลัว db เต็ม" concern is answered with hard limits instead of external storage**:
+  ≤ 2 MB per file, ≤ 5 files per record (`MAX_ATTACHMENT_BYTES`/`MAX_ATTACHMENTS_PER_SCOPE`,
+  enforced server-side, mirrored in the UI) — free Atlas (512 MB) fits ~50 fully-loaded records,
+  plenty for a trial; raise the caps later if the future host has room. The 2 MB cap also keeps
+  the JSON-base64 upload body under Vercel's ~4.5 MB serverless request limit.
+- **Downloads are capability URLs, no session needed**: each file gets a random 24-byte
+  `downloadKey`; `GET /api/scope-of-works/:id/attachments/:attachmentId/download?key=...` serves
+  the bytes to anyone presenting the key (deliberately NO session auth — links go into recipient
+  emails, and mail clients have no app session; wrong/missing key is an opaque 404). Same
+  unguessable-URL security model the public Blob URLs would have had. `ScopeOfWorkAttachment.url`
+  stores the app-relative path; the email builder prefixes the app origin.
 - **Email integration**: the "ส่งอีเมลแจ้งผู้รับเอกสาร" email lists every attachment as a direct
-  clickable link — works in any mail client with no app session (unlike the app link, which can't
-  deep-link). This is the deliberate reason for `access: "public"`: recipients open files straight
-  from the email.
+  clickable link.
 - **Lifecycle**: upload/delete are immediate API actions on the dedicated routes (see
   [API.md](../API.md)) — `attachments` is deliberately NOT PATCHable, so a stale client can't wipe
   the array. Edit-gated (owner-or-finalize, Draft only), audit-logged both ways. Deleting an
-  attachment deletes its blob best-effort (an orphaned blob never blocks metadata removal); a
-  soft-deleted record's blobs are left in place (no restore flow exists, and Blob storage is cheap).
+  attachment deletes its file document; a soft-deleted record's file documents are left in place
+  (no restore flow exists).
 - **Duplicate/Rewrite do NOT carry attachments over** — a copy would reference the same underlying
-  blob file, and deleting the attachment from either record would break the other's link. Fresh
-  records/copies always start with `attachments: []`; pre-2026-07-24 records lack the field
+  file document, and deleting the attachment from either record would break the other's link.
+  Fresh records/copies always start with `attachments: []`; pre-2026-07-24 records lack the field
   entirely and are read as empty (`currentAttachments()` server-side, `scope.attachments ?? []`
   client-side) — no migration script.
-- **⚠️ Requires manual setup before this feature actually works**: a Vercel Blob store must be
-  created (Vercel Dashboard → Storage → Blob) so `BLOB_READ_WRITE_TOKEN` exists — until then the
-  upload button returns a clear Thai `503`. Same convention as `RESEND_API_KEY` above. See
-  [TODO.md](../TODO.md).
+- **No external setup required** — the short-lived Vercel Blob dependency (`api/_lib/blob.ts`,
+  `@vercel/blob`) was removed with the rework; the user's Blob store can be deleted.
 
 ## Revision Note (added 2026-07-23)
 
