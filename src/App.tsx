@@ -722,7 +722,8 @@ export default function App() {
               onMarkAllRead={markAllNotificationsRead}
               onDelete={deleteNotification}
               onNavigate={(n) => {
-                if (n.relatedScopeId) navigateToScopeOfWorkStandalone(n.relatedScopeId);
+                if (n.relatedDeliveryOrderId) navigateToDeliveryOrder(n.relatedDeliveryOrderId);
+                else if (n.relatedScopeId) navigateToScopeOfWorkStandalone(n.relatedScopeId);
                 else if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId);
               }}
             />
@@ -791,7 +792,7 @@ export default function App() {
               : effectiveNav === "scopeOfWork"
               ? <ScopeOfWorkPage users={users} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
               : effectiveNav === "deliveryOrder"
-              ? <DeliveryOrderPage company={company} canEdit={canEditDeliveryOrder} canFinalize={canFinalizeDeliveryOrder} canPrint={canPrintDeliveryOrder} canDelete={canDeleteDeliveryOrder} initialDeliveryOrderId={deliveryOrderDeepLinkId} onDeliveryOrderIdConsumed={() => setDeliveryOrderDeepLinkId(null)} />
+              ? <DeliveryOrderPage company={company} canEdit={canEditDeliveryOrder} canFinalize={canFinalizeDeliveryOrder} canPrint={canPrintDeliveryOrder} canDelete={canDeleteDeliveryOrder} canCreate={canCreateDeliveryOrder} initialDeliveryOrderId={deliveryOrderDeepLinkId} onDeliveryOrderIdConsumed={() => setDeliveryOrderDeepLinkId(null)} />
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"

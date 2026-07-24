@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Send, GitBranch } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import {
   type DeliveryOrder, type DeliveryOrderUpdateFields, type DeliveryOrderInstallment,
   fetchDeliveryOrder, updateDeliveryOrder, finalizeDeliveryOrder, refreshDeliveryOrderFromScope, deleteDeliveryOrder,
+  submitDeliveryOrderApproval, rejectDeliveryOrder, withdrawDeliveryOrderApproval, rewriteDeliveryOrder,
 } from "../../lib/deliveryOrder";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -116,7 +117,9 @@ export function DeliveryOrderDocument({
   canFinalize,
   canPrint,
   canDelete,
+  canCreate,
   onBack,
+  onRewritten,
   backLabel = "กลับไปรายการใบส่งมอบสินค้า",
   showToast,
 }: {
@@ -126,7 +129,11 @@ export function DeliveryOrderDocument({
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
+  /** Gates the Rewrite action (added 2026-07-24 with the approval workflow) — `deliveryOrder:create`. */
+  canCreate: boolean;
   onBack: () => void;
+  /** Rewrite created a fresh Draft copy — navigate to it (the parent keys this component by id). */
+  onRewritten: (newId: string) => void;
   backLabel?: string;
   showToast: (msg: string) => void;
 }) {
@@ -134,7 +141,7 @@ export function DeliveryOrderDocument({
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<"finalize" | "refresh" | "delete" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"submit" | "finalize" | "withdraw" | "rewrite" | "refresh" | "delete" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [printInstallmentId, setPrintInstallmentId] = useState<string | null>(null);
 
@@ -208,13 +215,39 @@ export function DeliveryOrderDocument({
     setPrintInstallmentId(installment.id);
   };
 
+  const handleRejectClick = async () => {
+    if (!deliveryOrder) return;
+    const comment = window.prompt("เหตุผลการปฏิเสธ / สิ่งที่ต้องแก้ไข:", "");
+    if (comment === null) return;
+    if (!comment.trim()) { showToast("กรุณาระบุเหตุผลการปฏิเสธ"); return; }
+    try {
+      const updated = await rejectDeliveryOrder(deliveryOrder.id, comment.trim());
+      setDeliveryOrder(updated);
+      showToast("ตีกลับเป็นฉบับร่างแล้ว");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "ปฏิเสธไม่สำเร็จ");
+    }
+  };
+
   const runConfirmedAction = async () => {
     if (!deliveryOrder || !confirmAction) return;
     try {
-      if (confirmAction === "finalize") {
+      if (confirmAction === "submit") {
+        const updated = await submitDeliveryOrderApproval(deliveryOrder.id);
+        setDeliveryOrder(updated);
+        showToast("ส่งขออนุมัติแล้ว");
+      } else if (confirmAction === "finalize") {
         const updated = await finalizeDeliveryOrder(deliveryOrder.id);
         setDeliveryOrder(updated);
-        showToast("ยืนยันสถานะ Final แล้ว");
+        showToast("อนุมัติแล้ว (Final)");
+      } else if (confirmAction === "withdraw") {
+        const updated = await withdrawDeliveryOrderApproval(deliveryOrder.id);
+        setDeliveryOrder(updated);
+        showToast("ถอนคำขออนุมัติแล้ว กลับเป็นฉบับร่าง");
+      } else if (confirmAction === "rewrite") {
+        const created = await rewriteDeliveryOrder(deliveryOrder.id);
+        showToast("สร้างฉบับแก้ไขแล้ว");
+        onRewritten(created.id);
       } else if (confirmAction === "refresh") {
         setRefreshing(true);
         const updated = await refreshDeliveryOrderFromScope(deliveryOrder.id);
@@ -248,8 +281,12 @@ export function DeliveryOrderDocument({
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
         <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{deliveryOrder.scopeNumber}</span>
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isDraft ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20" : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"}`}>
-          {isDraft ? "Draft" : "Final"}
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+          isDraft ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20"
+          : deliveryOrder.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#e08a3c] border border-[#e08a3c]/20"
+          : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"
+        }`}>
+          {isDraft ? "Draft" : deliveryOrder.status === "PendingApproval" ? "รออนุมัติ" : "Final"}
         </span>
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
@@ -263,9 +300,29 @@ export function DeliveryOrderDocument({
               <Save size={13} /> บันทึกร่าง
             </button>
           )}
-          {canFinalize && isDraft && (
-            <button onClick={() => setConfirmAction("finalize")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors">
-              <CheckCircle2 size={13} /> ยืนยัน Final
+          {canEdit && isDraft && (
+            <button onClick={() => setConfirmAction("submit")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors">
+              <Send size={13} /> ส่งขออนุมัติ
+            </button>
+          )}
+          {deliveryOrder.status === "PendingApproval" && canFinalize && (
+            <>
+              <button onClick={() => setConfirmAction("finalize")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors">
+                <CheckCircle2 size={13} /> อนุมัติ
+              </button>
+              <button onClick={handleRejectClick} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
+                ปฏิเสธ
+              </button>
+            </>
+          )}
+          {deliveryOrder.status === "PendingApproval" && canEdit && (
+            <button onClick={() => setConfirmAction("withdraw")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+              ถอนคำขอ
+            </button>
+          )}
+          {deliveryOrder.status === "Final" && canCreate && (
+            <button onClick={() => setConfirmAction("rewrite")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+              <GitBranch size={13} /> แก้ไข (สร้างฉบับใหม่)
             </button>
           )}
           {canDelete && (
@@ -322,10 +379,34 @@ export function DeliveryOrderDocument({
       </div>
 
       <ConfirmDialog
+        open={confirmAction === "submit"}
+        title="ส่งขออนุมัติ"
+        message="เมื่อส่งแล้วใบส่งมอบสินค้านี้จะถูกล็อกระหว่างรออนุมัติ (ถอนคำขอได้หากต้องการกลับมาแก้ไข) ส่งขออนุมัติหรือไม่?"
+        confirmLabel="ส่งขออนุมัติ"
+        onConfirm={runConfirmedAction}
+        onCancel={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
+        open={confirmAction === "withdraw"}
+        title="ถอนคำขออนุมัติ"
+        message="เอกสารจะกลับเป็นฉบับร่างและแก้ไขได้อีกครั้ง ถอนคำขอหรือไม่?"
+        confirmLabel="ถอนคำขอ"
+        onConfirm={runConfirmedAction}
+        onCancel={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
+        open={confirmAction === "rewrite"}
+        title="สร้างฉบับแก้ไข"
+        message="ระบบจะสร้างใบส่งมอบสินค้าฉบับร่างใหม่จากฉบับอนุมัติแล้วนี้ (ข้อมูลงวด/รายการที่ติ๊กถูกคัดลอกมาทั้งหมด) โดยฉบับเดิมคงอยู่ตามเดิม ดำเนินการหรือไม่?"
+        confirmLabel="สร้างฉบับแก้ไข"
+        onConfirm={runConfirmedAction}
+        onCancel={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
         open={confirmAction === "finalize"}
-        title="ยืนยันสถานะ Final"
-        message="เมื่อยืนยันแล้วใบส่งมอบสินค้านี้จะไม่สามารถแก้ไขได้อีก ยืนยันหรือไม่?"
-        confirmLabel="ยืนยัน Final"
+        title="อนุมัติใบส่งมอบสินค้า"
+        message="เมื่ออนุมัติแล้วเอกสารจะเป็นสถานะ Final ถาวร แก้ไขไม่ได้อีก (ต้องใช้ แก้ไข/สร้างฉบับใหม่ เท่านั้น) ยืนยันหรือไม่?"
+        confirmLabel="อนุมัติ"
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />

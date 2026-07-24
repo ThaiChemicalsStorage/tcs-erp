@@ -10,7 +10,8 @@ import {
   type ScopeOfWorkFields, type QuoteFields,
 } from "./collections.js";
 import { Binary } from "mongodb";
-import { roleHasPermission } from "../../src/lib/roles.js";
+import { roleHasPermission, findRole } from "../../src/lib/roles.js";
+import { rolesCollection } from "./collections.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty, sanitizeBoolean } from "./quoteValidation.js";
 import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeChecklistGroups } from "./documentRequirements.js";
@@ -586,8 +587,10 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   // Final is a terminal state — locked against further edits entirely (use "ทำสำเนา" to keep
   // working from a copy). No un-finalize action exists; keeping this unconditional (not gated on
   // scopeOfWork:finalize) is a deliberate simplicity choice, matching "Keep it practical" in spec.
-  if (doc.status === "Final") {
-    throw new HttpError(400, "Scope of Work นี้เป็นสถานะ Final แล้ว ไม่สามารถแก้ไขได้ กรุณาทำสำเนาหากต้องการแก้ไขต่อ");
+  if (doc.status !== "Draft") {
+    throw new HttpError(400, doc.status === "PendingApproval"
+      ? "Scope of Work นี้อยู่ระหว่างรออนุมัติ แก้ไขไม่ได้ — ถอนคำขออนุมัติก่อนหากต้องการแก้ไข"
+      : "Scope of Work นี้อนุมัติแล้ว (Final) ไม่สามารถแก้ไขได้ กรุณาใช้ แก้ไข (Rewrite) เพื่อสร้างฉบับแก้ไขใหม่");
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -647,22 +650,150 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
+// ─── Approval workflow (added 2026-07-24, direct user request: "ทำส่งขออนุมัติ... ถ้ามีคนอนุมัติ
+// แล้วมันจะไม่สามารถแก้ไขอะไรได้อีกต้องกด Rewrite เท่านั้น") ─────────────────────────────────────
+// Draft → (ส่งขออนุมัติ, canEditScope) → PendingApproval → (อนุมัติ, `scopeOfWork:finalize`) → Final
+//                                              │→ (ปฏิเสธ + comment, finalize holder) → Draft
+//                                              │→ (ถอนคำขอ, canEditScope) → Draft
+// Editing/refresh/attachments are Draft-only (see the guards above), so both PendingApproval and
+// Final are locked; Final is terminal — Rewrite is the only way onward. `scopeOfWork:finalize` is
+// reused as the approval authority (no new permission — every role that could Finalize before can
+// Approve now). In-app notifications mirror the quotation workflow's: submit → every active
+// finalize holder; approve/reject → the record's creator.
+
+/** Notifies via the bell — same hand-rolled insertMany convention as the document-sent
+ * notification above and `api/handlers/quotes.ts`'s workflow writer. */
+async function notifyScopeApprovalEvent(
+  recipientUserIds: string[],
+  type: NotificationType,
+  title: string,
+  description: string,
+  scopeId: string,
+  scopeNumber: string,
+): Promise<void> {
+  const ids = [...new Set(recipientUserIds)].filter((uid) => uid !== "");
+  if (ids.length === 0) return;
+  const createdAt = nowIso();
+  const notifications = await notificationsCollection();
+  await notifications.insertMany(ids.map((recipientUserId) => ({
+    recipientUserId, type, title, description,
+    module: "Scope of Work", relatedScopeId: scopeId, relatedScopeNumber: scopeNumber,
+    createdAt, read: false,
+  })));
+}
+
+/** Every active user whose role holds `permission` — mirror of the quotation workflow's
+ * approver-resolution query. */
+async function activeUserIdsWithPermission(permission: Parameters<typeof roleHasPermission>[1]): Promise<string[]> {
+  const [users, roles] = await Promise.all([usersCollection(), rolesCollection()]);
+  const [activeUsers, roleList] = await Promise.all([
+    users.find({ status: "active" }, { projection: { roleKey: 1 } }).toArray(),
+    roles.find({}).toArray(),
+  ]);
+  return activeUsers
+    .filter((u) => roleHasPermission(findRole(roleList, u.roleKey), permission))
+    .map((u) => u._id.toString());
+}
+
+async function handleSubmitApproval(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadScopeOrThrow(id);
+  if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (doc.status !== "Draft") throw new HttpError(400, "ส่งขออนุมัติได้เฉพาะฉบับร่างเท่านั้น");
+  // Print-level completeness (not finalize-level): the approver signatory is filled by the
+  // approver at approve time, so requiring it here would block every submission.
+  throwIfIncomplete(
+    validateScopeOfWorkForPrint({ ...toValidationInput(doc), status: doc.status }),
+    "กรุณากรอกข้อมูลที่จำเป็นให้ครบก่อนส่งขออนุมัติ",
+  );
+
+  const scopeOfWorks = await scopeOfWorksCollection();
+  await scopeOfWorks.updateOne({ _id: doc._id }, { $set: { status: "PendingApproval" as ScopeOfWorkStatus, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const updated = await scopeOfWorks.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
+  await writeScopeAuditEntry(ctx, "Scope of Work Submitted", `ส่งขออนุมัติ Scope of Work ${updated.scopeNumber}`, {
+    scopeId: id, scopeNumber: updated.scopeNumber, quoteId: updated.quotationId,
+  });
+  await notifyScopeApprovalEvent(
+    await activeUserIdsWithPermission("scopeOfWork:finalize"),
+    "scope_of_work_submitted", "Scope of Work รออนุมัติ",
+    `${ctx.user.fullName} ส่ง Scope of Work ${updated.scopeNumber} (${updated.customerSnapshot.companyName}) เพื่อขออนุมัติ`,
+    id, updated.scopeNumber,
+  );
+  res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
+}
+
+/** `/finalize` now means "อนุมัติ" — kept under its original route name so the permission story
+ * (`scopeOfWork:finalize`) and client function name stay unchanged. */
 async function handleFinalize(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:finalize");
   const doc = await loadScopeOrThrow(id);
-  if (doc.status === "Final") throw new HttpError(400, "Scope of Work นี้เป็นสถานะ Final อยู่แล้ว");
+  if (doc.status === "Final") throw new HttpError(400, "Scope of Work นี้อนุมัติแล้ว (Final)");
+  if (doc.status !== "PendingApproval") throw new HttpError(400, "ต้องส่งขออนุมัติก่อน จึงจะอนุมัติได้");
+
+  // The approving user IS the approver signatory — filled here, not typed by the submitter
+  // (which is why submission validates at print level; with this injected the record satisfies
+  // finalize-level validation too).
+  const approver = { name: ctx.user.fullName, userId: ctx.user.id, date: nowIso().slice(0, 10) };
   throwIfIncomplete(
-    validateScopeOfWorkForFinalization(toValidationInput(doc)),
-    "กรุณากรอกข้อมูลที่จำเป็นให้ครบก่อนยืนยันสถานะ Final",
+    validateScopeOfWorkForFinalization(toValidationInput({ ...doc, approver })),
+    "ข้อมูลยังไม่ครบถ้วนสำหรับการอนุมัติ",
   );
 
   const scopeOfWorks = await scopeOfWorksCollection();
-  const now = nowIso();
-  await scopeOfWorks.updateOne({ _id: doc._id }, { $set: { status: "Final" as ScopeOfWorkStatus, updatedAt: now, updatedBy: ctx.user.id } });
+  await scopeOfWorks.updateOne({ _id: doc._id }, { $set: { status: "Final" as ScopeOfWorkStatus, approver, updatedAt: nowIso(), updatedBy: ctx.user.id } });
   const updated = await scopeOfWorks.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
-  await writeScopeAuditEntry(ctx, "Scope of Work Finalized", `ยืนยันสถานะ Final ของ Scope of Work ${updated.scopeNumber}`, {
+  await writeScopeAuditEntry(ctx, "Scope of Work Approved", `อนุมัติ Scope of Work ${updated.scopeNumber}`, {
+    scopeId: id, scopeNumber: updated.scopeNumber, quoteId: updated.quotationId,
+  });
+  await notifyScopeApprovalEvent(
+    updated.createdBy && updated.createdBy !== ctx.user.id ? [updated.createdBy] : [],
+    "scope_of_work_approved", "Scope of Work ได้รับอนุมัติ",
+    `${ctx.user.fullName} อนุมัติ Scope of Work ${updated.scopeNumber} แล้ว`,
+    id, updated.scopeNumber,
+  );
+  res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
+}
+
+async function handleRejectApproval(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "scopeOfWork:finalize");
+  const doc = await loadScopeOrThrow(id);
+  if (doc.status !== "PendingApproval") throw new HttpError(400, "ปฏิเสธได้เฉพาะเอกสารที่รออนุมัติเท่านั้น");
+  const comment = sanitizeLongText((req.body as { comment?: unknown } | undefined)?.comment, "เหตุผลการปฏิเสธ");
+  if (!comment.trim()) throw new HttpError(400, "กรุณาระบุเหตุผลการปฏิเสธ");
+
+  const scopeOfWorks = await scopeOfWorksCollection();
+  await scopeOfWorks.updateOne({ _id: doc._id }, { $set: { status: "Draft" as ScopeOfWorkStatus, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const updated = await scopeOfWorks.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
+  await writeScopeAuditEntry(ctx, "Scope of Work Rejected", `ปฏิเสธการอนุมัติ Scope of Work ${updated.scopeNumber}: ${comment.trim()}`, {
+    scopeId: id, scopeNumber: updated.scopeNumber, quoteId: updated.quotationId,
+  });
+  await notifyScopeApprovalEvent(
+    updated.createdBy && updated.createdBy !== ctx.user.id ? [updated.createdBy] : [],
+    "scope_of_work_rejected", "Scope of Work ถูกตีกลับ",
+    `${ctx.user.fullName} ปฏิเสธการอนุมัติ Scope of Work ${updated.scopeNumber}: ${comment.trim()}`,
+    id, updated.scopeNumber,
+  );
+  res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
+}
+
+async function handleWithdrawApproval(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadScopeOrThrow(id);
+  if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (doc.status !== "PendingApproval") throw new HttpError(400, "ถอนคำขอได้เฉพาะเอกสารที่รออนุมัติเท่านั้น");
+
+  const scopeOfWorks = await scopeOfWorksCollection();
+  await scopeOfWorks.updateOne({ _id: doc._id }, { $set: { status: "Draft" as ScopeOfWorkStatus, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const updated = await scopeOfWorks.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
+  await writeScopeAuditEntry(ctx, "Scope of Work Approval Withdrawn", `ถอนคำขออนุมัติ Scope of Work ${updated.scopeNumber}`, {
     scopeId: id, scopeNumber: updated.scopeNumber, quoteId: updated.quotationId,
   });
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
@@ -818,7 +949,7 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
   if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
-  if (doc.status === "Final") throw new HttpError(400, "Scope of Work นี้เป็นสถานะ Final แล้ว ไม่สามารถอัปเดตข้อมูลได้");
+  if (doc.status !== "Draft") throw new HttpError(400, "ต้องเป็นฉบับร่างเท่านั้นจึงจะอัปเดตข้อมูลจากใบเสนอราคาได้ (เอกสารที่รออนุมัติ/อนุมัติแล้วถูกล็อก)");
   // 2026-07-15, Codex review Medium fix: `handleCreate` requires `quotations:view` to read the
   // source quotation; refresh previously only checked Scope of Work edit/ownership authorization
   // before reading it, with no equivalent source-quotation access check of its own.
@@ -889,7 +1020,7 @@ async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, i
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
   if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
-  if (doc.status === "Final") throw new HttpError(400, "Scope of Work นี้เป็นสถานะ Final แล้ว ไม่สามารถแนบไฟล์เพิ่มได้");
+  if (doc.status !== "Draft") throw new HttpError(400, "ต้องเป็นฉบับร่างเท่านั้นจึงจะแนบไฟล์เพิ่มได้ (เอกสารที่รออนุมัติ/อนุมัติแล้วถูกล็อก)");
 
   const attachments = currentAttachments(doc);
   if (attachments.length >= MAX_ATTACHMENTS_PER_SCOPE) {
@@ -975,7 +1106,7 @@ async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, i
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
   if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
-  if (doc.status === "Final") throw new HttpError(400, "Scope of Work นี้เป็นสถานะ Final แล้ว ไม่สามารถลบไฟล์แนบได้");
+  if (doc.status !== "Draft") throw new HttpError(400, "ต้องเป็นฉบับร่างเท่านั้นจึงจะลบไฟล์แนบได้ (เอกสารที่รออนุมัติ/อนุมัติแล้วถูกล็อก)");
 
   const attachments = currentAttachments(doc);
   const target = attachments.find((a) => a.id === attachmentId);
@@ -1282,6 +1413,9 @@ export async function handleScopeOfWork(req: VercelRequest, res: VercelResponse)
   }
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "finalize") return handleFinalize(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "submit-approval") return handleSubmitApproval(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "reject") return handleRejectApproval(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "duplicate") return handleDuplicate(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);

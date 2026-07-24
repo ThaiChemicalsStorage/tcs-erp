@@ -1,4 +1,4 @@
-import { Truck, FilePen, FileCheck2, type LucideIcon } from "lucide-react";
+import { Truck, FilePen, FileClock, FileCheck2, type LucideIcon } from "lucide-react";
 import type { DeliveryOrderSummary as DeliveryOrderSummaryData } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
@@ -28,12 +28,13 @@ export function DeliveryOrderSummary({ data }: { data: DeliveryOrderSummaryData 
   const { t } = useI18n();
   const items: { icon: LucideIcon; label: string; count: number; accent: string }[] = [
     { icon: Truck, label: t("dashboard.deliveryOrder.total"), count: data.total, accent: "#5a7299" },
-    { icon: FilePen, label: t("dashboard.deliveryOrder.draft"), count: data.draft, accent: "#e08a3c" },
+    { icon: FilePen, label: t("dashboard.deliveryOrder.draft"), count: data.draft, accent: "#5a7299" },
+    { icon: FileClock, label: t("dashboard.deliveryOrder.pending"), count: data.pending, accent: "#e08a3c" },
     { icon: FileCheck2, label: t("dashboard.deliveryOrder.final"), count: data.final, accent: "#2aa36b" },
   ];
   return (
     <ChartCard title={t("dashboard.deliveryOrder.title")} sub={t("dashboard.deliveryOrder.sub")}>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {items.map((item) => <Tile key={item.label} {...item} />)}
       </div>
     </ChartCard>

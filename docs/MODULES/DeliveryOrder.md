@@ -211,6 +211,19 @@ which is itself checked before the plain quotes logic) — no new Vercel functio
 12-function-slot-sharing convention Scope of Work and Quotation Templates already use. New
 `api/_lib/deliveryOrderHandler.ts`. See [API.md](../API.md) for the full route table.
 
+## Approval Workflow + Rewrite (added 2026-07-24)
+
+Same state machine as Scope of Work's (see [ScopeOfWork.md](./ScopeOfWork.md) "Approval
+workflow"): **Draft → ส่งขออนุมัติ → `PendingApproval` → อนุมัติ → Final**, with ปฏิเสธ (comment
+required) and ถอนคำขอ returning to Draft; editing/refresh are Draft-only; `deliveryOrder:finalize`
+= approval authority. This supersedes the module's original "no Duplicate/Rewrite, Final is
+irreversible with no way onward" stance: **Rewrite now exists** (`POST /:id/rewrite`,
+`deliveryOrder:create`) as the only way to change an approved document — a fresh Draft copy with
+installment ids preserved (so "อัปเดตข้อมูลจาก Scope of Work" reconciliation-by-id still works);
+the Scope of Work's "เปิดใบส่งมอบสินค้า" button follows the newest record automatically. In-app
+notifications (`delivery_order_submitted/approved/rejected`) deep-link via the new
+`Notification.relatedDeliveryOrderId` field. See [API.md](../API.md) and CHANGELOG.md 2026-07-24.
+
 ## Share View (added and removed 2026-07-24, same day)
 
 A session-less capability-URL HTML view (`GET /api/delivery-orders/:id/view?key=...`,

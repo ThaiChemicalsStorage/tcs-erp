@@ -192,10 +192,11 @@ export interface NotificationSummary {
   byType: Record<string, number>;
 }
 
-/** Company-wide, all-time (isDeleted: false) — not scoped by the Dashboard date/salesperson/department filter, see api/dashboard/index.ts. */
+/** Company-wide, all-time (isDeleted: false) — not scoped by the Dashboard date/salesperson/department filter, see api/dashboard/index.ts. `pending` = "PendingApproval" (approval workflow, added 2026-07-24). */
 export interface ScopeOfWorkSummary {
   total: number;
   draft: number;
+  pending: number;
   final: number;
 }
 
@@ -203,6 +204,7 @@ export interface ScopeOfWorkSummary {
 export interface DeliveryOrderSummary {
   total: number;
   draft: number;
+  pending: number;
   final: number;
 }
 

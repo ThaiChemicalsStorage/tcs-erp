@@ -328,6 +328,16 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   thread); Duplicate/Rewrite explicitly reset the field (both build the new record by spreading
   the source, so without the reset a copy would reply into the source's thread). Records whose
   first send predates the fix start grouping from their next send onward.
+- **Approval workflow (added 2026-07-24, direct user request)**: the direct "ยืนยัน Final" button
+  is replaced by **Draft → ส่งขออนุมัติ → รออนุมัติ (`PendingApproval`) → อนุมัติ → Final**, with
+  ปฏิเสธ (finalize holder, comment required — lands in the audit entry + creator's notification)
+  and ถอนคำขอ (the requester) both returning to Draft. Submission validates print-level
+  completeness only — the **approver signatory is auto-filled by whoever approves** (name +
+  date), not typed by the submitter. Editing/refresh/attachments are strictly Draft-only, so a
+  pending document is locked too; Final is terminal and only Rewrite continues the work.
+  `scopeOfWork:finalize` = approval authority (no new permission). In-app notifications:
+  submitted → every active finalize holder; approved/rejected → the creator. See
+  [API.md](../API.md) and CHANGELOG.md 2026-07-24.
 - **Delivery Order link (added and removed 2026-07-24, same day)**: a "แนบลิงก์ใบส่งมอบสินค้าในอีเมล"
   checkbox + session-less Delivery Order view link briefly existed here — removed on direct user
   request ("เอาที่ติ๊กใบส่งมอบออกไปเลย เดี๋ยวแนบไฟล์เอา"): the preferred flow is printing the official

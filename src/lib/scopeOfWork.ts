@@ -26,7 +26,10 @@ export type { ChecklistOption, ChecklistGroup };
  * explicit "อัปเดตข้อมูลจากใบเสนอราคา" action can re-pull the snapshot on demand only.
  */
 
-export type ScopeOfWorkStatus = "Draft" | "Final";
+/** "PendingApproval" added 2026-07-24 (approval workflow, direct user request): Draft →
+ * ส่งขออนุมัติ → PendingApproval → อนุมัติ → Final (or ปฏิเสธ/ถอนคำขอ → back to Draft). Editing is
+ * Draft-only; Final is terminal — the only way to change an approved document is Rewrite. */
+export type ScopeOfWorkStatus = "Draft" | "PendingApproval" | "Final";
 
 /** Frozen-at-creation-time copy of the quotation's Customer Information — same "snapshot, not
  * live reference" rule as `Quote.customerSnapshot` (src/lib/customers.ts). `contactName` (added
@@ -430,8 +433,30 @@ export async function updateScopeOfWork(id: string, fields: ScopeOfWorkUpdateFie
   });
   return scopeOfWork;
 }
+/** Approve (2026-07-24: the `/finalize` route now means "อนุมัติ" — only valid from
+ * `PendingApproval`, requires `scopeOfWork:finalize`, auto-fills the approver signatory with the
+ * approving user server-side). */
 export async function finalizeScopeOfWork(id: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/finalize`, { method: "POST" });
+  return scopeOfWork;
+}
+/** ส่งขออนุมัติ — Draft → PendingApproval (added 2026-07-24). Server validates completeness
+ * (print-level — the approver signatory is filled at approve time, not here). */
+export async function submitScopeOfWorkApproval(id: string): Promise<ScopeOfWork> {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/submit-approval`, { method: "POST" });
+  return scopeOfWork;
+}
+/** ปฏิเสธ/ตีกลับ — PendingApproval → Draft, comment required (added 2026-07-24). */
+export async function rejectScopeOfWork(id: string, comment: string): Promise<ScopeOfWork> {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
+  return scopeOfWork;
+}
+/** ถอนคำขออนุมัติ (by the requester) — PendingApproval → Draft (added 2026-07-24). */
+export async function withdrawScopeOfWorkApproval(id: string): Promise<ScopeOfWork> {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/withdraw-approval`, { method: "POST" });
   return scopeOfWork;
 }
 export async function duplicateScopeOfWork(id: string): Promise<ScopeOfWork> {

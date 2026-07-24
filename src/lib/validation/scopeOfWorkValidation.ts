@@ -179,6 +179,6 @@ export function validateScopeOfWorkForFinalization(scope: ScopeOfWorkValidationI
 /** Called before Print/PDF export. A still-Draft record doesn't yet need an approver signature
  * (that's a Finalize-time requirement) — everything else must already be complete, since an
  * incomplete Draft must never be printed. */
-export function validateScopeOfWorkForPrint(scope: ScopeOfWorkValidationInput & { status: "Draft" | "Final" }): ValidationResult {
+export function validateScopeOfWorkForPrint(scope: ScopeOfWorkValidationInput & { status: "Draft" | "PendingApproval" | "Final" }): ValidationResult {
   return computeScopeOfWorkValidation(scope, { requireApprover: scope.status === "Final" });
 }

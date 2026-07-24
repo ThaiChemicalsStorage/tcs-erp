@@ -78,6 +78,12 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   quotation_lost: { label: "ปิดการขายไม่สำเร็จ", module: "ใบเสนอราคา" },
   quotation_cancelled: { label: "ใบเสนอราคาถูกยกเลิก", module: "ใบเสนอราคา" },
   scope_of_work_document_sent: { label: "มีเอกสาร Scope of Work ส่งถึงคุณ", module: "Scope of Work" },
+  scope_of_work_submitted: { label: "Scope of Work รออนุมัติ", module: "Scope of Work" },
+  scope_of_work_approved: { label: "Scope of Work ได้รับอนุมัติ", module: "Scope of Work" },
+  scope_of_work_rejected: { label: "Scope of Work ถูกตีกลับ", module: "Scope of Work" },
+  delivery_order_submitted: { label: "ใบส่งมอบสินค้ารออนุมัติ", module: "Delivery Order" },
+  delivery_order_approved: { label: "ใบส่งมอบสินค้าได้รับอนุมัติ", module: "Delivery Order" },
+  delivery_order_rejected: { label: "ใบส่งมอบสินค้าถูกตีกลับ", module: "Delivery Order" },
 };
 
 /** Idempotent. Mirrors the NotificationType union in src/lib/notifications.ts — scaffolding, not read by any live code path yet. */

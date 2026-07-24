@@ -1,4 +1,4 @@
-import { FileStack, FilePen, FileCheck2, type LucideIcon } from "lucide-react";
+import { FileStack, FilePen, FileClock, FileCheck2, type LucideIcon } from "lucide-react";
 import type { ScopeOfWorkSummary as ScopeOfWorkSummaryData } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
@@ -29,12 +29,13 @@ export function ScopeOfWorkSummary({ data }: { data: ScopeOfWorkSummaryData }) {
   const { t } = useI18n();
   const items: { icon: LucideIcon; label: string; count: number; accent: string }[] = [
     { icon: FileStack, label: t("dashboard.scopeOfWork.total"), count: data.total, accent: "#5a7299" },
-    { icon: FilePen, label: t("dashboard.scopeOfWork.draft"), count: data.draft, accent: "#e08a3c" },
+    { icon: FilePen, label: t("dashboard.scopeOfWork.draft"), count: data.draft, accent: "#5a7299" },
+    { icon: FileClock, label: t("dashboard.scopeOfWork.pending"), count: data.pending, accent: "#e08a3c" },
     { icon: FileCheck2, label: t("dashboard.scopeOfWork.final"), count: data.final, accent: "#2aa36b" },
   ];
   return (
     <ChartCard title={t("dashboard.scopeOfWork.title")} sub={t("dashboard.scopeOfWork.sub")}>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {items.map((item) => <Tile key={item.label} {...item} />)}
       </div>
     </ChartCard>

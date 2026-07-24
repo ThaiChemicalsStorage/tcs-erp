@@ -4,7 +4,46 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Removed: Delivery Order link in the recipient email
+## 2026-07-24 (absolute latest) — Approval workflow for Scope of Work + Delivery Order
+
+Direct user request ("ทำส่งขออนุมัติของ Scope of work กับ ใบส่งมอบให้ด้วยคือถ้ามีคนอนุมัติแล้วมันจะ
+ไม่สามารถแก้ไขอะไรได้อีกต้องกด Rewrite เท่านั้น"). Both documents gain the same state machine:
+
+**Draft → (ส่งขออนุมัติ) → PendingApproval → (อนุมัติ) → Final**, with (ปฏิเสธ + required comment)
+and (ถอนคำขอ, by the requester) both returning to Draft. Editing/refresh/attachments are now
+strictly Draft-only (`!== "Draft"` guards — PendingApproval locks too); Final is terminal and only
+Rewrite continues the work.
+
+- **Statuses**: `ScopeOfWorkStatus`/`DeliveryOrderStatus` gain `"PendingApproval"` (existing
+  Draft/Final records unaffected).
+- **Routes** (both handlers): `POST /:id/submit-approval` (canEdit+ownership rule, Draft only —
+  SOW validates print-level completeness; the approver signatory is NOT required at submit),
+  `POST /:id/reject` (finalize permission, comment required), `POST /:id/withdraw-approval`
+  (canEdit). **`POST /:id/finalize` now means "อนุมัติ"** — only valid from PendingApproval
+  (route name kept so the `*:finalize` permission story and client function names are unchanged;
+  direct Draft→Final is no longer possible). SOW approve **auto-fills the approver signatory**
+  with the approving user + date, then re-validates at finalize level.
+- **Delivery Order Rewrite added** (`POST /api/delivery-orders/:id/rewrite`, `deliveryOrder:create`
+  — the document previously had no Rewrite at all): fresh Draft copy of a **Final** record
+  (installment ids preserved so refresh reconciliation still works); the SOW's
+  "เปิดใบส่งมอบสินค้า" button follows the newest record automatically (updatedAt-desc lookup).
+- **Notifications**: 6 new types (`scope_of_work_/delivery_order_` × `submitted/approved/rejected`)
+  — submit → every active `*:finalize` holder; approve/reject → the creator. New
+  `Notification.relatedDeliveryOrderId` deep-links to the standalone Delivery Order page
+  (checked first in the bell's onNavigate).
+- **UI**: 3-state badges (Draft / รออนุมัติ / Final) + per-state toolbar buttons on both detail
+  views (submit gated on print-level validation for SOW; approve/reject for finalize holders;
+  reject comment via the small-prompt convention); both list pages gain a รออนุมัติ stat tile +
+  filter chip; the Dashboard SOW/DO cards gain a รออนุมัติ tile (`pending` field, "Final" label
+  now reads อนุมัติแล้ว/Approved).
+- **No new permission**: `*:finalize` = approval authority (every role that could Finalize before
+  can Approve now); no Role Management steps needed.
+
+`tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all pass clean.
+
+---
+
+## 2026-07-24 — Removed: Delivery Order link in the recipient email
 
 Direct user request after trying the feature ("เอาที่ติ๊กใบส่งมอบออกไปเลย เดี๋ยวแนบไฟล์เอา") — the
 same-day "แนบลิงก์ใบส่งมอบสินค้าในอีเมล" checkbox + session-less

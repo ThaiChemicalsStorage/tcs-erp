@@ -22,7 +22,11 @@ import { apiFetch } from "./apiClient.js";
  * payment schedule) on demand only.
  */
 
-export type DeliveryOrderStatus = "Draft" | "Final";
+/** "PendingApproval" added 2026-07-24 (approval workflow, direct user request — same model as
+ * Scope of Work's): Draft → ส่งขออนุมัติ → PendingApproval → อนุมัติ → Final. Editing is
+ * Draft-only; Final is terminal — the only way to change an approved document is Rewrite (also
+ * added 2026-07-24, this document previously had no Rewrite at all). */
+export type DeliveryOrderStatus = "Draft" | "PendingApproval" | "Final";
 
 /** One printed item row — a lean snapshot of `ScopeOfWorkItem` (name/quantity/unit/specifications
  * only; `remark`/`isSectionHeader` items aren't part of this document, see `deriveItemsFromScope()`
@@ -124,8 +128,36 @@ export async function updateDeliveryOrder(id: string, fields: DeliveryOrderUpdat
   });
   return deliveryOrder;
 }
+/** Approve (2026-07-24: the `/finalize` route now means "อนุมัติ" — only valid from
+ * `PendingApproval`, requires `deliveryOrder:finalize`). */
 export async function finalizeDeliveryOrder(id: string): Promise<DeliveryOrder> {
   const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/finalize`, { method: "POST" });
+  return deliveryOrder;
+}
+/** ส่งขออนุมัติ — Draft → PendingApproval (added 2026-07-24). */
+export async function submitDeliveryOrderApproval(id: string): Promise<DeliveryOrder> {
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/submit-approval`, { method: "POST" });
+  return deliveryOrder;
+}
+/** ปฏิเสธ/ตีกลับ — PendingApproval → Draft, comment required (added 2026-07-24). */
+export async function rejectDeliveryOrder(id: string, comment: string): Promise<DeliveryOrder> {
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ comment }),
+  });
+  return deliveryOrder;
+}
+/** ถอนคำขออนุมัติ (by the requester) — PendingApproval → Draft (added 2026-07-24). */
+export async function withdrawDeliveryOrderApproval(id: string): Promise<DeliveryOrder> {
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/withdraw-approval`, { method: "POST" });
+  return deliveryOrder;
+}
+/** Rewrite (added 2026-07-24) — creates a fresh Draft copy of a **Final** Delivery Order (same
+ * items/installment state, same `scopeOfWorkId`, installment ids preserved so refresh
+ * reconciliation still works) so an approved document can be corrected without unlocking it.
+ * Server rejects unless the source is Final. */
+export async function rewriteDeliveryOrder(id: string): Promise<DeliveryOrder> {
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/rewrite`, { method: "POST" });
   return deliveryOrder;
 }
 export async function refreshDeliveryOrderFromScope(id: string): Promise<DeliveryOrder> {

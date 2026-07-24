@@ -47,7 +47,7 @@ None of its own — delivery is inherently role-based (see Business Flow), but r
 - Mark read / mark all read / delete
 - Click-to-navigate — deep-links to the specific quotation when `relatedQuoteId` is set (2026-07-10), or the specific Scope of Work when `relatedScopeId` is set (2026-07-23)
 - Role-based delivery tied to the quotation approval workflow, server-enforced
-- **10 notification types** (added `quotation_won`/`quotation_lost`/`quotation_cancelled` 2026-07-10, fifth pass; `scope_of_work_document_sent` 2026-07-23) — each with its own `NotificationBell.tsx` icon (Trophy/TrendingDown/XOctagon for the three 2026-07-10 additions, Mail for the 2026-07-23 one)
+- **16 notification types** (added `quotation_won`/`quotation_lost`/`quotation_cancelled` 2026-07-10, fifth pass; `scope_of_work_document_sent` 2026-07-23; **2026-07-24 (approval workflow)**: `scope_of_work_submitted/approved/rejected` + `delivery_order_submitted/approved/rejected` — submitted → every active `*:finalize` holder, approved/rejected → the creator; the `delivery_order_*` types carry the new `relatedDeliveryOrderId` field, checked FIRST in `App.tsx`'s bell `onNavigate`, deep-linking to the standalone Delivery Order page) — each with its own `NotificationBell.tsx` icon
 - **2026-07-23**: first notification type not tied to the quotation approval workflow at all — `scope_of_work_document_sent`, delivered to explicitly-picked people rather than everyone holding a permission (see Business Flow above)
 - **2026-07-24**: automatic 45-second polling + refetch-on-focus (see Business Flow #5) — new notifications appear without a manual page reload
 

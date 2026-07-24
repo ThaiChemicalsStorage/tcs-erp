@@ -5,6 +5,7 @@ import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
   type ScopeOfWorkPaymentType,
   fetchScopeOfWork, updateScopeOfWork, finalizeScopeOfWork, duplicateScopeOfWork, rewriteScopeOfWork,
+  submitScopeOfWorkApproval, rejectScopeOfWork, withdrawScopeOfWorkApproval,
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
   blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS, sendScopeOfWorkDocumentNotifications,
   fetchScopeOfWorksByQuotation, uploadScopeOfWorkAttachment, deleteScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES,
@@ -241,7 +242,7 @@ export function ScopeOfWorkDocument({
   const [scope, setScope] = useState<ScopeOfWork | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<"finalize" | "refresh" | "delete" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"submit" | "finalize" | "withdraw" | "refresh" | "delete" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const summaryRef = useRef<HTMLDivElement>(null);
   // A `422 DOCUMENT_INCOMPLETE` from the server (print/finalize) merged on top of the live
@@ -479,13 +480,31 @@ export function ScopeOfWorkDocument({
     window.print();
   };
 
-  const handleFinalizeClick = () => {
-    if (!finalizeValidation.valid) {
+  /** ส่งขออนุมัติ — print-level completeness only; the approver signatory is filled by whoever
+   * approves, so `finalizeValidation` (which requires it) would wrongly block every submission. */
+  const handleSubmitClick = () => {
+    if (!printValidation.valid) {
       showToast(BLOCKED_TOOLTIP);
       summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    setConfirmAction("finalize");
+    setConfirmAction("submit");
+  };
+
+  /** ปฏิเสธ — comment required server-side; collected via the same small-prompt convention the
+   * secondaryCode creation flow already uses. */
+  const handleRejectClick = async () => {
+    if (!scope) return;
+    const comment = window.prompt("เหตุผลการปฏิเสธ / สิ่งที่ต้องแก้ไข:", "");
+    if (comment === null) return;
+    if (!comment.trim()) { showToast("กรุณาระบุเหตุผลการปฏิเสธ"); return; }
+    try {
+      const updated = await rejectScopeOfWork(scope.id, comment.trim());
+      setScope(updated);
+      showToast("ตีกลับเป็นฉบับร่างแล้ว");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "ปฏิเสธไม่สำเร็จ");
+    }
   };
 
   const handleDuplicate = async () => {
@@ -515,12 +534,20 @@ export function ScopeOfWorkDocument({
 
   const runConfirmedAction = async () => {
     if (!scope || !confirmAction) return;
-    if (confirmAction === "finalize") setServerValidationErrors(null);
+    if (confirmAction === "finalize" || confirmAction === "submit") setServerValidationErrors(null);
     try {
-      if (confirmAction === "finalize") {
+      if (confirmAction === "submit") {
+        const updated = await submitScopeOfWorkApproval(scope.id);
+        setScope(updated);
+        showToast("ส่งขออนุมัติแล้ว");
+      } else if (confirmAction === "finalize") {
         const updated = await finalizeScopeOfWork(scope.id);
         setScope(updated);
-        showToast("ยืนยันสถานะ Final แล้ว");
+        showToast("อนุมัติแล้ว (Final)");
+      } else if (confirmAction === "withdraw") {
+        const updated = await withdrawScopeOfWorkApproval(scope.id);
+        setScope(updated);
+        showToast("ถอนคำขออนุมัติแล้ว กลับเป็นฉบับร่าง");
       } else if (confirmAction === "refresh") {
         const updated = await refreshScopeOfWorkFromQuotation(scope.id);
         setScope(updated);
@@ -532,7 +559,7 @@ export function ScopeOfWorkDocument({
       }
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "ดำเนินการไม่สำเร็จ");
-      if (confirmAction === "finalize" && err instanceof ApiError && err.code === "DOCUMENT_INCOMPLETE") {
+      if ((confirmAction === "finalize" || confirmAction === "submit") && err instanceof ApiError && err.code === "DOCUMENT_INCOMPLETE") {
         setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
         summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
@@ -557,8 +584,12 @@ export function ScopeOfWorkDocument({
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
         <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{scope.scopeNumber}</span>
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isDraft ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20" : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"}`}>
-          {isDraft ? "Draft" : "Final"}
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+          isDraft ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20"
+          : scope.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#e08a3c] border border-[#e08a3c]/20"
+          : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"
+        }`}>
+          {isDraft ? "Draft" : scope.status === "PendingApproval" ? "รออนุมัติ" : "Final"}
         </span>
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
@@ -604,14 +635,38 @@ export function ScopeOfWorkDocument({
               <Save size={13} /> บันทึกร่าง
             </button>
           )}
-          {canFinalize && isDraft && (
+          {canEdit && isDraft && (
             <button
-              onClick={handleFinalizeClick}
-              disabled={!finalizeValidation.valid}
-              title={!finalizeValidation.valid ? BLOCKED_TOOLTIP : undefined}
-              className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors ${!finalizeValidation.valid ? "opacity-40 cursor-not-allowed" : ""}`}
+              onClick={handleSubmitClick}
+              disabled={!printValidation.valid}
+              title={!printValidation.valid ? BLOCKED_TOOLTIP : undefined}
+              className={`flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors ${!printValidation.valid ? "opacity-40 cursor-not-allowed" : ""}`}
             >
-              <CheckCircle2 size={13} /> ยืนยัน Final
+              <Send size={13} /> ส่งขออนุมัติ
+            </button>
+          )}
+          {scope.status === "PendingApproval" && canFinalize && (
+            <>
+              <button
+                onClick={() => setConfirmAction("finalize")}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors"
+              >
+                <CheckCircle2 size={13} /> อนุมัติ
+              </button>
+              <button
+                onClick={handleRejectClick}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors"
+              >
+                ปฏิเสธ
+              </button>
+            </>
+          )}
+          {scope.status === "PendingApproval" && canEdit && (
+            <button
+              onClick={() => setConfirmAction("withdraw")}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ถอนคำขอ
             </button>
           )}
           {canDelete && (
@@ -877,10 +932,26 @@ export function ScopeOfWorkDocument({
       </div>
 
       <ConfirmDialog
+        open={confirmAction === "submit"}
+        title="ส่งขออนุมัติ"
+        message="เมื่อส่งแล้ว Scope of Work นี้จะถูกล็อกระหว่างรออนุมัติ (ถอนคำขอได้หากต้องการกลับมาแก้ไข) ส่งขออนุมัติหรือไม่?"
+        confirmLabel="ส่งขออนุมัติ"
+        onConfirm={runConfirmedAction}
+        onCancel={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
         open={confirmAction === "finalize"}
-        title="ยืนยันสถานะ Final"
-        message="เมื่อยืนยันแล้ว Scope of Work นี้จะไม่สามารถแก้ไขได้อีก (ใช้ทำสำเนาหากต้องการแก้ไขต่อ) ยืนยันหรือไม่?"
-        confirmLabel="ยืนยัน Final"
+        title="อนุมัติ Scope of Work"
+        message="เมื่ออนุมัติแล้วเอกสารจะเป็นสถานะ Final ถาวร แก้ไขไม่ได้อีก (ต้องใช้ แก้ไข/Rewrite เพื่อสร้างฉบับใหม่เท่านั้น) และชื่อของคุณจะถูกบันทึกเป็นผู้อนุมัติ ยืนยันหรือไม่?"
+        confirmLabel="อนุมัติ"
+        onConfirm={runConfirmedAction}
+        onCancel={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
+        open={confirmAction === "withdraw"}
+        title="ถอนคำขออนุมัติ"
+        message="เอกสารจะกลับเป็นฉบับร่างและแก้ไขได้อีกครั้ง ถอนคำขอหรือไม่?"
+        confirmLabel="ถอนคำขอ"
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />

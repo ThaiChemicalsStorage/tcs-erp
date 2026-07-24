@@ -14,6 +14,12 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   quotation_lost: <TrendingDown size={14} />,
   quotation_cancelled: <XOctagon size={14} />,
   scope_of_work_document_sent: <Mail size={14} />,
+  scope_of_work_submitted: <Send size={14} />,
+  scope_of_work_approved: <CheckCircle2 size={14} />,
+  scope_of_work_rejected: <XCircle size={14} />,
+  delivery_order_submitted: <Send size={14} />,
+  delivery_order_approved: <CheckCircle2 size={14} />,
+  delivery_order_rejected: <XCircle size={14} />,
 };
 
 function timeAgo(iso: string, t: (key: TranslationKey) => string): string {

@@ -4,9 +4,11 @@ import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import {
   deliveryOrdersCollection, scopeOfWorksCollection, auditLogCollection,
+  usersCollection, rolesCollection, notificationsCollection,
   toObjectId, withStringId, type DeliveryOrderFields, type ScopeOfWorkFields,
 } from "./collections.js";
-import { roleHasPermission } from "../../src/lib/roles.js";
+import { roleHasPermission, findRole } from "../../src/lib/roles.js";
+import type { NotificationType } from "../../src/lib/notifications.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
 import { normalizePaymentConditions } from "../../src/lib/scopeOfWork.js";
@@ -279,8 +281,10 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const ctx = await requireUser(req);
   const doc = await loadDeliveryOrderOrThrow(id);
   if (!canEditDeliveryOrder(ctx, doc)) throw new HttpError(403, "Forbidden");
-  if (doc.status === "Final") {
-    throw new HttpError(400, "ใบส่งมอบสินค้านี้เป็นสถานะ Final แล้ว ไม่สามารถแก้ไขได้");
+  if (doc.status !== "Draft") {
+    throw new HttpError(400, doc.status === "PendingApproval"
+      ? "ใบส่งมอบสินค้านี้อยู่ระหว่างรออนุมัติ แก้ไขไม่ได้ — ถอนคำขออนุมัติก่อนหากต้องการแก้ไข"
+      : "ใบส่งมอบสินค้านี้อนุมัติแล้ว (Final) ไม่สามารถแก้ไขได้ กรุณาใช้ แก้ไข (Rewrite) เพื่อสร้างฉบับแก้ไขใหม่");
   }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -309,8 +313,8 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
   const doc = await loadDeliveryOrderOrThrow(id);
   if (!canEditDeliveryOrder(ctx, doc)) throw new HttpError(403, "Forbidden");
   if (!roleHasPermission(ctx.role, "scopeOfWork:view")) throw new HttpError(403, "Forbidden");
-  if (doc.status === "Final") {
-    throw new HttpError(400, "ใบส่งมอบสินค้านี้เป็นสถานะ Final แล้ว ไม่สามารถแก้ไขได้");
+  if (doc.status !== "Draft") {
+    throw new HttpError(400, "ต้องเป็นฉบับร่างเท่านั้นจึงจะอัปเดตข้อมูลจาก Scope of Work ได้ (เอกสารที่รออนุมัติ/อนุมัติแล้วถูกล็อก)");
   }
   const scope = await loadScopeOrThrow(doc.scopeOfWorkId);
 
@@ -333,21 +337,161 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ deliveryOrder: toClient(updated) });
 }
 
+// ─── Approval workflow (added 2026-07-24, direct user request — same model as Scope of Work's,
+// see scopeOfWorkHandler.ts's workflow block for the full state diagram and reasoning) ──────────
+
+async function notifyDeliveryOrderApprovalEvent(
+  recipientUserIds: string[],
+  type: NotificationType,
+  title: string,
+  description: string,
+  deliveryOrderId: string,
+  scopeNumber: string,
+): Promise<void> {
+  const ids = [...new Set(recipientUserIds)].filter((uid) => uid !== "");
+  if (ids.length === 0) return;
+  const createdAt = nowIso();
+  const notifications = await notificationsCollection();
+  await notifications.insertMany(ids.map((recipientUserId) => ({
+    recipientUserId, type, title, description,
+    module: "Delivery Order",
+    // Deep-links to the record on the standalone Delivery Order page — new Notification field
+    // added for these types (src/lib/notifications.ts), checked first in App.tsx's onNavigate.
+    relatedDeliveryOrderId: deliveryOrderId, relatedScopeNumber: scopeNumber,
+    createdAt, read: false,
+  })));
+}
+
+async function activeUserIdsWithPermission(permission: Parameters<typeof roleHasPermission>[1]): Promise<string[]> {
+  const [users, roles] = await Promise.all([usersCollection(), rolesCollection()]);
+  const [activeUsers, roleList] = await Promise.all([
+    users.find({ status: "active" }, { projection: { roleKey: 1 } }).toArray(),
+    roles.find({}).toArray(),
+  ]);
+  return activeUsers
+    .filter((u) => roleHasPermission(findRole(roleList, u.roleKey), permission))
+    .map((u) => u._id.toString());
+}
+
+async function handleSubmitApproval(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadDeliveryOrderOrThrow(id);
+  if (!canEditDeliveryOrder(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (doc.status !== "Draft") throw new HttpError(400, "ส่งขออนุมัติได้เฉพาะฉบับร่างเท่านั้น");
+
+  const deliveryOrders = await deliveryOrdersCollection();
+  await deliveryOrders.updateOne({ _id: doc._id }, { $set: { status: "PendingApproval" as DeliveryOrderStatus, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const updated = await deliveryOrders.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบใบส่งมอบสินค้า");
+  await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Submitted", `ส่งขออนุมัติใบส่งมอบสินค้า ${updated.scopeNumber}`, {
+    scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
+  });
+  await notifyDeliveryOrderApprovalEvent(
+    await activeUserIdsWithPermission("deliveryOrder:finalize"),
+    "delivery_order_submitted", "ใบส่งมอบสินค้ารออนุมัติ",
+    `${ctx.user.fullName} ส่งใบส่งมอบสินค้า ${updated.scopeNumber} (${updated.customerCompanyName}) เพื่อขออนุมัติ`,
+    id, updated.scopeNumber,
+  );
+  res.status(200).json({ deliveryOrder: toClient(updated) });
+}
+
+/** `/finalize` now means "อนุมัติ" — same route-name-preserving convention as Scope of Work's. */
 async function handleFinalize(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "deliveryOrder:finalize");
   const doc = await loadDeliveryOrderOrThrow(id);
-  if (doc.status === "Final") throw new HttpError(400, "ใบส่งมอบสินค้านี้เป็นสถานะ Final อยู่แล้ว");
+  if (doc.status === "Final") throw new HttpError(400, "ใบส่งมอบสินค้านี้อนุมัติแล้ว (Final)");
+  if (doc.status !== "PendingApproval") throw new HttpError(400, "ต้องส่งขออนุมัติก่อน จึงจะอนุมัติได้");
 
   const deliveryOrders = await deliveryOrdersCollection();
-  const now = nowIso();
-  await deliveryOrders.updateOne({ _id: doc._id }, { $set: { status: "Final" as DeliveryOrderStatus, updatedAt: now, updatedBy: ctx.user.id } });
+  await deliveryOrders.updateOne({ _id: doc._id }, { $set: { status: "Final" as DeliveryOrderStatus, updatedAt: nowIso(), updatedBy: ctx.user.id } });
   const updated = await deliveryOrders.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบใบส่งมอบสินค้า");
-  await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Finalized", `ยืนยันสถานะ Final ของใบส่งมอบสินค้า ${updated.scopeNumber}`, {
+  await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Approved", `อนุมัติใบส่งมอบสินค้า ${updated.scopeNumber}`, {
+    scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
+  });
+  await notifyDeliveryOrderApprovalEvent(
+    updated.createdBy && updated.createdBy !== ctx.user.id ? [updated.createdBy] : [],
+    "delivery_order_approved", "ใบส่งมอบสินค้าได้รับอนุมัติ",
+    `${ctx.user.fullName} อนุมัติใบส่งมอบสินค้า ${updated.scopeNumber} แล้ว`,
+    id, updated.scopeNumber,
+  );
+  res.status(200).json({ deliveryOrder: toClient(updated) });
+}
+
+async function handleRejectApproval(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "deliveryOrder:finalize");
+  const doc = await loadDeliveryOrderOrThrow(id);
+  if (doc.status !== "PendingApproval") throw new HttpError(400, "ปฏิเสธได้เฉพาะเอกสารที่รออนุมัติเท่านั้น");
+  const comment = sanitizeLongText((req.body as { comment?: unknown } | undefined)?.comment, "เหตุผลการปฏิเสธ");
+  if (!comment.trim()) throw new HttpError(400, "กรุณาระบุเหตุผลการปฏิเสธ");
+
+  const deliveryOrders = await deliveryOrdersCollection();
+  await deliveryOrders.updateOne({ _id: doc._id }, { $set: { status: "Draft" as DeliveryOrderStatus, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const updated = await deliveryOrders.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบใบส่งมอบสินค้า");
+  await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Rejected", `ปฏิเสธการอนุมัติใบส่งมอบสินค้า ${updated.scopeNumber}: ${comment.trim()}`, {
+    scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
+  });
+  await notifyDeliveryOrderApprovalEvent(
+    updated.createdBy && updated.createdBy !== ctx.user.id ? [updated.createdBy] : [],
+    "delivery_order_rejected", "ใบส่งมอบสินค้าถูกตีกลับ",
+    `${ctx.user.fullName} ปฏิเสธการอนุมัติใบส่งมอบสินค้า ${updated.scopeNumber}: ${comment.trim()}`,
+    id, updated.scopeNumber,
+  );
+  res.status(200).json({ deliveryOrder: toClient(updated) });
+}
+
+async function handleWithdrawApproval(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadDeliveryOrderOrThrow(id);
+  if (!canEditDeliveryOrder(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (doc.status !== "PendingApproval") throw new HttpError(400, "ถอนคำขอได้เฉพาะเอกสารที่รออนุมัติเท่านั้น");
+
+  const deliveryOrders = await deliveryOrdersCollection();
+  await deliveryOrders.updateOne({ _id: doc._id }, { $set: { status: "Draft" as DeliveryOrderStatus, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const updated = await deliveryOrders.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบใบส่งมอบสินค้า");
+  await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Approval Withdrawn", `ถอนคำขออนุมัติใบส่งมอบสินค้า ${updated.scopeNumber}`, {
     scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
   });
   res.status(200).json({ deliveryOrder: toClient(updated) });
+}
+
+/** Rewrite (added 2026-07-24) — the only way to change an approved (Final) Delivery Order: a
+ * fresh Draft copy of the same record (items + installment state preserved, **installment ids
+ * kept as-is** so "อัปเดตข้อมูลจาก Scope of Work" reconciliation-by-id still works on the copy),
+ * new createdAt/createdBy, version 1. Deliberately only offered from Final — a Draft is still
+ * editable directly and a copy would just be a confusing duplicate. The list/existence lookups
+ * sort by `updatedAt` desc, so the rewrite becomes the record the Scope of Work's
+ * "เปิดใบส่งมอบสินค้า" button opens. */
+async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "deliveryOrder:create");
+  if (!roleHasPermission(ctx.role, "deliveryOrder:view")) throw new HttpError(403, "Forbidden");
+  const source = await loadDeliveryOrderOrThrow(id);
+  if (source.status !== "Final") throw new HttpError(400, "สร้างฉบับแก้ไขได้เฉพาะเอกสารที่อนุมัติแล้ว (Final) เท่านั้น — ฉบับร่างแก้ไขได้โดยตรง");
+
+  const now = nowIso();
+  const { _id: _sourceId, ...rest } = source;
+  const doc: DeliveryOrderFields = {
+    ...rest,
+    status: "Draft",
+    version: 1,
+    createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+    isDeleted: false,
+  };
+  const deliveryOrders = await deliveryOrdersCollection();
+  const result = await deliveryOrders.insertOne(doc);
+  const created = await deliveryOrders.findOne({ _id: result.insertedId });
+  if (!created) throw new HttpError(500, "สร้างฉบับแก้ไขไม่สำเร็จ");
+  await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Rewritten", `สร้างฉบับแก้ไขของใบส่งมอบสินค้า ${created.scopeNumber} (จากฉบับอนุมัติแล้ว)`, {
+    scopeNumber: created.scopeNumber, scopeOfWorkId: created.scopeOfWorkId,
+  });
+  res.status(200).json({ deliveryOrder: toClient(created) });
 }
 
 async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
@@ -388,5 +532,9 @@ export async function handleDeliveryOrder(req: VercelRequest, res: VercelRespons
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "finalize") return handleFinalize(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "submit-approval") return handleSubmitApproval(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "reject") return handleRejectApproval(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
   throw new HttpError(404, "Not found");
 }

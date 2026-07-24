@@ -11,7 +11,15 @@ export type NotificationType =
   | "quotation_won"
   | "quotation_lost"
   | "quotation_cancelled"
-  | "scope_of_work_document_sent";
+  | "scope_of_work_document_sent"
+  // Approval workflow for Scope of Work + Delivery Order — added 2026-07-24 (direct user
+  // request). submitted → every active `*:finalize` holder; approved/rejected → the creator.
+  | "scope_of_work_submitted"
+  | "scope_of_work_approved"
+  | "scope_of_work_rejected"
+  | "delivery_order_submitted"
+  | "delivery_order_approved"
+  | "delivery_order_rejected";
 
 export interface Notification {
   id: string;
@@ -26,6 +34,10 @@ export interface Notification {
    * `.relatedScopeNumber` (src/lib/auditLog.ts). */
   relatedScopeId?: string;
   relatedScopeNumber?: string;
+  /** Added 2026-07-24 for the `delivery_order_*` approval-workflow types — deep-links to the
+   * record on the standalone Delivery Order page (checked before `relatedScopeId` in
+   * `App.tsx`'s bell `onNavigate`). */
+  relatedDeliveryOrderId?: string;
   createdAt: string;
   read: boolean;
 }

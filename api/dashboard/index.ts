@@ -934,16 +934,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ownScopeClause = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
       ? {}
       : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }, ...scopeRecipientMatch] };
-    let scopeOfWork: { total: number; draft: number; final: number } | null = null;
+    let scopeOfWork: { total: number; draft: number; pending: number; final: number } | null = null;
     if (roleHasPermission(ctx.role, "scopeOfWork:view")) {
       try {
         const scopeOfWorks = await scopeOfWorksCollection();
-        const [total, draft, final] = await Promise.all([
+        const [total, draft, pending, final] = await Promise.all([
           scopeOfWorks.countDocuments({ isDeleted: false, ...ownScopeClause }),
           scopeOfWorks.countDocuments({ isDeleted: false, status: "Draft", ...ownScopeClause }),
+          scopeOfWorks.countDocuments({ isDeleted: false, status: "PendingApproval", ...ownScopeClause }),
           scopeOfWorks.countDocuments({ isDeleted: false, status: "Final", ...ownScopeClause }),
         ]);
-        scopeOfWork = { total, draft, final };
+        scopeOfWork = { total, draft, pending, final };
       } catch (err) {
         console.error("[dashboard] scopeOfWork query failed", err);
         scopeOfWork = null;
@@ -958,16 +959,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ownDeliveryClause = roleHasPermission(ctx.role, "deliveryOrder:viewAll")
       ? {}
       : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }] };
-    let deliveryOrder: { total: number; draft: number; final: number } | null = null;
+    let deliveryOrder: { total: number; draft: number; pending: number; final: number } | null = null;
     if (roleHasPermission(ctx.role, "deliveryOrder:view")) {
       try {
         const deliveryOrders = await deliveryOrdersCollection();
-        const [total, draft, final] = await Promise.all([
+        const [total, draft, pending, final] = await Promise.all([
           deliveryOrders.countDocuments({ isDeleted: false, ...ownDeliveryClause }),
           deliveryOrders.countDocuments({ isDeleted: false, status: "Draft", ...ownDeliveryClause }),
+          deliveryOrders.countDocuments({ isDeleted: false, status: "PendingApproval", ...ownDeliveryClause }),
           deliveryOrders.countDocuments({ isDeleted: false, status: "Final", ...ownDeliveryClause }),
         ]);
-        deliveryOrder = { total, draft, final };
+        deliveryOrder = { total, draft, pending, final };
       } catch (err) {
         console.error("[dashboard] deliveryOrder query failed", err);
         deliveryOrder = null;

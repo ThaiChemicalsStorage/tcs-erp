@@ -20,6 +20,7 @@ export function DeliveryOrderPage({
   canFinalize,
   canPrint,
   canDelete,
+  canCreate,
   initialDeliveryOrderId,
   onDeliveryOrderIdConsumed,
 }: {
@@ -28,6 +29,8 @@ export function DeliveryOrderPage({
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
+  /** Gates the detail view's Rewrite action (added 2026-07-24) — `deliveryOrder:create`. */
+  canCreate: boolean;
   /** Set when navigated here from ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button — same
    * "adjust state during rendering" pattern as ScopeOfWorkPage.tsx's `initialScopeOfWorkId`. */
   initialDeliveryOrderId?: string | null;
@@ -86,7 +89,9 @@ export function DeliveryOrderPage({
           canFinalize={canFinalize}
           canPrint={canPrint}
           canDelete={canDelete}
+          canCreate={canCreate}
           onBack={backToList}
+          onRewritten={openDeliveryOrder}
           showToast={toast.show}
         />
         <Toast message={toast.message} />
