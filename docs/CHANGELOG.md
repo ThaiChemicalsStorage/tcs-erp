@@ -4,7 +4,21 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Email threading for repeat sends + Delivery Order link in the email
+## 2026-07-24 (absolute latest) — Threading fix: anchor the FIRST send's `References` too
+
+Live test (user screenshot of a real Gmail inbox) showed the "Re:" follow-up arriving as a
+separate conversation: **Resend replaces a custom `Message-ID` with its own**, so the follow-up's
+`In-Reply-To`/`References` pointed at an ID that never existed. Fix: every send — the first
+included — now carries the same synthetic thread anchor in `References`; mail clients group
+messages whose `References` chains share an ID whether or not that root message exists, so
+threading no longer depends on the provider preserving anything. Records whose first send
+predates this fix start grouping from their next send onward (the already-delivered first email
+can't gain the header retroactively). `api/_lib/scopeOfWorkHandler.ts` only; docs updated in
+MODULES/ScopeOfWork.md's threading bullet.
+
+---
+
+## 2026-07-24 — Email threading for repeat sends + Delivery Order link in the email
 
 Two direct user requests in one pass ("ส่งไฟล์ตามหลัง...ให้มันอยู่ในแบบเหมือนตอบกลับตัวเองในอีเมล" +
 "ทำให้มันสามารถแนบใบส่งมอบงานได้ด้วย", clarified via AskUserQuestion to mean a link in the SOW email):

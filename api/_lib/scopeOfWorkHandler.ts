@@ -1194,13 +1194,19 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
   const baseSubject = `[Scope of Work] ${doc.scopeNumber} — ${doc.customerSnapshot.companyName}`;
 
   // ── Email threading (2026-07-24, direct user request: "ส่งไฟล์ตามหลัง...ให้มันอยู่ในแบบเหมือน
-  // ตอบกลับตัวเองในอีเมล") — the FIRST send of a record generates and persists a Message-ID; every
-  // later send of the SAME record references it (In-Reply-To/References) with a "Re:" subject, so
-  // follow-ups (e.g. after attaching another file) collapse into the recipient's existing
-  // conversation instead of arriving as a scattered new email each time. Per-record, so two
-  // different Scope of Works never share a thread. If the provider overrides our Message-ID on the
-  // first send, the "Re:"-same-subject fallback still groups in Gmail, and follow-ups still thread
-  // with each other via their shared References value. ──
+  // ตอบกลับตัวเองในอีเมล") — every send of the SAME record shares one synthetic thread anchor in
+  // its `References` header (follow-ups add `In-Reply-To` + a "Re:" subject), so repeat sends
+  // (e.g. after attaching another file) collapse into the recipient's existing conversation.
+  // Per-record, so two different Scope of Works never share a thread.
+  //
+  // **Why the FIRST send also carries `References` (fix, same day)**: the original implementation
+  // set the anchor as the first email's own `Message-ID` and had follow-ups reference that — but
+  // Resend replaces a custom `Message-ID` with its own, so the follow-up referenced an ID that
+  // never existed and Gmail kept it as a separate conversation (live-verified: the "Re:" arrived
+  // unthreaded). Anchoring EVERY send — first included — to the same synthetic `References` value
+  // removes the dependency on the provider preserving anything: mail clients group messages whose
+  // `References` chains share an ID, whether or not that root message exists. (`Message-ID` is
+  // still attempted on the first send — harmless if honored, harmless if replaced.)
   let threadId = typeof doc.emailThreadId === "string" ? doc.emailThreadId : "";
   const isFollowUp = threadId !== "";
   let subject = baseSubject;
@@ -1211,7 +1217,7 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
   } else {
     const host = (() => { try { return new URL(appUrl).hostname; } catch { return "tcs-erp"; } })();
     threadId = `<sow-${id}-${randomBytes(9).toString("hex")}@${host}>`;
-    headers = { "Message-ID": threadId };
+    headers = { "Message-ID": threadId, References: threadId };
     const scopeOfWorks = await scopeOfWorksCollection();
     // Deliberately no updatedAt/updatedBy bump — this is send bookkeeping, not a content edit.
     await scopeOfWorks.updateOne({ _id: doc._id }, { $set: { emailThreadId: threadId } });

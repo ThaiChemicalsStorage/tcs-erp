@@ -318,13 +318,16 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   entry, and returns `{ sentCount, failedCount, recipientCount }` for the UI toast.
 - **Email threading (added 2026-07-24, direct user request)**: repeat sends of the *same* record
   land in the recipients' existing email conversation, like a reply — the first send mints a
-  Message-ID (`<sow-{id}-{rand}@{APP_URL host}>`), persists it as server-only
-  `ScopeOfWork.emailThreadId` (no updatedAt bump), and later sends set `In-Reply-To`/`References`
-  plus a `Re:` subject. Strictly per-record (two Scope of Works never share a thread);
-  Duplicate/Rewrite explicitly reset the field (both build the new record by spreading the source,
-  so without the reset a copy would reply into the source's thread). Final grouping is the
-  receiving client's call — Gmail/Outlook honor these headers, and the Re:-same-subject pairing is
-  the fallback. Records sent before this feature start their thread from their next send.
+  synthetic thread anchor (`<sow-{id}-{rand}@{APP_URL host}>`), persists it as server-only
+  `ScopeOfWork.emailThreadId` (no updatedAt bump), and **every send — the first included — carries
+  it in `References`** (follow-ups add `In-Reply-To` + a `Re:` subject). Anchoring the first send
+  too is a same-day live-test fix: Resend replaces a custom `Message-ID` with its own, so the
+  original follow-up referenced a nonexistent ID and Gmail kept it separate — clients group
+  messages whose `References` chains share an ID regardless of whether that root exists, which
+  removes the provider dependency entirely. Strictly per-record (two Scope of Works never share a
+  thread); Duplicate/Rewrite explicitly reset the field (both build the new record by spreading
+  the source, so without the reset a copy would reply into the source's thread). Records whose
+  first send predates the fix start grouping from their next send onward.
 - **Delivery Order link (added 2026-07-24, direct user request, scoped via AskUserQuestion)**: a
   "แนบลิงก์ใบส่งมอบสินค้าในอีเมล" checkbox appears next to the send button when a Delivery Order
   for this record exists — per-send choice (not persisted), passed as `{ includeDeliveryOrder }`.
