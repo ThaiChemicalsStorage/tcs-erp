@@ -1,54 +1,67 @@
-# แผนย้ายระบบขึ้น Server จริง (Server Migration Plan)
+# Server Migration Plan
 
-> **บันทึกจากการคุยกันวันที่ 24 ก.ค. 2026** — เก็บไว้เพื่อไม่ต้องอธิบายใหม่
-> สถานะ: **ยังไม่เริ่ม — รอจนกว่าระบบจะพัฒนาเสร็จและเจ้าของสั่งให้เริ่ม**
+> **Recorded 2026-07-24 from a direct conversation with the owner** — written down at their request
+> ("จดและสร้างไฟล์สักอย่างในโปรเจคก์นี้ว่าเคยคุยเรื่องนี้ไว้ขี้เกียจมาบอกใหม่") so it never needs
+> re-explaining. **Status: NOT started — deferred until development is finished and the owner
+> explicitly says go.**
 
-## ข้อตกลงสำคัญ (Key Facts)
+## Key Facts (agreed with the owner)
 
-- **Vercel ที่ใช้อยู่ตอนนี้ (https://tcs-erp-nine.vercel.app) เป็นแค่ demo สำหรับทดลองระบบเท่านั้น**
-  ไม่ใช่ที่อยู่จริงระยะยาว — ของจริงจะขึ้น Server เอง (ยังไม่ได้ตัดสินใจว่าที่ไหน/แบบไหน)
-- งานพัฒนาระบบ**ยังไม่เสร็จ** — ระหว่างนี้พัฒนาต่อบน demo ตามปกติ
-- **กติกาตั้งแต่ 2026-07-24 เป็นต้นไป:** ฟีเจอร์ใหม่ทุกตัวต้องใช้ของที่ย้ายตามได้
-  (MongoDB / Node ธรรมดา / REST ปกติ) — **ห้ามผูกเพิ่มกับบริการเฉพาะของ Vercel**
-  (Blob, KV, Edge Config, Cron ฯลฯ) เว้นแต่ตกลงกันก่อนเป็นกรณีไป
+- **The current Vercel deployment (https://tcs-erp-nine.vercel.app) is a demo/trial only** — the
+  owner's words: "ที่จริงระบบนี้ไม่ได้จะขึ้น vercel นะ...แค่อยากลองระบบเฉยๆ" and "จริงๆแล้วไม่ได้
+  deploy ขึ้น vercel จริงๆ มันแค่ demo". Real production hosting will be a self-managed server
+  (where/how not yet decided).
+- Development is **not finished** — keep building features on the Vercel demo for now.
+- The owner explicitly declined starting migration prep early ("งานยังไม่เสร็จนะแล้วก็ยังไม่ได้ขึ้น
+  Server ตอนนี้") — **do NOT begin any of the migration steps below until asked.**
+- **Standing rule from 2026-07-24 onward:** every new feature must use portable building blocks
+  only (MongoDB, plain Node logic, standard REST). **Never couple new work to Vercel-specific
+  services** (Blob, KV, Edge Config, Cron, etc.) unless explicitly agreed case-by-case first.
 
-## สิ่งที่เคยเจอมาแล้ว (บทเรียน)
+## Lesson Already Learned
 
-ฟีเจอร์แนบไฟล์ Scope of Work (2026-07-24) ตอนแรกสร้างบน **Vercel Blob** แล้วต้องรื้อกลับมาเก็บใน
-**MongoDB** (collection `scope_attachment_files`) ภายในวันเดียว หลังจากรู้ว่า Vercel เป็นแค่ demo —
-นี่คือเหตุผลของกติกาข้างบน ไฟล์ต้องเดินทางไปกับฐานข้อมูล
+The Scope of Work attachment feature (2026-07-24) was first built on **Vercel Blob** and had to be
+reworked to **MongoDB storage** (`scope_attachment_files` collection) the same day, once the
+demo-only status came to light — files must travel with the database. That rework is why the
+standing rule above exists. See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Attachments"
+and CHANGELOG.md 2026-07-24.
 
-## สถานะความพร้อมย้าย ณ ตอนนี้
+## Portability Status Today
 
-| ส่วน | ย้ายได้เลย? | หมายเหตุ |
+| Subsystem | Portable as-is? | Notes |
 |---|---|---|
-| หน้าเว็บ (React/Vite) | ✅ | build เป็นไฟล์ static เสิร์ฟจากที่ไหนก็ได้ (nginx ฯลฯ) |
-| ฐานข้อมูล MongoDB Atlas | ✅ | ใช้ Atlas ต่อ หรือย้ายไป MongoDB บนเซิร์ฟเวอร์ตัวเอง (dump/restore) |
-| ไฟล์แนบ | ✅ | อยู่ใน MongoDB แล้ว ไปกับฐานข้อมูล |
-| อีเมล (Resend REST API) | ✅ | แค่ตั้ง `RESEND_API_KEY` บนโฮสต์ใหม่ |
-| ระบบล็อกอิน (bcrypt + JWT cookie) | ✅ | ไม่ผูกกับ Vercel (cookie `secure` ต้องมี HTTPS) |
-| **ตัว API — 12 ไฟล์ใน `api/handlers/` + routing ใน `vercel.json`** | ⚠️ | จุดเดียวที่ผูกกับ Vercel Functions — ต้องทำ "เปลือก Express" มาครอบ (ดูแผนข้างล่าง) |
+| Frontend (React/Vite) | ✅ | Builds to static files — servable by nginx or any static host |
+| Database (MongoDB Atlas) | ✅ | Keep Atlas, or move to self-hosted MongoDB via dump/restore |
+| File attachments | ✅ | Stored in MongoDB (`scope_attachment_files`) — travel with the DB |
+| Email (Resend REST API) | ✅ | Plain `fetch` — just set `RESEND_API_KEY` on the new host |
+| Auth (bcrypt + JWT httpOnly cookie) | ✅ | Not Vercel-coupled (`secure` cookie requires HTTPS on the new host) |
+| **API layer — 12 function files in `api/handlers/` + `vercel.json` rewrites** | ⚠️ | The one Vercel-coupled piece: runs as Vercel Functions today; needs a thin Express wrapper (see plan) |
 
-โชคดีที่ logic ธุรกิจเกือบทั้งหมดอยู่ใน `api/_lib/` ซึ่งไม่ผูกกับ Vercel และรูปแบบ req/res ที่ใช้
-(`req.query`, `req.body`, `res.status().json()`) เข้ากันได้กับ Express แทบ 100% —
-**ไม่ต้องเขียน API ใหม่** แค่เพิ่มชั้นบาง ๆ มาครอบของเดิม
+The good news: nearly all business logic lives in `api/_lib/` and is transport-agnostic, and the
+req/res surface the handlers use (`req.query`, `req.body`, `res.status().json()`,
+`res.setHeader()`, `res.send()`) is ~100% Express-compatible (`VercelRequest`/`VercelResponse` are
+type-only imports, erased at runtime). **The API does not need a rewrite — only a thin new shell
+around the existing handlers.**
 
-## แผนตอนย้ายจริง (3 ขั้น — ทำเมื่อเจ้าของสั่งเท่านั้น)
+## The Migration Plan (3 steps — execute ONLY when the owner says go)
 
-1. **สร้าง Express server** (`server/index.ts`) — mount handler ทั้ง 12 ตัวเดิมตามเส้นทางใน
-   `vercel.json` + เสิร์ฟหน้าเว็บจาก `dist/` พร้อม SPA fallback
-   *(ของแถม: ได้รันระบบเต็มบนเครื่องตัวเองเป็นครั้งแรก ทดสอบได้โดยไม่ต้อง deploy)*
-2. **ทำ `.env.example`** — รวบรวมตัวแปรที่ต้องตั้ง: `MONGODB_URI`, JWT secret,
-   `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`
-3. **เขียน `docs/DEPLOYMENT.md`** — คู่มือติดตั้งบนเซิร์ฟเวอร์จริง:
-   - Node 20+ / PM2 หรือ systemd (รันตลอด ฟื้นเองเมื่อล่ม)
+1. **Add an Express server** (`server/index.ts`): mount the existing 12 handler entry points on
+   routes replicating `vercel.json`'s rewrites, add `express.json()` with a ~5 MB limit (the
+   attachment upload body), and serve the built frontend from `dist/` with an SPA fallback.
+   *Side benefit: the first-ever way to run the full stack locally — today the API can only be
+   tested by deploying.*
+2. **Add `.env.example`** documenting every required variable in one place: `MONGODB_URI`, the JWT
+   secret, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`.
+3. **Write `docs/DEPLOYMENT.md`** — the real-server install guide:
+   - Node 20+ under PM2 or systemd (always running, auto-restart on crash)
    - nginx reverse proxy + HTTPS (Let's Encrypt)
-   - ตัวเลือกฐานข้อมูล: ใช้ Atlas ต่อ vs ติดตั้ง MongoDB เอง + แผน backup
-   - ย้ายค่า env จาก Vercel มาที่โฮสต์ใหม่
+   - Database decision: keep Atlas vs self-hosted MongoDB, plus a backup plan
+   - Copying env values from Vercel to the new host
 
-ขั้น 1–2 ทำล่วงหน้าได้โดยไม่กระทบ demo บน Vercel (โค้ดเดิมรันบน Vercel ต่อได้ปกติ)
+Steps 1–2 are non-destructive to the Vercel demo (the same code keeps deploying to Vercel
+unchanged; the Express entry is an additional way to run it, not a replacement).
 
-## เอกสารที่เกี่ยวข้อง
+## Related Documents
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — สถาปัตยกรรมปัจจุบัน (Vercel Functions + MongoDB)
-- [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Attachments" — ตัวอย่างการรื้อของที่ผูกกับ Vercel ออก
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — current architecture (Vercel Functions + MongoDB)
+- [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Attachments" — the de-Vercel-ing precedent
