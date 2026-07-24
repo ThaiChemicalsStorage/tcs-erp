@@ -4,7 +4,37 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Dashboard: Delivery Order summary card
+## 2026-07-24 (absolute latest) — Dashboard: own-data-only scoping for roles without `viewAll`
+
+Direct user decision (asked explicitly via AskUserQuestion; chose "เห็นแค่ของตัวเอง"): the Dashboard
+previously showed company-wide aggregates to every `dashboard:view` holder, which leaked
+colleagues' totals/rankings to roles the list pages deliberately restrict (the own-records-only
+inconsistency surfaced while discussing the new Delivery Order card's permission gating).
+
+- `api/dashboard/index.ts`: a caller without `quotations:viewAll` now gets every quote-based
+  figure (KPIs, pipeline, charts, followUps, salesPerformance, customerAnalytics,
+  jobTypeAnalytics, trend series) computed from only their own quotes — the exact ownership
+  predicate `GET /api/quotes` uses (`createdByUserId` = self, plus ownerless legacy quotes) —
+  injected into `dateMatch` (inherited by `fullMatch`) and `salespersonOnlyMatch`. Sales Activity
+  is forced to their own `userName`. The SOW/DO summary cards likewise scope by the module's own
+  `viewAll` using the same predicates as their list routes (incl. the document-recipient match for
+  SOW). Deliberately still company-wide: the new-vs-repeat client classification (repeat customer
+  of the COMPANY; only own clients are displayed), the forecast's trailing-12-month win-rate
+  baseline (a stable ratio), and `approvalDashboard` (an approver must see everyone's pending
+  quotes; it keeps its own `quotations:approve` gate).
+- Response gains `ownDataOnly: boolean`; `DashboardPage.tsx` shows a gold filter-honesty notice
+  ("แสดงเฉพาะข้อมูลของคุณเท่านั้น") and `DashboardFilterBar` hides the salesperson/department
+  dropdowns (`hidePeopleFilters`) — they'd only offer the caller themselves. A crafted request
+  passing those filters anyway can only narrow its own data further, never widen it.
+- 2 i18n keys, What's New entry (`2026-07-24-dashboard-own-data`), docs
+  (MODULES/Dashboard.md, API.md, RBAC.md, UI_GUIDELINES.md "Filter Honesty" unchanged in
+  principle — the notice follows it).
+
+`tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all pass clean.
+
+---
+
+## 2026-07-24 — Dashboard: Delivery Order summary card
 
 Direct user request ("อัปเดตหน้า Dashboard... ไม่ได้เอาข้อมูลพวกหน้าที่สร้างใหม่เข้าไปด้วย") — the
 2026-07-23 Delivery Order module had no Dashboard presence. Added a Total/Draft/Final summary card

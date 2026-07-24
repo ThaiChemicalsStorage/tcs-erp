@@ -313,6 +313,17 @@ entirely, same as every permission check):
 - `GET /api/search`'s Quotation result category (`api/_lib/searchHandler.ts`'s `searchQuotations()`)
   — without this, a caller without `quotations:viewAll` could trivially discover another user's
   quotation through the Global Search box even though the list page itself hides it.
+- **`GET /api/dashboard` (added 2026-07-24, direct user decision)** — the Dashboard previously
+  showed company-wide aggregates to every `dashboard:view` holder, leaking colleagues'
+  totals/rankings to roles the list pages restrict. Now a caller without `quotations:viewAll`
+  gets every quote-based figure computed from only their own quotes (same predicate), the SOW/DO
+  summary cards scoped by those modules' own `viewAll` (same predicates as their list routes),
+  and Sales Activity restricted to their own audit events; the response carries
+  `ownDataOnly: true` so the UI shows a "your own data only" notice and hides the
+  salesperson/department filters. Deliberate exceptions (documented in `api/dashboard/index.ts`):
+  the new-vs-repeat client classification and the forecast win-rate baseline stay company-wide
+  (aggregate ratios, no per-record data), and `approvalDashboard` stays unscoped behind its own
+  `quotations:approve` gate — an approver must see everyone's pending quotes.
 
 Legacy/seed quotes with an empty `createdByUserId` (ownerless — same convention the `PATCH`
 ownership check above already uses) are visible to everyone regardless of `quotations:viewAll`,

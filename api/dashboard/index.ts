@@ -8,6 +8,7 @@ import {
   withStringId, type QuoteFields,
 } from "../_lib/collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
+import { DOCUMENT_RECIPIENT_DEPARTMENTS } from "../../src/lib/documentRequirements.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
 import { computeQuoteAmountBeforeVat } from "../_lib/quoteAmounts.js";
 import { dedupeQuotesByRevisionChain } from "../_lib/quoteRevisions.js";
@@ -309,6 +310,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (to) range.$lte = to;
       dateMatch.issueDate = range;
     }
+    // ── Own-data-only scoping (2026-07-24, direct user decision) ─────────────────────────────────
+    // A caller without `quotations:viewAll` sees the whole Dashboard computed from only their own
+    // quotes — the exact same ownership predicate `GET /api/quotes` uses for its list (own
+    // `createdByUserId`, plus ownerless legacy/seed quotes). Previously the Dashboard showed
+    // company-wide aggregates to every `dashboard:view` holder, which leaked colleagues'
+    // totals/rankings to roles the list pages deliberately restrict. Injected into `dateMatch`
+    // BEFORE `fullMatch` spreads it (so both inherit it), and into `salespersonOnlyMatch` below.
+    // Two queries deliberately stay company-wide (see their own comments): the new-vs-repeat client
+    // classification (a client is a repeat customer of the COMPANY; only the caller's own clients
+    // are ever displayed) and the forecast's trailing-12-month win-rate baseline (a stable
+    // ratio, not per-quote data). `approvalDashboard` also stays unscoped — an approver must see
+    // everyone's pending quotes to do their job, and it has its own `quotations:approve` gate.
+    const ownDataOnly = !roleHasPermission(ctx.role, "quotations:viewAll");
+    const ownQuoteClause = { $or: [{ createdByUserId: ctx.user.id }, { createdByUserId: "" }] };
+    if (ownDataOnly) Object.assign(dateMatch, ownQuoteClause);
     const fullMatch: Record<string, unknown> = { ...dateMatch };
     if (salespersonFilter && salespersonFilter !== "all") fullMatch.salesperson = salespersonFilter;
     if (salespeopleInDepartment) {
@@ -331,6 +347,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * MODULES/Dashboard.md for the documented rationale.
      */
     const salespersonOnlyMatch: Record<string, unknown> = {};
+    if (ownDataOnly) Object.assign(salespersonOnlyMatch, ownQuoteClause);
     if (salespersonFilter && salespersonFilter !== "all") salespersonOnlyMatch.salesperson = salespersonFilter;
     if (salespeopleInDepartment) {
       const deptCond = { salesperson: { $in: [...salespeopleInDepartment] } };
@@ -770,7 +787,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     type BySalespersonRow = { period: string; salesperson: string; created: number; edited: number };
     const activityMatch: Record<string, unknown> = { action: { $in: [...ACTIVITY_ACTIONS] } };
     if (from || to) activityMatch.createdAt = bangkokDayBoundsUtc(from, to);
-    if (salespersonFilter && salespersonFilter !== "all") activityMatch.userName = salespersonFilter;
+    // Own-data-only callers see only their own sales activity — audit entries are keyed by
+    // `userName` (fullName), not user id, so this joins on the same name convention the
+    // salesperson filter itself uses. Forced regardless of the salesperson/department filter
+    // (which the UI hides for these callers anyway).
+    if (ownDataOnly) activityMatch.userName = ctx.user.fullName;
+    else if (salespersonFilter && salespersonFilter !== "all") activityMatch.userName = salespersonFilter;
     if (salespeopleInDepartment) {
       const deptCond = { userName: { $in: [...salespeopleInDepartment] } };
       if (activityMatch.userName) {
@@ -903,14 +925,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // salesperson (it inherits a quotation's), so joining it back to the filtered quote set just to
     // honor the filter isn't worth the extra query for what's meant to be a simple "how many SOW
     // documents exist" count.
+    // Own-data-only counterpart for the two document-count cards below: without the module's own
+    // `viewAll`, the counts cover exactly the records the caller's standalone list page would show
+    // them — same predicates as `handleList` in scopeOfWorkHandler.ts / deliveryOrderHandler.ts
+    // (own `createdBy`, ownerless legacy records, and — for Scope of Work only — records naming
+    // the caller as a document recipient).
+    const scopeRecipientMatch = DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => ({ [`documentRecipients.${d.key}`]: ctx.user.id }));
+    const ownScopeClause = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
+      ? {}
+      : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }, ...scopeRecipientMatch] };
     let scopeOfWork: { total: number; draft: number; final: number } | null = null;
     if (roleHasPermission(ctx.role, "scopeOfWork:view")) {
       try {
         const scopeOfWorks = await scopeOfWorksCollection();
         const [total, draft, final] = await Promise.all([
-          scopeOfWorks.countDocuments({ isDeleted: false }),
-          scopeOfWorks.countDocuments({ isDeleted: false, status: "Draft" }),
-          scopeOfWorks.countDocuments({ isDeleted: false, status: "Final" }),
+          scopeOfWorks.countDocuments({ isDeleted: false, ...ownScopeClause }),
+          scopeOfWorks.countDocuments({ isDeleted: false, status: "Draft", ...ownScopeClause }),
+          scopeOfWorks.countDocuments({ isDeleted: false, status: "Final", ...ownScopeClause }),
         ]);
         scopeOfWork = { total, draft, final };
       } catch (err) {
@@ -924,14 +955,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // all-time, deliberately unfiltered for the same reason: a Delivery Order inherits its
     // quotation context via the Scope of Work, so it has no salesperson/issue-date of its own to
     // filter by. ──
+    const ownDeliveryClause = roleHasPermission(ctx.role, "deliveryOrder:viewAll")
+      ? {}
+      : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }] };
     let deliveryOrder: { total: number; draft: number; final: number } | null = null;
     if (roleHasPermission(ctx.role, "deliveryOrder:view")) {
       try {
         const deliveryOrders = await deliveryOrdersCollection();
         const [total, draft, final] = await Promise.all([
-          deliveryOrders.countDocuments({ isDeleted: false }),
-          deliveryOrders.countDocuments({ isDeleted: false, status: "Draft" }),
-          deliveryOrders.countDocuments({ isDeleted: false, status: "Final" }),
+          deliveryOrders.countDocuments({ isDeleted: false, ...ownDeliveryClause }),
+          deliveryOrders.countDocuments({ isDeleted: false, status: "Draft", ...ownDeliveryClause }),
+          deliveryOrders.countDocuments({ isDeleted: false, status: "Final", ...ownDeliveryClause }),
         ]);
         deliveryOrder = { total, draft, final };
       } catch (err) {
@@ -1061,6 +1095,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       approvalDashboard,
       scopeOfWork,
       deliveryOrder,
+      ownDataOnly,
       notificationSummary,
       availableSalespeople,
       availableDepartments,

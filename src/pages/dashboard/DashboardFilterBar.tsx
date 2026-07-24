@@ -13,12 +13,16 @@ export interface DashboardFilterState {
 const PRESETS: DateRangePreset[] = ["all", "today", "yesterday", "last7", "last14", "thisMonth", "lastMonth", "thisQuarter", "thisYear", "custom"];
 
 export function DashboardFilterBar({
-  filters, onChange, availableSalespeople, availableDepartments,
+  filters, onChange, availableSalespeople, availableDepartments, hidePeopleFilters = false,
 }: {
   filters: DashboardFilterState;
   onChange: (next: DashboardFilterState) => void;
   availableSalespeople: string[];
   availableDepartments: string[];
+  /** Own-data-only callers (no `quotations:viewAll`) — the server already scopes everything to
+   * their own quotes, so a salesperson/department picker would only offer themselves or produce
+   * empty charts. See `DashboardStats.ownDataOnly`. */
+  hidePeopleFilters?: boolean;
 }) {
   const { t } = useI18n();
   const [preset, setPreset] = useState<DateRangePreset>("all");
@@ -65,7 +69,7 @@ export function DashboardFilterBar({
 
       {/* Grouped so department+salesperson wrap together as a unit instead of `ml-auto` on a lone
           select detaching it from the row it was meant to stay aligned with once the bar wraps. */}
-      <div className="flex items-center gap-2.5 flex-wrap sm:ml-auto">
+      {!hidePeopleFilters && <div className="flex items-center gap-2.5 flex-wrap sm:ml-auto">
         <select
           value={filters.department}
           onChange={(e) => onChange({ ...filters, department: e.target.value })}
@@ -83,7 +87,7 @@ export function DashboardFilterBar({
           <option value="all">{t("dashboard.filter.salesperson.all")}</option>
           {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-      </div>
+      </div>}
     </div>
   );
 }

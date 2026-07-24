@@ -456,6 +456,14 @@ None owned by this page — it's a read-only aggregation over `customers`, `lead
 - Approve/Reject actions from the Pending Approvals widget reuse the existing
   `POST /api/quotes/:id/workflow` route (same one the Quotation module's own approval buttons
   call) — no new API route was added for this.
+- **2026-07-24 (second pass, direct user decision)**: **own-data-only scoping** — a caller without
+  `quotations:viewAll` gets every quote-based figure computed from only their own quotes (the
+  quotation list's exact ownership predicate), Sales Activity restricted to their own audit
+  events, and the SOW/DO cards scoped by those modules' own `viewAll` (their list routes' exact
+  predicates, incl. SOW's document-recipient match). Response gains `ownDataOnly: boolean`; the
+  UI shows a gold notice and hides the salesperson/department filter dropdowns. Deliberate
+  company-wide exceptions: new-vs-repeat client classification, forecast win-rate baseline,
+  `approvalDashboard`. See [RBAC.md](../RBAC.md) "Quotation Own-Quotes-Only Viewing".
 - **2026-07-24**: response gained a `deliveryOrder: { total, draft, final } | null` field — same
   shape/gating/unfiltered rules as `scopeOfWork` below, gated by `deliveryOrder:view`, isolated in
   its own try/catch. Backs the new `DeliveryOrderSummary.tsx` component.

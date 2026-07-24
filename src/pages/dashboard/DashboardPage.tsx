@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw, Download, History } from "lucide-react";
+import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw, Download, History, UserRound } from "lucide-react";
 import { type QuotationListFilter, interestLabelKey } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardStats } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
@@ -241,8 +241,17 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
       </div>
 
       <div data-tour="dashboard-filters">
-        <DashboardFilterBar filters={filters} onChange={handleFiltersChange} availableSalespeople={stats?.availableSalespeople ?? []} availableDepartments={stats?.availableDepartments ?? []} />
+        <DashboardFilterBar filters={filters} onChange={handleFiltersChange} availableSalespeople={stats?.availableSalespeople ?? []} availableDepartments={stats?.availableDepartments ?? []} hidePeopleFilters={stats?.ownDataOnly ?? false} />
       </div>
+
+      {/* Filter-honesty notice (see UI_GUIDELINES.md): own-data-only callers must be told the
+          Dashboard is scoped to them, or the smaller numbers read as missing data. */}
+      {stats?.ownDataOnly && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-[#c9a84c]/8 border border-[#c9a84c]/25 rounded-lg px-3 py-2 -mt-3">
+          <UserRound size={13} className="text-[#c9a84c] flex-shrink-0" />
+          {t("dashboard.ownDataOnly.notice")}
+        </div>
+      )}
 
       {!stats ? (
         loadError ? <ErrorState onRetry={retry} /> : <DashboardContentSkeleton />

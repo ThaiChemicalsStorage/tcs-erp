@@ -249,6 +249,11 @@ export interface DashboardStats {
   scopeOfWork: ScopeOfWorkSummary | null;
   /** Null when the caller lacks deliveryOrder:view — the frontend hides the Delivery Order card entirely in that case. */
   deliveryOrder: DeliveryOrderSummary | null;
+  /** True when the caller lacks `quotations:viewAll` — every quote-based figure covers only their
+   * own quotes (same ownership predicate as the quotation list), the SOW/DO cards cover only
+   * records their list pages would show, and Sales Activity covers only their own events. The
+   * frontend shows an "own data only" notice and hides the salesperson/department filters. */
+  ownDataOnly: boolean;
   notificationSummary: NotificationSummary;
   availableSalespeople: string[];
   /** Distinct `User.department` free-text values across all users — see Dashboard docs for the free-text-matching caveat (no real Department entity yet). */
