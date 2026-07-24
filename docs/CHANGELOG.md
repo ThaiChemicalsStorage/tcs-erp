@@ -4,7 +4,41 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Delivery Order print rebuilt to visually match the FM-SL-05 reference PDF
+## 2026-07-24 (absolute latest) — Delivery Order print: suppress the browser's URL footer via a zero-margin page override
+
+**Bug report**: direct user follow-up right after the print rebuild below — "มันมีลิ้งเว็บอยู่ใน
+ใบซ้ายล่างเอาออกด้วย" (there's a website link at the bottom-left of the document, remove it). That
+link is Chrome/Edge's own "Headers and footers" print-dialog option injecting the page URL at the
+bottom-left (plus date/title at the top) — not anything the app renders. The long-standing
+UI_GUIDELINES position was "not app-controllable, tell the user to untick the option" (Quotation/
+Scope of Work show a tooltip saying exactly that).
+
+**Fix — it IS suppressible for a whole-page-owned document**: the browser draws those texts only
+inside the `@page` margin area; with zero margins there is nowhere to draw them, so they're
+omitted regardless of the dialog checkbox. `DeliveryOrderPrintDocument.tsx` now renders a
+`<style>@media print { @page { margin: 0 } }</style>` scoped to the component's lifetime (it
+unmounts with the Delivery Order detail view, so Quotation/Scope of Work printing keeps the global
+12mm rule), and each installment's page wrapper carries `padding: 12mm` instead — the printed
+geometry is unchanged. This works for Delivery Order because its print output owns entire pages;
+it wasn't retrofitted onto Quotation/Scope of Work (their flowing multi-page layouts rely on real
+page margins on every page — see the known trade-off below).
+
+**Verified** by regenerating the harness PDF with Chrome's header/footer layer force-enabled
+(`page.pdf({ displayHeaderFooter: true, preferCSSPageSize: true })`, the same layer the dialog
+checkbox draws): no URL/date/title anywhere, layout pixel-identical to the previous pass, still
+one page per milestone. **Known trade-offs**: on a rare multi-page milestone, continuation pages
+start at the physical paper edge (only left/right padding carries across page breaks inside one
+wrapper); and if a user manually picks non-default margins in the print dialog, the browser margin
+area — and its texts — can come back (the default "Margins: Default" honors the CSS zero margin).
+
+**Files Modified**: `src/pages/quotation/DeliveryOrderPrintDocument.tsx`,
+`docs/UI_GUIDELINES.md`, `docs/MODULES/DeliveryOrder.md`, `docs/CLAUDE.md`, `docs/CHANGELOG.md`.
+
+**Verification**: `npm run lint` (0 errors, 2 pre-existing warnings), `npm run build` pass clean.
+
+---
+
+## 2026-07-24 — Delivery Order print rebuilt to visually match the FM-SL-05 reference PDF
 
 **Requirement**: rebuild the Delivery Note print/PDF layout to match the reference PDF
 (`public/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf`, company form FM-SL-05 Rev.01)

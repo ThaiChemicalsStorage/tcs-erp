@@ -30,9 +30,15 @@ headless system Chrome (`puppeteer-core`, temporary harness deleted after use) a
 side-by-side with the reference: one-page dense milestone (≈ ref p1), two-item milestone with
 filler (≈ ref p2/p3), `?only=` single-milestone scoping (exactly 1 page, zero sibling data),
 Thai+English item text, 30-item 3-page stress test. **Deliberate remaining differences**: 12mm
-global `@page` margins (reference's ~3mm isn't reliably printable; rule shared app-wide), Noto
-Serif Thai instead of the reference's Angsana-like Windows-only font, and browser print
-header/footer being a user dialog setting CSS can't force. See CHANGELOG.md 2026-07-24.
+margins (reference's ~3mm isn't reliably printable), and Noto Serif Thai instead of the
+reference's Angsana-like Windows-only font. **Same day, follow-up fix**: per a direct user report
+("มันมีลิ้งเว็บอยู่ในใบซ้ายล่างเอาออกด้วย"), the browser's own "Headers and footers" print texts —
+the page URL at the bottom-left in particular — are now suppressed outright: a component-scoped
+`<style>` sets `@page { margin: 0 }` for this document only (the browser has no margin area to
+draw its texts into) and each page wrapper carries the 12mm as `padding` instead, so the printed
+geometry is unchanged. Verified with Chrome's header/footer layer force-enabled. See
+[UI_GUIDELINES.md](../UI_GUIDELINES.md) "Print / PDF" for when this trick is (and isn't)
+applicable. See CHANGELOG.md 2026-07-24.
 
 **2026-07-24, separate Delivery Note per payment milestone**: each eligible (non-deposit) payment
 milestone now prints as its own completely independent Delivery Note. Three changes:

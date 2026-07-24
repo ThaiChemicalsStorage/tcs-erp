@@ -99,7 +99,7 @@ function InstallmentPage({
   return (
     <div
       className="hidden print:block"
-      style={{ breakAfter: "page", fontFamily: DOC_FONT, color: "#000", background: "#fff" }}
+      style={{ breakAfter: "page", fontFamily: DOC_FONT, color: "#000", background: "#fff", padding: "12mm" }}
     >
       {/* Letterhead/titles/customer info live OUTSIDE the table: Chromium only repeats a printed
           <thead> across pages when it's reasonably small, so the thead holds just the intro +
@@ -297,6 +297,15 @@ export function DeliveryOrderPrintDocument({ deliveryOrder, companyHeader, onlyI
     : deliveryOrder.installments;
   return (
     <>
+      {/* Zero-margin page override, scoped to this component's lifetime (it unmounts with the
+          Delivery Order detail view, so no other document's print is affected): with no margin
+          area, Chrome has nowhere to draw its own "Headers and footers" texts — the page URL at
+          the bottom-left in particular — so they're suppressed regardless of the user's print
+          dialog setting (user report: "มันมีลิ้งเว็บอยู่ในใบซ้ายล่างเอาออกด้วย"). The 12mm the
+          global @page rule used to provide moves onto each page wrapper as padding. Known
+          trade-off: on a rare multi-page milestone, continuation pages start at the physical
+          paper edge (only left/right padding carries across page breaks). */}
+      <style>{"@media print { @page { margin: 0 } }"}</style>
       {/* The print tables are display:none on screen, so the browser never encounters their Thai
           glyphs and would not download Noto Serif Thai until the print dialog is already rendering —
           silently falling back to whatever Thai system font the machine happens to have. This
