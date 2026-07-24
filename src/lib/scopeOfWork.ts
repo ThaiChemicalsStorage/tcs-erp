@@ -274,6 +274,16 @@ export interface ScopeOfWork {
   remarks: string;
   seller: ScopeOfWorkSignatory;
   approver: ScopeOfWorkSignatory;
+  /** Extra files attached to this record (added 2026-07-24, per direct user request to attach
+   * additional documents where the record is emailed to recipients — "อยากให้ทำให้สามารถแนบไฟล์ได้
+   * ตรงหน้า scope of work ที่จะส่งเอกสารให้ผู้อื่น...กลัว db เต็ม"). The file BYTES deliberately never
+   * touch MongoDB — they live in Vercel Blob storage (`api/_lib/blob.ts`) and this array stores
+   * only lightweight metadata + the blob URL, so attachments can't fill the database up. Managed
+   * exclusively through the dedicated upload/delete routes (never part of a PATCH), and NOT carried
+   * over by Duplicate/Rewrite — copies would share the same underlying blob file, and deleting the
+   * attachment from one record would break the other record's link. Pre-2026-07-24 records lack
+   * the field entirely — read it as `scope.attachments ?? []`. */
+  attachments: ScopeOfWorkAttachment[];
   status: ScopeOfWorkStatus;
   version: number;
   createdAt: string;
@@ -282,6 +292,26 @@ export interface ScopeOfWork {
   updatedBy: string;
   isDeleted: boolean;
 }
+
+/** One attached file's metadata — the actual bytes live in Vercel Blob at `url`, never in MongoDB. */
+export interface ScopeOfWorkAttachment {
+  id: string;
+  fileName: string;
+  /** Public (unguessable-suffix) Vercel Blob URL — also linked directly in the recipient email. */
+  url: string;
+  /** Original size in bytes — display only. */
+  size: number;
+  contentType: string;
+  uploadedBy: string;
+  uploadedByName: string;
+  uploadedAt: string;
+}
+
+/** Per-file / per-record attachment limits — enforced server-side, mirrored in the UI. The 3 MB
+ * per-file cap keeps the JSON-base64 upload body under Vercel's ~4.5 MB serverless request limit
+ * (3 MB × 4/3 base64 overhead ≈ 4 MB). */
+export const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+export const MAX_ATTACHMENTS_PER_SCOPE = 10;
 
 /** Compact shape for a quotation-detail "does a Scope of Work already exist?" lookup — omits
  * full checklist/item content. */
@@ -409,6 +439,25 @@ export async function logScopeOfWorkPrinted(id: string): Promise<void> {
  * failure (e.g. one recipient's address rejected) without treating the whole action as failed. */
 export async function sendScopeOfWorkDocumentNotifications(id: string): Promise<{ sentCount: number; failedCount: number; recipientCount: number }> {
   return apiFetch<{ sentCount: number; failedCount: number; recipientCount: number }>(`/scope-of-works/${id}/send-documents`, { method: "POST" });
+}
+/** Uploads one attachment (JSON base64 body — see MAX_ATTACHMENT_BYTES) and returns the updated
+ * record. The file bytes go to Vercel Blob server-side; MongoDB only stores metadata. */
+export async function uploadScopeOfWorkAttachment(
+  id: string,
+  file: { fileName: string; contentType: string; dataBase64: string },
+): Promise<ScopeOfWork> {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/attachments`, {
+    method: "POST",
+    body: JSON.stringify(file),
+  });
+  return scopeOfWork;
+}
+export async function deleteScopeOfWorkAttachment(id: string, attachmentId: string): Promise<ScopeOfWork> {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(
+    `/scope-of-works/${id}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: "DELETE" },
+  );
+  return scopeOfWork;
 }
 
 export function newScopeSpecLineId(): string {

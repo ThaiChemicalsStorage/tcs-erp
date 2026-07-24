@@ -18,10 +18,12 @@ import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/l
 import { normalizePaymentConditions, normalizeDocumentRecipients } from "../../src/lib/scopeOfWork.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
 import { sendEmail, isEmailConfigured } from "./email.js";
+import { uploadBlobFile, deleteBlobFile } from "./blob.js";
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE } from "../../src/lib/scopeOfWork.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
   ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkPaymentInstallment,
-  ScopeOfWorkPaymentType, ScopeOfWorkSignatory, ScopeOfWorkCustomerSnapshot,
+  ScopeOfWorkPaymentType, ScopeOfWorkSignatory, ScopeOfWorkCustomerSnapshot, ScopeOfWorkAttachment,
 } from "../../src/lib/scopeOfWork.js";
 
 /**
@@ -498,6 +500,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       documentRecipients: {},
       documentRecipientMessage: "",
       revisionNote: "",
+      attachments: [],
       remarks: derived.remarks,
       seller,
       approver: { name: "", userId: "", date: "" },
@@ -699,6 +702,10 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
       isDeleted: false,
       // Never inherited from the source — see `ScopeOfWork.revisionNote`'s doc comment (src/lib/scopeOfWork.ts).
       revisionNote: "",
+      // Never inherited either — a copy would share the source's underlying blob files, and
+      // deleting an attachment from one record would break the other's link. See
+      // `ScopeOfWork.attachments`'s doc comment (src/lib/scopeOfWork.ts).
+      attachments: [],
     };
     try {
       const result = await scopeOfWorks.insertOne(doc);
@@ -763,6 +770,10 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
       isDeleted: false,
       // Never inherited from the source — see `ScopeOfWork.revisionNote`'s doc comment (src/lib/scopeOfWork.ts).
       revisionNote: "",
+      // Never inherited either — a copy would share the source's underlying blob files, and
+      // deleting an attachment from one record would break the other's link. See
+      // `ScopeOfWork.attachments`'s doc comment (src/lib/scopeOfWork.ts).
+      attachments: [],
     };
     try {
       const result = await scopeOfWorks.insertOne(doc);
@@ -829,6 +840,103 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
+// ─── Attachments (added 2026-07-24) ────────────────────────────────────────────────────────────
+// Files live in Vercel Blob, never MongoDB (user concern: "กลัว db เต็ม") — see api/_lib/blob.ts.
+// Managed only through these dedicated routes; `attachments` is deliberately NOT a PATCHable
+// field, so a stale client can't accidentally wipe the array (and with it, track of live blobs).
+
+/** Pre-2026-07-24 records have no `attachments` field at all. */
+function currentAttachments(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkAttachment[] {
+  return Array.isArray(doc.attachments) ? doc.attachments : [];
+}
+
+async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadScopeOrThrow(id);
+  if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (doc.status === "Final") throw new HttpError(400, "Scope of Work นี้เป็นสถานะ Final แล้ว ไม่สามารถแนบไฟล์เพิ่มได้");
+
+  const attachments = currentAttachments(doc);
+  if (attachments.length >= MAX_ATTACHMENTS_PER_SCOPE) {
+    throw new HttpError(400, `แนบไฟล์ได้สูงสุด ${MAX_ATTACHMENTS_PER_SCOPE} ไฟล์ต่อเอกสาร — ลบไฟล์เดิมออกก่อน`);
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const fileName = sanitizeShortText(body.fileName, "ชื่อไฟล์");
+  if (!fileName.trim()) throw new HttpError(400, "กรุณาระบุชื่อไฟล์");
+  const contentType = typeof body.contentType === "string" && body.contentType.trim()
+    ? body.contentType.trim().slice(0, 120)
+    : "application/octet-stream";
+  const dataBase64 = typeof body.dataBase64 === "string" ? body.dataBase64 : "";
+  if (!dataBase64) throw new HttpError(400, "ไม่พบข้อมูลไฟล์");
+  // 4/3 base64 overhead — reject before decoding so an oversized payload can't cost a full decode.
+  if (dataBase64.length > Math.ceil((MAX_ATTACHMENT_BYTES * 4) / 3) + 8) {
+    throw new HttpError(400, `ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
+  }
+  let data: Buffer;
+  try {
+    data = Buffer.from(dataBase64, "base64");
+  } catch {
+    throw new HttpError(400, "ข้อมูลไฟล์ไม่ถูกต้อง");
+  }
+  if (data.length === 0) throw new HttpError(400, "ไม่พบข้อมูลไฟล์");
+  if (data.length > MAX_ATTACHMENT_BYTES) {
+    throw new HttpError(400, `ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
+  }
+
+  // Path-safe name for the blob key only — the display name keeps the user's original text.
+  const safeName = fileName.replace(/[\\/:*?"<>|#%]/g, "_");
+  const url = await uploadBlobFile(`scope-of-work/${id}/${safeName}`, data, contentType);
+
+  const attachment: ScopeOfWorkAttachment = {
+    id: randomUUID(),
+    fileName,
+    url,
+    size: data.length,
+    contentType,
+    uploadedBy: ctx.user.id,
+    uploadedByName: ctx.user.fullName,
+    uploadedAt: nowIso(),
+  };
+  const scopeOfWorks = await scopeOfWorksCollection();
+  await scopeOfWorks.updateOne(
+    { _id: doc._id },
+    { $set: { attachments: [...attachments, attachment], updatedAt: nowIso(), updatedBy: ctx.user.id } },
+  );
+  const updated = await scopeOfWorks.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
+  await writeScopeAuditEntry(ctx, "Scope of Work Attachment Added", `แนบไฟล์ "${fileName}" กับ Scope of Work ${doc.scopeNumber}`, {
+    scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId,
+  });
+  res.status(200).json({ scopeOfWork: withStringId(updated) });
+}
+
+async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, id: string, attachmentId: string) {
+  if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadScopeOrThrow(id);
+  if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (doc.status === "Final") throw new HttpError(400, "Scope of Work นี้เป็นสถานะ Final แล้ว ไม่สามารถลบไฟล์แนบได้");
+
+  const attachments = currentAttachments(doc);
+  const target = attachments.find((a) => a.id === attachmentId);
+  if (!target) throw new HttpError(404, "ไม่พบไฟล์แนบ");
+
+  await deleteBlobFile(target.url);
+  const scopeOfWorks = await scopeOfWorksCollection();
+  await scopeOfWorks.updateOne(
+    { _id: doc._id },
+    { $set: { attachments: attachments.filter((a) => a.id !== attachmentId), updatedAt: nowIso(), updatedBy: ctx.user.id } },
+  );
+  const updated = await scopeOfWorks.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
+  await writeScopeAuditEntry(ctx, "Scope of Work Attachment Removed", `ลบไฟล์แนบ "${target.fileName}" ออกจาก Scope of Work ${doc.scopeNumber}`, {
+    scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId,
+  });
+  res.status(200).json({ scopeOfWork: withStringId(updated) });
+}
+
 async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:print");
@@ -881,6 +989,21 @@ function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl:
     )
     .join("");
 
+  // Attached files (2026-07-24) — direct blob links, openable without an app session (the app has
+  // no URL router for email deep-links; these work in any mail client).
+  const attachments = Array.isArray(doc.attachments) ? doc.attachments : [];
+  const attachmentsBlock = attachments.length > 0
+    ? `<div style="margin-top:22px;border-top:1px solid #eee;padding-top:16px;">
+         <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#767676;letter-spacing:.5px;">ไฟล์แนบ (${attachments.length})</p>
+         ${attachments
+           .map(
+             (a) => `<p style="margin:0 0 6px;font-size:13px;">📎 <a href="${a.url}" style="color:#0b1d3a;font-weight:600;">${escapeHtml(a.fileName)}</a>
+               <span style="color:#999;font-size:11px;">(${(a.size / 1024 / 1024).toFixed(2)} MB)</span></p>`,
+           )
+           .join("")}
+       </div>`
+    : "";
+
   return `
     <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;max-width:560px;margin:0 auto;background:#f4f4f4;padding:24px 16px;">
       <div style="background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e4e4e4;">
@@ -894,6 +1017,7 @@ function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl:
             Scope of Work <strong style="color:#0b1d3a;">${escapeHtml(doc.scopeNumber)}</strong> มีเอกสารที่ต้องการให้ตรวจสอบ/ดำเนินการ
           </p>
           <table style="width:100%;border-collapse:collapse;">${rowsHtml}</table>
+          ${attachmentsBlock}
           <div style="margin-top:26px;text-align:center;">
             <a href="${appUrl}" style="display:inline-block;background:#c9a84c;color:#0b1d3a;text-decoration:none;font-weight:700;font-size:13px;padding:11px 28px;border-radius:6px;">เปิดดูใน TCS ERP</a>
           </div>
@@ -1025,5 +1149,7 @@ export async function handleScopeOfWork(req: VercelRequest, res: VercelResponse)
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "send-documents") return handleSendDocumentNotifications(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "attachments") return handleAttachmentUpload(req, res, parts[0]);
+  if (parts.length === 3 && parts[1] === "attachments") return handleAttachmentDelete(req, res, parts[0], parts[2]);
   throw new HttpError(404, "Not found");
 }

@@ -1,6 +1,15 @@
-import { Check } from "lucide-react";
+import { useRef } from "react";
+import { Check, Paperclip, Trash2, Loader2, FileText } from "lucide-react";
 import type { User } from "../../lib/users";
 import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../lib/documentRequirements";
+import {
+  type ScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE,
+} from "../../lib/scopeOfWork";
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
 
 /**
  * "ผู้รับเอกสาร" — real people to actually email when a `documentsToSend` (เอกสารส่งถึง) checklist
@@ -28,6 +37,10 @@ export function DocumentRecipientsPicker({
   message,
   onMessageChange,
   disabled,
+  attachments,
+  uploading,
+  onUploadAttachment,
+  onDeleteAttachment,
 }: {
   documentsToSendGroup: ChecklistGroup | undefined;
   users: User[];
@@ -38,7 +51,15 @@ export function DocumentRecipientsPicker({
   message: string;
   onMessageChange: (next: string) => void;
   disabled: boolean;
+  /** Extra files attached to the record (added 2026-07-24) — bytes live in Vercel Blob, links are
+   * included in the recipient email; see `ScopeOfWork.attachments`'s doc comment. Uploads/deletes
+   * are immediate API actions (not part of the unsaved draft), handled by the parent. */
+  attachments: ScopeOfWorkAttachment[];
+  uploading: boolean;
+  onUploadAttachment: (file: File) => void;
+  onDeleteAttachment: (attachmentId: string) => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   if (!documentsToSendGroup) return null;
   const checkedByKey = new Map(documentsToSendGroup.options.map((o) => [o.key, o.checked]));
   const checkedDepartments = DOCUMENT_RECIPIENT_DEPARTMENTS.filter((d) => checkedByKey.get(d.key));
@@ -109,6 +130,69 @@ export function DocumentRecipientsPicker({
           );
         })}
       </div>
+      {/* ── ไฟล์แนบ (added 2026-07-24) ── */}
+      <div className="mt-4 pt-4 border-t border-border/70">
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <label className="block text-xs font-semibold text-foreground">
+            ไฟล์แนบ <span className="font-normal text-muted-foreground">(ไม่บังคับ — สูงสุด {MAX_ATTACHMENTS_PER_SCOPE} ไฟล์ ไฟล์ละไม่เกิน {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB)</span>
+          </label>
+          {!disabled && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || attachments.length >= MAX_ATTACHMENTS_PER_SCOPE}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50 flex-shrink-0"
+            >
+              {uploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
+              {uploading ? "กำลังอัปโหลด..." : "แนบไฟล์"}
+            </button>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onUploadAttachment(file);
+              e.target.value = "";
+            }}
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground mb-2">
+          ไฟล์ที่แนบจะถูกส่งเป็นลิงก์ในอีเมลถึงผู้รับเอกสารด้วย — ตัวไฟล์ถูกเก็บในที่เก็บไฟล์แยกต่างหาก ไม่กินพื้นที่ฐานข้อมูล
+        </p>
+        {attachments.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground italic">ยังไม่มีไฟล์แนบ</p>
+        ) : (
+          <div className="border border-border/70 rounded-lg divide-y divide-border/60">
+            {attachments.map((a) => (
+              <div key={a.id} className="flex items-center gap-2.5 px-3 py-2 text-xs">
+                <FileText size={14} className="text-[#c9a84c] flex-shrink-0" />
+                <a
+                  href={a.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 min-w-0 truncate font-medium text-foreground hover:text-[#c9a84c] transition-colors"
+                  title={a.fileName}
+                >
+                  {a.fileName}
+                </a>
+                <span className="text-muted-foreground font-mono flex-shrink-0">{formatFileSize(a.size)}</span>
+                {!disabled && (
+                  <button
+                    onClick={() => onDeleteAttachment(a.id)}
+                    disabled={uploading}
+                    aria-label={`ลบไฟล์แนบ ${a.fileName}`}
+                    className="text-muted-foreground hover:text-[#e05252] transition-colors disabled:opacity-50 flex-shrink-0"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="mt-4 pt-4 border-t border-border/70">
         <label className="block text-xs font-semibold text-foreground mb-1">
           ข้อความเพิ่มเติมถึงผู้รับ <span className="font-normal text-muted-foreground">(ไม่บังคับ)</span>

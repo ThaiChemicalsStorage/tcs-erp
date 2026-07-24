@@ -7,7 +7,7 @@ import {
   fetchScopeOfWork, updateScopeOfWork, finalizeScopeOfWork, duplicateScopeOfWork, rewriteScopeOfWork,
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
   blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS, sendScopeOfWorkDocumentNotifications,
-  fetchScopeOfWorksByQuotation,
+  fetchScopeOfWorksByQuotation, uploadScopeOfWorkAttachment, deleteScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES,
 } from "../../lib/scopeOfWork";
 import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOrderFromScope } from "../../lib/deliveryOrder";
 import { getRevisionPredecessorId, generateScopeOfWorkRevisionSummary } from "../../lib/revisionDiff";
@@ -250,6 +250,7 @@ export function ScopeOfWorkDocument({
   const [serverValidationErrors, setServerValidationErrors] = useState<{ fieldErrors: Record<string, string>; groupErrors: Record<string, string[]> } | null>(null);
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [sendingDocs, setSendingDocs] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [generatingRevisionNote, setGeneratingRevisionNote] = useState(false);
   // "Does a Delivery Order already exist for this Scope of Work?" (added 2026-07-23, per direct
   // user request) — same existence-check pattern QuoteDocument.tsx uses for its own "สร้าง/เปิด
@@ -355,6 +356,51 @@ export function ScopeOfWorkDocument({
       showToast(err instanceof ApiError ? err.message : "ส่งอีเมลไม่สำเร็จ");
     } finally {
       setSendingDocs(false);
+    }
+  };
+
+  // ── ไฟล์แนบ (added 2026-07-24) — immediate API actions, not part of the unsaved draft; the
+  // file bytes go to Vercel Blob server-side, MongoDB stores only metadata. ─────────────────────
+  const handleUploadAttachment = async (file: File) => {
+    if (!scope || uploadingAttachment) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      showToast(`ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
+      return;
+    }
+    setUploadingAttachment(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      let binary = "";
+      const bytes = new Uint8Array(buffer);
+      // Chunked conversion — String.fromCharCode(...entireArray) overflows the argument limit on
+      // multi-MB files.
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      }
+      const updated = await uploadScopeOfWorkAttachment(scope.id, {
+        fileName: file.name,
+        contentType: file.type || "application/octet-stream",
+        dataBase64: btoa(binary),
+      });
+      setScope((prev) => (prev ? { ...prev, attachments: updated.attachments ?? [] } : prev));
+      showToast(`แนบไฟล์ "${file.name}" แล้ว`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "แนบไฟล์ไม่สำเร็จ");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    if (!scope || uploadingAttachment) return;
+    setUploadingAttachment(true);
+    try {
+      const updated = await deleteScopeOfWorkAttachment(scope.id, attachmentId);
+      setScope((prev) => (prev ? { ...prev, attachments: updated.attachments ?? [] } : prev));
+      showToast("ลบไฟล์แนบแล้ว");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "ลบไฟล์แนบไม่สำเร็จ");
+    } finally {
+      setUploadingAttachment(false);
     }
   };
 
@@ -707,6 +753,10 @@ export function ScopeOfWorkDocument({
           message={scope.documentRecipientMessage ?? ""}
           onMessageChange={(next) => updateField("documentRecipientMessage", next)}
           disabled={!editable}
+          attachments={scope.attachments ?? []}
+          uploading={uploadingAttachment}
+          onUploadAttachment={handleUploadAttachment}
+          onDeleteAttachment={handleDeleteAttachment}
         />
         {documentsToSendGroup && checkedDocumentsToSendKeys.size > 0 && (
           <div className="flex justify-end print:hidden -mt-2">

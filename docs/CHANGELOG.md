@@ -4,7 +4,53 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — User manual: added document *detail* page screenshots
+## 2026-07-24 (absolute latest) — Scope of Work: file attachments (Vercel Blob, zero MongoDB storage)
+
+**Requirement**: direct user request — "อยากให้ทำให้สามารถแนบไฟล์ได้ตรงหน้า scope of work ที่จะส่ง
+เอกสารให้ผู้อื่นให้สามารถแนบไฟล์เพิ่มเติมเข้าไปด้วยละช่วยจัดการให้หน่อยกลัว db เต็ม" — attach extra
+files where a Scope of Work is emailed to recipients, and don't fill the database up.
+
+**Design — file bytes never touch MongoDB**: uploads go to **Vercel Blob** (new `api/_lib/blob.ts`,
+`@vercel/blob` production dependency; `access: "public"` + unguessable random URL suffix); the new
+`ScopeOfWork.attachments: ScopeOfWorkAttachment[]` stores only per-file metadata + the blob URL
+(~hundreds of bytes/file), directly answering the "กลัว db เต็ม" concern. Limits: ≤ 3 MB/file
+(keeps the JSON-base64 body under Vercel's ~4.5 MB request cap), ≤ 10 files/record.
+
+- **New routes** (mounted on the existing shared function, still 12/12 slots):
+  `POST /api/scope-of-works/:id/attachments` (upload) and
+  `DELETE /api/scope-of-works/:id/attachments/:attachmentId` — edit-gated (owner-or-finalize,
+  Draft only), audit-logged both ways, `attachments` deliberately NOT PATCHable. Blob delete on
+  removal is best-effort (an orphaned blob never blocks the user).
+- **UI**: a "ไฟล์แนบ" section in the "ผู้รับเอกสาร" card (`DocumentRecipientsPicker.tsx`) — attach
+  button with progress state, file list with size + open-in-new-tab link + delete; limits shown
+  inline; explicit hint that files don't consume database space. Upload/delete are immediate API
+  actions; the parent (`ScopeOfWorkDocument.tsx`) merges only the returned `attachments` array
+  into local state so unsaved draft edits elsewhere aren't clobbered.
+- **Email**: the "ส่งอีเมลแจ้งผู้รับเอกสาร" email now lists each attachment as a direct clickable
+  link (works in any mail client, no app session needed — the deliberate reason for public-access
+  blobs).
+- **Duplicate/Rewrite do NOT inherit attachments** — copies would share the same blob file and a
+  delete from one record would break the other's link; both now explicitly reset
+  `attachments: []`. Pre-existing records lack the field and are read as empty everywhere — no
+  migration.
+- **⚠️ Manual setup required**: create a Vercel Blob store (Dashboard → Storage → Blob) so
+  `BLOB_READ_WRITE_TOKEN` exists — until then the upload button returns a clear Thai 503. Same
+  convention as `RESEND_API_KEY`. Tracked in TODO.md (top High Priority item) together with the
+  live-verification checklist.
+
+**Files Modified**: `src/lib/scopeOfWork.ts`, `api/_lib/blob.ts` (new),
+`api/_lib/scopeOfWorkHandler.ts`, `src/pages/quotation/DocumentRecipientsPicker.tsx`,
+`src/pages/quotation/ScopeOfWorkDocument.tsx`, `src/lib/whatsNew.ts`, `package.json`
+(`@vercel/blob`), `docs/MODULES/ScopeOfWork.md`, `docs/API.md`, `docs/TODO.md`, `docs/CLAUDE.md`,
+`docs/CHANGELOG.md`.
+
+**Verification**: `tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build`
+all pass clean. Not verified against a live deployment — requires the Blob store to exist first
+(see TODO.md).
+
+---
+
+## 2026-07-24 — User manual: added document *detail* page screenshots
 
 Per direct user follow-up ("ทำไมไม่กดเข้าไปในใบด้วยพวก ใบเสนอราคา scope of work และใบส่งมอบงานละ
 แคปมาด้วยละจะได้ครบๆ") on the entry below: 3 more live-site screenshots, this time of the *inside*

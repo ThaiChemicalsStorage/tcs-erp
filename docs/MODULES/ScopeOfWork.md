@@ -1,6 +1,6 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23, Attachments (Vercel Blob file storage) added 2026-07-24
 
 **2026-07-23, Own-Records-Only Viewing** (per direct user request, "หน้า scope of work อยากให้ทำสิทธิ์
 เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — mirroring Quotation's `quotations:viewAll`): new
@@ -361,6 +361,39 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   to Vercel's environment variables — the send button returns a clear `500` ("ระบบยังไม่ได้ตั้งค่า
   การส่งอีเมล") instead of silently failing when it's missing, but nothing in this codebase can set
   the key itself (a human must sign up at resend.com). See [ARCHITECTURE.md](../ARCHITECTURE.md) and
+  [TODO.md](../TODO.md).
+
+## Attachments (added 2026-07-24)
+
+Per direct user request ("อยากให้ทำให้สามารถแนบไฟล์ได้ตรงหน้า scope of work ที่จะส่งเอกสารให้ผู้อื่นให้
+สามารถแนบไฟล์เพิ่มเติมเข้าไปด้วยละช่วยจัดการให้หน่อยกลัว db เต็ม") — extra files (customer PO scans,
+drawings, etc.) can be attached in the "ผู้รับเอกสาร" card (`DocumentRecipientsPicker.tsx`, a
+"ไฟล์แนบ" section between the recipient picker and the custom-message textarea).
+
+- **The file bytes never touch MongoDB** — the explicit driver of the design ("กลัว db เต็ม"). Files
+  are uploaded to **Vercel Blob** (`api/_lib/blob.ts`, `@vercel/blob` package, `access: "public"`
+  with an unguessable random URL suffix); `ScopeOfWork.attachments` stores only a
+  `ScopeOfWorkAttachment` metadata row per file (`{id, fileName, url, size, contentType,
+  uploadedBy, uploadedByName, uploadedAt}` — a few hundred bytes).
+- **Limits**: ≤ 3 MB per file (keeps the JSON-base64 upload body under Vercel's ~4.5 MB serverless
+  request cap), ≤ 10 files per record — enforced server-side, mirrored in the UI.
+- **Email integration**: the "ส่งอีเมลแจ้งผู้รับเอกสาร" email lists every attachment as a direct
+  clickable link — works in any mail client with no app session (unlike the app link, which can't
+  deep-link). This is the deliberate reason for `access: "public"`: recipients open files straight
+  from the email.
+- **Lifecycle**: upload/delete are immediate API actions on the dedicated routes (see
+  [API.md](../API.md)) — `attachments` is deliberately NOT PATCHable, so a stale client can't wipe
+  the array. Edit-gated (owner-or-finalize, Draft only), audit-logged both ways. Deleting an
+  attachment deletes its blob best-effort (an orphaned blob never blocks metadata removal); a
+  soft-deleted record's blobs are left in place (no restore flow exists, and Blob storage is cheap).
+- **Duplicate/Rewrite do NOT carry attachments over** — a copy would reference the same underlying
+  blob file, and deleting the attachment from either record would break the other's link. Fresh
+  records/copies always start with `attachments: []`; pre-2026-07-24 records lack the field
+  entirely and are read as empty (`currentAttachments()` server-side, `scope.attachments ?? []`
+  client-side) — no migration script.
+- **⚠️ Requires manual setup before this feature actually works**: a Vercel Blob store must be
+  created (Vercel Dashboard → Storage → Blob) so `BLOB_READ_WRITE_TOKEN` exists — until then the
+  upload button returns a clear Thai `503`. Same convention as `RESEND_API_KEY` above. See
   [TODO.md](../TODO.md).
 
 ## Revision Note (added 2026-07-23)
