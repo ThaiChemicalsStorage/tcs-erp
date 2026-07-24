@@ -429,6 +429,7 @@ export async function ensureIndexes() {
     permissions, departments, positions, customers, customerContacts,
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
     notificationTypes, jobTypes, quotationTemplates, scopeOfWorks, deliveryOrders,
+    scopeAttachmentFiles,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -437,6 +438,7 @@ export async function ensureIndexes() {
     leadsCollection(), leadActivitiesCollection(), productTemplatesCollection(),
     quotationCommentsCollection(), quotationTagsCollection(), notificationTypesCollection(),
     jobTypesCollection(), quotationTemplatesCollection(), scopeOfWorksCollection(), deliveryOrdersCollection(),
+    scopeAttachmentFilesCollection(),
   ]);
 
   await Promise.all([
@@ -490,6 +492,12 @@ export async function ensureIndexes() {
     deliveryOrders.createIndex({ scopeOfWorkId: 1 }),
     deliveryOrders.createIndex({ status: 1 }),
     deliveryOrders.createIndex({ isDeleted: 1 }),
+    // Attachment file bytes — the download route looks up by {scopeOfWorkId, attachmentId}; these
+    // docs each carry up to 2 MB of Binary, so an unindexed scan is disproportionately expensive.
+    // Also declared defensively per-instance in scopeOfWorkHandler.ts (ensureAttachmentIndexes())
+    // because this function only runs from the one-time Setup Wizard.
+    scopeAttachmentFiles.createIndex({ attachmentId: 1 }, { unique: true }),
+    scopeAttachmentFiles.createIndex({ scopeOfWorkId: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

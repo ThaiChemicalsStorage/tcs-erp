@@ -321,6 +321,14 @@ export interface ScopeOfWorkAttachment {
 export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 export const MAX_ATTACHMENTS_PER_SCOPE = 5;
 
+/** Human display for an attachment's byte size — shared by the ไฟล์แนบ list in
+ * `DocumentRecipientsPicker.tsx` and the recipient email builder (api/_lib/scopeOfWorkHandler.ts),
+ * so a 50 KB file never renders as "0.05 MB". */
+export function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 /** Compact shape for a quotation-detail "does a Scope of Work already exist?" lookup — omits
  * full checklist/item content. */
 export interface ScopeOfWorkSummary {

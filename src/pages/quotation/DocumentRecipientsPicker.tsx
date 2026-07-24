@@ -3,13 +3,8 @@ import { Check, Paperclip, Trash2, Loader2, FileText } from "lucide-react";
 import type { User } from "../../lib/users";
 import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../lib/documentRequirements";
 import {
-  type ScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE,
+  type ScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE, formatFileSize,
 } from "../../lib/scopeOfWork";
-
-function formatFileSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-}
 
 /**
  * "ผู้รับเอกสาร" — real people to actually email when a `documentsToSend` (เอกสารส่งถึง) checklist

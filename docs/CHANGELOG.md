@@ -4,7 +4,49 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Scope of Work attachments reworked: MongoDB storage, Vercel Blob removed
+## 2026-07-24 (absolute latest) — Self-review fix pass over the attachments work (stored-XSS + concurrency + hygiene)
+
+A single-pass code review (no multi-agent fan-out available this session) over everything since
+`3d1c151` found and fixed, all in `api/_lib/scopeOfWorkHandler.ts` unless noted:
+
+- **Stored XSS (the important one)**: the unauthenticated download route echoed the
+  uploader-chosen `contentType` back with `Content-Disposition: inline` on the app's own origin —
+  any editor could upload `text/html`/`image/svg+xml` and have script run in whoever opened the
+  emailed link. Now only a script-free whitelist (PDF/PNG/JPEG/GIF/WebP/plain text) renders
+  inline; everything else is `attachment` + `application/octet-stream`, plus
+  `X-Content-Type-Options: nosniff` always.
+- **Concurrent-upload race**: upload/delete rewrote the whole `attachments` array from a pre-read
+  snapshot (`$set`) — two parallel uploads could silently drop one's metadata (orphaning its
+  bytes) and blow past the 5-file cap. Now an atomic `$push` with the cap re-checked inside the
+  update filter (losing the race deletes the just-stored bytes and returns the normal "full"
+  error), and delete uses `$pull`.
+- **Missing indexes**: `scope_attachment_files` had none — every download was a collection scan
+  over up-to-2-MB Binary docs. Added `{attachmentId}` (unique) + `{scopeOfWorkId}` to
+  `ensureIndexes()` (`api/_lib/collections.ts`) and, because that only runs from the Setup
+  Wizard, defensively per-instance via `ensureAttachmentIndexes()` (same pattern as
+  `ensureSearchIndexes()`).
+- **Malformed `filename*`**: `encodeURIComponent` leaves `'()*` bare and a bare `'` breaks the
+  RFC 5987 `filename*=UTF-8''…` syntax (e.g. `customer's PO (final).pdf`) — now percent-escaped.
+- **Legacy-record normalization**: `normalizeScope()` now defaults `attachments: []` (the client
+  type declares it non-optional), and the attachment routes' responses go through
+  `normalizeScope()` like every other route instead of raw `withStringId()`.
+- **Dead base64 try/catch**: Node's base64 decoder never throws — it silently skips invalid
+  characters, so corrupt input could be stored truncated. Replaced with an up-front charset check.
+- **Email size text**: small files rendered as "(0.00 MB)" — the recipient email now uses the
+  same `formatFileSize()` as the ไฟล์แนบ list, moved to `src/lib/scopeOfWork.ts` and shared
+  (`DocumentRecipientsPicker.tsx` local copy removed).
+
+Reported but deliberately not changed: the Delivery Order print's filler-row budget counts rows,
+not rendered height, so long wrapped item names can push content to a second page with filler
+still present (visual tuning, needs the reference PDF to re-verify against).
+
+**Files Modified**: `api/_lib/scopeOfWorkHandler.ts`, `api/_lib/collections.ts`,
+`src/lib/scopeOfWork.ts`, `src/pages/quotation/DocumentRecipientsPicker.tsx`,
+`docs/MODULES/ScopeOfWork.md`, `docs/API.md`, `docs/CHANGELOG.md`.
+
+---
+
+## 2026-07-24 — Scope of Work attachments reworked: MongoDB storage, Vercel Blob removed
 
 **Context — live testing of the entry below surfaced two Blob issues and one big new fact.** The
 first live upload attempt 503'd: the user's newly-created Blob store provisions **OIDC-style creds**

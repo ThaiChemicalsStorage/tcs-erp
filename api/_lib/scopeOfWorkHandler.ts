@@ -20,7 +20,7 @@ import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/l
 import { normalizePaymentConditions, normalizeDocumentRecipients } from "../../src/lib/scopeOfWork.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
 import { sendEmail, isEmailConfigured } from "./email.js";
-import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE } from "../../src/lib/scopeOfWork.js";
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE, formatFileSize } from "../../src/lib/scopeOfWork.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
   ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkPaymentInstallment,
@@ -410,6 +410,9 @@ function normalizeScope(scope: ScopeOfWork): ScopeOfWork {
     // Same "record predates this field" defaulting as documentRecipients above.
     revisionNote: scope.revisionNote ?? "",
     documentRecipientMessage: scope.documentRecipientMessage ?? "",
+    // Pre-2026-07-24 records have no `attachments` field at all — the client type declares it
+    // non-optional, so default it here rather than trusting every consumer to `?? []`.
+    attachments: scope.attachments ?? [],
   };
 }
 
@@ -858,6 +861,23 @@ function currentAttachments(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkAttachme
   return Array.isArray(doc.attachments) ? doc.attachments : [];
 }
 
+/** `ensureIndexes()` in api/_lib/collections.ts only ever runs from the one-time Setup Wizard
+ * bootstrap, permanently unreachable on an already-provisioned deployment — same gap and same
+ * defensive-idempotent fix as `ensureSearchIndexes()` (api/_lib/searchHandler.ts), scoped once per
+ * warm serverless instance. Without these, every download `findOne` is a full collection scan over
+ * documents that each carry up to 2 MB of BSON Binary. */
+let attachmentIndexesEnsured = false;
+async function ensureAttachmentIndexes(
+  files: Awaited<ReturnType<typeof scopeAttachmentFilesCollection>>,
+): Promise<void> {
+  if (attachmentIndexesEnsured) return;
+  await Promise.all([
+    files.createIndex({ attachmentId: 1 }, { unique: true }),
+    files.createIndex({ scopeOfWorkId: 1 }),
+  ]);
+  attachmentIndexesEnsured = true;
+}
+
 async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requireUser(req);
@@ -882,12 +902,11 @@ async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, i
   if (dataBase64.length > Math.ceil((MAX_ATTACHMENT_BYTES * 4) / 3) + 8) {
     throw new HttpError(400, `ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
   }
-  let data: Buffer;
-  try {
-    data = Buffer.from(dataBase64, "base64");
-  } catch {
-    throw new HttpError(400, "ข้อมูลไฟล์ไม่ถูกต้อง");
-  }
+  // Node's base64 decoder never throws — it silently SKIPS invalid characters, so a corrupted
+  // payload would otherwise be stored truncated without anyone noticing. Validate the charset up
+  // front instead (the client's btoa() output is plain standard base64, no whitespace).
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(dataBase64)) throw new HttpError(400, "ข้อมูลไฟล์ไม่ถูกต้อง");
+  const data = Buffer.from(dataBase64, "base64");
   if (data.length === 0) throw new HttpError(400, "ไม่พบข้อมูลไฟล์");
   if (data.length > MAX_ATTACHMENT_BYTES) {
     throw new HttpError(400, `ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
@@ -896,6 +915,7 @@ async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, i
   const attachmentId = randomUUID();
   const downloadKey = randomBytes(24).toString("base64url");
   const files = await scopeAttachmentFilesCollection();
+  await ensureAttachmentIndexes(files);
   await files.insertOne({
     scopeOfWorkId: id,
     attachmentId,
@@ -918,16 +938,30 @@ async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, i
     uploadedAt: nowIso(),
   };
   const scopeOfWorks = await scopeOfWorksCollection();
-  await scopeOfWorks.updateOne(
-    { _id: doc._id },
-    { $set: { attachments: [...attachments, attachment], updatedAt: nowIso(), updatedBy: ctx.user.id } },
+  // Atomic `$push` with the per-record cap re-checked inside the filter itself ("slot N-1 must not
+  // exist yet") — the previous read-modify-write `$set` of the whole array meant two concurrent
+  // uploads could each start from the same snapshot, silently dropping one upload's metadata (while
+  // its file bytes stayed behind as an orphan) and blowing past MAX_ATTACHMENTS_PER_SCOPE. The cast
+  // is only because the driver's `Filter` key typing doesn't admit a computed dotted array path.
+  const pushResult = await scopeOfWorks.updateOne(
+    {
+      _id: doc._id,
+      [`attachments.${MAX_ATTACHMENTS_PER_SCOPE - 1}`]: { $exists: false },
+    } as Parameters<typeof scopeOfWorks.updateOne>[0],
+    { $push: { attachments: attachment }, $set: { updatedAt: nowIso(), updatedBy: ctx.user.id } },
   );
+  if (pushResult.matchedCount === 0) {
+    // Lost a concurrent race to the last free slot — remove the just-stored bytes so they can't
+    // linger unreferenced, then surface the same "full" error the pre-check gives.
+    await files.deleteOne({ attachmentId });
+    throw new HttpError(400, `แนบไฟล์ได้สูงสุด ${MAX_ATTACHMENTS_PER_SCOPE} ไฟล์ต่อเอกสาร — ลบไฟล์เดิมออกก่อน`);
+  }
   const updated = await scopeOfWorks.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
   await writeScopeAuditEntry(ctx, "Scope of Work Attachment Added", `แนบไฟล์ "${fileName}" กับ Scope of Work ${doc.scopeNumber}`, {
     scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId,
   });
-  res.status(200).json({ scopeOfWork: withStringId(updated) });
+  res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 
 async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, id: string, attachmentId: string) {
@@ -944,16 +978,35 @@ async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, i
   const files = await scopeAttachmentFilesCollection();
   await files.deleteOne({ attachmentId });
   const scopeOfWorks = await scopeOfWorksCollection();
+  // `$pull` of just this entry (not a `$set` of a pre-read filtered array) so a concurrent upload's
+  // freshly-pushed sibling entry can't be clobbered by a stale snapshot.
   await scopeOfWorks.updateOne(
     { _id: doc._id },
-    { $set: { attachments: attachments.filter((a) => a.id !== attachmentId), updatedAt: nowIso(), updatedBy: ctx.user.id } },
+    { $pull: { attachments: { id: attachmentId } }, $set: { updatedAt: nowIso(), updatedBy: ctx.user.id } },
   );
   const updated = await scopeOfWorks.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
   await writeScopeAuditEntry(ctx, "Scope of Work Attachment Removed", `ลบไฟล์แนบ "${target.fileName}" ออกจาก Scope of Work ${doc.scopeNumber}`, {
     scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId,
   });
-  res.status(200).json({ scopeOfWork: withStringId(updated) });
+  res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
+}
+
+/** Content types allowed to render inline in the browser tab. Anything else — crucially text/html
+ * and image/svg+xml, which can execute script — is served as a plain download under a neutral
+ * content type instead: this route is unauthenticated and lives on the app's own origin, so
+ * echoing an uploader-chosen `contentType` back with `inline` disposition would let any editor
+ * store an HTML file that runs script (and reads the session token) in whoever opens the emailed
+ * link. Vercel Blob never had this problem only because its public URLs were on a foreign origin. */
+const INLINE_SAFE_CONTENT_TYPES = new Set([
+  "application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp", "text/plain",
+]);
+
+/** RFC 5987 ext-value percent-encoding — `encodeURIComponent` alone leaves `'`, `(`, `)`, `*`
+ * bare, and a bare `'` in particular breaks the `filename*=UTF-8''…` syntax (it's that field's own
+ * delimiter), mangling downloads of e.g. `customer's PO (final).pdf`. */
+function encodeRfc5987(value: string): string {
+  return encodeURIComponent(value).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
 /** Serves an attachment's bytes. Deliberately NO session auth — access is gated by the random
@@ -966,12 +1019,16 @@ async function handleAttachmentDownload(req: VercelRequest, res: VercelResponse,
   if (!key) throw new HttpError(404, "ไม่พบไฟล์แนบ");
 
   const files = await scopeAttachmentFilesCollection();
+  await ensureAttachmentIndexes(files);
   const file = await files.findOne({ scopeOfWorkId: id, attachmentId });
   if (!file || file.downloadKey !== key) throw new HttpError(404, "ไม่พบไฟล์แนบ");
 
   const buffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data.buffer);
-  res.setHeader("Content-Type", file.contentType || "application/octet-stream");
-  res.setHeader("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`);
+  const storedType = (file.contentType || "").split(";")[0].trim().toLowerCase();
+  const inlineSafe = INLINE_SAFE_CONTENT_TYPES.has(storedType);
+  res.setHeader("Content-Type", inlineSafe ? storedType : "application/octet-stream");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Disposition", `${inlineSafe ? "inline" : "attachment"}; filename*=UTF-8''${encodeRfc5987(file.fileName)}`);
   res.setHeader("Cache-Control", "private, max-age=3600");
   res.status(200).send(buffer);
 }
@@ -1039,7 +1096,7 @@ function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl:
            .map((a) => {
              const href = a.url.startsWith("http") ? a.url : `${appUrl}${a.url}`;
              return `<p style="margin:0 0 6px;font-size:13px;">📎 <a href="${href}" style="color:#0b1d3a;font-weight:600;">${escapeHtml(a.fileName)}</a>
-               <span style="color:#999;font-size:11px;">(${(a.size / 1024 / 1024).toFixed(2)} MB)</span></p>`;
+               <span style="color:#999;font-size:11px;">(${formatFileSize(a.size)})</span></p>`;
            })
            .join("")}
        </div>`

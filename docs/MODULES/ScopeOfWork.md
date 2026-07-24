@@ -404,6 +404,19 @@ drawings, etc.) can be attached in the "ผู้รับเอกสาร" ca
   client-side) — no migration script.
 - **No external setup required** — the short-lived Vercel Blob dependency (`api/_lib/blob.ts`,
   `@vercel/blob`) was removed with the rework; the user's Blob store can be deleted.
+- **Hardening (2026-07-24, same-day self-review pass)**: the download route serves only a
+  whitelist of script-free content types inline (PDF/PNG/JPEG/GIF/WebP/plain text) — anything
+  else, crucially `text/html`/`image/svg+xml`, is forced to `attachment` + `application/octet-stream`
+  + `nosniff`, closing a stored-XSS hole (uploader-chosen `contentType` echoed inline on the app's
+  own origin from an unauthenticated route; Blob never had this only because its URLs were on a
+  foreign origin). Uploads append atomically (`$push` with the 5-file cap re-checked inside the
+  filter; deletes use `$pull`) so concurrent uploads can't clobber each other or exceed the cap;
+  `scope_attachment_files` gets `{attachmentId}` (unique) + `{scopeOfWorkId}` indexes (declared in
+  `ensureIndexes()` and defensively per-instance in `ensureAttachmentIndexes()`, since the former
+  only runs from the Setup Wizard); `filename*` is RFC 5987-encoded (bare `'` used to break the
+  header); base64 charset is validated up front (Node silently skips invalid chars, it never
+  throws); attachment routes' responses now go through `normalizeScope()` like every other route,
+  and `normalizeScope()` defaults `attachments` to `[]` for pre-2026-07-24 records.
 
 ## Revision Note (added 2026-07-23)
 
