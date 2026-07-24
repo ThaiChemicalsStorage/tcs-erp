@@ -66,6 +66,8 @@ unchanged; the Express entry is an additional way to run it, not a replacement).
 > Recorded 2026-07-24 at the owner's request ("อยากให้จดทั้งหมดที่ต้องทำไว้ตอนที่จะขึ้น Server") —
 > the single complete list, so nothing has to be rediscovered at migration time. Ordered; items
 > marked **(can do now)** don't need the server and work on the Vercel demo too.
+> **Don't skip step G** — the owner explicitly asked to be reminded that the user manual must be
+> updated as the final pre-launch step.
 
 ### A. Domain + email sender (can do now — also fixes email on the demo)
 
@@ -138,12 +140,28 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
    other account without a reload (the 45 s polling).
 6. Role check: a view-only account must NOT see the send-email button / edit actions.
 
-### G. Decommission the demo
+### G. Final step before go-live: UPDATE THE USER MANUAL (owner's explicit reminder, 2026-07-24)
+
+- **Regenerate `public/คู่มือการใช้งาน TCS ERP.pdf` as the last step before going live** — the
+  owner asked to be reminded of this specifically ("ท้ายสุดก่อนขึ้น Server ให้อัพเดตคู่มือ").
+  Two reasons it must be redone, not just kept:
+  1. **Content is stale**: the manual was generated 2026-07-24 morning; features shipped after it
+     are missing — the approval workflow (ส่งขออนุมัติ/อนุมัติ/ปฏิเสธ/ถอนคำขอ + Delivery Order
+     Rewrite), Scope of Work attachments, email threading, notification polling, Dashboard
+     Excel export + Delivery Order card + own-data-only scoping, and anything shipped later.
+     Sweep `WHATS_NEW_ENTRIES` (src/lib/whatsNew.ts) against the manual's chapter list to catch
+     everything.
+  2. **Screenshots show the demo URL** — recapture against the real host so users see the
+     right address.
+  The regeneration workflow is recorded in docs/CHANGELOG.md 2026-07-24 (user manual entry):
+  screenshots via browser automation against the live site, HTML source at
+  `docs/manual/user-manual.html`, PDF via headless Chrome `page.pdf()`.
+
+### H. Decommission the demo
 
 - Keep or delete the Vercel project (keeping it as a staging environment is fine — but then
   restrict who knows the URL, since it shares the production database unless repointed).
 - Delete the unused Vercel Blob store (leftover from the 2026-07-24 attachments rework).
-- Optional: regenerate `public/คู่มือการใช้งาน TCS ERP.pdf` — its screenshots show the demo URL.
 - Update `docs/ARCHITECTURE.md` + this file to describe the real host as current.
 
 ### Optional post-migration upgrades (only possible on the real server)
