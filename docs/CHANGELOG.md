@@ -4,7 +4,22 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Delivery Order print: suppress the browser's URL footer via a zero-margin page override
+## 2026-07-24 (absolute latest) — What's New announcements for the Delivery Order work + standing rule
+
+Per a direct user request ("ทุกครั้งที่มี update ใหญ่อยากให้ขึ้นประกาศในเว็บด้วยที่สร้างไว้แล้วที่เป็น
+Update อะ"), two entries were added to `WHATS_NEW_ENTRIES` (`src/lib/whatsNew.ts`): one for today's
+per-milestone printing + FM-SL-05 print rebuild + browser-URL-footer suppression, and one
+backfilling the 2026-07-23 Delivery Order module itself, which had shipped without an announcement.
+**Standing rule going forward**: every genuinely user-facing feature/behavior change must get a
+Thai `WHATS_NEW_ENTRIES` entry as part of the same task — internal fixes/refactors/docs-only
+changes don't. (This was already the module's documented intent — see docs/CLAUDE.md's "What's New
+(topbar)" row — now treated as a per-task requirement, not an afterthought.)
+
+**Files Modified**: `src/lib/whatsNew.ts`, `docs/CHANGELOG.md`.
+
+---
+
+## 2026-07-24 — Delivery Order print: suppress the browser's URL footer via a zero-margin page override
 
 **Bug report**: direct user follow-up right after the print rebuild below — "มันมีลิ้งเว็บอยู่ใน
 ใบซ้ายล่างเอาออกด้วย" (there's a website link at the bottom-left of the document, remove it). That
