@@ -449,7 +449,8 @@ export async function sendScopeOfWorkDocumentNotifications(id: string): Promise<
   return apiFetch<{ sentCount: number; failedCount: number; recipientCount: number }>(`/scope-of-works/${id}/send-documents`, { method: "POST" });
 }
 /** Uploads one attachment (JSON base64 body — see MAX_ATTACHMENT_BYTES) and returns the updated
- * record. The file bytes go to Vercel Blob server-side; MongoDB only stores metadata. */
+ * record. The file bytes are stored server-side in the `scope_attachment_files` collection;
+ * the record itself only stores metadata. */
 export async function uploadScopeOfWorkAttachment(
   id: string,
   file: { fileName: string; contentType: string; dataBase64: string },

@@ -51,9 +51,10 @@ export function DocumentRecipientsPicker({
   message: string;
   onMessageChange: (next: string) => void;
   disabled: boolean;
-  /** Extra files attached to the record (added 2026-07-24) — bytes live in Vercel Blob, links are
-   * included in the recipient email; see `ScopeOfWork.attachments`'s doc comment. Uploads/deletes
-   * are immediate API actions (not part of the unsaved draft), handled by the parent. */
+  /** Extra files attached to the record (added 2026-07-24) — bytes live in the
+   * `scope_attachment_files` MongoDB collection, links are included in the recipient email; see
+   * `ScopeOfWork.attachments`'s doc comment. Uploads/deletes are immediate API actions (not part
+   * of the unsaved draft), handled by the parent. */
   attachments: ScopeOfWorkAttachment[];
   uploading: boolean;
   onUploadAttachment: (file: File) => void;

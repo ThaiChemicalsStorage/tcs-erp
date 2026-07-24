@@ -360,7 +360,7 @@ export function ScopeOfWorkDocument({
   };
 
   // ── ไฟล์แนบ (added 2026-07-24) — immediate API actions, not part of the unsaved draft; the
-  // file bytes go to Vercel Blob server-side, MongoDB stores only metadata. ─────────────────────
+  // file bytes are stored server-side in the scope_attachment_files collection. ─────────────────
   const handleUploadAttachment = async (file: File) => {
     if (!scope || uploadingAttachment) return;
     if (file.size > MAX_ATTACHMENT_BYTES) {
