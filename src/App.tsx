@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -674,6 +674,18 @@ export default function App() {
             onNavigateToTemplate={navigateToTemplate}
             onNavigateToScopeOfWork={navigateToScopeOfWork}
           />
+          {/* User manual — deliberately a labeled gold pill, not just an icon, per direct user
+              request that anyone who can't use the system immediately sees where the manual is. */}
+          <a
+            href={encodeURI("/คู่มือการใช้งาน TCS ERP.pdf")}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={t("topbar.manual")}
+            className="flex-shrink-0 flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-full border border-[#c9a84c]/60 bg-[#c9a84c]/10 text-[#a07830] hover:bg-[#c9a84c]/20 hover:border-[#c9a84c] transition-all text-xs font-semibold"
+          >
+            <BookOpen size={15} className="flex-shrink-0" />
+            <span className="hidden sm:inline whitespace-nowrap">{t("topbar.manual")}</span>
+          </a>
           <div className="flex-shrink-0">
             <WhatsNewPanel currentUserId={currentUser.id} />
           </div>

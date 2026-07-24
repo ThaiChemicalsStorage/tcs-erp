@@ -79,6 +79,7 @@ const translations = {
     "nav.group.inventory": "คลังสินค้า",
     "nav.group.admin": "การจัดการระบบ",
     "topbar.help": "วิธีใช้งาน",
+    "topbar.manual": "คู่มือการใช้งาน",
 
     "onboarding.progress": "ขั้นตอนที่ {{current}} จาก {{total}}",
     "onboarding.next": "ถัดไป",
@@ -988,6 +989,7 @@ const translations = {
     "nav.group.inventory": "Inventory",
     "nav.group.admin": "Administration",
     "topbar.help": "Help",
+    "topbar.manual": "User Manual",
 
     "onboarding.progress": "Step {{current}} of {{total}}",
     "onboarding.next": "Next",

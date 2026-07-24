@@ -4,7 +4,24 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Thai user manual PDF
+## 2026-07-24 (absolute latest) — "คู่มือการใช้งาน" manual button on the topbar
+
+Per direct user follow-up ("ช่วยทำแบบกดดูคู่มือแบบเห็นง่ายๆ คนเข้าใจได้ง่ายมากที่สุด...") after asking
+where the manual lives on the site: the user manual PDF (previous entry) now has a highly visible
+entry point — a **gold pill button labeled "คู่มือการใช้งาน"** (BookOpen icon) on the topbar of
+every page, between Global Search and the What's New icon (`src/App.tsx`). Deliberately a labeled
+pill in the brand gold, not another anonymous icon, so someone who can't use the system immediately
+sees where help is. Opens the PDF in a new tab (`encodeURI`'d Thai filename); label collapses to
+icon-only below the `sm` breakpoint. New `topbar.manual` i18n key (Thai/English); the What's New
+manual announcement now points at the button instead of the raw URL.
+
+**Files Modified**: `src/App.tsx`, `src/lib/i18n.tsx`, `src/lib/whatsNew.ts`, `docs/CHANGELOG.md`.
+
+**Verification**: `npm run lint` (0 errors, 2 pre-existing warnings), `npm run build` pass clean.
+
+---
+
+## 2026-07-24 — Thai user manual PDF
 
 Per direct user request ("อยากให้สร้างไฟล์คู่มือมาเป็น pdf วิธีใช้เว็บไซต์นี้"), a full Thai
 end-user manual was authored and shipped as a PDF:
