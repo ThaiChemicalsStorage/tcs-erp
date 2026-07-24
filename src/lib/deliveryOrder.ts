@@ -70,6 +70,12 @@ export interface DeliveryOrder {
   createdBy: string;
   updatedBy: string;
   isDeleted: boolean;
+  /** Capability key for the session-less read-only HTML view (added 2026-07-24) —
+   * `GET /api/delivery-orders/:id/view?key=...`, linked from the Scope of Work
+   * document-recipient email when the sender ticks "แนบใบส่งมอบสินค้า". Generated server-side on
+   * first use (same random-key pattern as attachment downloads), never client-writable (not in
+   * DeliveryOrderUpdateFields), absent until then. */
+  shareKey?: string;
 }
 
 /** Compact shape for a Scope of Work detail's "does a Delivery Order already exist?" lookup. */

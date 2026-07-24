@@ -316,6 +316,23 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   [ARCHITECTURE.md](../ARCHITECTURE.md)) in parallel per recipient (`Promise.allSettled`, so one bad
   address doesn't block the others), writes a `"Scope of Work Document Notification Sent"` audit
   entry, and returns `{ sentCount, failedCount, recipientCount }` for the UI toast.
+- **Email threading (added 2026-07-24, direct user request)**: repeat sends of the *same* record
+  land in the recipients' existing email conversation, like a reply — the first send mints a
+  Message-ID (`<sow-{id}-{rand}@{APP_URL host}>`), persists it as server-only
+  `ScopeOfWork.emailThreadId` (no updatedAt bump), and later sends set `In-Reply-To`/`References`
+  plus a `Re:` subject. Strictly per-record (two Scope of Works never share a thread);
+  Duplicate/Rewrite explicitly reset the field (both build the new record by spreading the source,
+  so without the reset a copy would reply into the source's thread). Final grouping is the
+  receiving client's call — Gmail/Outlook honor these headers, and the Re:-same-subject pairing is
+  the fallback. Records sent before this feature start their thread from their next send.
+- **Delivery Order link (added 2026-07-24, direct user request, scoped via AskUserQuestion)**: a
+  "แนบลิงก์ใบส่งมอบสินค้าในอีเมล" checkbox appears next to the send button when a Delivery Order
+  for this record exists — per-send choice (not persisted), passed as `{ includeDeliveryOrder }`.
+  The email gains a "ใบส่งมอบสินค้าและบริการ" block linking the session-less
+  `GET /api/delivery-orders/:id/view?key=` HTML view (see
+  [MODULES/DeliveryOrder.md](./DeliveryOrder.md) "Share View" and [API.md](../API.md)); the server
+  `400`s if none exists, which the UI prevents by only offering the checkbox when it knows one
+  does.
 - **In-app notification + recipient list visibility** (added 2026-07-23, same-day second pass, per
   direct user follow-up — "อยากรู้ว่าทำยังไงถึงให้มันไปโผล่ในหน้า scope of work ของเราเวลาที่มีคนอื่น
   ส่งมา... อยากให้ขึ้นแจ้งเตือนในระบบด้วย"): sending now does two more things besides the email —

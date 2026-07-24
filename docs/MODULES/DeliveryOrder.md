@@ -211,6 +211,21 @@ which is itself checked before the plain quotes logic) — no new Vercel functio
 12-function-slot-sharing convention Scope of Work and Quotation Templates already use. New
 `api/_lib/deliveryOrderHandler.ts`. See [API.md](../API.md) for the full route table.
 
+## Share View (added 2026-07-24)
+
+`GET /api/delivery-orders/:id/view?key=...` (`handleShareView()`) — a **session-less, read-only
+HTML rendering** of the Delivery Order, linked from the Scope of Work document-recipient email when
+the sender ticks "แนบลิงก์ใบส่งมอบสินค้าในอีเมล" (see [ScopeOfWork.md](./ScopeOfWork.md) "Document
+Recipients"). Same capability-URL pattern as Scope of Work attachment downloads: authorization is
+the random `DeliveryOrder.shareKey` (minted by the Scope of Work send route on first use, never
+client-writable — not in `DeliveryOrderUpdateFields`); every failure mode (bad id, deleted record,
+no key minted yet, wrong key) is an identical opaque `404`. Rendered fresh from the live record on
+every open (one section per non-deposit installment: เลขที่/วันที่, ticked-items table with specs,
+Remark; `Cache-Control: no-store`, `noindex`, all interpolated values HTML-escaped since they're
+user-entered). Deliberately **not** a replica of the FM-SL-05 form — it's a viewing convenience
+for email recipients; the official printable document remains the in-app per-milestone print flow
+(`DeliveryOrderPrintDocument.tsx`).
+
 ## Files
 
 - `src/lib/deliveryOrder.ts` — types + `fetch*`/`create*`/`update*`/`finalize*`/`refresh*`/`delete*`

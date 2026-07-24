@@ -4,7 +4,39 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Dashboard: real Excel (.xlsx) export
+## 2026-07-24 (absolute latest) — Email threading for repeat sends + Delivery Order link in the email
+
+Two direct user requests in one pass ("ส่งไฟล์ตามหลัง...ให้มันอยู่ในแบบเหมือนตอบกลับตัวเองในอีเมล" +
+"ทำให้มันสามารถแนบใบส่งมอบงานได้ด้วย", clarified via AskUserQuestion to mean a link in the SOW email):
+
+**Email threading** — repeat "ส่งอีเมลแจ้งผู้รับเอกสาร" sends of the same record now land in the
+recipient's existing email conversation instead of as a new email each time:
+- `api/_lib/email.ts`: `sendEmail()` accepts pass-through SMTP `headers`.
+- New server-only `ScopeOfWork.emailThreadId` (never PATCHable, explicitly reset by
+  Duplicate/Rewrite — a new document starts its own thread; critical because both build the new
+  record by spreading the source). First send generates `<sow-{id}-{rand}@{APP_URL host}>`, sets
+  it as `Message-ID`, persists it (no updatedAt bump — send bookkeeping, not a content edit);
+  every later send sends `In-Reply-To`/`References` + a `Re:` subject. Per-record, so two Scope
+  of Works never share a thread. If the provider overrides the first `Message-ID`, the
+  Re:-same-subject fallback still groups in Gmail and follow-ups still thread with each other.
+**Delivery Order link** — the ผู้รับเอกสาร send row gains a "แนบลิงก์ใบส่งมอบสินค้าในอีเมล" checkbox
+(only when a Delivery Order exists; per-send choice, not persisted):
+- `POST /send-documents` accepts `{ includeDeliveryOrder }` (400 if none exists); mints a
+  `DeliveryOrder.shareKey` on first use and renders a "ใบส่งมอบสินค้าและบริการ" block in the email.
+- New session-less `GET /api/delivery-orders/:id/view?key=` (`handleShareView`) — same
+  capability-URL pattern as attachment downloads (opaque 404 on any mismatch, `noindex`,
+  `no-store`, all interpolated values HTML-escaped): a read-only HTML rendering, one section per
+  non-deposit installment (เลขที่/วันที่/ticked items/Remark). A viewing convenience from the live
+  record — the official printable FM-SL-05 form remains the in-app print flow.
+
+What's New entry (`2026-07-24-email-thread-delivery-link`); docs: MODULES/ScopeOfWork.md,
+MODULES/DeliveryOrder.md, API.md. `tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`,
+`npm run build` all pass clean. Live threading behavior in real inboxes is testable only against
+the Resend account owner's address until a sending domain is verified (see TODO.md).
+
+---
+
+## 2026-07-24 — Dashboard: real Excel (.xlsx) export
 
 Direct user pick from the "what's the system missing" list (option 6, Excel export / monthly
 report — constrained to free-only per the same conversation's no-budget decision):

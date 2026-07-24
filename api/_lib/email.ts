@@ -27,7 +27,14 @@ export function isEmailConfigured(): boolean {
  * deployment fails fast with one clear error instead of N identical ones) or a plain `Error` on a
  * non-2xx response from Resend (message includes Resend's own error body when available, logged by
  * the caller — never surfaced verbatim to the end user, who only needs "ส่งไม่สำเร็จ"). */
-export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }): Promise<void> {
+export async function sendEmail({ to, subject, html, headers }: { to: string; subject: string; html: string;
+  /** Extra SMTP headers passed through to Resend verbatim — used for threading (`Message-ID` on a
+   * document's first send, `In-Reply-To`/`References` on follow-ups, added 2026-07-24 so repeat
+   * sends of the same document land in the recipient's existing conversation instead of as a new
+   * email each time). Threading is ultimately the receiving client's call — Gmail/Outlook honor
+   * these headers; the `Re:` subject the caller pairs with them is the fallback signal. */
+  headers?: Record<string, string>;
+}): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new EmailNotConfiguredError();
   // Resend's own sandbox "from" address — works with zero setup for testing, but every recipient
@@ -38,7 +45,7 @@ export async function sendEmail({ to, subject, html }: { to: string; subject: st
   const res = await fetch(RESEND_API_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to, subject, html }),
+    body: JSON.stringify({ from, to, subject, html, ...(headers ? { headers } : {}) }),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
