@@ -4,7 +4,29 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — User manual now illustrated with real live-site screenshots
+## 2026-07-24 (absolute latest) — User manual: added document *detail* page screenshots
+
+Per direct user follow-up ("ทำไมไม่กดเข้าไปในใบด้วยพวก ใบเสนอราคา scope of work และใบส่งมอบงานละ
+แคปมาด้วยละจะได้ครบๆ") on the entry below: 3 more live-site screenshots, this time of the *inside*
+of each document (captured by scripting a click into the first record of each list, same
+interactive login-once flow, throwaway profile deleted again afterward):
+
+- Chapter 4: Quotation detail — customer/document form + the toolbar (พิมพ์/คัดลอก/แก้ไข/สร้าง
+  Scope of Work/บันทึก).
+- Chapter 5: Scope of Work detail — header form + toolbar (พิมพ์/ทำสำเนา/แก้ไข/เปิดใบส่งมอบสินค้า/
+  อัปเดตข้อมูล/ยืนยัน Final).
+- Chapter 6: Delivery Order detail — the per-milestone installment cards with item tick-boxes,
+  เลขที่/วันที่/Remark fields, and each card's own "พิมพ์ใบส่งมอบงวดนี้" button (cropped to omit a
+  stale test remark at the bottom of the raw capture).
+
+PDF regenerated (still 17 pages — the new figures fill the continuation sheets chapters 4/5/6
+already had; 3.2 MB) and inspected. **Files Modified**: `docs/manual/user-manual.html`,
+`docs/manual/images/11-quotation-detail.png` + `12-sow-detail.png` + `13-do-detail.png` (new),
+`public/คู่มือการใช้งาน TCS ERP.pdf` (regenerated), `docs/CHANGELOG.md`.
+
+---
+
+## 2026-07-24 — User manual now illustrated with real live-site screenshots
 
 Per direct user request ("ในใบ pdf อยากได้ภาพของเว็บมาประกอบในคู่มือด้วยจะได้เห็นชัดขึ้น"), the manual
 PDF was regenerated with 11 real screenshots of the live production site embedded per chapter
