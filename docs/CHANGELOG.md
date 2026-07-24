@@ -4,7 +4,29 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Self-review fix pass over the attachments work (stored-XSS + concurrency + hygiene)
+## 2026-07-24 (absolute latest) — Notification polling: แจ้งเตือนขึ้นเองโดยไม่ต้องรีเฟรชหน้า
+
+Direct user report: "ตอนนี้เว็บมันไม่ Real time มันต้องกดรีก่อนรอบนึงแจ้งเตือนถึงจะขึ้น" — notifications
+were fetched exactly once at boot (`loadDomainData()`), so a `scope_of_work_document_sent` (or any
+workflow) notification never appeared until a full page reload.
+
+- `src/App.tsx`: new polling effect — while `bootStatus === "ready"`, refetch
+  `GET /api/notifications` every 45 s, plus immediately on window focus and on a hidden→visible
+  `visibilitychange`; skips entirely while the tab is hidden (no wasted requests). Cleaned up on
+  sign-out/unmount via the effect teardown.
+- **Polling, not SSE/WebSocket, deliberately**: Vercel serverless can't hold a connection open,
+  and polling is fully portable to the future self-managed server (the standing
+  no-Vercel-locked-services rule). SSE is recorded as a possible post-migration upgrade in
+  SERVER_MIGRATION_PLAN.md.
+- What's New entry added (`2026-07-24-notification-polling`), per the standing announce rule.
+- Docs: MODULES/Notifications.md (Business Flow #5, Current Features, Future Improvements),
+  SERVER_MIGRATION_PLAN.md (post-migration upgrade note), this file, docs/CLAUDE.md module row.
+
+`tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all pass clean.
+
+---
+
+## 2026-07-24 — Self-review fix pass over the attachments work (stored-XSS + concurrency + hygiene)
 
 A single-pass code review (no multi-agent fan-out available this session) over everything since
 `3d1c151` found and fixed, all in `api/_lib/scopeOfWorkHandler.ts` unless noted:

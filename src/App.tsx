@@ -371,6 +371,31 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mobileNavOpen]);
 
+  // ── Notification polling (2026-07-24, direct user request) ──────────────────────────────────
+  // Notifications were previously fetched once at boot only, so e.g. a "เอกสารส่งถึงคุณ" event
+  // never appeared until a full page reload. Polling (not SSE/WebSocket) is deliberate: the
+  // current Vercel serverless backend can't hold a connection open, and polling stays portable to
+  // the future self-managed server — SSE is recorded as a possible post-migration upgrade in
+  // docs/SERVER_MIGRATION_PLAN.md. Skips while the tab is hidden (no wasted requests for a
+  // backgrounded tab); a hidden→visible transition and window focus both refetch immediately, so
+  // returning to the tab never waits out the remainder of an interval.
+  useEffect(() => {
+    if (bootStatus !== "ready") return;
+    const refetch = () => {
+      if (document.hidden) return;
+      fetchNotifications().then(setNotifications).catch(() => {});
+    };
+    const intervalId = window.setInterval(refetch, 45_000);
+    const onVisibilityChange = () => { if (!document.hidden) refetch(); };
+    window.addEventListener("focus", refetch);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refetch);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [bootStatus]);
+
   // Offers the guided tour once per user, the first time they land on a "ready" session — not
   // forced (see `showTourPrompt`'s Start/Skip banner below), and never shown again once they've
   // either finished or explicitly skipped it (tracked in localStorage, see src/lib/tour.ts).

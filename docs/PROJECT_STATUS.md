@@ -14,6 +14,13 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-24] Notifications update automatically — no more manual page refresh.** Direct user
+  report ("ต้องกดรีก่อนรอบนึงแจ้งเตือนถึงจะขึ้น"): `App.tsx` now polls `GET /api/notifications`
+  every 45 s while signed in, plus an immediate refetch on tab focus / hidden→visible; pauses
+  while the tab is hidden. Polling (not SSE/WebSocket) deliberately — portable to the future
+  self-managed server per the standing rule; SSE recorded as a post-migration upgrade in
+  [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md). What's New entry added. See
+  [MODULES/Notifications.md](./MODULES/Notifications.md) and CHANGELOG.md.
 - ✅ **[2026-07-24] Delivery Order print rebuilt to visually match the FM-SL-05 reference PDF.**
   `DeliveryOrderPrintDocument.tsx` rebuilt from scratch against a page-image inspection of all 3
   reference pages (`public/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf`): black-on-white

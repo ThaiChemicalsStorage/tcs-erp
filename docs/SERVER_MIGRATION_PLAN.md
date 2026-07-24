@@ -61,6 +61,13 @@ around the existing handlers.**
 Steps 1–2 are non-destructive to the Vercel demo (the same code keeps deploying to Vercel
 unchanged; the Express entry is an additional way to run it, not a replacement).
 
+### Optional post-migration upgrades (only possible on the real server)
+
+- **Notification push via SSE** — 2026-07-24: the client polls `GET /api/notifications` every
+  45 s (see MODULES/Notifications.md), because Vercel serverless can't hold a connection open.
+  Once the Express server exists, an SSE endpoint can push notifications instantly instead;
+  the polling code is the fallback either way, so this is an enhancement, not a blocker.
+
 ## Related Documents
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — current architecture (Vercel Functions + MongoDB)

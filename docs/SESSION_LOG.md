@@ -4,7 +4,41 @@
 
 ---
 
-## Session — 2026-07-23 (absolute latest), Investigation + fix: Delivery Order "nothing prints" report
+## Session — 2026-07-24 (absolute latest), Attachments hardening + docs slim-down + notification polling
+
+### What was implemented
+- **Self-review fix pass over the Scope of Work attachments work** (commit `d9378a2`): a code
+  review of everything since `3d1c151` found 8 issues; 7 fixed — the important ones being a stored
+  XSS on the unauthenticated attachment download route (uploader-chosen `contentType` rendered
+  inline on the app origin — now an inline-safe whitelist + `nosniff`), a concurrent-upload race
+  that could drop attachment metadata and exceed the 5-file cap (now atomic `$push`/`$pull` with
+  the cap in the update filter), and missing indexes on `scope_attachment_files`. The 8th (Delivery
+  Order filler-row budget counts rows, not rendered height) was deliberately left — fixing it risks
+  the visually-verified FM-SL-05 layout; recorded as a known limitation.
+- **docs/CLAUDE.md slimmed from 68 KB → 39 KB** (commit `35db22c`, via /doctor with user approval):
+  5 module-table rows had grown into full pass-by-pass changelog mirrors; compressed to summaries +
+  links since the detail already lives in CHANGELOG.md/MODULES/*.md per the standing docs rule.
+  Every load-bearing gotcha (manual Role Management steps, `RESEND_API_KEY`, deposit-label rule,
+  pre-tax rule, print exceptions) was preserved in the summaries.
+- **Notification polling** (direct user report "ต้องกดรีก่อนรอบนึงแจ้งเตือนถึงจะขึ้น"): notifications
+  were fetched once at boot only; now polled every 45 s + refetch on tab focus, paused while
+  hidden. Polling over SSE/WebSocket deliberately (Vercel can't hold connections; portable to the
+  future server — SSE recorded as a post-migration upgrade in SERVER_MIGRATION_PLAN.md).
+
+### Problems found / fixed
+- The stored-XSS + race findings above — both real, both live-relevant, found by review rather
+  than user report.
+- Also answered "what's still Vercel-coupled": only the API shell (`@vercel/node` type-only
+  imports + `vercel.json` routing) and the overridable `APP_URL` fallback — all covered by the
+  3-step migration plan; 3 stale "Vercel Blob" comments fixed (`6f4e9fe`).
+
+### What's next
+- Live-verify the hardened attachment routes against production after deploy.
+- Migration prep stays deferred until the owner says go (SERVER_MIGRATION_PLAN.md).
+
+---
+
+## Session — 2026-07-23, Investigation + fix: Delivery Order "nothing prints" report
 
 ### What was implemented
 - User reported: ticking an item in the second installment card, then clicking print, produced
