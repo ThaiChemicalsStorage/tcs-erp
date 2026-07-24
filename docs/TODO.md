@@ -166,17 +166,20 @@
 
 ## Medium Priority — Other
 
-- [ ] **Manual Scope of Work document number entry (2026-07-24, owner picked "ข้อ 2" then said
-  "ยัง ใส่ไว้ใน TODO ไว้" — recorded, not built).** An OPTIONAL field at creation time: blank =
-  today's auto-generated `PQ{YYYYMM}-{seq}-{jobType}-{secondaryCode}` number exactly as now (users
-  of the auto flow completely unaffected); typed = use the custom number, editable while Draft.
-  Requirements agreed in-conversation: server-side uniqueness check (clear error on duplicate,
-  race-safe); must compose with Rewrite's `-R{n}` suffixing and with Duplicate/the atomic
-  monthly counter (a copy gets a fresh number; future auto numbers must not collide with a
-  manually-typed one); Global Search/lists/email subject already read `scopeNumber` off the record
-  so they should follow for free (verify). **Email threading is unaffected either way** — the
-  thread anchor is the record's internal id, not the document number. Est. 1–2 hours incl.
-  docs/checks.
+- [ ] **Manual-ONLY Scope of Work document number entry (2026-07-24, owner: "ระบบไม่ต้องสร้างเลข
+  เองดิ" — superseding the earlier optional-field framing the same day; recorded, not built).**
+  The system stops generating scope numbers entirely: the user TYPES the document number at
+  creation (required, replaces today's auto `PQ{YYYYMM}-{seq}-{jobType}-{secondaryCode}`
+  generation and likely the secondaryCode prompt with a type-the-number prompt), editable while
+  Draft. Requirements: server-side uniqueness check (clear error on duplicate, race-safe — the
+  unique index on `scopeNumber` already exists); Rewrite keeps appending `-R{n}` to whatever was
+  typed; Duplicate must now ASK for a new number instead of minting one; the atomic monthly
+  counter/`yearMonth`/`jobSequence` fields become legacy (kept on old records, no migration);
+  Global Search/lists/email subject read `scopeNumber` off the record and should follow for free
+  (verify). **Email threading unaffected** — the thread anchor is the record's internal id, not
+  the number. Existing records keep their auto-generated numbers as-is. Est. 1–2 hours incl.
+  docs/checks. Open question to confirm at build time: any format guardrails, or completely free
+  text?
 - [ ] **"ทวง PO" (chase the sales for the customer PO number + PO file) — proposed 2026-07-24,
   awaiting the owner's go-ahead** (discussion happened; the conversation moved on before a
   decision). Proposal on the table: (1) a "ยังไม่มี PO" badge + filter on the Scope of Work list
