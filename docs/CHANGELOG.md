@@ -4,7 +4,22 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — "ส่งอีเมลแจ้งผู้รับเอกสาร" now requires `scopeOfWork:edit`
+## 2026-07-24 (absolute latest) — Go-Live Checklist recorded in SERVER_MIGRATION_PLAN.md
+
+Docs-only. Direct user request ("อยากให้จดทั้งหมดที่ต้องทำไว้ตอนที่จะขึ้น Server") after discovering
+Resend's sandbox sender can only deliver to the account owner's own address: recorded the complete
+A→G go-live checklist in docs/SERVER_MIGRATION_PLAN.md — (A) company domain + Resend domain
+verification + `EMAIL_FROM` (host-independent, can be done now and fixes real-recipient email on
+the demo too), (B) the existing 3-step Express shell plan, (C) server setup incl. the
+HTTPS-is-mandatory note (secure cookie) and every env var with the `APP_URL` email/capability-link
+warning, (D) Atlas-vs-self-hosted DB + backups, (E) the 3 still-pending manual Role Management
+grants vs fresh-DB Setup Wizard, (F) a 6-point post-cutover verification list, (G) demo
+decommissioning. Also added the raise-attachment-limit item to the post-migration upgrades list.
+Migration work itself remains deferred until the owner says go.
+
+---
+
+## 2026-07-24 — "ส่งอีเมลแจ้งผู้รับเอกสาร" now requires `scopeOfWork:edit`
 
 Direct user report: a role that can only *view* a Scope of Work could still press
 "ส่งอีเมลแจ้งผู้รับเอกสาร" (the send used `scopeOfWork:print`) while being unable to pick or change

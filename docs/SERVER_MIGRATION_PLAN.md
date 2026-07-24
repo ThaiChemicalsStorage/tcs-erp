@@ -61,12 +61,95 @@ around the existing handlers.**
 Steps 1–2 are non-destructive to the Vercel demo (the same code keeps deploying to Vercel
 unchanged; the Express entry is an additional way to run it, not a replacement).
 
+## Go-Live Checklist — EVERYTHING to do when moving to the real server
+
+> Recorded 2026-07-24 at the owner's request ("อยากให้จดทั้งหมดที่ต้องทำไว้ตอนที่จะขึ้น Server") —
+> the single complete list, so nothing has to be rediscovered at migration time. Ordered; items
+> marked **(can do now)** don't need the server and work on the Vercel demo too.
+
+### A. Domain + email sender (can do now — also fixes email on the demo)
+
+1. **Get a company domain** (e.g. `thaichemicals.co.th`) — buy one (~300–500 THB/yr) or use one
+   the company already owns. The free `*.vercel.app` URL can never be used as an email sender
+   domain (we don't own `vercel.app`).
+2. **Verify the domain with Resend** (dashboard → Domains → Add Domain → add the ~3 DNS records
+   (SPF/DKIM) at the domain registrar → wait a few minutes). Free tier: 1 domain, 3,000
+   emails/month — plenty for this internal system.
+3. **Set `EMAIL_FROM`** env var to e.g. `TCS ERP <erp@thaichemicals.co.th>`. No code change needed
+   (`api/_lib/email.ts` already reads it). **Until this is done, email sending only reaches the
+   Resend account owner's own address** — the sandbox sender `onboarding@resend.dev` cannot
+   deliver to arbitrary employee addresses (discovered/discussed 2026-07-24). This step is
+   host-independent: done once, it keeps working after the migration.
+
+### B. Build the portable server shell (the 3-step plan above)
+
+Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — see
+"The Migration Plan" section. Non-destructive to the Vercel demo.
+
+### C. Server machine setup
+
+- Node 20+ under **PM2 or systemd** (always running, auto-restart on crash).
+- **nginx reverse proxy + HTTPS (Let's Encrypt)** — HTTPS is NOT optional: the session cookie is
+  `secure`, so login breaks entirely on plain HTTP.
+- Point the app's own domain/subdomain (e.g. `erp.thaichemicals.co.th`) at the server.
+- **Environment variables** (copy values out of the Vercel project settings):
+  - `MONGODB_URI` — same Atlas URI, or the new self-hosted one
+  - `JWT_SECRET` (the session-signing secret — keep the SAME value if migrating live sessions,
+    or accept that everyone re-logs-in once)
+  - `RESEND_API_KEY`
+  - `EMAIL_FROM` (from step A)
+  - `APP_URL` — set to the real URL (e.g. `https://erp.thaichemicals.co.th`). **Important**: email
+    links AND attachment capability-URLs are built from this; left unset it falls back to the
+    Vercel demo URL and every emailed link points at the wrong site.
+
+### D. Database
+
+- **Option 1 — keep MongoDB Atlas** (simplest): nothing moves; just allow the new server's IP in
+  Atlas Network Access and reuse the URI.
+- **Option 2 — self-hosted MongoDB**: `mongodump` from Atlas → `mongorestore` on the server.
+  Attachments travel automatically (they live in the `scope_attachment_files` collection);
+  indexes are preserved by dump/restore.
+- Either way: **set up a backup plan** (Atlas has automatic backups on paid tiers; self-hosted
+  needs a scheduled `mongodump` + off-machine copy).
+
+### E. Data/roles on first boot
+
+- **Migrating the existing database** (the normal case): users/roles/data carry over as-is.
+  **Complete any still-pending manual Role Management grants first** — as of 2026-07-24 these
+  three are still open in TODO.md: `quotations:viewAll`, `scopeOfWork:viewAll`, and the 7
+  `deliveryOrder:*` permissions for existing roles (a Super Admin checks the boxes in Role
+  Management — `defaultRoles` only seeds on first-run setup, never re-applies).
+- **Fresh/empty database instead**: open the app once → Setup Wizard runs → seeds roles (which
+  DO include all current permissions) + creates indexes + creates the Super Admin.
+
+### F. Verify after cutover (each of these exercises a different subsystem)
+
+1. Sign in over HTTPS (JWT cookie) + sign out.
+2. Send "ส่งอีเมลแจ้งผู้รับเอกสาร" to a REAL employee address (proves the verified domain).
+3. Upload an attachment, then open its capability URL from a logged-out browser (proves
+   `APP_URL` + unauthenticated download route).
+4. Print a per-milestone Delivery Order (print CSS is host-independent, but verify once).
+5. Two accounts in two browsers: trigger a notification, confirm it appears within ~1 min on the
+   other account without a reload (the 45 s polling).
+6. Role check: a view-only account must NOT see the send-email button / edit actions.
+
+### G. Decommission the demo
+
+- Keep or delete the Vercel project (keeping it as a staging environment is fine — but then
+  restrict who knows the URL, since it shares the production database unless repointed).
+- Delete the unused Vercel Blob store (leftover from the 2026-07-24 attachments rework).
+- Optional: regenerate `public/คู่มือการใช้งาน TCS ERP.pdf` — its screenshots show the demo URL.
+- Update `docs/ARCHITECTURE.md` + this file to describe the real host as current.
+
 ### Optional post-migration upgrades (only possible on the real server)
 
 - **Notification push via SSE** — 2026-07-24: the client polls `GET /api/notifications` every
   45 s (see MODULES/Notifications.md), because Vercel serverless can't hold a connection open.
   Once the Express server exists, an SSE endpoint can push notifications instantly instead;
   the polling code is the fallback either way, so this is an enhancement, not a blocker.
+- **Raise the 2 MB attachment limit** — it was sized to Vercel's ~4.5 MB request-body cap; on the
+  Express server the `express.json` limit is ours to choose (mind MongoDB's 16 MB document cap —
+  base64 inflates payloads ×4/3, so ~10 MB files is a comfortable ceiling).
 
 ## Related Documents
 
