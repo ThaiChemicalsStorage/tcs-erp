@@ -114,13 +114,18 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
 
 ### E. Data/roles on first boot
 
-- **Migrating the existing database** (the normal case): users/roles/data carry over as-is.
-  **Complete any still-pending manual Role Management grants first** — as of 2026-07-24 these
-  three are still open in TODO.md: `quotations:viewAll`, `scopeOfWork:viewAll`, and the 7
-  `deliveryOrder:*` permissions for existing roles (a Super Admin checks the boxes in Role
-  Management — `defaultRoles` only seeds on first-run setup, never re-applies).
-- **Fresh/empty database instead**: open the app once → Setup Wizard runs → seeds roles (which
-  DO include all current permissions) + creates indexes + creates the Super Admin.
+- **The expected path is a FRESH database** — owner's decision 2026-07-24 ("ฐานข้อมูลตอนนี้
+  เดี๋ยวต้องเคลียร์ใหม่อยู่ดี"): the demo database's data is throwaway test data and will be
+  cleared before real use, so plan for: open the app once → Setup Wizard runs → seeds roles
+  (which DO include every current permission — no manual grant steps needed on a fresh seed) +
+  creates indexes + creates the Super Admin, then recreate real users/products/customers.
+- **If any demo data ends up being kept instead** (decision can change): users/roles/data carry
+  over as-is, and the still-pending manual Role Management grants must be completed —
+  `quotations:viewAll`, `scopeOfWork:viewAll`, and the 7 `deliveryOrder:*` permissions for
+  existing roles (`defaultRoles` only seeds on first-run setup, never re-applies).
+- **Budget note (2026-07-24)**: no paid services at all for now — everything in this plan must
+  stay on free tiers until the owner says otherwise (Atlas free tier, Resend free tier; the
+  domain in step A is the one unavoidable purchase and waits until go-live approaches).
 
 ### F. Verify after cutover (each of these exercises a different subsystem)
 
