@@ -4,7 +4,34 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — What's New announcements for the Delivery Order work + standing rule
+## 2026-07-24 (absolute latest) — Thai user manual PDF
+
+Per direct user request ("อยากให้สร้างไฟล์คู่มือมาเป็น pdf วิธีใช้เว็บไซต์นี้"), a full Thai
+end-user manual was authored and shipped as a PDF:
+
+- **`public/คู่มือการใช้งาน TCS ERP.pdf`** (12 pages, A4, navy/gold brand styling, Noto Sans Thai)
+  — downloadable from the deployed site at `/คู่มือการใช้งาน TCS ERP.pdf`. Covers: login, screen/
+  menu overview (exact sidebar labels verified against `i18n.tsx`), Dashboard, Quotations (wizard,
+  workflow, Rewrite/Revision Note), Scope of Work (checklist, payment installments, document
+  recipients), Delivery Orders (per-milestone item ticks + printing), Products, Customers,
+  Quotation Templates, admin section (users/roles/audit log, incl. the "new permissions need a
+  manual Role Management tick after big updates" warning), Settings, printing-to-PDF instructions
+  (incl. the headers/footers note per document type), and an FAQ.
+- **`docs/manual/user-manual.html`** — the committed HTML source; regenerate the PDF with headless
+  Chrome (`page.pdf({ preferCSSPageSize: true, printBackground: true })`) after editing. Rendered
+  and visually checked page-by-page before shipping (cover, chapter layout, no page overflow).
+- A What's New entry announces the manual with its URL (per the standing announce-major-updates
+  rule).
+
+**Files Modified**: `docs/manual/user-manual.html` (new), `public/คู่มือการใช้งาน TCS ERP.pdf`
+(new), `src/lib/whatsNew.ts`, `docs/CHANGELOG.md`.
+
+**Verification**: `npm run lint` / `npm run build` pass clean; the PDF was rendered back to images
+and inspected page-by-page.
+
+---
+
+## 2026-07-24 — What's New announcements for the Delivery Order work + standing rule
 
 Per a direct user request ("ทุกครั้งที่มี update ใหญ่อยากให้ขึ้นประกาศในเว็บด้วยที่สร้างไว้แล้วที่เป็น
 Update อะ"), two entries were added to `WHATS_NEW_ENTRIES` (`src/lib/whatsNew.ts`): one for today's
