@@ -4,7 +4,48 @@
 
 ---
 
-## 2026-07-23 (absolute latest) — Fix: Delivery Order signature line duplicated "บริษัท"
+## 2026-07-24 (absolute latest) — Delivery Order: separate Delivery Note per payment milestone
+
+**Requirement**: each eligible (non-deposit) payment milestone must print as its own completely
+independent Delivery Note — printing "40% Materials" must produce a document containing only that
+milestone's เลขที่/วันที่/ticked items/Remark, never anything from "40% After Job Complete" or a
+Down Payment milestone. The per-milestone *state* (independent `itemIds`/`documentNumber`/
+`issueDate`/`remark` per installment, keyed by the stable installment `id`) and the Down Payment
+exclusion already existed from the 2026-07-23 passes; this pass closed the three remaining gaps:
+
+1. **Per-milestone Print button** (`DeliveryOrderDocument.tsx`): each installment card now has its
+   own "พิมพ์ใบส่งมอบงวดนี้" button (gated by `deliveryOrder:print`, blocks with a toast if that
+   specific milestone has zero items ticked). Clicking it sets a `printInstallmentId` state that
+   scopes `DeliveryOrderPrintDocument` (new optional `onlyInstallmentId` prop) to that one
+   milestone's page before `window.print()` fires from an effect; the browser's `afterprint` event
+   resets it. The old global toolbar "พิมพ์ / PDF" button — which printed every milestone's page in
+   one combined document and caused the reported confusion — was removed; printing is now always
+   per-milestone. (A raw browser Ctrl+P with no button clicked still falls back to rendering every
+   milestone's page, each page still fully self-contained.)
+2. **Milestone name on the printed page** (`DeliveryOrderPrintDocument.tsx`): the printed header's
+   right column gained a "งวดชำระ" line showing `{pct}% {label}` (e.g. "40% Materials") — previously
+   the milestone was only identifiable via the freely-editable Remark footer.
+3. **Broadened deposit exclusion** (`api/_lib/deliveryOrderHandler.ts`): `isDownPaymentLabel()` →
+   `isDepositLabel()`, matching an exact-whole-label set ("Down Payment", "Deposit", "เงินมัดจำ",
+   "ชำระเงินล่วงหน้า", case-insensitive/trimmed) instead of "Down Payment" alone; `stripDownPayment()`
+   renamed `stripDepositInstallments()`. Still never a substring match and never percentage-based —
+   "40% Materials" and "After Down Payment refund" stay eligible. Same self-healing read-path
+   stripping as before, no migration script.
+
+**Files Modified**: `src/pages/quotation/DeliveryOrderDocument.tsx`,
+`src/pages/quotation/DeliveryOrderPrintDocument.tsx`, `api/_lib/deliveryOrderHandler.ts`,
+`docs/MODULES/DeliveryOrder.md`, `docs/CLAUDE.md`, `docs/CHANGELOG.md`.
+
+**Verification**: `tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all
+pass clean (an initial `react-hooks/set-state-in-effect` lint error was fixed by moving the
+post-print state reset into an `afterprint` listener). The broadened deposit matcher was verified
+via a standalone Node script (all 4 deposit labels match incl. case/whitespace variants; "40%
+Materials"/"Down Payment 2"/substring labels correctly stay eligible). Not verified against a live
+deployment/browser print preview — same standing sandboxed-session limitation as every other pass.
+
+---
+
+## 2026-07-23 — Fix: Delivery Order signature line duplicated "บริษัท"
 
 **Bug report**: direct user follow-up — "ทำไมติ๊กอันล่างแล้วกดพิมพ์ออกมาแล้วมันไม่มีอะไรเลยละ" (why,
 after ticking the bottom item and printing, nothing comes out).

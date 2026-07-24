@@ -68,6 +68,7 @@ function InstallmentPage({
                 <p className="text-[10px]"><span className="text-[#5a7299] inline-block w-16">เลขที่</span> {installment.documentNumber || " "}</p>
                 <p className="text-[10px]"><span className="text-[#5a7299] inline-block w-16">วันที่</span> {installment.issueDate ? fmtNumericDate(installment.issueDate) : " "}</p>
                 <p className="text-[10px]"><span className="text-[#5a7299] inline-block w-16">WORK ORDER</span> <span className="font-mono">{deliveryOrder.scopeNumber}</span></p>
+                <p className="text-[10px]"><span className="text-[#5a7299] inline-block w-16">งวดชำระ</span> {`${installment.pct !== null ? `${installment.pct}% ` : ""}${installment.label}`.trim() || " "}</p>
               </div>
             </div>
           </td>
@@ -138,13 +139,22 @@ function InstallmentPage({
   );
 }
 
-export function DeliveryOrderPrintDocument({ deliveryOrder, companyHeader }: {
+/** `onlyInstallmentId` scopes the print output to a single payment milestone's page — the
+ * per-milestone "พิมพ์" buttons (`DeliveryOrderDocument.tsx`) pass the clicked installment's id so
+ * the printed document contains that milestone's Delivery Note alone, never a sibling milestone's
+ * items/เลขที่/วันที่/Remark. When null (e.g. a raw browser Ctrl+P with no button clicked), every
+ * milestone's page renders — each page is still self-contained per installment either way. */
+export function DeliveryOrderPrintDocument({ deliveryOrder, companyHeader, onlyInstallmentId = null }: {
   deliveryOrder: DeliveryOrder;
   companyHeader: CompanyHeaderInfo;
+  onlyInstallmentId?: string | null;
 }) {
+  const installments = onlyInstallmentId
+    ? deliveryOrder.installments.filter((i) => i.id === onlyInstallmentId)
+    : deliveryOrder.installments;
   return (
     <>
-      {deliveryOrder.installments.map((installment) => (
+      {installments.map((installment) => (
         <InstallmentPage key={installment.id} deliveryOrder={deliveryOrder} installment={installment} companyHeader={companyHeader} />
       ))}
     </>

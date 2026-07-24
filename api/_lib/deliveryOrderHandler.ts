@@ -76,15 +76,18 @@ function deriveItemsFromScope(scope: WithId<ScopeOfWorkFields>): DeliveryOrderIt
     }));
 }
 
-/** A Delivery Order never has a page for the Down Payment installment — added 2026-07-23, per
+/** A Delivery Order never has a page for a pure deposit installment — added 2026-07-23, per
  * direct user follow-up ("ลืมบอกว่าใบส่งมอบงานจะไม่มี down payment เลย"): a deposit paid before any
  * goods/work are actually delivered has nothing to "deliver," so it has no place on this document
- * type, unlike Scope of Work's payment schedule (which legitimately lists it). Matched against the
- * exact label `PAYMENT_TERM_PRESETS`' own "Down Payment" rows use (case-insensitive, trimmed) —
- * a plain string match rather than fuzzy free-text guessing, same "exact key, not fuzzy" convention
- * `DocumentRecipientsPicker.tsx`'s department matching already follows. */
-function isDownPaymentLabel(label: string): boolean {
-  return label.trim().toLowerCase() === "down payment";
+ * type, unlike Scope of Work's payment schedule (which legitimately lists it). Broadened 2026-07-24
+ * from "Down Payment" only to the other deposit spellings the free-text installment label can
+ * carry. Still an exact whole-label match (case-insensitive, trimmed) — never a substring match and
+ * never a percentage-based rule, so a milestone like "40% Materials" or "After Down Payment refund"
+ * stays eligible; same "exact key, not fuzzy" convention `DocumentRecipientsPicker.tsx`'s
+ * department matching already follows. */
+const DEPOSIT_INSTALLMENT_LABELS = new Set(["down payment", "deposit", "เงินมัดจำ", "ชำระเงินล่วงหน้า"]);
+function isDepositLabel(label: string): boolean {
+  return DEPOSIT_INSTALLMENT_LABELS.has(label.trim().toLowerCase());
 }
 
 /**
@@ -94,8 +97,8 @@ function isDownPaymentLabel(label: string): boolean {
  * exists on the Scope of Work keeps its user-entered `itemIds`/`documentNumber`/`issueDate`/`remark`
  * (stale `itemIds` pointing at a since-removed item are dropped, never left dangling); a brand-new
  * installment (added to the Scope of Work after this Delivery Order was created) gets a fresh blank
- * page with an auto-drafted `remark`; an installment removed from the Scope of Work — or labeled
- * "Down Payment", see `isDownPaymentLabel()` — simply stops appearing here (its page is dropped,
+ * page with an auto-drafted `remark`; an installment removed from the Scope of Work — or carrying
+ * a deposit label, see `isDepositLabel()` — simply stops appearing here (its page is dropped,
  * nothing to reconcile). `pct`/`label`/`paymentType`/`days` always mirror the Scope of Work's own
  * values — never independently client-editable on this document, see `sanitizeInstallmentsUpdate()`
  * below.
@@ -108,7 +111,7 @@ function deriveInstallmentsFromScope(
   const existingById = new Map(existing.map((i) => [i.id, i]));
   const currentItemIds = new Set(scope.items.filter((it) => !it.isSectionHeader).map((it) => it.id));
   return paymentConditions.installments
-    .filter((src) => !isDownPaymentLabel(src.label))
+    .filter((src) => !isDepositLabel(src.label))
     .map((src) => {
       const base = { id: src.id, pct: src.pct, label: src.label, paymentType: src.paymentType, days: src.days };
       const prev = existingById.get(src.id);
@@ -126,12 +129,13 @@ function deriveInstallmentsFromScope(
 }
 
 /** Defensive filter applied at every read path (not just `deriveInstallmentsFromScope()` above) —
- * a Delivery Order created before this pass shipped may already have a stored Down Payment page;
- * this strips it from every response without requiring a migration script or a manual "อัปเดตข้อมูล
- * จาก Scope of Work" click. A record only actually loses the stored row for good once it's next
- * saved through `handleUpdate()`/`handleRefresh()` — reads alone never write back. */
-function stripDownPayment(installments: DeliveryOrderInstallment[]): DeliveryOrderInstallment[] {
-  return installments.filter((i) => !isDownPaymentLabel(i.label));
+ * a Delivery Order created before the deposit exclusion (or its 2026-07-24 broadening) shipped may
+ * already have a stored deposit page; this strips it from every response without requiring a
+ * migration script or a manual "อัปเดตข้อมูลจาก Scope of Work" click. A record only actually loses
+ * the stored row for good once it's next saved through `handleUpdate()`/`handleRefresh()` — reads
+ * alone never write back. */
+function stripDepositInstallments(installments: DeliveryOrderInstallment[]): DeliveryOrderInstallment[] {
+  return installments.filter((i) => !isDepositLabel(i.label));
 }
 
 function toSummary(doc: WithId<DeliveryOrderFields>): DeliveryOrderSummary {
@@ -145,17 +149,17 @@ function toListItem(doc: WithId<DeliveryOrderFields>): DeliveryOrderListItem {
     scopeOfWorkId: full.scopeOfWorkId ?? "",
     scopeNumber: full.scopeNumber ?? "",
     customerCompanyName: full.customerCompanyName ?? "",
-    installmentCount: Array.isArray(full.installments) ? stripDownPayment(full.installments).length : 0,
+    installmentCount: Array.isArray(full.installments) ? stripDepositInstallments(full.installments).length : 0,
     status: full.status ?? "Draft",
     updatedAt: full.updatedAt ?? "",
   };
 }
 /** The one place a full `DeliveryOrder` is prepared for a client response — every route below calls
- * this instead of `withStringId()` directly, so `stripDownPayment()` is never accidentally skipped
- * on a new response shape added later. */
+ * this instead of `withStringId()` directly, so `stripDepositInstallments()` is never accidentally
+ * skipped on a new response shape added later. */
 function toClient(doc: WithId<DeliveryOrderFields>) {
   const full = withStringId(doc);
-  return { ...full, installments: stripDownPayment(full.installments) };
+  return { ...full, installments: stripDepositInstallments(full.installments) };
 }
 
 async function loadDeliveryOrderOrThrow(id: string): Promise<WithId<DeliveryOrderFields>> {

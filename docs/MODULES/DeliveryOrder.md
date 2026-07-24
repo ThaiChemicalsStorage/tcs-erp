@@ -1,6 +1,24 @@
 # Module: Delivery Order
 
-## Status: ✅ Built (2026-07-23), Down Payment exclusion + signature-line fix same day
+## Status: ✅ Built (2026-07-23), Down Payment exclusion + signature-line fix same day, separate per-milestone printing 2026-07-24
+
+**2026-07-24, separate Delivery Note per payment milestone**: each eligible (non-deposit) payment
+milestone now prints as its own completely independent Delivery Note. Three changes:
+(1) the global toolbar "พิมพ์ / PDF" button (which printed every milestone's page in one combined
+document) was **removed**, replaced by a per-installment-card "พิมพ์ใบส่งมอบงวดนี้" button (same
+`deliveryOrder:print` gate; blocks with a toast if that specific milestone has zero items ticked) —
+clicking it scopes the print output to that one milestone via a `printInstallmentId` state +
+`DeliveryOrderPrintDocument`'s new optional `onlyInstallmentId` prop, so the printed document
+contains only that milestone's เลขที่/วันที่/ticked items/Remark, never a sibling milestone's (a raw
+browser Ctrl+P still falls back to all pages, each page self-contained as before);
+(2) the printed header gained a "งวดชำระ" line showing the milestone name (`{pct}% {label}`, e.g.
+"40% Materials") — previously only the editable Remark identified the milestone;
+(3) the deposit exclusion was broadened from the exact label "Down Payment" to an exact-whole-label
+set: "Down Payment" / "Deposit" / "เงินมัดจำ" / "ชำระเงินล่วงหน้า" (`isDepositLabel()`, formerly
+`isDownPaymentLabel()`; `stripDownPayment()` → `stripDepositInstallments()`) — still never a
+substring or percentage-based match, so "40% Materials" stays eligible. Per-milestone state
+(independent `itemIds`/`documentNumber`/`issueDate`/`remark`, keyed by the stable installment `id`)
+already existed and is unchanged. See CHANGELOG.md 2026-07-24.
 
 **2026-07-23, same-day fix, signature line**: per a direct user bug report ("ทำไมติ๊กอันล่างแล้วกด
 พิมพ์ออกมาแล้วมันไม่มีอะไรเลยละ") the signature block in `DeliveryOrderPrintDocument.tsx` printed a
@@ -59,7 +77,8 @@ each showing only the items the preparer marks as covered by that shipment.
 3. **Installments** (`DeliveryOrderInstallment[]`) are built from the Scope of Work's
    `paymentConditions.installments` (same `id`, `pct`, `label`, `paymentType`, `days` — always a
    mirror of the Scope of Work's own payment schedule, never independently editable here) — **except
-   Down Payment, which never gets a page** (see "Status" above) — plus
+   a deposit installment (Down Payment/Deposit/เงินมัดจำ/ชำระเงินล่วงหน้า), which never gets a
+   page** (see "Status" above) — plus
    fields specific to this document: `itemIds` (which of the snapshotted items are ticked as
    included in this installment's shipment — **starts empty**, per the direct instruction "งวดนี้จะมี
    ให้ติ๊กว่าเอาสินค้าตัวไหนไปบ้าง"), `documentNumber`/`issueDate` ("เลขที่"/"วันที่" — always blank by
@@ -74,15 +93,19 @@ each showing only the items the preparer marks as covered by that shipment.
    pointing at a since-removed item are dropped, never left dangling)/`documentNumber`/`issueDate`/
    `remark`; a brand-new installment gets a fresh blank page; a removed installment's page simply
    stops appearing. Never runs automatically — only on explicit click, with a confirm dialog first.
-5. **Print** (`DeliveryOrderPrintDocument.tsx`) renders one `<table className="hidden print:table
-   ...">` per installment, each with `style={{ breakAfter: "page" }}` so the browser starts a new
-   physical page per installment — matching the reference PDF's one-page-per-installment structure
-   exactly. Company letterhead comes from the live Settings → Company Info singleton
+5. **Print** (`DeliveryOrderPrintDocument.tsx`) is **per milestone** (since 2026-07-24): each
+   installment card has its own "พิมพ์ใบส่งมอบงวดนี้" button that prints one independent Delivery
+   Note containing only that milestone's page — its เลขที่/วันที่, its ticked items, its Remark, and
+   a "งวดชำระ" header line naming the milestone (`{pct}% {label}`) — never a sibling milestone's
+   data. There is no combined-print toolbar button anymore. Each page renders as a
+   `<table className="hidden print:table ...">` with `style={{ breakAfter: "page" }}`; a raw browser
+   Ctrl+P (no button clicked) falls back to rendering every milestone's page, each still fully
+   self-contained. Company letterhead comes from the live Settings → Company Info singleton
    (`CompanyHeaderInfo`, same convention `PrintDocument.tsx`/`ScopeOfWorkPrintDocument.tsx` already
    use), not a hardcoded copy of the sample's letterhead — so it stays in sync if the company's own
    info ever changes. No required-field validation gate exists on this document type (deliberately
-   simpler than Quotation/Scope of Work's validation machinery) — the print button only blocks with a
-   toast if literally zero items are ticked across every installment.
+   simpler than Quotation/Scope of Work's validation machinery) — a milestone's print button only
+   blocks with a toast if that milestone has zero items ticked.
 6. **Draft/Final lifecycle**, same two-state model as Scope of Work — "ยืนยัน Final" locks the record
    against further edits (no un-finalize action, no Duplicate/Rewrite action either — a Delivery
    Order is meant to track one specific Scope of Work's actual shipments, not spawn independent

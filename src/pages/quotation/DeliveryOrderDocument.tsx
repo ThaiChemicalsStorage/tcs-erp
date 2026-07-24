@@ -19,11 +19,12 @@ function installmentTitle(inst: DeliveryOrderInstallment): string {
   return `${pctPart}${inst.label || "งวดชำระเงิน"}${methodPart}`;
 }
 
-function InstallmentEditor({ installment, items, onChange, disabled }: {
+function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: {
   installment: DeliveryOrderInstallment;
   items: DeliveryOrder["items"];
   onChange: (next: DeliveryOrderInstallment) => void;
   disabled: boolean;
+  onPrint: (() => void) | null;
 }) {
   const toggleItem = (itemId: string) => {
     if (disabled) return;
@@ -35,9 +36,16 @@ function InstallmentEditor({ installment, items, onChange, disabled }: {
 
   return (
     <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-      <p className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
-        {installmentTitle(installment)}
-      </p>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          {installmentTitle(installment)}
+        </p>
+        {onPrint && (
+          <button onClick={onPrint} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all flex-shrink-0">
+            <Printer size={13} /> พิมพ์ใบส่งมอบงวดนี้
+          </button>
+        )}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         <div>
           <label className="text-xs text-muted-foreground block mb-1">เลขที่</label>
@@ -128,6 +136,18 @@ export function DeliveryOrderDocument({
   const [refreshing, setRefreshing] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"finalize" | "refresh" | "delete" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [printInstallmentId, setPrintInstallmentId] = useState<string | null>(null);
+
+  // Print fires from an effect so the just-set `printInstallmentId` has already committed to the
+  // DOM (scoping DeliveryOrderPrintDocument to that one milestone's page) before the dialog opens;
+  // the browser's own afterprint event resets it once the dialog closes.
+  useEffect(() => {
+    if (!printInstallmentId) return;
+    const reset = () => setPrintInstallmentId(null);
+    window.addEventListener("afterprint", reset);
+    window.print();
+    return () => window.removeEventListener("afterprint", reset);
+  }, [printInstallmentId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -178,13 +198,14 @@ export function DeliveryOrderDocument({
     }
   };
 
-  const handlePrint = async () => {
-    const hasAnySelectedItem = deliveryOrder.installments.some((i) => i.itemIds.length > 0);
-    if (!hasAnySelectedItem) {
-      showToast("กรุณาเลือกรายการสินค้าอย่างน้อย 1 รายการในงวดใดงวดหนึ่งก่อนพิมพ์");
+  // Each payment milestone prints as its own independent Delivery Note — only the clicked
+  // installment's items/เลขที่/วันที่/Remark ever reach the printed document, never a sibling's.
+  const handlePrintInstallment = (installment: DeliveryOrderInstallment) => {
+    if (installment.itemIds.length === 0) {
+      showToast("กรุณาเลือกรายการสินค้าอย่างน้อย 1 รายการในงวดนี้ก่อนพิมพ์");
       return;
     }
-    window.print();
+    setPrintInstallmentId(installment.id);
   };
 
   const runConfirmedAction = async () => {
@@ -232,11 +253,6 @@ export function DeliveryOrderDocument({
         </span>
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          {canPrint && (
-            <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-              <Printer size={13} /> พิมพ์ / PDF
-            </button>
-          )}
           {editable && (
             <button onClick={() => setConfirmAction("refresh")} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <RotateCw size={13} /> อัปเดตข้อมูลจาก Scope of Work
@@ -297,11 +313,12 @@ export function DeliveryOrderDocument({
               items={deliveryOrder.items}
               onChange={(next) => updateInstallment(installment.id, next)}
               disabled={!editable}
+              onPrint={canPrint ? () => handlePrintInstallment(installment) : null}
             />
           ))
         )}
 
-        <DeliveryOrderPrintDocument deliveryOrder={deliveryOrder} companyHeader={companyHeader} />
+        <DeliveryOrderPrintDocument deliveryOrder={deliveryOrder} companyHeader={companyHeader} onlyInstallmentId={printInstallmentId} />
       </div>
 
       <ConfirmDialog
