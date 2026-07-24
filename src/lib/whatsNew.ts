@@ -21,6 +21,15 @@ export interface WhatsNewEntry {
 // Newest first.
 export const WHATS_NEW_ENTRIES: WhatsNewEntry[] = [
   {
+    id: "2026-07-24-dashboard-excel-export",
+    date: "2026-07-24",
+    title: "ส่งออกรายงาน Dashboard เป็นไฟล์ Excel ได้แล้ว",
+    bullets: [
+      "ปุ่ม 'ส่งออก Excel' ใหม่บนหน้า Dashboard — ได้ไฟล์ Excel จริง แยกเป็นชีต: สรุป KPI, ผลงานพนักงานขาย, ลูกค้า Top, ประเภทงาน, Pipeline และแนวโน้มรายเดือน",
+      "อยากได้รายงานประจำเดือน: เลือกช่วงเวลา 'เดือนนี้' หรือ 'เดือนที่แล้ว' ในตัวกรอง แล้วกดส่งออก Excel — ชื่อไฟล์และหัวรายงานจะระบุช่วงเดือนนั้นให้เอง",
+    ],
+  },
+  {
     id: "2026-07-24-dashboard-own-data",
     date: "2026-07-24",
     title: "Dashboard แสดงข้อมูลตามสิทธิ์ของแต่ละคนแล้ว",

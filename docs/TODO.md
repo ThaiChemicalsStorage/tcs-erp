@@ -194,7 +194,7 @@
 ## Medium Priority — Executive Dashboard follow-ups (2026-07-10 request)
 
 - [x] ~~Report Export CSV for the Dashboard~~ — **done 2026-07-10** (Codex review fix pass): client-side CSV export (`src/pages/dashboard/csvExport.ts`, no new dependency) of KPIs + Sales Performance/Top Customers/Job Type Analytics tables, built from the already-filtered `DashboardStats` already on screen. "Export CSV" button in the Dashboard header.
-- [ ] **Report Export — PDF/Excel** for the Dashboard still open (CSV done above). Excel needs a new library (e.g. `xlsx`); PDF should extend the existing browser-print pattern (`PrintDocument.tsx` precedent) rather than adding a heavy new dependency.
+- [ ] **Report Export — PDF** for the Dashboard still open (CSV done above; **Excel done 2026-07-24** — `src/pages/dashboard/xlsxExport.ts`, multi-sheet, reused the already-shipped `xlsx` package, no new dependency). PDF should extend the existing browser-print pattern (`PrintDocument.tsx` precedent) rather than adding a heavy new dependency.
 - [ ] Real Lead/Customer entities (see the Lead & Customer Management item above) would resolve the Dashboard's free-text `client`-string-matching caveat for repeat-customer/top-customer analytics, and let the sales pipeline start at "Lead" instead of "Draft."
 - [ ] A dedicated monthly quotation-*count* aggregation (as opposed to reusing the monthly *revenue* series) would make `QuotationTrendChart` show real data instead of an approximation.
 - [ ] Confirm whether cross-salesperson rankings/performance data on the Dashboard should be restricted for the Sales User role (currently visible to any `dashboard:view` holder, same as every other KPI) — not built, no requirement for it yet, would need a new permission if requested.

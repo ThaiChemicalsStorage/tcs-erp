@@ -4,7 +4,31 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Dashboard: own-data-only scoping for roles without `viewAll`
+## 2026-07-24 (absolute latest) — Dashboard: real Excel (.xlsx) export
+
+Direct user pick from the "what's the system missing" list (option 6, Excel export / monthly
+report — constrained to free-only per the same conversation's no-budget decision):
+
+- New `src/pages/dashboard/xlsxExport.ts` — client-side multi-sheet workbook (Summary+KPIs /
+  Sales Performance / Top Customers / Job Types / Pipeline / Monthly Trend) built from the same
+  already-fetched, already-filtered `DashboardStats` the CSV export uses; reuses the `xlsx`
+  package already shipped for Template workbook parsing (zero new dependencies), dynamic-imported
+  so the library loads on first click, not in the Dashboard bundle. Column widths auto-sized;
+  the header block records the filter period + an own-data-only marker when applicable.
+- `DashboardPage.tsx`: gold "ส่งออก Excel" button (primary) beside the existing CSV button, with
+  an in-progress state. The **monthly report** ask is covered by composition: pick the
+  เดือนนี้/เดือนที่แล้ว filter preset → export — the period lands in the filename
+  (`dashboard-report-<from>_<to>.xlsx`) and the Summary sheet header. No scheduled/emailed report
+  (would need cron — Vercel-locked, and the polling/on-demand principle applies until the real
+  server exists).
+- 4 i18n keys, What's New entry (`2026-07-24-dashboard-excel-export`), TODO's "PDF/Excel export
+  deferred" note updated (Excel done; PDF still deferred), docs (Dashboard.md).
+
+`tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all pass clean.
+
+---
+
+## 2026-07-24 — Dashboard: own-data-only scoping for roles without `viewAll`
 
 Direct user decision (asked explicitly via AskUserQuestion; chose "เห็นแค่ของตัวเอง"): the Dashboard
 previously showed company-wide aggregates to every `dashboard:view` holder, which leaked

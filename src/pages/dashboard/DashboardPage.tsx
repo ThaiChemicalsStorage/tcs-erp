@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw, Download, History, UserRound } from "lucide-react";
+import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw, Download, History, UserRound, FileSpreadsheet } from "lucide-react";
 import { type QuotationListFilter, interestLabelKey } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardStats } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
@@ -7,6 +7,7 @@ import { PageHeader } from "../../components/PageHeader";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
 import { todayIsoBangkok } from "./dateRanges";
 import { buildDashboardCsv, downloadCsv } from "./csvExport";
+import { exportDashboardXlsx } from "./xlsxExport";
 import { ChartCard } from "./ChartCard";
 import { ExecutiveSummaryCards } from "./ExecutiveSummaryCards";
 import { SalesPerformancePanel } from "./SalesPerformancePanel";
@@ -211,6 +212,17 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
     const csv = buildDashboardCsv(stats, stats.filters);
     downloadCsv(`dashboard-export-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
+  const [exportingXlsx, setExportingXlsx] = useState(false);
+  const exportXlsx = () => {
+    if (!stats || exportingXlsx) return;
+    setExportingXlsx(true);
+    // Filename carries the filter period so a "เดือนที่แล้ว" export reads as that month's report.
+    const period = stats.filters.from || stats.filters.to
+      ? `${stats.filters.from || "start"}_${stats.filters.to || todayIsoBangkok()}`
+      : new Date().toISOString().slice(0, 10);
+    exportDashboardXlsx(stats, stats.filters, `dashboard-report-${period}.xlsx`)
+      .finally(() => setExportingXlsx(false));
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -231,9 +243,18 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
                   : <div className="w-4 h-4 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" />
               )}
               {stats?.hasAnyData && (
-                <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-                  <Download size={13} /> {t("dashboard.export.csv")}
-                </button>
+                <>
+                  <button
+                    onClick={exportXlsx}
+                    disabled={exportingXlsx}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c9a84c]/40 bg-[#c9a84c]/10 rounded-lg text-foreground hover:bg-[#c9a84c]/20 transition-all disabled:opacity-50 font-medium"
+                  >
+                    <FileSpreadsheet size={13} className="text-[#c9a84c]" /> {exportingXlsx ? t("dashboard.export.xlsx.loading") : t("dashboard.export.xlsx")}
+                  </button>
+                  <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                    <Download size={13} /> {t("dashboard.export.csv")}
+                  </button>
+                </>
               )}
             </>
           }

@@ -141,7 +141,11 @@ values, `pipeline[].totalValue`, `salesPerformance` (revenue/totalValue/expected
 avgDealSize), `customerAnalytics` (revenue/totalValue), `jobTypeAnalytics` (revenue/totalValue/
 avgDealSize), `forecast` (thisMonth/thisQuarter/thisYear), `revenueTrend`/`revenueByMonth`,
 `followUps[].amount`, and `approvalDashboard.pendingList[].amount`. Every value in the CSV export
-(`csvExport.ts`) inherits this since it's built from the same already-fetched response.
+(`csvExport.ts`) inherits this since it's built from the same already-fetched response. The Excel
+export (`xlsxExport.ts`, added 2026-07-24 — multi-sheet: Summary+KPIs / Sales Performance / Top
+Customers / Job Types / Pipeline / Monthly Trend; `xlsx` package dynamic-imported on first click)
+inherits it identically, and doubles as the monthly report: the เดือนนี้/เดือนที่แล้ว filter preset +
+export puts the period in the filename and Summary-sheet header.
 
 **Why this is exact, not an approximation**: `Quote` has no persisted pre-tax/subtotal field —
 `amount` is always the VAT-included grand total

@@ -21,6 +21,8 @@ const translations = {
     "dashboard.subtitle": "สรุปใบเสนอราคา ยอดขาย และกิจกรรมของฝ่ายขาย",
     "dashboard.refreshing": "กำลังอัปเดตข้อมูล...",
     "dashboard.export.csv": "ส่งออก CSV",
+    "dashboard.export.xlsx": "ส่งออก Excel",
+    "dashboard.export.xlsx.loading": "กำลังสร้างไฟล์...",
 
     "dashboard.section.overview": "ภาพรวมยอดขาย",
     "dashboard.section.overview.sub": "ตัวชี้วัดหลักที่สำคัญที่สุด ณ ช่วงเวลาที่เลือก",
@@ -937,6 +939,8 @@ const translations = {
 
     "dashboard.title": "Executive Overview",
     "dashboard.export.csv": "Export CSV",
+    "dashboard.export.xlsx": "Export Excel",
+    "dashboard.export.xlsx.loading": "Generating...",
 
     "dashboard.section.overview": "Sales Overview",
     "dashboard.section.overview.sub": "The most important metrics for the selected period",
