@@ -4,7 +4,34 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — "คู่มือการใช้งาน" manual button on the topbar
+## 2026-07-24 (absolute latest) — User manual now illustrated with real live-site screenshots
+
+Per direct user request ("ในใบ pdf อยากได้ภาพของเว็บมาประกอบในคู่มือด้วยจะได้เห็นชัดขึ้น"), the manual
+PDF was regenerated with 11 real screenshots of the live production site embedded per chapter
+(sign-in, topbar strip, Dashboard, Quotations, Scope of Work, Delivery Orders, Products, Customers,
+Templates, User Management, Settings — now 17 pages, 2.6 MB).
+
+**How the screenshots were captured**: a visible (non-headless) Chrome window with a throwaway
+profile was scripted via `puppeteer-core` against the live site; the user logged in manually once
+(no credentials ever shared with or stored by the tooling), then the script navigated every sidebar
+page and captured 1600×900 @2x shots. A first-time guided-tour welcome popup photobombed round one
+— the retake dismisses it first ("ข้าม") before capturing. The sign-in page was captured separately
+with a fresh headless session. The throwaway Chrome profile (which held the live session cookie)
+was deleted immediately after capture. Screenshots were downscaled to 1400px wide into
+`docs/manual/images/` (committed, so future manual regenerations keep working); chapters 7–9 were
+split from one shared page into three so each fits its screenshot; long chapters (4/5) let their
+screenshot flow onto a continuation sheet rather than squeezing the text.
+
+**Files Modified**: `docs/manual/user-manual.html`, `docs/manual/images/*` (11 new),
+`public/คู่มือการใช้งาน TCS ERP.pdf` (regenerated), `docs/CHANGELOG.md`.
+
+**Verification**: regenerated PDF rendered back to images and inspected page-by-page (cover, image
+placement, captions, no clipped content). No source-code changes — `lint`/`build` unaffected but
+re-run clean anyway.
+
+---
+
+## 2026-07-24 — "คู่มือการใช้งาน" manual button on the topbar
 
 Per direct user follow-up ("ช่วยทำแบบกดดูคู่มือแบบเห็นง่ายๆ คนเข้าใจได้ง่ายมากที่สุด...") after asking
 where the manual lives on the site: the user manual PDF (previous entry) now has a highly visible
