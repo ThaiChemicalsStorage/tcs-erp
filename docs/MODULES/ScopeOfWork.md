@@ -300,15 +300,19 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   `ChecklistGroupCard.tsx`'s already-established checkbox convention immediately above this card,
   inside its own bordered per-department box with a "เลือกแล้ว N คน"/"ยังไม่ได้เลือกผู้รับ" badge
   next to the department title so it's obvious at a glance which departments still need a pick.
-- **"ส่งอีเมลแจ้งผู้รับเอกสาร"** button (below the picker, visible once ≥1 department is checked):
-  saves the record first (the server reads recipients from the persisted document, not unsaved
-  client state), then calls `POST /api/scope-of-works/:id/send-documents`
+- **"ส่งอีเมลแจ้งผู้รับเอกสาร"** button (below the picker, visible once ≥1 department is checked
+  **and the caller holds `scopeOfWork:edit`** — see the gate note below): saves the record first
+  (the server reads recipients from the persisted document, not unsaved client state), then calls
+  `POST /api/scope-of-works/:id/send-documents`
   (`handleSendDocumentNotifications()`, `api/_lib/scopeOfWorkHandler.ts`). Only departments that are
   BOTH currently checked AND have ≥1 picked recipient are actually emailed; recipients are deduped
   across departments so a person picked under two checked options gets one email/notification, not
-  two. Gated by `scopeOfWork:print` (a distribution/export action, not a content edit — no new
-  permission was added, and like Print it has no ownership check and works on a `"Final"` record
-  too). Sends via `api/_lib/email.ts`'s `sendEmail()` (Resend REST API, see
+  two. **Gated by `scopeOfWork:edit` (changed 2026-07-24 from the original `scopeOfWork:print`,
+  direct user report)**: a view/print-only role could fire the send while being unable to pick or
+  change recipients — sending now requires the same permission that controls the picker, both
+  server-side and for the button's visibility. Like Print it still has no ownership check and works
+  on a `"Final"` record too (it distributes the document, it doesn't change it — content edits stay
+  Draft-only). Sends via `api/_lib/email.ts`'s `sendEmail()` (Resend REST API, see
   [ARCHITECTURE.md](../ARCHITECTURE.md)) in parallel per recipient (`Promise.allSettled`, so one bad
   address doesn't block the others), writes a `"Scope of Work Document Notification Sent"` audit
   entry, and returns `{ sentCount, failedCount, recipientCount }` for the UI toast.

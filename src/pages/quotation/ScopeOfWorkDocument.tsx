@@ -758,7 +758,11 @@ export function ScopeOfWorkDocument({
           onUploadAttachment={handleUploadAttachment}
           onDeleteAttachment={handleDeleteAttachment}
         />
-        {documentsToSendGroup && checkedDocumentsToSendKeys.size > 0 && (
+        {/* Send gated by `canEdit` (not `editable`) — 2026-07-24 direct user report: a view-only
+            role could fire the send while unable to pick recipients. `canEdit` alone (without the
+            Draft check) so an editor can still send a Final record — the server gate
+            (`scopeOfWork:edit` on POST /send-documents) matches. */}
+        {canEdit && documentsToSendGroup && checkedDocumentsToSendKeys.size > 0 && (
           <div className="flex justify-end print:hidden -mt-2">
             <button
               onClick={handleSendDocuments}

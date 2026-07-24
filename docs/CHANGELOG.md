@@ -4,7 +4,31 @@
 
 ---
 
-## 2026-07-24 (absolute latest) — Notification polling: แจ้งเตือนขึ้นเองโดยไม่ต้องรีเฟรชหน้า
+## 2026-07-24 (absolute latest) — "ส่งอีเมลแจ้งผู้รับเอกสาร" now requires `scopeOfWork:edit`
+
+Direct user report: a role that can only *view* a Scope of Work could still press
+"ส่งอีเมลแจ้งผู้รับเอกสาร" (the send used `scopeOfWork:print`) while being unable to pick or change
+any recipient — send-but-can't-choose. The send action now requires the same permission that
+controls the recipient picker:
+
+- `api/_lib/scopeOfWorkHandler.ts`: `POST /:id/send-documents` gate changed
+  `scopeOfWork:print` → `scopeOfWork:edit`. Still no ownership check, still works on `"Final"`
+  records (it distributes the document, it doesn't change it — content edits stay Draft-only).
+- `src/pages/quotation/ScopeOfWorkDocument.tsx`: the button itself is now rendered only for
+  `canEdit` holders (previously it had **no** client-side permission check at all — anyone who
+  could open the page saw it). Uses `canEdit`, not `editable` (= `canEdit && isDraft`), so an
+  editor can still send a Final record, matching the server.
+- Docs: RBAC.md permission table (both rows), API.md route row, MODULES/ScopeOfWork.md
+  "Document Recipients".
+
+No new permission and no role-matrix change — roles holding `scopeOfWork:edit` keep working;
+view/print-only roles lose exactly the one action the user asked to remove.
+
+`tsc -b`, `tsc --noEmit -p tsconfig.api.json`, `npm run lint`, `npm run build` all pass clean.
+
+---
+
+## 2026-07-24 — Notification polling: แจ้งเตือนขึ้นเองโดยไม่ต้องรีเฟรชหน้า
 
 Direct user report: "ตอนนี้เว็บมันไม่ Real time มันต้องกดรีก่อนรอบนึงแจ้งเตือนถึงจะขึ้น" — notifications
 were fetched exactly once at boot (`loadDomainData()`), so a `scope_of_work_document_sent` (or any

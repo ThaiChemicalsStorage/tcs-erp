@@ -1132,13 +1132,16 @@ function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl:
  * currently checked in the checklist AND have at least one picked recipient are emailed — a
  * department with recipients picked earlier but since unchecked is skipped (the picks themselves
  * are preserved for convenience if re-checked later, but the send action only acts on what's
- * currently marked "needs to go here"). Gated by `scopeOfWork:print` (not `:edit`) — this is a
- * distribution/export action like Print, not a content edit, so it deliberately has no ownership
- * check and works on a `"Final"` record too, same as Print.
+ * currently marked "needs to go here"). Gated by `scopeOfWork:edit` — originally `scopeOfWork:print`
+ * (reasoning: a distribution action like Print), changed 2026-07-24 on direct user report: a
+ * view/print-only role could fire the send while being unable to pick or change recipients, so
+ * sending now requires the same permission that controls the recipient picker itself. Still no
+ * ownership check, and still works on a `"Final"` record (unlike content edits, which are
+ * Draft-only) — it distributes the document, it doesn't change it.
  */
 async function handleSendDocumentNotifications(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
-  const ctx = await requirePermission(req, "scopeOfWork:print");
+  const ctx = await requirePermission(req, "scopeOfWork:edit");
   const doc = await loadScopeOrThrow(id);
 
   const checklistGroups = withDefaultChecklistGroups(doc.checklistGroups, doc.jobTypeCode);
