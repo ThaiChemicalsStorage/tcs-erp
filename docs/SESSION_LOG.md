@@ -4,7 +4,23 @@
 
 ---
 
-## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI
+## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO"
+
+### What was implemented (third task this session: "ทวง PO")
+- **The full 2026-07-24 PO-chasing proposal**, on the owner's direct go-ahead ("ทำเรื่องทวง PO
+  ต่อเลย"): list badge/PO column/filter toggle/summary card ("ยังไม่มี PO" = blank
+  `customerPoNumber`); "ทวงเลข PO" button → `POST /:id/chase-po` (repeatable, audit-logged,
+  in-app notification `scope_of_work_po_chase` to name-matched salesperson → seller link →
+  creator, deep-linked); Dashboard "ยังไม่มีเลข PO" tile; What's New entry.
+- **Companion blocker fix**: `FOLLOW_UP_FIELDS` (PO number/recipients/message) + attachments now
+  editable/PATCHable on PendingApproval/Final records — a customer PO arrives after approval;
+  content stays locked. Client saves only the follow-up subset on non-Draft records.
+
+### Problems found / fixed (third task)
+- **"ส่งอีเมลแจ้งผู้รับเอกสาร" on a Final record was entirely broken** (found by reading while
+  wiring the exemption): the client's save-then-send PATCHed the full field set, which the
+  2026-07-24 content lock always rejected — and the recipients picker was disabled anyway. The
+  follow-up-fields exemption fixes both halves.
 
 ### What was implemented (second task this session: CI)
 - **GitHub Actions CI** (`.github/workflows/ci.yml`) — the owner asked what CI is, got the

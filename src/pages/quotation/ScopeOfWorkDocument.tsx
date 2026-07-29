@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing } from "lucide-react";
 import type { User } from "../../lib/users";
 import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
@@ -9,6 +9,7 @@ import {
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
   blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS, sendScopeOfWorkDocumentNotifications,
   fetchScopeOfWorksByQuotation, uploadScopeOfWorkAttachment, deleteScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES,
+  chaseScopeOfWorkPo,
 } from "../../lib/scopeOfWork";
 import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOrderFromScope } from "../../lib/deliveryOrder";
 import { getRevisionPredecessorId, generateScopeOfWorkRevisionSummary } from "../../lib/revisionDiff";
@@ -51,6 +52,19 @@ function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
     remarks: s.remarks,
     seller: s.seller,
     approver: s.approver,
+  };
+}
+
+/** The only fields a PATCH may carry on a PendingApproval/Final record — follow-up data exempt
+ * from the approval lock (2026-07-29, the "ทวง PO" pass; see `FOLLOW_UP_FIELDS` in
+ * api/_lib/scopeOfWorkHandler.ts): a customer PO usually arrives AFTER approval. Used by `save()`/
+ * `handleSendDocuments()` whenever the record isn't a Draft, so a non-Draft save never trips the
+ * server's content lock by sending the full field set. */
+function toFollowUpFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
+  return {
+    customerPoNumber: s.customerPoNumber,
+    documentRecipients: s.documentRecipients,
+    documentRecipientMessage: s.documentRecipientMessage,
   };
 }
 
@@ -254,6 +268,7 @@ export function ScopeOfWorkDocument({
   const [sendingDocs, setSendingDocs] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [generatingRevisionNote, setGeneratingRevisionNote] = useState(false);
+  const [chasingPo, setChasingPo] = useState(false);
   // "Does a Delivery Order already exist for this Scope of Work?" (added 2026-07-23, per direct
   // user request) — same existence-check pattern QuoteDocument.tsx uses for its own "สร้าง/เปิด
   // Scope of Work" button. Opens the most-recently-updated one if more than one exists.
@@ -325,17 +340,34 @@ export function ScopeOfWorkDocument({
   const summaryMessages = [...Object.values(finalizeValidation.fieldErrors), ...Object.values(finalizeValidation.groupErrors).flat()];
   const totalRequiredChecks = Object.values(scopeOfWorkRequiredFields).filter((f) => f.required).length + MANDATORY_CHECKLIST_GROUP_KEYS.length + 1 + 1;
 
+  // A non-Draft record saves only the follow-up subset (PO number/recipients/message) — the
+  // server's content lock rejects anything else; see toFollowUpFields() above.
   const save = async () => {
     if (!scope) return;
     try {
       setSaving(true);
-      const updated = await updateScopeOfWork(scope.id, toUpdateFields(scope));
+      const updated = await updateScopeOfWork(scope.id, isDraft ? toUpdateFields(scope) : toFollowUpFields(scope));
       setScope(updated);
-      showToast("บันทึกร่างแล้ว");
+      showToast(isDraft ? "บันทึกร่างแล้ว" : "บันทึกเลข PO / ผู้รับเอกสารแล้ว");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** "ทวงเลข PO" (added 2026-07-29) — repeatable in-app chase to the record's salesperson; the
+   * server resolves who that actually is and reports the name back for the toast. */
+  const handleChasePo = async () => {
+    if (!scope || chasingPo) return;
+    setChasingPo(true);
+    try {
+      const { notifiedUserName } = await chaseScopeOfWorkPo(scope.id);
+      showToast(`ส่งการแจ้งเตือนทวงเลข PO ถึง ${notifiedUserName} แล้ว`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "ส่งการแจ้งเตือนไม่สำเร็จ");
+    } finally {
+      setChasingPo(false);
     }
   };
 
@@ -346,7 +378,7 @@ export function ScopeOfWorkDocument({
     if (!scope || sendingDocs) return;
     setSendingDocs(true);
     try {
-      const saved = await updateScopeOfWork(scope.id, toUpdateFields(scope));
+      const saved = await updateScopeOfWork(scope.id, isDraft ? toUpdateFields(scope) : toFollowUpFields(scope));
       setScope(saved);
       const result = await sendScopeOfWorkDocumentNotifications(scope.id);
       showToast(
@@ -638,9 +670,21 @@ export function ScopeOfWorkDocument({
               <RotateCw size={13} /> อัปเดตข้อมูลจากใบเสนอราคา
             </button>
           )}
-          {editable && (
+          {/* Non-Draft: the save button stays (canEdit, not editable) but only persists the
+              follow-up subset — PO number/recipients/message; see save() above (2026-07-29). */}
+          {canEdit && (
             <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
-              <Save size={13} /> บันทึกร่าง
+              <Save size={13} /> {isDraft ? "บันทึกร่าง" : "บันทึก (เลข PO / ผู้รับเอกสาร)"}
+            </button>
+          )}
+          {!scope.customerPoNumber.trim() && (
+            <button
+              onClick={handleChasePo}
+              disabled={chasingPo}
+              title="ส่งแจ้งเตือนในระบบถึงพนักงานขายของงานนี้ ให้ติดตามเลข PO จากลูกค้า (กดซ้ำได้)"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e08a3c]/40 text-[#e08a3c] rounded-lg font-medium hover:bg-[#e08a3c]/10 transition-colors disabled:opacity-60"
+            >
+              {chasingPo ? <Loader2 size={13} className="animate-spin" /> : <BellRing size={13} />} ทวงเลข PO
             </button>
           )}
           {canEdit && isDraft && (
@@ -772,7 +816,10 @@ export function ScopeOfWorkDocument({
               </div>
               <div>
                 <RequiredFieldLabel required={false}>เอกสารใบสั่งซื้อเลขที่ (PO)</RequiredFieldLabel>
-                <input disabled={!editable} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.customerPoNumber} onChange={(e) => updateField("customerPoNumber", e.target.value)} />
+                {/* canEdit (not editable): PO is follow-up data, still editable on a
+                    PendingApproval/Final record — see FOLLOW_UP_FIELDS (2026-07-29). */}
+                <input disabled={!canEdit} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.customerPoNumber} onChange={(e) => updateField("customerPoNumber", e.target.value)} />
+                {canEdit && !isDraft && <p className="text-[10px] text-muted-foreground mt-1">ช่องนี้บันทึกได้แม้เอกสารอนุมัติแล้ว (PO มักมาทีหลัง) — กด "บันทึก" บนแถบเครื่องมือ</p>}
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">ใบเสนอราคา</label>
@@ -817,7 +864,11 @@ export function ScopeOfWorkDocument({
           onChange={(next) => updateField("documentRecipients", next)}
           message={scope.documentRecipientMessage ?? ""}
           onMessageChange={(next) => updateField("documentRecipientMessage", next)}
-          disabled={!editable}
+          // canEdit (not editable): recipients/message/attachments are follow-up data, still
+          // editable on a PendingApproval/Final record — see FOLLOW_UP_FIELDS (2026-07-29). This
+          // also un-breaks "ส่งอีเมลแจ้งผู้รับเอกสาร" on Final records, whose save-then-send
+          // previously always tripped the server's content lock.
+          disabled={!canEdit}
           attachments={scope.attachments ?? []}
           uploading={uploadingAttachment}
           onUploadAttachment={handleUploadAttachment}

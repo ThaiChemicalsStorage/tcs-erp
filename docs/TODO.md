@@ -189,19 +189,29 @@
   Draft saves + re-checks uniqueness; a Final record's number field is genuinely read-only;
   Duplicate's prompt → new number → new record flow; Rewrite of a manually-numbered record
   produces `{typed}-R1`; old auto-numbered records still list/search/open normally.
-- [ ] **"ทวง PO" (chase the sales for the customer PO number + PO file) — proposed 2026-07-24,
-  awaiting the owner's go-ahead** (discussion happened; the conversation moved on before a
-  decision). Proposal on the table: (1) a "ยังไม่มี PO" badge + filter on the Scope of Work list
-  for records with an empty `customerPoNumber`/no PO attachment; (2) a "ทวงเลข PO" button sending
-  an in-app notification (deep-linked, audit-logged, repeatable) to the record's salesperson;
-  (3) optionally a Dashboard "งานที่ยังไม่มี PO" counter. **Blocker discovered while designing:
-  the 2026-07-24 approval workflow locks `customerPoNumber` + attachments on Final records, but a
-  customer PO usually arrives AFTER approval** — the companion proposal is to exempt
-  `customerPoNumber`/attachments/documentRecipients/documentRecipientMessage from the Final lock
-  (they're follow-up data, not approved document content; item lists/payment terms/checklists
-  stay locked). Time-based auto-chasing (e.g. "remind after 3 days") needs cron — deferred to
-  post-migration per the no-Vercel-locked-services rule, noted in SERVER_MIGRATION_PLAN.md's
-  upgrade list when built.
+- [x] ~~**"ทวง PO" (chase the sales for the customer PO number + PO file) — proposed 2026-07-24,
+  awaiting the owner's go-ahead.**~~ — **done 2026-07-29, full proposal built on the owner's
+  direct go-ahead ("ทำเรื่องทวง PO ต่อเลย")**: (1) "ยังไม่มี PO" badge + new PO column, an
+  "เฉพาะที่ยังไม่มี PO" filter toggle, and a 5th summary card on the Scope of Work list (badge
+  basis: blank `customerPoNumber` — attachments deliberately not consulted, they carry no type to
+  tell a PO file apart); (2) "ทวงเลข PO" toolbar button on the record (shown while the PO number
+  is blank) → `POST /:id/chase-po` sends an in-app bell notification (new
+  `scope_of_work_po_chase` type, deep-linked via `relatedScopeId`) to the resolved salesperson
+  (name-matched user → `seller.userId` → creator), audit-logged and repeatable; (3) Dashboard's
+  Scope of Work card gained a "ยังไม่มีเลข PO" counter. **Companion blocker fixed**:
+  `customerPoNumber`/`documentRecipients`/`documentRecipientMessage` (`FOLLOW_UP_FIELDS`) +
+  attachments are now exempt from the PendingApproval/Final edit lock — this also un-broke
+  "ส่งอีเมลแจ้งผู้รับเอกสาร" on Final records, whose save-then-send always tripped the content
+  lock. Time-based auto-chasing (e.g. "remind after 3 days") still needs cron — **remains
+  deferred to post-migration** per the no-Vercel-locked-services rule. See CHANGELOG.md.
+- [ ] **Manually verify the "ทวง PO" feature (2026-07-29) against a live deployment.** Verified
+  via `tsc`/`lint`/`build` (all clean) and code review only — same standing limitation.
+  Specifically unverified against real data: the chase notification actually lands in the right
+  salesperson's bell and deep-links to the record; the resolution chain picks the intended person
+  on records whose `quotationSalesperson` doesn't exactly match a user's `fullName`; saving the
+  PO number on a real Final record works (and other fields genuinely stay locked); ส่งอีเมล on a
+  Final record now works end-to-end; the list badge/filter/counter and the Dashboard "ยังไม่มีเลข
+  PO" tile show correct counts.
 - [x] Persist the secondary quotation document fields (contact person, phone, address, tax ID, PO reference, issue/expiry dates, payment terms) — done as part of the PDF polish work above, now real fields on `Quote`
 - [x] **Dashboard KPI rework** — **done 2026-07-09**: real KPIs (Total Customers, Total Leads, Total Quotations, Total Products, Revenue, Won Deals, Lost Deals) now come from `GET /api/dashboard`; Customers/Leads correctly showed `0` until those modules shipped. **Total Customers now reflects real data as of 2026-07-14** (see the Customer Management item above) — `api/dashboard/index.ts`'s query was updated from `deletedAt: null` to `isDeleted: false` to match the redefined `Customer` schema. Total Leads still shows `0` (Lead Management remains unbuilt). See [MODULES/Dashboard.md](./MODULES/Dashboard.md).
 - [x] **Dashboard date-range filter** — **done 2026-07-10**: Today/Yesterday/Last 7/14 Days/This Month/Last Month/This Quarter/This Year/Custom Range/All Time + a salesperson filter, all server-side, driving every KPI/chart/table on the page. See [MODULES/Dashboard.md](./MODULES/Dashboard.md).

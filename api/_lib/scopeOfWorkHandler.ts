@@ -414,6 +414,8 @@ function toListItem(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkListItem {
     // `ScopeOfWork.quotationSalesperson` is a frozen-at-creation-time snapshot of the source
     // quotation's salesperson, same provenance rationale as every other snapshotted field here.
     quotationSalesperson: full.quotationSalesperson ?? "",
+    // Added 2026-07-29 for the list's "ยังไม่มี PO" badge/filter (the "ทวง PO" feature).
+    customerPoNumber: full.customerPoNumber ?? "",
     issueDate: full.issueDate ?? "",
     deliveryDate: full.deliveryDate ?? "",
     status: full.status ?? "Draft",
@@ -602,20 +604,30 @@ async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(doc)) });
 }
 
+/** Follow-up data exempt from the PendingApproval/Final edit lock (2026-07-29, the "ทวง PO"
+ * pass's companion fix): a customer PO usually arrives AFTER the document is approved, so the
+ * 2026-07-24 approval workflow's blanket lock made it impossible to ever record the PO number on
+ * the very records that need it. These fields are follow-up bookkeeping, not approved document
+ * content — item lists, payment terms, checklists, signatures, and the document number itself all
+ * stay locked. Attachments (their own routes below) get the same exemption for the same reason. */
+const FOLLOW_UP_FIELDS = new Set(["customerPoNumber", "documentRecipients", "documentRecipientMessage"]);
+
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
   if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
-  // Final is a terminal state — locked against further edits entirely (use "ทำสำเนา" to keep
-  // working from a copy). No un-finalize action exists; keeping this unconditional (not gated on
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  // Final is a terminal state — locked against content edits entirely (use "ทำสำเนา"/Rewrite to
+  // keep working from a copy), and PendingApproval locks the same way while under review. The ONLY
+  // exception: a PATCH touching nothing but FOLLOW_UP_FIELDS (see above) is allowed through in any
+  // status. No un-finalize action exists; keeping the content lock unconditional (not gated on
   // scopeOfWork:finalize) is a deliberate simplicity choice, matching "Keep it practical" in spec.
-  if (doc.status !== "Draft") {
+  if (doc.status !== "Draft" && Object.keys(body).some((k) => !FOLLOW_UP_FIELDS.has(k))) {
     throw new HttpError(400, doc.status === "PendingApproval"
-      ? "Scope of Work นี้อยู่ระหว่างรออนุมัติ แก้ไขไม่ได้ — ถอนคำขออนุมัติก่อนหากต้องการแก้ไข"
-      : "Scope of Work นี้อนุมัติแล้ว (Final) ไม่สามารถแก้ไขได้ กรุณาใช้ แก้ไข (Rewrite) เพื่อสร้างฉบับแก้ไขใหม่");
+      ? "Scope of Work นี้อยู่ระหว่างรออนุมัติ แก้ไขไม่ได้ — ถอนคำขออนุมัติก่อนหากต้องการแก้ไข (ยกเว้นเลข PO/ผู้รับเอกสาร ซึ่งบันทึกได้เสมอ)"
+      : "Scope of Work นี้อนุมัติแล้ว (Final) ไม่สามารถแก้ไขได้ กรุณาใช้ แก้ไข (Rewrite) เพื่อสร้างฉบับแก้ไขใหม่ (ยกเว้นเลข PO/ผู้รับเอกสาร ซึ่งบันทึกได้เสมอ)");
   }
 
-  const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<ScopeOfWorkFields> = {};
 
   // Draft-only by construction (the status guard above) — the moment a record is approved (Final)
@@ -1042,7 +1054,9 @@ async function handleAttachmentUpload(req: VercelRequest, res: VercelResponse, i
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
   if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
-  if (doc.status !== "Draft") throw new HttpError(400, "ต้องเป็นฉบับร่างเท่านั้นจึงจะแนบไฟล์เพิ่มได้ (เอกสารที่รออนุมัติ/อนุมัติแล้วถูกล็อก)");
+  // Deliberately NO Draft-only guard (removed 2026-07-29, the "ทวง PO" pass): attachments are
+  // follow-up data — a customer PO file usually arrives after approval — same exemption as
+  // FOLLOW_UP_FIELDS in handleUpdate above.
 
   const attachments = currentAttachments(doc);
   if (attachments.length >= MAX_ATTACHMENTS_PER_SCOPE) {
@@ -1128,7 +1142,7 @@ async function handleAttachmentDelete(req: VercelRequest, res: VercelResponse, i
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
   if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
-  if (doc.status !== "Draft") throw new HttpError(400, "ต้องเป็นฉบับร่างเท่านั้นจึงจะลบไฟล์แนบได้ (เอกสารที่รออนุมัติ/อนุมัติแล้วถูกล็อก)");
+  // No Draft-only guard — same follow-up-data exemption as the upload route above (2026-07-29).
 
   const attachments = currentAttachments(doc);
   const target = attachments.find((a) => a.id === attachmentId);
@@ -1405,6 +1419,67 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
   res.status(200).json({ ok: true, sentCount, failedCount, recipientCount: userDocs.length });
 }
 
+/**
+ * "ทวงเลข PO" (added 2026-07-29, per the owner's go-ahead on the 2026-07-24 proposal recorded in
+ * docs/TODO.md) — sends an in-app bell notification chasing the customer PO number to the person
+ * responsible for the record. Recipient resolution, most-specific first: (1) the ERP user whose
+ * `fullName` exactly matches the frozen `quotationSalesperson` snapshot (same name-only
+ * correlation `resolveDefaultSeller()` already uses — `salesperson` is free text, not a foreign
+ * key); (2) the record's `seller.userId` signatory link; (3) the record's creator. Gated by
+ * `scopeOfWork:view` only — anyone who can see the record can chase (a Purchase-department
+ * document recipient or an accounting Viewer is a legitimate chaser); every press is
+ * audit-logged, so it's deliberately repeatable with no cooldown (a second chase after a quiet
+ * week is the whole point) and abuse stays traceable. Blocked with a clear 400 once the record
+ * already has a PO number.
+ */
+async function handleChasePo(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "scopeOfWork:view");
+  const doc = await loadScopeOrThrow(id);
+  if ((doc.customerPoNumber ?? "").trim()) {
+    throw new HttpError(400, `Scope of Work นี้มีเลข PO แล้ว (${doc.customerPoNumber.trim()})`);
+  }
+
+  const users = await usersCollection();
+  let targetId = "";
+  let targetName = "";
+  const salespersonName = (doc.quotationSalesperson ?? "").trim();
+  if (salespersonName) {
+    const match = await users.findOne({ fullName: salespersonName }, { projection: { fullName: 1 } });
+    if (match) { targetId = match._id.toString(); targetName = match.fullName; }
+  }
+  if (!targetId && doc.seller?.userId) {
+    try {
+      const match = await users.findOne({ _id: toObjectId(doc.seller.userId) }, { projection: { fullName: 1 } });
+      if (match) { targetId = match._id.toString(); targetName = match.fullName; }
+    } catch { /* malformed legacy id — fall through to the next tier */ }
+  }
+  if (!targetId && doc.createdBy) {
+    try {
+      const match = await users.findOne({ _id: toObjectId(doc.createdBy) }, { projection: { fullName: 1 } });
+      if (match) { targetId = match._id.toString(); targetName = match.fullName; }
+    } catch { /* same */ }
+  }
+  if (!targetId) throw new HttpError(400, "ไม่พบบัญชีผู้ใช้ของพนักงานขาย/ผู้สร้างเอกสารนี้ในระบบ จึงส่งการแจ้งเตือนไม่ได้");
+
+  const notifications = await notificationsCollection();
+  await notifications.insertOne({
+    recipientUserId: targetId,
+    type: "scope_of_work_po_chase" satisfies NotificationType,
+    title: "ทวงเลข PO",
+    description: `${ctx.user.fullName} ขอให้ติดตามเลข PO ของ Scope of Work ${doc.scopeNumber} (${doc.customerSnapshot.companyName}) จากลูกค้า`,
+    module: "Scope of Work",
+    relatedScopeId: id,
+    relatedScopeNumber: doc.scopeNumber,
+    createdAt: nowIso(),
+    read: false,
+  });
+  await writeScopeAuditEntry(ctx, "Scope of Work PO Chased", `ทวงเลข PO ของ Scope of Work ${doc.scopeNumber} ไปยัง ${targetName}`, {
+    scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId,
+  });
+  res.status(200).json({ ok: true, notifiedUserName: targetName });
+}
+
 async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:delete");
@@ -1443,6 +1518,7 @@ export async function handleScopeOfWork(req: VercelRequest, res: VercelResponse)
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "send-documents") return handleSendDocumentNotifications(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "chase-po") return handleChasePo(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "attachments") return handleAttachmentUpload(req, res, parts[0]);
   if (parts.length === 3 && parts[1] === "attachments") return handleAttachmentDelete(req, res, parts[0], parts[2]);
   if (parts.length === 4 && parts[1] === "attachments" && parts[3] === "download") {

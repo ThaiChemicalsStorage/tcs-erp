@@ -680,6 +680,43 @@ Draft, with a fresh `issueDate`, `seller` reset to the duplicating user, `approv
 and, **since 2026-07-29**, a user-typed `scopeNumber` supplied in the POST body instead of an
 auto-minted one, see "Scope Number / Job Code").
 
+## PO Chasing — "ทวง PO" (added 2026-07-29)
+
+Built from the 2026-07-24 proposal on the owner's direct go-ahead. A customer PO number
+(`customerPoNumber`) usually arrives only after the document is approved, so the module now both
+**surfaces** records still missing one and lets anyone **chase** it:
+
+- **List page**: a "PO" column (number, or an amber "ยังไม่มี PO" badge when blank), an
+  "เฉพาะที่ยังไม่มี PO" filter toggle, and a 5th summary card. Badge basis is a blank
+  `customerPoNumber` only — attachments deliberately aren't consulted (no type field to tell a PO
+  file apart from any other attachment).
+- **"ทวงเลข PO" toolbar button** (detail view, shown while the PO number is blank, any status) →
+  `POST /:id/chase-po` (`scopeOfWork:view` — anyone who can see the record can chase; repeatable
+  by design, every press writes a "Scope of Work PO Chased" audit entry so it stays traceable).
+  The server resolves the responsible person — ERP user whose `fullName` exactly matches the
+  frozen `quotationSalesperson` snapshot → the `seller.userId` signatory link → the record's
+  creator — and writes an in-app bell notification (`scope_of_work_po_chase`, deep-links to the
+  record via `relatedScopeId`). Returns the notified name for the confirmation toast; 400 once a
+  PO number exists or when no account resolves.
+- **Dashboard**: the Scope of Work summary card gained a "ยังไม่มีเลข PO" tile (same own-records
+  scoping as its other tiles).
+- **Deferred**: time-based auto-chasing ("remind after 3 days") needs cron — post-migration per
+  the no-Vercel-locked-services rule ([SERVER_MIGRATION_PLAN.md](../SERVER_MIGRATION_PLAN.md)).
+
+### Follow-up fields exempt from the approval lock (same pass)
+
+The 2026-07-24 approval workflow locked PendingApproval/Final records wholesale — which made it
+impossible to ever record the PO on the very records that need it. Now `FOLLOW_UP_FIELDS`
+(`customerPoNumber`/`documentRecipients`/`documentRecipientMessage`, see
+`api/_lib/scopeOfWorkHandler.ts`) may be PATCHed in **any** status, and attachment upload/delete
+lost their Draft-only guards — they're follow-up bookkeeping, not approved document content. Item
+lists, payment terms, checklists, signatures, and the document number stay locked (a non-Draft
+PATCH carrying any other field still 400s). Client side, these inputs enable on `canEdit`
+regardless of status, and the toolbar save button on a non-Draft record sends only this subset
+("บันทึก (เลข PO / ผู้รับเอกสาร)"). This also fixed a real bug: **"ส่งอีเมลแจ้งผู้รับเอกสาร" on a
+Final record always failed** — its save-then-send used the full-field PATCH, which the content
+lock rejected.
+
 ## Print / PDF
 
 `ScopeOfWorkPrintDocument.tsx` — a `hidden print:table` element (same convention as the Quotation's

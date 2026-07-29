@@ -198,6 +198,8 @@ export interface ScopeOfWorkSummary {
   draft: number;
   pending: number;
   final: number;
+  /** Records still missing a customer PO number — added 2026-07-29 (the "ทวง PO" feature). */
+  noPo: number;
 }
 
 /** Same shape/rules as ScopeOfWorkSummary — Delivery Order document counts, added 2026-07-24. */

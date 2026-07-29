@@ -934,17 +934,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ownScopeClause = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
       ? {}
       : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }, ...scopeRecipientMatch] };
-    let scopeOfWork: { total: number; draft: number; pending: number; final: number } | null = null;
+    let scopeOfWork: { total: number; draft: number; pending: number; final: number; noPo: number } | null = null;
     if (roleHasPermission(ctx.role, "scopeOfWork:view")) {
       try {
         const scopeOfWorks = await scopeOfWorksCollection();
-        const [total, draft, pending, final] = await Promise.all([
+        // `noPo` (2026-07-29, the "ทวง PO" feature): records still missing a customer PO number —
+        // `$in: [null, ""]` also matches a record with no `customerPoNumber` field at all.
+        const [total, draft, pending, final, noPo] = await Promise.all([
           scopeOfWorks.countDocuments({ isDeleted: false, ...ownScopeClause }),
           scopeOfWorks.countDocuments({ isDeleted: false, status: "Draft", ...ownScopeClause }),
           scopeOfWorks.countDocuments({ isDeleted: false, status: "PendingApproval", ...ownScopeClause }),
           scopeOfWorks.countDocuments({ isDeleted: false, status: "Final", ...ownScopeClause }),
+          // Cast: the driver types `customerPoNumber` as string-only, but `$in: [null, ""]` is the
+          // standard MongoDB idiom for "blank OR the field doesn't exist at all".
+          scopeOfWorks.countDocuments({ isDeleted: false, customerPoNumber: { $in: [null, ""] } as unknown as string, ...ownScopeClause }),
         ]);
-        scopeOfWork = { total, draft, pending, final };
+        scopeOfWork = { total, draft, pending, final, noPo };
       } catch (err) {
         console.error("[dashboard] scopeOfWork query failed", err);
         scopeOfWork = null;

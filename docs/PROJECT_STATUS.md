@@ -14,6 +14,17 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-29] "ทวง PO" — chase missing customer PO numbers.** Full 2026-07-24 proposal
+  built on the owner's go-ahead: "ยังไม่มี PO" badge + PO column + filter toggle + summary card
+  on the Scope of Work list; a "ทวงเลข PO" button sending a repeatable, audit-logged in-app
+  notification (new `scope_of_work_po_chase` type) to the record's resolved salesperson
+  (name-match → seller link → creator); a Dashboard "ยังไม่มีเลข PO" counter tile. Companion
+  blocker fixed: PO number/recipients/message/attachments are now editable on
+  PendingApproval/Final records (`FOLLOW_UP_FIELDS` exemption — a PO usually arrives after
+  approval; document content stays locked), which also un-broke "ส่งอีเมลแจ้งผู้รับเอกสาร" on
+  Final records. Time-based auto-chasing stays deferred to post-migration (needs cron). What's
+  New entry added. `tsc`/`lint`/`build` clean; live verification tracked in [TODO.md](./TODO.md).
+  See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "PO Chasing" and CHANGELOG.md.
 - ✅ **[2026-07-29] CI pipeline (GitHub Actions).** `.github/workflows/ci.yml` runs
   `npm run lint` + `tsc --noEmit` (both tsconfigs) + `npm run build` on every push/PR to
   `master` (Node 24, `npm ci`, npm cache). Notify-only by design — it does not block the Vercel

@@ -1,4 +1,4 @@
-import { FileStack, FilePen, FileClock, FileCheck2, type LucideIcon } from "lucide-react";
+import { FileStack, FilePen, FileClock, FileCheck2, BellRing, type LucideIcon } from "lucide-react";
 import type { ScopeOfWorkSummary as ScopeOfWorkSummaryData } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
@@ -32,10 +32,13 @@ export function ScopeOfWorkSummary({ data }: { data: ScopeOfWorkSummaryData }) {
     { icon: FilePen, label: t("dashboard.scopeOfWork.draft"), count: data.draft, accent: "#5a7299" },
     { icon: FileClock, label: t("dashboard.scopeOfWork.pending"), count: data.pending, accent: "#e08a3c" },
     { icon: FileCheck2, label: t("dashboard.scopeOfWork.final"), count: data.final, accent: "#2aa36b" },
+    // "งานที่ยังไม่มี PO" — added 2026-07-29 (the "ทวง PO" feature). `?? 0` guards a cached/stale
+    // API response from before the field existed.
+    { icon: BellRing, label: t("dashboard.scopeOfWork.noPo"), count: data.noPo ?? 0, accent: "#e08a3c" },
   ];
   return (
     <ChartCard title={t("dashboard.scopeOfWork.title")} sub={t("dashboard.scopeOfWork.sub")}>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
         {items.map((item) => <Tile key={item.label} {...item} />)}
       </div>
     </ChartCard>

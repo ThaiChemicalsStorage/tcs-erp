@@ -374,6 +374,8 @@ export interface ScopeOfWorkListItem {
   customerName: string;
   /** Added 2026-07-22 for the list page's Salesperson filter — see `ScopeOfWork.quotationSalesperson`. */
   quotationSalesperson: string;
+  /** Added 2026-07-29 for the list's "ยังไม่มี PO" badge/filter (the "ทวง PO" feature). */
+  customerPoNumber: string;
   issueDate: string;
   deliveryDate: string;
   status: ScopeOfWorkStatus;
@@ -385,7 +387,11 @@ export interface ScopeOfWorkListItem {
  * dedicated action (finalize/duplicate/refresh). `scopeNumber` became PATCHable 2026-07-29
  * (manual-ONLY numbering): editable while Draft only, server-checked for uniqueness (409 on a
  * duplicate). `issueDate`/`secondaryCode` edits no longer recompute anything — the number only
- * changes when the user retypes it. `jobTypeCode` never changes after creation. */
+ * changes when the user retypes it. `jobTypeCode` never changes after creation.
+ * **Follow-up fields** (2026-07-29, the "ทวง PO" pass): `customerPoNumber`/`documentRecipients`/
+ * `documentRecipientMessage` are the only fields a PATCH may carry on a PendingApproval/Final
+ * record (`FOLLOW_UP_FIELDS` in api/_lib/scopeOfWorkHandler.ts — a customer PO usually arrives
+ * after approval); everything else remains Draft-only. */
 export type ScopeOfWorkUpdateFields = Partial<{
   scopeNumber: string;
   issueDate: string;
@@ -491,6 +497,14 @@ export async function refreshScopeOfWorkFromQuotation(id: string): Promise<Scope
 }
 export async function deleteScopeOfWork(id: string): Promise<void> {
   await apiFetch<void>(`/scope-of-works/${id}`, { method: "DELETE" });
+}
+/** "ทวงเลข PO" (added 2026-07-29) — in-app bell notification chasing the customer PO number,
+ * sent to the record's resolved salesperson (name-matched user → seller link → creator; see
+ * `handleChasePo` in api/_lib/scopeOfWorkHandler.ts). Repeatable, audit-logged; 400 with a clear
+ * message once the record already has a PO number. Returns who actually got notified, for the
+ * confirmation toast. */
+export async function chaseScopeOfWorkPo(id: string): Promise<{ notifiedUserName: string }> {
+  return apiFetch<{ notifiedUserName: string }>(`/scope-of-works/${id}/chase-po`, { method: "POST" });
 }
 export async function logScopeOfWorkPrinted(id: string): Promise<void> {
   await apiFetch<void>(`/scope-of-works/${id}/print`, { method: "POST" });

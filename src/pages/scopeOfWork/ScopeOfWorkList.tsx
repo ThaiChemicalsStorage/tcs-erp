@@ -23,6 +23,9 @@ export function ScopeOfWorkList({
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
   const [filterSalesperson, setFilterSalesperson] = useState<string>(FILTER_ALL);
+  // "เฉพาะที่ยังไม่มี PO" — added 2026-07-29 (the "ทวง PO" feature): a record counts as "no PO"
+  // when its customerPoNumber snapshot is blank.
+  const [filterNoPo, setFilterNoPo] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
@@ -37,6 +40,7 @@ export function ScopeOfWorkList({
     quotationNumber: s.quotationNumber ?? "",
     jobTypeCode: s.jobTypeCode ?? "",
     quotationSalesperson: s.quotationSalesperson ?? "",
+    customerPoNumber: s.customerPoNumber ?? "",
     // Not itself unsafe to leave undefined (indexing `statusStyle[undefined]` just yields an
     // undefined class name, not a crash), but normalized anyway for the same reason every other
     // field here is — `s.status` indexes a lookup table, so a real value keeps the badge looking
@@ -50,10 +54,13 @@ export function ScopeOfWorkList({
   // a separate master list, since `quotationSalesperson` is a frozen snapshot, not a live reference.
   const salespeopleInList = [...new Set(items.map((s) => s.quotationSalesperson).filter((n) => n.trim()))].sort();
 
+  const noPoCount = items.filter((s) => !s.customerPoNumber.trim()).length;
+
   const filtered = items
     .filter((s) => filterStatus === FILTER_ALL || s.status === filterStatus)
     .filter((s) => filterJobType === FILTER_ALL || s.jobTypeCode === filterJobType)
     .filter((s) => filterSalesperson === FILTER_ALL || s.quotationSalesperson === filterSalesperson)
+    .filter((s) => !filterNoPo || !s.customerPoNumber.trim())
     .filter((s) => !normalizedSearch || [s.scopeNumber, s.customerName, s.quotationNumber, s.jobTypeCode].some((v) => v.toLowerCase().includes(normalizedSearch)));
 
   return (
@@ -64,12 +71,13 @@ export function ScopeOfWorkList({
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         {[
           { label: "ทั้งหมด", count: scopeOfWorks.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
           { label: "Draft", count: scopeOfWorks.filter((s) => s.status === "Draft").length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
           { label: "รออนุมัติ", count: scopeOfWorks.filter((s) => s.status === "PendingApproval").length, color: "#e08a3c", bg: "from-[#e08a3c]/15 to-[#e08a3c]/5" },
           { label: "Final", count: scopeOfWorks.filter((s) => s.status === "Final").length, color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
+          { label: "ยังไม่มี PO", count: noPoCount, color: "#e08a3c", bg: "from-[#e08a3c]/15 to-[#e08a3c]/5" },
         ].map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">
             <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.bg} flex items-center justify-center mb-3`}>
@@ -120,13 +128,23 @@ export function ScopeOfWorkList({
             ))}
           </select>
         </div>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {[FILTER_ALL, "Draft", "PendingApproval", "Final"].map((s) => (
-            <button key={s} onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
-              {s === FILTER_ALL ? "ทั้งหมด" : statusLabel[s as ScopeOfWorkStatus] ?? s}
-            </button>
-          ))}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
+            {[FILTER_ALL, "Draft", "PendingApproval", "Final"].map((s) => (
+              <button key={s} onClick={() => setFilterStatus(s)}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+                {s === FILTER_ALL ? "ทั้งหมด" : statusLabel[s as ScopeOfWorkStatus] ?? s}
+              </button>
+            ))}
+          </div>
+          {/* Independent of the status pills — "ยังไม่มี PO" composes with any status
+              (added 2026-07-29, the "ทวง PO" feature). */}
+          <button
+            onClick={() => setFilterNoPo((v) => !v)}
+            className={`h-9 px-3 text-xs rounded-xl font-medium border transition-all ${filterNoPo ? "bg-[#e08a3c] text-white border-[#e08a3c]" : "bg-secondary text-muted-foreground border-border hover:text-foreground hover:border-[#e08a3c]/40"}`}
+          >
+            เฉพาะที่ยังไม่มี PO {noPoCount > 0 && `(${noPoCount})`}
+          </button>
         </div>
       </div>
 
@@ -151,7 +169,7 @@ export function ScopeOfWorkList({
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              {["รหัสงาน", "ลูกค้า", "พนักงานขาย", "ประเภทงาน", "ใบเสนอราคา", "วันที่ส่งของ", "สถานะ", "แก้ไขล่าสุด"].map((h) => (
+              {["รหัสงาน", "ลูกค้า", "พนักงานขาย", "ประเภทงาน", "ใบเสนอราคา", "PO", "วันที่ส่งของ", "สถานะ", "แก้ไขล่าสุด"].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -172,6 +190,13 @@ export function ScopeOfWorkList({
                   )}
                 </td>
                 <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{s.quotationNumber}</td>
+                <td className="px-4 py-3.5 text-xs whitespace-nowrap">
+                  {s.customerPoNumber.trim() ? (
+                    <span className="font-mono text-muted-foreground">{s.customerPoNumber}</span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#e08a3c]/10 text-[#e08a3c] border border-[#e08a3c]/25">ยังไม่มี PO</span>
+                  )}
+                </td>
                 <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(s.deliveryDate)}</td>
                 <td className="px-4 py-3.5">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[s.status]}`}>

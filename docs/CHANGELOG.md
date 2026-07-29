@@ -4,7 +4,54 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Set up CI (GitHub Actions: lint + typecheck + build on every push)
+## 2026-07-29 (absolute latest) — "ทวง PO": chase missing customer PO numbers + unlock follow-up fields on approved records
+
+Executes the full 2026-07-24 proposal recorded in TODO.md, on the owner's direct go-ahead
+("ทำเรื่องทวง PO ต่อเลย"):
+
+- **List page** (`ScopeOfWorkList.tsx`): new "PO" column showing the PO number, or an amber
+  "ยังไม่มี PO" badge when blank; an "เฉพาะที่ยังไม่มี PO" filter toggle (composes with the
+  status pills, shows the live count); a 5th "ยังไม่มี PO" summary card (grid rebalanced
+  `grid-cols-2 md:grid-cols-3 xl:grid-cols-5`). Badge basis is a blank `customerPoNumber` only —
+  attachments deliberately aren't consulted (they carry no type field, so a "PO file" can't be
+  told apart from any other attachment). `ScopeOfWorkListItem`/`toListItem()` gained
+  `customerPoNumber`.
+- **"ทวงเลข PO" button** (`ScopeOfWorkDocument.tsx` toolbar, shown while the record's PO number
+  is blank, any status): calls new `POST /api/scope-of-works/:id/chase-po`
+  (`scopeOfWork:view` — anyone who can see the record can chase; every press is audit-logged
+  ("Scope of Work PO Chased"), so it's deliberately repeatable with no cooldown). The server
+  resolves the responsible person — ERP user whose `fullName` exactly matches the frozen
+  `quotationSalesperson` snapshot → the `seller.userId` signatory link → the record's creator —
+  writes an in-app bell notification (new `scope_of_work_po_chase` type, BellRing icon,
+  deep-links via the existing `relatedScopeId` mechanism), and returns the notified name for the
+  confirmation toast. 400 with a clear message once a PO number exists, or when no account can
+  be resolved at all.
+- **Follow-up fields exempt from the approval lock** (the proposal's companion blocker fix):
+  `FOLLOW_UP_FIELDS` (`customerPoNumber`/`documentRecipients`/`documentRecipientMessage`) may now
+  be PATCHed on a PendingApproval/Final record — a customer PO usually arrives AFTER approval;
+  item lists/payment terms/checklists/signatures/the document number stay locked (a non-Draft
+  PATCH carrying any other field still 400s, message now notes the exemption). Attachment
+  upload/delete lost their Draft-only guards for the same reason. Client: the PO input +
+  recipients picker/message/attachments now enable on `canEdit` (not Draft-only); the toolbar
+  save button appears for `canEdit` on any status, sending only the follow-up subset
+  (`toFollowUpFields()`) on non-Draft records, labeled "บันทึก (เลข PO / ผู้รับเอกสาร)".
+  **Side effect fixed**: "ส่งอีเมลแจ้งผู้รับเอกสาร" on a Final record previously ALWAYS failed —
+  its save-then-send called the full-field PATCH, which the content lock rejected (and the picker
+  was disabled anyway); both halves work now.
+- **Dashboard**: the Scope of Work card gained a "ยังไม่มีเลข PO" tile (`noPo` count in
+  `api/dashboard/index.ts`, `$in: [null, ""]` so a record missing the field entirely counts too;
+  respects the same own-records scoping as the other tiles). New i18n keys
+  `dashboard.scopeOfWork.noPo` (th/en).
+- **Deferred, unchanged**: time-based auto-chasing ("remind after 3 days") needs cron — still
+  post-migration per the no-Vercel-locked-services rule.
+- What's New (Thai) entry added. Docs: TODO.md (proposal item → done + live-verification item),
+  MODULES/ScopeOfWork.md ("PO Chasing" section + lock-exemption notes), API.md, 
+  MODULES/Notifications.md, MODULES/Dashboard.md, PROJECT_STATUS.md, SESSION_LOG.md.
+- `tsc` (both configs)/`lint`/`build` all pass clean; live verification tracked in TODO.md.
+
+---
+
+## 2026-07-29 — Set up CI (GitHub Actions: lint + typecheck + build on every push)
 
 Closes the long-standing TODO.md High Priority item (owner asked "ทำ CI คืออะไร", got the
 explanation, said "ทำเลย"). New `.github/workflows/ci.yml`:

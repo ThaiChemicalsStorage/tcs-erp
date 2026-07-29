@@ -336,9 +336,13 @@ other pass in this project (see PROJECT_STATUS.md "Known Risks").
   single-status filter to jump to. Moved into supporting detail as of 2026-07-13, seventh pass,
   same reasoning as `SalesPerformancePanel` above.
 - `ScopeOfWorkSummary.tsx` (added 2026-07-23, per a direct user request to show "how many Scope of
-  Work documents exist" on the Dashboard) — Total/Draft/Final as a compact 3-tile row inside one
+  Work documents exist" on the Dashboard) — Total/Draft/Final as a compact tile row inside one
   `ChartCard`, same visual pattern as `ActivityFollowUpSummary` above (informational only, no tile
   is clickable — there's no Scope of Work list filter to jump to the way Pending Approvals has).
+  **2026-07-29 (the "ทวง PO" feature)**: gained a 5th "ยังไม่มีเลข PO" tile (`noPo` — non-deleted
+  records whose `customerPoNumber` is blank/absent, `$in: [null, ""]`, same own-records scoping as
+  the other tiles); the matching list-page filter is `เฉพาะที่ยังไม่มี PO` on the standalone Scope
+  of Work page. Tile grid rebalanced to `grid-cols-2 sm:grid-cols-3 xl:grid-cols-5`.
   Placed in supporting detail, directly after `ActivityFollowUpSummary`. Deliberately **not** added
   as a 5th `ExecutiveSummaryCards` tile — that row is a documented, repeatedly-reaffirmed "exactly 4
   cards" business requirement (see `ExecutiveSummaryCards.tsx`'s own doc comment above). Only

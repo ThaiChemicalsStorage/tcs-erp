@@ -12,6 +12,10 @@ export type NotificationType =
   | "quotation_lost"
   | "quotation_cancelled"
   | "scope_of_work_document_sent"
+  // "ทวงเลข PO" — added 2026-07-29 (the PO-chasing feature, see docs/MODULES/ScopeOfWork.md
+  // "PO Chasing"): fired to the record's resolved salesperson (name-matched user → seller link →
+  // creator) when someone presses the chase button on a record with no PO number yet.
+  | "scope_of_work_po_chase"
   // Approval workflow for Scope of Work + Delivery Order — added 2026-07-24 (direct user
   // request). submitted → every active `*:finalize` holder; approved/rejected → the creator.
   | "scope_of_work_submitted"

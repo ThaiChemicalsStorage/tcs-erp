@@ -78,6 +78,7 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   quotation_lost: { label: "ปิดการขายไม่สำเร็จ", module: "ใบเสนอราคา" },
   quotation_cancelled: { label: "ใบเสนอราคาถูกยกเลิก", module: "ใบเสนอราคา" },
   scope_of_work_document_sent: { label: "มีเอกสาร Scope of Work ส่งถึงคุณ", module: "Scope of Work" },
+  scope_of_work_po_chase: { label: "ทวงเลข PO", module: "Scope of Work" },
   scope_of_work_submitted: { label: "Scope of Work รออนุมัติ", module: "Scope of Work" },
   scope_of_work_approved: { label: "Scope of Work ได้รับอนุมัติ", module: "Scope of Work" },
   scope_of_work_rejected: { label: "Scope of Work ถูกตีกลับ", module: "Scope of Work" },
