@@ -631,6 +631,7 @@ export default function App() {
   const canFinalizeScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:finalize");
   const canPrintScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:print");
   const canDeleteScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:delete");
+  const canChasePoScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:chasePo");
   // Delivery Order (added 2026-07-23) — `canViewDeliveryOrder`/`canCreateDeliveryOrder` gate
   // ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button (passed into both QuotationPage.tsx
   // and ScopeOfWorkPage.tsx, since that same component renders from either); the rest back
@@ -829,7 +830,7 @@ export default function App() {
               : effectiveNav === "auditLog"
               ? <AuditLogPage />
               : effectiveNav === "scopeOfWork"
-              ? <ScopeOfWorkPage users={users} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
+              ? <ScopeOfWorkPage users={users} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canChasePo={canChasePoScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
               : effectiveNav === "deliveryOrder"
               ? <DeliveryOrderPage company={company} canEdit={canEditDeliveryOrder} canFinalize={canFinalizeDeliveryOrder} canPrint={canPrintDeliveryOrder} canDelete={canDeleteDeliveryOrder} canCreate={canCreateDeliveryOrder} initialDeliveryOrderId={deliveryOrderDeepLinkId} onDeliveryOrderIdConsumed={() => setDeliveryOrderDeepLinkId(null)} />
               : pageDataLoading || pageDataError

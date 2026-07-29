@@ -296,6 +296,7 @@ export function QuotationPage({
           canPrint={canPrintScopeOfWork}
           canDelete={canDeleteScopeOfWork}
           canCreate={canCreateScopeOfWork}
+          canChasePo={hasPermission(currentUser, roles, "scopeOfWork:chasePo")}
           canViewDeliveryOrder={canViewDeliveryOrder}
           canCreateDeliveryOrder={canCreateDeliveryOrder}
           onOpenDeliveryOrder={onOpenDeliveryOrder}

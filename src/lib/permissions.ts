@@ -38,6 +38,10 @@ export type Permission =
   | "scopeOfWork:finalize"
   | "scopeOfWork:print"
   | "scopeOfWork:delete"
+  // "ทวงเลข PO" (added 2026-07-29, direct owner request: the chase button must be its own
+  // grantable permission, not implied by scopeOfWork:view) — gates both the toolbar button and
+  // POST /api/scope-of-works/:id/chase-po.
+  | "scopeOfWork:chasePo"
   | "deliveryOrder:view"
   | "deliveryOrder:viewAll"
   | "deliveryOrder:create"
@@ -84,6 +88,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "scopeOfWork:finalize",
   "scopeOfWork:print",
   "scopeOfWork:delete",
+  "scopeOfWork:chasePo",
   "deliveryOrder:view",
   "deliveryOrder:viewAll",
   "deliveryOrder:create",
@@ -131,6 +136,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "scopeOfWork:finalize": "ยืนยันสถานะ Final ของ Scope of Work",
   "scopeOfWork:print": "พิมพ์ / ส่งออก Scope of Work",
   "scopeOfWork:delete": "ลบ Scope of Work",
+  "scopeOfWork:chasePo": "ทวงเลข PO (ส่งแจ้งเตือนถึงพนักงานขาย)",
   "deliveryOrder:view": "ดูใบส่งมอบสินค้า",
   "deliveryOrder:viewAll": "ดูใบส่งมอบสินค้าของผู้อื่น",
   "deliveryOrder:create": "สร้างใบส่งมอบสินค้า",
@@ -179,6 +185,7 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "scopeOfWork:finalize": "permission.scopeOfWorkFinalize",
   "scopeOfWork:print": "permission.scopeOfWorkPrint",
   "scopeOfWork:delete": "permission.scopeOfWorkDelete",
+  "scopeOfWork:chasePo": "permission.scopeOfWorkChasePo",
   "deliveryOrder:view": "permission.deliveryOrderView",
   "deliveryOrder:viewAll": "permission.deliveryOrderViewAll",
   "deliveryOrder:create": "permission.deliveryOrderCreate",
@@ -217,6 +224,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "scopeOfWork:finalize",
       "scopeOfWork:print",
       "scopeOfWork:delete",
+      "scopeOfWork:chasePo",
       "deliveryOrder:view",
       "deliveryOrder:viewAll",
       "deliveryOrder:create",

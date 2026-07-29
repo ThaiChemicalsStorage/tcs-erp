@@ -217,6 +217,7 @@ export function ScopeOfWorkDocument({
   canPrint,
   canDelete,
   canCreate,
+  canChasePo,
   canViewDeliveryOrder,
   canCreateDeliveryOrder,
   onOpenDeliveryOrder,
@@ -233,6 +234,9 @@ export function ScopeOfWorkDocument({
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
+  /** Gates the "ทวงเลข PO" toolbar button — the dedicated `scopeOfWork:chasePo` permission
+   * (2026-07-29, owner request: chasing is an explicitly-granted right, not implied by view). */
+  canChasePo: boolean;
   /** Gates the "สร้าง/เปิดใบส่งมอบสินค้า" toolbar action (added 2026-07-23, per direct user
    * request) — mirrors the same "does one already exist?" existence-check pattern QuoteDocument.tsx
    * uses for its own "สร้าง/เปิด Scope of Work" button. `canCreateDeliveryOrder` alone (without
@@ -676,7 +680,7 @@ export function ScopeOfWorkDocument({
               <Save size={13} /> {isDraft ? "บันทึกร่าง" : "บันทึก (เลข PO / ผู้รับเอกสาร)"}
             </button>
           )}
-          {!scope.customerPoNumber.trim() && (
+          {canChasePo && !scope.customerPoNumber.trim() && (
             <button
               onClick={handleChasePo}
               disabled={chasingPo}

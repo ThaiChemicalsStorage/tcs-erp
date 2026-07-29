@@ -22,6 +22,7 @@ export function ScopeOfWorkPage({
   canPrint,
   canDelete,
   canCreate,
+  canChasePo,
   canViewDeliveryOrder,
   canCreateDeliveryOrder,
   onOpenDeliveryOrder,
@@ -34,6 +35,8 @@ export function ScopeOfWorkPage({
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
+  /** Gates the detail view's "ทวงเลข PO" button (`scopeOfWork:chasePo`, added 2026-07-29). */
+  canChasePo: boolean;
   /** Threaded straight through to ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button
    * (added 2026-07-23) — see that component's own doc comment. */
   canViewDeliveryOrder: boolean;
@@ -107,6 +110,7 @@ export function ScopeOfWorkPage({
           canPrint={canPrint}
           canDelete={canDelete}
           canCreate={canCreate}
+          canChasePo={canChasePo}
           canViewDeliveryOrder={canViewDeliveryOrder}
           canCreateDeliveryOrder={canCreateDeliveryOrder}
           onOpenDeliveryOrder={onOpenDeliveryOrder}

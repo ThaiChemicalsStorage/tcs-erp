@@ -6,6 +6,12 @@
 
 ## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
 
+### What was implemented (ninth task this session: dedicated chase-PO permission)
+- Owner deferred the Role Management ticks ("ค่อยติ๊กทีหลัง") but asked for the chase button to be
+  its own permission. New `scopeOfWork:chasePo` (45th permission): server gate on `/chase-po`,
+  `canChasePo` prop threading to the button, defaults to Administrator/Approver 1/Approver 2,
+  th/en labels, tests → 56, docs + What's New. Production tick batch grows to 4 sets (TODO.md).
+
 ### What was implemented (eighth task this session: refresh keeps the current page)
 - Direct user complaint that refresh always bounced to the Dashboard — explained the no-router
   architecture, offered page-level (hash) vs document-level restore; owner picked level 1.

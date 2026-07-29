@@ -4,7 +4,33 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Refresh no longer resets to the Dashboard (URL-hash page persistence)
+## 2026-07-29 (absolute latest) — "ทวงเลข PO" becomes its own grantable permission (scopeOfWork:chasePo)
+
+Direct owner request ("อยากให้ทำสิทธิ์เพิ่มด้วยว่าสิทธิ์ที่ทวง PO ... เพิ่มเข้ามาถึงจะกดได้หรือขึ้นให้กด")
+— the chase action shipped earlier today gated by `scopeOfWork:view` (anyone who could see the
+record); the owner wants it explicitly granted instead:
+
+- New `scopeOfWork:chasePo` permission (union/ALL_PERMISSIONS/labels — "ทวงเลข PO (ส่งแจ้งเตือนถึง
+  พนักงานขาย)" — label-key map/Role Management matrix group, th/en i18n). 45 permissions total now.
+- Server: `POST /api/scope-of-works/:id/chase-po` now `requirePermission("scopeOfWork:chasePo")`.
+- Client: the "ทวงเลข PO" toolbar button renders only with the permission — new `canChasePo` prop
+  on `ScopeOfWorkDocument`, threaded from QuotationPage (inline `hasPermission`) and
+  App → ScopeOfWorkPage.
+- Default grants (fresh setups): Administrator + Approver Level 1 + Approver Level 2 (+ Super
+  Admin implicitly). Sales User deliberately excluded (the chase targets the salesperson);
+  Viewer excluded (sending a notification isn't read-only).
+- **⚠️ Production needs a manual Role Management tick** (same seeds-once story as every post-seed
+  permission) — added to TODO.md's pending-grants batch (now 4 sets); until ticked, only a Super
+  Admin can chase.
+- Tests: `tests/permissions.test.ts` extended (56 total) — approvers/administrator hold it,
+  sales/viewer don't, and the viewer read-only sweep now also matches `chase`.
+- Docs: RBAC.md (permission table row + count), API.md (route auth), MODULES/ScopeOfWork.md,
+  TODO.md (new ACTION item + step-E batch count). What's New (Thai) entry added.
+- `tsc` (both configs)/`lint`/`npm test` (56/56)/`build` all pass clean.
+
+---
+
+## 2026-07-29 — Refresh no longer resets to the Dashboard (URL-hash page persistence)
 
 Direct user request ("ทำไมเวลารีเฟรชหน้ามันเด้งไปหน้า dashboard ตลอดทำไมไม่อยู่หน้าเดิม") — the
 app has no router, so the current page lived only in React state and every refresh rebooted to

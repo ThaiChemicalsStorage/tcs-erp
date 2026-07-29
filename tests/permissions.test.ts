@@ -32,6 +32,8 @@ describe("default role grants (the RBAC baseline every server check builds on)",
     expect(roleHasPermission(sales, "quotations:viewAll")).toBe(false);
     expect(roleHasPermission(sales, "scopeOfWork:viewAll")).toBe(false);
     expect(roleHasPermission(sales, "scopeOfWork:finalize")).toBe(false);
+    // Chasing targets the salesperson — sales don't chase themselves (2026-07-29 owner decision).
+    expect(roleHasPermission(sales, "scopeOfWork:chasePo")).toBe(false);
     expect(roleHasPermission(sales, "users:manage")).toBe(false);
   });
 
@@ -42,15 +44,21 @@ describe("default role grants (the RBAC baseline every server check builds on)",
       expect(roleHasPermission(approver, "quotations:reject")).toBe(true);
       expect(roleHasPermission(approver, "quotations:viewAll")).toBe(true);
       expect(roleHasPermission(approver, "scopeOfWork:finalize")).toBe(true);
+      expect(roleHasPermission(approver, "scopeOfWork:chasePo")).toBe(true);
       expect(roleHasPermission(approver, "quotations:create")).toBe(false);
     }
+  });
+
+  it("administrator can chase PO numbers", () => {
+    expect(roleHasPermission(role("administrator"), "scopeOfWork:chasePo")).toBe(true);
   });
 
   it("viewer is strictly read-only", () => {
     const viewer = role("viewer");
     expect(roleHasPermission(viewer, "quotations:view")).toBe(true);
+    expect(roleHasPermission(viewer, "scopeOfWork:chasePo"), "chasing sends a notification — not read-only").toBe(false);
     for (const p of ALL_PERMISSIONS) {
-      if (/(create|edit|delete|approve|reject|finalize|manage|import)/.test(p)) {
+      if (/(create|edit|delete|approve|reject|finalize|manage|import|chase)/.test(p)) {
         expect(roleHasPermission(viewer, p), `viewer must not hold ${p}`).toBe(false);
       }
     }

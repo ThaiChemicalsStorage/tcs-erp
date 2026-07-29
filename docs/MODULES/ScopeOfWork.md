@@ -691,8 +691,11 @@ Built from the 2026-07-24 proposal on the owner's direct go-ahead. A customer PO
   `customerPoNumber` only — attachments deliberately aren't consulted (no type field to tell a PO
   file apart from any other attachment).
 - **"ทวงเลข PO" toolbar button** (detail view, shown while the PO number is blank, any status) →
-  `POST /:id/chase-po` (`scopeOfWork:view` — anyone who can see the record can chase; repeatable
-  by design, every press writes a "Scope of Work PO Chased" audit entry so it stays traceable).
+  `POST /:id/chase-po` — gated by the dedicated **`scopeOfWork:chasePo`** permission (changed
+  same day 2026-07-29 from `scopeOfWork:view`, on direct owner request: chasing must be an
+  explicitly-granted right; defaults to Administrator + both Approver levels, Sales User/Viewer
+  deliberately excluded — see [RBAC.md](../RBAC.md)). Repeatable by design; every press writes a
+  "Scope of Work PO Chased" audit entry so it stays traceable.
   The server resolves the responsible person — ERP user whose `fullName` exactly matches the
   frozen `quotationSalesperson` snapshot → the `seller.userId` signatory link → the record's
   creator — and writes an in-app bell notification (`scope_of_work_po_chase`, deep-links to the

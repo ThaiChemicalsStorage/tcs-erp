@@ -202,9 +202,9 @@ access check of its own (unlike `create`, which always required `quotations:view
 `docs/CODEX_REVIEW_REPORT.md`'s "Claude Fix Status" and
 [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 
-6 permissions (7 as of 2026-07-23, see "Scope of Work Own-Records-Only Viewing" below) gate the
-feature end-to-end, enforced server-side in `api/_lib/scopeOfWorkHandler.ts` (never just hidden
-client-side):
+6 permissions (7 as of 2026-07-23 — see "Scope of Work Own-Records-Only Viewing" below — and 8 as
+of 2026-07-29, `scopeOfWork:chasePo`) gate the feature end-to-end, enforced server-side in
+`api/_lib/scopeOfWorkHandler.ts` (never just hidden client-side):
 
 | Permission | Gates |
 |---|---|
@@ -215,6 +215,7 @@ client-side):
 | `scopeOfWork:finalize` | **The approval authority (2026-07-24 approval workflow)**: `POST /api/scope-of-works/:id/finalize` (now "อนุมัติ" — only from `PendingApproval`, auto-fills the approver signatory) and `POST /:id/reject`. Direct Draft→Final no longer exists; submission (`/:id/submit-approval`) needs only the edit+ownership rule. No new permission was added — every role that could Finalize before can Approve now. Also, independent of ownership, a `scopeOfWork:finalize` holder can edit or delete *any* Draft record, not just their own — the RBAC spec's "Sales Manager: view/edit/finalize" language. |
 | `scopeOfWork:print` | `POST /api/scope-of-works/:id/print` (writes the print/export audit entry the client calls right before `window.print()`; as of 2026-07-16 also revalidates completeness first — see below). It briefly (2026-07-23 → 2026-07-24) also gated `POST /api/scope-of-works/:id/send-documents` — that route moved to `scopeOfWork:edit` on 2026-07-24 (see the `scopeOfWork:edit` row above and [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients"). |
 | `scopeOfWork:delete` | `DELETE /api/scope-of-works/:id` (soft delete) — combined with the same ownership-or-finalize check as edit. |
+| `scopeOfWork:chasePo` | **Added 2026-07-29 (same day as the "ทวง PO" feature itself, on direct owner request)** — gates `POST /api/scope-of-works/:id/chase-po` and the "ทวงเลข PO" toolbar button. The feature originally shipped gated by `scopeOfWork:view` (anyone who could see the record could chase); the owner wants chasing to be an explicitly-granted right instead. Default grants: Administrator + Approver Level 1 + Approver Level 2 (+ Super Admin implicitly); Sales User deliberately not (the chase targets the salesperson), Viewer not (sending a notification isn't read-only). **Existing production roles need a manual Role Management tick like every other post-seed permission** — see TODO.md. |
 
 **Ownership rule** (`canEditScope()`/`isOwnerOf()` in `api/_lib/scopeOfWorkHandler.ts`, same shape as
 the Quotation workflow's owner-or-approver check below): a Sales user (`scopeOfWork:edit` but not

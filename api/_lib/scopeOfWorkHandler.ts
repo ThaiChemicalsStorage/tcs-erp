@@ -1425,16 +1425,17 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
  * responsible for the record. Recipient resolution, most-specific first: (1) the ERP user whose
  * `fullName` exactly matches the frozen `quotationSalesperson` snapshot (same name-only
  * correlation `resolveDefaultSeller()` already uses — `salesperson` is free text, not a foreign
- * key); (2) the record's `seller.userId` signatory link; (3) the record's creator. Gated by
- * `scopeOfWork:view` only — anyone who can see the record can chase (a Purchase-department
- * document recipient or an accounting Viewer is a legitimate chaser); every press is
- * audit-logged, so it's deliberately repeatable with no cooldown (a second chase after a quiet
- * week is the whole point) and abuse stays traceable. Blocked with a clear 400 once the record
- * already has a PO number.
+ * key); (2) the record's `seller.userId` signatory link; (3) the record's creator. Gated by the
+ * dedicated `scopeOfWork:chasePo` permission (changed 2026-07-29, same day, on direct owner
+ * request — originally `scopeOfWork:view`, i.e. anyone who could see the record; the owner wants
+ * chasing to be an explicitly-granted right, defaulting to Administrator + both Approver levels).
+ * Every press is audit-logged, so it's deliberately repeatable with no cooldown (a second chase
+ * after a quiet week is the whole point) and abuse stays traceable. Blocked with a clear 400 once
+ * the record already has a PO number.
  */
 async function handleChasePo(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
-  const ctx = await requirePermission(req, "scopeOfWork:view");
+  const ctx = await requirePermission(req, "scopeOfWork:chasePo");
   const doc = await loadScopeOrThrow(id);
   if ((doc.customerPoNumber ?? "").trim()) {
     throw new HttpError(400, `Scope of Work นี้มีเลข PO แล้ว (${doc.customerPoNumber.trim()})`);
