@@ -4,7 +4,16 @@
 
 ---
 
-## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual
+## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours
+
+### What was implemented (seventh task this session: Quotation/Products tour steps)
+- **`useModuleTour()`** — per-page driver.js walkthroughs with per-user/per-tour localStorage
+  seen-tracking (new functions in tour.ts; the main tour's storage untouched). Quotation list and
+  Products list each get a 4-step tour (auto-start once per user, HelpCircle replay button in the
+  header), mounted in the list components so they never fire over editor views. `currentUserId`
+  threaded to QuoteList (from QuotationPage) and App → ProductsPage → ProductList. 18 i18n keys +
+  What's New entry. Closes the 2026-07-10 TODO item's two buildable targets; SOW/DO/Customers are
+  now cheap follow-ups.
 
 ### What was implemented (sixth task this session: UX polish + manual)
 - Owner asked for a bug/UX pass + manual update. Shipped: new shared `PromptDialog.tsx` replacing

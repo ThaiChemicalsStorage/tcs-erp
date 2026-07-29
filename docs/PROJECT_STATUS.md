@@ -14,6 +14,14 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-29] Guided tour steps for Quotation + Products.** New `useModuleTour()` hook
+  (per-page driver.js walkthrough, auto-starts once per user on first visit, per-tour localStorage
+  seen-tracking, HelpCircle replay button in the page header): Quotation list (create button →
+  summary cards → filters → table) and Products list (add product → categories → toolbar →
+  table), 4 steps each, th/en. Closes the two buildable targets of the 2026-07-10 "extend the
+  guided tour" TODO item; SOW/DO/Customers pages can now be added cheaply, Leads still has no
+  page. What's New entry added. `tsc`/`lint`/`test`/`build` clean; live click-through pending
+  (see CHANGELOG.md). See [TODO.md](./TODO.md).
 - ✅ **[2026-07-29] UX polish pass + user manual 29/07 edition.** Killed all three
   `window.prompt()` usages via a new shared `PromptDialog.tsx` (styled reject-reason and
   duplicate-number prompts on Scope of Work/Delivery Order); notification delete button now

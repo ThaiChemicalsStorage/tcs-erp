@@ -13,6 +13,7 @@ export function ProductsPage({
   onProductsChange,
   categories,
   onCategoriesChange,
+  currentUserId,
   initialEditId,
   onEditIdConsumed,
   autoView,
@@ -23,6 +24,8 @@ export function ProductsPage({
   onProductsChange: (products: Product[]) => void;
   categories: ProductCategory[];
   onCategoriesChange: (categories: ProductCategory[]) => void;
+  /** For the list view's one-time guided tour "seen" tracking (see useModuleTour). */
+  currentUserId: string;
   /** Set by a Global Search product result click — opens that product's edit form directly, whether ProductsPage is mounting fresh or already on-screen (see CustomersPage's identical `initialEditId` for the full rationale). */
   initialEditId?: string | null;
   onEditIdConsumed?: () => void;
@@ -140,6 +143,7 @@ export function ProductsPage({
     <ProductList
       products={products}
       categories={categories}
+      currentUserId={currentUserId}
       onEdit={(id) => { setEditingId(id); setView("edit"); }}
       onArchiveToggle={handleArchiveToggle}
       onDelete={handleDelete}

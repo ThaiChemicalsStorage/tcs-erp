@@ -4,7 +4,38 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — UX polish pass (kill window.prompt, touch-visible delete, honest login) + user manual updated to the 29/07 edition
+## 2026-07-29 (absolute latest) — Guided tour steps for the Quotation and Products pages
+
+Closes the "extend the guided tour" TODO item's two buildable targets (open since 2026-07-10),
+on the owner's direct go-ahead:
+
+- **Infra**: `GuidedTour.tsx`'s driver.js wiring extracted into an internal `useDriverTour()`;
+  the original sidebar/topbar/Dashboard walkthrough (`useGuidedTour()`) is byte-for-byte the same
+  behavior. New `useModuleTour(tourKey, userId, steps)` — auto-starts once per user per page
+  (600 ms after mount so the page has painted; closing/skipping counts as seen, same convention
+  as the main tour) and returns `start` for a replay button. Seen-tracking is per-tour in
+  localStorage (`hasPageTourCompleted()`/`markPageTourCompleted()`, src/lib/tour.ts —
+  independent of the main tour's existing key, which is untouched/back-compatible).
+- **Quotation list** (QuoteList.tsx, 4 steps): "+ สร้างใบเสนอราคา" (mentions the Job
+  Type/Template wizard) → summary cards → search + status filters → the table (click a row to
+  open; interest rating in the last column). Mounted in the LIST component so it can never fire
+  over the detail/editor views; `currentUserId` threaded from QuotationPage's existing
+  `currentUser`.
+- **Products list** (ProductList.tsx, 4 steps): "+ เพิ่มสินค้า" (mentions quotations pick items
+  from here) → "จัดการหมวดหมู่" → search/category/show-archived toolbar → the table
+  (sortable headers, row actions). `currentUserId` threaded App → ProductsPage → ProductList
+  (new prop on both).
+- **Replay button**: a `HelpCircle` icon button ("ดูคำแนะนำหน้านี้" / "Show page tips",
+  `tour.replay`) in each page's header restarts that page's tour on demand.
+- 18 new i18n keys (th/en). What's New (Thai) entry added.
+- `tsc` (both configs)/`lint`/`npm test` (55/55)/`build` all pass clean. Not click-through
+  verified in a live browser this session (same standing limitation) — specifically unverified:
+  the auto-start actually waits for slow-network paints, and driver.js popover positioning
+  around the summary-card grid at narrow viewports.
+
+---
+
+## 2026-07-29 — UX polish pass (kill window.prompt, touch-visible delete, honest login) + user manual updated to the 29/07 edition
 
 Owner request: "ช่วยเช็คบัคและปรับหน้าตาให้แบบ User friendly มากกว่าเดิมหน่อยตรงไหนที่คิดว่าใช้งานยาก
 และอัพเดตหน้าคู่มือให้ด้วย". The bug/UX review found the roughest edges were three long-tracked

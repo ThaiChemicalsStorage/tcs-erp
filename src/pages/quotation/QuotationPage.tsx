@@ -249,6 +249,7 @@ export function QuotationPage({
           quotes={quotes}
           jobTypes={jobTypes}
           initialFilter={listFilterSnapshot}
+          currentUserId={currentUser.id}
           onOpen={(id) => { setSelectedId(id); setView("detail"); }}
           onCreateNew={() => {
             setSelectedId(null);

@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { Plus, FileText, Target, X, Search, GitBranch } from "lucide-react";
+import { Plus, FileText, Target, X, Search, GitBranch, HelpCircle } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
+import { useModuleTour } from "../../components/GuidedTour";
 import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusStyle, statusIcon, statusLabelKey, isRevisionQuote } from "../../lib/quotes";
 import type { JobType } from "../../lib/jobTypes";
 import { initials } from "../../lib/users";
@@ -33,6 +35,7 @@ export function QuoteList({
   quotes,
   jobTypes,
   initialFilter,
+  currentUserId,
   onOpen,
   onCreateNew,
   onInterestChange,
@@ -41,11 +44,24 @@ export function QuoteList({
   jobTypes: JobType[];
   /** Seeds the filters below on mount (a Dashboard pipeline-stage/follow-up click-through) — not re-applied on prop changes since QuoteList remounts fresh each visit, see QuotationPage.tsx. */
   initialFilter: QuotationListFilter | null;
+  /** For the per-user "seen" tracking of this page's one-time guided tour (see useModuleTour). */
+  currentUserId: string;
   onOpen: (id: string) => void;
   onCreateNew: () => void;
   onInterestChange: (id: string, v: QuoteInterest) => void;
 }) {
   const { t } = useI18n();
+
+  // Page tour (added 2026-07-29) — auto-starts once per user on their first visit to this list;
+  // the HelpCircle button in the header replays it. Mounted here (not QuotationPage) so it can
+  // never fire over the detail/editor views.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="quotation-create"]', popover: { title: t("tour.quotation.create.title"), description: t("tour.quotation.create.desc"), side: "bottom" } },
+    { element: '[data-tour="quotation-summary"]', popover: { title: t("tour.quotation.summary.title"), description: t("tour.quotation.summary.desc"), side: "bottom" } },
+    { element: '[data-tour="quotation-filters"]', popover: { title: t("tour.quotation.filters.title"), description: t("tour.quotation.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="quotation-table"]', popover: { title: t("tour.quotation.table.title"), description: t("tour.quotation.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("quotation", currentUserId, tourSteps);
   const [filterStatus, setFilterStatus] = useState<string>(initialFilter?.status ?? FILTER_ALL);
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
   const [filterSalesperson, setFilterSalesperson] = useState<string>(FILTER_ALL);
@@ -77,13 +93,23 @@ export function QuoteList({
           <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("quotation.pageSubtitle")}</p>
         </div>
-        <button onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
-          <Plus size={15} /> {t("quotation.createNew")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={tour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={15} />
+          </button>
+          <button data-tour="quotation-create" onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <Plus size={15} /> {t("quotation.createNew")}
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div data-tour="quotation-summary" className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           { label: t("quotation.filterAll"), count: quotes.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
           { label: t("quotation.status.pendingApproval"), count: quotes.filter((q) => q.status === "รออนุมัติ").length, color: "#c9a84c", bg: "from-[#c9a84c]/15 to-[#c9a84c]/5" },
@@ -106,7 +132,7 @@ export function QuoteList({
       </div>
 
       {/* Filter */}
-      <div className="space-y-3">
+      <div data-tour="quotation-filters" className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative h-9 w-72">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -164,7 +190,7 @@ export function QuoteList({
       </div>
 
       {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="quotation-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {quotes.length === 0 ? (
           <EmptyState icon={FileText} title={t("empty.quotations.title")} description={t("empty.quotations.sub")} actionLabel={t("empty.quotations.action")} onAction={onCreateNew} compact />
         ) : filtered.length === 0 ? (

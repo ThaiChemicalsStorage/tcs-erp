@@ -1,10 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   Plus, Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Pencil, Copy, Archive, ArchiveRestore, Trash2, Tags, Package,
+  Pencil, Copy, Archive, ArchiveRestore, Trash2, Tags, Package, HelpCircle,
 } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import type { Product, ProductCategory } from "../../lib/products";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useModuleTour } from "../../components/GuidedTour";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useI18n } from "../../lib/i18n";
@@ -21,6 +23,7 @@ function fmtDate(iso: string) {
 export function ProductList({
   products,
   categories,
+  currentUserId,
   onEdit,
   onArchiveToggle,
   onDelete,
@@ -30,6 +33,8 @@ export function ProductList({
 }: {
   products: Product[];
   categories: ProductCategory[];
+  /** For the per-user "seen" tracking of this page's one-time guided tour (see useModuleTour). */
+  currentUserId: string;
   onEdit: (id: string) => void;
   onArchiveToggle: (id: string) => void;
   onDelete: (id: string) => void;
@@ -38,6 +43,16 @@ export function ProductList({
   onManageCategories: () => void;
 }) {
   const { t } = useI18n();
+
+  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
+  // as QuoteList.tsx's tour; mounted in the list view only, never over the form/categories views.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="products-create"]', popover: { title: t("tour.products.create.title"), description: t("tour.products.create.desc"), side: "bottom" } },
+    { element: '[data-tour="products-categories"]', popover: { title: t("tour.products.categories.title"), description: t("tour.products.categories.desc"), side: "bottom" } },
+    { element: '[data-tour="products-toolbar"]', popover: { title: t("tour.products.toolbar.title"), description: t("tour.products.toolbar.desc"), side: "bottom" } },
+    { element: '[data-tour="products-table"]', popover: { title: t("tour.products.table.title"), description: t("tour.products.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("products", currentUserId, tourSteps);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_CATEGORIES);
   const [showArchived, setShowArchived] = useState(false);
@@ -103,17 +118,25 @@ export function ProductList({
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("products.pageSubtitle")}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={onManageCategories} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
+          <button
+            onClick={tour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={15} />
+          </button>
+          <button data-tour="products-categories" onClick={onManageCategories} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
             <Tags size={15} /> {t("products.manageCategories")}
           </button>
-          <button onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+          <button data-tour="products-create" onClick={onCreateNew} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
             <Plus size={15} /> {t("products.addNew")}
           </button>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div data-tour="products-toolbar" className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 focus-within:border-[#c9a84c]/40 transition-colors">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input
@@ -146,7 +169,7 @@ export function ProductList({
       </div>
 
       {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="products-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {products.length === 0 ? (
           <EmptyState icon={Package} title={t("empty.products.title")} description={t("empty.products.sub")} actionLabel={t("empty.products.action")} onAction={onCreateNew} compact />
         ) : sorted.length === 0 ? (
