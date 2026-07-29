@@ -6,6 +6,19 @@
 
 ## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
 
+### What was implemented (sixteenth task this session: granted the 4 pending Role Management permissions)
+- Direct follow-up to the previous task's summary of open TODOs — the owner said "ไปติ๊กสิทธิ์ 4
+  ตัวนั้นให้เลย" (go tick those 4 permissions). Read `src/lib/roles.ts`'s `defaultRoles` as the
+  source of truth for each role's target permission set, then opened Role Management for
+  Administrator/Approver Level 1/Approver Level 2/Viewer and ticked only the boxes matching that
+  target — left every other existing checkbox alone (some roles hold extra permissions beyond the
+  code defaults, e.g. Approvers also have `quotations:create`, not touched). Sales User was
+  intentionally skipped (not part of the 4-item list). All 4 `ACTION REQUIRED` TODO items and the
+  Go-Live Checklist step-E sub-item are now closed; see CHANGELOG for the exact before/after
+  permission counts per role.
+- **New TODO surfaced**: Sales User's own `deliveryOrder:*` grant wasn't specifically re-verified
+  this pass (same seeding gap could affect it too) — flagged as a follow-up.
+
 ### What was implemented (fifteenth task this session: refreshed the user manual's screenshots)
 - User reported the manual's screenshots were stale (last captured 2026-07-24, five days before
   the tour/PO-chasing/hash-persistence/What's New changes above). Started the dev server (found it

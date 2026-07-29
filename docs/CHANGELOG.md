@@ -4,7 +4,36 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Refreshed user manual screenshots
+## 2026-07-29 (absolute latest) — Granted the 4 pending permissions to existing production roles
+
+Closed out the last of the outstanding manual Role Management grants tracked in TODO.md (step E
+of the Go-Live Checklist) — `quotations:viewAll`, `scopeOfWork:viewAll`, `deliveryOrder:*`, and
+`scopeOfWork:chasePo` all predate their permission existing in `defaultRoles`, and `defaultRoles`
+only seeds the `roles` collection once on first-run setup, so production's existing role documents
+never picked them up automatically. Went through each of the 4 non-Super-Admin roles in Role
+Management and ticked only the boxes matching `src/lib/roles.ts`'s current `defaultRoles` target
+for that role — nothing else was touched (a couple of roles hold extra permissions beyond the
+code's defaults, e.g. Approver Level 1/2 also have `quotations:create`, which were left alone since
+reconciling a role to the code defaults exactly wasn't the ask).
+
+**Files Modified**: none (MongoDB `roles` collection only, via the live UI)
+
+**Reason**: Direct owner request ("ไปติ๊กสิทธิ์ 4 ตัวนั้นให้เลย") to finally close this out.
+
+**Notes**: Per-role permission count before → after: **Administrator** 42 → 43 (`scopeOfWork:chasePo`
+only — everything else in the target set was already granted). **Approver Level 1** 8 → 20
+(`quotations:viewAll`; `scopeOfWork:view/viewAll/edit/finalize/print/chasePo`;
+`deliveryOrder:view/viewAll/edit/finalize/print`). **Approver Level 2** 7 → 19 (identical set to
+Approver Level 1). **Viewer** 3 → 8 (`quotations:viewAll`; `scopeOfWork:view/viewAll`;
+`deliveryOrder:view/viewAll` — deliberately no `chasePo`, not in Viewer's default set).
+**Sales User was deliberately left untouched** (8 permissions, unchanged) — its own
+`deliveryOrder:view/create/edit/print` gap is a separate, older issue not part of this specific
+4-item list, tracked as a fresh TODO follow-up. See [TODO.md](./TODO.md) (all 4 corresponding
+`ACTION REQUIRED` items marked done) and [RBAC.md](./RBAC.md) for the permission definitions.
+
+---
+
+## 2026-07-29 — Refreshed user manual screenshots
 
 The 14 screenshots embedded in `docs/manual/user-manual.html` (and thus the generated
 `public/คู่มือการใช้งาน TCS ERP.pdf`) were captured 2026-07-24 and had drifted out of date after
