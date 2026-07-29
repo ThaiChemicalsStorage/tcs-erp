@@ -14,6 +14,15 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-29] Login rate limiting.** `POST /api/auth/login` now records failed attempts in a
+  new TTL-purged `login_attempts` MongoDB collection and throttles over a 15-minute sliding
+  window: ≥5 failures for one identifier, or ≥20 from one IP, → 429 with a Thai
+  "รอประมาณ X นาที" message + `Retry-After` header. Success clears the identifier's failures; a
+  correct-password-but-suspended attempt neither records nor clears; the check runs before the
+  bcrypt compare so locked-out requests stay cheap. MongoDB-backed deliberately (portable to the
+  future server, no per-instance memory, no Vercel-locked KV). Closes a Known Gap open since the
+  2026-07-09 migration. `tsc`/`lint`/`build` clean; live 429 behavior not yet verified (see
+  [TODO.md](./TODO.md)). See [RBAC.md](./RBAC.md), [API.md](./API.md), CHANGELOG.md.
 - ✅ **[2026-07-29] "ทวง PO" — chase missing customer PO numbers.** Full 2026-07-24 proposal
   built on the owner's go-ahead: "ยังไม่มี PO" badge + PO column + filter toggle + summary card
   on the Scope of Work list; a "ทวงเลข PO" button sending a repeatable, audit-logged in-app
@@ -700,7 +709,7 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 ## Upcoming Milestones
 
 1. **Lead & Customer Management module** — the original "Phase 1" scope from the initial ERP spec, still outstanding. Now the single largest untouched bucket, since the backend migration closed the other big one.
-2. Close the remaining honest gaps from the backend migration: add login rate limiting, set up CI (typecheck/lint/build on push), verify GitHub auto-deploy is actually wired, add automated tests for the new API layer, rotate the MongoDB Atlas credential that was pasted into an AI chat session — see [TODO.md](./TODO.md) High Priority.
+2. Close the remaining honest gaps from the backend migration: ~~add login rate limiting~~ (done 2026-07-29), ~~set up CI~~ (done 2026-07-29), ~~verify GitHub auto-deploy~~ (confirmed in practice), add automated tests for the new API layer, rotate the MongoDB Atlas credential that was pasted into an AI chat session — see [TODO.md](./TODO.md) High Priority.
 3. Wire `Company.vatRate` into `computeTotals()`, add button-level permission gating to Product Library, and lift `QuotationPage`'s selected-quote state to `App.tsx` so notifications can deep-link to a specific quote.
 
 ## Current Sprint
@@ -713,7 +722,7 @@ Not yet planned.
 
 ## Known Risks
 
-- **No rate limiting on login** (`POST /api/auth/login`): a scripted brute-force attempt against a known username isn't throttled. Should be closed before this app is exposed beyond a trusted internal network. See [RBAC.md](./RBAC.md) Known Gaps and [TODO.md](./TODO.md).
+- ~~**No rate limiting on login**~~ — **closed 2026-07-29**: `POST /api/auth/login` now throttles via the TTL-purged `login_attempts` MongoDB collection (≥5 failures/identifier or ≥20/IP per 15 min → 429 + `Retry-After`). Not yet verified against the live deployment (see [TODO.md](./TODO.md)). See [RBAC.md](./RBAC.md) Known Gaps.
 - **A MongoDB Atlas database-user password was pasted into an AI chat session** during the 2026-07-09 backend migration's development. A credential rotation was recommended to the user as a follow-up; whether it has been done cannot be verified from the codebase — treat as an open, unconfirmed action item until explicitly checked off. See [TODO.md](./TODO.md).
 - **No true session revocation**: sessions are JWTs (httpOnly cookie, 7-day expiry), not database-backed — a still-active account's leaked/stolen token remains valid until natural expiry; only a *deactivated* account is locked out immediately (every request re-checks `status` against MongoDB). Low risk in practice (httpOnly, never exposed to XSS-readable JS) but worth knowing precisely. See [RBAC.md](./RBAC.md) "What Was Achieved vs. the Old Proposed Design."
 - **No automated tests** (CI now exists — see below): nothing in this repo (frontend or the new API layer) is covered by tests. **2026-07-29 update**: `.github/workflows/ci.yml` now runs `lint`/`tsc` (both configs)/`build` on every push/PR to `master`, so a compile-/lint-broken push shows a red ✗ on the commit immediately — but CI is **notify-only** (it doesn't block the Vercel auto-deploy, which would require a PR-based workflow) and only proves the code builds, not that features behave correctly (that's the still-open automated-tests item). See [TODO.md](./TODO.md).

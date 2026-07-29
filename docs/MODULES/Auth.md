@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Session gate in front of the whole app, backed by real multi-user accounts and server-verified credentials. As of the 2026-07-09 backend migration this is **real security**: bcrypt password hashing, JWT httpOnly-cookie sessions, server-side re-verification on every request. See [RBAC.md](../RBAC.md) for the full model and its honest remaining gaps (no rate limiting, no true session revocation).
+Session gate in front of the whole app, backed by real multi-user accounts and server-verified credentials. As of the 2026-07-09 backend migration this is **real security**: bcrypt password hashing, JWT httpOnly-cookie sessions, server-side re-verification on every request, and — as of 2026-07-29 — login rate limiting (see below). See [RBAC.md](../RBAC.md) for the full model and its honest remaining gaps (no true session revocation).
 
 ## Business Flow
 
@@ -46,8 +46,8 @@ Every signed-in user can reach the app shell; what they see inside it is gated p
 ## Future Improvements
 
 - True session revocation (a server-side deny-list or database-backed sessions) so a still-active account's leaked token can be force-invalidated before its natural 7-day expiry — currently only a *deactivated* account is locked out immediately; see [RBAC.md](../RBAC.md) "What Was Achieved vs. the Old Proposed Design."
-- Rate limiting on `POST /api/auth/login` — currently unthrottled.
+- ~~Rate limiting on `POST /api/auth/login`~~ — **done 2026-07-29**: failed attempts tracked in the TTL-purged `login_attempts` MongoDB collection; ≥5 failures per identifier or ≥20 per IP within 15 minutes → `429` with a Thai "รอประมาณ X นาที" message + `Retry-After`; success clears the identifier's failures; the check runs before the bcrypt compare. See [RBAC.md](../RBAC.md) Known Gaps and [API.md](../API.md).
 
 ## Known Issues
 
-None currently open. The pre-migration client-side checksum/`localStorage`-session limitations were closed by the 2026-07-09 backend migration (real bcrypt hashing, httpOnly JWT cookie) — see [RBAC.md](../RBAC.md) for the remaining honest gaps (no rate limiting, no true mid-expiry session revocation).
+None currently open. The pre-migration client-side checksum/`localStorage`-session limitations were closed by the 2026-07-09 backend migration (real bcrypt hashing, httpOnly JWT cookie), and login rate limiting landed 2026-07-29 — see [RBAC.md](../RBAC.md) for the remaining honest gaps (no true mid-expiry session revocation).

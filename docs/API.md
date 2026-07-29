@@ -25,7 +25,7 @@ Routes are consolidated into 12 function files (`api/handlers/jobtypes.ts` added
 |---|---|---|---|---|
 | `GET /api/auth/session` | None | — | `200 { user: PublicUser \| null, needsSetup: boolean }` | `needsSetup: true` only when the `users` collection is empty (no user has ever been created) — drives the Setup Wizard vs. Sign In branch in `App.tsx`'s boot sequence. |
 | `POST /api/auth/setup` | None (blocked once any user exists) | `{ employeeId, fullName, username, email, password }` | `201 { user }`, sets session cookie | `409` if `users` collection is non-empty. Creates the first user with the `isSuperAdmin` role from `defaultRoles`, seeds default roles into MongoDB first (`seedDefaultRolesIfEmpty()`). Password must be ≥ 6 chars. |
-| `POST /api/auth/login` | None | `{ identifier, password }` | `200 { user }`, sets session cookie | `identifier` matched case-insensitively against `username` or `email`. `401` on bad credentials, `403` if the account is `inactive`. |
+| `POST /api/auth/login` | None | `{ identifier, password }` | `200 { user }`, sets session cookie | `identifier` matched case-insensitively against `username` or `email`. `401` on bad credentials, `403` if the account is `inactive`. **Rate limited (2026-07-29)**: ≥5 failures for one identifier or ≥20 from one IP within 15 min → `429` (Thai retry-in-X-minutes message + `Retry-After` header); tracked in the TTL-purged `login_attempts` collection, cleared for the identifier on a successful login. The check runs before the bcrypt compare. |
 | `POST /api/auth/logout` | None | — | `204`, clears session cookie | |
 
 ## Users (`api/handlers/users.ts`, mounted at `/api/users`)
@@ -286,7 +286,7 @@ Every route funnels exceptions through `withErrorHandling()` (`api/_lib/http.ts`
 ## Known, Deliberate Scope Limitations (not bugs — see [RBAC.md](./RBAC.md) for the full RBAC picture)
 
 - `GET /api/users`, `GET /api/roles`, `GET /api/company`, `GET /api/products`, `GET /api/categories` are open to any **authenticated** user, not gated by e.g. `users:manage`. This matches the pre-migration behavior, where the full dataset already lived in every signed-in user's browser — so it's not a new permission surface, just now real authentication is required at all (previously anyone could open the site with zero login). Mutations on all of these remain properly permission-gated per action.
-- No rate limiting on `POST /api/auth/login` — a gap worth closing before this app is exposed beyond a trusted internal network. See [TODO.md](./TODO.md).
+- ~~No rate limiting on `POST /api/auth/login`~~ — closed 2026-07-29, see the login route's row above and [RBAC.md](./RBAC.md) Known Gaps.
 - No pagination on any list route (`GET /api/quotes`, `GET /api/users`, `GET /api/audit-log` aside from its 1000-entry cap) — fine at current data volumes, worth revisiting if any collection grows large.
 
 ## Superseded: the old proposed Next.js API design — NOT what got built

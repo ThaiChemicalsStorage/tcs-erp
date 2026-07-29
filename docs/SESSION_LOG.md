@@ -4,7 +4,16 @@
 
 ---
 
-## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO"
+## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting
+
+### What was implemented (fourth task this session: login rate limiting)
+- **`POST /api/auth/login` is no longer unthrottled** (Known Gap since 2026-07-09, owner asked to
+  close it next): failed attempts land in a new TTL-purged `login_attempts` collection; ≥5
+  failures/identifier or ≥20/IP in 15 min → 429 with a Thai retry-in-X-minutes message +
+  `Retry-After`. Success clears the identifier's failures; suspended-account attempts neither
+  record nor clear; the check precedes the bcrypt compare. MongoDB-backed deliberately — portable
+  to the future server, per the no-Vercel-locked-services rule. Unverified live: the actual 429 on
+  production (noted in TODO.md's done-item).
 
 ### What was implemented (third task this session: "ทวง PO")
 - **The full 2026-07-24 PO-chasing proposal**, on the owner's direct go-ahead ("ทำเรื่องทวง PO

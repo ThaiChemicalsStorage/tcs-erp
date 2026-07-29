@@ -4,7 +4,44 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — "ทวง PO": chase missing customer PO numbers + unlock follow-up fields on approved records
+## 2026-07-29 (absolute latest) — Login rate limiting on POST /api/auth/login
+
+Closes the "no login rate limiting" Known Gap open since the 2026-07-09 backend migration
+(docs/RBAC.md), on the owner's direct request:
+
+- **Mechanism**: failed attempts are recorded in a new `login_attempts` MongoDB collection
+  (`{identifier, ip, createdAt: Date}` — a real BSON `Date` so the TTL index can purge it) and
+  counted over a 15-minute sliding window (`$gte` cutoff for precision; the TTL index is the
+  cleanup). Two keys: per typed identifier (**≥5** failures → 429 — protects one account from a
+  targeted guess) and per requesting IP (**≥20** → 429 — blunts a scripted sweep across many
+  usernames; higher so one office NAT with several fat-fingering humans doesn't trip it). IP =
+  first `x-forwarded-for` hop (Vercel-set; client-supplied values are appended after, never first).
+- **429 response**: Thai "พยายามเข้าสู่ระบบผิดหลายครั้งเกินไป กรุณารอประมาณ X นาที..." where X is
+  when the oldest in-window failure ages out (clamped ≥1 min), plus a `Retry-After` header. The
+  check runs BEFORE the user lookup + bcrypt compare, so a locked-out request costs one count
+  query, not a ~100 ms hash.
+- **Bookkeeping**: a successful login deletes that identifier's failure docs (a legitimate user
+  who fat-fingered twice isn't one typo from lockout all window); a correct-password-but-suspended
+  attempt neither records (not a guess) nor clears (a lockout can't be reset by hammering a
+  known-suspended account).
+- **Why MongoDB**: per-instance memory resets on cold start and isn't shared across concurrent
+  serverless instances; a Vercel KV-style service would violate the no-Vercel-locked-services
+  rule (SERVER_MIGRATION_PLAN.md). The collection travels with the database to the future server.
+- **Indexes**: TTL `{createdAt}` (900 s) + the two count keys — in `ensureIndexes()` for fresh
+  setups AND declared defensively once per warm instance (`ensureLoginAttemptIndexes()`, same
+  pattern as `ensureScopeNumberIndexes()`), since `ensureIndexes()` never runs on the
+  already-provisioned production deployment.
+- What's New (Thai) entry added. Docs: TODO.md (item → done), RBAC.md (gap closed, both
+  mentions), API.md (login row + gaps list), MODULES/Auth.md (3 mentions), DATABASE.md
+  (`login_attempts` row), IMPLEMENTATION_CHECKLIST.md (2 rows), PROJECT_STATUS.md (Known Risk →
+  closed, next-steps list, Completed Features), CLAUDE.md (scope-limitations line).
+- `tsc` (both configs)/`lint`/`build` all pass clean. Unverified live (same standing limitation):
+  that 6 rapid wrong passwords really 429 on production and the lockout expires on schedule —
+  noted inside the TODO.md done-item.
+
+---
+
+## 2026-07-29 — "ทวง PO": chase missing customer PO numbers + unlock follow-up fields on approved records
 
 Executes the full 2026-07-24 proposal recorded in TODO.md, on the owner's direct go-ahead
 ("ทำเรื่องทวง PO ต่อเลย"):

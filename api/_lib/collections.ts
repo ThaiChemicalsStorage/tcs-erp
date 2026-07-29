@@ -127,6 +127,25 @@ export async function scopeAttachmentFilesCollection() {
   return db.collection<ScopeAttachmentFileFields>("scope_attachment_files");
 }
 
+/** Failed-login tracking for `POST /api/auth/login`'s rate limiting (added 2026-07-29 — closes the
+ * long-standing "no login rate limiting" Known Gap; see docs/RBAC.md). One document per FAILED
+ * attempt; successful logins delete the identifier's documents. MongoDB-backed deliberately (not
+ * per-instance memory, which resets on every cold start and isn't shared across concurrent
+ * serverless instances; not a Vercel KV-style service, per the no-Vercel-locked-services rule in
+ * docs/SERVER_MIGRATION_PLAN.md). `createdAt` is a real BSON `Date` — unlike this codebase's usual
+ * ISO strings — because the TTL index that auto-purges old attempts only works on `Date` values. */
+export interface LoginAttemptFields {
+  /** Lowercased login identifier (username or email) as typed — tracked per-target-account. */
+  identifier: string;
+  /** Requesting IP (first `x-forwarded-for` hop) — tracks cross-account scripted sweeps. */
+  ip: string;
+  createdAt: Date;
+}
+export async function loginAttemptsCollection() {
+  const db = await getDb();
+  return db.collection<LoginAttemptFields>("login_attempts");
+}
+
 /** Delivery Order (added 2026-07-23) — see `src/lib/deliveryOrder.ts` for the full domain-shape doc
  * comment and docs/MODULES/DeliveryOrder.md for the PDF-to-field mapping. No uniqueness constraint
  * on `scopeOfWorkId` (a Scope of Work can in principle have more than one, same non-enforced
@@ -504,6 +523,16 @@ export async function ensureIndexes() {
   const sessions = await sessionsCollection();
   await sessions.createIndex({ userId: 1 });
   await sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+  // login_attempts (2026-07-29, login rate limiting): TTL auto-purge + the two count-query keys.
+  // Also declared defensively per-instance in api/handlers/auth.ts (ensureLoginAttemptIndexes())
+  // because this function only runs from the one-time Setup Wizard.
+  const loginAttempts = await loginAttemptsCollection();
+  await Promise.all([
+    loginAttempts.createIndex({ createdAt: 1 }, { expireAfterSeconds: 15 * 60 }),
+    loginAttempts.createIndex({ identifier: 1, createdAt: 1 }),
+    loginAttempts.createIndex({ ip: 1, createdAt: 1 }),
+  ]);
 }
 
 export function toObjectId(id: string): ObjectId {

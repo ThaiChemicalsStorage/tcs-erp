@@ -11,7 +11,7 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **What client-side permission checks (`hasPermission()`, sidebar filtering, button gating) remain**: exactly what they always were — a UX layer that hides controls a user shouldn't see. They are **not** the security boundary anymore (they never should have been treated as one, and now genuinely aren't): the server independently re-checks every mutation regardless of what the UI shows or hides. This is the correct, standard shape for a web app's RBAC (client = UX, server = enforcement) — no longer a "simulation" positioned to become that shape someday.
 
-**Known, honest gaps** (not fixed, not hidden — see Known Gaps at the bottom of this file): no rate limiting on login attempts, no automated tests over the new API/permission layer, and no two-stage sequential approval (unchanged limitation from before, see Known Simplifications below).
+**Known, honest gaps** (not fixed, not hidden — see Known Gaps at the bottom of this file): no automated tests over the new API/permission layer, and no two-stage sequential approval (unchanged limitation from before, see Known Simplifications below). Login rate limiting was a long-standing member of this list until **2026-07-29** — now closed, see Known Gaps.
 
 ### What's actually built
 
@@ -470,7 +470,7 @@ Before the 2026-07-09 migration, this file described a hypothetical "Phase 2" (N
 
 ## Known Gaps (honest, current, not hidden)
 
-- **No rate limiting on `POST /api/auth/login`** — a scripted brute-force attempt against a known username isn't throttled. Should be closed before this app is exposed beyond a trusted internal network. See [TODO.md](./TODO.md).
+- ~~**No rate limiting on `POST /api/auth/login`**~~ — **closed 2026-07-29**: failed attempts are tracked in the `login_attempts` MongoDB collection (TTL-purged) and counted over a 15-minute sliding window — ≥5 failures for one identifier, or ≥20 from one IP, → `429` with a Thai retry-in-X-minutes message + `Retry-After` header. A successful login clears that identifier's failures; a correct-password-but-suspended attempt neither records nor clears (so a lockout can't be reset by hammering a known-suspended account). The check runs before the bcrypt compare, keeping locked-out requests cheap. See `api/handlers/auth.ts` and CHANGELOG.md.
 - **No true session revocation** — see the Sessions row above. A stolen, still-valid JWT is not immediately invalidated by an admin action (only future requests from a *deactivated* account are blocked; a still-active account's leaked token remains usable until natural expiry).
 - **No automated tests** over the new API/permission layer — every guard described above was manually verified during the migration, not covered by a test suite. See [TODO.md](./TODO.md).
 - **Sequential two-level approval** (Approver Level 1 must approve before Level 2 can) is still not implemented — unchanged limitation from the pre-migration build, see Known Simplifications above. This was never blocked on the backend migration; it's a product decision, not a security gap.

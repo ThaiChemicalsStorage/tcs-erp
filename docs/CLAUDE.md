@@ -17,7 +17,7 @@
 
 This supersedes the previously-proposed "Phase 2" stack (Next.js + Prisma + PostgreSQL + Auth.js) — that plan was **never built**; the migration that actually happened used a different, simpler stack (Vite unchanged + Vercel Functions + MongoDB) chosen for a faster path to a real backend without a frontend framework rewrite. The old proposal is kept in [ARCHITECTURE.md](./ARCHITECTURE.md) as a superseded historical record only — do not build against it.
 
-Known, deliberate scope limitations (not bugs, see [RBAC.md](./RBAC.md) Known Gaps): no automated tests, no login rate limiting. (CI exists as of 2026-07-29 — `.github/workflows/ci.yml` runs lint + typecheck + build on every push/PR to `master`; notify-only, it does not block the Vercel auto-deploy.)
+Known, deliberate scope limitations (not bugs, see [RBAC.md](./RBAC.md) Known Gaps): no automated tests. (CI exists as of 2026-07-29 — `.github/workflows/ci.yml`, notify-only lint+typecheck+build on every push/PR to `master`. Login rate limiting also exists as of 2026-07-29 — MongoDB-backed, 5 failures/identifier or 20/IP per 15 min → 429, see [RBAC.md](./RBAC.md).)
 
 ## Project Goals
 
