@@ -166,20 +166,29 @@
 
 ## Medium Priority — Other
 
-- [ ] **Manual-ONLY Scope of Work document number entry (2026-07-24, owner: "ระบบไม่ต้องสร้างเลข
-  เองดิ" — superseding the earlier optional-field framing the same day; recorded, not built).**
-  The system stops generating scope numbers entirely: the user TYPES the document number at
-  creation (required, replaces today's auto `PQ{YYYYMM}-{seq}-{jobType}-{secondaryCode}`
-  generation and likely the secondaryCode prompt with a type-the-number prompt), editable while
-  Draft. Requirements: server-side uniqueness check (clear error on duplicate, race-safe — the
-  unique index on `scopeNumber` already exists); Rewrite keeps appending `-R{n}` to whatever was
-  typed; Duplicate must now ASK for a new number instead of minting one; the atomic monthly
-  counter/`yearMonth`/`jobSequence` fields become legacy (kept on old records, no migration);
-  Global Search/lists/email subject read `scopeNumber` off the record and should follow for free
-  (verify). **Email threading unaffected** — the thread anchor is the record's internal id, not
-  the number. Existing records keep their auto-generated numbers as-is. Est. 1–2 hours incl.
-  docs/checks. Open question to confirm at build time: any format guardrails, or completely free
-  text?
+- [x] ~~**Manual-ONLY Scope of Work document number entry (2026-07-24, owner: "ระบบไม่ต้องสร้างเลข
+  เองดิ" — superseding the earlier optional-field framing the same day; recorded, not built).**~~ —
+  **done 2026-07-29, exactly per the recorded spec**: user types the number at creation (modal in
+  `QuoteDocument.tsx`) and on Duplicate (prompt in `ScopeOfWorkDocument.tsx`); server enforces
+  non-blank + uniqueness (friendly 409 + unique-index race-safe backstop); editable while Draft
+  only; Rewrite still appends `-R{n}`; `yearMonth`/`jobSequence`/`secondaryCode` became legacy
+  (old records untouched, new ones write ""/0/""); Global Search/lists/email subject verified (by
+  code reading) to follow for free; email threading unaffected. The build-time open question was
+  answered by the owner: **completely free text, no format guardrails**. Discovered en route: the
+  unique `scopeNumber` index TODO assumed existed almost certainly never got created on production
+  (`ensureIndexes()` only runs from the Setup Wizard) — a new `ensureScopeNumberIndexes()` now
+  defensively creates it and drops the legacy `{yearMonth, jobSequence}` unique index at runtime.
+  See CHANGELOG.md 2026-07-29.
+- [ ] **Manually verify the manual-ONLY Scope of Work number entry (2026-07-29) against a live
+  deployment.** Verified via `tsc`/`lint`/`build` (all clean) and code review only — same standing
+  sandboxed-session limitation as every recent pass. Specifically unverified against real data:
+  creating with a typed number works end-to-end and a duplicate number really gets the friendly
+  409 toast in the modal (not a raw error); `ensureScopeNumberIndexes()` actually creates the
+  unique `scopeNumber` index on production (would fail loudly in logs if duplicate numbers somehow
+  already exist) and drops `yearMonth_1_jobSequence_1` where present; editing the number on a
+  Draft saves + re-checks uniqueness; a Final record's number field is genuinely read-only;
+  Duplicate's prompt → new number → new record flow; Rewrite of a manually-numbered record
+  produces `{typed}-R1`; old auto-numbered records still list/search/open normally.
 - [ ] **"ทวง PO" (chase the sales for the customer PO number + PO file) — proposed 2026-07-24,
   awaiting the owner's go-ahead** (discussion happened; the conversation moved on before a
   decision). Proposal on the table: (1) a "ยังไม่มี PO" badge + filter on the Scope of Work list

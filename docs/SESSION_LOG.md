@@ -4,7 +4,38 @@
 
 ---
 
-## Session — 2026-07-24 (absolute latest), Attachments hardening + docs slim-down + notification polling
+## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry
+
+### What was implemented
+- **The recorded "กรอกเลข Scope of Work เอง" spec (TODO.md, 2026-07-24) was built end-to-end.**
+  The owner answered the one open build-time question first (via an in-session prompt): the number
+  is **completely free-form** — no format guardrails. Changes: creation modal now asks for the
+  whole document number (replacing the required-`secondaryCode` prompt); Duplicate prompts for the
+  copy's number; `scopeNumber` is PATCHable/editable while Draft only; Rewrite still auto-appends
+  `-R{n}`; uniqueness = friendly 409 pre-check + unique-index race-safe backstop; `secondaryCode`
+  demoted to an optional legacy reference field (its "unconfirmed business meaning" question is
+  moot — the user now types the full number); `yearMonth`/`jobSequence` legacy (""/0 on new
+  records, old records untouched). What's New (Thai) entry added per the standing rule.
+
+### Problems found / fixed
+- **The unique `scopeNumber` index TODO.md assumed existed almost certainly never existed on
+  production**: `ensureIndexes()` only runs from the Setup Wizard, which predates the Scope of Work
+  module on the provisioned deployment. Added `ensureScopeNumberIndexes()` (once per warm
+  instance, same pattern as `ensureAttachmentIndexes()`) to really create it — and to drop the
+  legacy `{yearMonth, jobSequence}` unique index, which would otherwise reject every second new
+  record (all `{"", 0}` now).
+- **Latent fresh-setup Rewrite bug found by reading**: on a database where `ensureIndexes()` DID
+  run (fresh setup), Rewrite's carry-over of the source's `{yearMonth, jobSequence}` pair violated
+  that unique index and would 409 after 3 retries. Dropping the index fixes it.
+
+### What's next
+- Live-verify the whole flow against production after deploy (tracked in TODO.md): create/edit/
+  duplicate with typed numbers, the 409 duplicate toast, the runtime index create/drop, Rewrite of
+  a manually-numbered record, old records unaffected.
+
+---
+
+## Session — 2026-07-24, Attachments hardening + docs slim-down + notification polling
 
 ### What was implemented
 - **Self-review fix pass over the Scope of Work attachments work** (commit `d9378a2`): a code

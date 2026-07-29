@@ -60,37 +60,64 @@ async function writeScopeAuditEntry(
   });
 }
 
-// ─── Scope number generation (server-side only, per business requirement) ────────────────────────
+// ─── Scope number entry (manual-ONLY as of 2026-07-29, owner: "ระบบไม่ต้องสร้างเลขเองดิ") ────────
+// The system no longer generates scope numbers at all — the user TYPES the document number at
+// creation (and on Duplicate), completely free-form per the owner's explicit format decision
+// (no forced prefix/pattern). The server's job is only: required-non-blank, and uniqueness
+// (friendly pre-check + the unique `scopeNumber` index as the race-safe backstop). The old
+// `PQ{YYYYMM}-{seq}-{jobType}-{secondaryCode}` generator, its atomic monthly counter, and the
+// `yearMonth`/`jobSequence` fields are legacy: kept as-is on old records, written as ""/0 on new
+// ones, never migrated. Rewrite still appends `-R{n}` to whatever was typed (see handleRewrite).
 
-/** `PQ{YYYYMM}-{jobSequence}-{jobTypeCode}-{secondaryCode}` — see src/lib/scopeOfWork.ts.
- * `secondaryCode` is omitted from the string (not padded with a trailing dash) while still blank,
- * since the business meaning of that final segment isn't yet confirmed (see docs/MODULES/
- * ScopeOfWork.md "Secondary Code — Open Business Question") and the code must never invent one. */
-function computeScopeNumber(yearMonth: string, jobSequence: number, jobTypeCode: string, secondaryCode: string): string {
-  const base = `PQ${yearMonth}-${jobSequence}-${jobTypeCode || "XX"}`;
-  return secondaryCode ? `${base}-${secondaryCode}` : base;
+/** Uniform required-non-blank sanitation for a user-typed document number. Free text by explicit
+ * owner decision (2026-07-29) — no format guardrails beyond non-blank + the shared length cap. */
+function sanitizeScopeNumber(raw: unknown): string {
+  return sanitizeShortText(raw, "เลขที่เอกสาร", true);
 }
 
-function yearMonthFromIsoDate(isoDate: string): string {
-  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(isoDate);
-  if (!match) return isoDate; // caller already validated isoDate via validateIsoDateOrEmpty
-  return `${match[1]}${match[2]}`;
-}
+const DUPLICATE_SCOPE_NUMBER_MESSAGE = (scopeNumber: string) =>
+  `เลขที่เอกสาร "${scopeNumber}" ถูกใช้กับ Scope of Work ใบอื่นแล้ว กรุณาใช้เลขอื่น`;
 
-/** Atomically reserves the next job sequence number for a given calendar month — same pattern as
- * `nextQuoteId()` in api/handlers/quotes.ts, keyed by `scope_{yearMonth}` instead of quote year.
- * No legacy-data bootstrap step is needed (unlike the quote counter): this is a brand-new
- * collection with no pre-existing documents to reconcile against. */
-async function nextJobSequence(
-  counters: Awaited<ReturnType<typeof countersCollection>>,
-  yearMonth: string,
-): Promise<number> {
-  const result = await counters.findOneAndUpdate(
-    { _id: `scope_${yearMonth}` },
-    { $inc: { seq: 1 } },
-    { returnDocument: "after", upsert: true },
+/** Friendly-duplicate pre-check. Soft-deleted records still hold their number (the unique index
+ * doesn't exclude them), so they block reuse too — deliberate: "restoring" a number whose old
+ * document still exists in the database would make the audit trail ambiguous. Race-safe only in
+ * combination with the unique index (`insertOne`/`updateOne` catch 11000 → the same 409). */
+async function assertScopeNumberAvailable(
+  scopeOfWorks: Awaited<ReturnType<typeof scopeOfWorksCollection>>,
+  scopeNumber: string,
+  excludeId?: ObjectId,
+): Promise<void> {
+  const clash = await scopeOfWorks.findOne(
+    { scopeNumber, ...(excludeId ? { _id: { $ne: excludeId } } : {}) },
+    { projection: { _id: 1 } },
   );
-  return result?.seq ?? 1;
+  if (clash) throw new HttpError(409, DUPLICATE_SCOPE_NUMBER_MESSAGE(scopeNumber));
+}
+
+/** `ensureIndexes()` (api/_lib/collections.ts) only runs from the one-time Setup Wizard bootstrap,
+ * permanently unreachable on an already-provisioned deployment — same gap and same
+ * once-per-warm-instance defensive fix as `ensureAttachmentIndexes()` below. Guarantees the
+ * unique `scopeNumber` index (now the ONE uniqueness mechanism for manually-typed numbers) really
+ * exists, and drops the legacy `{yearMonth, jobSequence}` unique index if present — new records
+ * all write `{"", 0}` there, which that index would reject from the second record onward. */
+let scopeNumberIndexesEnsured = false;
+async function ensureScopeNumberIndexes(
+  scopeOfWorks: Awaited<ReturnType<typeof scopeOfWorksCollection>>,
+): Promise<void> {
+  if (scopeNumberIndexesEnsured) return;
+  try {
+    await scopeOfWorks.createIndex({ scopeNumber: 1 }, { unique: true });
+  } catch (err) {
+    // Most likely pre-existing duplicate data — the pre-check above still catches ordinary cases;
+    // log loudly rather than block every create on an index-management problem.
+    console.error("[scope-of-works] failed to ensure unique scopeNumber index", err);
+  }
+  try {
+    await scopeOfWorks.dropIndex("yearMonth_1_jobSequence_1");
+  } catch {
+    // Already gone (or never created on this deployment — see the doc comment above): fine.
+  }
+  scopeNumberIndexesEnsured = true;
 }
 
 /** Atomically reserves the next revision number for a "Rewrite/แก้ไข" chain (see `handleRewrite()`
@@ -452,10 +479,11 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ scopeOfWorks: docs.map(toSummary) });
 }
 
-/** Bounded retry for the (extremely unlikely, since `jobSequence` is atomically reserved per
- * month) case of a duplicate-key error on insert — 2026-07-15, Codex review Critical-section
- * recommendation. Re-reserves a fresh sequence number for the same month on each retry rather than
- * failing outright, so a genuine race never surfaces as a raw 500/E11000 to the client. */
+/** Bounded retry for the (extremely unlikely, since the revision number is atomically reserved)
+ * case of a duplicate-key error on a Rewrite insert — 2026-07-15, Codex review Critical-section
+ * recommendation. Since 2026-07-29 only `handleRewrite` still needs it (Create/Duplicate now use
+ * the user's own typed number, where a duplicate is a real user error surfaced as a 409, not a
+ * retryable allocation race). */
 const MAX_SCOPE_NUMBER_ATTEMPTS = 3;
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
@@ -466,65 +494,58 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const quotationId = typeof body.quotationId === "string" ? body.quotationId.trim() : "";
   if (!quotationId) throw new HttpError(400, "กรุณาระบุใบเสนอราคา");
-  // 2026-07-15, Codex review High Priority fix: previously always blank on creation, so the
-  // generated code never actually had its required 4th segment (`PQ{YYYYMM}-{seq}-{jobType}` with
-  // no suffix at all). Now required up front — the *value* is still never invented by this code
-  // (see docs/MODULES/ScopeOfWork.md "Open Business Question"), only its presence is now enforced;
-  // the user supplies the real value themselves before the record (and its permanent job code)
-  // is even created.
-  const secondaryCode = sanitizeShortText(body.secondaryCode, "รหัสอ้างอิงท้ายงาน", true);
+  // Manual-ONLY document number (2026-07-29) — replaces both the auto `PQ{...}` generation and the
+  // old required-`secondaryCode` prompt. The creator types the whole number themselves; the server
+  // only enforces non-blank + uniqueness. `secondaryCode` still exists as an optional legacy
+  // reference field on the record, but is no longer collected at creation.
+  const scopeNumber = sanitizeScopeNumber(body.scopeNumber);
 
-  const [quotes, scopeOfWorks, counters] = await Promise.all([quotesCollection(), scopeOfWorksCollection(), countersCollection()]);
+  const [quotes, scopeOfWorks] = await Promise.all([quotesCollection(), scopeOfWorksCollection()]);
+  await ensureScopeNumberIndexes(scopeOfWorks);
+  await assertScopeNumberAvailable(scopeOfWorks, scopeNumber);
   const quote = await quotes.findOne({ _id: quotationId });
   if (!quote) throw new HttpError(404, "ไม่พบใบเสนอราคา");
 
   const derived = deriveFromQuotation(quote);
   const seller = await resolveDefaultSeller(quote, ctx);
   const issueDate = nowIso().slice(0, 10);
-  const yearMonth = yearMonthFromIsoDate(issueDate);
   const now = nowIso();
 
-  let created: (ScopeOfWorkFields & { _id: ObjectId }) | null = null;
-  let lastDuplicateErr: unknown;
-  for (let attempt = 0; attempt < MAX_SCOPE_NUMBER_ATTEMPTS && !created; attempt++) {
-    const jobSequence = await nextJobSequence(counters, yearMonth);
-    const scopeNumber = computeScopeNumber(yearMonth, jobSequence, derived.jobTypeCode, secondaryCode);
-    const doc: ScopeOfWorkFields = {
-      scopeNumber, yearMonth, jobSequence, secondaryCode,
-      quotationId, quotationNumber: derived.quotationNumber,
-      jobTypeCode: derived.jobTypeCode, jobTypeName: derived.jobTypeName,
-      quotationSalesperson: derived.quotationSalesperson,
-      issueDate, deliveryDate: "", drawingCode: "",
-      customerPoNumber: derived.customerPoNumber,
-      customerSnapshot: derived.customerSnapshot,
-      deliveryLocation: derived.deliveryLocation,
-      shippingContact: "", shippingPhone: "", billingContact: "", billingPhone: "",
-      checklistGroups: derived.checklistGroups,
-      items: derived.items,
-      paymentConditions: { installments: [], description: derived.paymentDescription, notes: "" },
-      documentRecipients: {},
-      documentRecipientMessage: "",
-      revisionNote: "",
-      attachments: [],
-      remarks: derived.remarks,
-      seller,
-      approver: { name: "", userId: "", date: "" },
-      status: "Draft",
-      version: 1,
-      createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
-      isDeleted: false,
-    };
-    try {
-      const result = await scopeOfWorks.insertOne(doc);
-      created = { ...doc, _id: result.insertedId };
-    } catch (err) {
-      if (err instanceof MongoServerError && err.code === 11000) { lastDuplicateErr = err; continue; }
-      throw err;
-    }
-  }
-  if (!created) {
-    console.error("[scope-of-works] exhausted retries reserving a unique scope number", lastDuplicateErr);
-    throw new HttpError(409, "ไม่สามารถสร้างรหัสงานที่ไม่ซ้ำกันได้ กรุณาลองใหม่อีกครั้ง");
+  const doc: ScopeOfWorkFields = {
+    // yearMonth/jobSequence are legacy fields from the removed auto-numbering scheme — written as
+    // neutral empties on every new record (old records keep their real values, no migration).
+    scopeNumber, yearMonth: "", jobSequence: 0, secondaryCode: "",
+    quotationId, quotationNumber: derived.quotationNumber,
+    jobTypeCode: derived.jobTypeCode, jobTypeName: derived.jobTypeName,
+    quotationSalesperson: derived.quotationSalesperson,
+    issueDate, deliveryDate: "", drawingCode: "",
+    customerPoNumber: derived.customerPoNumber,
+    customerSnapshot: derived.customerSnapshot,
+    deliveryLocation: derived.deliveryLocation,
+    shippingContact: "", shippingPhone: "", billingContact: "", billingPhone: "",
+    checklistGroups: derived.checklistGroups,
+    items: derived.items,
+    paymentConditions: { installments: [], description: derived.paymentDescription, notes: "" },
+    documentRecipients: {},
+    documentRecipientMessage: "",
+    revisionNote: "",
+    attachments: [],
+    remarks: derived.remarks,
+    seller,
+    approver: { name: "", userId: "", date: "" },
+    status: "Draft",
+    version: 1,
+    createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+    isDeleted: false,
+  };
+  let created: ScopeOfWorkFields & { _id: ObjectId };
+  try {
+    const result = await scopeOfWorks.insertOne(doc);
+    created = { ...doc, _id: result.insertedId };
+  } catch (err) {
+    // Lost the race against a concurrent create typing the same number — same 409 the pre-check gives.
+    if (err instanceof MongoServerError && err.code === 11000) throw new HttpError(409, DUPLICATE_SCOPE_NUMBER_MESSAGE(scopeNumber));
+    throw err;
   }
 
   await writeScopeAuditEntry(ctx, "Scope of Work Created", `สร้าง Scope of Work ${created.scopeNumber} จากใบเสนอราคา ${quotationId}`, {
@@ -546,6 +567,7 @@ async function loadScopeOrThrow(id: string): Promise<WithId<ScopeOfWorkFields>> 
  * mandatory group existed (see "Existing Document Compatibility" in the validation spec). */
 function toValidationInput(doc: WithId<ScopeOfWorkFields>) {
   return {
+    scopeNumber: doc.scopeNumber,
     customerSnapshot: doc.customerSnapshot,
     issueDate: doc.issueDate,
     deliveryDate: doc.deliveryDate,
@@ -596,6 +618,17 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<ScopeOfWorkFields> = {};
 
+  // Draft-only by construction (the status guard above) — the moment a record is approved (Final)
+  // its number is locked for good; only Rewrite (which appends `-R{n}`) changes it after that.
+  if ("scopeNumber" in body) {
+    const nextScopeNumber = sanitizeScopeNumber(body.scopeNumber);
+    if (nextScopeNumber !== doc.scopeNumber) {
+      const scopeOfWorks = await scopeOfWorksCollection();
+      await ensureScopeNumberIndexes(scopeOfWorks);
+      await assertScopeNumberAvailable(scopeOfWorks, nextScopeNumber, doc._id);
+      update.scopeNumber = nextScopeNumber;
+    }
+  }
   if ("issueDate" in body) update.issueDate = validateIsoDateOrEmpty(body.issueDate, "วันที่") || doc.issueDate;
   if ("deliveryDate" in body) update.deliveryDate = validateIsoDateOrEmpty(body.deliveryDate, "วันที่ส่งของ/ส่งแบบอนุมัติ");
   if ("drawingCode" in body) update.drawingCode = sanitizeShortText(body.drawingCode, "รหัส Drawing");
@@ -616,32 +649,21 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("seller" in body) update.seller = await sanitizeSignatory(body.seller, "ผู้ขาย");
   if ("approver" in body) update.approver = await sanitizeSignatory(body.approver, "ผู้อนุมัติ");
 
-  // Recompute scopeNumber whenever a component actually changed — see computeScopeNumber() above.
-  // jobTypeCode never changes after creation. jobSequence normally doesn't either, EXCEPT when
-  // editing `issueDate` moves it into a different calendar month: `jobSequence` is only unique
-  // *within the month it was allocated for* (see nextJobSequence()/the {yearMonth,jobSequence}
-  // unique index in api/_lib/collections.ts), so silently keeping the old sequence number under a
-  // new yearMonth could collide with a different Scope of Work that was allocated that same
-  // sequence number in the *actually*-that month. A fresh sequence is atomically reserved for the
-  // new month instead, exactly like a brand-new creation would get.
-  const effectiveIssueDate = update.issueDate ?? doc.issueDate;
-  const effectiveSecondaryCode = update.secondaryCode ?? doc.secondaryCode;
-  const effectiveYearMonth = yearMonthFromIsoDate(effectiveIssueDate);
-  let effectiveJobSequence = doc.jobSequence;
-  if (effectiveYearMonth !== doc.yearMonth) {
-    const counters = await countersCollection();
-    effectiveJobSequence = await nextJobSequence(counters, effectiveYearMonth);
-    update.yearMonth = effectiveYearMonth;
-    update.jobSequence = effectiveJobSequence;
-  }
-  if (effectiveYearMonth !== doc.yearMonth || effectiveSecondaryCode !== doc.secondaryCode) {
-    update.scopeNumber = computeScopeNumber(effectiveYearMonth, effectiveJobSequence, doc.jobTypeCode, effectiveSecondaryCode);
-  }
-
+  // No scopeNumber recompute anymore (2026-07-29, manual-ONLY numbers): editing `issueDate` or
+  // `secondaryCode` no longer touches the document number — it only changes when the user
+  // explicitly retypes it (handled above).
   update.updatedAt = nowIso();
   update.updatedBy = ctx.user.id;
   const scopeOfWorks = await scopeOfWorksCollection();
-  await scopeOfWorks.updateOne({ _id: doc._id }, { $set: update });
+  try {
+    await scopeOfWorks.updateOne({ _id: doc._id }, { $set: update });
+  } catch (err) {
+    // Race-safe backstop for a concurrent save typing the same number (see the unique index).
+    if (err instanceof MongoServerError && err.code === 11000 && update.scopeNumber) {
+      throw new HttpError(409, DUPLICATE_SCOPE_NUMBER_MESSAGE(update.scopeNumber));
+    }
+    throw err;
+  }
   const updated = await scopeOfWorks.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
   await writeScopeAuditEntry(ctx, "Scope of Work Updated", `แก้ไข Scope of Work ${updated.scopeNumber}`, {
@@ -808,54 +830,49 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
   if (!roleHasPermission(ctx.role, "scopeOfWork:view")) throw new HttpError(403, "Forbidden");
   const source = await loadScopeOrThrow(id);
 
-  const [scopeOfWorks, counters] = await Promise.all([scopeOfWorksCollection(), countersCollection()]);
+  // Manual-ONLY numbers (2026-07-29): Duplicate no longer mints a fresh auto number — the caller
+  // asks the user for the copy's own document number and sends it here, same rules as Create
+  // (required non-blank, unique, completely free-form).
+  const scopeNumber = sanitizeScopeNumber((req.body as Record<string, unknown> | undefined)?.scopeNumber);
+
+  const scopeOfWorks = await scopeOfWorksCollection();
+  await ensureScopeNumberIndexes(scopeOfWorks);
+  await assertScopeNumberAvailable(scopeOfWorks, scopeNumber);
   const issueDate = nowIso().slice(0, 10);
-  const yearMonth = yearMonthFromIsoDate(issueDate);
-  // Source record's own `secondaryCode` carries over rather than resetting to blank — it already
-  // satisfied the required-non-empty rule at the source's own creation time (see `handleCreate`),
-  // and a duplicate is usually still "the same job," just a fresh editable copy.
-  const secondaryCode = source.secondaryCode;
   const now = nowIso();
 
   const { _id: _sourceId, ...rest } = source;
-  let created: (ScopeOfWorkFields & { _id: ObjectId }) | null = null;
-  let lastDuplicateErr: unknown;
-  for (let attempt = 0; attempt < MAX_SCOPE_NUMBER_ATTEMPTS && !created; attempt++) {
-    const jobSequence = await nextJobSequence(counters, yearMonth);
-    const scopeNumber = computeScopeNumber(yearMonth, jobSequence, source.jobTypeCode, secondaryCode);
-    const doc: ScopeOfWorkFields = {
-      ...rest,
-      scopeNumber, yearMonth, jobSequence, secondaryCode,
-      issueDate,
-      items: source.items.map((it) => ({ ...it, id: randomUUID(), specifications: it.specifications.map((s) => ({ ...s, id: randomUUID() })) })),
-      checklistGroups: cloneChecklistGroups(source.checklistGroups),
-      status: "Draft",
-      version: 1,
-      seller: { name: ctx.user.fullName, userId: ctx.user.id, date: "" },
-      approver: { name: "", userId: "", date: "" },
-      createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
-      isDeleted: false,
-      // Never inherited from the source — see `ScopeOfWork.revisionNote`'s doc comment (src/lib/scopeOfWork.ts).
-      revisionNote: "",
-      // Never inherited either — a copy would share the source's underlying blob files, and
-      // deleting an attachment from one record would break the other's link. See
-      // `ScopeOfWork.attachments`'s doc comment (src/lib/scopeOfWork.ts).
-      attachments: [],
-      // Never inherited (2026-07-24) — a new document starts its own email conversation; carrying
-      // the source's thread would make this record's sends reply into the source's thread.
-      emailThreadId: "",
-    };
-    try {
-      const result = await scopeOfWorks.insertOne(doc);
-      created = { ...doc, _id: result.insertedId };
-    } catch (err) {
-      if (err instanceof MongoServerError && err.code === 11000) { lastDuplicateErr = err; continue; }
-      throw err;
-    }
-  }
-  if (!created) {
-    console.error("[scope-of-works] exhausted retries reserving a unique scope number on duplicate", lastDuplicateErr);
-    throw new HttpError(409, "ไม่สามารถสร้างรหัสงานที่ไม่ซ้ำกันได้ กรุณาลองใหม่อีกครั้ง");
+  const doc: ScopeOfWorkFields = {
+    ...rest,
+    // `secondaryCode` (legacy reference field) carries over via `...rest`; the legacy
+    // yearMonth/jobSequence pair resets to the same neutral empties Create writes.
+    scopeNumber, yearMonth: "", jobSequence: 0,
+    issueDate,
+    items: source.items.map((it) => ({ ...it, id: randomUUID(), specifications: it.specifications.map((s) => ({ ...s, id: randomUUID() })) })),
+    checklistGroups: cloneChecklistGroups(source.checklistGroups),
+    status: "Draft",
+    version: 1,
+    seller: { name: ctx.user.fullName, userId: ctx.user.id, date: "" },
+    approver: { name: "", userId: "", date: "" },
+    createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+    isDeleted: false,
+    // Never inherited from the source — see `ScopeOfWork.revisionNote`'s doc comment (src/lib/scopeOfWork.ts).
+    revisionNote: "",
+    // Never inherited either — a copy would share the source's underlying blob files, and
+    // deleting an attachment from one record would break the other's link. See
+    // `ScopeOfWork.attachments`'s doc comment (src/lib/scopeOfWork.ts).
+    attachments: [],
+    // Never inherited (2026-07-24) — a new document starts its own email conversation; carrying
+    // the source's thread would make this record's sends reply into the source's thread.
+    emailThreadId: "",
+  };
+  let created: ScopeOfWorkFields & { _id: ObjectId };
+  try {
+    const result = await scopeOfWorks.insertOne(doc);
+    created = { ...doc, _id: result.insertedId };
+  } catch (err) {
+    if (err instanceof MongoServerError && err.code === 11000) throw new HttpError(409, DUPLICATE_SCOPE_NUMBER_MESSAGE(scopeNumber));
+    throw err;
   }
 
   await writeScopeAuditEntry(ctx, "Scope of Work Duplicated", `ทำสำเนา Scope of Work จาก ${source.scopeNumber} เป็น ${created.scopeNumber}`, {
@@ -870,10 +887,12 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
  * Scope of Work. Same clone semantics as `handleDuplicate()` above (fresh `_id`/item/spec ids,
  * status reset to Draft, fresh seller/blank approver) — the real difference is the new record's
  * `scopeNumber`: a revision-suffixed id derived from the source's own (`{root}-R{n}`, e.g.
- * `PQ202607-6-TA-SK-R1`, then `-R2`) instead of an unrelated freshly-reserved job sequence, and
- * `yearMonth`/`jobSequence`/`secondaryCode`/`issueDate` all carry over unchanged from the source
- * (via the `...rest` spread, deliberately never overridden here) rather than being regenerated the
- * way Duplicate regenerates them — a rewrite is "a new revision of the same job," not a new one.
+ * `PQ202607-6-TA-SK-R1`, then `-R2`) instead of a brand-new number — since 2026-07-29 the root
+ * number is whatever the user originally TYPED (manual-ONLY numbering), and the `-R{n}` suffix is
+ * still appended automatically to it. `yearMonth`/`jobSequence` (legacy)/`secondaryCode`/
+ * `issueDate` all carry over unchanged from the source (via the `...rest` spread, deliberately
+ * never overridden here) rather than being replaced the way Duplicate replaces them (Duplicate now
+ * asks the user for the copy's number) — a rewrite is "a new revision of the same job," not a new one.
  * `rootScopeNumber` is always derived from the *record actually being rewritten*, so rewriting an
  * already-rewritten `-R1` correctly advances to `-R2`, never `-R1-R1` — same guarantee Quotation's
  * Rewrite gives, via the same shared `getRevisionRoot()`. The source record is never modified.
@@ -886,6 +905,9 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   const source = await loadScopeOrThrow(id);
 
   const [scopeOfWorks, counters] = await Promise.all([scopeOfWorksCollection(), countersCollection()]);
+  // Also drops the legacy {yearMonth, jobSequence} unique index if present — the `...rest` spread
+  // below carries the source's pair over unchanged, which that index would reject.
+  await ensureScopeNumberIndexes(scopeOfWorks);
   const rootScopeNumber = getRevisionRoot(source.scopeNumber);
   const now = nowIso();
 

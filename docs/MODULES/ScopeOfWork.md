@@ -133,7 +133,7 @@ The reference PDF has four kinds of content, and each is treated differently:
 |---|---|---|
 | ชื่อลูกค้า | `quotation.customerSnapshot.companyName` (falls back to `quote.client`) | No — read-only display (refreshed only via "อัปเดตข้อมูลจากใบเสนอราคา") |
 | ชื่อผู้ติดต่อ (จากใบเสนอราคา) | `quotation.customerSnapshot.contactName` (falls back to `quote.contactName`) — added 2026-07-15, Codex review High Priority fix; shown read-only in the editor for reference | No |
-| รหัสงาน | Server-generated `scopeNumber` | No — components (`secondaryCode`, `issueDate`) are editable and recompute it |
+| รหัสงาน | **User-typed `scopeNumber`** (manual-ONLY since 2026-07-29 — see "Scope Number / Job Code" below) | Yes — while Draft only; uniqueness re-checked on save |
 | รหัส Drawing | *(no reliable quotation field)* | Yes — starts blank |
 | สถานที่ส่งของ | `quotation.deliveryAddress` | Yes |
 | ชื่อผู้ติดต่อส่งของ | *(no reliable quotation field — quotations only have one generic contact, not a shipping-specific one)* | Yes — starts blank |
@@ -174,42 +174,54 @@ edit quantity/unit, add specification lines — none of this writes back to the 
 
 ## Scope Number / Job Code
 
-Format: `PQ{YYYYMM}-{jobSequence}-{jobTypeCode}-{secondaryCode}`, e.g. `PQ202607-174-LI-SK`.
+**Manual-ONLY entry since 2026-07-29** (owner: "ระบบไม่ต้องสร้างเลขเองดิ" — superseding the
+original auto-generation): the system does not generate scope numbers at all anymore. The user
+**types the whole document number themselves** at creation (required non-blank, completely
+free-form by explicit owner decision — no forced prefix/format), in the "สร้าง Scope of Work"
+prompt (`QuoteDocument.tsx`), replacing the old required-`secondaryCode` prompt.
 
-- **`YYYYMM`** — the Scope of Work's own `issueDate` (Gregorian year, not the Buddhist year the
-  quotation numbering convention uses — the reference PDF's own `รหัสงาน` uses `2026`, not `2569`).
-- **`jobSequence`** — an atomically-reserved per-calendar-month counter (`scope_{yearMonth}` in the
-  shared `counters` collection, same pattern as `QUOTE_COUNTER_ID` in `api/handlers/quotes.ts`).
-  Reserved once at creation; if a later edit moves `issueDate` into a *different* month, a **fresh**
-  sequence number is atomically reserved for that new month (see `handleUpdate` in
-  `api/_lib/scopeOfWorkHandler.ts`) — reusing the old number would risk colliding with a different
-  record that was allocated that same number in the month it actually landed in.
-- **`jobTypeCode`** — the quotation's Job Type code (LI/TA/SC/BF/...), frozen at creation.
-- **`secondaryCode`** — see "Open Business Question" below. **Required at creation** (2026-07-15,
-  Codex review High Priority fix — see the prompt in `QuoteDocument.tsx`'s "สร้าง Scope of Work"
-  button), so every generated code always has its 4th segment from the start; never blank/omitted
-  for a newly-created record. Editable afterward via `PATCH` (still optional there, to allow a
-  correction without re-triggering the create-time requirement on every unrelated save).
+- **Uniqueness** — server-enforced: a friendly pre-check (`assertScopeNumberAvailable()`) returns a
+  clear Thai 409 ("เลขที่เอกสาร ... ถูกใช้กับ Scope of Work ใบอื่นแล้ว"); the unique `scopeNumber`
+  index is the race-safe backstop (an `E11000` on insert/update maps to the same 409). Soft-deleted
+  records still block their number's reuse, deliberately. `ensureScopeNumberIndexes()`
+  (`api/_lib/scopeOfWorkHandler.ts`) defensively guarantees this index exists at runtime — the
+  Setup-Wizard-only `ensureIndexes()` never ran on the already-provisioned production database —
+  and drops the legacy `{yearMonth, jobSequence}` unique index (see below).
+- **Editing** — `scopeNumber` is PATCHable **while Draft only** (the editor's "เลขที่เอกสาร
+  (รหัสงาน)" field, previously read-only); PendingApproval/Final are already locked wholesale by
+  the status guard, so an approved document's number is permanently frozen.
+- **Rewrite** — unchanged: still auto-appends `-R{n}` to whatever the user typed
+  (`getRevisionRoot()` + the atomic `scope_revision_{root}` counter), e.g. `MY-JOB-01` → `MY-JOB-01-R1`.
+- **Duplicate** — now **asks the user for the copy's own number** (`window.prompt` in
+  `ScopeOfWorkDocument.tsx`, sent in the POST body) instead of minting one; same
+  required/unique/free-form rules as creation.
+- **Validation** — `scopeNumber` joined `scopeOfWorkRequiredFields` (required); `secondaryCode`
+  flipped to optional (legacy reference field).
+- **Existing records** — keep their auto-generated `PQ{YYYYMM}-{seq}-{jobType}-{secondaryCode}`
+  numbers as-is; no migration.
 
-Uniqueness: a unique index on `{yearMonth, jobSequence}` (`api/_lib/collections.ts`) guarantees no
-two records ever share a scope number, since that pair alone is already globally unique — a second
-unique index directly on `scopeNumber` is a defense-in-depth safety net, not the primary mechanism.
-A bounded retry loop (`MAX_SCOPE_NUMBER_ATTEMPTS = 3`, `api/_lib/scopeOfWorkHandler.ts`) re-reserves
-a fresh sequence and retries the insert on the (essentially unreachable, given the atomic counter)
-chance of an `E11000` duplicate-key error, rather than surfacing a raw 500 — 2026-07-15, Codex
-review recommendation.
+### Legacy: the removed auto-numbering scheme (2026-07-15 → 2026-07-29)
 
-### Open Business Question — `secondaryCode` ("รหัสอ้างอิงท้ายงาน")
+Historical format: `PQ{YYYYMM}-{jobSequence}-{jobTypeCode}-{secondaryCode}`, e.g.
+`PQ202607-174-LI-SK` — `YYYYMM` from `issueDate` (Gregorian), `jobSequence` from an atomic
+per-month counter (`scope_{yearMonth}` in `counters`), `jobTypeCode` frozen from the quotation, and
+`secondaryCode` a required-at-creation user-supplied suffix. Editing `issueDate` across a month
+boundary used to re-reserve a fresh sequence; editing `secondaryCode` used to recompute the number
+— **both recompute behaviors are removed** (the number now only changes when the user retypes it).
+The `yearMonth`/`jobSequence` fields remain on old records untouched and are written as `""`/`0` on
+new ones; their old `{yearMonth, jobSequence}` unique index is dropped at runtime by
+`ensureScopeNumberIndexes()` (it would reject every second new record, and it also silently
+conflicted with Rewrite's carry-over of the pair — a latent bug on any fresh-setup deployment,
+fixed by the drop). The monthly counter documents in `counters` are simply orphaned (harmless).
 
-The reference PDF's trailing `-SK` segment has no equivalent field anywhere in the current ERP, and
-its business *meaning* (a site code? an internal team code? something else?) was not specified. Per
-the task's explicit instruction, this pass does **not** invent that meaning: `secondaryCode` is a
-plain text field on the Scope of Work header, labeled "รหัสอ้างอิงท้ายงาน (ยังต้องยืนยันความหมาย
-ทางธุรกิจ)" in the editor. Its *presence* is now required at creation (see above, 2026-07-15 fix) —
-the user supplies whatever real value they already know from their own business context — but
-**what that value should represent, or whether it should instead be a selectable list** (e.g. per
-salesperson, per site, per team) rather than free text, is still an open question for Codex/the
-business to weigh in on.
+### `secondaryCode` ("รหัสอ้างอิงท้ายงาน") — now a legacy optional reference field
+
+Was the number's required 4th segment with an unconfirmed business meaning (the reference PDF's
+trailing `-SK`). Since 2026-07-29 it is **no longer part of the document number at all** — the user
+types the full number themselves, including whatever suffix convention they want — so the old "what
+does this segment mean?" open question is moot. The field itself remains on the header form as an
+optional free-text reference ("รหัสอ้างอิงท้ายงาน (ไม่บังคับ — ฟิลด์อ้างอิงเดิม)"), blank on new
+records, so old records' values stay visible/editable.
 
 ## Checklist Groups
 
@@ -664,8 +676,9 @@ unchanged.
 Two statuses: `Draft` → `Final`. Finalizing (`POST /:id/finalize`, `scopeOfWork:finalize`) locks the
 record against further edits/refresh entirely — there is no un-finalize route in this pass; "ทำสำเนา"
 (`POST /:id/duplicate`) is the documented way to keep working from a copy (always created as a fresh
-Draft, with a brand-new `scopeNumber`/`issueDate`/`jobSequence`, `seller` reset to the duplicating
-user, `approver` reset to blank).
+Draft, with a fresh `issueDate`, `seller` reset to the duplicating user, `approver` reset to blank —
+and, **since 2026-07-29**, a user-typed `scopeNumber` supplied in the POST body instead of an
+auto-minted one, see "Scope Number / Job Code").
 
 ## Print / PDF
 

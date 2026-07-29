@@ -9,12 +9,15 @@ import type { ValidationResult } from "./types.js";
  * are the only sanctioned optional-field exceptions, each with its own business reason.
  *
  * Dotted paths (`customerSnapshot.companyName`) address nested fields; every other key is a
- * top-level `ScopeOfWork` field. Excludes server-derived/read-only fields (scopeNumber,
- * yearMonth, jobSequence, quotationNumber, jobTypeCode/Name, quotationSalesperson, version,
- * timestamps) — never "missing" from the user's perspective, always regenerated successfully by
- * the server before persisting.
+ * top-level `ScopeOfWork` field. Excludes server-derived/read-only fields (yearMonth, jobSequence,
+ * quotationNumber, jobTypeCode/Name, quotationSalesperson, version, timestamps) — never "missing"
+ * from the user's perspective. `scopeNumber` joined this config 2026-07-29 when it became a
+ * manually-typed (no longer server-generated) field.
  */
 export const scopeOfWorkRequiredFields: Record<string, { label: string; required: boolean }> = {
+  // Manually typed by the user since 2026-07-29 (free-form, uniqueness enforced server-side) —
+  // required, since it's the document's identity.
+  scopeNumber: { label: "เลขที่เอกสาร", required: true },
   "customerSnapshot.companyName": { label: "ชื่อลูกค้า", required: true },
   "customerSnapshot.contactName": { label: "ชื่อผู้ติดต่อ", required: true },
   "customerSnapshot.address": { label: "ที่อยู่ลูกค้า", required: true },
@@ -26,7 +29,10 @@ export const scopeOfWorkRequiredFields: Record<string, { label: string; required
   issueDate: { label: "วันที่", required: true },
   deliveryDate: { label: "วันที่ส่งของ/ส่งแบบอนุมัติ", required: true },
   drawingCode: { label: "รหัส Drawing", required: true },
-  secondaryCode: { label: "รหัสอ้างอิงท้ายงาน", required: true },
+  // Optional exception (2026-07-29): legacy reference field from the removed auto-numbering scheme
+  // — no longer part of the document number (which the user now types whole), kept only so old
+  // records' values stay visible/editable. New records leave it blank.
+  secondaryCode: { label: "รหัสอ้างอิงท้ายงาน", required: false },
   // Optional exception: a customer PO number normally doesn't exist yet at this stage.
   customerPoNumber: { label: "เอกสารใบสั่งซื้อเลขที่ (PO)", required: false },
   deliveryLocation: { label: "สถานที่ส่งของ", required: true },
@@ -108,6 +114,7 @@ function validatePaymentPercentages(payment: ScopeOfWorkPaymentConditions): stri
 }
 
 export interface ScopeOfWorkValidationInput {
+  scopeNumber: string;
   customerSnapshot: ScopeOfWorkCustomerSnapshot;
   issueDate: string;
   deliveryDate: string;

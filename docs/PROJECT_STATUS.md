@@ -14,6 +14,17 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-29] Scope of Work: manual-ONLY document number entry.** Executes the spec the owner
+  recorded 2026-07-24 ("ระบบไม่ต้องสร้างเลขเองดิ"); the open format question was answered this
+  session: completely free-form. The system no longer generates scope numbers — the user types the
+  number at creation (new modal field) and on Duplicate (prompt); server enforces non-blank +
+  uniqueness (friendly 409 + unique-index backstop, defensively created at runtime since the
+  Setup-Wizard-only `ensureIndexes()` never ran on production); editable while Draft only; Rewrite
+  still auto-appends `-R{n}`; `yearMonth`/`jobSequence`/`secondaryCode` became legacy fields (old
+  records keep their auto numbers, no migration); the legacy `{yearMonth, jobSequence}` unique
+  index is dropped at runtime (also fixes a latent fresh-setup Rewrite bug). What's New entry
+  added. `tsc`/`lint`/`build` all pass clean; live verification tracked in [TODO.md](./TODO.md).
+  See [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Scope Number / Job Code" and CHANGELOG.md.
 - ✅ **[2026-07-24] Notifications update automatically — no more manual page refresh.** Direct user
   report ("ต้องกดรีก่อนรอบนึงแจ้งเตือนถึงจะขึ้น"): `App.tsx` now polls `GET /api/notifications`
   every 45 s while signed in, plus an immediate refetch on tab focus / hidden→visible; pauses

@@ -4,6 +4,58 @@
 
 ---
 
+## 2026-07-29 (absolute latest) — Scope of Work: manual-ONLY document number entry
+
+Executes the spec recorded in TODO.md on 2026-07-24 (owner: "ระบบไม่ต้องสร้างเลขเองดิ"). The
+build-time open question was answered by the owner this session: **completely free-form** — no
+format guardrails (no forced "PQ" prefix or segment pattern).
+
+- **Create** (`POST /api/scope-of-works`): body is now `{ quotationId, scopeNumber }` — the user
+  TYPES the whole document number in the "สร้าง Scope of Work" modal (`QuoteDocument.tsx`),
+  replacing the old required-`secondaryCode` prompt. Required non-blank; friendly duplicate check
+  (`assertScopeNumberAvailable()` → 409 "เลขที่เอกสาร ... ถูกใช้กับ Scope of Work ใบอื่นแล้ว")
+  backed race-safely by the unique `scopeNumber` index (insert `E11000` → same 409). The old
+  `PQ{YYYYMM}-{seq}-{jobType}-{secondaryCode}` generator + atomic monthly counter are retired;
+  new records write `yearMonth: ""`/`jobSequence: 0`/`secondaryCode: ""` (legacy fields; old
+  records untouched, no migration).
+- **Edit while Draft only**: `scopeNumber` is now PATCHable (uniqueness re-checked, 11000-backstopped)
+  and the editor's "เลขที่เอกสาร (รหัสงาน)" field (`ScopeOfWorkDocument.tsx`, previously read-only)
+  is editable while Draft — PendingApproval/Final stay locked wholesale by the existing status
+  guard, so an approved number is frozen for good. The old recomputes are **removed**: editing
+  `issueDate` across a month boundary no longer re-reserves a sequence, and editing
+  `secondaryCode` no longer rewrites the number.
+- **Duplicate** (`POST /:id/duplicate`): now requires `{ scopeNumber }` in the body — the client
+  asks the user for the copy's own number (`window.prompt`, same convention as reject's comment)
+  instead of the server minting one.
+- **Rewrite**: unchanged behavior — still auto-appends `-R{n}` to whatever was typed
+  (`getRevisionRoot()` + the `scope_revision_{root}` counter, bounded-retry on collisions, so a
+  manually-created `X-R1` can't break `X`'s next rewrite).
+- **Indexes**: new `ensureScopeNumberIndexes()` (once per warm instance, same defensive pattern as
+  `ensureAttachmentIndexes()`) creates the unique `scopeNumber` index — the Setup-Wizard-only
+  `ensureIndexes()` never ran on the already-provisioned production DB, so on production that
+  index (TODO.md believed it existed) most likely did NOT — and drops the legacy
+  `{yearMonth, jobSequence}` unique index (removed from `ensureIndexes()` too): every new record
+  writes the same `{"", 0}` pair, which that index would reject from the second record onward.
+  Side effect: this also fixes a latent fresh-setup-deployment bug where Rewrite's carry-over of
+  the source's `{yearMonth, jobSequence}` violated that index and 409'd after 3 retries.
+- **Validation** (`scopeOfWorkValidation.ts`): `scopeNumber` added to `scopeOfWorkRequiredFields`
+  (required — it's the document identity; also added to `ScopeOfWorkValidationInput` and the
+  server's `toValidationInput()`); `secondaryCode` flipped to optional (legacy reference field,
+  label now "รหัสอ้างอิงท้ายงาน (ไม่บังคับ — ฟิลด์อ้างอิงเดิม)") — its old "unconfirmed business
+  meaning" open question is moot now that the user types the full number themselves. Net required
+  count unchanged (+1/−1).
+- **Follows for free** (verified by reading the code paths): list pages/Global Search/email
+  subject+notifications all read `scopeNumber` off the record; email threading anchors on the
+  internal record id, not the number, so renumbering a Draft never breaks an existing thread.
+- **What's New**: added a Thai `WHATS_NEW_ENTRIES` entry (2026-07-29) announcing the change.
+- Docs: TODO.md (spec item moved to done), MODULES/ScopeOfWork.md ("Scope Number / Job Code"
+  rewritten + legacy section), API.md (create/PATCH/duplicate/rewrite rows), DATABASE.md
+  (`scope_of_works` numbering + indexes), CLAUDE.md module table row.
+- `tsc` (both configs)/`lint`/`build` all pass clean. Not yet verified against a live deployment
+  (same standing limitation as every recent pass) — see the new TODO.md verification item.
+
+---
+
 ## 2026-07-24 (absolute latest) — Approval workflow for Scope of Work + Delivery Order
 
 Direct user request ("ทำส่งขออนุมัติของ Scope of work กับ ใบส่งมอบให้ด้วยคือถ้ามีคนอนุมัติแล้วมันจะ

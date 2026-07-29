@@ -489,15 +489,19 @@ its source quotation, and later edits to the quotation/customer/product master d
 change an already-created Scope of Work (an explicit "อัปเดตข้อมูลจากใบเสนอราคา" action, `POST
 /:id/refresh`, re-pulls only the quotation-derived fields on demand).
 
-`scopeNumber` (`PQ{yearMonth}-{jobSequence}-{jobTypeCode}-{secondaryCode}`, e.g.
-`PQ202607-174-LI-SK`) is always server-generated: `yearMonth` comes from `issueDate`,
-`jobSequence` is an atomically-reserved per-month counter (`scope_{yearMonth}` in the shared
-`counters` collection, same pattern as `QUOTE_COUNTER_ID` in `api/handlers/quotes.ts`), and
-`secondaryCode` is a plain editable field (`รหัสอ้างอิงท้ายงาน`) — **its business meaning is not yet
-confirmed**, see "Open Business Questions" in the module doc. `jobSequence` is normally frozen after
-creation, except: editing `issueDate` into a different calendar month re-reserves a **fresh**
-sequence number for that month (needed to preserve the `{yearMonth, jobSequence}` uniqueness
-guarantee — see the doc comment in `api/_lib/scopeOfWorkHandler.ts`'s `handleUpdate`).
+`scopeNumber` is **typed manually by the user since 2026-07-29** (owner decision, completely
+free-form — no format guardrails): required non-blank at creation and on Duplicate, unique across
+all records (friendly 409 pre-check + the unique index as the race-safe backstop; soft-deleted
+records still block their number's reuse), editable **while Draft only**, and permanently locked
+once Final; Rewrite still auto-appends `-R{n}` to whatever was typed. The pre-2026-07-29
+auto-generated format (`PQ{yearMonth}-{jobSequence}-{jobTypeCode}-{secondaryCode}`, e.g.
+`PQ202607-174-LI-SK`) survives unchanged on old records. `yearMonth`/`jobSequence` are **legacy
+fields**: real values on old records, `""`/`0` on new ones (the atomic `scope_{yearMonth}` monthly
+counter is retired; its documents in `counters` are orphaned, harmless). `secondaryCode` is now an
+optional free-text legacy reference field (`รหัสอ้างอิงท้ายงาน`), blank on new records — no longer
+part of the number, and editing it (or moving `issueDate` across a month boundary) no longer
+recomputes anything. See "Scope Number / Job Code" in
+[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
 
 `checklistGroups` reproduces the reference PDF's printed checkbox/radio groups (Safety, TOR/
 Requirement from customer, เอกสารส่งถึง, ปจ.2, งานขนส่ง, Logo, Name plate, Test Report — split into
@@ -544,9 +548,13 @@ of Work never shows pricing (no unit price/discount/VAT/grand total anywhere in 
 print output). Fully independently editable afterward (add/remove/duplicate/reorder items, add
 specification lines) — never writes back to the quotation.
 
-Indexes (`ensureIndexes()`, `api/_lib/collections.ts`): `scopeNumber` (unique — a defense-in-depth
-safety net; uniqueness is actually guaranteed by the `{yearMonth, jobSequence}` index below, which
-is also unique), `quotationId`, `status`, `isDeleted`.
+Indexes (`ensureIndexes()`, `api/_lib/collections.ts`): `scopeNumber` (unique — since 2026-07-29
+**the** uniqueness mechanism for the now-manually-typed numbers), `quotationId`, `status`,
+`isDeleted`. The old `{yearMonth, jobSequence}` unique index is no longer created and is dropped
+defensively at runtime by `ensureScopeNumberIndexes()` (`api/_lib/scopeOfWorkHandler.ts`) — new
+records all write `{"", 0}` there, which that index would reject from the second record onward
+(the same function also defensively *creates* the unique `scopeNumber` index, since the
+Setup-Wizard-only `ensureIndexes()` never runs on an already-provisioned deployment).
 
 ### `DeliveryOrder` (`src/lib/deliveryOrder.ts`) — added 2026-07-23
 

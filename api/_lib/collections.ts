@@ -91,10 +91,11 @@ export async function quotationTemplatesCollection() {
 /**
  * Scope of Work (added 2026-07-15) — see `src/lib/scopeOfWork.ts` for the full domain-shape doc
  * comment and docs/MODULES/ScopeOfWork.md for the PDF-to-field mapping. `scopeNumber` is the
- * human-readable `PQ{YYYYMM}-{jobSequence}-{jobTypeCode}-{secondaryCode}` business id, uniquely
- * indexed below — uniqueness is actually guaranteed by `{yearMonth, jobSequence}` alone (an
- * atomic per-month counter, same pattern as `QUOTE_COUNTER_ID` in api/handlers/quotes.ts), the
- * `scopeNumber` index is a defense-in-depth safety net, not the primary uniqueness mechanism.
+ * human-readable business id — since 2026-07-29 it's typed manually by the user (free-form, no
+ * auto-generation), so the unique index below IS the one uniqueness mechanism. `yearMonth`/
+ * `jobSequence` are legacy fields from the removed auto-numbering scheme (kept on old records,
+ * written as ""/0 on new ones); their old `{yearMonth, jobSequence}` unique index is dropped
+ * defensively at runtime by `ensureScopeNumberIndexes()` (api/_lib/scopeOfWorkHandler.ts).
  */
 export type ScopeOfWorkFields = Omit<ScopeOfWork, "id">;
 export async function scopeOfWorksCollection() {
@@ -485,7 +486,6 @@ export async function ensureIndexes() {
     quotationTemplates.createIndex({ isActive: 1 }),
     quotationTemplates.createIndex({ isDeleted: 1 }),
     scopeOfWorks.createIndex({ scopeNumber: 1 }, { unique: true }),
-    scopeOfWorks.createIndex({ yearMonth: 1, jobSequence: 1 }, { unique: true }),
     scopeOfWorks.createIndex({ quotationId: 1 }),
     scopeOfWorks.createIndex({ status: 1 }),
     scopeOfWorks.createIndex({ isDeleted: 1 }),

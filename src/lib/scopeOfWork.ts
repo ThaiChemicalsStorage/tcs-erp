@@ -222,9 +222,19 @@ export interface ScopeOfWorkSignatory {
 
 export interface ScopeOfWork {
   id: string;
+  /** The document number — manually TYPED by the user since 2026-07-29 (owner decision: "ระบบ
+   * ไม่ต้องสร้างเลขเองดิ", completely free-form, no format guardrails), replacing the old
+   * server-generated `PQ{YYYYMM}-{seq}-{jobType}-{secondaryCode}` scheme. Required at creation,
+   * unique across all records (server-enforced, friendly 409 on a duplicate), editable only while
+   * Draft. Rewrite still auto-appends `-R{n}` to whatever was typed; Duplicate asks the user for
+   * the copy's own number. Records created before 2026-07-29 keep their auto-generated numbers. */
   scopeNumber: string;
+  /** Legacy (auto-numbering era, pre-2026-07-29): real values on old records, `""` on new ones. */
   yearMonth: string;
+  /** Legacy (auto-numbering era, pre-2026-07-29): real values on old records, `0` on new ones. */
   jobSequence: number;
+  /** Legacy reference field (pre-2026-07-29 it was the number's required 4th segment) — now an
+   * optional free-text reference, no longer part of `scopeNumber` and blank on new records. */
   secondaryCode: string;
   quotationId: string;
   quotationNumber: string;
@@ -370,14 +380,14 @@ export interface ScopeOfWorkListItem {
   updatedAt: string;
 }
 
-/** Fields a Scope of Work editor actually submits on PATCH — everything except the id/scopeNumber
- * components/quotationId/status/version/audit fields, which are always server-derived or only
- * change via a dedicated action (finalize/duplicate/refresh). `issueDate`/`secondaryCode` ARE
- * editable and, when changed, cause the server to recompute `scopeNumber` (see
- * api/_lib/scopeOfWorkHandler.ts) — `jobTypeCode` never changes after creation; `jobSequence` only
- * changes if editing `issueDate` moves it into a different calendar month (a fresh sequence number
- * is re-allocated for that month, to preserve global scopeNumber uniqueness). */
+/** Fields a Scope of Work editor actually submits on PATCH — everything except the
+ * id/quotationId/status/version/audit fields, which are always server-derived or only change via a
+ * dedicated action (finalize/duplicate/refresh). `scopeNumber` became PATCHable 2026-07-29
+ * (manual-ONLY numbering): editable while Draft only, server-checked for uniqueness (409 on a
+ * duplicate). `issueDate`/`secondaryCode` edits no longer recompute anything — the number only
+ * changes when the user retypes it. `jobTypeCode` never changes after creation. */
 export type ScopeOfWorkUpdateFields = Partial<{
+  scopeNumber: string;
   issueDate: string;
   deliveryDate: string;
   drawingCode: string;
@@ -414,15 +424,14 @@ export async function fetchScopeOfWork(id: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}`);
   return scopeOfWork;
 }
-/** `secondaryCode` (รหัสอ้างอิงท้ายงาน) is required by the server — 2026-07-15, Codex review High
- * Priority fix: the generated job code previously always omitted its 4th segment because this was
- * silently blank on every creation. Its actual *value* is still never invented here or server-side
- * — the caller (the "สร้าง Scope of Work" prompt in QuoteDocument.tsx) collects it from the user
- * before calling this. */
-export async function createScopeOfWorkFromQuotation(quotationId: string, secondaryCode: string): Promise<ScopeOfWork> {
+/** `scopeNumber` is the user's own typed document number (manual-ONLY since 2026-07-29, replacing
+ * both the auto-generated number and the old required-`secondaryCode` prompt) — required non-blank,
+ * free-form, server-checked for uniqueness (409 with a clear Thai message on a duplicate). The
+ * caller (the "สร้าง Scope of Work" prompt in QuoteDocument.tsx) collects it from the user. */
+export async function createScopeOfWorkFromQuotation(quotationId: string, scopeNumber: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>("/scope-of-works", {
     method: "POST",
-    body: JSON.stringify({ quotationId, secondaryCode }),
+    body: JSON.stringify({ quotationId, scopeNumber }),
   });
   return scopeOfWork;
 }
@@ -459,8 +468,14 @@ export async function withdrawScopeOfWorkApproval(id: string): Promise<ScopeOfWo
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/withdraw-approval`, { method: "POST" });
   return scopeOfWork;
 }
-export async function duplicateScopeOfWork(id: string): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/duplicate`, { method: "POST" });
+/** `scopeNumber` (added 2026-07-29, manual-ONLY numbering): the copy's own user-typed document
+ * number — Duplicate no longer mints one automatically; same required/unique/free-form rules as
+ * `createScopeOfWorkFromQuotation()`. */
+export async function duplicateScopeOfWork(id: string, scopeNumber: string): Promise<ScopeOfWork> {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/duplicate`, {
+    method: "POST",
+    body: JSON.stringify({ scopeNumber }),
+  });
   return scopeOfWork;
 }
 /** Creates a new revision (`{root}-R{n}`) of `id`, added 2026-07-22 to mirror Quotation's identical

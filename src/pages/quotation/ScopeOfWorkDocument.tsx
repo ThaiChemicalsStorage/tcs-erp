@@ -31,6 +31,7 @@ const BLOCKED_TOOLTIP = "กรุณากรอกข้อมูลและ�
 
 function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
   return {
+    scopeNumber: s.scopeNumber,
     issueDate: s.issueDate,
     deliveryDate: s.deliveryDate,
     drawingCode: s.drawingCode,
@@ -434,8 +435,8 @@ export function ScopeOfWorkDocument({
 
   /** "สร้าง/เปิดใบส่งมอบสินค้า" (added 2026-07-23, per direct user request) — mirrors
    * QuoteDocument.tsx's `handleScopeOfWorkClick()`/`confirmCreateScopeOfWork()` exactly, minus the
-   * secondaryCode prompt (a Delivery Order needs no extra input to create — everything it needs is
-   * already on the Scope of Work). */
+   * document-number prompt (a Delivery Order needs no extra input to create — everything it needs
+   * is already on the Scope of Work). */
   const handleDeliveryOrderClick = async () => {
     if (!scope || deliveryOrderBusy) return;
     if (existingDeliveryOrder) {
@@ -491,8 +492,8 @@ export function ScopeOfWorkDocument({
     setConfirmAction("submit");
   };
 
-  /** ปฏิเสธ — comment required server-side; collected via the same small-prompt convention the
-   * secondaryCode creation flow already uses. */
+  /** ปฏิเสธ — comment required server-side; collected via the same `window.prompt` convention
+   * `handleDuplicate` above uses for the copy's document number. */
   const handleRejectClick = async () => {
     if (!scope) return;
     const comment = window.prompt("เหตุผลการปฏิเสธ / สิ่งที่ต้องแก้ไข:", "");
@@ -507,10 +508,17 @@ export function ScopeOfWorkDocument({
     }
   };
 
+  /** Manual-ONLY numbers (2026-07-29): the copy needs its own user-typed document number — the
+   * system no longer mints one. Collected via the same small-prompt convention `handleRejectClick`
+   * below already uses; a duplicate number surfaces the server's own 409 message as a toast. */
   const handleDuplicate = async () => {
     if (!scope) return;
+    const input = window.prompt("เลขที่เอกสารสำหรับสำเนาใหม่ (กำหนดได้อิสระ ระบบตรวจสอบเลขซ้ำให้):", "");
+    if (input === null) return;
+    const scopeNumber = input.trim();
+    if (!scopeNumber) { showToast("กรุณาระบุเลขที่เอกสาร"); return; }
     try {
-      const created = await duplicateScopeOfWork(scope.id);
+      const created = await duplicateScopeOfWork(scope.id, scopeNumber);
       showToast(`ทำสำเนาเป็น ${created.scopeNumber} แล้ว`);
       onDuplicated(created.id);
     } catch (err) {
@@ -704,11 +712,13 @@ export function ScopeOfWorkDocument({
                 <FieldError message={finalizeValidation.fieldErrors["customerSnapshot.contactName"]} />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">รหัสงาน</label>
-                <input readOnly className="w-full text-xs font-mono text-[#c9a84c] font-medium bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={scope.scopeNumber} />
+                <RequiredFieldLabel>เลขที่เอกสาร (รหัสงาน)</RequiredFieldLabel>
+                <input disabled={!editable} className="w-full text-xs font-mono text-[#c9a84c] font-medium bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.scopeNumber} onChange={(e) => updateField("scopeNumber", e.target.value)} placeholder="เช่น PQ202607-15-LI-SK" />
+                {editable && <p className="text-[10px] text-muted-foreground mt-1">พิมพ์เลขเองได้อิสระ — ระบบตรวจสอบเลขซ้ำตอนบันทึก แก้ไขได้เฉพาะฉบับร่าง</p>}
+                <FieldError message={finalizeValidation.fieldErrors.scopeNumber} />
               </div>
               <div>
-                <RequiredFieldLabel>รหัสอ้างอิงท้ายงาน (ยังต้องยืนยันความหมายทางธุรกิจ)</RequiredFieldLabel>
+                <label className="text-xs text-muted-foreground block mb-1">รหัสอ้างอิงท้ายงาน (ไม่บังคับ — ฟิลด์อ้างอิงเดิม)</label>
                 <input disabled={!editable} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.secondaryCode} onChange={(e) => updateField("secondaryCode", e.target.value)} placeholder="เช่น SK" />
                 <FieldError message={finalizeValidation.fieldErrors.secondaryCode} />
               </div>

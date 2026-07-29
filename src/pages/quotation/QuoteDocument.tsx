@@ -234,12 +234,12 @@ export function QuoteDocument({
   // this button if more than one exists (e.g. from "ทำสำเนา") — see docs/MODULES/ScopeOfWork.md.
   const [existingScopeOfWork, setExistingScopeOfWork] = useState<ScopeOfWorkSummary | null>(null);
   const [scopeOfWorkBusy, setScopeOfWorkBusy] = useState(false);
-  // 2026-07-15, Codex review High Priority fix: `secondaryCode` is required server-side on create
-  // (see api/_lib/scopeOfWorkHandler.ts) so the generated job code always has its 4th segment from
-  // the start, instead of silently omitting it. This modal collects the *value* from the user —
-  // the one person who actually knows it — rather than the code inventing or defaulting one.
+  // Manual-ONLY document number (2026-07-29, owner: "ระบบไม่ต้องสร้างเลขเองดิ") — this modal now
+  // collects the WHOLE document number typed by the user (free-form, no format guardrails per the
+  // owner's explicit decision), replacing the old required-`secondaryCode` prompt from the
+  // auto-numbering era. The server enforces non-blank + uniqueness (409 with a clear message).
   const [scopeOfWorkPromptOpen, setScopeOfWorkPromptOpen] = useState(false);
-  const [scopeOfWorkSecondaryCode, setScopeOfWorkSecondaryCode] = useState("");
+  const [scopeOfWorkNumber, setScopeOfWorkNumber] = useState("");
   const [scopeOfWorkPromptError, setScopeOfWorkPromptError] = useState("");
   useEffect(() => {
     // `isDetail`/`canViewScopeOfWork` can't actually flip during this component's lifetime (a
@@ -261,18 +261,18 @@ export function QuoteDocument({
       onOpenScopeOfWork(existingScopeOfWork.id);
       return;
     }
-    setScopeOfWorkSecondaryCode("");
+    setScopeOfWorkNumber("");
     setScopeOfWorkPromptError("");
     setScopeOfWorkPromptOpen(true);
   };
 
   const confirmCreateScopeOfWork = async () => {
     if (!quote) return;
-    const secondaryCode = scopeOfWorkSecondaryCode.trim();
-    if (!secondaryCode) { setScopeOfWorkPromptError("กรุณาระบุรหัสอ้างอิงท้ายงาน"); return; }
+    const scopeNumber = scopeOfWorkNumber.trim();
+    if (!scopeNumber) { setScopeOfWorkPromptError("กรุณาระบุเลขที่เอกสาร"); return; }
     setScopeOfWorkBusy(true);
     try {
-      const created = await createScopeOfWorkFromQuotation(quote.id, secondaryCode);
+      const created = await createScopeOfWorkFromQuotation(quote.id, scopeNumber);
       setScopeOfWorkPromptOpen(false);
       onOpenScopeOfWork(created.id);
     } catch (err) {
@@ -903,16 +903,16 @@ export function QuoteDocument({
           <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
             <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>สร้าง Scope of Work</p>
             <p className="text-xs text-muted-foreground mb-4">
-              กรุณาระบุรหัสอ้างอิงท้ายงาน (เช่น SK) เพื่อใช้ในรหัสงานของ Scope of Work — รูปแบบ PQ{"{"}YYYYMM{"}"}-{"{"}ลำดับ{"}"}-{"{"}ประเภทงาน{"}"}-{"{"}รหัสอ้างอิงท้ายงาน{"}"}
+              กรุณาพิมพ์เลขที่เอกสาร Scope of Work ด้วยตนเอง (ระบบไม่สร้างเลขอัตโนมัติแล้ว) — กำหนดรูปแบบได้อิสระ ระบบจะตรวจสอบให้ว่าเลขไม่ซ้ำกับใบอื่น
             </p>
-            <label className="text-xs text-muted-foreground block mb-1.5">รหัสอ้างอิงท้ายงาน <span className="text-[#e05252]">*</span></label>
+            <label className="text-xs text-muted-foreground block mb-1.5">เลขที่เอกสาร <span className="text-[#e05252]">*</span></label>
             <input
               autoFocus
-              className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
-              value={scopeOfWorkSecondaryCode}
-              onChange={(e) => setScopeOfWorkSecondaryCode(e.target.value)}
+              className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+              value={scopeOfWorkNumber}
+              onChange={(e) => setScopeOfWorkNumber(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") confirmCreateScopeOfWork(); }}
-              placeholder="เช่น SK"
+              placeholder="เช่น PQ202607-15-LI-SK"
             />
             {scopeOfWorkPromptError && <p className="text-xs text-[#e05252] mt-1.5">{scopeOfWorkPromptError}</p>}
             <div className="flex items-center justify-end gap-2 mt-4">
