@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { Truck, Search, X } from "lucide-react";
+import { Truck, Search, X, HelpCircle } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
+import { useModuleTour } from "../../components/GuidedTour";
 import type { DeliveryOrderListItem, DeliveryOrderStatus } from "../../lib/deliveryOrder";
 import { formatQuoteDateThai } from "../../lib/quotes";
+import { useI18n } from "../../lib/i18n";
 
 const FILTER_ALL = "all";
 
@@ -15,11 +18,24 @@ const statusLabel: Record<DeliveryOrderStatus, string> = { Draft: "Draft", Pendi
 
 export function DeliveryOrderList({
   deliveryOrders,
+  currentUserId,
   onOpen,
 }: {
   deliveryOrders: DeliveryOrderListItem[];
+  /** For the per-user "seen" tracking of this page's one-time guided tour (see useModuleTour). */
+  currentUserId: string;
   onOpen: (id: string) => void;
 }) {
+  const { t } = useI18n();
+  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
+  // as the other list pages' tours.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="do-summary"]', popover: { title: t("tour.do.summary.title"), description: t("tour.do.summary.desc"), side: "bottom" } },
+    { element: '[data-tour="do-filters"]', popover: { title: t("tour.do.filters.title"), description: t("tour.do.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="do-table"]', popover: { title: t("tour.do.table.title"), description: t("tour.do.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("deliveryOrder", currentUserId, tourSteps);
+
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -38,13 +54,23 @@ export function DeliveryOrderList({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ใบส่งมอบสินค้า</h1>
-        <p className="text-sm text-muted-foreground mt-0.5 font-mono">จัดการและติดตามใบส่งมอบสินค้าและบริการทั้งหมด</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ใบส่งมอบสินค้า</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">จัดการและติดตามใบส่งมอบสินค้าและบริการทั้งหมด</p>
+        </div>
+        <button
+          onClick={tour.start}
+          title={t("tour.replay")}
+          aria-label={t("tour.replay")}
+          className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+        >
+          <HelpCircle size={15} />
+        </button>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div data-tour="do-summary" className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           { label: "ทั้งหมด", count: deliveryOrders.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
           { label: "Draft", count: deliveryOrders.filter((d) => d.status === "Draft").length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
@@ -62,7 +88,7 @@ export function DeliveryOrderList({
       </div>
 
       {/* Filter */}
-      <div className="space-y-3">
+      <div data-tour="do-filters" className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative h-9 w-72">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -91,7 +117,7 @@ export function DeliveryOrderList({
       </div>
 
       {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="do-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {deliveryOrders.length === 0 ? (
           <EmptyState
             icon={Truck}

@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { ClipboardList, Search, X } from "lucide-react";
+import { ClipboardList, Search, X, HelpCircle } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
+import { useModuleTour } from "../../components/GuidedTour";
 import type { ScopeOfWorkListItem, ScopeOfWorkStatus } from "../../lib/scopeOfWork";
 import { formatQuoteDateThai } from "../../lib/quotes";
+import { useI18n } from "../../lib/i18n";
 
 const FILTER_ALL = "all";
 
@@ -15,11 +18,25 @@ const statusLabel: Record<ScopeOfWorkStatus, string> = { Draft: "Draft", Pending
 
 export function ScopeOfWorkList({
   scopeOfWorks,
+  currentUserId,
   onOpen,
 }: {
   scopeOfWorks: ScopeOfWorkListItem[];
+  /** For the per-user "seen" tracking of this page's one-time guided tour (see useModuleTour). */
+  currentUserId: string;
   onOpen: (id: string) => void;
 }) {
+  const { t } = useI18n();
+  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
+  // as QuoteList.tsx/ProductList.tsx; mounted in the list view only.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="sow-summary"]', popover: { title: t("tour.sow.summary.title"), description: t("tour.sow.summary.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-filters"]', popover: { title: t("tour.sow.filters.title"), description: t("tour.sow.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-nopo"]', popover: { title: t("tour.sow.nopo.title"), description: t("tour.sow.nopo.desc"), side: "bottom" } },
+    { element: '[data-tour="sow-table"]', popover: { title: t("tour.sow.table.title"), description: t("tour.sow.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("scopeOfWork", currentUserId, tourSteps);
+
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
   const [filterSalesperson, setFilterSalesperson] = useState<string>(FILTER_ALL);
@@ -65,13 +82,23 @@ export function ScopeOfWorkList({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>Scope of Work</h1>
-        <p className="text-sm text-muted-foreground mt-0.5 font-mono">จัดการและติดตาม Scope of Work ทั้งหมด</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>Scope of Work</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">จัดการและติดตาม Scope of Work ทั้งหมด</p>
+        </div>
+        <button
+          onClick={tour.start}
+          title={t("tour.replay")}
+          aria-label={t("tour.replay")}
+          className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+        >
+          <HelpCircle size={15} />
+        </button>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div data-tour="sow-summary" className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         {[
           { label: "ทั้งหมด", count: scopeOfWorks.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
           { label: "Draft", count: scopeOfWorks.filter((s) => s.status === "Draft").length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
@@ -90,7 +117,7 @@ export function ScopeOfWorkList({
       </div>
 
       {/* Filter */}
-      <div className="space-y-3">
+      <div data-tour="sow-filters" className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative h-9 w-72">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -140,6 +167,7 @@ export function ScopeOfWorkList({
           {/* Independent of the status pills — "ยังไม่มี PO" composes with any status
               (added 2026-07-29, the "ทวง PO" feature). */}
           <button
+            data-tour="sow-nopo"
             onClick={() => setFilterNoPo((v) => !v)}
             className={`h-9 px-3 text-xs rounded-xl font-medium border transition-all ${filterNoPo ? "bg-[#e08a3c] text-white border-[#e08a3c]" : "bg-secondary text-muted-foreground border-border hover:text-foreground hover:border-[#e08a3c]/40"}`}
           >
@@ -149,7 +177,7 @@ export function ScopeOfWorkList({
       </div>
 
       {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="sow-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {scopeOfWorks.length === 0 ? (
           <EmptyState
             icon={ClipboardList}

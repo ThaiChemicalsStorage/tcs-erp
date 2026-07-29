@@ -6,6 +6,14 @@
 
 ## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
 
+### What was implemented (tenth task this session: SOW/DO tour steps)
+- Extended `useModuleTour()` to the Scope of Work list (4 steps — summary w/ no-PO count, filters,
+  the no-PO toggle as its own step, table) and Delivery Order list (3 steps — summary, filters,
+  table w/ per-installment printing note). Replay buttons added to both headers (rebuilt as flex
+  rows); `currentUserId` threaded through both page shells; 14 new th/en keys (new strings follow
+  the i18n rule even though these two pages are otherwise hardcoded Thai). What's New module-tours
+  entry updated to cover all four pages. Customers list is the remaining cheap candidate.
+
 ### What was implemented (ninth task this session: dedicated chase-PO permission)
 - Owner deferred the Role Management ticks ("ค่อยติ๊กทีหลัง") but asked for the chase button to be
   its own permission. New `scopeOfWork:chasePo` (45th permission): server gate on `/chase-po`,

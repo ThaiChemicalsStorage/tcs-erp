@@ -17,6 +17,7 @@ import { useToast } from "../../hooks/useToast";
  */
 export function ScopeOfWorkPage({
   users,
+  currentUserId,
   canEdit,
   canFinalize,
   canPrint,
@@ -30,6 +31,8 @@ export function ScopeOfWorkPage({
   onScopeOfWorkIdConsumed,
 }: {
   users: User[];
+  /** For the list's one-time guided tour "seen" tracking (see useModuleTour). */
+  currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
@@ -153,7 +156,7 @@ export function ScopeOfWorkPage({
 
   return (
     <>
-      <ScopeOfWorkList scopeOfWorks={scopeOfWorks} onOpen={openScopeOfWork} />
+      <ScopeOfWorkList scopeOfWorks={scopeOfWorks} currentUserId={currentUserId} onOpen={openScopeOfWork} />
       <Toast message={toast.message} />
     </>
   );

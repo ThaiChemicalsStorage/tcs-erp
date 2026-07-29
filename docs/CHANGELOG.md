@@ -4,7 +4,32 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — "ทวงเลข PO" becomes its own grantable permission (scopeOfWork:chasePo)
+## 2026-07-29 (absolute latest) — Guided tour steps for the Scope of Work and Delivery Order pages
+
+Extends the same-day Quotation/Products module-tour pass to the two remaining document list pages,
+on the owner's direct go-ahead — same `useModuleTour()` infra (auto-start once per user, per-tour
+localStorage seen-tracking, HelpCircle replay button added to each page's header):
+
+- **Scope of Work list** (`ScopeOfWorkList.tsx`, tourKey `scopeOfWork`, 4 steps): summary cards
+  (incl. the "ยังไม่มี PO" count) → search/jobtype/salesperson/status filters → the
+  "เฉพาะที่ยังไม่มี PO" toggle (its own step — mentions the chase-PO button and that it's
+  permission-gated) → the table (row-click; notes creation happens from the quotation page).
+- **Delivery Order list** (`DeliveryOrderList.tsx`, tourKey `deliveryOrder`, 3 steps): summary
+  cards → search + status filters → the table (notes creation from the Scope of Work page and
+  per-installment printing).
+- Both pages' headers rebuilt as flex rows to host the replay button; `currentUserId` threaded
+  App → ScopeOfWorkPage/DeliveryOrderPage → their list components (new prop on all four).
+- These two list components were hardcoded-Thai; the NEW strings follow the standing i18n rule
+  (`useI18n()` + 14 new `tour.sow.*`/`tour.do.*` keys th/en) rather than adding more literals —
+  the pages' existing hardcoded Thai is untouched (pre-existing inconsistency, not this pass's
+  scope).
+- What's New: the module-tours entry (same day) updated to cover all four pages.
+- `tsc` (both configs)/`lint`/`npm test` (56/56)/`build` all pass clean; same live click-through
+  caveat as the Quotation/Products tours.
+
+---
+
+## 2026-07-29 — "ทวงเลข PO" becomes its own grantable permission (scopeOfWork:chasePo)
 
 Direct owner request ("อยากให้ทำสิทธิ์เพิ่มด้วยว่าสิทธิ์ที่ทวง PO ... เพิ่มเข้ามาถึงจะกดได้หรือขึ้นให้กด")
 — the chase action shipped earlier today gated by `scopeOfWork:view` (anyone who could see the

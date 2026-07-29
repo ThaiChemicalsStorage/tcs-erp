@@ -27,6 +27,11 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
   document — tracked in [TODO.md](./TODO.md)); permission gating unchanged. What's New entry
   added. `tsc`/`lint`/`test`/`build` clean; live refresh/Back-Forward click-through pending. See
   [ARCHITECTURE.md](./ARCHITECTURE.md) and CHANGELOG.md.
+- ✅ **[2026-07-29] Guided tour steps for Scope of Work + Delivery Order.** Same-day extension of
+  the module-tour infra to the two remaining document list pages (4 + 3 steps, incl. a dedicated
+  step for the "เฉพาะที่ยังไม่มี PO" toggle), HelpCircle replay buttons, `currentUserId` threaded
+  through both page shells, 14 new th/en i18n keys. Customers list is the only cheap follow-up
+  left; Leads still has no page. See CHANGELOG.md.
 - ✅ **[2026-07-29] Guided tour steps for Quotation + Products.** New `useModuleTour()` hook
   (per-page driver.js walkthrough, auto-starts once per user on first visit, per-tour localStorage
   seen-tracking, HelpCircle replay button in the page header): Quotation list (create button →

@@ -16,6 +16,7 @@ import { useToast } from "../../hooks/useToast";
  */
 export function DeliveryOrderPage({
   company,
+  currentUserId,
   canEdit,
   canFinalize,
   canPrint,
@@ -25,6 +26,8 @@ export function DeliveryOrderPage({
   onDeliveryOrderIdConsumed,
 }: {
   company: Company;
+  /** For the list's one-time guided tour "seen" tracking (see useModuleTour). */
+  currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
@@ -127,7 +130,7 @@ export function DeliveryOrderPage({
 
   return (
     <>
-      <DeliveryOrderList deliveryOrders={deliveryOrders} onOpen={openDeliveryOrder} />
+      <DeliveryOrderList deliveryOrders={deliveryOrders} currentUserId={currentUserId} onOpen={openDeliveryOrder} />
       <Toast message={toast.message} />
     </>
   );
