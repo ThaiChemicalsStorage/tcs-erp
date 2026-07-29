@@ -280,6 +280,7 @@ left unaddressed, deliberately out of scope for a "fix Critical/High" pass:
 - [ ] Dark mode — `theme.css` only defines the light palette currently; Tailwind's `dark:` variant isn't wired up.
 - [ ] Revisit `DashboardPage` bundle size (~502KB gzipped ~132KB as of the second 2026-07-10 pass, up from ~490KB, mostly `recharts`) if more chart-heavy modules get added.
 - [ ] Base64-in-document uploads (logo/stamp/profile picture/signature) have a practical 16MB MongoDB document ceiling — the `uploads`/`attachments` collections (schema-only, 2026-07-09) are prep for a future real blob-storage migration.
+- [ ] The per-page guided tour (`useModuleTour`, added 2026-07-29) auto-fires on a user's first visit to a page and repeatedly obscured screenshots while refreshing the user manual's images (2026-07-29) — worth a documented way to capture clean screenshots (dismiss via Escape before shooting, or seed the tour's per-user "seen" flag) if screenshotting the app becomes a recurring task.
 
 ## Completed
 

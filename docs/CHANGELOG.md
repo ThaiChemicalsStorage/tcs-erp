@@ -4,7 +4,37 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Code-review fix pass on the document-editor tours
+## 2026-07-29 (absolute latest) — Refreshed user manual screenshots
+
+The 14 screenshots embedded in `docs/manual/user-manual.html` (and thus the generated
+`public/คู่มือการใช้งาน TCS ERP.pdf`) were captured 2026-07-24 and had drifted out of date after
+five days of UI changes (guided tours, "ทวง PO" chasing, URL-hash page persistence, the What's
+New panel, etc.) — reported by the user as "รูปในคู่มือยังเป็นรูปเก่าอยู่" (manual images are
+still the old ones). Recaptured all 14 against the live production app (signed in as Super Admin,
+1400×900 viewport) and swapped them in.
+
+**Files Modified**: `docs/manual/user-manual.html` (all 13 `images/*.png` references changed to
+`.jpg` — see Notes), `docs/manual/images/*` (all 13 page screenshots replaced; `topbar.png`
+re-captured but kept as `.png`), `public/คู่มือการใช้งาน TCS ERP.pdf` (regenerated via
+`docs/manual/generate-pdf.mjs`)
+
+**Files Removed**: the 13 stale `.png` screenshots (superseded by same-named `.jpg` files)
+
+**Reason**: Direct user report that the manual's screenshots no longer matched the running app.
+
+**Notes**: The browser-automation screenshot tool only outputs JPEG, so the 13 full-page captures
+were saved as `.jpg` and the HTML updated to match (`topbar.png` is a cropped PNG from the same
+tool's `zoom` action, unaffected). Chromium content-sniffs local `file://` images rather than
+trusting the extension, so this doesn't break `page.pdf()` rendering — verified by regenerating
+the PDF (no errors, 1.99 MB) and spot-checking several pages via a local static server. Per policy
+this agent never types a password into a login form itself — the user signed in manually before
+screenshot capture began, and the agent logged the session out at the end (after the last
+authenticated screenshot) specifically to capture the sign-in page image; the user needs to sign
+back in themselves.
+
+---
+
+## 2026-07-29 — Code-review fix pass on the document-editor tours
 
 A recall-focused review of the previous commit (the three document-editor tours) surfaced and
 fixed the following — all verified against the running code before changing anything:

@@ -6,6 +6,23 @@
 
 ## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
 
+### What was implemented (fifteenth task this session: refreshed the user manual's screenshots)
+- User reported the manual's screenshots were stale (last captured 2026-07-24, five days before
+  the tour/PO-chasing/hash-persistence/What's New changes above). Started the dev server (found it
+  has no `/api` proxy — plain `vite`, no backend — so switched to the live production app), opened
+  a browser tab, and had the user sign in themselves (this agent never types a password into a
+  login field, even for the user's own app). Captured all 14 manual images fresh via browser
+  automation, replacing the stale set; regenerated the PDF (`generate-pdf.mjs`, verified 1.99 MB,
+  no errors) and spot-checked several pages via a local static server before finishing. Logged the
+  session out at the very end (after the last authenticated screenshot) to capture the sign-in
+  page image, then told the user they'd need to sign back in. See CHANGELOG for the `.png`→`.jpg`
+  filename detail (the screenshot tool only outputs JPEG; Chromium content-sniffs `file://` images
+  so the PDF still renders correctly).
+- **New TODO surfaced**: the guided-tour system (added this session, see tasks above) auto-fires
+  on a Super Admin's first visit to each page, which repeatedly obscured screenshots mid-capture —
+  worth a documented "how to screenshot the app cleanly" note (skip via Escape, or seed the tour
+  as already-seen) if this becomes a recurring task.
+
 ### What was implemented (fourteenth task this session: recall-focused code review of the document-editor tours + fixes)
 - Reviewed commit 7d11e8b with 8 finder angles + per-candidate verification. Confirmed and fixed:
   QuoteDocument's tour auto-firing over the blank create form (now `autoStart: isDetail`; the
