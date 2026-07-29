@@ -4,7 +4,15 @@
 
 ---
 
-## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours
+## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
+
+### What was implemented (eighth task this session: refresh keeps the current page)
+- Direct user complaint that refresh always bounced to the Dashboard — explained the no-router
+  architecture, offered page-level (hash) vs document-level restore; owner picked level 1.
+  `activeNav` ↔ `location.hash` sync in App.tsx (validated against `NavKey`, replaceState on the
+  first hashless write, `hashchange` listener → Back/Forward works). Level 2 (open-document
+  restore) recorded in TODO.md. ARCHITECTURE/CLAUDE "No router" sections updated; What's New
+  entry added.
 
 ### What was implemented (seventh task this session: Quotation/Products tour steps)
 - **`useModuleTour()`** — per-page driver.js walkthroughs with per-user/per-tour localStorage

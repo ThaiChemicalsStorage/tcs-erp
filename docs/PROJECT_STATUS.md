@@ -14,6 +14,13 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-29] Refresh keeps the current page (URL-hash persistence).** Direct user request —
+  `activeNav` now mirrors into `location.hash` (`#quotations`, ...), read back on load and
+  `hashchange`: refresh stays on the same page, browser Back/Forward navigate between pages,
+  page-level URLs are shareable. Deliberately page-level only ("level 2" — restoring the open
+  document — tracked in [TODO.md](./TODO.md)); permission gating unchanged. What's New entry
+  added. `tsc`/`lint`/`test`/`build` clean; live refresh/Back-Forward click-through pending. See
+  [ARCHITECTURE.md](./ARCHITECTURE.md) and CHANGELOG.md.
 - ✅ **[2026-07-29] Guided tour steps for Quotation + Products.** New `useModuleTour()` hook
   (per-page driver.js walkthrough, auto-starts once per user on first visit, per-tour localStorage
   seen-tracking, HelpCircle replay button in the page header): Quotation list (create button →

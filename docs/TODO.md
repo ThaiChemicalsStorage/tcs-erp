@@ -166,6 +166,15 @@
 
 ## Medium Priority — Other
 
+- [ ] **"Level 2" page persistence: restore the OPEN DOCUMENT (not just the page) across a
+  refresh.** The 2026-07-29 URL-hash persistence keeps the top-level page (`#quotations`, ...)
+  across refresh/Back/Forward, per the owner's request — but which document a page had open
+  (a specific quotation/SOW/DO in detail view) is each page's internal state and still resets.
+  Doing this properly means encoding the open record id (and view mode) into the hash per module
+  and restoring it on mount — start with the Quotation module if requested (owner was told this
+  is a bigger, per-module job; approved only "level 1" so far). Unsaved form input can never
+  survive a refresh regardless — set that expectation if this gets built.
+
 - [x] ~~**Manual-ONLY Scope of Work document number entry (2026-07-24, owner: "ระบบไม่ต้องสร้างเลข
   เองดิ" — superseding the earlier optional-field framing the same day; recorded, not built).**~~ —
   **done 2026-07-29, exactly per the recorded spec**: user types the number at creation (modal in

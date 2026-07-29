@@ -4,7 +4,33 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Guided tour steps for the Quotation and Products pages
+## 2026-07-29 (absolute latest) — Refresh no longer resets to the Dashboard (URL-hash page persistence)
+
+Direct user request ("ทำไมเวลารีเฟรชหน้ามันเด้งไปหน้า dashboard ตลอดทำไมไม่อยู่หน้าเดิม") — the
+app has no router, so the current page lived only in React state and every refresh rebooted to
+the default. The owner approved the "level 1" fix (page-level) explicitly:
+
+- `activeNav` is now mirrored into `location.hash` (`#quotations`, `#products`, ...): initial
+  state reads the hash (`navFromHash()` — validated against the `NavKey` union via
+  `NAV_LABEL_KEYS`, unknown hashes ignored), every page change writes it (a history entry, so
+  **browser Back/Forward now navigate between pages**), and a `hashchange` listener reads it
+  back (covers Back/Forward + hand-edited URLs). The very first write on a hashless load uses
+  `history.replaceState` so Back doesn't step through a phantom `""→#dashboard` entry.
+- Free side effects: page-level shareable URLs (`...#quotations` opens straight to that page
+  after sign-in), and the existing permission gating still applies unchanged (`effectiveNav`
+  falls back to Dashboard for a page the user can't view, exactly as before).
+- **Deliberately page-level only** ("level 2" — restoring the open *document* inside a page —
+  was explained as a bigger per-module job and not requested; now tracked in TODO.md). Unsaved
+  form input can never survive a refresh regardless.
+- Docs: ARCHITECTURE.md + docs/CLAUDE.md "No router" sections updated to describe the hash
+  persistence and where the router-migration threshold now actually sits. What's New entry added.
+- `tsc`/`lint`/`npm test` (55/55)/`build` all pass clean. Not click-through verified live (same
+  standing limitation) — specifically unverified: refresh lands back on the same page against
+  the real deployment, and Back/Forward stepping through a real navigation history.
+
+---
+
+## 2026-07-29 — Guided tour steps for the Quotation and Products pages
 
 Closes the "extend the guided tour" TODO item's two buildable targets (open since 2026-07-10),
 on the owner's direct go-ahead:

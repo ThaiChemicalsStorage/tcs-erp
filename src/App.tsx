@@ -201,6 +201,22 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   settings: "nav.settings",
 };
 
+/**
+ * URL-hash page persistence (added 2026-07-29, direct user request: "ทำไมเวลารีเฟรชหน้ามันเด้งไป
+ * หน้า dashboard ตลอด") — this app deliberately has no router (`activeNav` is plain React state,
+ * see docs/CLAUDE.md "Current Architecture"), so before this, the URL never changed and a refresh
+ * always reset to the Dashboard. The lightest possible fix, not a router migration: mirror
+ * `activeNav` into `location.hash` (`#quotations`, `#products`, ...) and read it back on load and
+ * on `hashchange` — which also gives browser Back/Forward page navigation and shareable
+ * page-level URLs for free. Page-level only, by explicit scope decision: which *document* a page
+ * had open lives in each page's own internal state and is NOT restored (tracked in TODO.md as the
+ * possible "level 2" follow-up).
+ */
+function navFromHash(): NavKey | null {
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  return raw in NAV_LABEL_KEYS ? (raw as NavKey) : null;
+}
+
 function moduleForAction(action: string): string {
   if (action.startsWith("Quotation") || action === "Status Changed") return "ใบเสนอราคา";
   if (action.startsWith("User") || action === "Password Reset") return "ผู้ใช้งาน";
@@ -229,7 +245,30 @@ export default function App() {
    * `sidebarOpen` (the desktop 256px/64px width toggle) since on mobile the sidebar is either fully
    * open as an overlay or fully hidden, never a persistent icon rail. See NAV_EXPANDED below. */
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [activeNav, setActiveNav] = useState<NavKey>("dashboard");
+  const [activeNav, setActiveNav] = useState<NavKey>(() => navFromHash() ?? "dashboard");
+
+  // ── URL-hash sync (see navFromHash's doc comment) ─────────────────────────────────────────────
+  // State → hash: every page change becomes a history entry (enabling Back/Forward). The very
+  // first write on a hashless load uses replaceState so Back doesn't step through a phantom
+  // ""→"#dashboard" entry. Hash → state: covers Back/Forward and a hand-edited URL; an unknown
+  // hash is simply ignored (state and URL re-converge on the next navigation).
+  useEffect(() => {
+    const target = `#${activeNav}`;
+    if (window.location.hash === target) return;
+    if (window.location.hash === "") {
+      window.history.replaceState(null, "", target);
+    } else {
+      window.location.hash = target;
+    }
+  }, [activeNav]);
+  useEffect(() => {
+    const onHashChange = () => {
+      const nav = navFromHash();
+      if (nav) setActiveNav(nav);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quotationListFilter, setQuotationListFilter] = useState<QuotationListFilter | null>(null);
   /** Set by a notification click when it has a `relatedQuoteId` — opens that quote's detail view directly instead of just the module's list, consumed once by QuotationPage then cleared (see below). */
