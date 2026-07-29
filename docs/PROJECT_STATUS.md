@@ -27,6 +27,10 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
   document — tracked in [TODO.md](./TODO.md)); permission gating unchanged. What's New entry
   added. `tsc`/`lint`/`test`/`build` clean; live refresh/Back-Forward click-through pending. See
   [ARCHITECTURE.md](./ARCHITECTURE.md) and CHANGELOG.md.
+- ✅ **[2026-07-29] Dashboard page tour.** 5 deeper steps (export/filters/KPI cards incl. the
+  pre-VAT + revision-dedup rules/status summary/in-depth section) + replay button;
+  `useModuleTour` gained an `autoStart` option so it never races the main first-sign-in tour on
+  the same page. See CHANGELOG.md.
 - ✅ **[2026-07-29] Guided tours completed for every page.** Third same-day tour pass (owner:
   "ทำให้หมด"): Customers, Quotation Templates, User Management, Role Management, Audit Log, and
   Settings (incl. a dedicated signature-upload step — it feeds printed documents) — every page in

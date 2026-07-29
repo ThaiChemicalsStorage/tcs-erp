@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
-import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw, Download, History, UserRound, FileSpreadsheet } from "lucide-react";
+import { ThumbsUp, ThumbsDown, CircleDot, LayoutDashboard, AlertTriangle, RotateCw, Download, History, UserRound, FileSpreadsheet, HelpCircle } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { type QuotationListFilter, interestLabelKey } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardStats } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
+import { useModuleTour } from "../../components/GuidedTour";
+import { hasTourCompleted } from "../../lib/tour";
 import { PageHeader } from "../../components/PageHeader";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
 import { todayIsoBangkok } from "./dateRanges";
@@ -166,8 +169,27 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
  * simplified to the exact 4-section required layout above, added Sales Activity's per-salesperson
  * breakdown table, and added structured quotation/customer fields to Recent Activity Details.
  */
-export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavigateToQuotations: (filter: QuotationListFilter) => void; onOpenQuote: (quoteId: string) => void }) {
+export function DashboardPage({ currentUserId, onNavigateToQuotations, onOpenQuote }: {
+  /** For the page tour's per-user "seen" tracking (see useModuleTour). */
+  currentUserId: string;
+  onNavigateToQuotations: (filter: QuotationListFilter) => void;
+  onOpenQuote: (quoteId: string) => void;
+}) {
   const { t } = useI18n();
+
+  // Page tour (added 2026-07-29) — a deeper dive than the MAIN first-sign-in tour (which also
+  // covers this page's basics): auto-starts only AFTER the user has finished/skipped the main
+  // tour (`hasTourCompleted`), so the two driver.js instances can never race each other on a
+  // brand-new user's very first visit; the replay button works regardless.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="dashboard-export"]', popover: { title: t("tour.dashboard.export.title"), description: t("tour.dashboard.export.desc"), side: "bottom" } },
+    { element: '[data-tour="dashboard-filters"]', popover: { title: t("tour.dashboard.filters.title"), description: t("tour.dashboard.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="dashboard-kpis"]', popover: { title: t("tour.dashboard.kpis.title"), description: t("tour.dashboard.kpis.desc"), side: "bottom" } },
+    { element: '[data-tour="dashboard-status"]', popover: { title: t("tour.dashboard.status.title"), description: t("tour.dashboard.status.desc"), side: "top" } },
+    { element: '[data-tour="dashboard-indepth"]', popover: { title: t("tour.dashboard.indepth.title"), description: t("tour.dashboard.indepth.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("dashboard", currentUserId, tourSteps, { autoStart: hasTourCompleted(currentUserId) });
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -243,7 +265,7 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
                   : <div className="w-4 h-4 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" />
               )}
               {stats?.hasAnyData && (
-                <>
+                <div data-tour="dashboard-export" className="flex items-center gap-2">
                   <button
                     onClick={exportXlsx}
                     disabled={exportingXlsx}
@@ -254,8 +276,16 @@ export function DashboardPage({ onNavigateToQuotations, onOpenQuote }: { onNavig
                   <button onClick={exportCsv} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
                     <Download size={13} /> {t("dashboard.export.csv")}
                   </button>
-                </>
+                </div>
               )}
+              <button
+                onClick={tour.start}
+                title={t("tour.replay")}
+                aria-label={t("tour.replay")}
+                className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+              >
+                <HelpCircle size={14} />
+              </button>
             </>
           }
         />
@@ -342,7 +372,9 @@ function DashboardContent({
 
       {/* 2. Quotation status summary — full width, not paired with Forecast (Forecast moved to
           supporting detail below per "if it makes the Dashboard cluttered, move it lower") */}
-      <QuotationStatusSummary kpis={kpis} />
+      <div data-tour="dashboard-status">
+        <QuotationStatusSummary kpis={kpis} />
+      </div>
 
       {/* 3. Sales activity analytics — trend + recent-period table + per-salesperson
           breakdown, filter-aware, full width. Always present for every `dashboard:view` role as
@@ -361,7 +393,7 @@ function DashboardContent({
           (P'Keng/P'Kee pass) since they weren't named in the required 5-row layout — "focus
           first on the exact required business information." Not removed, still real,
           filter-aware MongoDB data. ── */}
-      <div className="pt-2 border-t border-border space-y-6">
+      <div data-tour="dashboard-indepth" className="pt-2 border-t border-border space-y-6">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.section.detail")}</p>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

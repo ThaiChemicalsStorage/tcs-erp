@@ -826,7 +826,7 @@ export default function App() {
                 so e.g. navigating straight to Products no longer waits on unrelated resources like
                 `notifications`/`quotes` that Products never reads. */}
             {effectiveNav === "dashboard"
-              ? <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
+              ? <DashboardPage currentUserId={currentUser.id} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
               : effectiveNav === "auditLog"
               ? <AuditLogPage currentUserId={currentUser.id} />
               : effectiveNav === "scopeOfWork"
@@ -849,7 +849,7 @@ export default function App() {
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
               : effectiveNav === "roles" && isSuperAdmin
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} currentUserId={currentUser.id} onAudit={handleAudit} />
-              : <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
+              : <DashboardPage currentUserId={currentUser.id} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
             }
           </Suspense>
           </ErrorBoundary>

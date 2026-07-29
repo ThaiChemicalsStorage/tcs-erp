@@ -4,7 +4,37 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Guided tours for every remaining page (Customers, Templates, Users, Roles, Audit Log, Settings)
+## 2026-07-29 (absolute latest) — Dashboard page tour (deeper than the main first-sign-in tour)
+
+Owner: "ทำ tour ของหน้า Dashboard เพิ่มด้วย" — the Dashboard was the one page whose only coverage
+was the MAIN first-sign-in tour's basics (title/filters/KPIs as 3 of its 6 stops). Now it has its
+own 5-step deep tour (tourKey `dashboard`) + the standard HelpCircle replay button in the header:
+
+- Steps: export buttons (Excel multi-sheet/CSV, "pick เดือนที่แล้ว for an instant monthly
+  report") → filters (they drive nearly everything) → the 4 KPI cards (explicitly states the
+  pre-VAT rule and revision-chain de-dup — the two most-asked-about numbers behaviors) → the
+  quotation status summary → the "in-depth detail" section (mentions the pipeline stages are
+  clickable through to the quotation list).
+- **Collision guard**: `useModuleTour` gained an `autoStart` option (default true, all existing
+  tours unchanged); the Dashboard passes `hasTourCompleted(userId)` so its auto-start waits until
+  the user has finished/skipped the main tour — both tours land on the same page, and two
+  driver.js instances must never race on a brand-new user's very first visit. The replay button
+  works regardless.
+- New `data-tour` anchors: `dashboard-export` (wraps the header export buttons),
+  `dashboard-status`, `dashboard-indepth`; `dashboard-filters`/`dashboard-kpis` reuse the main
+  tour's existing anchors with richer copy. `currentUserId` prop added to DashboardPage (both
+  App call sites). 10 new i18n keys (th/en). What's New entry updated to include the Dashboard.
+- **Process note**: the App.tsx call-site edit was first attempted with a PowerShell
+  `-replace` one-liner, which mangled the file's UTF-8 (Windows PowerShell 5.1 `Get-Content`
+  reads BOM-less UTF-8 as ANSI — em-dashes/Thai became mojibake + a BOM appeared). Caught in the
+  same step via `git diff`, reverted via `git checkout --`, redone with a normal editor tool;
+  the committed file is verified clean (2-line diff).
+- `tsc` (both configs)/`lint`/`npm test` (56/56)/`build` all pass clean; same live click-through
+  caveat as the other tour passes.
+
+---
+
+## 2026-07-29 — Guided tours for every remaining page (Customers, Templates, Users, Roles, Audit Log, Settings)
 
 Owner: "เหลือ tour ของอะไรอีกทำให้หมด" — finishes the module-tour rollout; every page in the app
 now has a walkthrough (the only gap left is Leads, which has no page to point at). Same

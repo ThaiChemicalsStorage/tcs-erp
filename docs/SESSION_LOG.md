@@ -6,6 +6,13 @@
 
 ## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
 
+### What was implemented (twelfth task this session: Dashboard page tour)
+- 5-step deep tour (export/filters/KPIs w/ pre-VAT + dedup rules/status/in-depth) + replay
+  button; `useModuleTour` gained `autoStart` so the page tour waits until the main tour is done
+  (both land on the Dashboard — no driver.js race). **Process incident**: a PowerShell `-replace`
+  one-liner on App.tsx mangled its UTF-8 (PS 5.1 ANSI read of BOM-less UTF-8) — caught
+  immediately via git diff, reverted, redone with the editor tool; committed file verified clean.
+
 ### What was implemented (eleventh task this session: tours for every remaining page)
 - Customers/Templates/Users/Roles/AuditLog/Settings all gained `useModuleTour()` walkthroughs
   (2-4 steps each; Settings spotlights the signature upload that feeds printed documents) +

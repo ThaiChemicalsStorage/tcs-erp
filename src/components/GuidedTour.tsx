@@ -72,17 +72,23 @@ export function useGuidedTour(onFinish?: () => void) {
  * convention as the main tour. The returned `start` backs the page's "ดูคำแนะนำหน้านี้" replay
  * button. Mount it in the page's LIST view component (not the page shell) so it can never fire
  * over a detail/editor view.
+ *
+ * `autoStart` (default true) suppresses the one-time auto-fire while still allowing manual
+ * replay — the Dashboard passes `hasTourCompleted(userId)` so its page tour never races the
+ * MAIN first-sign-in tour (which also lands on the Dashboard): a brand-new user finishes the
+ * main walkthrough first, and the deeper Dashboard tour auto-offers on their next visit.
  */
-export function useModuleTour(tourKey: string, userId: string, steps: DriveStep[]) {
+export function useModuleTour(tourKey: string, userId: string, steps: DriveStep[], opts?: { autoStart?: boolean }) {
+  const autoStart = opts?.autoStart ?? true;
   const { start, stop } = useDriverTour(steps, () => markPageTourCompleted(tourKey, userId));
   // Latest-closure ref so the auto-start effect doesn't need `steps`/`start` (rebuilt every
   // render) in its dependency list — it must fire exactly once per page visit per user.
   const startRef = useRef(start);
   useEffect(() => { startRef.current = start; });
   useEffect(() => {
-    if (hasPageTourCompleted(tourKey, userId)) return;
+    if (!autoStart || hasPageTourCompleted(tourKey, userId)) return;
     const timer = setTimeout(() => startRef.current(), 600);
     return () => clearTimeout(timer);
-  }, [tourKey, userId]);
+  }, [tourKey, userId, autoStart]);
   return { start, stop };
 }
