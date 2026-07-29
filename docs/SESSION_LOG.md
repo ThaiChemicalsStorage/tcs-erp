@@ -4,9 +4,18 @@
 
 ---
 
-## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry
+## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI
 
-### What was implemented
+### What was implemented (second task this session: CI)
+- **GitHub Actions CI** (`.github/workflows/ci.yml`) — the owner asked what CI is, got the
+  plain-language explanation (a free automatic gatekeeper for a repo that auto-deploys to
+  production on every push), and said "ทำเลย". Lint + typecheck (both tsconfigs) + build on every
+  push/PR to `master`, Node 24, `npm ci` + cache. Notify-only (doesn't block the Vercel deploy —
+  blocking needs a PR-based workflow, offered but not requested); platform-neutral per the
+  no-Vercel-locked-services rule. Also closed the stale "verify GitHub → Vercel auto-deploy"
+  TODO item (proven in practice since 2026-07-23).
+
+### What was implemented (first task this session)
 - **The recorded "กรอกเลข Scope of Work เอง" spec (TODO.md, 2026-07-24) was built end-to-end.**
   The owner answered the one open build-time question first (via an in-session prompt): the number
   is **completely free-form** — no format guardrails. Changes: creation modal now asks for the

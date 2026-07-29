@@ -14,6 +14,13 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-29] CI pipeline (GitHub Actions).** `.github/workflows/ci.yml` runs
+  `npm run lint` + `tsc --noEmit` (both tsconfigs) + `npm run build` on every push/PR to
+  `master` (Node 24, `npm ci`, npm cache). Notify-only by design — it does not block the Vercel
+  auto-deploy, it makes a broken push loudly visible (red ✗ on the commit) so it can be reverted
+  fast; platform-neutral per the no-Vercel-locked-services rule. Closes the long-standing
+  TODO.md High Priority item; the companion "verify auto-deploy is wired" item was also closed
+  (confirmed in practice since 2026-07-23). See CHANGELOG.md.
 - ✅ **[2026-07-29] Scope of Work: manual-ONLY document number entry.** Executes the spec the owner
   recorded 2026-07-24 ("ระบบไม่ต้องสร้างเลขเองดิ"); the open format question was answered this
   session: completely free-form. The system no longer generates scope numbers — the user types the
@@ -698,7 +705,7 @@ Not yet planned.
 - **No rate limiting on login** (`POST /api/auth/login`): a scripted brute-force attempt against a known username isn't throttled. Should be closed before this app is exposed beyond a trusted internal network. See [RBAC.md](./RBAC.md) Known Gaps and [TODO.md](./TODO.md).
 - **A MongoDB Atlas database-user password was pasted into an AI chat session** during the 2026-07-09 backend migration's development. A credential rotation was recommended to the user as a follow-up; whether it has been done cannot be verified from the codebase — treat as an open, unconfirmed action item until explicitly checked off. See [TODO.md](./TODO.md).
 - **No true session revocation**: sessions are JWTs (httpOnly cookie, 7-day expiry), not database-backed — a still-active account's leaked/stolen token remains valid until natural expiry; only a *deactivated* account is locked out immediately (every request re-checks `status` against MongoDB). Low risk in practice (httpOnly, never exposed to XSS-readable JS) but worth knowing precisely. See [RBAC.md](./RBAC.md) "What Was Achieved vs. the Old Proposed Design."
-- **No automated tests, no CI pipeline**: nothing in this repo (frontend or the new API layer) is covered by tests, and nothing runs `tsc`/`eslint`/`build` automatically on push. A regression could reach `master` — and, since the GitHub repo is connected to Vercel for auto-deploy, potentially production — unnoticed. See [TODO.md](./TODO.md).
+- **No automated tests** (CI now exists — see below): nothing in this repo (frontend or the new API layer) is covered by tests. **2026-07-29 update**: `.github/workflows/ci.yml` now runs `lint`/`tsc` (both configs)/`build` on every push/PR to `master`, so a compile-/lint-broken push shows a red ✗ on the commit immediately — but CI is **notify-only** (it doesn't block the Vercel auto-deploy, which would require a PR-based workflow) and only proves the code builds, not that features behave correctly (that's the still-open automated-tests item). See [TODO.md](./TODO.md).
 - **RBAC permission model is real but hardcoded**: the 35-key `Permission` union is still a TypeScript union, not admin-creatable rows — adding a genuinely new permission still requires a code change and redeploy, even though roles/permission-assignment are fully admin-editable at runtime. Not a security risk, but a scaling limitation worth knowing. See [RBAC.md](./RBAC.md).
 - **Scope of Work (2026-07-15, incl. the same-day Codex-review fix pass) is unverified against a live deployment/browser** — same sandboxed-session no-live-database limitation as every prior pass (see the entry two lines below). `secondaryCode`'s business *meaning* is also still an open, explicitly-flagged question (its presence is now required, per the fix pass, but not its meaning), not a code defect — see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) and [TODO.md](./TODO.md).
 - **Scope ambiguity**: the long-term ERP vision (multi-department, many more modules) is far larger than what exists today. Expectations should be managed against [CLAUDE.md](./CLAUDE.md)'s "Current Development Phase" section.
@@ -724,7 +731,7 @@ Not yet planned.
 - Product Library lacks button-level (create/edit/delete) permission gating — only its sidebar entry (`products:view`) is gated.
 - ~~`salesTeam` (sales leaderboard data) is shared, static sample data~~ — **removed 2026-07-09** along with the fake Dashboard sales leaderboard that used it; `QuoteList.tsx`'s salesperson avatar now uses a deterministic hash-based color, no fake roster.
 - No automated tests exist anywhere in the project.
-- No CI pipeline configured.
+- ~~No CI pipeline configured~~ — **fixed 2026-07-29**: `.github/workflows/ci.yml` (lint + typecheck ×2 + build on every push/PR to `master`, notify-only). See CHANGELOG.md.
 - Bundle: `DashboardPage` chunk **shrank** to ~478KB gzipped ~126KB after the 2026-07-10 UI/UX redesign pass (down from ~502KB/~132KB) — 3 redundant charts were removed as part of decluttering, more than offsetting the new components added, and it's now under Vite's 500KB raw-size warning threshold for the first time. The main `index.js` chunk grew (~263KB → ~303KB) since `driver.js` and the new shared components (`GuidedTour`/`EmptyState`/`PageHeader`/`MetricInfoTooltip`) are used directly in `App.tsx`, not lazy-loaded — worth revisiting with route-level code-splitting if the main chunk keeps growing.
 - Base64-in-document uploads (logo/stamp/profile picture/signature) have a practical 16MB MongoDB document ceiling — the new `uploads`/`attachments` collections (schema-only, 2026-07-09) are forward-looking scaffolding for a real blob-storage migration, not yet wired to anything.
 - ~~`i18n.tsx` only covers strings the 2026-07-09 pass touched~~ — **resolved same day**: essentially all UI chrome now translated. Persisted data/seed content and the printed quotation document remain Thai-only, deliberately.

@@ -1,0 +1,46 @@
+# CI — typecheck + lint + build on every push/PR to master.
+#
+# Why this exists: the GitHub repo auto-deploys to production (Vercel) on every push to
+# master with no checks in between (docs/TODO.md's long-standing CI item). This workflow is
+# the safety net: it runs the exact same three checks docs/CLAUDE.md's standing rule already
+# requires before any task is considered done, so a broken push shows a red ✗ on the commit
+# immediately. It does NOT block the Vercel deploy (that would require a PR-based workflow) —
+# it makes a bad push loudly visible so it can be reverted fast.
+#
+# Deliberately platform-neutral (plain GitHub Actions + npm, nothing Vercel-specific) per the
+# standing no-new-Vercel-locked-services rule in docs/SERVER_MIGRATION_PLAN.md.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck (frontend)
+        run: npx tsc --noEmit
+
+      - name: Typecheck (API)
+        run: npx tsc --noEmit -p tsconfig.api.json
+
+      # Also re-runs both tsc configs internally (see package.json's build script) — kept as
+      # the final gate anyway, since it's the only step that proves vite can actually bundle.
+      - name: Build
+        run: npm run build

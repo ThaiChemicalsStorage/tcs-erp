@@ -4,7 +4,30 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Scope of Work: manual-ONLY document number entry
+## 2026-07-29 (absolute latest) — Set up CI (GitHub Actions: lint + typecheck + build on every push)
+
+Closes the long-standing TODO.md High Priority item (owner asked "ทำ CI คืออะไร", got the
+explanation, said "ทำเลย"). New `.github/workflows/ci.yml`:
+
+- Triggers on every push/PR to `master`; single `checks` job on `ubuntu-latest`, Node 24
+  (matches the local dev environment), `npm ci` with the npm cache enabled.
+- Steps kept separate for clear failure labeling: `npm run lint` → `npx tsc --noEmit` →
+  `npx tsc --noEmit -p tsconfig.api.json` → `npm run build` (the build re-runs both tsc configs
+  internally, kept anyway as the only step proving vite can actually bundle).
+- **Notify-only, deliberately**: a failing check shows a red ✗ on the commit but does NOT block
+  the Vercel auto-deploy — blocking would require moving to a PR-based workflow (a real
+  day-to-day workflow change, offered to the owner but not requested). Platform-neutral (plain
+  GitHub Actions + npm, nothing Vercel-specific) per SERVER_MIGRATION_PLAN.md's standing rule.
+- Also marked TODO.md's "Verify GitHub → Vercel auto-deploy is actually wired" as resolved — it
+  was confirmed in practice by 2026-07-23 (a push observed producing a `READY`/`production`
+  deployment matching the latest commit) and by every shipped feature since.
+- No What's New entry — internal tooling, not a user-facing feature.
+- Docs: TODO.md (2 items done), PROJECT_STATUS.md (Known Risks + Technical Debt), CLAUDE.md
+  (scope-limitations line), IMPLEMENTATION_CHECKLIST.md (CI row).
+
+---
+
+## 2026-07-29 — Scope of Work: manual-ONLY document number entry
 
 Executes the spec recorded in TODO.md on 2026-07-24 (owner: "ระบบไม่ต้องสร้างเลขเองดิ"). The
 build-time open question was answered by the owner this session: **completely free-form** — no
