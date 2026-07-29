@@ -6,6 +6,18 @@
 
 ## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
 
+### What was implemented (fourteenth task this session: recall-focused code review of the document-editor tours + fixes)
+- Reviewed commit 7d11e8b with 8 finder angles + per-candidate verification. Confirmed and fixed:
+  QuoteDocument's tour auto-firing over the blank create form (now `autoStart: isDetail`; the
+  previous docs' "all three pass `autoStart: !!record`" claim was false — corrected forward in
+  CHANGELOG), DeliveryOrder's installments step highlighting the "no installments yet" warning
+  (anchor + autoStart now require `installments.length > 0`), unmount counting as tour-"seen"
+  (shared-hook `unmountingRef` guard), the What's New announcement never badging (entry moved to
+  index 0), the span-wrapping-div anchor, and the 14x-copy-pasted replay button (extracted
+  `TourReplayButton`; 11 older sites tracked in TODO). MODULES docs updated per the standing rule.
+  Refuted (no fix needed): missing `print:hidden` as a print bug (self-collapsing empty box —
+  added anyway as hygiene), and oversized-anchor popovers (driver.js clamps + falls back).
+
 ### What was implemented (thirteenth task this session: document-editor tours — rollout complete)
 - QuoteDocument/ScopeOfWorkDocument/DeliveryOrderDocument each gained a toolbar tour (3/4/2 steps
   — actions incl. workflow buttons, SOW's completion indicator + manual-number/PO rules +

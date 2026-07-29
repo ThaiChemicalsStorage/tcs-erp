@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Send, GitBranch, HelpCircle } from "lucide-react";
+import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Send, GitBranch } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import {
   type DeliveryOrder, type DeliveryOrderUpdateFields, type DeliveryOrderInstallment,
@@ -10,6 +10,7 @@ import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
 import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { DriveStep } from "driver.js";
 import { useI18n } from "../../lib/i18n";
 import { DeliveryOrderPrintDocument } from "./DeliveryOrderPrintDocument";
@@ -144,6 +145,7 @@ export function DeliveryOrderDocument({
   backLabel?: string;
   showToast: (msg: string) => void;
 }) {
+  const { t } = useI18n();
   const [deliveryOrder, setDeliveryOrder] = useState<DeliveryOrder | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -172,14 +174,20 @@ export function DeliveryOrderDocument({
     return () => { cancelled = true; };
   }, [deliveryOrderId, reloadKey]);
 
-  // Document tour (added 2026-07-29) — `autoStart: !!deliveryOrder` defers the one-time auto-fire
-  // until the record has loaded; the toolbar replay button restarts it any time.
-  const { t } = useI18n();
+  // Document tour (added 2026-07-29) — the auto-fire waits until the record has loaded AND at
+  // least one installment card is actually on screen: a DO created from an SOW with an empty (or
+  // deposit-only) payment schedule has `installments: []`, and firing there would burn the
+  // one-time attempt narrating per-installment cards over the "no installments yet" warning.
+  // (The `data-tour` anchor is likewise only present on the non-empty branch, so a manual replay
+  // in the empty state skips that step instead of highlighting the warning.) The toolbar replay
+  // button restarts the tour any time.
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="dodoc-actions"]', popover: { title: t("tour.dodoc.actions.title"), description: t("tour.dodoc.actions.desc"), side: "bottom" } },
     { element: '[data-tour="dodoc-installments"]', popover: { title: t("tour.dodoc.installments.title"), description: t("tour.dodoc.installments.desc"), side: "top" } },
   ];
-  const docTour = useModuleTour("deliveryOrderDoc", currentUserId, docTourSteps, { autoStart: !!deliveryOrder });
+  const docTour = useModuleTour("deliveryOrderDoc", currentUserId, docTourSteps, {
+    autoStart: !!deliveryOrder && deliveryOrder.installments.length > 0,
+  });
 
   if (loadError) {
     return (
@@ -307,14 +315,7 @@ export function DeliveryOrderDocument({
         </span>
 
         <div data-tour="dodoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <button
-            onClick={docTour.start}
-            title={t("tour.replay")}
-            aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
-          >
-            <HelpCircle size={14} />
-          </button>
+          <TourReplayButton onClick={docTour.start} />
           {editable && (
             <button onClick={() => setConfirmAction("refresh")} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <RotateCw size={13} /> อัปเดตข้อมูลจาก Scope of Work
@@ -380,7 +381,7 @@ export function DeliveryOrderDocument({
           </div>
         </div>
 
-        <div data-tour="dodoc-installments" className="space-y-5">
+        <div data-tour={deliveryOrder.installments.length > 0 ? "dodoc-installments" : undefined} className="space-y-5 print:hidden">
           {deliveryOrder.installments.length === 0 ? (
             <div className="bg-[#e08a3c]/10 border border-[#e08a3c]/30 rounded-xl p-4 flex items-start gap-3 print:hidden">
               <AlertTriangle size={16} className="text-[#e08a3c] flex-shrink-0 mt-0.5" />

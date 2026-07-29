@@ -4,7 +4,54 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Document-editor tours: Quotation, Scope of Work, Delivery Order (tour rollout complete)
+## 2026-07-29 (absolute latest) — Code-review fix pass on the document-editor tours
+
+A recall-focused review of the previous commit (the three document-editor tours) surfaced and
+fixed the following — all verified against the running code before changing anything:
+
+- **QuoteDocument's tour auto-fired over the blank CREATE form** (`useModuleTour("quotationDoc", …)`
+  passed no `autoStart`, so it defaulted to `true`): a first-time user's most likely first entry
+  into the editor is "สร้างใบเสนอราคาใหม่", where the actions step's copy enumerates
+  duplicate/rewrite/create-SOW and the approval-workflow buttons — all `isDetail`-gated and
+  provably absent there — and dismissing burned the one-time flag forever. Now passes
+  `{ autoStart: isDetail }`; the replay button still works in both modes. This also corrects the
+  previous entry's claim that "all three pass `autoStart: !!record`" — QuoteDocument never did
+  (its record arrives via props, so the load-race guard didn't apply; the mode race did).
+- **DeliveryOrderDocument step 2 pointed at the "no installments yet" warning**: the new
+  `data-tour="dodoc-installments"` wrapper spanned BOTH ternary branches, defeating
+  `useDriverTour`'s missing-anchor filter — a DO created from an SOW with an empty/deposit-only
+  payment schedule (`installments: []` is a normal server-side outcome of
+  `deriveInstallmentsFromScope()`) auto-fired a tour narrating per-installment cards over an
+  orange warning saying there are none, then marked itself seen. The anchor now exists only when
+  `installments.length > 0` and `autoStart` additionally requires it, so the one-time attempt
+  waits for the UI the step actually describes.
+- **Unmount no longer counts as "seen"** (`GuidedTour.tsx`): driver.js fires `onDestroyed` for
+  programmatic `destroy()` too, so the unmount cleanup (parent `key=` remounts on
+  duplicate/rewrite/create→save, nav changes) was marking a tour completed the user never
+  dismissed. The cleanup now sets an `unmountingRef` flag that suppresses the `onFinish`
+  callback; real dismissals (Done/×/Escape/overlay click) still mark seen, unchanged.
+- **The What's New announcement was silent**: the document-tours bullet was added to the
+  `2026-07-29-module-tours` entry at index 2, but `hasUnseenWhatsNew()` compares only
+  `WHATS_NEW_ENTRIES[0].id` — users who had already opened the panel would never get the gold
+  dot. The updated entry now leads the list (a comment in `whatsNew.ts` records the rule).
+- **`TourReplayButton` extracted** into `GuidedTour.tsx`: the HelpCircle replay button had been
+  copy-pasted 14 times across `src/` and had already drifted into two size variants
+  (`w-9/size 15` on 10 list pages vs `w-8/size 14` on Dashboard + the three documents). The
+  three new document editors now use the shared component; migrating the 11 older call sites is
+  left as mechanical follow-up (tracked in TODO.md).
+- Hygiene: the `sowdoc-completion` anchor is a `div` (was a `span` wrapping a `div` — invalid
+  HTML nesting); the two new tour wrapper divs are `print:hidden` like every screen-only sibling;
+  the mid-body `useI18n()` calls in ScopeOfWorkDocument/DeliveryOrderDocument moved to the top of
+  the component with the other hooks (they sat directly above early returns — a rules-of-hooks
+  hazard for the next edit); `useModuleTour`'s doc comment no longer claims tours may only mount
+  in LIST views (three editors now do) and documents both `autoStart` uses (policy vs readiness).
+- Docs: MODULES/Quotation.md, ScopeOfWork.md and DeliveryOrder.md now document their document
+  tours (keys, anchors, the `currentUserId` prop); docs/CLAUDE.md's GuidedTour.tsx line updated.
+- `tsc` (both configs)/`lint`/`npm test`/`build` re-run clean after the fixes.
+
+---
+
+## 2026-07-29 — Document-editor tours: Quotation, Scope of Work, Delivery Order (tour rollout complete)
 
 Owner: "เหลือ Tour อะไรอีกทำให้ครบในทีเดียวเลย" — the last uncovered surface was the document
 editors themselves (arguably where guidance matters most). Three new tours, same `useModuleTour()`

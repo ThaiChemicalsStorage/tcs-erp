@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing, HelpCircle } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing } from "lucide-react";
 import type { User } from "../../lib/users";
 import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
@@ -17,6 +17,7 @@ import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
 import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { DriveStep } from "driver.js";
 import { useI18n } from "../../lib/i18n";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
@@ -265,6 +266,7 @@ export function ScopeOfWorkDocument({
   onRewritten: (newId: string) => void;
   showToast: (msg: string) => void;
 }) {
+  const { t } = useI18n();
   const [scope, setScope] = useState<ScopeOfWork | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -316,7 +318,6 @@ export function ScopeOfWorkDocument({
   // Document tour (added 2026-07-29) — `autoStart: !!scope` defers the one-time auto-fire until
   // the record has actually loaded (the anchors don't exist over the loading spinner); the replay
   // button in the toolbar restarts it any time.
-  const { t } = useI18n();
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="sowdoc-actions"]', popover: { title: t("tour.sowdoc.actions.title"), description: t("tour.sowdoc.actions.desc"), side: "bottom" } },
     { element: '[data-tour="sowdoc-completion"]', popover: { title: t("tour.sowdoc.completion.title"), description: t("tour.sowdoc.completion.desc"), side: "bottom" } },
@@ -654,17 +655,13 @@ export function ScopeOfWorkDocument({
         </span>
 
         <div data-tour="sowdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <button
-            onClick={docTour.start}
-            title={t("tour.replay")}
-            aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
-          >
-            <HelpCircle size={14} />
-          </button>
-          <span data-tour="sowdoc-completion">
+          <TourReplayButton onClick={docTour.start} />
+          {/* div, not span: DocumentCompletionIndicator renders a <div> root and a span may not
+              contain flow content (invalid HTML that only survives because React bypasses the
+              parser). */}
+          <div data-tour="sowdoc-completion">
             <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={finalizeValidation.missingCount} />
-          </span>
+          </div>
           {canPrint && (
             <button
               onClick={handlePrint}

@@ -267,3 +267,18 @@ lifetime — harmless, nothing reads it. See CHANGELOG.md 2026-07-24.
   actual printed page layout has not been visually confirmed against a real browser print preview —
   same standing sandboxed-session limitation as every other pass this session (Playwright MCP
   disconnected, no live MongoDB credentials). See [TODO.md](../TODO.md).
+
+## Guided Tour (2026-07-29)
+
+`DeliveryOrderDocument.tsx` has a 2-step driver.js tour (tourKey `deliveryOrderDoc` via
+`useModuleTour()`), separate from the DeliveryOrderList page tour. Steps/anchors:
+`[data-tour="dodoc-actions"]` (toolbar) and `[data-tour="dodoc-installments"]` (the
+per-installment cards wrapper — the anchor is only present when `installments.length > 0`, and
+auto-fire is gated `{ autoStart: !!deliveryOrder && installments.length > 0 }`: a DO created
+from an SOW with an empty or deposit-only payment schedule legitimately has `installments: []`
+(`deriveInstallmentsFromScope()` filters deposit labels), and the step must never narrate
+per-installment cards over the "no installments yet" warning nor burn the one-time attempt
+there). The shared `TourReplayButton` replays the tour any time. This introduced the component's
+`currentUserId: string` prop (threaded from DeliveryOrderPage) and its first `useI18n()` usage
+(tour strings only). Keep `data-tour` anchors in sync with the steps array — missing anchors are
+silently filtered out at start.

@@ -80,7 +80,7 @@ ERP/
 │   │   ├── EmptyState.tsx         # shared {icon,title,description,actionLabel?,onAction?,compact?} empty state — added 2026-07-10
 │   │   ├── PageHeader.tsx         # shared {title,description?,actions?,path?} page header — added 2026-07-10, Dashboard only so far
 │   │   ├── MetricInfoTooltip.tsx  # click-to-toggle info popover for KPI cards — added 2026-07-10
-│   │   └── GuidedTour.tsx         # driver.js tours: useGuidedTour() (first-sign-in walkthrough, 2026-07-10) + useModuleTour() (per-page tours w/ per-user seen-tracking — Quotation/Products lists, 2026-07-29)
+│   │   └── GuidedTour.tsx         # driver.js tours: useGuidedTour() (first-sign-in walkthrough, 2026-07-10) + useModuleTour() (per-page/per-document tours w/ per-user seen-tracking — all 11 list/admin pages, Dashboard, and the QuoteDocument/ScopeOfWorkDocument/DeliveryOrderDocument editors, 2026-07-29) + the shared TourReplayButton (extracted 2026-07-29 — new tour call sites must use it, not hand-rolled HelpCircle markup)
 │   ├── hooks/useToast.ts
 │   ├── lib/                       # types + pure helpers + REST API calls (apiFetch), per domain
 │   │   ├── apiClient.ts           # apiFetch<T>() — the one place every domain lib talks to the backend

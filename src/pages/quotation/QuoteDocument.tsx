@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronRight, Printer, Copy, Save, Send, CheckCircle2, Building2, Hash, CalendarDays,
-  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList, GitBranch, Wand2, HelpCircle,
+  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList, GitBranch, Wand2,
 } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
 import type { JobType } from "../../lib/jobTypes";
@@ -285,13 +286,17 @@ export function QuoteDocument({
   };
 
   // Document tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button
-  // convention as the list pages' tours; anchors exist in both new and detail modes.
+  // convention as the list pages' tours. Anchors exist in both new and detail modes, but the
+  // one-time auto-fire is gated to DETAIL mode (`autoStart: isDetail`): the actions step
+  // enumerates duplicate/rewrite/create-SOW and the approval-workflow buttons, all of which are
+  // `isDetail`-gated — auto-firing over the blank create form would burn the single attempt on a
+  // toolbar that doesn't show them yet. The replay button still works in both modes.
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="qdoc-actions"]', popover: { title: t("tour.qdoc.actions.title"), description: t("tour.qdoc.actions.desc"), side: "bottom" } },
     { element: '[data-tour="qdoc-customer"]', popover: { title: t("tour.qdoc.customer.title"), description: t("tour.qdoc.customer.desc"), side: "right" } },
     { element: '[data-tour="qdoc-items"]', popover: { title: t("tour.qdoc.items.title"), description: t("tour.qdoc.items.desc"), side: "top" } },
   ];
-  const docTour = useModuleTour("quotationDoc", currentUser.id, docTourSteps);
+  const docTour = useModuleTour("quotationDoc", currentUser.id, docTourSteps, { autoStart: isDetail });
 
   const { total } = computeTotals(lines, discount);
   const jobTypeDisplay = jobTypeCode ? `${jobTypeCode} — ${jobTypeName}` : "";
@@ -484,14 +489,7 @@ export function QuoteDocument({
         )}
 
         <div data-tour="qdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <button
-            onClick={docTour.start}
-            title={t("tour.replay")}
-            aria-label={t("tour.replay")}
-            className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
-          >
-            <HelpCircle size={14} />
-          </button>
+          <TourReplayButton onClick={docTour.start} />
           <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={validation.missingCount} />
           {permissions.canExport && (
             <button
@@ -754,7 +752,7 @@ export function QuoteDocument({
 
         </div>
 
-        <div data-tour="qdoc-items">
+        <div data-tour="qdoc-items" className="print:hidden">
           <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} />
         </div>
 

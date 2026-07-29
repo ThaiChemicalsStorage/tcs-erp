@@ -839,3 +839,18 @@ gain a *value* import that transitively pulls in JSX/React.
    in the database, but there is no admin-facing restore endpoint/screen yet (2026-07-15, Codex
    review Low Priority finding — the delete confirmation's wording was corrected to stop implying
    one exists). Add a real restore action if this is ever needed in practice.
+
+## Guided Tour (2026-07-29)
+
+`ScopeOfWorkDocument.tsx` has a 4-step driver.js tour (tourKey `scopeOfWorkDoc` via
+`useModuleTour()`), separate from the ScopeOfWorkList page tour. Steps/anchors:
+`[data-tour="sowdoc-actions"]` (toolbar), `[data-tour="sowdoc-completion"]` (a `div` wrapping
+`DocumentCompletionIndicator`), `[data-tour="sowdoc-header"]` (header card — narrates the
+manual-number-Draft-only and PO-editable-after-Final rules), `[data-tour="sowdoc-checklist"]`
+(checklist card incl. the recipients/email flow). Auto-fire is gated `{ autoStart: !!scope }` so
+the one-time attempt waits for the fetch (the anchors don't exist over the loading spinner);
+the shared `TourReplayButton` replays it any time. This introduced the component's
+`currentUserId: string` prop (threaded from QuotationPage and ScopeOfWorkPage) for the per-user
+"seen" tracking, and its first `useI18n()` usage (tour strings only; the rest of the component
+remains hardcoded Thai by prior convention). Keep `data-tour` anchors in sync with the steps
+array — missing anchors are silently filtered out at start.

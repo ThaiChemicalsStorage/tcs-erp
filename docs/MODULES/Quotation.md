@@ -229,3 +229,17 @@ Client-side RBAC (see [RBAC.md](../RBAC.md)) via `computeQuotePermissions(quote,
 - **[Fixed 2026-07-08]** The status badge/toolbar froze at whatever value it had when the document was first opened, because it lived in local `useState` that didn't re-derive when a workflow transition changed `quote.status` without remounting the component. Fixed by deriving `quoteStatus` from the `quote` prop directly. See [CHANGELOG.md](../CHANGELOG.md).
 - **[Fixed 2026-07-08]** Quotes previously reset to seed data on every reload (in-memory only) — now persisted to `localStorage`.
 - **[Fixed 2026-07-09]** The "หมายเหตุ / เงื่อนไข" (remarks) textarea was `defaultValue`-only (uncontrolled) — any edit was silently lost on save and reset to the company default on every reopen. Fixed by adding a real `Quote.remarks` field, wired through `save()` like every other document field.
+
+## Guided Tour (2026-07-29)
+
+The quotation **editor** (`QuoteDocument.tsx`) has its own 3-step driver.js tour (tourKey
+`quotationDoc` via `useModuleTour()`, per-user "seen" tracking in `src/lib/tour.ts`), separate
+from the QuoteList page tour. Steps/anchors: `[data-tour="qdoc-actions"]` (the action toolbar),
+`[data-tour="qdoc-customer"]` (the customer selector), `[data-tour="qdoc-items"]` (the
+`LineItemsEditor` wrapper, `print:hidden`). The one-time auto-fire is gated
+`{ autoStart: isDetail }` — the quote arrives via props (no fetch race), but in **create** mode
+the actions step would describe `isDetail`-gated buttons (duplicate/rewrite/create-SOW/workflow)
+that aren't rendered, so the tour only auto-offers on a saved quotation; the shared
+`TourReplayButton` in the toolbar replays it any time, in both modes. Renaming/moving any
+`data-tour` anchor breaks the corresponding step silently (missing anchors are filtered out at
+start) — keep them in sync with the steps array in `QuoteDocument.tsx`.
