@@ -4,7 +4,36 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Guided tour steps for the Scope of Work and Delivery Order pages
+## 2026-07-29 (absolute latest) — Guided tours for every remaining page (Customers, Templates, Users, Roles, Audit Log, Settings)
+
+Owner: "เหลือ tour ของอะไรอีกทำให้หมด" — finishes the module-tour rollout; every page in the app
+now has a walkthrough (the only gap left is Leads, which has no page to point at). Same
+`useModuleTour()` infra + HelpCircle replay button per page:
+
+- **CustomersPage** (tourKey `customers`, 3 steps): add-customer (auto-fills quotations) →
+  search/status/archived toolbar → table row actions. Header's right side wrapped so the replay
+  button shows even for roles without `customers:create`.
+- **TemplateManagementPage** (`templates`, 4 steps): Excel import (change-detected, safe to
+  re-run) → create template → toolbar → template card list. If the page mounts straight into the
+  editor (wizard deep-link), no target exists → start() no-ops and nothing is marked seen.
+- **UserManagementPage** (`users`, 3 steps): create user (mentions no-self-signup) → search →
+  table (edit/reset password/deactivate = immediate lockout).
+- **RoleManagementPage** (`roles`, 2 steps): create role (tick-per-permission editor) → role
+  cards (system roles editable, not deletable).
+- **AuditLogPage** (`auditLog`, 2 steps): search → table (auto-recorded, read-only, immutable).
+  The page previously took zero props — gained `currentUserId`.
+- **SettingsPage** (`settings`, 2 steps): the tab bar → the profile card, spotlighting the
+  signature upload (used automatically on printed documents) — the least discoverable
+  high-value setting in the app. Header rebuilt as a flex row for the replay button.
+- `currentUserId` threaded from App to CustomersPage/TemplateManagementPage/RoleManagementPage/
+  AuditLogPage (UserManagementPage/SettingsPage already had `currentUser`). 32 new i18n keys
+  (th/en). What's New module-tours entry updated to "ครบทุกหน้า".
+- `tsc` (both configs)/`lint`/`npm test` (56/56)/`build` all pass clean; same live click-through
+  caveat as the earlier tour passes.
+
+---
+
+## 2026-07-29 — Guided tour steps for the Scope of Work and Delivery Order pages
 
 Extends the same-day Quotation/Products module-tour pass to the two remaining document list pages,
 on the owner's direct go-ahead — same `useModuleTour()` infra (auto-start once per user, per-tour

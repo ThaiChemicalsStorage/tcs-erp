@@ -1,11 +1,27 @@
 import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, HelpCircle } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import type { AuditLogEntry } from "../../lib/auditLog";
 import { fetchAuditLog } from "../../lib/auditLog";
+import { useModuleTour } from "../../components/GuidedTour";
 import { useI18n } from "../../lib/i18n";
 
-export function AuditLogPage() {
+export function AuditLogPage({
+  currentUserId,
+}: {
+  /** For the one-time guided tour "seen" tracking (see useModuleTour). */
+  currentUserId: string;
+}) {
   const { t } = useI18n();
+
+  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
+  // as the other list pages' tours.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="audit-search"]', popover: { title: t("tour.audit.search.title"), description: t("tour.audit.search.desc"), side: "bottom" } },
+    { element: '[data-tour="audit-table"]', popover: { title: t("tour.audit.table.title"), description: t("tour.audit.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("auditLog", currentUserId, tourSteps);
+
   const [search, setSearch] = useState("");
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,13 +43,23 @@ export function AuditLogPage() {
           <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("nav.auditLog")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("auditLog.totalCount").replace("{n}", String(entries.length))}</p>
         </div>
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full sm:w-72">
-          <Search size={14} className="text-muted-foreground flex-shrink-0" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("auditLog.searchPlaceholder")} className="bg-transparent text-sm outline-none w-full text-foreground placeholder-muted-foreground" />
+        <div className="flex items-center gap-2 flex-wrap">
+          <div data-tour="audit-search" className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full sm:w-72">
+            <Search size={14} className="text-muted-foreground flex-shrink-0" />
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("auditLog.searchPlaceholder")} className="bg-transparent text-sm outline-none w-full text-foreground placeholder-muted-foreground" />
+          </div>
+          <button
+            onClick={tour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={15} />
+          </button>
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="audit-table" className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>

@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Lock, ShieldCheck } from "lucide-react";
+import { Plus, Pencil, Trash2, Lock, ShieldCheck, HelpCircle } from "lucide-react";
+import type { DriveStep } from "driver.js";
+import { useModuleTour } from "../../components/GuidedTour";
 import type { Role } from "../../lib/roles";
 import { isPermissionLockedToSuperAdmin, createRole, updateRole, deleteRole } from "../../lib/roles";
 import { PERMISSION_GROUPS, PERMISSION_LABEL_KEY, type Permission } from "../../lib/permissions";
@@ -26,14 +28,26 @@ export function RoleManagementPage({
   roles,
   onRolesChange,
   users,
+  currentUserId,
   onAudit,
 }: {
   roles: Role[];
   onRolesChange: (roles: Role[]) => void;
   users: User[];
+  /** For the list view's one-time guided tour "seen" tracking (see useModuleTour). */
+  currentUserId: string;
   onAudit: (action: string, details: string) => void;
 }) {
   const { t } = useI18n();
+
+  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
+  // as the other list pages' tours.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="roles-create"]', popover: { title: t("tour.roles.create.title"), description: t("tour.roles.create.desc"), side: "bottom" } },
+    { element: '[data-tour="roles-list"]', popover: { title: t("tour.roles.list.title"), description: t("tour.roles.list.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("roles", currentUserId, tourSteps);
+
   const [view, setView] = useState<View>("list");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [form, setForm] = useState<RoleFormState>(emptyForm());
@@ -186,12 +200,22 @@ export function RoleManagementPage({
     <div className="flex-1 overflow-y-auto p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <p className="text-xs text-muted-foreground">{t("roles.pageHint")}</p>
-        <button onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
-          <Plus size={15} /> {t("roles.createNew")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={tour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={15} />
+          </button>
+          <button data-tour="roles-create" onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <Plus size={15} /> {t("roles.createNew")}
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div data-tour="roles-list" className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {roles.map((r) => (
           <div key={r.key} className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-start justify-between mb-2">

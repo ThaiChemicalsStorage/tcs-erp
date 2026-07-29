@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   User as UserIcon, Building2, ShieldCheck, Bell, CheckCircle2, Hash, Mail, Phone, MapPin, type LucideIcon,
-  Image as ImageIcon, Stamp, PenTool, Landmark, FileText,
+  Image as ImageIcon, Stamp, PenTool, Landmark, FileText, HelpCircle,
 } from "lucide-react";
+import type { DriveStep } from "driver.js";
+import { useModuleTour } from "../components/GuidedTour";
 import type { Company } from "../lib/storage";
 import { saveCompany as saveCompanyApi } from "../lib/storage";
 import type { User } from "../lib/users";
@@ -99,6 +101,16 @@ export function SettingsPage({
   onAudit: (action: string, details: string) => void;
 }) {
   const { t } = useI18n();
+
+  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
+  // as the other pages' tours. The profile step targets the default tab's card, so both steps are
+  // present on a fresh visit.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="settings-tabs"]', popover: { title: t("tour.settings.tabs.title"), description: t("tour.settings.tabs.desc"), side: "bottom" } },
+    { element: '[data-tour="settings-profile"]', popover: { title: t("tour.settings.profile.title"), description: t("tour.settings.profile.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("settings", currentUser.id, tourSteps);
+
   const tabs: { key: Tab; label: string; icon: LucideIcon }[] = [
     { key: "profile", label: t("settings.tab.profile"), icon: UserIcon },
     ...(canManageCompany ? [{ key: "company" as const, label: t("settings.tab.company"), icon: Building2 }] : []),
@@ -193,12 +205,22 @@ export function SettingsPage({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("settings.pageTitle")}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("settings.pageSubtitle")}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("settings.pageTitle")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("settings.pageSubtitle")}</p>
+        </div>
+        <button
+          onClick={tour.start}
+          title={t("tour.replay")}
+          aria-label={t("tour.replay")}
+          className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+        >
+          <HelpCircle size={15} />
+        </button>
       </div>
 
-      <div className="flex items-center gap-1 bg-muted rounded-xl p-1 w-fit overflow-x-auto">
+      <div data-tour="settings-tabs" className="flex items-center gap-1 bg-muted rounded-xl p-1 w-fit overflow-x-auto">
         {tabs.map((tabDef) => (
           <button
             key={tabDef.key}
@@ -214,7 +236,7 @@ export function SettingsPage({
 
       {/* Profile */}
       {tab === "profile" && (
-        <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
+        <div data-tour="settings-profile" className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#c9a84c] to-[#a07830] flex items-center justify-center text-white text-lg font-bold flex-shrink-0 overflow-hidden">
               {profileDraft.profilePictureDataUrl ? (

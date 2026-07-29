@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search, Pencil, Power, Archive, ArchiveRestore, Contact, X } from "lucide-react";
+import { Plus, Search, Pencil, Power, Archive, ArchiveRestore, Contact, X, HelpCircle } from "lucide-react";
+import type { DriveStep } from "driver.js";
+import { useModuleTour } from "../../components/GuidedTour";
 import {
   type Customer, type CustomerDraft, emptyCustomerDraft,
   createCustomer, updateCustomer, setCustomerArchived,
@@ -26,6 +28,7 @@ function fmtDate(iso: string) {
 export function CustomersPage({
   customers,
   onCustomersChange,
+  currentUserId,
   canCreate,
   canEdit,
   canArchive,
@@ -36,6 +39,8 @@ export function CustomersPage({
 }: {
   customers: Customer[];
   onCustomersChange: (customers: Customer[]) => void;
+  /** For the one-time guided tour "seen" tracking (see useModuleTour). */
+  currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
   canArchive: boolean;
@@ -48,6 +53,16 @@ export function CustomersPage({
 }) {
   const { t } = useI18n();
   const { message, show } = useToast();
+
+  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
+  // as the other list pages' tours.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="customers-create"]', popover: { title: t("tour.customers.create.title"), description: t("tour.customers.create.desc"), side: "bottom" } },
+    { element: '[data-tour="customers-toolbar"]', popover: { title: t("tour.customers.toolbar.title"), description: t("tour.customers.toolbar.desc"), side: "bottom" } },
+    { element: '[data-tour="customers-table"]', popover: { title: t("tour.customers.table.title"), description: t("tour.customers.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("customers", currentUserId, tourSteps);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showArchived, setShowArchived] = useState(false);
@@ -148,15 +163,25 @@ export function CustomersPage({
           <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("customers.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">{t("customers.pageSubtitle")}</p>
         </div>
-        {canCreate && (
-          <button onClick={() => setFormTarget("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
-            <Plus size={15} /> {t("customers.addNew")}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={tour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={15} />
           </button>
-        )}
+          {canCreate && (
+            <button data-tour="customers-create" onClick={() => setFormTarget("new")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+              <Plus size={15} /> {t("customers.addNew")}
+            </button>
+          )}
+        </div>
       </div>
 
       {customers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div data-tour="customers-toolbar" className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 focus-within:border-[#c9a84c]/40 transition-colors">
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
             <input
@@ -177,7 +202,7 @@ export function CustomersPage({
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="customers-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {customers.length === 0 ? (
           <EmptyState icon={Contact} title={t("empty.customers.title")} description={t("empty.customers.sub")} actionLabel={canCreate ? t("empty.customers.action") : undefined} onAction={canCreate ? () => setFormTarget("new") : undefined} compact />
         ) : filtered.length === 0 ? (

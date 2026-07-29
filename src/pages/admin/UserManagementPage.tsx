@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Plus, Pencil, KeyRound, UserCheck, UserX, Trash2, Search, ShieldCheck } from "lucide-react";
+import { Plus, Pencil, KeyRound, UserCheck, UserX, Trash2, Search, ShieldCheck, HelpCircle } from "lucide-react";
+import type { DriveStep } from "driver.js";
+import { useModuleTour } from "../../components/GuidedTour";
 import type { User, UserStatus } from "../../lib/users";
 import { createUser, updateUser, deleteUser, isEmployeeIdTaken, isUsernameTaken, isEmailTaken, initials, POSITION_SUGGESTIONS } from "../../lib/users";
 import { DOCUMENT_RECIPIENT_DEPARTMENTS } from "../../lib/documentRequirements";
@@ -54,6 +56,17 @@ export function UserManagementPage({
   onEditIdConsumed?: () => void;
 }) {
   const { t } = useI18n();
+
+  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
+  // as the other list pages' tours; harmless if the page mounts straight into the edit form (a
+  // Global Search deep link): no target exists, start() no-ops, nothing is marked seen.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="users-create"]', popover: { title: t("tour.users.create.title"), description: t("tour.users.create.desc"), side: "bottom" } },
+    { element: '[data-tour="users-search"]', popover: { title: t("tour.users.search.title"), description: t("tour.users.search.desc"), side: "bottom" } },
+    { element: '[data-tour="users-table"]', popover: { title: t("tour.users.table.title"), description: t("tour.users.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("users", currentUser.id, tourSteps);
+
   const [view, setView] = useState<View>("list");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -284,16 +297,26 @@ export function UserManagementPage({
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full sm:w-72">
+        <div data-tour="users-search" className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full sm:w-72">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("users.searchPlaceholder")} className="bg-transparent text-sm outline-none w-full text-foreground placeholder-muted-foreground" />
         </div>
-        <button onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
-          <Plus size={15} /> {t("users.addNew")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={tour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={15} />
+          </button>
+          <button data-tour="users-create" onClick={startCreate} className="flex items-center gap-1.5 px-3.5 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <Plus size={15} /> {t("users.addNew")}
+          </button>
+        </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="users-table" className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>

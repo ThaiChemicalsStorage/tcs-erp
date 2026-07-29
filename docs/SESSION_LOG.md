@@ -6,6 +6,12 @@
 
 ## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
 
+### What was implemented (eleventh task this session: tours for every remaining page)
+- Customers/Templates/Users/Roles/AuditLog/Settings all gained `useModuleTour()` walkthroughs
+  (2-4 steps each; Settings spotlights the signature upload that feeds printed documents) +
+  HelpCircle replay buttons; `currentUserId` threaded to the four pages that lacked a user prop.
+  Every page in the app is now covered — the only remaining tour gap is Leads (no page exists).
+
 ### What was implemented (tenth task this session: SOW/DO tour steps)
 - Extended `useModuleTour()` to the Scope of Work list (4 steps — summary w/ no-PO count, filters,
   the no-PO toggle as its own step, table) and Delivery Order list (3 steps — summary, filters,

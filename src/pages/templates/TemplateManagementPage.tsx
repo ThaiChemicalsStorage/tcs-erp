@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Plus, Search, Pencil, Power, Archive, ArchiveRestore, Copy, Eye, FileStack, X, Loader2, Upload, FileText,
+  Plus, Search, Pencil, Power, Archive, ArchiveRestore, Copy, Eye, FileStack, X, Loader2, Upload, FileText, HelpCircle,
 } from "lucide-react";
+import type { DriveStep } from "driver.js";
+import { useModuleTour } from "../../components/GuidedTour";
 import {
   type QuotationTemplateSummary, type QuotationTemplate,
   fetchQuotationTemplates, fetchQuotationTemplate, setQuotationTemplateActive, setQuotationTemplateArchived,
@@ -37,6 +39,7 @@ export function TemplateManagementPage({
   jobTypes,
   products,
   categories,
+  currentUserId,
   canCreate,
   canEdit,
   canDuplicate,
@@ -50,6 +53,8 @@ export function TemplateManagementPage({
   jobTypes: JobType[];
   products: Product[];
   categories: ProductCategory[];
+  /** For the list view's one-time guided tour "seen" tracking (see useModuleTour). */
+  currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
   canDuplicate: boolean;
@@ -63,6 +68,18 @@ export function TemplateManagementPage({
   onCreateQuotationFromTemplate?: (jobTypeCode: string, templateId: string) => void;
 }) {
   const { t } = useI18n();
+
+  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
+  // as the other list pages' tours. If the page mounts straight into the editor view (wizard
+  // deep-link), no tour target exists, start() no-ops, and nothing is marked seen — it simply
+  // offers itself again on the next list-view mount.
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="templates-import"]', popover: { title: t("tour.templates.import.title"), description: t("tour.templates.import.desc"), side: "bottom" } },
+    { element: '[data-tour="templates-create"]', popover: { title: t("tour.templates.create.title"), description: t("tour.templates.create.desc"), side: "bottom" } },
+    { element: '[data-tour="templates-toolbar"]', popover: { title: t("tour.templates.toolbar.title"), description: t("tour.templates.toolbar.desc"), side: "bottom" } },
+    { element: '[data-tour="templates-list"]', popover: { title: t("tour.templates.list.title"), description: t("tour.templates.list.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("templates", currentUserId, tourSteps);
   const { message, show } = useToast();
   const [templates, setTemplates] = useState<QuotationTemplateSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -211,13 +228,21 @@ export function TemplateManagementPage({
           <p className="text-sm text-muted-foreground mt-0.5">{t("templates.pageSubtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={tour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={15} />
+          </button>
           {canImport && (
-            <button onClick={handleImport} disabled={importing} title={t("templates.importFromExcelHint")} className="flex items-center gap-2 px-3.5 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button data-tour="templates-import" onClick={handleImport} disabled={importing} title={t("templates.importFromExcelHint")} className="flex items-center gap-2 px-3.5 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {importing ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} {t("templates.importFromExcel")}
             </button>
           )}
           {canCreate && (
-            <button onClick={() => setView("create")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button data-tour="templates-create" onClick={() => setView("create")} className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
               <Plus size={15} /> {t("templates.addNew")}
             </button>
           )}
@@ -225,7 +250,7 @@ export function TemplateManagementPage({
       </div>
 
       {templates.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div data-tour="templates-toolbar" className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-64 focus-within:border-[#c9a84c]/40 transition-colors">
             <Search size={14} className="text-muted-foreground flex-shrink-0" />
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("templates.searchPlaceholder")} className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full" />
@@ -251,7 +276,7 @@ export function TemplateManagementPage({
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="templates-list" className="bg-card border border-border rounded-xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16 gap-2 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" /> {t("common.loading")}

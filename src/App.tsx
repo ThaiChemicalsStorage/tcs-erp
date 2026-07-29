@@ -828,7 +828,7 @@ export default function App() {
             {effectiveNav === "dashboard"
               ? <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
               : effectiveNav === "auditLog"
-              ? <AuditLogPage />
+              ? <AuditLogPage currentUserId={currentUser.id} />
               : effectiveNav === "scopeOfWork"
               ? <ScopeOfWorkPage users={users} currentUserId={currentUser.id} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canChasePo={canChasePoScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
               : effectiveNav === "deliveryOrder"
@@ -838,9 +838,9 @@ export default function App() {
               : effectiveNav === "quotations"
               ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} initialScopeOfWorkDeepLink={scopeOfWorkDeepLink} onScopeOfWorkDeepLinkConsumed={() => setScopeOfWorkDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} />
               : effectiveNav === "quotationTemplates"
-              ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
+              ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} currentUserId={currentUser.id} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "customers"
-              ? <CustomersPage customers={customers} onCustomersChange={setCustomers} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} initialEditId={customerDeepLinkId} onEditIdConsumed={() => setCustomerDeepLinkId(null)} autoCreateSeq={pageAction?.nav === "customers" && pageAction.action === "create" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
+              ? <CustomersPage customers={customers} onCustomersChange={setCustomers} currentUserId={currentUser.id} canCreate={canCreateCustomers} canEdit={canEditCustomers} canArchive={canArchiveCustomers} initialEditId={customerDeepLinkId} onEditIdConsumed={() => setCustomerDeepLinkId(null)} autoCreateSeq={pageAction?.nav === "customers" && pageAction.action === "create" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "settings"
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
               : effectiveNav === "products"
@@ -848,7 +848,7 @@ export default function App() {
               : effectiveNav === "users"
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
               : effectiveNav === "roles" && isSuperAdmin
-              ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} onAudit={handleAudit} />
+              ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} currentUserId={currentUser.id} onAudit={handleAudit} />
               : <DashboardPage onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
             }
           </Suspense>
