@@ -8,6 +8,7 @@ import {
 } from "../../lib/deliveryOrder";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { PromptDialog } from "../../components/PromptDialog";
 import { DeliveryOrderPrintDocument } from "./DeliveryOrderPrintDocument";
 
 function toUpdateFields(d: DeliveryOrder): DeliveryOrderUpdateFields {
@@ -144,6 +145,7 @@ export function DeliveryOrderDocument({
   const [confirmAction, setConfirmAction] = useState<"submit" | "finalize" | "withdraw" | "rewrite" | "refresh" | "delete" | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [printInstallmentId, setPrintInstallmentId] = useState<string | null>(null);
+  const [rejectPromptOpen, setRejectPromptOpen] = useState(false);
 
   // Print fires from an effect so the just-set `printInstallmentId` has already committed to the
   // DOM (scoping DeliveryOrderPrintDocument to that one milestone's page) before the dialog opens;
@@ -215,13 +217,13 @@ export function DeliveryOrderDocument({
     setPrintInstallmentId(installment.id);
   };
 
-  const handleRejectClick = async () => {
+  /** Comment collected via the styled PromptDialog (2026-07-29 UX pass, previously a jarring
+   * native `window.prompt`) — same convention as ScopeOfWorkDocument.tsx's reject. */
+  const confirmReject = async (comment: string) => {
     if (!deliveryOrder) return;
-    const comment = window.prompt("เหตุผลการปฏิเสธ / สิ่งที่ต้องแก้ไข:", "");
-    if (comment === null) return;
-    if (!comment.trim()) { showToast("กรุณาระบุเหตุผลการปฏิเสธ"); return; }
+    setRejectPromptOpen(false);
     try {
-      const updated = await rejectDeliveryOrder(deliveryOrder.id, comment.trim());
+      const updated = await rejectDeliveryOrder(deliveryOrder.id, comment);
       setDeliveryOrder(updated);
       showToast("ตีกลับเป็นฉบับร่างแล้ว");
     } catch (err) {
@@ -310,7 +312,7 @@ export function DeliveryOrderDocument({
               <button onClick={() => setConfirmAction("finalize")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors">
                 <CheckCircle2 size={13} /> อนุมัติ
               </button>
-              <button onClick={handleRejectClick} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
+              <button onClick={() => setRejectPromptOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
                 ปฏิเสธ
               </button>
             </>
@@ -427,6 +429,18 @@ export function DeliveryOrderDocument({
         danger
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
+      />
+      <PromptDialog
+        open={rejectPromptOpen}
+        title="ปฏิเสธการอนุมัติ"
+        message="ใบส่งมอบสินค้านี้จะถูกตีกลับเป็นฉบับร่างให้ผู้จัดทำแก้ไข พร้อมเหตุผลที่ระบุ"
+        label="เหตุผลการปฏิเสธ / สิ่งที่ต้องแก้ไข"
+        placeholder="เช่น รายการสินค้าในงวดที่ 2 ไม่ครบ"
+        confirmLabel="ปฏิเสธและตีกลับ"
+        requiredMessage="กรุณาระบุเหตุผลการปฏิเสธ"
+        multiline
+        onConfirm={confirmReject}
+        onCancel={() => setRejectPromptOpen(false)}
       />
     </div>
   );

@@ -13,7 +13,6 @@ export function SignInPage({
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -69,16 +68,9 @@ export function SignInPage({
           </div>
         </div>
 
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
-            className="w-4 h-4 rounded border-border accent-[#c9a84c]"
-          />
-          <span className="text-xs text-muted-foreground">{t("signin.remember")}</span>
-        </label>
-
+        {/* The old "จดจำฉันไว้ในระบบ" checkbox was removed 2026-07-29 (UX pass): it never did
+            anything — sessions are always a 7-day cookie regardless — so it only misled users
+            into thinking unchecking it would log them out sooner (a long-tracked Codex finding). */}
         {error && <p className="text-xs text-[#e05252]">{error}</p>}
 
         <button

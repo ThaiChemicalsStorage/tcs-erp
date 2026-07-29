@@ -88,9 +88,9 @@
   - Repeated inline Playfair Display/color `style={{...}}` objects across Dashboard components — not consolidated into shared typography/color tokens.
 - [ ] **Medium/Low Priority UI items deferred from the 2026-07-13 Codex review** (`docs/CODEX_REVIEW_REPORT.md`) — the Critical + High items were fixed the same day (see CHANGELOG.md), these were explicitly scoped out:
   - Topbar search is decorative (no state/filtering/results) — either wire it up or remove the input to stop implying it works.
-  - Notification delete button is hover-only (`opacity-0 group-hover:opacity-100`) — no persistent affordance for touch/keyboard users.
+  - ~~Notification delete button is hover-only (`opacity-0 group-hover:opacity-100`) — no persistent affordance for touch/keyboard users.~~ — **done 2026-07-29** (UX pass): always visible at 50% opacity, full opacity on hover/focus-visible.
   - Notification rows are `<div onClick>`, not semantic `<button>`/`<a>` — no keyboard activation.
-  - Login page's "Remember me" checkbox is UI-only and doesn't change session behavior — make it functional or remove it (currently misleading).
+  - ~~Login page's "Remember me" checkbox is UI-only and doesn't change session behavior — make it functional or remove it (currently misleading).~~ — **done 2026-07-29** (UX pass): removed (sessions are always the 7-day cookie; the checkbox only misled).
   - No `focus-visible` ring audit across icon-only buttons (many rely on `title` alone, not an accessible name for all assistive tech).
   - Chart cards use fixed pixel heights (200–260px) not re-tuned per breakpoint; Dashboard tables/legends have no compact-card mobile alternative, only horizontal scroll.
 - [ ] **Roll out `PageHeader`/`EmptyState` beyond the Dashboard.** Added 2026-07-10 (UI/UX pass) as shared components (`src/components/PageHeader.tsx`/`EmptyState.tsx`) and wired into the Dashboard (both) plus Products/Quotations (`EmptyState` only); Quotation/Products/Settings/User Management/Role Management/Audit Log pages still use their own hand-rolled `<h1>`/description header markup. Mechanical, page-by-page work — low risk, no new design decisions needed, just needs the time.

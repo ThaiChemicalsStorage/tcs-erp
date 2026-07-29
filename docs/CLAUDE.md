@@ -70,6 +70,7 @@ ERP/
 │   ├── main.tsx                   # entry point
 │   ├── components/                # generic, reusable, cross-module UI
 │   │   ├── ConfirmDialog.tsx
+│   │   ├── PromptDialog.tsx       # styled single-value text prompt (reject reasons, document numbers) — added 2026-07-29, replaces every window.prompt()
 │   │   ├── Toast.tsx
 │   │   ├── NotificationBell.tsx   # header bell + dropdown panel
 │   │   ├── WhatsNewPanel.tsx      # header "มีอะไรใหม่" (What's New) sparkle icon + dropdown panel — added 2026-07-23, in-app update log, see this file's "Current Modules" table row "What's New (topbar)"
@@ -158,7 +159,7 @@ Full detail: [ARCHITECTURE.md](./ARCHITECTURE.md).
 - No comments unless they explain a non-obvious *why* (a workaround, a hidden constraint). Never comments that restate what the code does.
 - One `lib/<domain>.ts` per data domain: types + sample/seed data + pure helper functions + (if applicable) `localStorage` load/save. Pages import from there, never redefine types locally.
 - One `pages/<module>/` folder per module once it grows past a single file; a top-level `<Module>Page.tsx` manages view-switching state and composes smaller view components from the same folder.
-- Reuse `components/ConfirmDialog.tsx` for any destructive-action confirmation and `components/Toast.tsx` + `hooks/useToast.ts` for transient success feedback — don't build a second one-off version of either.
+- Reuse `components/ConfirmDialog.tsx` for any destructive-action confirmation, `components/PromptDialog.tsx` for any single-value text prompt (never `window.prompt()` — see UI_GUIDELINES.md "Dialogs"), and `components/Toast.tsx` + `hooks/useToast.ts` for transient success feedback — don't build a second one-off version of any of them.
 - Reuse `components/BrandMark.tsx` for any logo/wordmark rendering — never re-inline a copy-pasted logo block.
 - The app is Thai-language by default; `src/lib/i18n.tsx` (`useI18n()`/`t()` in components, `translate()` for plain non-component functions like `apiClient.ts`/`session.ts`) provides a full English alternative, toggled in Settings → Profile. As of 2026-07-09 essentially all UI chrome across every page is wired to the dictionary (~450 keys). Two categories are deliberately **not** translated, by design, not oversight: (1) **persisted data/seed content** — audit log entries, notification title/description/module text, default role/department/position descriptions, `Company` default values — these are business records or admin-editable content, not app chrome, and stay in whatever language they were authored in; (2) **`PrintDocument.tsx`**, the actual printed/PDF quotation sent to customers, which always renders in Thai regardless of the admin's own UI language preference (translating a real business document based on the preparer's UI setting would risk silently sending an English quotation to a Thai customer). New user-facing strings should always go through `t()`/`translate()` and the dictionary — never re-introduce a hardcoded literal.
 - Every module's sidebar/nav visual language, table styling, form input styling, and button styling should match [UI_GUIDELINES.md](./UI_GUIDELINES.md) — copy an existing page's patterns rather than inventing new ones.

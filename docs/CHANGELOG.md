@@ -4,7 +4,50 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — First automated test suite (vitest, 55 tests, wired into CI)
+## 2026-07-29 (absolute latest) — UX polish pass (kill window.prompt, touch-visible delete, honest login) + user manual updated to the 29/07 edition
+
+Owner request: "ช่วยเช็คบัคและปรับหน้าตาให้แบบ User friendly มากกว่าเดิมหน่อยตรงไหนที่คิดว่าใช้งานยาก
+และอัพเดตหน้าคู่มือให้ด้วย". The bug/UX review found the roughest edges were three long-tracked
+items (two from the 2026-07-13 Codex UX review backlog) plus the jarring native prompts the recent
+approval/manual-number features had leaned on:
+
+- **New shared `PromptDialog.tsx`** (styled single-value text prompt, same shell as ConfirmDialog;
+  `multiline`/`mono`/`requiredMessage` options; input state lives in an inner mounted-only-while-
+  open component so it resets per open without a reset-in-effect). Replaced ALL THREE
+  `window.prompt()` usages: Scope of Work reject reason (multiline, with context message),
+  Scope of Work duplicate's document number (mono, with the "free-form, uniqueness-checked"
+  explanation), Delivery Order reject reason. Native prompts were unstyled browser chrome with no
+  Thai font and awkward on mobile — at exactly the moments that matter (rejecting an approval,
+  numbering a copy). UI_GUIDELINES.md "Dialogs" now bans `window.prompt` outright.
+- **Notification delete button visible without hover** (Codex 2026-07-13 backlog): was
+  `opacity-0 group-hover:opacity-100` — literally undiscoverable on touch devices and invisible
+  to keyboard users. Now `opacity-50 hover:opacity-100 focus-visible:opacity-100`.
+  UI_GUIDELINES.md's icon-action pattern updated to ban the hover-only idiom.
+- **Removed the login page's "จดจำฉันไว้ในระบบ" checkbox** (Codex 2026-07-13 backlog: "make it
+  functional or remove it — currently misleading"): it never did anything (sessions are always
+  the 7-day cookie), so it only misled users into thinking unchecking it changed logout behavior.
+  Removed + its 2 i18n keys.
+- **User manual updated to the 29/07/2026 edition** (`docs/manual/user-manual.html` →
+  regenerated `public/คู่มือการใช้งาน TCS ERP.pdf`, 17 pages): Chapter 1 gains the login-lockout
+  explanation (5 wrong passwords / 15 min); Chapter 5 rewritten where stale — manual document
+  number entry (replaces the Secondary-Code/auto-number instructions), the approval workflow
+  (ส่งขออนุมัติ → รออนุมัติ → อนุมัติ/ปฏิเสธ — the manual still said "ยืนยัน Final"), a new
+  "การติดตามเลข PO (ทวง PO)" section, Duplicate-asks-for-a-number, and the follow-up-fields-
+  editable-after-Final rule; Chapter 6's Final bullet replaced with the approval flow. Figure
+  captions corrected; screenshots unchanged (they predate today's UI text changes — recapture is
+  already a mandatory go-live step, see SERVER_MIGRATION_PLAN.md step G).
+- **PDF regeneration is now a committed one-command script** (`docs/manual/generate-pdf.mjs`,
+  puppeteer-core via `npm install --no-save` + system Chrome — previously an ad-hoc throwaway
+  each time); SERVER_MIGRATION_PLAN.md step G updated to reference it.
+- What's New (Thai) entry added covering the three UX changes + the manual update.
+- `tsc` (both configs)/`lint`/`npm test` (55/55)/`build` all pass clean. The regenerated PDF was
+  sanity-checked (valid PDF, 17 pages) but not visually proofread page-by-page this session —
+  the pipeline and stylesheet are unchanged from the visually-verified 24/07 edition, only text
+  content changed.
+
+---
+
+## 2026-07-29 — First automated test suite (vitest, 55 tests, wired into CI)
 
 The project's first real test coverage, on the owner's direct go-ahead ("ทำเลย" after the
 plain-language explanation) — closes the "zero test coverage anywhere" state flagged since the

@@ -4,7 +4,17 @@
 
 ---
 
-## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite
+## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual
+
+### What was implemented (sixth task this session: UX polish + manual)
+- Owner asked for a bug/UX pass + manual update. Shipped: new shared `PromptDialog.tsx` replacing
+  all three `window.prompt()` usages (SOW reject/duplicate-number, DO reject — native prompts
+  were the ugliest moments in the approval flow); notification delete button visible without
+  hover (touch users literally couldn't find it); removed the do-nothing "จดจำฉันไว้ในระบบ"
+  checkbox. Manual updated to the 29/07 edition (login lockout, manual SOW numbers, approval
+  workflow replacing the stale "ยืนยัน Final" text, PO chasing) + PDF regenerated via a new
+  committed `docs/manual/generate-pdf.mjs`; screenshots deliberately left for go-live step G.
+  UI_GUIDELINES now bans `window.prompt` and the hover-only icon-action idiom.
 
 ### What was implemented (fifth task this session: first automated test suite)
 - **55 vitest tests across 7 files** (`tests/`, `npm test`, wired into CI with a cached mongod

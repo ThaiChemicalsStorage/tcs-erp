@@ -15,6 +15,7 @@ import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOr
 import { getRevisionPredecessorId, generateScopeOfWorkRevisionSummary } from "../../lib/revisionDiff";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { PromptDialog } from "../../components/PromptDialog";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { ChecklistGroupCard } from "./ChecklistGroupCard";
 import { DocumentRecipientsPicker } from "./DocumentRecipientsPicker";
@@ -269,6 +270,9 @@ export function ScopeOfWorkDocument({
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [generatingRevisionNote, setGeneratingRevisionNote] = useState(false);
   const [chasingPo, setChasingPo] = useState(false);
+  // Which styled PromptDialog is open (replaces window.prompt, 2026-07-29 UX pass) — the two
+  // single-value prompts this page needs: a rejection reason and a duplicate's document number.
+  const [promptOpen, setPromptOpen] = useState<"reject" | "duplicate" | null>(null);
   // "Does a Delivery Order already exist for this Scope of Work?" (added 2026-07-23, per direct
   // user request) — same existence-check pattern QuoteDocument.tsx uses for its own "สร้าง/เปิด
   // Scope of Work" button. Opens the most-recently-updated one if more than one exists.
@@ -524,15 +528,13 @@ export function ScopeOfWorkDocument({
     setConfirmAction("submit");
   };
 
-  /** ปฏิเสธ — comment required server-side; collected via the same `window.prompt` convention
-   * `handleDuplicate` above uses for the copy's document number. */
-  const handleRejectClick = async () => {
+  /** ปฏิเสธ — comment required server-side; collected via the styled PromptDialog (2026-07-29
+   * UX pass, previously a jarring native `window.prompt`). */
+  const confirmReject = async (comment: string) => {
     if (!scope) return;
-    const comment = window.prompt("เหตุผลการปฏิเสธ / สิ่งที่ต้องแก้ไข:", "");
-    if (comment === null) return;
-    if (!comment.trim()) { showToast("กรุณาระบุเหตุผลการปฏิเสธ"); return; }
+    setPromptOpen(null);
     try {
-      const updated = await rejectScopeOfWork(scope.id, comment.trim());
+      const updated = await rejectScopeOfWork(scope.id, comment);
       setScope(updated);
       showToast("ตีกลับเป็นฉบับร่างแล้ว");
     } catch (err) {
@@ -541,14 +543,11 @@ export function ScopeOfWorkDocument({
   };
 
   /** Manual-ONLY numbers (2026-07-29): the copy needs its own user-typed document number — the
-   * system no longer mints one. Collected via the same small-prompt convention `handleRejectClick`
-   * below already uses; a duplicate number surfaces the server's own 409 message as a toast. */
-  const handleDuplicate = async () => {
+   * system no longer mints one. Collected via the styled PromptDialog; a duplicate number
+   * surfaces the server's own 409 message as a toast. */
+  const confirmDuplicate = async (scopeNumber: string) => {
     if (!scope) return;
-    const input = window.prompt("เลขที่เอกสารสำหรับสำเนาใหม่ (กำหนดได้อิสระ ระบบตรวจสอบเลขซ้ำให้):", "");
-    if (input === null) return;
-    const scopeNumber = input.trim();
-    if (!scopeNumber) { showToast("กรุณาระบุเลขที่เอกสาร"); return; }
+    setPromptOpen(null);
     try {
       const created = await duplicateScopeOfWork(scope.id, scopeNumber);
       showToast(`ทำสำเนาเป็น ${created.scopeNumber} แล้ว`);
@@ -651,7 +650,7 @@ export function ScopeOfWorkDocument({
             />
           )}
           {canCreate && (
-            <button onClick={handleDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button onClick={() => setPromptOpen("duplicate")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
               <Copy size={13} /> ทำสำเนา
             </button>
           )}
@@ -706,7 +705,7 @@ export function ScopeOfWorkDocument({
                 <CheckCircle2 size={13} /> อนุมัติ
               </button>
               <button
-                onClick={handleRejectClick}
+                onClick={() => setPromptOpen("reject")}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors"
               >
                 ปฏิเสธ
@@ -1033,6 +1032,30 @@ export function ScopeOfWorkDocument({
         danger
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
+      />
+      <PromptDialog
+        open={promptOpen === "reject"}
+        title="ปฏิเสธการอนุมัติ"
+        message={`เอกสาร ${scope.scopeNumber} จะถูกตีกลับเป็นฉบับร่างให้ผู้จัดทำแก้ไข พร้อมเหตุผลที่ระบุ`}
+        label="เหตุผลการปฏิเสธ / สิ่งที่ต้องแก้ไข"
+        placeholder="เช่น งวดชำระเงินไม่ตรงกับที่ตกลงกับลูกค้า"
+        confirmLabel="ปฏิเสธและตีกลับ"
+        requiredMessage="กรุณาระบุเหตุผลการปฏิเสธ"
+        multiline
+        onConfirm={confirmReject}
+        onCancel={() => setPromptOpen(null)}
+      />
+      <PromptDialog
+        open={promptOpen === "duplicate"}
+        title="ทำสำเนา Scope of Work"
+        message="สำเนาใหม่ต้องมีเลขที่เอกสารของตัวเอง — กำหนดได้อิสระ ระบบจะตรวจสอบให้ว่าเลขไม่ซ้ำกับใบอื่น"
+        label="เลขที่เอกสารสำหรับสำเนาใหม่"
+        placeholder="เช่น PQ202607-16-LI-SK"
+        confirmLabel="ทำสำเนา"
+        requiredMessage="กรุณาระบุเลขที่เอกสาร"
+        mono
+        onConfirm={confirmDuplicate}
+        onCancel={() => setPromptOpen(null)}
       />
     </div>
   );

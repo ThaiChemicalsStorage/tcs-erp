@@ -14,6 +14,16 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-29] UX polish pass + user manual 29/07 edition.** Killed all three
+  `window.prompt()` usages via a new shared `PromptDialog.tsx` (styled reject-reason and
+  duplicate-number prompts on Scope of Work/Delivery Order); notification delete button now
+  visible without hover (was undiscoverable on touch); removed the misleading do-nothing
+  "จดจำฉันไว้ในระบบ" login checkbox — the latter two were long-tracked 2026-07-13 Codex UX
+  backlog items. User manual updated (login lockout, manual document numbers, approval workflow,
+  PO chasing) and the PDF regenerated via a new committed `docs/manual/generate-pdf.mjs` script;
+  screenshots deliberately unchanged (recapture is already go-live step G). What's New entry
+  added. `tsc`/`lint`/`test`/`build` all clean. See CHANGELOG.md and
+  [UI_GUIDELINES.md](./UI_GUIDELINES.md) "Dialogs".
 - ✅ **[2026-07-29] First automated test suite (vitest, 55 tests, wired into CI).** `tests/` +
   `npm test`: quotation money math with client/server formula parity (`computeTotals` vs
   `quoteAmounts.ts` — fails the moment the two drift), default-role RBAC grants + permission

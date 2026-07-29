@@ -110,9 +110,12 @@ export function NotificationBell({
                         <span className="text-[10px] text-muted-foreground">{timeAgo(n.createdAt, t)}</span>
                       </div>
                     </div>
+                    {/* Always visible at reduced opacity (2026-07-29 UX pass) — the previous
+                        `opacity-0 group-hover:opacity-100` made it undiscoverable on touch
+                        devices (no hover) and invisible to keyboard users tabbing onto it. */}
                     <button
                       onClick={(e) => { e.stopPropagation(); onDelete(n.id); }}
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-[#e05252] transition-all flex-shrink-0 p-1"
+                      className="opacity-50 hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-[#e05252] transition-all flex-shrink-0 p-1"
                       aria-label={t("notif.deleteAria")}
                     >
                       <Trash2 size={13} />

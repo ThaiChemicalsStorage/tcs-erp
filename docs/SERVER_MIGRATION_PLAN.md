@@ -145,17 +145,15 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
 - **Regenerate `public/คู่มือการใช้งาน TCS ERP.pdf` as the last step before going live** — the
   owner asked to be reminded of this specifically ("ท้ายสุดก่อนขึ้น Server ให้อัพเดตคู่มือ").
   Two reasons it must be redone, not just kept:
-  1. **Content is stale**: the manual was generated 2026-07-24 morning; features shipped after it
-     are missing — the approval workflow (ส่งขออนุมัติ/อนุมัติ/ปฏิเสธ/ถอนคำขอ + Delivery Order
-     Rewrite), Scope of Work attachments, email threading, notification polling, Dashboard
-     Excel export + Delivery Order card + own-data-only scoping, and anything shipped later.
-     Sweep `WHATS_NEW_ENTRIES` (src/lib/whatsNew.ts) against the manual's chapter list to catch
-     everything.
-  2. **Screenshots show the demo URL** — recapture against the real host so users see the
-     right address.
-  The regeneration workflow is recorded in docs/CHANGELOG.md 2026-07-24 (user manual entry):
-  screenshots via browser automation against the live site, HTML source at
-  `docs/manual/user-manual.html`, PDF via headless Chrome `page.pdf()`.
+  1. **Content freshness**: the text content was updated 2026-07-29 (approval workflow, manual
+     Scope of Work numbers, PO chasing, login lockout — see CHANGELOG.md) but anything shipped
+     after that date will be missing again. Sweep `WHATS_NEW_ENTRIES` (src/lib/whatsNew.ts)
+     against the manual's chapter list to catch everything.
+  2. **Screenshots show the demo URL** (and predate the 2026-07-29 UI text changes) — recapture
+     against the real host so users see the right address.
+  Regeneration is now one command (2026-07-29): `npm install --no-save puppeteer-core && node
+  docs/manual/generate-pdf.mjs` (committed script, uses system Chrome). Screenshots are still
+  captured via browser automation against the live site — see docs/CHANGELOG.md 2026-07-24.
 
 ### H. Decommission the demo
 
