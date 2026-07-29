@@ -107,11 +107,15 @@ export function JobTypeDistributionChart({ jobTypeAnalytics }: { jobTypeAnalytic
       {data.length === 0 ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
         <>
           <div className="flex justify-center mb-4">
-            <PieChart width={160} height={160}>
-              <Pie data={data} cx={75} cy={75} innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="value" strokeWidth={0}>
-                {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
-              </Pie>
-            </PieChart>
+            <div className="w-[160px] h-[160px] flex-shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={data} cx="50%" cy="50%" innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="value" strokeWidth={0}>
+                    {data.map((_, i) => <Cell key={i} fill={PALETTE[i % PALETTE.length]} />)}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
             {data.map((d, i) => (
@@ -164,11 +168,15 @@ export function ProductsByCategoryChart({ categoryBreakdown }: { categoryBreakdo
       {categoryBreakdown.length === 0 ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
         <>
           <div className="flex justify-center mb-4">
-            <PieChart width={160} height={160}>
-              <Pie data={categoryBreakdown} cx={75} cy={75} innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="count" strokeWidth={0}>
-                {categoryBreakdown.map((entry, i) => <Cell key={entry.categoryId} fill={PALETTE[i % PALETTE.length]} />)}
-              </Pie>
-            </PieChart>
+            <div className="w-[160px] h-[160px] flex-shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={categoryBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="count" strokeWidth={0}>
+                    {categoryBreakdown.map((entry, i) => <Cell key={entry.categoryId} fill={PALETTE[i % PALETTE.length]} />)}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </div>
           <div className="space-y-2.5">
             {categoryBreakdown.map((c, i) => (

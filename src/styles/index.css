@@ -8,6 +8,19 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* 2026-07-29, accessibility hardening pass: this app had no prefers-reduced-motion handling
+   anywhere. Loading indicators (animate-spin/animate-pulse) still need to communicate "this is
+   loading" — removing motion entirely would silently drop that signal — so this slows them to a
+   single, deliberate pulse instead of a continuous spin/flash, rather than a blanket 0.01ms kill. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin {
+    animation-duration: 2.5s;
+  }
+  .animate-pulse {
+    animation: pulse 3s ease-in-out infinite;
+  }
+}
+
 @media print {
   /* Explicit A4 portrait — 2026-07-15, Codex review Medium fix (Scope of Work): previously only
      `margin` was set, leaving the actual paper size to each browser's own default rather than

@@ -27,7 +27,7 @@ export function CustomerAnalytics({ data }: { data: CustomerAnalyticsData }) {
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-wrap">
           {tabs.map((tb) => (
             <button key={tb.key} onClick={() => setTab(tb.key)}
-              className={`px-2.5 py-1 text-[11px] rounded-md font-medium transition-all ${tab === tb.key ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+              className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${tab === tb.key ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
               {tb.label}
             </button>
           ))}

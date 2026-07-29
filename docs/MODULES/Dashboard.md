@@ -404,7 +404,17 @@ other pass in this project (see PROJECT_STATUS.md "Known Risks").
   Quotation module's own approval flow. Reject requires a comment (inline textarea), matching the
   existing workflow rule. **Only rendered when the caller has `quotations:approve`** (response
   field is `null` otherwise); the Reject button additionally requires `quotations:reject`
-  (`approvalDashboard.canReject`, server-computed).
+  (`approvalDashboard.canReject`, server-computed). **2026-07-29, critique-driven hardening
+  pass**: Approve now opens a `ConfirmDialog` (name-checked quote ID + client, states the action
+  is recorded and can't be undone from this screen) instead of committing on a single click — the
+  `รออนุมัติ → อนุมัติแล้ว` transition has no reverse edge in `api/_lib/quoteWorkflow.ts`, and
+  `QuoteDocument.tsx`'s own editor already confirms this identical transition, so the Dashboard
+  widget was the one place in the app that didn't. The dialog is rendered via `createPortal` into
+  `document.body` (a `<tr>`'s only valid children are `<td>`/`<th>`, so the confirm overlay can't
+  be a direct DOM child of the row). Both success toasts now name the quotation ID. The 4 stat-tile
+  accent colors (gold/green/red for pending/approved/rejected) were also darkened to clear WCAG AA
+  4.5:1 contrast against their `bg-secondary/40` background — the original brand hexes measured as
+  low as 2.15:1 there — matching the same fix already applied to `statusStyle` in `src/lib/quotes.tsx`.
 - `NotificationSummary.tsx` — the caller's own unread count + breakdown by type.
 - `DashboardCharts.tsx` — shared `ChartCard` wrapper (`ChartCard.tsx`, now supports an `actions`
   slot for the Revenue Trend grouping toggle) plus the remaining named charts: `RevenueTrendChart`

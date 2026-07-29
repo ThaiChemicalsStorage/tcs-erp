@@ -1,4 +1,4 @@
-import { PieChart, Pie, Cell } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import type { DashboardKpis } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
@@ -52,11 +52,15 @@ export function QuotationStatusSummary({ kpis }: { kpis: DashboardKpis }) {
         <EmptyState icon={PieChartIcon} title={t("dashboard.noData")} description={t("dashboard.statusSummary.sub")} compact />
       ) : (
         <div className="flex flex-col sm:flex-row items-center gap-5">
-          <PieChart width={140} height={140}>
-            <Pie data={donutData} cx={65} cy={65} innerRadius={42} outerRadius={64} paddingAngle={3} dataKey="count" strokeWidth={0}>
-              {donutData.map((d) => <Cell key={d.key} fill={d.color} />)}
-            </Pie>
-          </PieChart>
+          <div className="w-[140px] h-[140px] flex-shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={donutData} cx="50%" cy="50%" innerRadius={42} outerRadius={64} paddingAngle={3} dataKey="count" strokeWidth={0}>
+                  {donutData.map((d) => <Cell key={d.key} fill={d.color} />)}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
           <div className="flex-1 w-full overflow-x-auto">
             <table className="w-full">
               <thead>

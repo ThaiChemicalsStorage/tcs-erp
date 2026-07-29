@@ -4,7 +4,65 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Granted the 4 pending permissions to existing production roles
+## 2026-07-29 (absolute latest) — Impeccable design-system setup + Dashboard accessibility/responsive hardening pass
+
+Ran the `/impeccable` skill end-to-end for the first time on this project: `init` wrote a new
+`PRODUCT.md` (users, positioning, durable constraints — incl. the new "Permanent UI and Impeccable
+Rules" the owner dictated: strict scope discipline, business-logic/RBAC/DB protections, UI rules),
+and `document` scanned the existing navy/gold system into a new `DESIGN.md` + `.impeccable/design.json`
+sidecar (Creative North Star "The Chartered Ledger," the Tinted Pill / Icon Chip Tint / Flat-Ledger
+named rules, Stat Tile + Chart Section signature components). Then ran a full
+`audit → harden → adapt → polish → typeset → critique → harden → clarify → polish` cycle against the
+Dashboard, driven by real findings rather than a general sweep:
+
+- **Accessibility**: `statusStyle` (`src/lib/quotes.tsx`, used app-wide for the 9 Quotation statuses)
+  had text-on-its-own-10%-tint contrast as low as 2.1:1 (Pending Approval's gold) — every status's
+  text color is now a computed, minimally-darkened variant of the same hue that clears WCAG AA
+  4.5:1, background/border hues unchanged. The same fix was applied to `ApprovalDashboard.tsx`'s 4
+  stat-tile accent colors (measured against their actual `bg-secondary/40` background). Dashboard's
+  filter bar (`DashboardFilterBar.tsx`) gained `aria-label`s on all 5 previously-unlabeled
+  date-range/department/salesperson controls. Added a project-wide `prefers-reduced-motion` rule
+  (`src/styles/index.css`) — the app had none before.
+- **Responsive**: 6 supporting-detail grids in `DashboardPage.tsx` jumped straight from 1 column to
+  `xl:` (1280px), stacking needlessly at the 1024–1279px range common on real laptops; all now step
+  at `lg:` instead (one 3-up grid progresses `1 → lg:2 → xl:3`). Removed one vestigial single-child
+  grid wrapper found while making that change.
+- **Consistency**: normalized 4 stray font sizes (`PipelineSteps.tsx`, `ApprovalDashboard.tsx`,
+  `CustomerAnalytics.tsx`, `SalesPerformancePanel.tsx`) from `10px`/`11px` to the documented `12px`
+  chrome floor; converted 3 fixed-pixel `PieChart` instances (`QuotationStatusSummary.tsx`,
+  `DashboardCharts.tsx` ×2) to `ResponsiveContainer`, matching every other chart in the folder.
+- **UX (critique-driven)**: `ApprovalDashboard.tsx`'s Approve button used to commit the
+  `รออนุมัติ → อนุมัติแล้ว` transition — which has no reverse edge in
+  `api/_lib/quoteWorkflow.ts` — on a single click, with no confirmation, even though
+  `QuoteDocument.tsx`'s own editor already confirms this identical transition. A dual-agent critique
+  (independent design review + detector/browser evidence pass) scored this 19/40 on Nielsen's
+  heuristics and flagged it P0. Fixed: Approve now opens a `ConfirmDialog` naming the quote ID and
+  client and stating the action can't be undone from this screen, rendered via `createPortal` (a
+  `<tr>`'s only valid children are `<td>`/`<th>`, so the dialog can't be a direct child of the row);
+  both success toasts now name the quotation ID.
+- **Left deliberately unfixed, by explicit owner choice**: `CustomerAnalytics.tsx`/
+  `ApprovalDashboard.tsx`'s remaining plain-caption 10px text (a genuine but low-priority drift the
+  detector caught) — scoped out of this pass, tracked as a follow-up.
+
+**Files Modified**: `PRODUCT.md`, `DESIGN.md` (new, root), `.impeccable/design.json`,
+`.impeccable/critique/2026-07-29T09-41-15Z__src-pages-dashboard-approvaldashboard-tsx.md` (new),
+`src/lib/quotes.tsx`, `src/lib/i18n.tsx`, `src/styles/index.css`,
+`src/pages/dashboard/{ApprovalDashboard,CustomerAnalytics,DashboardCharts,DashboardFilterBar,
+DashboardPage,PipelineSteps,QuotationStatusSummary,SalesPerformancePanel}.tsx`.
+
+**Reason**: owner-initiated `/impeccable` design-system setup, followed by an owner-directed
+audit → fix cycle on the Dashboard specifically.
+
+**Notes**: `tsc --noEmit`/`npm run lint`/`npm run build`/`npm test` (56/56) all verified clean after
+every step. Live browser verification was attempted at each step and consistently hit this
+sandbox's known limitation (no `vercel dev`/MongoDB behind the plain `vite` dev server, so the app
+shows its own "connection failed" guard before the Dashboard can render) — verified instead via
+`tsc`/lint/build/tests, precise contrast math (Node scripts, not eyeballed), and line-level code
+review. See `.impeccable/critique/...` for the full critique report.
+
+---
+
+## 2026-07-29 — Granted the 4 pending permissions to existing production roles
 
 Closed out the last of the outstanding manual Role Management grants tracked in TODO.md (step E
 of the Go-Live Checklist) — `quotations:viewAll`, `scopeOfWork:viewAll`, `deliveryOrder:*`, and

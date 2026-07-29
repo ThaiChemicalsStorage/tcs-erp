@@ -210,16 +210,24 @@ export type QuoteUpdateFields = Partial<
 
 export const VAT_RATE = 7;
 
+/**
+ * Background/border keep each status's original hue (unchanged); the text color is a darkened
+ * variant of the same hue (2026-07-29, accessibility hardening pass) — the original scheme used
+ * the identical hex for bg/10, text, and border/20, which put a mid-tone color's text directly on
+ * a ~10%-tint-of-itself background and failed WCAG AA contrast (as low as 2.1:1 for Pending
+ * Approval's gold). Each text hex below is the minimum darkening (same hue/saturation, reduced
+ * lightness only) needed to clear 4.5:1 against its own pill background — computed, not eyeballed.
+ */
 export const statusStyle: Record<QuoteStatus, string> = {
-  "ร่าง": "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20",
-  "รออนุมัติ": "bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/20",
-  "อนุมัติแล้ว": "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20",
-  "ส่งให้ลูกค้าแล้ว": "bg-[#3b6fc9]/10 text-[#3b6fc9] border border-[#3b6fc9]/20",
-  "ลูกค้ายอมรับ": "bg-[#1f9d8a]/10 text-[#1f9d8a] border border-[#1f9d8a]/20",
+  "ร่าง": "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
+  "รออนุมัติ": "bg-[#c9a84c]/10 text-[#866d28] border border-[#c9a84c]/20",
+  "อนุมัติแล้ว": "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
+  "ส่งให้ลูกค้าแล้ว": "bg-[#3b6fc9]/10 text-[#366bc6] border border-[#3b6fc9]/20",
+  "ลูกค้ายอมรับ": "bg-[#1f9d8a]/10 text-[#187c6d] border border-[#1f9d8a]/20",
   "ปิดการขายสำเร็จ": "bg-[#157347]/10 text-[#157347] border border-[#157347]/20",
-  "ลูกค้าปฏิเสธ": "bg-[#e08a3c]/10 text-[#e08a3c] border border-[#e08a3c]/20",
-  "เสียโอกาส": "bg-[#e05252]/10 text-[#e05252] border border-[#e05252]/20",
-  "ยกเลิก": "bg-[#8a94a6]/10 text-[#8a94a6] border border-[#8a94a6]/20",
+  "ลูกค้าปฏิเสธ": "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
+  "เสียโอกาส": "bg-[#e05252]/10 text-[#d22626] border border-[#e05252]/20",
+  "ยกเลิก": "bg-[#8a94a6]/10 text-[#657085] border border-[#8a94a6]/20",
 };
 
 /** Translated display label per status — `QuoteStatus` itself stays the fixed Thai literal stored in MongoDB and used for all comparisons/state-machine logic; this map is display-only. */

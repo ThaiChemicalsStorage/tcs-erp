@@ -29,7 +29,7 @@ export function SalesPerformancePanel({ kpis }: { kpis: DashboardKpis }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-5">
         {metrics.map((m) => (
           <div key={m.label} className="min-w-0">
-            <p className="text-[11px] text-muted-foreground truncate" title={m.label}>{m.label}</p>
+            <p className="text-xs text-muted-foreground truncate" title={m.label}>{m.label}</p>
             <p className="text-lg font-bold font-mono text-foreground mt-0.5">{m.value}</p>
           </div>
         ))}

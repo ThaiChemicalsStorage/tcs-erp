@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-29T12:00:00.000Z",
+  "title": "Design System: TCS ERP",
+  "extensions": {
+    "colorMeta": {
+      "navy-ink": {
+        "role": "neutral",
+        "displayName": "Navy Ink",
+        "canonical": "#0b1d3a",
+        "tonalRamp": ["#050d1c", "#0b1d3a", "#132a4e", "#1c3a66", "#2c5488", "#5578a8", "#8fa8c9", "#c8d6e8"]
+      },
+      "gilded-gold": {
+        "role": "primary",
+        "displayName": "Gilded Gold",
+        "canonical": "#c9a84c",
+        "tonalRamp": ["#5c4a1e", "#8a7130", "#b0913e", "#c9a84c", "#d6bc6e", "#e2ce93", "#eee0bb", "#f8f1de"]
+      },
+      "hover-gold": {
+        "role": "primary",
+        "displayName": "Hover Gold",
+        "canonical": "#f0c040",
+        "tonalRamp": ["#664f0f", "#977420", "#c19b30", "#f0c040", "#f3ce68", "#f6dc8f", "#fae9b7", "#fdf4dc"]
+      },
+      "paper-blue": {
+        "role": "neutral",
+        "displayName": "Paper Blue",
+        "canonical": "#f4f6fb",
+        "tonalRamp": ["#c4cbdd", "#d3d9e8", "#e2e7f1", "#f4f6fb", "#f7f9fc", "#f9fafd", "#fbfcfe", "#fdfdfe"]
+      },
+      "ledger-white": {
+        "role": "neutral",
+        "displayName": "Ledger White",
+        "canonical": "#ffffff"
+      },
+      "pale-surface": {
+        "role": "neutral",
+        "displayName": "Pale Surface",
+        "canonical": "#e8edf7"
+      },
+      "surface-blue-ink": {
+        "role": "neutral",
+        "displayName": "Surface Blue Ink",
+        "canonical": "#1a3a6b",
+        "note": "secondary-foreground — the text color used against Pale Surface"
+      },
+      "muted-mist": {
+        "role": "neutral",
+        "displayName": "Muted Mist",
+        "canonical": "#eef1f8",
+        "note": "near-duplicate of Pale Surface; used for input backgrounds and table header tints"
+      },
+      "muted-slate": {
+        "role": "neutral",
+        "displayName": "Muted Slate",
+        "canonical": "#5a7299",
+        "tonalRamp": ["#233042", "#374a63", "#4a6180", "#5a7299", "#7c92ae", "#a2b3c8", "#c8d3e0", "#e6ebf2"]
+      },
+      "danger-red": {
+        "role": "semantic",
+        "displayName": "Danger Red",
+        "canonical": "#e05252",
+        "tonalRamp": ["#5c1717", "#8a2222", "#b83535", "#e05252", "#e97878", "#f0a0a0", "#f7c8c8", "#fbe6e6"]
+      },
+      "sidebar-foreground": {
+        "role": "neutral",
+        "displayName": "Sidebar Foreground",
+        "canonical": "#a8bed8",
+        "note": "the pale ink used for inactive nav labels on the navy sidebar"
+      },
+      "sidebar-hover": {
+        "role": "neutral",
+        "displayName": "Sidebar Hover",
+        "canonical": "#132540",
+        "note": "near-duplicate of Navy Ink, one step lighter — sidebar item hover fill only"
+      },
+      "sidebar-border": {
+        "role": "neutral",
+        "displayName": "Sidebar Border",
+        "canonical": "rgba(201, 168, 76, 0.15)",
+        "note": "gilded-gold at 15% opacity"
+      },
+      "chart-blue": {
+        "role": "chart",
+        "displayName": "Chart Blue",
+        "canonical": "#1a5fb4"
+      },
+      "chart-green": {
+        "role": "chart",
+        "displayName": "Chart Green",
+        "canonical": "#2aa36b"
+      },
+      "chart-purple": {
+        "role": "chart",
+        "displayName": "Chart Purple",
+        "canonical": "#7c4dbb"
+      },
+      "status-pending": {
+        "role": "status",
+        "displayName": "Status: Pending Approval",
+        "canonical": "#c9a84c",
+        "note": "shares the Gilded Gold hex by coincidence of the source data, not a token reuse — treat as its own status color"
+      },
+      "status-approved": {
+        "role": "status",
+        "displayName": "Status: Approved",
+        "canonical": "#2aa36b"
+      },
+      "status-sent": {
+        "role": "status",
+        "displayName": "Status: Sent to Customer",
+        "canonical": "#3b6fc9"
+      },
+      "status-accepted": {
+        "role": "status",
+        "displayName": "Status: Customer Accepted",
+        "canonical": "#1f9d8a"
+      },
+      "status-won": {
+        "role": "status",
+        "displayName": "Status: Won (Closed Sale)",
+        "canonical": "#157347"
+      },
+      "status-rejected": {
+        "role": "status",
+        "displayName": "Status: Customer Rejected",
+        "canonical": "#e08a3c"
+      },
+      "status-lost": {
+        "role": "status",
+        "displayName": "Status: Lost",
+        "canonical": "#e05252",
+        "note": "shares the Danger Red hex, consistent with Lost being a genuinely negative outcome"
+      },
+      "status-cancelled": {
+        "role": "status",
+        "displayName": "Status: Cancelled",
+        "canonical": "#8a94a6"
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display / Headings", "purpose": "Page titles, card/section titles, topbar breadcrumb — Playfair Display via inline style, always paired with a Noto Sans Thai fallback." },
+      "body": { "displayName": "Body", "purpose": "Paragraph copy, static chrome, and dense-page input/table content at the 14px content tier." },
+      "label": { "displayName": "Chrome / Label", "purpose": "Buttons, form labels, status pills, secondary/fine-print text — 12px floor, never smaller for a real form label." },
+      "mono": { "displayName": "Numbers / Codes", "purpose": "Quotation numbers, document numbers, currency, dates, product codes — anything read character-by-character." }
+    },
+    "shadows": [
+      { "name": "floating-panel", "value": "shadow-xl (Tailwind default: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1))", "purpose": "The only elevation in the system — dropdown panels (notifications, What's New, Global Search, user menu) and modal dialogs. Never used on an in-flow card." }
+    ],
+    "motion": [
+      { "name": "transition-colors", "value": "Tailwind default (~150ms ease)", "purpose": "Button/link/nav hover and focus color shifts." },
+      { "name": "transition-all", "value": "Tailwind default (~150ms ease)", "purpose": "Interactive card hover (border-color shift toward gold)." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one gold action per screen — submit, save, approve, create.",
+      "html": "<button class=\"ds-btn-primary\">บันทึก</button>",
+      "css": ".ds-btn-primary { background: #c9a84c; color: #0b1d3a; padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 14px; border: none; transition: background-color 0.15s ease; } .ds-btn-primary:hover { background: #f0c040; } .ds-btn-primary:focus-visible { outline: 2px solid #c9a84c; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outline/ghost action — cancel, secondary workflow steps.",
+      "html": "<button class=\"ds-btn-secondary\">ยกเลิก</button>",
+      "css": ".ds-btn-secondary { background: transparent; color: #5a7299; padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(11,29,58,0.1); font-weight: 600; font-size: 14px; transition: color 0.15s ease, border-color 0.15s ease; } .ds-btn-secondary:hover { color: #0b1d3a; border-color: rgba(201,168,76,0.4); }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive confirmation — used inside ConfirmDialog for delete/reject actions.",
+      "html": "<button class=\"ds-btn-danger\">ลบ</button>",
+      "css": ".ds-btn-danger { background: #e05252; color: #ffffff; padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 14px; border: none; transition: background-color 0.15s ease; } .ds-btn-danger:hover { background: #c94444; }"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "chip",
+      "refersTo": "status-pending",
+      "description": "The signature tinted-pill status badge — one dedicated hex per workflow status, same three-part formula every time.",
+      "html": "<span class=\"ds-status-pill\">รออนุมัติ</span>",
+      "css": ".ds-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 500; background: rgba(201,168,76,0.1); color: #c9a84c; border: 1px solid rgba(201,168,76,0.2); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The base surface for every panel/section — flat, hairline-bordered, never shadowed at rest.",
+      "html": "<div class=\"ds-card\"><h3 class=\"ds-card-title\">ใบเสนอราคา</h3><p class=\"ds-card-body\">รายละเอียดใบเสนอราคา</p></div>",
+      "css": ".ds-card { background: #ffffff; border: 1px solid rgba(11,29,58,0.1); border-radius: 12px; padding: 24px; } .ds-card-title { font-family: 'Playfair Display', 'Noto Sans Thai', serif; font-weight: 600; font-size: 16px; color: #0b1d3a; margin: 0 0 8px 0; } .ds-card-body { font-family: 'Inter', 'Noto Sans Thai', sans-serif; font-size: 14px; color: #5a7299; margin: 0; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard form field — muted-mist fill, gold focus border, red error state.",
+      "html": "<label class=\"ds-label\">ชื่อลูกค้า <span class=\"ds-required\">*</span></label><input class=\"ds-input\" placeholder=\"กรอกชื่อลูกค้า\" />",
+      "css": ".ds-label { font-family: 'Inter', 'Noto Sans Thai', sans-serif; font-size: 12px; font-weight: 500; color: #5a7299; display: block; margin-bottom: 6px; } .ds-required { color: #e05252; } .ds-input { width: 100%; background: #eef1f8; border: 1px solid rgba(11,29,58,0.1); border-radius: 8px; padding: 8px 12px; font-family: 'Inter', 'Noto Sans Thai', sans-serif; font-size: 14px; color: #0b1d3a; outline: none; transition: border-color 0.15s ease; box-sizing: border-box; } .ds-input:focus { border-color: rgba(201,168,76,0.5); }"
+    },
+    {
+      "name": "Sidebar Nav Item",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Active state reuses the same tinted-pill formula as Status Pills — the sidebar's active row is a direct application of that rule.",
+      "html": "<div class=\"ds-nav-item ds-nav-item--active\">แดชบอร์ด</div><div class=\"ds-nav-item\">ใบเสนอราคา</div>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; font-family: 'Inter', 'Noto Sans Thai', sans-serif; font-size: 14px; font-weight: 500; color: #a8bed8; transition: background-color 0.15s ease, color 0.15s ease; } .ds-nav-item:hover { background: #132540; color: #ffffff; } .ds-nav-item--active { background: rgba(201,168,76,0.15); color: #c9a84c; border: 1px solid rgba(201,168,76,0.25); }"
+    },
+    {
+      "name": "Stat Tile",
+      "kind": "card",
+      "refersTo": "stat-tile",
+      "description": "Compact KPI/at-a-glance number tile — icon in an Icon Chip Tint square, large mono value, muted label, optional one-line helper caption.",
+      "html": "<div class=\"ds-stat-tile\"><div class=\"ds-stat-tile-icon\">◆</div><p class=\"ds-stat-tile-value\">128</p><p class=\"ds-stat-tile-label\">ใบเสนอราคาทั้งหมด</p></div>",
+      "css": ".ds-stat-tile { background: #ffffff; border: 1px solid rgba(11,29,58,0.1); border-radius: 12px; padding: 16px; transition: border-color 0.2s ease; } .ds-stat-tile:hover { border-color: rgba(201,168,76,0.3); } .ds-stat-tile-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: #1a5fb418; color: #1a5fb4; font-size: 14px; margin-bottom: 8px; } .ds-stat-tile-value { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 700; color: #0b1d3a; letter-spacing: -0.01em; margin: 0; } .ds-stat-tile-label { font-family: 'Inter', 'Noto Sans Thai', sans-serif; font-size: 12px; color: #5a7299; margin: 4px 0 0 0; }"
+    },
+    {
+      "name": "Chart Tooltip",
+      "kind": "custom",
+      "refersTo": "chart-tooltip",
+      "description": "Recharts tooltip shared across every Dashboard chart — the one floating element inside a chart, so it earns shadow-xl and a gold-tinted (not hairline-navy) border.",
+      "html": "<div class=\"ds-chart-tooltip\"><p class=\"ds-chart-tooltip-label\">มิ.ย. 2026</p><p class=\"ds-chart-tooltip-value\" style=\"color:#c9a84c\">ยอดขายปิด: ฿1.2M</p></div>",
+      "css": ".ds-chart-tooltip { background: #ffffff; border: 1px solid rgba(201,168,76,0.3); border-radius: 8px; padding: 12px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); } .ds-chart-tooltip-label { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #5a7299; margin: 0 0 4px 0; } .ds-chart-tooltip-value { font-family: 'JetBrains Mono', monospace; font-size: 12px; margin: 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Chartered Ledger",
+    "overview": "TCS ERP looks like the official record book of a serious trading house, not a generic SaaS dashboard. Navy is the ink and the leather binding — it is the color of authority, of a company that stores and moves chemicals for a living and can't afford ambiguity in its paperwork. Gold is used the way a ledger uses a wax seal or a gilded edge: sparingly, on the things that represent approval, action, or attention — a primary button, an active nav item, a \"pending approval\" pill. Playfair Display headings give every page title the weight of a printed heading in a bound register, while Inter carries the actual day-to-day reading — the paragraphs, labels, and form fields a clerk fills in dozens of times a day. JetBrains Mono marks anything that must be read exactly and never mistaken: quotation numbers, dates, currency.\n\nThe system is formal and trustworthy by necessity (it carries a server-enforced audit trail, RBAC, and approval workflow), but the mandate from the people who actually use it every day is that formal must never mean unfriendly: the ledger metaphor governs color and type, not density or tone. Screens stay legible and unintimidating — generous padding, plain-language page descriptions, one clear primary action per screen, and empty states that always say what to do next rather than just \"no data.\" A user who has never opened a design system should still be able to find the one gold button that matters.\n\nThe system is deliberately flat and quiet at rest — surfaces are separated by a hairline navy border, not a shadow — and reserves motion/elevation for the moment something is genuinely floating above the page (a dropdown, a modal). This keeps the \"ledger\" feeling calm and paper-like rather than app-glossy.",
+    "keyCharacteristics": [
+      "Navy-and-gold, editorial-serif headings over a clean sans-serif body — formal without being cold.",
+      "Gold is rare and meaningful: primary actions, active/selected states, \"awaiting approval.\" Never a background color for large areas.",
+      "Flat by default (border-only surfaces); shadow appears only when something floats above the page.",
+      "No third-party component library — every control is hand-built in Tailwind to this system's exact rules.",
+      "Every workflow status (9 of them, end to end) gets its own tinted pill color — the system doubles as a legend once learned."
+    ],
+    "rules": [
+      { "name": "The Icon Chip Tint Rule", "body": "A small icon sitting in a rounded square (stat tiles, action-item tiles) tints its own background by appending a literal 18 hex-alpha suffix to the icon's accent color (roughly 9% opacity), with the icon itself at full accent color — a distinct notation from the Tinted Pill Rule's Tailwind /10 /20 opacity classes. Don't mix the two conventions for the same element.", "section": "colors" },
+      { "name": "The Rare Gold Rule", "body": "Gold covers a small fraction of any given screen — one primary button, one active nav row, one status pill at a time. Never use gold as a large background fill, a card background, or a body-text color.", "section": "colors" },
+      { "name": "The Tinted Pill Rule", "body": "Every status badge uses the same formula: bg-[HEX]/10 text-[HEX] border border-[HEX]/20, one dedicated hex per status. A new status must mint its own hex under this formula rather than reusing an existing status's color.", "section": "colors" },
+      { "name": "The Two-Tier Density Rule", "body": "On dense working pages, chrome (labels, buttons, badges, pills) sits at 12px while actual content (input values, table data, totals) sits at 14px. Bumping everything to one size erases the hierarchy.", "section": "typography" },
+      { "name": "The Flat-Ledger Rule", "body": "Surfaces are flat at rest, separated by a border, not a shadow. Shadow (shadow-xl) is reserved exclusively for content that overlays the page — dropdowns and modals — never an in-flow card or panel.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep gold rare — one primary action, one active state, one status pill at a time.",
+      "Do use the tinted-pill formula for any new status or state badge.",
+      "Do pair every 'Playfair Display' inline style with the 'Noto Sans Thai' fallback.",
+      "Do keep icon-only actions discoverable at opacity-50 by default, full opacity on hover or focus-visible — never hover-only.",
+      "Do wrap every table in overflow-x-auto and make every field-pair grid grid-cols-1 sm:grid-cols-2.",
+      "Do reserve shadow-xl for genuinely floating layers — everything else stays flat with a border."
+    ],
+    "donts": [
+      "Don't use gold as a large background fill, a card background, or body text color.",
+      "Don't put a shadow on an in-flow card or panel.",
+      "Don't drop a real form label below 12px — text-[10px] is only for uppercase section-eyebrow labels.",
+      "Don't use window.prompt()/window.confirm() — use PromptDialog/ConfirmDialog.",
+      "Don't apply this design system to a formal reference-form print document — the reference paper form is the design authority there, not this system.",
+      "Don't reach for a drag-and-drop library for reorderable lists — use up/down arrow buttons or native HTML5 drag events."
+    ]
+  }
+}

@@ -14,6 +14,21 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-29] Impeccable design-system setup + Dashboard accessibility/responsive/UX hardening pass.**
+  First `/impeccable` run on this project: `init` → `PRODUCT.md` (users, positioning, and a
+  standing "Permanent UI and Impeccable Rules" policy the owner dictated), `document` → `DESIGN.md`
+  + `.impeccable/design.json` scanned from the existing navy/gold system. Then a full
+  audit→harden→adapt→polish→typeset→critique cycle on the Dashboard: status-pill text contrast
+  (as low as 2.1:1) darkened to WCAG AA 4.5:1 app-wide (`src/lib/quotes.tsx`'s `statusStyle` +
+  `ApprovalDashboard.tsx`'s stat tiles); 5 unlabeled filter controls got `aria-label`s; the app's
+  first `prefers-reduced-motion` rule; 6 grids that skipped straight to `xl:` (1280px) now step at
+  `lg:`, closing a real gap at the 1024–1279px range common on real laptops; 4 stray font sizes
+  normalized to the documented 12px floor. A dual-agent critique (independent design review +
+  detector/browser evidence, isolated sub-agents) then found the Approve button committed an
+  irreversible workflow transition with zero confirmation — scored 19/40, P0 — fixed with a
+  `ConfirmDialog` (naming quote ID + client, rendered via `createPortal` since a `<tr>` can't
+  directly host it) and toast messages that now name the quotation ID. See CHANGELOG.md and the
+  persisted critique at `.impeccable/critique/`.
 - ✅ **[2026-07-29] "ทวงเลข PO" is now its own grantable permission (`scopeOfWork:chasePo`).**
   Owner request the same day the feature shipped: the chase button/route no longer piggybacks on
   `scopeOfWork:view` — it requires an explicit Role Management grant (defaults: Administrator +

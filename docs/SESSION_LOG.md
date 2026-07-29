@@ -4,7 +4,55 @@
 
 ---
 
-## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
+## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence + Impeccable design-system setup + Dashboard hardening
+
+### What was implemented (seventeenth task this session: Impeccable design-system setup + full Dashboard audit→fix cycle)
+- First-ever run of the `/impeccable` skill on this project. `init` interviewed the owner (in Thai,
+  per their request) and wrote `PRODUCT.md` — confirmed users are all four groups (Sales/Sales
+  Managers/Technical staff/Admins/Managers/CEO, many first-time business-software users), desktop/
+  laptop-only, no accessibility mandate today. `document` scanned the existing navy/gold system
+  (scan mode, not seed — a coherent system already existed) into `DESIGN.md` + a
+  `.impeccable/design.json` sidecar: Creative North Star "The Chartered Ledger," Rare Gold/Tinted
+  Pill/Icon Chip Tint/Flat-Ledger/Two-Tier Density named rules, Stat Tile + Chart Section signature
+  components. The owner then dictated a standing "Permanent UI and Impeccable Rules" policy (strict
+  scope discipline, business-logic/RBAC/DB protections, UI rules, required verification checklist)
+  — folded into `PRODUCT.md`/`DESIGN.md` (so `context.mjs` surfaces it automatically every future
+  `/impeccable` run) plus a cross-session memory note for the process/verification half that doesn't
+  belong in either doc.
+- Ran `audit` on the Dashboard: 13/20 (Acceptable) — real findings, not detector noise (verified 34
+  of 36 detector hits as false positives against the project's own documented 10px-eyebrow
+  convention before trusting the rest). Then worked the punch list: `harden` (status-pill contrast
+  as low as 2.1:1 → all ≥4.5:1 AA, computed not eyeballed; 5 unlabeled Dashboard filter controls;
+  project's first `prefers-reduced-motion` rule), `adapt` (6 supporting-detail grids jumped 1→`xl:`
+  1280px, skipping the 1024–1279px laptop-window range this app's own users actually sit in most —
+  now step at `lg:`), `polish` (3 fixed-pixel `PieChart`s → `ResponsiveContainer`), `typeset` (4
+  stray 10-11px chrome elements → the documented 12px floor). Re-ran `audit`: 16/20 (Good) — caught
+  one new isolated contrast issue in `ApprovalDashboard.tsx`'s own stat tiles the first pass hadn't
+  read closely, fixed it (`harden`), re-verified.
+- **`critique` the Approve button** (owner request, following the audit's deferred UX question): ran
+  the full dual-agent protocol (two isolated sub-agents — independent design review + detector/
+  browser-evidence pass, never seeing each other's output) rather than degrading to inline. Found:
+  Approve committed the `รออนุมัติ→อนุมัติแล้ว` transition (no reverse edge in the workflow state
+  machine) on a single click with zero confirmation, while `QuoteDocument.tsx`'s own editor already
+  confirms this identical transition — scored 19/40, P0. Owner picked the full-`ConfirmDialog`
+  option; fixed via `harden`+`clarify`+`polish`: Approve now confirms (naming quote ID + client,
+  states it can't be undone from this screen), both toasts now name the quotation ID. One real bug
+  caught mid-fix: the first attempt rendered `ConfirmDialog` as a direct `<tr>` child (invalid table
+  HTML) — fixed with `createPortal` to `document.body` rather than lifting per-row busy/error state
+  to the parent (the only existing precedent, `ProductList.tsx`'s `confirmDeleteId`, doesn't carry
+  that per-row state, so it didn't fit here).
+- Every step verified via `tsc --noEmit`/`npm run lint`/`npm run build`/`npm test` (56/56) plus a
+  `git diff --stat` scope check. Live browser verification was attempted every time and consistently
+  hit this sandbox's known limitation (no `vercel dev`/MongoDB behind the plain `vite` dev server —
+  confirmed via screenshot, not assumed) — verified instead via precise contrast math (Node scripts)
+  and line-level review. Found and cleaned up one unrelated orphaned dev-server process left over
+  from earlier in this same session.
+- **New TODO surfaced**: `CustomerAnalytics.tsx`'s stat-tile caption (10px, plain case, doesn't
+  qualify for the documented uppercase/tracking-wide eyebrow exception) — flagged by the critique's
+  detector pass, explicitly deferred by the owner rather than bundled into the fix pass.
+  `ApprovalDashboard.tsx`'s `confirmReject()` doesn't reset `busy` on its success path (relies on
+  the row unmounting after `onRefresh()`) — a latent inconsistency noticed during the final polish
+  read, not fixed since it's outside what was asked and isn't currently observable.
 
 ### What was implemented (sixteenth task this session: granted the 4 pending Role Management permissions)
 - Direct follow-up to the previous task's summary of open TODOs — the owner said "ไปติ๊กสิทธิ์ 4

@@ -1,24 +1,41 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { ClipboardCheck, ThumbsUp, ThumbsDown } from "lucide-react";
 import type { ApprovalDashboard as ApprovalDashboardData, PendingApprovalItem } from "../../lib/dashboard";
 import { performWorkflowAction } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { useToast } from "../../hooks/useToast";
 import { Toast } from "../../components/Toast";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { fmtDaysOrDash, fmtShort } from "./format";
 
+/**
+ * 2026-07-29, critique-driven hardening pass: `approve()` used to fire directly from the button's
+ * `onClick` — the only action in this row (and the only place in the app) that committed this exact
+ * workflow transition with zero confirmation, even though `QuoteDocument.tsx`'s own editor already
+ * confirms the identical `"approved"` transition via its `pendingAction` modal. The transition also
+ * has no reverse edge in `api/_lib/quoteWorkflow.ts`, so an accidental click was unrecoverable from
+ * this widget. `confirmOpen` now gates the real `approve()` call behind `ConfirmDialog`, reusing the
+ * same shared component the rest of the app already uses for confirmations (`docs/UI_GUIDELINES.md`
+ * "Dialogs") instead of hand-rolling a new modal — Approve needs no comment field, so `ConfirmDialog`
+ * fits better here than `QuoteDocument.tsx`'s own comment-capable inline modal. The message itself
+ * names the quote id/client (so the confirm step doubles as the pre-commit review Assessment A found
+ * missing) and states plainly that this can't be undone from this screen.
+ */
 function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; canReject: boolean; onDone: (message: string) => void }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
 
   const approve = async () => {
+    setConfirmOpen(false);
     setBusy(true);
     try {
       await performWorkflowAction(item.id, "approved", "", {});
-      onDone(t("dashboard.approval.actionSuccess.approved"));
+      onDone(t("dashboard.approval.actionSuccess.approved").replace("{id}", item.id));
     } catch {
       setError(t("dashboard.approval.actionError"));
     } finally {
@@ -31,7 +48,7 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
     setBusy(true);
     try {
       await performWorkflowAction(item.id, "rejected", comment.trim(), {});
-      onDone(t("dashboard.approval.actionSuccess.rejected"));
+      onDone(t("dashboard.approval.actionSuccess.rejected").replace("{id}", item.id));
     } catch {
       setError(t("dashboard.approval.actionError"));
       setBusy(false);
@@ -41,7 +58,7 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
   return (
     <tr className="border-b border-border/50 hover:bg-secondary/30 transition-colors align-top">
       <td className="px-3 py-2.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{item.id}</td>
-      <td className="px-3 py-2.5 text-xs text-foreground">{item.client}</td>
+      <td className="px-3 py-2.5 text-xs text-foreground max-w-[200px] truncate" title={item.client}>{item.client}</td>
       <td className="px-3 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{item.salesperson}</td>
       <td className="px-3 py-2.5 text-xs font-mono text-foreground font-semibold whitespace-nowrap">{fmtShort(item.amount)}</td>
       <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{item.submittedDate ? item.submittedDate.slice(0, 10) : "—"}</td>
@@ -55,30 +72,47 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
               rows={2}
               className="text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#e05252]/50 transition-colors w-full resize-none"
             />
-            {error && <p className="text-[10px] text-[#e05252]">{error}</p>}
+            {error && <p className="text-xs text-[#e05252]">{error}</p>}
             <div className="flex items-center gap-1.5">
-              <button disabled={busy} onClick={confirmReject} className="px-2.5 py-1 text-[11px] bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors disabled:opacity-50">
+              <button disabled={busy} onClick={confirmReject} className="px-2.5 py-1 text-xs bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors disabled:opacity-50">
                 {t("dashboard.approval.rejectConfirm")}
               </button>
-              <button disabled={busy} onClick={() => { setRejecting(false); setComment(""); setError(""); }} className="px-2.5 py-1 text-[11px] border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+              <button disabled={busy} onClick={() => { setRejecting(false); setComment(""); setError(""); }} className="px-2.5 py-1 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                 {t("common.cancel")}
               </button>
             </div>
           </div>
         ) : (
           <div className="flex items-center gap-1.5">
-            <button disabled={busy} onClick={approve} className="flex items-center gap-1 px-2.5 py-1 text-[11px] bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors disabled:opacity-50">
+            <button disabled={busy} onClick={() => setConfirmOpen(true)} className="flex items-center gap-1 px-2.5 py-1 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors disabled:opacity-50">
               <ThumbsUp size={11} /> {t("quotation.action.approved")}
             </button>
             {canReject && (
-              <button disabled={busy} onClick={() => setRejecting(true)} className="flex items-center gap-1 px-2.5 py-1 text-[11px] bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors disabled:opacity-50">
+              <button disabled={busy} onClick={() => setRejecting(true)} className="flex items-center gap-1 px-2.5 py-1 text-xs bg-[#e05252] text-white rounded-lg font-semibold hover:bg-[#c94444] transition-colors disabled:opacity-50">
                 <ThumbsDown size={11} /> {t("quotation.action.rejectBtn")}
               </button>
             )}
-            {error && <p className="text-[10px] text-[#e05252]">{error}</p>}
+            {error && <p className="text-xs text-[#e05252]">{error}</p>}
           </div>
         )}
       </td>
+      {/* Portal to document.body: a <tr>'s only valid children are <td>/<th>, so ConfirmDialog's
+          fixed-overlay <div> can't be a direct DOM child here without producing invalid table
+          markup. createPortal keeps this row's own confirmOpen/approve closure (no need to lift
+          busy/error state up to the parent, unlike ProductList.tsx's shared confirmDeleteId
+          pattern, which doesn't carry per-row inline busy/error state the way this row does) while
+          rendering the actual overlay outside the table entirely. */}
+      {createPortal(
+        <ConfirmDialog
+          open={confirmOpen}
+          title={t("dashboard.approval.confirmApprove.title")}
+          message={t("dashboard.approval.confirmApprove.message").replace("{id}", item.id).replace("{client}", item.client)}
+          confirmLabel={t("quotation.action.approved")}
+          onConfirm={approve}
+          onCancel={() => setConfirmOpen(false)}
+        />,
+        document.body,
+      )}
     </tr>
   );
 }
@@ -86,10 +120,17 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
 export function ApprovalDashboard({ data, onRefresh }: { data: ApprovalDashboardData; onRefresh: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
+  /**
+   * `accent` colors the value text directly against `bg-secondary/40` — same accessibility
+   * hardening pass as `statusStyle` (2026-07-29): the raw brand hexes (gold especially, 2.15:1)
+   * failed WCAG AA here too, so each is the minimum darkened (same hue/saturation, reduced
+   * lightness only) variant that clears 4.5:1 against this tile's actual background, computed
+   * the same way as `src/lib/quotes.tsx`'s `statusStyle`.
+   */
   const items = [
-    { label: t("dashboard.approval.pending"), value: data.pendingApprovals.toLocaleString("th-TH"), accent: "#c9a84c" },
-    { label: t("dashboard.approval.approvedToday"), value: data.approvedToday.toLocaleString("th-TH"), accent: "#2aa36b" },
-    { label: t("dashboard.approval.rejectedToday"), value: data.rejectedToday.toLocaleString("th-TH"), accent: "#e05252" },
+    { label: t("dashboard.approval.pending"), value: data.pendingApprovals.toLocaleString("th-TH"), accent: "#886f29" },
+    { label: t("dashboard.approval.approvedToday"), value: data.approvedToday.toLocaleString("th-TH"), accent: "#218155" },
+    { label: t("dashboard.approval.rejectedToday"), value: data.rejectedToday.toLocaleString("th-TH"), accent: "#d92b2b" },
     { label: t("dashboard.kpi.averageApprovalTime"), value: fmtDaysOrDash(data.averageApprovalTime, t("dashboard.unit.days")), accent: "#5a7299" },
   ];
 

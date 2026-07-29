@@ -396,42 +396,40 @@ function DashboardContent({
       <div data-tour="dashboard-indepth" className="pt-2 border-t border-border space-y-6">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.section.detail")}</p>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SalesPerformancePanel kpis={kpis} />
           <ExpectedSalesForecastChart forecast={forecast} />
         </div>
 
         <ActivityFollowUpSummary kpis={kpis} onPendingApprovalsClick={() => onNavigateToQuotations({ status: "รออนุมัติ" })} />
         {(scopeOfWork || deliveryOrder) && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {scopeOfWork && <ScopeOfWorkSummary data={scopeOfWork} />}
             {deliveryOrder && <DeliveryOrderSummary data={deliveryOrder} />}
           </div>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           <RevenueTrendChart trend={revenueTrend} anchorDate={trendAnchorDate} />
           <ProductsByCategoryChart categoryBreakdown={categoryBreakdown} />
         </div>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <RevenueByJobTypeChart jobTypeAnalytics={jobTypeAnalytics} />
           <JobTypeDistributionChart jobTypeAnalytics={jobTypeAnalytics} />
         </div>
 
         <PipelineSteps pipeline={pipeline} onStageClick={(status) => onNavigateToQuotations({ status })} />
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} />
-        </div>
+        <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} />
         <SalesPerformanceTable title={t("dashboard.salesPerformance.title")} sub={t("dashboard.salesPerformance.sub")} entries={salesPerformance} />
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <CustomerAnalytics data={customerAnalytics} />
           <JobTypeAnalytics jobTypeAnalytics={jobTypeAnalytics} />
         </div>
 
         {approvalDashboard && <ApprovalDashboard data={approvalDashboard} onRefresh={refreshAfterAction} />}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <FollowUpReminders followUps={followUps} onOpenClient={(client) => onNavigateToQuotations({ client })} />
           <NotificationSummary summary={notificationSummary} />
         </div>
