@@ -4,7 +4,17 @@
 
 ---
 
-## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting
+## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite
+
+### What was implemented (fifth task this session: first automated test suite)
+- **55 vitest tests across 7 files** (`tests/`, `npm test`, wired into CI with a cached mongod
+  binary) — the deliberate "riskiest logic first" slice the owner approved: money math incl.
+  client/server parity, RBAC grants + permission edge cases, workflow state machine + per-action
+  authorization, quote ownership rules, revision-chain parsing/dedup, Scope of Work validation
+  (incl. the same-day manual-number rules), and a real `/api/auth/login` integration test
+  (bcrypt/JWT + every new rate-limiting case) against `mongodb-memory-server`. Standing rule #8
+  now includes `npm test`. Remaining coverage gaps recorded honestly in TODO.md (per-route HTTP
+  guards beyond auth, products CRUD, UI).
 
 ### What was implemented (fourth task this session: login rate limiting)
 - **`POST /api/auth/login` is no longer unthrottled** (Known Gap since 2026-07-09, owner asked to

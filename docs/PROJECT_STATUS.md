@@ -14,6 +14,20 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-07-29] First automated test suite (vitest, 55 tests, wired into CI).** `tests/` +
+  `npm test`: quotation money math with client/server formula parity (`computeTotals` vs
+  `quoteAmounts.ts` — fails the moment the two drift), default-role RBAC grants + permission
+  edge cases (unknown role denies, "named Super Admin" ≠ super admin), quotation workflow state
+  machine (terminal statuses have no exit, no Draft→Approved shortcut) + per-action
+  authorization, `computeQuotePermissions` ownership rules (own-Draft vs colleague's-Draft,
+  submitter-can't-approve), revision-chain parsing/dedup, Scope of Work required-field
+  validation (incl. the new manual-number rules), and a **real login integration test** running
+  the actual `api/handlers/auth.ts` (bcrypt, JWT cookie, and all the new rate-limiting cases:
+  5-failure lockout not bypassable with the correct password, clear-on-success, 20-per-IP sweep
+  cap, suspended-account neither-records-nor-clears, TTL index present) against an in-memory
+  MongoDB (`mongodb-memory-server` — no real database touched). CI runs the suite on every
+  push/PR with the mongod binary cached. Coverage is a deliberate first slice — per-route HTTP
+  guards beyond `/api/auth/*` still open, see [TODO.md](./TODO.md). See CHANGELOG.md.
 - ✅ **[2026-07-29] Login rate limiting.** `POST /api/auth/login` now records failed attempts in a
   new TTL-purged `login_attempts` MongoDB collection and throttles over a 15-minute sliding
   window: ≥5 failures for one identifier, or ≥20 from one IP, → 429 with a Thai
@@ -709,7 +723,7 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 ## Upcoming Milestones
 
 1. **Lead & Customer Management module** — the original "Phase 1" scope from the initial ERP spec, still outstanding. Now the single largest untouched bucket, since the backend migration closed the other big one.
-2. Close the remaining honest gaps from the backend migration: ~~add login rate limiting~~ (done 2026-07-29), ~~set up CI~~ (done 2026-07-29), ~~verify GitHub auto-deploy~~ (confirmed in practice), add automated tests for the new API layer, rotate the MongoDB Atlas credential that was pasted into an AI chat session — see [TODO.md](./TODO.md) High Priority.
+2. Close the remaining honest gaps from the backend migration: ~~add login rate limiting~~ (done 2026-07-29), ~~set up CI~~ (done 2026-07-29), ~~verify GitHub auto-deploy~~ (confirmed in practice), add automated tests for the new API layer (**started 2026-07-29** — 55 tests incl. a login integration test; per-route HTTP coverage still open), rotate the MongoDB Atlas credential that was pasted into an AI chat session — see [TODO.md](./TODO.md) High Priority.
 3. Wire `Company.vatRate` into `computeTotals()`, add button-level permission gating to Product Library, and lift `QuotationPage`'s selected-quote state to `App.tsx` so notifications can deep-link to a specific quote.
 
 ## Current Sprint
@@ -725,7 +739,7 @@ Not yet planned.
 - ~~**No rate limiting on login**~~ — **closed 2026-07-29**: `POST /api/auth/login` now throttles via the TTL-purged `login_attempts` MongoDB collection (≥5 failures/identifier or ≥20/IP per 15 min → 429 + `Retry-After`). Not yet verified against the live deployment (see [TODO.md](./TODO.md)). See [RBAC.md](./RBAC.md) Known Gaps.
 - **A MongoDB Atlas database-user password was pasted into an AI chat session** during the 2026-07-09 backend migration's development. A credential rotation was recommended to the user as a follow-up; whether it has been done cannot be verified from the codebase — treat as an open, unconfirmed action item until explicitly checked off. See [TODO.md](./TODO.md).
 - **No true session revocation**: sessions are JWTs (httpOnly cookie, 7-day expiry), not database-backed — a still-active account's leaked/stolen token remains valid until natural expiry; only a *deactivated* account is locked out immediately (every request re-checks `status` against MongoDB). Low risk in practice (httpOnly, never exposed to XSS-readable JS) but worth knowing precisely. See [RBAC.md](./RBAC.md) "What Was Achieved vs. the Old Proposed Design."
-- **No automated tests** (CI now exists — see below): nothing in this repo (frontend or the new API layer) is covered by tests. **2026-07-29 update**: `.github/workflows/ci.yml` now runs `lint`/`tsc` (both configs)/`build` on every push/PR to `master`, so a compile-/lint-broken push shows a red ✗ on the commit immediately — but CI is **notify-only** (it doesn't block the Vercel auto-deploy, which would require a PR-based workflow) and only proves the code builds, not that features behave correctly (that's the still-open automated-tests item). See [TODO.md](./TODO.md).
+- **Automated test coverage is partial** (was "none" until 2026-07-29): a first real vitest suite (55 tests, `tests/`, `npm test`) now covers quotation money math (incl. client/server formula parity), default-role RBAC grants + permission edge cases, the quotation workflow state machine + per-action authorization, ownership rules, revision-chain parsing/dedup, Scope of Work validation, and a full `/api/auth/login` integration test (bcrypt/JWT/rate limiting against an in-memory MongoDB) — and CI runs it on every push/PR (`.github/workflows/ci.yml`, notify-only: it doesn't block the Vercel auto-deploy). Still uncovered: HTTP-level guards on every route other than `/api/auth/*`, products CRUD helpers, all UI components. See [TODO.md](./TODO.md).
 - **RBAC permission model is real but hardcoded**: the 35-key `Permission` union is still a TypeScript union, not admin-creatable rows — adding a genuinely new permission still requires a code change and redeploy, even though roles/permission-assignment are fully admin-editable at runtime. Not a security risk, but a scaling limitation worth knowing. See [RBAC.md](./RBAC.md).
 - **Scope of Work (2026-07-15, incl. the same-day Codex-review fix pass) is unverified against a live deployment/browser** — same sandboxed-session no-live-database limitation as every prior pass (see the entry two lines below). `secondaryCode`'s business *meaning* is also still an open, explicitly-flagged question (its presence is now required, per the fix pass, but not its meaning), not a code defect — see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) and [TODO.md](./TODO.md).
 - **Scope ambiguity**: the long-term ERP vision (multi-department, many more modules) is far larger than what exists today. Expectations should be managed against [CLAUDE.md](./CLAUDE.md)'s "Current Development Phase" section.
@@ -750,8 +764,8 @@ Not yet planned.
 - Notification clicks navigate to the quotation list, not the specific quote — deep-linking needs `QuotationPage`'s view state lifted to `App.tsx`.
 - Product Library lacks button-level (create/edit/delete) permission gating — only its sidebar entry (`products:view`) is gated.
 - ~~`salesTeam` (sales leaderboard data) is shared, static sample data~~ — **removed 2026-07-09** along with the fake Dashboard sales leaderboard that used it; `QuoteList.tsx`'s salesperson avatar now uses a deterministic hash-based color, no fake roster.
-- No automated tests exist anywhere in the project.
-- ~~No CI pipeline configured~~ — **fixed 2026-07-29**: `.github/workflows/ci.yml` (lint + typecheck ×2 + build on every push/PR to `master`, notify-only). See CHANGELOG.md.
+- ~~No automated tests exist anywhere in the project~~ — **first suite landed 2026-07-29** (55 vitest tests incl. an in-memory-MongoDB login integration test, run by CI); route-level/UI coverage still open, see TODO.md.
+- ~~No CI pipeline configured~~ — **fixed 2026-07-29**: `.github/workflows/ci.yml` (lint + typecheck ×2 + build + `npm test` on every push/PR to `master`, notify-only). See CHANGELOG.md.
 - Bundle: `DashboardPage` chunk **shrank** to ~478KB gzipped ~126KB after the 2026-07-10 UI/UX redesign pass (down from ~502KB/~132KB) — 3 redundant charts were removed as part of decluttering, more than offsetting the new components added, and it's now under Vite's 500KB raw-size warning threshold for the first time. The main `index.js` chunk grew (~263KB → ~303KB) since `driver.js` and the new shared components (`GuidedTour`/`EmptyState`/`PageHeader`/`MetricInfoTooltip`) are used directly in `App.tsx`, not lazy-loaded — worth revisiting with route-level code-splitting if the main chunk keeps growing.
 - Base64-in-document uploads (logo/stamp/profile picture/signature) have a practical 16MB MongoDB document ceiling — the new `uploads`/`attachments` collections (schema-only, 2026-07-09) are forward-looking scaffolding for a real blob-storage migration, not yet wired to anything.
 - ~~`i18n.tsx` only covers strings the 2026-07-09 pass touched~~ — **resolved same day**: essentially all UI chrome now translated. Persisted data/seed content and the printed quotation document remain Thai-only, deliberately.

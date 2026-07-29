@@ -2,10 +2,12 @@
 #
 # Why this exists: the GitHub repo auto-deploys to production (Vercel) on every push to
 # master with no checks in between (docs/TODO.md's long-standing CI item). This workflow is
-# the safety net: it runs the exact same three checks docs/CLAUDE.md's standing rule already
-# requires before any task is considered done, so a broken push shows a red ✗ on the commit
-# immediately. It does NOT block the Vercel deploy (that would require a PR-based workflow) —
-# it makes a bad push loudly visible so it can be reverted fast.
+# the safety net: it runs the same checks docs/CLAUDE.md's standing rule already requires
+# before any task is considered done — plus, since 2026-07-29, the vitest suite (money math,
+# RBAC rules, workflow state machine, Scope of Work validation, and a real-login integration
+# test incl. rate limiting against an in-memory MongoDB) — so a broken push shows a red ✗ on
+# the commit immediately. It does NOT block the Vercel deploy (that would require a PR-based
+# workflow) — it makes a bad push loudly visible so it can be reverted fast.
 #
 # Deliberately platform-neutral (plain GitHub Actions + npm, nothing Vercel-specific) per the
 # standing no-new-Vercel-locked-services rule in docs/SERVER_MIGRATION_PLAN.md.
@@ -44,3 +46,15 @@ jobs:
       # the final gate anyway, since it's the only step that proves vite can actually bundle.
       - name: Build
         run: npm run build
+
+      # mongodb-memory-server (tests/api/) downloads a real mongod binary on first use — cached
+      # between runs so only the very first CI run pays the download. Restored after npm ci
+      # (which would otherwise wipe node_modules/.cache).
+      - name: Cache mongod binary for tests
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-memory-server-${{ runner.os }}
+
+      - name: Test
+        run: npm test

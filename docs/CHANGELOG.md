@@ -4,7 +4,62 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Login rate limiting on POST /api/auth/login
+## 2026-07-29 (absolute latest) — First automated test suite (vitest, 55 tests, wired into CI)
+
+The project's first real test coverage, on the owner's direct go-ahead ("ทำเลย" after the
+plain-language explanation) — closes the "zero test coverage anywhere" state flagged since the
+backend migration, deliberately as a first slice over the riskiest pure logic plus one real
+integration path:
+
+- **Tooling**: `vitest` + `mongodb-memory-server` (devDependencies; both added to
+  `allowScripts`). `npm test` (`vitest run`), standalone `vitest.config.ts` (Node environment,
+  no Tailwind/React plugins needed — esbuild handles quotes.tsx's JSX via tsconfig). CI gained a
+  Test step + a cache for the downloaded mongod binary.
+- **`tests/quoteAmounts.test.ts`** — `computeTotals` (line discounts before quote discount, 7%
+  VAT, empty-lines-yield-zero) and **client/server formula parity**: `computeQuoteAmountBeforeVat`/
+  `WithVat` (api/_lib/quoteAmounts.ts, feeding the persisted `amount` + every Dashboard total)
+  must match `computeTotals` on shared cases — fails the moment the two formulas drift.
+- **`tests/permissions.test.ts`** — default-role grants (super_admin holds everything incl.
+  later-added permissions; sales_user can create/edit but never approve/viewAll; both approver
+  levels can approve but not create; viewer holds nothing mutating) + edge cases (null user /
+  unknown roleKey / missing role all deny; a role merely NAMED "Super Admin" isn't one; custom
+  roles hold exactly what they were granted).
+- **`tests/quoteWorkflow.test.ts`** — the server-authoritative state machine: exact from/to per
+  action, terminal statuses (Won/Lost/Cancelled) have no exit, no Draft→Approved shortcut, every
+  non-terminal status has an exit; `isWorkflowActionAllowed` (submit needs ownership, approve/
+  reject/cancel are permission-pure, post-approval actions need edit + owner-or-approver);
+  `COMMENT_REQUIRED_ACTIONS` covers exactly the rejection-style actions.
+- **`tests/quotePermissions.test.ts`** — `computeQuotePermissions` ownership rules: own Draft
+  fully controllable, colleague's Draft untouchable, approve only from PendingApproval, the
+  submitter can't approve their own quote, viewer gets every gate closed, legacy ownerless
+  quotes count as owned, Rewrite/Duplicate follow `quotations:create`.
+- **`tests/revisions.test.ts`** — `-R{n}` parsing (incl. free-form manual Scope of Work numbers
+  and lookalike ids that must NOT parse), rewrite-of-a-rewrite advances the same chain, and
+  `dedupeQuotesByRevisionChain` keeps exactly the latest revision per chain in any input order.
+- **`tests/scopeOfWorkValidation.test.ts`** — a fully-valid baseline passes; `scopeNumber`
+  required / `secondaryCode` optional (the 2026-07-29 manual-number rules); approver required at
+  finalize (and for printing a Final record) but not for printing a Draft; malformed dates fail;
+  payment installments must each have a pct and sum to exactly 100; unchecked mandatory
+  checklist groups block; item rules (no items / no spec line / zero quantity).
+- **`tests/api/loginRateLimit.test.ts`** — integration: the REAL `api/handlers/auth.ts` (setup
+  wizard → login) with real bcrypt/JWT against an in-memory MongoDB. Covers: successful login
+  sets the session cookie; wrong password 401s; **5 failures lock the identifier and the correct
+  password then still gets 429** (+ `Retry-After`); success clears the failure history (verified
+  in the collection); one identifier's failures never lock another; 20 failures from one IP
+  across many identifiers trip the IP cap while an unrelated IP is unaffected; failure docs
+  record the caller's IP as a real BSON Date; a suspended account's correct-password attempt
+  403s and records nothing; the 900s TTL index really exists.
+- **Standing rule updated** (docs/CLAUDE.md #8): `npm test` joins tsc/lint/build as a
+  before-done requirement, and changes touching tested logic must update the matching test file
+  in the same task.
+- Not covered yet (deliberate first slice — tracked in TODO.md): HTTP-level per-route guards
+  beyond `/api/auth/*` (the login test's mock-req/in-memory-Mongo harness is the template),
+  products CRUD helpers, UI components.
+- All 55 tests pass locally (11 s) and in CI. No What's New entry — internal tooling.
+
+---
+
+## 2026-07-29 — Login rate limiting on POST /api/auth/login
 
 Closes the "no login rate limiting" Known Gap open since the 2026-07-09 backend migration
 (docs/RBAC.md), on the owner's direct request:

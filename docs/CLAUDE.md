@@ -17,7 +17,7 @@
 
 This supersedes the previously-proposed "Phase 2" stack (Next.js + Prisma + PostgreSQL + Auth.js) — that plan was **never built**; the migration that actually happened used a different, simpler stack (Vite unchanged + Vercel Functions + MongoDB) chosen for a faster path to a real backend without a frontend framework rewrite. The old proposal is kept in [ARCHITECTURE.md](./ARCHITECTURE.md) as a superseded historical record only — do not build against it.
 
-Known, deliberate scope limitations (not bugs, see [RBAC.md](./RBAC.md) Known Gaps): no automated tests. (CI exists as of 2026-07-29 — `.github/workflows/ci.yml`, notify-only lint+typecheck+build on every push/PR to `master`. Login rate limiting also exists as of 2026-07-29 — MongoDB-backed, 5 failures/identifier or 20/IP per 15 min → 429, see [RBAC.md](./RBAC.md).)
+Known, deliberate scope limitations (not bugs, see [RBAC.md](./RBAC.md) Known Gaps): automated test coverage is partial — a first vitest suite exists as of 2026-07-29 (`tests/`, `npm test`, 55 tests incl. an in-memory-MongoDB login integration test; per-route HTTP guards beyond `/api/auth/*` still untested). CI exists as of 2026-07-29 (`.github/workflows/ci.yml`, notify-only lint+typecheck+build+test on every push/PR to `master`). Login rate limiting exists as of 2026-07-29 (MongoDB-backed, 5 failures/identifier or 20/IP per 15 min → 429, see [RBAC.md](./RBAC.md)).
 
 ## Project Goals
 
@@ -202,7 +202,7 @@ See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for the maintained completion perce
 5. Update the relevant file(s) under `MODULES/` for whatever module changed.
 6. Update this file's module table / architecture summary if it materially changed.
 7. Update [ARCHITECTURE.md](./ARCHITECTURE.md) if structure changed, [DATABASE.md](./DATABASE.md) if data shapes changed, [API.md](./API.md) if the client-operation surface changed, [RBAC.md](./RBAC.md) if permissions changed, [UI_GUIDELINES.md](./UI_GUIDELINES.md) if new UI patterns were introduced.
-8. Before considering any task complete: `npx tsc --noEmit`, `npm run lint`, and `npm run build` must all pass clean.
+8. Before considering any task complete: `npx tsc --noEmit`, `npm run lint`, `npm run build`, and `npm test` must all pass clean. When a change touches tested logic (money math, RBAC rules, workflow transitions, Scope of Work validation, login), update/extend the matching `tests/` file in the same task.
 
 A task is not done until the code works **and** the docs reflect it.
 
