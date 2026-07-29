@@ -108,6 +108,7 @@ export function ScopeOfWorkPage({
           key={selectedId}
           scopeOfWorkId={selectedId}
           users={users}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canFinalize={canFinalize}
           canPrint={canPrint}

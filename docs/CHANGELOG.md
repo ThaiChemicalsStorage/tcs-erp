@@ -4,7 +4,38 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Dashboard page tour (deeper than the main first-sign-in tour)
+## 2026-07-29 (absolute latest) — Document-editor tours: Quotation, Scope of Work, Delivery Order (tour rollout complete)
+
+Owner: "เหลือ Tour อะไรอีกทำให้ครบในทีเดียวเลย" — the last uncovered surface was the document
+editors themselves (arguably where guidance matters most). Three new tours, same `useModuleTour()`
+infra + HelpCircle replay button in each document's toolbar:
+
+- **QuoteDocument** (tourKey `quotationDoc`, 3 steps): the action toolbar (save/print/duplicate/
+  rewrite/create-SOW + the status-and-permission-dependent workflow buttons) → the customer
+  selector (auto-fill, draft-only change rule) → the line-items editor (product picker,
+  sub-details, drag-reorder, auto VAT). Anchors exist in both create and detail modes.
+- **ScopeOfWorkDocument** (`scopeOfWorkDoc`, 4 steps): action toolbar (incl. duplicate-asks-a-
+  number, auto -R rewrite, chase-PO, delivery-order, refresh) → the completion indicator (must be
+  complete before print/submit) → the header card (manual document number editable only while
+  Draft; the PO field editable even after Final) → the checklist card (incl. recipients/email/
+  attachments flow). The component gained `useI18n` (its first — it was hardcoded-Thai; new
+  strings follow the i18n rule) and a `currentUserId` prop threaded from QuotationPage and
+  ScopeOfWorkPage.
+- **DeliveryOrderDocument** (`deliveryOrderDoc`, 2 steps): action toolbar → the per-installment
+  cards (deposits get no card; per-installment printing). Same `useI18n` + `currentUserId`
+  additions (threaded from DeliveryOrderPage).
+- **Load-race guard**: all three pass `autoStart: !!record` — the one-time auto-fire waits until
+  the document has actually fetched (the anchors don't exist over the loading spinner), instead
+  of burning the attempt against an empty page; nothing is marked seen until a tour really shows.
+- 18 new i18n keys (th/en). What's New module-tours entry gains a document-editors bullet.
+  Coverage is now genuinely complete: main tour + 11 page tours + 3 document tours; the only gap
+  left anywhere is the unbuilt Leads module.
+- `tsc` (both configs)/`lint`/`npm test` (56/56)/`build` all pass clean; same live click-through
+  caveat as the other tour passes.
+
+---
+
+## 2026-07-29 — Dashboard page tour (deeper than the main first-sign-in tour)
 
 Owner: "ทำ tour ของหน้า Dashboard เพิ่มด้วย" — the Dashboard was the one page whose only coverage
 was the MAIN first-sign-in tour's basics (title/filters/KPIs as 3 of its 6 stops). Now it has its

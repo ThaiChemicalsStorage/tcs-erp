@@ -6,6 +6,13 @@
 
 ## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence
 
+### What was implemented (thirteenth task this session: document-editor tours — rollout complete)
+- QuoteDocument/ScopeOfWorkDocument/DeliveryOrderDocument each gained a toolbar tour (3/4/2 steps
+  — actions incl. workflow buttons, SOW's completion indicator + manual-number/PO rules +
+  recipients checklist, DO's per-installment cards). `autoStart: !!record` waits for the fetch so
+  the auto-fire never burns against a loading spinner. SOW/DO documents gained their first
+  `useI18n` + `currentUserId` props. Tour coverage is now complete except the unbuilt Leads.
+
 ### What was implemented (twelfth task this session: Dashboard page tour)
 - 5-step deep tour (export/filters/KPIs w/ pre-VAT + dedup rules/status/in-depth) + replay
   button; `useModuleTour` gained `autoStart` so the page tour waits until the main tour is done

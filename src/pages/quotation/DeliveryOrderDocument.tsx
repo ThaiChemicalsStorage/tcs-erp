@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Send, GitBranch } from "lucide-react";
+import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Send, GitBranch, HelpCircle } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import {
   type DeliveryOrder, type DeliveryOrderUpdateFields, type DeliveryOrderInstallment,
@@ -9,6 +9,9 @@ import {
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
+import { useModuleTour } from "../../components/GuidedTour";
+import type { DriveStep } from "driver.js";
+import { useI18n } from "../../lib/i18n";
 import { DeliveryOrderPrintDocument } from "./DeliveryOrderPrintDocument";
 
 function toUpdateFields(d: DeliveryOrder): DeliveryOrderUpdateFields {
@@ -114,6 +117,7 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
 export function DeliveryOrderDocument({
   deliveryOrderId,
   company,
+  currentUserId,
   canEdit,
   canFinalize,
   canPrint,
@@ -126,6 +130,8 @@ export function DeliveryOrderDocument({
 }: {
   deliveryOrderId: string;
   company: Company;
+  /** For the document tour's per-user "seen" tracking (see useModuleTour). */
+  currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
@@ -165,6 +171,15 @@ export function DeliveryOrderDocument({
       .catch(() => { if (!cancelled) setLoadError(true); });
     return () => { cancelled = true; };
   }, [deliveryOrderId, reloadKey]);
+
+  // Document tour (added 2026-07-29) — `autoStart: !!deliveryOrder` defers the one-time auto-fire
+  // until the record has loaded; the toolbar replay button restarts it any time.
+  const { t } = useI18n();
+  const docTourSteps: DriveStep[] = [
+    { element: '[data-tour="dodoc-actions"]', popover: { title: t("tour.dodoc.actions.title"), description: t("tour.dodoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="dodoc-installments"]', popover: { title: t("tour.dodoc.installments.title"), description: t("tour.dodoc.installments.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("deliveryOrderDoc", currentUserId, docTourSteps, { autoStart: !!deliveryOrder });
 
   if (loadError) {
     return (
@@ -291,7 +306,15 @@ export function DeliveryOrderDocument({
           {isDraft ? "Draft" : deliveryOrder.status === "PendingApproval" ? "รออนุมัติ" : "Final"}
         </span>
 
-        <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+        <div data-tour="dodoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <button
+            onClick={docTour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={14} />
+          </button>
           {editable && (
             <button onClick={() => setConfirmAction("refresh")} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <RotateCw size={13} /> อัปเดตข้อมูลจาก Scope of Work
@@ -357,25 +380,27 @@ export function DeliveryOrderDocument({
           </div>
         </div>
 
-        {deliveryOrder.installments.length === 0 ? (
-          <div className="bg-[#e08a3c]/10 border border-[#e08a3c]/30 rounded-xl p-4 flex items-start gap-3 print:hidden">
-            <AlertTriangle size={16} className="text-[#e08a3c] flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-foreground font-medium">
-              Scope of Work นี้ยังไม่มีงวดชำระเงิน — เพิ่มงวดชำระเงินในหน้า Scope of Work ก่อน แล้วกด "อัปเดตข้อมูลจาก Scope of Work"
-            </p>
-          </div>
-        ) : (
-          deliveryOrder.installments.map((installment) => (
-            <InstallmentEditor
-              key={installment.id}
-              installment={installment}
-              items={deliveryOrder.items}
-              onChange={(next) => updateInstallment(installment.id, next)}
-              disabled={!editable}
-              onPrint={canPrint ? () => handlePrintInstallment(installment) : null}
-            />
-          ))
-        )}
+        <div data-tour="dodoc-installments" className="space-y-5">
+          {deliveryOrder.installments.length === 0 ? (
+            <div className="bg-[#e08a3c]/10 border border-[#e08a3c]/30 rounded-xl p-4 flex items-start gap-3 print:hidden">
+              <AlertTriangle size={16} className="text-[#e08a3c] flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-foreground font-medium">
+                Scope of Work นี้ยังไม่มีงวดชำระเงิน — เพิ่มงวดชำระเงินในหน้า Scope of Work ก่อน แล้วกด "อัปเดตข้อมูลจาก Scope of Work"
+              </p>
+            </div>
+          ) : (
+            deliveryOrder.installments.map((installment) => (
+              <InstallmentEditor
+                key={installment.id}
+                installment={installment}
+                items={deliveryOrder.items}
+                onChange={(next) => updateInstallment(installment.id, next)}
+                disabled={!editable}
+                onPrint={canPrint ? () => handlePrintInstallment(installment) : null}
+              />
+            ))
+          )}
+        </div>
 
         <DeliveryOrderPrintDocument deliveryOrder={deliveryOrder} companyHeader={companyHeader} onlyInstallmentId={printInstallmentId} />
       </div>

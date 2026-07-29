@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronRight, Printer, Copy, Save, Send, CheckCircle2, Building2, Hash, CalendarDays,
-  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList, GitBranch, Wand2,
+  ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList, GitBranch, Wand2, HelpCircle,
 } from "lucide-react";
+import type { DriveStep } from "driver.js";
+import { useModuleTour } from "../../components/GuidedTour";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
 import type { JobType } from "../../lib/jobTypes";
@@ -282,6 +284,15 @@ export function QuoteDocument({
     }
   };
 
+  // Document tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button
+  // convention as the list pages' tours; anchors exist in both new and detail modes.
+  const docTourSteps: DriveStep[] = [
+    { element: '[data-tour="qdoc-actions"]', popover: { title: t("tour.qdoc.actions.title"), description: t("tour.qdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="qdoc-customer"]', popover: { title: t("tour.qdoc.customer.title"), description: t("tour.qdoc.customer.desc"), side: "right" } },
+    { element: '[data-tour="qdoc-items"]', popover: { title: t("tour.qdoc.items.title"), description: t("tour.qdoc.items.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("quotationDoc", currentUser.id, docTourSteps);
+
   const { total } = computeTotals(lines, discount);
   const jobTypeDisplay = jobTypeCode ? `${jobTypeCode} — ${jobTypeName}` : "";
 
@@ -472,7 +483,15 @@ export function QuoteDocument({
           </div>
         )}
 
-        <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+        <div data-tour="qdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <button
+            onClick={docTour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={14} />
+          </button>
           <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={validation.missingCount} />
           {permissions.canExport && (
             <button
@@ -587,7 +606,7 @@ export function QuoteDocument({
 
           {/* Meta fields — editable on screen */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-b border-border print:hidden">
-            <div className="p-6 border-b sm:border-b-0 sm:border-r border-border">
+            <div data-tour="qdoc-customer" className="p-6 border-b sm:border-b-0 sm:border-r border-border">
               <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</p>
               <div className="space-y-2.5">
                 <div>
@@ -735,7 +754,9 @@ export function QuoteDocument({
 
         </div>
 
-        <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} />
+        <div data-tour="qdoc-items">
+          <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} />
+        </div>
 
         {/* Remarks + Signature — screen preview only; print output is PrintDocument below */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">

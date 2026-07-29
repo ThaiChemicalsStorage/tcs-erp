@@ -291,6 +291,7 @@ export function QuotationPage({
           key={scopeOfWorkId}
           scopeOfWorkId={scopeOfWorkId}
           users={users}
+          currentUserId={currentUser.id}
           canEdit={canEditScopeOfWork}
           canFinalize={canFinalizeScopeOfWork}
           canPrint={canPrintScopeOfWork}

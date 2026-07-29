@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing, HelpCircle } from "lucide-react";
 import type { User } from "../../lib/users";
 import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
@@ -16,6 +16,9 @@ import { getRevisionPredecessorId, generateScopeOfWorkRevisionSummary } from "..
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
+import { useModuleTour } from "../../components/GuidedTour";
+import type { DriveStep } from "driver.js";
+import { useI18n } from "../../lib/i18n";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { ChecklistGroupCard } from "./ChecklistGroupCard";
 import { DocumentRecipientsPicker } from "./DocumentRecipientsPicker";
@@ -212,6 +215,7 @@ function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
 export function ScopeOfWorkDocument({
   scopeOfWorkId,
   users,
+  currentUserId,
   canEdit,
   canFinalize,
   canPrint,
@@ -229,6 +233,8 @@ export function ScopeOfWorkDocument({
 }: {
   scopeOfWorkId: string;
   users: User[];
+  /** For the document tour's per-user "seen" tracking (see useModuleTour). */
+  currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
@@ -306,6 +312,18 @@ export function ScopeOfWorkDocument({
       .catch(() => { if (!cancelled) setLoadError(true); });
     return () => { cancelled = true; };
   }, [scopeOfWorkId, reloadKey]);
+
+  // Document tour (added 2026-07-29) — `autoStart: !!scope` defers the one-time auto-fire until
+  // the record has actually loaded (the anchors don't exist over the loading spinner); the replay
+  // button in the toolbar restarts it any time.
+  const { t } = useI18n();
+  const docTourSteps: DriveStep[] = [
+    { element: '[data-tour="sowdoc-actions"]', popover: { title: t("tour.sowdoc.actions.title"), description: t("tour.sowdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="sowdoc-completion"]', popover: { title: t("tour.sowdoc.completion.title"), description: t("tour.sowdoc.completion.desc"), side: "bottom" } },
+    { element: '[data-tour="sowdoc-header"]', popover: { title: t("tour.sowdoc.header.title"), description: t("tour.sowdoc.header.desc"), side: "top" } },
+    { element: '[data-tour="sowdoc-checklist"]', popover: { title: t("tour.sowdoc.checklist.title"), description: t("tour.sowdoc.checklist.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("scopeOfWorkDoc", currentUserId, docTourSteps, { autoStart: !!scope });
 
   if (loadError) {
     return (
@@ -635,8 +653,18 @@ export function ScopeOfWorkDocument({
           {isDraft ? "Draft" : scope.status === "PendingApproval" ? "รออนุมัติ" : "Final"}
         </span>
 
-        <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
-          <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={finalizeValidation.missingCount} />
+        <div data-tour="sowdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <button
+            onClick={docTour.start}
+            title={t("tour.replay")}
+            aria-label={t("tour.replay")}
+            className="flex items-center justify-center w-8 h-8 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
+          >
+            <HelpCircle size={14} />
+          </button>
+          <span data-tour="sowdoc-completion">
+            <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={finalizeValidation.missingCount} />
+          </span>
           {canPrint && (
             <button
               onClick={handlePrint}
@@ -738,7 +766,7 @@ export function ScopeOfWorkDocument({
         </div>
 
         {/* Header fields */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
+        <div data-tour="sowdoc-header" className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 print:hidden">
             <p className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">SCOPE OF WORK</p>
             <p className="text-[#a8bed8] text-xs mt-1">
@@ -837,7 +865,7 @@ export function ScopeOfWorkDocument({
         </div>
 
         {/* Checklist groups */}
-        <div className="bg-card border border-border rounded-xl p-5 print:hidden">
+        <div data-tour="sowdoc-checklist" className="bg-card border border-border rounded-xl p-5 print:hidden">
           <p className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>เช็คลิสต์เงื่อนไขงาน</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {scope.checklistGroups.map((group, idx) => (

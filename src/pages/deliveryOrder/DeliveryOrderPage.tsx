@@ -88,6 +88,7 @@ export function DeliveryOrderPage({
           key={selectedId}
           deliveryOrderId={selectedId}
           company={company}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canFinalize={canFinalize}
           canPrint={canPrint}
