@@ -32,7 +32,11 @@ export function BrandMark({ size = 32, variant = "full", theme = "dark", classNa
           >
             Thai Chemicals Storage ERP
           </p>
-          <p className="text-[#c9a84c] text-[10px] font-mono uppercase tracking-widest truncate mt-0.5">ระบบองค์กร</p>
+          {/* Gold only reads at proper contrast on the dark navy panel (~7.3:1) — on a light/card
+              background it drops to ~2.1:1, well under the 4.5:1 AA floor (Impeccable audit
+              2026-07-30). #866d28 is the same darkened-gold text variant DESIGN.md already defines
+              for the Pending Approval status pill, reused here instead of minting a new hex. */}
+          <p className={`text-[10px] font-mono uppercase tracking-widest truncate mt-0.5 ${theme === "dark" ? "text-[#c9a84c]" : "text-[#866d28]"}`}>ระบบองค์กร</p>
         </div>
       )}
     </div>

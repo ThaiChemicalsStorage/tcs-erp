@@ -45,22 +45,35 @@ const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateMana
 const ScopeOfWorkPage = lazy(() => import("./pages/scopeOfWork/ScopeOfWorkPage").then((m) => ({ default: m.ScopeOfWorkPage })));
 const DeliveryOrderPage = lazy(() => import("./pages/deliveryOrder/DeliveryOrderPage").then((m) => ({ default: m.DeliveryOrderPage })));
 
+/** `role="status"`/`aria-live`/`sr-only` label added (Impeccable shell audit 2026-07-30) — this is
+ * the highest-frequency loading state in the app (the `Suspense` fallback for every lazy-loaded
+ * page, i.e. every navigation) and previously had zero text of any kind, visible or otherwise.
+ * Matches the pattern already proven on `BootLoading` below. */
 function PageLoading() {
+  const { t } = useI18n();
   return (
-    <div className="flex-1 flex items-center justify-center p-6">
+    <div className="flex-1 flex items-center justify-center p-6" role="status" aria-live="polite">
       <div className="space-y-3 w-full max-w-3xl">
         {[...Array(4)].map((_, i) => (
           <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />
         ))}
       </div>
+      <span className="sr-only">{t("boot.sectionLoading")}</span>
     </div>
   );
 }
 
+/** Shown while the initial session check is in flight (and as the `Suspense` fallback while
+ * SignInPage/SetupWizardPage's own lazy chunk downloads) — the very first thing most users ever
+ * see. Previously just a pulsing logo with no text/ARIA signal (accessibility hardening pass,
+ * found in the 2026-07-30 authentication UI audit); now announces itself the same way every other
+ * loading state in the app does. */
 function BootLoading() {
+  const { t } = useI18n();
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="min-h-screen bg-background flex items-center justify-center" role="status" aria-live="polite">
       <img src="/logo.png" alt="Thai Chemicals Storage ERP" className="h-14 w-auto object-contain animate-pulse" />
+      <span className="sr-only">{t("boot.loading")}</span>
     </div>
   );
 }
@@ -72,7 +85,7 @@ function BootLoading() {
 function BootError({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+    <div className="min-h-screen bg-background flex items-center justify-center p-6" role="alert">
       <div className="flex flex-col items-center text-center gap-3 max-w-sm">
         <div className="w-12 h-12 rounded-full bg-[#e05252]/10 flex items-center justify-center">
           <AlertTriangle size={22} className="text-[#e05252]" />
@@ -98,7 +111,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   const { t } = useI18n();
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
         <AlertTriangle size={20} className="text-[#e05252]" />
         <p className="text-sm text-muted-foreground">{t("boot.sectionError")}</p>
         <button onClick={onRetry} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
@@ -108,7 +121,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
     );
   }
   return (
-    <div className="flex-1 flex flex-col items-center justify-center gap-2.5 p-6">
+    <div className="flex-1 flex flex-col items-center justify-center gap-2.5 p-6" role="status" aria-live="polite">
       <Loader2 size={20} className="text-muted-foreground animate-spin" />
       <p className="text-xs text-muted-foreground">{t("boot.sectionLoading")}</p>
     </div>
@@ -145,6 +158,13 @@ const INITIAL_RESOURCE_STATUS: Record<ResourceKey, ResourceState> = {
   users: "loading", roles: "loading", company: "loading", products: "loading", categories: "loading",
   notifications: "loading", quotes: "loading", jobTypes: "loading", customers: "loading",
 };
+
+/** Same selector `useDialogA11y` (`ConfirmDialog`/`PromptDialog`) already uses for its Tab-trap —
+ * kept as a local constant here rather than importing that hook, since the mobile nav drawer stays
+ * permanently mounted (only translated off-screen, never unmounted) while that hook assumes the
+ * panel unmounts on close; the trap below is written to only ever attach its listener while
+ * `mobileNavOpen` is actually true (Impeccable shell audit 2026-07-30). */
+const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 interface NavItem {
   key: NavKey;
@@ -245,6 +265,11 @@ export default function App() {
    * `sidebarOpen` (the desktop 256px/64px width toggle) since on mobile the sidebar is either fully
    * open as an overlay or fully hidden, never a persistent icon rail. See NAV_EXPANDED below. */
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  /** Focus-trap support for the mobile drawer (Impeccable shell audit 2026-07-30) — `panelRef` is
+   * the `<aside>` itself (its focusable descendants define the trap boundaries), `triggerRef` is
+   * the hamburger button that opens it, so focus can return there when the drawer closes. */
+  const mobileNavPanelRef = useRef<HTMLElement>(null);
+  const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
   const [activeNav, setActiveNav] = useState<NavKey>(() => navFromHash() ?? "dashboard");
 
   // ── URL-hash sync (see navFromHash's doc comment) ─────────────────────────────────────────────
@@ -401,14 +426,53 @@ export default function App() {
     return () => { cancelled = true; };
   }, [loadDomainData]);
 
-  // Mobile drawer: Escape closes it, and it never survives a nav change made some other way
-  // (e.g. browser back) since it's plain UI state, not routed — no cleanup needed there.
+  // Mobile drawer: Escape closes it (never survives a nav change made some other way, e.g. browser
+  // back, since it's plain UI state, not routed — no cleanup needed there), Tab is trapped inside
+  // it while open, and focus moves in on open / back to the trigger on close. Previously declared
+  // `role="dialog" aria-modal="true"` on the `<aside>` (see App.tsx render below) without any of
+  // this — telling assistive tech "your focus is contained here" while it wasn't (Impeccable shell
+  // audit 2026-07-30). Gated entirely on `mobileNavOpen` (both the listener attach below and the
+  // early return) rather than using the shared `useDialogA11y` hook, since that hook assumes its
+  // panel unmounts on close — this `<aside>` never does, it's only translated off-screen.
   useEffect(() => {
     if (!mobileNavOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileNavOpen(false); };
+    const panel = mobileNavPanelRef.current;
+    // `offsetParent !== null` excludes elements CSS currently hides (e.g. the close button is
+    // `md:hidden` — display:none at desktop widths) — a raw querySelectorAll match with no
+    // visibility filter would otherwise let items[0] silently be unfocusable, breaking both the
+    // focus-on-open and the Tab-wrap boundaries without any error (caught in the Impeccable shell
+    // audit's own verification pass, 2026-07-30).
+    const items = panel
+      ? Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null)
+      : [];
+    items[0]?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setMobileNavOpen(false); return; }
+      if (e.key !== "Tab" || items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    const trigger = mobileNavTriggerRef.current;
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      trigger?.focus();
+    };
+  }, [mobileNavOpen]);
+
+  // User menu: Escape closes it, matching the mobile drawer's own Escape handling above — the
+  // dropdown previously had no keyboard-only way to dismiss without activating one of its three
+  // items (Impeccable shell audit 2026-07-30). Not a full focus trap (unlike the drawer above) since
+  // this is a lightweight disclosure panel, not a modal — clicking outside or Tab-ing past it already
+  // closes/exits it, matching NotificationBell/WhatsNewPanel's existing non-modal dropdown pattern.
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setUserMenuOpen(false); };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mobileNavOpen]);
+  }, [userMenuOpen]);
 
   // ── Notification polling (2026-07-24, direct user request) ──────────────────────────────────
   // Notifications were previously fetched once at boot only, so e.g. a "เอกสารส่งถึงคุณ" event
@@ -663,6 +727,15 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden font-sans text-foreground print:h-auto print:overflow-visible print:block">
+      {/* Skip link — invisible until keyboard-focused (Impeccable shell audit 2026-07-30). Without
+          this, a keyboard user must tab through the entire sidebar (up to 10 nav items) plus every
+          topbar control on every single page load before ever reaching page content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#c9a84c] focus:text-[#0b1d3a] focus:rounded-lg focus:font-semibold focus:shadow-xl"
+      >
+        {t("nav.skipToContent")}
+      </a>
       {/* Mobile drawer backdrop */}
       {mobileNavOpen && (
         <div className="fixed inset-0 bg-[#0b1d3a]/50 z-30 md:hidden" onClick={closeMobileNav} aria-hidden="true" />
@@ -670,6 +743,7 @@ export default function App() {
 
       {/* Sidebar — static column on desktop (md+), off-canvas overlay drawer below md */}
       <aside
+        ref={mobileNavPanelRef}
         role={mobileNavOpen ? "dialog" : undefined}
         aria-modal={mobileNavOpen ? true : undefined}
         aria-label={mobileNavOpen ? t("nav.openMenu") : undefined}
@@ -691,10 +765,18 @@ export default function App() {
             return (
               <div key={group.labelKey} className="space-y-0.5">
                 {navExpanded && (
-                  <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50">{t(group.labelKey)}</p>
+                  // /70 not /50 (Impeccable shell audit 2026-07-30) — #a8bed8 at 50% opacity on the
+                  // navy sidebar measured 3.22:1, under the 4.5:1 AA floor; /70 clears 5.00:1 while
+                  // staying visibly quieter than the full-opacity nav item text (8.81:1).
+                  <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/70">{t(group.labelKey)}</p>
                 )}
                 {items.map(({ key, icon: Icon, labelKey }) => (
-                  <button key={key} onClick={() => { setActiveNav(key); closeMobileNav(); }} title={navExpanded ? undefined : t(labelKey)}
+                  <button
+                    key={key}
+                    onClick={() => { setActiveNav(key); closeMobileNav(); }}
+                    title={navExpanded ? undefined : t(labelKey)}
+                    aria-label={navExpanded ? undefined : t(labelKey)}
+                    aria-current={activeNav === key ? "page" : undefined}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-150 relative min-w-0
                       ${activeNav === key ? "bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border border-transparent"}`}>
                     <Icon size={17} className="flex-shrink-0" />
@@ -706,7 +788,11 @@ export default function App() {
           })}
         </nav>
         <div className="px-2 py-3 border-t border-sidebar-border">
-          <button onClick={() => { setActiveNav("settings"); closeMobileNav(); }} title={navExpanded ? undefined : t("nav.settings")}
+          <button
+            onClick={() => { setActiveNav("settings"); closeMobileNav(); }}
+            title={navExpanded ? undefined : t("nav.settings")}
+            aria-label={navExpanded ? undefined : t("nav.settings")}
+            aria-current={activeNav === "settings" ? "page" : undefined}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all duration-150 border min-w-0 ${
               activeNav === "settings" ? "bg-[#c9a84c]/15 text-[#c9a84c] border-[#c9a84c]/25" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white border-transparent"
             }`}>
@@ -719,7 +805,7 @@ export default function App() {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible print:block">
         <header className="flex items-center gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 border-b border-border bg-card min-h-[60px] md:min-h-[68px] relative print:hidden">
-          <button onClick={() => setMobileNavOpen(true)} aria-label={t("nav.openMenu")} className="md:hidden text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
+          <button ref={mobileNavTriggerRef} onClick={() => setMobileNavOpen(true)} aria-label={t("nav.openMenu")} className="md:hidden text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
             <Menu size={20} />
           </button>
           <button onClick={() => setSidebarOpen(!sidebarOpen)} aria-label={sidebarOpen ? t("nav.collapseSidebar") : t("nav.expandSidebar")} className="hidden md:block text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
@@ -746,7 +832,11 @@ export default function App() {
             target="_blank"
             rel="noreferrer"
             aria-label={t("topbar.manual")}
-            className="flex-shrink-0 flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-full border border-[#c9a84c]/60 bg-[#c9a84c]/10 text-[#a07830] hover:bg-[#c9a84c]/20 hover:border-[#c9a84c] transition-all text-xs font-semibold"
+            // #866d28 not #a07830 (Impeccable shell audit 2026-07-30) — #a07830 measured ~3.7-4.0:1
+            // against this pill's actual backgrounds, under the 4.5:1 AA floor; #866d28 is the same
+            // darkened-gold text variant already used to fix the identical mistake on the Setup
+            // Wizard badge and BrandMark's light-theme subtitle earlier this session.
+            className="flex-shrink-0 flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-full border border-[#c9a84c]/60 bg-[#c9a84c]/10 text-[#866d28] hover:bg-[#c9a84c]/20 hover:border-[#c9a84c] transition-all text-xs font-semibold"
           >
             <BookOpen size={15} className="flex-shrink-0" />
             <span className="hidden sm:inline whitespace-nowrap">{t("topbar.manual")}</span>
@@ -769,7 +859,13 @@ export default function App() {
             />
           </div>
           <div className="relative" data-tour="user-menu">
-            <button onClick={() => setUserMenuOpen((v) => !v)} className="flex items-center gap-2.5 pl-3 border-l border-border">
+            <button
+              onClick={() => setUserMenuOpen((v) => !v)}
+              aria-haspopup="true"
+              aria-expanded={userMenuOpen}
+              aria-label={`${currentUser.fullName} — ${t("nav.settings")}, ${t("topbar.help")}, ${t("topbar.logout")}`}
+              className="flex items-center gap-2.5 pl-3 border-l border-border"
+            >
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#c9a84c] to-[#a07830] flex items-center justify-center text-white text-xs font-bold overflow-hidden">
                 {currentUser.profilePictureDataUrl ? (
                   <img src={currentUser.profilePictureDataUrl} alt={currentUser.fullName} className="w-full h-full object-cover" />
@@ -811,7 +907,11 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 flex flex-col overflow-hidden print:overflow-visible print:block">
+        {/* <main> landmark + tabIndex={-1} (Impeccable shell audit 2026-07-30) — previously a plain
+            div with no landmark role at all; tabIndex={-1} lets the skip link above actually move
+            focus here (not just scroll to it) without adding this container to the normal Tab
+            order. */}
+        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden outline-none print:overflow-visible print:block">
           <ErrorBoundary key={effectiveNav}>
           <Suspense fallback={<PageLoading />}>
             {/* Dashboard and Audit Log fetch their own data independently (see AREA 2 in the
@@ -853,7 +953,7 @@ export default function App() {
             }
           </Suspense>
           </ErrorBoundary>
-        </div>
+        </main>
       </div>
 
       {showTourPrompt && (

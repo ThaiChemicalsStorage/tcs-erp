@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { WHATS_NEW_ENTRIES, hasUnseenWhatsNew, markWhatsNewSeen } from "../lib/whatsNew";
 import { useI18n } from "../lib/i18n";
@@ -13,6 +13,15 @@ export function WhatsNewPanel({ currentUserId }: { currentUserId: string }) {
   const [open, setOpen] = useState(false);
   const [unseen, setUnseen] = useState(() => hasUnseenWhatsNew(currentUserId));
 
+  // Escape closes the panel — same rationale as NotificationBell's identical fix (Impeccable shell
+  // audit 2026-07-30).
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
   return (
     <div className="relative">
       <button
@@ -25,6 +34,8 @@ export function WhatsNewPanel({ currentUserId }: { currentUserId: string }) {
         }}
         className="relative text-muted-foreground hover:text-foreground transition-colors p-2"
         aria-label={t("whatsNew.bellAria")}
+        aria-haspopup="true"
+        aria-expanded={open}
       >
         <Sparkles size={18} />
         {unseen && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#c9a84c]" />}

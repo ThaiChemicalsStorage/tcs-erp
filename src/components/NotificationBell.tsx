@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, BellRing, Send, CheckCircle2, XCircle, AlertTriangle, CheckCheck, Ban, Check, Trash2, Trophy, TrendingDown, XOctagon, Mail } from "lucide-react";
 import type { Notification, NotificationType } from "../lib/notifications";
 import { useI18n, type TranslationKey } from "../lib/i18n";
@@ -57,12 +57,30 @@ export function NotificationBell({
   const unread = mine.filter((n) => !n.read).length;
   const badgeText = unread > 99 ? "99+" : String(unread);
 
+  // Escape closes the panel — matches the mobile nav drawer's own Escape handling in App.tsx
+  // (Impeccable shell audit 2026-07-30); this panel previously had no keyboard-only way to dismiss
+  // without activating a row inside it.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  const openNotification = (n: Notification) => {
+    if (!n.read) onMarkRead(n.id);
+    onNavigate(n);
+    setOpen(false);
+  };
+
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
         className="relative text-muted-foreground hover:text-foreground transition-colors p-2"
         aria-label={t("notif.bellAria")}
+        aria-haspopup="true"
+        aria-expanded={open}
       >
         <Bell size={18} />
         {unread > 0 && (
@@ -78,7 +96,10 @@ export function NotificationBell({
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("notif.title")}</p>
               {unread > 0 && (
-                <button onClick={onMarkAllRead} className="flex items-center gap-1 text-xs text-[#c9a84c] hover:text-[#a07830] transition-colors">
+                // #866d28 not #c9a84c (Impeccable shell audit 2026-07-30) — #c9a84c on this white
+                // panel measured 2.29:1, well under the 4.5:1 AA floor; same darkened-gold text
+                // variant already used to fix the identical mistake elsewhere this session.
+                <button onClick={onMarkAllRead} className="flex items-center gap-1 text-xs text-[#866d28] hover:text-[#a07830] transition-colors">
                   <Check size={12} /> {t("notif.markAllRead")}
                 </button>
               )}
@@ -88,12 +109,25 @@ export function NotificationBell({
                 <p className="text-center text-xs text-muted-foreground py-10">{t("empty.notifications.title")}</p>
               ) : (
                 mine.map((n) => (
+                  // role="button"/tabIndex/onKeyDown (Impeccable shell audit 2026-07-30) — this row
+                  // is the entire point of the notification panel and was previously only openable
+                  // by mouse click; a real <button> isn't used here because it would illegally nest
+                  // the delete <button> below inside it. aria-label gives the row its own clean
+                  // accessible name rather than letting it concatenate the nested delete button's.
                   <div
                     key={n.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${n.title} — ${n.description}`}
                     className={`group flex items-start gap-3 px-4 py-3 border-b border-border/60 last:border-0 cursor-pointer transition-colors ${
                       n.read ? "hover:bg-secondary/40" : "bg-[#c9a84c]/[0.06] hover:bg-[#c9a84c]/10"
                     }`}
-                    onClick={() => { if (!n.read) onMarkRead(n.id); onNavigate(n); setOpen(false); }}
+                    onClick={() => openNotification(n)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
+                      openNotification(n);
+                    }}
                   >
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${n.read ? "bg-secondary text-muted-foreground" : "bg-[#c9a84c]/15 text-[#c9a84c]"}`}>
                       {TYPE_ICON[n.type]}

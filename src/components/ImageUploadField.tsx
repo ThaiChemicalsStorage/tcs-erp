@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Upload, X, AlertTriangle, type LucideIcon } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 
@@ -30,6 +30,7 @@ export function ImageUploadField({
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
+  const inputId = useId();
 
   const handleFile = (file: File | undefined) => {
     if (!file) return;
@@ -50,7 +51,7 @@ export function ImageUploadField({
 
   return (
     <div>
-      <label className={labelCls}><span className="flex items-center gap-1"><Icon size={10} /> {label}</span></label>
+      <label htmlFor={inputId} className={labelCls}><span className="flex items-center gap-1"><Icon size={10} /> {label}</span></label>
       <div className="flex items-center gap-3">
         <div className={`flex-shrink-0 flex items-center justify-center bg-secondary border border-border rounded-lg overflow-hidden ${aspect === "square" ? "w-16 h-16" : "w-28 h-16"}`}>
           {value ? (
@@ -80,9 +81,9 @@ export function ImageUploadField({
           </div>
           <p className="text-[10px] text-muted-foreground">{t("settings.image.sizeHint")}</p>
         </div>
-        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+        <input ref={inputRef} id={inputId} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
       </div>
-      {error && <p className="text-xs text-[#e05252] mt-1.5 flex items-center gap-1"><AlertTriangle size={11} /> {error}</p>}
+      {error && <p role="alert" className="text-xs text-[#e05252] mt-1.5 flex items-center gap-1"><AlertTriangle size={11} /> {error}</p>}
     </div>
   );
 }

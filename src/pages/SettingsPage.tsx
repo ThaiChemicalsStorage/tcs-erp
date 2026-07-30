@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   User as UserIcon, Building2, ShieldCheck, Bell, CheckCircle2, Hash, Mail, Phone, MapPin, type LucideIcon,
   Image as ImageIcon, Stamp, PenTool, Landmark, FileText, HelpCircle,
@@ -64,10 +64,13 @@ function useSavedFlash() {
   return [saved, () => setSaved(true)] as const;
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ checked, onChange, labelledBy }: { checked: boolean; onChange: (v: boolean) => void; labelledBy: string }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-labelledby={labelledBy}
       onClick={() => onChange(!checked)}
       className={`w-10 h-5.5 rounded-full transition-colors relative flex-shrink-0 ${checked ? "bg-[#c9a84c]" : "bg-muted border border-border"}`}
       style={{ height: "22px" }}
@@ -80,7 +83,11 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
-const readOnlyCls = "w-full text-sm text-muted-foreground bg-muted border border-border rounded-lg px-3 py-2 outline-none cursor-not-allowed";
+// Darkened variant of muted-foreground (not the shared token) — text-muted-foreground (#5a7299) on
+// this field's bg-muted (#eef1f8) measures ~4.3:1, just under the 4.5:1 AA floor for normal text;
+// this hex clears ~5.3:1 while staying in the same blue-slate family (Impeccable audit 2026-07-30).
+// Scoped to this file only, not the global --muted-foreground token used across the rest of the app.
+const readOnlyCls = "w-full text-sm text-[#4c6488] bg-muted border border-border rounded-lg px-3 py-2 outline-none cursor-default";
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
 
 export function SettingsPage({
@@ -122,16 +129,19 @@ export function SettingsPage({
   const [profileDraft, setProfileDraft] = useState(currentUser);
   const [profileSaved, flashProfileSaved] = useSavedFlash();
   const [profileError, setProfileError] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
 
   const [companyDraft, setCompanyDraft] = useState(company);
   const [companySaved, flashCompanySaved] = useSavedFlash();
   const [companyError, setCompanyError] = useState("");
+  const [companySaving, setCompanySaving] = useState(false);
 
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [pwError, setPwError] = useState("");
   const [pwSaved, flashPwSaved] = useSavedFlash();
+  const [pwSaving, setPwSaving] = useState(false);
 
   const [notifPrefs, setNotifPrefs] = useState({
     quoteApproved: true,
@@ -139,9 +149,39 @@ export function SettingsPage({
     weeklyDigest: false,
   });
 
+  // Field ids for label/input association (screen readers otherwise can't tell which label
+  // belongs to which field — Impeccable audit 2026-07-30, matches the useId() convention already
+  // used for this in TemplateEditorView.tsx / UserManagementPage.tsx).
+  const fullNameId = useId();
+  const profilePhoneId = useId();
+  const employeeIdId = useId();
+  const profileEmailId = useId();
+  const departmentId = useId();
+  const positionId = useId();
+  const roleFieldId = useId();
+  const companyNameId = useId();
+  const addressId = useId();
+  const companyPhoneId = useId();
+  const companyEmailId = useId();
+  const taxIdId = useId();
+  const vatId = useId();
+  const bankNameId = useId();
+  const bankBranchId = useId();
+  const bankAccountNameId = useId();
+  const bankAccountNumberId = useId();
+  const termsId = useId();
+  const currentPwId = useId();
+  const newPwId = useId();
+  const confirmPwId = useId();
+  const profileHeadingId = useId();
+  const companyHeadingId = useId();
+  const securityHeadingId = useId();
+  const notificationsHeadingId = useId();
+
   const roleName = roles.find((r) => r.key === currentUser.roleKey)?.name ?? currentUser.roleKey;
 
   const saveProfile = async () => {
+    setProfileSaving(true);
     try {
       const updated = await updateUser(currentUser.id, {
         fullName: profileDraft.fullName,
@@ -155,10 +195,13 @@ export function SettingsPage({
       flashProfileSaved();
     } catch (err) {
       setProfileError(err instanceof ApiError ? err.message : t("common.errorGeneric"));
+    } finally {
+      setProfileSaving(false);
     }
   };
 
   const saveCompany = async () => {
+    setCompanySaving(true);
     try {
       const updated = await saveCompanyApi(companyDraft);
       setCompanyError("");
@@ -167,6 +210,8 @@ export function SettingsPage({
       flashCompanySaved();
     } catch (err) {
       setCompanyError(err instanceof ApiError ? err.message : t("common.errorGeneric"));
+    } finally {
+      setCompanySaving(false);
     }
   };
 
@@ -183,6 +228,7 @@ export function SettingsPage({
       setPwError(t("settings.security.errorMismatch"));
       return;
     }
+    setPwSaving(true);
     try {
       const updated = await updateUser(currentUser.id, { password: newPw, currentPassword: currentPw });
       setPwError("");
@@ -194,13 +240,15 @@ export function SettingsPage({
       flashPwSaved();
     } catch (err) {
       setPwError(err instanceof ApiError ? err.message : t("settings.security.errorGeneric"));
+    } finally {
+      setPwSaving(false);
     }
   };
 
-  const notifRows: { key: "quoteApproved" | "lowStock" | "weeklyDigest"; label: string; sub: string }[] = [
-    { key: "quoteApproved", label: t("settings.notif.quoteApproved.label"), sub: t("settings.notif.quoteApproved.sub") },
-    { key: "lowStock", label: t("settings.notif.lowStock.label"), sub: t("settings.notif.lowStock.sub") },
-    { key: "weeklyDigest", label: t("settings.notif.weeklyDigest.label"), sub: t("settings.notif.weeklyDigest.sub") },
+  const notifRows: { key: "quoteApproved" | "lowStock" | "weeklyDigest"; label: string; sub: string; id: string }[] = [
+    { key: "quoteApproved", label: t("settings.notif.quoteApproved.label"), sub: t("settings.notif.quoteApproved.sub"), id: `${notificationsHeadingId}-quoteApproved` },
+    { key: "lowStock", label: t("settings.notif.lowStock.label"), sub: t("settings.notif.lowStock.sub"), id: `${notificationsHeadingId}-lowStock` },
+    { key: "weeklyDigest", label: t("settings.notif.weeklyDigest.label"), sub: t("settings.notif.weeklyDigest.sub"), id: `${notificationsHeadingId}-weeklyDigest` },
   ];
 
   return (
@@ -237,6 +285,7 @@ export function SettingsPage({
       {/* Profile */}
       {tab === "profile" && (
         <div data-tour="settings-profile" className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
+          <h2 id={profileHeadingId} className="sr-only">{t("settings.tab.profile")}</h2>
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#c9a84c] to-[#a07830] flex items-center justify-center text-white text-lg font-bold flex-shrink-0 overflow-hidden">
               {profileDraft.profilePictureDataUrl ? (
@@ -253,33 +302,33 @@ export function SettingsPage({
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>{t("settings.profile.fullNameLabel")}</label>
-              <input className={inputCls} value={profileDraft.fullName} onChange={(e) => setProfileDraft((p) => ({ ...p, fullName: e.target.value }))} />
+              <label htmlFor={fullNameId} className={labelCls}>{t("settings.profile.fullNameLabel")}</label>
+              <input id={fullNameId} className={inputCls} value={profileDraft.fullName} onChange={(e) => setProfileDraft((p) => ({ ...p, fullName: e.target.value }))} />
             </div>
             <div>
-              <label className={labelCls}>{t("settings.profile.phoneLabel")}</label>
-              <input className={inputCls} value={profileDraft.phone} onChange={(e) => setProfileDraft((p) => ({ ...p, phone: e.target.value }))} />
+              <label htmlFor={profilePhoneId} className={labelCls}>{t("settings.profile.phoneLabel")}</label>
+              <input id={profilePhoneId} className={inputCls} value={profileDraft.phone} onChange={(e) => setProfileDraft((p) => ({ ...p, phone: e.target.value }))} />
             </div>
             <div>
-              <label className={labelCls}>{t("settings.profile.employeeIdLabel")}</label>
-              <input className={readOnlyCls} value={profileDraft.employeeId} disabled />
+              <label htmlFor={employeeIdId} className={labelCls}>{t("settings.profile.employeeIdLabel")}</label>
+              <input id={employeeIdId} className={readOnlyCls} value={profileDraft.employeeId} readOnly />
             </div>
             <div>
-              <label className={labelCls}>{t("settings.profile.emailLabel")}</label>
-              <input className={readOnlyCls} value={profileDraft.email} disabled />
+              <label htmlFor={profileEmailId} className={labelCls}>{t("settings.profile.emailLabel")}</label>
+              <input id={profileEmailId} className={readOnlyCls} value={profileDraft.email} readOnly />
             </div>
             <div>
-              <label className={labelCls}>{t("settings.profile.departmentLabel")}</label>
-              <input className={readOnlyCls} value={profileDraft.department || t("common.dash")} disabled />
+              <label htmlFor={departmentId} className={labelCls}>{t("settings.profile.departmentLabel")}</label>
+              <input id={departmentId} className={readOnlyCls} value={profileDraft.department || t("common.dash")} readOnly />
             </div>
             <div>
-              <label className={labelCls}>{t("settings.profile.positionLabel")}</label>
-              <input className={readOnlyCls} value={profileDraft.position || t("common.dash")} disabled />
+              <label htmlFor={positionId} className={labelCls}>{t("settings.profile.positionLabel")}</label>
+              <input id={positionId} className={readOnlyCls} value={profileDraft.position || t("common.dash")} readOnly />
             </div>
             <div className="sm:col-span-2">
-              <label className={labelCls}>{t("settings.profile.roleLabel")}</label>
-              <input className={readOnlyCls} value={roleName} disabled />
-              <p className="text-[10px] text-muted-foreground mt-1">{t("settings.profile.roleHint")}</p>
+              <label htmlFor={roleFieldId} className={labelCls}>{t("settings.profile.roleLabel")}</label>
+              <input id={roleFieldId} className={readOnlyCls} value={roleName} readOnly aria-describedby={`${roleFieldId}-hint`} />
+              <p id={`${roleFieldId}-hint`} className="text-[10px] text-muted-foreground mt-1">{t("settings.profile.roleHint")}</p>
             </div>
           </div>
 
@@ -305,9 +354,9 @@ export function SettingsPage({
             <LanguageField />
           </div>
 
-          {profileError && <p className="text-xs text-[#e05252]">{profileError}</p>}
+          {profileError && <p role="alert" className="text-xs text-[#e05252]">{profileError}</p>}
           <div className="flex items-center gap-3 pt-1">
-            <button onClick={saveProfile} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button onClick={saveProfile} disabled={profileSaving} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
               {t("common.saveChanges")}
             </button>
             <SavedNote show={profileSaved} />
@@ -318,6 +367,7 @@ export function SettingsPage({
       {/* Company */}
       {tab === "company" && canManageCompany && (
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
+          <h2 id={companyHeadingId} className="sr-only">{t("settings.tab.company")}</h2>
           <p className="text-xs text-muted-foreground leading-relaxed">
             {t("settings.company.hint")}
           </p>
@@ -327,83 +377,83 @@ export function SettingsPage({
           </div>
           <div className="space-y-4">
             <div>
-              <label className={labelCls}>{t("settings.company.nameLabel")}</label>
-              <input className={inputCls} value={companyDraft.name} onChange={(e) => setCompanyDraft((c) => ({ ...c, name: e.target.value }))} />
+              <label htmlFor={companyNameId} className={labelCls}>{t("settings.company.nameLabel")}</label>
+              <input id={companyNameId} className={inputCls} value={companyDraft.name} onChange={(e) => setCompanyDraft((c) => ({ ...c, name: e.target.value }))} />
             </div>
             <div>
-              <label className={`${labelCls} flex items-center gap-1`}><MapPin size={10} /> {t("settings.company.addressLabel")}</label>
-              <input className={inputCls} value={companyDraft.address} onChange={(e) => setCompanyDraft((c) => ({ ...c, address: e.target.value }))} />
+              <label htmlFor={addressId} className={`${labelCls} flex items-center gap-1`}><MapPin size={10} /> {t("settings.company.addressLabel")}</label>
+              <input id={addressId} className={inputCls} value={companyDraft.address} onChange={(e) => setCompanyDraft((c) => ({ ...c, address: e.target.value }))} />
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={`${labelCls} flex items-center gap-1`}><Phone size={10} /> {t("settings.company.phoneLabel")}</label>
-                <input className={inputCls} value={companyDraft.phone} onChange={(e) => setCompanyDraft((c) => ({ ...c, phone: e.target.value }))} />
+                <label htmlFor={companyPhoneId} className={`${labelCls} flex items-center gap-1`}><Phone size={10} /> {t("settings.company.phoneLabel")}</label>
+                <input id={companyPhoneId} className={inputCls} value={companyDraft.phone} onChange={(e) => setCompanyDraft((c) => ({ ...c, phone: e.target.value }))} />
               </div>
               <div>
-                <label className={`${labelCls} flex items-center gap-1`}><Mail size={10} /> {t("settings.company.emailLabel")}</label>
-                <input className={inputCls} value={companyDraft.email} onChange={(e) => setCompanyDraft((c) => ({ ...c, email: e.target.value }))} />
+                <label htmlFor={companyEmailId} className={`${labelCls} flex items-center gap-1`}><Mail size={10} /> {t("settings.company.emailLabel")}</label>
+                <input id={companyEmailId} className={inputCls} value={companyDraft.email} onChange={(e) => setCompanyDraft((c) => ({ ...c, email: e.target.value }))} />
               </div>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={`${labelCls} flex items-center gap-1`}><Hash size={10} /> {t("settings.company.taxIdLabel")}</label>
-                <input className={`${inputCls} font-mono`} value={companyDraft.taxId} onChange={(e) => setCompanyDraft((c) => ({ ...c, taxId: e.target.value }))} />
+                <label htmlFor={taxIdId} className={`${labelCls} flex items-center gap-1`}><Hash size={10} /> {t("settings.company.taxIdLabel")}</label>
+                <input id={taxIdId} className={`${inputCls} font-mono`} value={companyDraft.taxId} onChange={(e) => setCompanyDraft((c) => ({ ...c, taxId: e.target.value }))} />
               </div>
               <div>
-                <label className={labelCls}>{t("settings.company.vatLabel")}</label>
-                <input type="number" min={0} max={100} className={`${inputCls} font-mono`} value={companyDraft.vatRate} onChange={(e) => setCompanyDraft((c) => ({ ...c, vatRate: Number(e.target.value) }))} />
+                <label htmlFor={vatId} className={labelCls}>{t("settings.company.vatLabel")}</label>
+                <input id={vatId} type="number" min={0} max={100} className={`${inputCls} font-mono`} value={companyDraft.vatRate} onChange={(e) => setCompanyDraft((c) => ({ ...c, vatRate: Number(e.target.value) }))} />
               </div>
             </div>
           </div>
 
           <div className="space-y-4 pt-2 border-t border-border">
-            <p className={`${labelCls} flex items-center gap-1 text-foreground font-medium`}><Landmark size={12} /> {t("settings.company.bankSectionTitle")}</p>
+            <h3 className={`${labelCls} flex items-center gap-1 text-foreground font-medium`}><Landmark size={12} /> {t("settings.company.bankSectionTitle")}</h3>
             <div className="grid sm:grid-cols-2 gap-4">
-              <div><label className={labelCls}>{t("settings.company.bankNameLabel")}</label><input className={inputCls} value={companyDraft.bankName} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankName: e.target.value }))} /></div>
-              <div><label className={labelCls}>{t("settings.company.bankBranchLabel")}</label><input className={inputCls} value={companyDraft.bankBranch} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankBranch: e.target.value }))} /></div>
-              <div><label className={labelCls}>{t("settings.company.bankAccountNameLabel")}</label><input className={inputCls} value={companyDraft.bankAccountName} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankAccountName: e.target.value }))} /></div>
-              <div><label className={labelCls}>{t("settings.company.bankAccountNumberLabel")}</label><input className={`${inputCls} font-mono`} value={companyDraft.bankAccountNumber} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankAccountNumber: e.target.value }))} /></div>
+              <div><label htmlFor={bankNameId} className={labelCls}>{t("settings.company.bankNameLabel")}</label><input id={bankNameId} className={inputCls} value={companyDraft.bankName} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankName: e.target.value }))} /></div>
+              <div><label htmlFor={bankBranchId} className={labelCls}>{t("settings.company.bankBranchLabel")}</label><input id={bankBranchId} className={inputCls} value={companyDraft.bankBranch} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankBranch: e.target.value }))} /></div>
+              <div><label htmlFor={bankAccountNameId} className={labelCls}>{t("settings.company.bankAccountNameLabel")}</label><input id={bankAccountNameId} className={inputCls} value={companyDraft.bankAccountName} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankAccountName: e.target.value }))} /></div>
+              <div><label htmlFor={bankAccountNumberId} className={labelCls}>{t("settings.company.bankAccountNumberLabel")}</label><input id={bankAccountNumberId} className={`${inputCls} font-mono`} value={companyDraft.bankAccountNumber} onChange={(e) => setCompanyDraft((c) => ({ ...c, bankAccountNumber: e.target.value }))} /></div>
             </div>
           </div>
 
           <div className="pt-2 border-t border-border">
-            <label className={`${labelCls} flex items-center gap-1`}><FileText size={10} /> {t("settings.company.termsLabel")}</label>
-            <textarea rows={4} className={`${inputCls} resize-none`} value={companyDraft.termsAndConditions} onChange={(e) => setCompanyDraft((c) => ({ ...c, termsAndConditions: e.target.value }))} />
+            <label htmlFor={termsId} className={`${labelCls} flex items-center gap-1`}><FileText size={10} /> {t("settings.company.termsLabel")}</label>
+            <textarea id={termsId} rows={4} className={`${inputCls} resize-none`} value={companyDraft.termsAndConditions} onChange={(e) => setCompanyDraft((c) => ({ ...c, termsAndConditions: e.target.value }))} />
           </div>
 
           <div className="flex items-center gap-3 pt-1">
-            <button onClick={saveCompany} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button onClick={saveCompany} disabled={companySaving} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
               {t("common.saveChanges")}
             </button>
             <SavedNote show={companySaved} />
           </div>
-          {companyError && <p className="text-xs text-[#e05252]">{companyError}</p>}
+          {companyError && <p role="alert" className="text-xs text-[#e05252]">{companyError}</p>}
         </div>
       )}
 
       {/* Security */}
       {tab === "security" && (
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
-          <p className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("settings.security.title")}</p>
+          <h2 id={securityHeadingId} className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("settings.security.title")}</h2>
           <div className="space-y-4">
             <div>
-              <label className={labelCls}>{t("settings.security.currentLabel")}</label>
-              <input type="password" className={inputCls} value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} />
+              <label htmlFor={currentPwId} className={labelCls}>{t("settings.security.currentLabel")}</label>
+              <input id={currentPwId} type="password" autoComplete="current-password" className={inputCls} value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} />
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>{t("settings.security.newLabel")}</label>
-                <input type="password" className={inputCls} value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+                <label htmlFor={newPwId} className={labelCls}>{t("settings.security.newLabel")}</label>
+                <input id={newPwId} type="password" autoComplete="new-password" className={inputCls} value={newPw} onChange={(e) => setNewPw(e.target.value)} />
               </div>
               <div>
-                <label className={labelCls}>{t("settings.security.confirmLabel")}</label>
-                <input type="password" className={inputCls} value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
+                <label htmlFor={confirmPwId} className={labelCls}>{t("settings.security.confirmLabel")}</label>
+                <input id={confirmPwId} type="password" autoComplete="new-password" className={inputCls} value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
               </div>
             </div>
           </div>
-          {pwError && <p className="text-xs text-[#e05252]">{pwError}</p>}
+          {pwError && <p role="alert" className="text-xs text-[#e05252]">{pwError}</p>}
           <div className="flex items-center gap-3 pt-1">
-            <button onClick={savePassword} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+            <button onClick={savePassword} disabled={pwSaving} className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
               {t("settings.security.submit")}
             </button>
             <SavedNote show={pwSaved} />
@@ -414,13 +464,17 @@ export function SettingsPage({
       {/* Notifications */}
       {tab === "notifications" && (
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-1">
+          <h2 id={notificationsHeadingId} className="sr-only">{t("settings.tab.notifications")}</h2>
+          <p className="text-xs text-muted-foreground leading-relaxed pb-3">
+            {t("settings.notifications.hint")}
+          </p>
           {notifRows.map((n, i) => (
             <div key={n.key} className={`flex items-center justify-between py-4 ${i > 0 ? "border-t border-border" : ""}`}>
               <div>
-                <p className="text-sm text-foreground font-medium">{n.label}</p>
+                <p id={n.id} className="text-sm text-foreground font-medium">{n.label}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{n.sub}</p>
               </div>
-              <Toggle checked={notifPrefs[n.key]} onChange={(v) => setNotifPrefs((p) => ({ ...p, [n.key]: v }))} />
+              <Toggle checked={notifPrefs[n.key]} onChange={(v) => setNotifPrefs((p) => ({ ...p, [n.key]: v }))} labelledBy={n.id} />
             </div>
           ))}
         </div>

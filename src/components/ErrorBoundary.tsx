@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RotateCw } from "lucide-react";
+import { useI18n } from "../lib/i18n";
 
 /**
  * This app previously had no error boundary anywhere — a real incident (2026-07-22): a client-side
@@ -23,6 +24,30 @@ interface State {
   hasError: boolean;
 }
 
+/** Split out from the class component below purely to call `useI18n()` — React error boundaries
+ * must be class components (no hook-based equivalent exists), but the actual presentational output
+ * doesn't need to be. Previously the only hardcoded-Thai user-facing text in the app: every other
+ * string routes through `t()`, and this is exactly the screen where an English-mode user most needs
+ * to understand what happened (Impeccable shell audit 2026-07-30). */
+function ErrorBoundaryFallback() {
+  const { t } = useI18n();
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
+      <div className="w-12 h-12 rounded-full bg-[#e05252]/10 flex items-center justify-center">
+        <AlertTriangle size={22} className="text-[#e05252]" />
+      </div>
+      <p className="text-sm font-medium text-foreground">{t("boot.errorBoundary.title")}</p>
+      <p className="text-xs text-muted-foreground max-w-sm">{t("boot.errorBoundary.message")}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+      >
+        <RotateCw size={14} /> {t("boot.errorBoundary.reload")}
+      </button>
+    </div>
+  );
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
 
@@ -36,21 +61,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
-          <div className="w-12 h-12 rounded-full bg-[#e05252]/10 flex items-center justify-center">
-            <AlertTriangle size={22} className="text-[#e05252]" />
-          </div>
-          <p className="text-sm font-medium text-foreground">เกิดข้อผิดพลาดที่ไม่คาดคิด</p>
-          <p className="text-xs text-muted-foreground max-w-sm">กรุณาลองโหลดหน้านี้ใหม่อีกครั้ง หากยังพบปัญหา กรุณาแจ้งผู้ดูแลระบบ</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
-          >
-            <RotateCw size={14} /> โหลดหน้านี้ใหม่
-          </button>
-        </div>
-      );
+      return <ErrorBoundaryFallback />;
     }
     return this.props.children;
   }
