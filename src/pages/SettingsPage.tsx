@@ -74,6 +74,12 @@ function Toggle({ checked, onChange, labelledBy }: { checked: boolean; onChange:
   // (checked translateX = 40 - 16 - 3 = 21px). The border is now always present (transparent
   // when checked) rather than conditionally added, so the knob's containing block doesn't shift
   // by a border-width between states.
+  // `left-0` pins the knob's un-translated position to the track's edge. Without it, `left`
+  // stays `auto` and the browser falls back to a "static position" for this absolutely
+  // positioned (but display: inline by default) span — since <button> has `text-align: center`
+  // in the UA stylesheet, that static position lands at the track's horizontal center, so
+  // translate-x then overshoots off the right edge instead of landing at the intended offset
+  // (visible as the knob spilling out of the track — reported bug, 2026-07-30).
   return (
     <button
       type="button"
@@ -84,7 +90,7 @@ function Toggle({ checked, onChange, labelledBy }: { checked: boolean; onChange:
       className={`w-[40px] h-[22px] rounded-full border transition-colors relative flex-shrink-0 ${checked ? "bg-[#c9a84c] border-transparent" : "bg-muted border-border"}`}
     >
       <span
-        className={`absolute top-[3px] w-[16px] h-[16px] rounded-full bg-white shadow transition-transform ${checked ? "translate-x-[21px]" : "translate-x-[3px]"}`}
+        className={`absolute left-0 top-[3px] w-[16px] h-[16px] rounded-full bg-white shadow transition-transform ${checked ? "translate-x-[21px]" : "translate-x-[3px]"}`}
       />
     </button>
   );
