@@ -45,6 +45,18 @@ Server-enforced per action: `products:view`/`create`/`edit`/`delete` on the resp
 - Seeded with 7 sample chemical-storage-relevant products across 7 categories (Materials/Equipment/Services/Labor/Installation/Software/Hardware → วัสดุ/อุปกรณ์/บริการ/ค่าแรง/การติดตั้ง/ซอฟต์แวร์/ฮาร์ดแวร์)
 - Quotation picker integration with verified snapshot independence
 
+## Accessibility Hardening (2026-07-30)
+
+An `/impeccable audit` pass + fix found and fixed: `CategoriesManager.tsx` had independently
+reintroduced the status-pill contrast bug (hand-rolled instead of reusing the shared `StatusBadge`)
+— now reuses it directly; `ProductPickerModal` (the Quotation catalog picker) had zero dialog
+semantics — now wired to `useDialogA11y` via a wrapper+form split (avoiding a known latent bug in
+`ConfirmDialog`'s own version of this pattern); `ProductForm` had zero label association on all 7
+fields and — uniquely among this app's forms — no busy-guard on Save at all; both are fixed.
+`ProductList`'s hover-only row actions and entirely keyboard-inaccessible sortable column headers
+were also fixed. Verified live via `vercel dev`, including opening the picker from an actual
+Quotation. See CHANGELOG.md 2026-07-30.
+
 ## Future Improvements
 
 - Bulk import/export (CSV) — not requested yet, but a natural fit for a "product library"

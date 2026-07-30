@@ -70,9 +70,9 @@ export function DocumentRecipientsPicker({
 
   return (
     <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-      <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+      <h2 className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
         ผู้รับเอกสาร
-      </p>
+      </h2>
       <p className="text-[11px] text-muted-foreground mb-3">
         ติ๊กเลือกพนักงานในแต่ละแผนกที่เลือกไว้ใน "เอกสารส่งถึง" ด้านบน — เมื่อกดปุ่ม "ส่งอีเมลแจ้งผู้รับเอกสาร" ระบบจะส่งอีเมลไปยังพนักงานที่ติ๊กเลือกไว้เท่านั้น
       </p>
@@ -190,13 +190,14 @@ export function DocumentRecipientsPicker({
       </div>
 
       <div className="mt-4 pt-4 border-t border-border/70">
-        <label className="block text-xs font-semibold text-foreground mb-1">
+        <label htmlFor="recipientMessage" className="block text-xs font-semibold text-foreground mb-1">
           ข้อความเพิ่มเติมถึงผู้รับ <span className="font-normal text-muted-foreground">(ไม่บังคับ)</span>
         </label>
         <p className="text-[11px] text-muted-foreground mb-2">
           ข้อความนี้จะแสดงด้านบนเนื้อหาอัตโนมัติในอีเมล เช่น ระบุกำหนดเวลา หรือคำแนะนำเพิ่มเติมสำหรับผู้รับ
         </p>
         <textarea
+          id="recipientMessage"
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
           disabled={disabled}

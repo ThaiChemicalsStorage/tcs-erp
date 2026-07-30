@@ -230,6 +230,19 @@ Client-side RBAC (see [RBAC.md](../RBAC.md)) via `computeQuotePermissions(quote,
 - **[Fixed 2026-07-08]** Quotes previously reset to seed data on every reload (in-memory only) — now persisted to `localStorage`.
 - **[Fixed 2026-07-09]** The "หมายเหตุ / เงื่อนไข" (remarks) textarea was `defaultValue`-only (uncontrolled) — any edit was silently lost on save and reset to the company default on every reopen. Fixed by adding a real `Quote.remarks` field, wired through `save()` like every other document field.
 
+## Accessibility Hardening (2026-07-30)
+
+An `/impeccable audit` pass + fix found and fixed: every field in the Customer Info/Document Details
+panels now has a real `htmlFor`/`id` label association (previously zero); the Save button and every
+Confirm/Prompt dialog now guard against a double-click firing the same request twice; line-item
+sub-details gained up/down keyboard-reorder buttons alongside the existing drag handle; the
+workflow-action modal was extracted into its own `WorkflowActionDialog` component so it could get
+`role="dialog"`/Escape-to-close/focus-trap; Save's success toast now only shows after the request
+actually resolves (previously optimistic); opening a deep-linked quote the user can't access now
+shows an explicit not-found state instead of a silently-blank editable form; the Scope-of-Work-number
+prompt now uses the shared `PromptDialog` instead of a hand-rolled duplicate. See CHANGELOG.md
+2026-07-30 for the full list (this pass also touched Scope of Work and Delivery Order).
+
 ## Guided Tour (2026-07-29)
 
 The quotation **editor** (`QuoteDocument.tsx`) has its own 3-step driver.js tour (tourKey

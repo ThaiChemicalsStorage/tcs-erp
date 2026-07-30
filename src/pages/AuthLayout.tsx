@@ -20,9 +20,12 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="relative">
-          <h1 className="text-white text-3xl font-semibold leading-snug mb-4" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          {/* A styled <p>, not an <h1> — this panel is decorative marketing copy hidden below `lg`
+              (see the "Accessibility Hardening" note in docs/MODULES/Auth.md), while the page's
+              actual identifying heading ("Sign In") lives in SignInPage.tsx as the real <h1>. */}
+          <p className="text-white text-3xl font-semibold leading-snug mb-4" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
             {t("auth.brand.headline1")}<br />{t("auth.brand.headline2")}
-          </h1>
+          </p>
           <p className="text-[#a8bed8] text-sm leading-relaxed mb-8 max-w-sm">
             {t("auth.brand.description")}
           </p>
@@ -42,7 +45,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Form panel */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
+      <main className="flex-1 flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-sm">
           {/* Mobile brand mark */}
           <div className="flex lg:hidden mb-8 justify-center">
@@ -50,7 +53,7 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
           </div>
           {children}
         </div>
-      </div>
+      </main>
     </div>
   );
 }

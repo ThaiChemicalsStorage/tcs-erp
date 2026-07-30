@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Plus, Search, Pencil, Power, Archive, ArchiveRestore, Contact, X, HelpCircle } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -11,6 +11,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
+import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { useI18n } from "../../lib/i18n";
 
 type StatusFilter = "all" | "active" | "inactive";
@@ -243,7 +244,7 @@ export function CustomersPage({
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{fmtDate(c.updatedAt)}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                         {canEdit && (
                           <button onClick={() => setFormTarget(c)} title={t("common.edit")} aria-label={`${t("common.edit")} ${c.companyName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
                             <Pencil size={14} />
@@ -318,8 +319,11 @@ function CustomerFormModal({
   const [draft, setDraft] = useState<CustomerDraft>(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const panelRef = useDialogA11y(onCancel);
+  const titleId = useId();
 
   const field = (key: keyof CustomerDraft) => ({
+    id: `customer-${key}`,
     value: draft[key] as string,
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDraft((d) => ({ ...d, [key]: e.target.value })),
   });
@@ -335,53 +339,53 @@ function CustomerFormModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
-      <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5">
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5">
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
             {t("customers.form.title")}
-          </p>
-          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
+          </h2>
+          <button onClick={onCancel} disabled={saving} className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60"><X size={16} /></button>
         </div>
 
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.clientName")} <span className="text-[#e05252]">*</span></label>
+            <label htmlFor="customer-companyName" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.clientName")} <span className="text-[#e05252]">*</span></label>
             <input {...field("companyName")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactName")}</label>
+              <label htmlFor="customer-contactName" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactName")}</label>
               <input {...field("contactName")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactPhone")}</label>
+              <label htmlFor="customer-phone" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactPhone")}</label>
               <input {...field("phone")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
             </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactEmail")}</label>
+            <label htmlFor="customer-email" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.contactEmail")}</label>
             <input {...field("email")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.address")}</label>
+            <label htmlFor="customer-address" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.address")}</label>
             <input {...field("address")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.taxId")}</label>
+            <label htmlFor="customer-taxId" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.taxId")}</label>
             <input {...field("taxId")} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryMethod")}</label>
+              <label htmlFor="customer-deliveryMethod" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryMethod")}</label>
               <input {...field("deliveryMethod")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.project")}</label>
+              <label htmlFor="customer-projectName" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.project")}</label>
               <input {...field("projectName")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
             </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryAddress")}</label>
+            <label htmlFor="customer-deliveryAddress" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.deliveryAddress")}</label>
             <input {...field("deliveryAddress")} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
           <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-foreground">
@@ -393,7 +397,7 @@ function CustomerFormModal({
         {error && <p className="text-xs text-[#e05252] mt-3">{error}</p>}
 
         <div className="flex items-center justify-end gap-2 mt-5">
-          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+          <button onClick={onCancel} disabled={saving} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">{t("common.cancel")}</button>
           <button
             onClick={handleSubmit}
             disabled={saving}

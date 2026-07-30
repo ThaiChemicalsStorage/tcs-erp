@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FileQuestion } from "lucide-react";
 import type { Company } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
 import type { JobType } from "../../lib/jobTypes";
@@ -15,6 +16,7 @@ import { QuoteDocument } from "./QuoteDocument";
 import { ScopeOfWorkDocument } from "./ScopeOfWorkDocument";
 import { QuotationTemplateWizard, type QuotationWizardResult } from "./QuotationTemplateWizard";
 import { Toast } from "../../components/Toast";
+import { EmptyState } from "../../components/EmptyState";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
 
@@ -197,6 +199,10 @@ export function QuotationPage({
       }
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("quotation.saveErrorToast"));
+      // Rethrown (accessibility/correctness hardening pass, mirrors handleWorkflowAction below) so
+      // QuoteDocument.tsx's save() knows the request failed and skips its success toast instead of
+      // showing "Saved!" regardless of outcome.
+      throw err;
     }
   };
 
@@ -308,6 +314,25 @@ export function QuotationPage({
         />
         <Toast message={toast.message} />
       </>
+    );
+  }
+
+  // A deep-linked quote (notification click, Global Search) can point at an id that isn't in this
+  // user's own loaded `quotes` list — e.g. a custom role with `quotations:approve` but not
+  // `quotations:viewAll` clicking a notification about someone else's quote. Without this guard,
+  // `QuoteDocument` would silently render as a blank editable "new quote" form (since `quote` is
+  // undefined) and Save would be a silent no-op — an explicit not-found state is much clearer.
+  if (view === "detail" && !selectedQuote) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6">
+        <EmptyState
+          icon={FileQuestion}
+          title={t("quotation.notFound.title")}
+          description={t("quotation.notFound.desc")}
+          actionLabel={t("quotation.notFound.action")}
+          onAction={() => setView("list")}
+        />
+      </div>
     );
   }
 

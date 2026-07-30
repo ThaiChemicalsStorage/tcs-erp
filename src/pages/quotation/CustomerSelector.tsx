@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { Search, X, Building2, ChevronDown } from "lucide-react";
 import type { Customer } from "../../lib/customers";
 import { useI18n } from "../../lib/i18n";
@@ -16,6 +16,7 @@ export function CustomerSelector({
   onSelect,
   onClear,
   disabled,
+  inputId,
 }: {
   customers: Customer[];
   /** The currently-linked customer's id, or "" for a manually-entered quote with no linked customer. */
@@ -23,11 +24,16 @@ export function CustomerSelector({
   onSelect: (customer: Customer) => void;
   onClear: () => void;
   disabled: boolean;
+  /** Applied to the search `<input>` so a caller's `<label htmlFor={inputId}>` associates with it.
+   * Only rendered while no customer is selected (the selected state shows a static readout with no
+   * input) — that's fine, an unresolved `htmlFor` target is inert, not an error. */
+  inputId?: string;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
 
   const selected = customers.find((c) => c.id === selectedId);
 
@@ -72,12 +78,19 @@ export function CustomerSelector({
       <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 focus-within:border-[#c9a84c]/50 transition-colors">
         <Search size={14} className="text-muted-foreground flex-shrink-0" />
         <input
+          id={inputId}
           type="text"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
           disabled={disabled}
           value={query}
           onFocus={() => setOpen(true)}
           onBlur={closeOnBlur}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
           placeholder={t("quotation.customerSelector.searchPlaceholder")}
           className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full disabled:opacity-60"
         />
@@ -85,7 +98,7 @@ export function CustomerSelector({
       </div>
 
       {open && !disabled && (
-        <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-card border border-border rounded-lg shadow-xl py-1">
+        <div id={listboxId} role="listbox" className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-card border border-border rounded-lg shadow-xl py-1">
           {matches.length === 0 ? (
             <p className="px-3 py-2.5 text-xs text-muted-foreground">{t("quotation.customerSelector.noResults")}</p>
           ) : (
@@ -93,6 +106,8 @@ export function CustomerSelector({
               <button
                 key={c.id}
                 type="button"
+                role="option"
+                aria-selected={c.id === selectedId}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { onSelect(c); setQuery(""); setOpen(false); }}
                 className="w-full text-left px-3 py-2 hover:bg-secondary/60 transition-colors"

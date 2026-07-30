@@ -188,13 +188,17 @@ export function ProductList({
                   {columns.map((col) => (
                     <th
                       key={col.key}
-                      onClick={() => toggleSort(col.key)}
-                      className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap"
+                      aria-sort={sort.key === col.key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+                      className="px-4 py-3 text-left whitespace-nowrap"
                     >
-                      <span className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(col.key)}
+                        className="flex items-center gap-1 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider select-none hover:text-foreground transition-colors"
+                      >
                         {col.label}
                         {sort.key === col.key && (sort.dir === "asc" ? <ChevronUp size={11} /> : <ChevronDown size={11} />)}
-                      </span>
+                      </button>
                     </th>
                   ))}
                   <th className="px-4 py-3 w-32" />
@@ -216,17 +220,17 @@ export function ProductList({
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground font-mono">{fmtDate(p.updatedAt)}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => onEdit(p.id)} title={t("common.edit")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
+                      <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                        <button onClick={() => onEdit(p.id)} title={t("common.edit")} aria-label={`${t("common.edit")} ${p.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
                           <Pencil size={14} />
                         </button>
-                        <button onClick={() => onDuplicate(p.id)} title={t("products.action.duplicate")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
+                        <button onClick={() => onDuplicate(p.id)} title={t("products.action.duplicate")} aria-label={`${t("products.action.duplicate")} ${p.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
                           <Copy size={14} />
                         </button>
-                        <button onClick={() => onArchiveToggle(p.id)} title={p.archived ? t("common.unarchive") : t("common.archive")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
+                        <button onClick={() => onArchiveToggle(p.id)} title={p.archived ? t("common.unarchive") : t("common.archive")} aria-label={`${p.archived ? t("common.unarchive") : t("common.archive")} ${p.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
                           {p.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
                         </button>
-                        <button onClick={() => setConfirmDeleteId(p.id)} title={t("common.delete")} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors">
+                        <button onClick={() => setConfirmDeleteId(p.id)} title={t("common.delete")} aria-label={`${t("common.delete")} ${p.name}`} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors">
                           <Trash2 size={14} />
                         </button>
                       </div>

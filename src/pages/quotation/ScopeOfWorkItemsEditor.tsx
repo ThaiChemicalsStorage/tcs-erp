@@ -1,7 +1,8 @@
 import { Fragment, useRef, useState } from "react";
-import { Plus, Trash2, Copy, GripVertical, StickyNote } from "lucide-react";
+import { Plus, Trash2, Copy, GripVertical, StickyNote, ChevronUp, ChevronDown, ClipboardList } from "lucide-react";
 import { type ScopeOfWorkItem, newScopeItemId, newScopeSpecLineId, blankScopeOfWorkItem } from "../../lib/scopeOfWork";
 import { FieldError } from "../../components/FieldError";
+import { EmptyState } from "../../components/EmptyState";
 
 /**
  * Editable table for a Scope of Work's item list — copied at creation time from the source
@@ -77,7 +78,7 @@ export function ScopeOfWorkItemsEditor({
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
-        <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>รายการ Scope of Work</p>
+        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>รายการ Scope of Work</h2>
         {!disabled && (
           <div className="flex items-center gap-2">
             <button onClick={addSectionHeader} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
@@ -126,7 +127,12 @@ export function ScopeOfWorkItemsEditor({
                     <td className="px-4 py-2.5 align-top">
                       {!disabled && (
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => removeItem(item.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={13} /></button>
+                          {/* Keyboard/touch alternative to the drag handle — native HTML5 drag
+                              events have no keyboard equivalent, so whole-row reordering was
+                              previously mouse-only. */}
+                          <button onClick={() => reorder(idx, idx - 1)} disabled={idx === 0} title="ย้ายขึ้น" aria-label="ย้ายขึ้น" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronUp size={13} /></button>
+                          <button onClick={() => reorder(idx, idx + 1)} disabled={idx === items.length - 1} title="ย้ายลง" aria-label="ย้ายลง" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronDown size={13} /></button>
+                          <button onClick={() => removeItem(item.id)} title="ลบ" aria-label="ลบ" className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Trash2 size={13} /></button>
                         </div>
                       )}
                     </td>
@@ -165,15 +171,21 @@ export function ScopeOfWorkItemsEditor({
                         <button
                           onClick={() => toggleExpand(item.id)}
                           title="รายละเอียด/ข้อกำหนด"
-                          className={`transition-colors relative ${hasSpecs ? "text-[#c9a84c]" : "text-muted-foreground opacity-0 group-hover:opacity-100"} hover:text-[#c9a84c]`}
+                          aria-label="รายละเอียด/ข้อกำหนด"
+                          className={`transition-colors relative ${hasSpecs ? "text-[#c9a84c]" : "text-muted-foreground opacity-50 group-hover:opacity-100 focus-visible:opacity-100"} hover:text-[#c9a84c]`}
                         >
                           <StickyNote size={13} />
                           {hasSpecs && !isExpanded && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[#c9a84c]" />}
                         </button>
                         {!disabled && (
                           <>
-                            <button onClick={() => duplicateItem(item.id)} title="ทำสำเนารายการ" className="text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"><Copy size={13} /></button>
-                            <button onClick={() => removeItem(item.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={13} /></button>
+                            {/* Keyboard/touch alternative to the drag handle — native HTML5 drag
+                                events have no keyboard equivalent, so whole-row reordering was
+                                previously mouse-only. */}
+                            <button onClick={() => reorder(idx, idx - 1)} disabled={idx === 0} title="ย้ายขึ้น" aria-label="ย้ายขึ้น" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronUp size={13} /></button>
+                            <button onClick={() => reorder(idx, idx + 1)} disabled={idx === items.length - 1} title="ย้ายลง" aria-label="ย้ายลง" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronDown size={13} /></button>
+                            <button onClick={() => duplicateItem(item.id)} title="ทำสำเนารายการ" aria-label="ทำสำเนารายการ" className="text-muted-foreground hover:text-foreground transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Copy size={13} /></button>
+                            <button onClick={() => removeItem(item.id)} title="ลบ" aria-label="ลบ" className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Trash2 size={13} /></button>
                           </>
                         )}
                       </div>
@@ -198,7 +210,7 @@ export function ScopeOfWorkItemsEditor({
                                     className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
                                   />
                                   {!disabled && (
-                                    <button onClick={() => removeSpecLine(item.id, sl.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1"><Trash2 size={12} /></button>
+                                    <button onClick={() => removeSpecLine(item.id, sl.id)} title="ลบ" aria-label="ลบ" className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1"><Trash2 size={12} /></button>
                                   )}
                                 </div>
                               ))}
@@ -228,7 +240,9 @@ export function ScopeOfWorkItemsEditor({
             })}
             {items.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-xs text-muted-foreground">ยังไม่มีรายการ Scope of Work</td>
+                <td colSpan={5}>
+                  <EmptyState icon={ClipboardList} title="ยังไม่มีรายการ Scope of Work" description="เพิ่มรายการด้วยปุ่ม “เพิ่มรายการ” ด้านบน" compact />
+                </td>
               </tr>
             )}
           </tbody>

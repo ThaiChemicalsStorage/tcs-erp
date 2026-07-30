@@ -43,6 +43,18 @@ Super Admin only, hardcoded (`userIsSuperAdmin()`), independent of whatever the 
 - `roles:manage`/`company:manage` structurally un-assignable to any role but Super Admin
 - Delete blocked while any user still holds the role
 
+## Accessibility Hardening (2026-07-30)
+
+An `/impeccable audit` of the Admin module found and fixed: the Create/Edit Role form's name and
+description fields had `<label>`s with no `htmlFor` and inputs with no `id` — added `useId()`-
+generated pairs (the permission-matrix checkboxes were already correctly `<label>`-wrapped, no
+change needed there); row-action buttons (edit/view, delete) relied on `title` alone — added
+item-specific `aria-label`s; the "System" role badge used raw gold (`text-[#c9a84c]`) as plain text
+directly on the card's white background (≈2.37:1 contrast, failing WCAG AA) — darkened to
+`#866d28`, the same value already established for gold-on-tint pills elsewhere. See
+[UserManagement.md](./UserManagement.md) for the fuller writeup of this pass (same audit, same
+session). No RBAC, permission-matrix, or business-logic changes. See CHANGELOG.md 2026-07-30.
+
 ## Future Improvements
 
 - Bulk "reassign all users from role A to role B" helper before allowing a role delete

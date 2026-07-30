@@ -114,6 +114,19 @@ list. `customer_contacts` remains schema-only/unused.
   on the quote, Draft-only customer changes on an existing quote
 - Only active, non-deleted customers are offered in the Quotation selector
 
+## Accessibility Hardening (2026-07-30)
+
+An `/impeccable audit` pass + fix found and fixed: `StatusBadge.tsx` (the shared active/inactive/
+archived pill this page uses) still carried the pre-2026-07-29 one-hex contrast formula — darkened
+to the same AA-passing formula already established on the Quotation workflow's own statuses; the
+create/edit `CustomerFormModal` had zero label association on all 9 fields and no dialog semantics
+at all (not even a hand-rolled attempt at `ConfirmDialog`'s shell) — now wired to the shared
+`useDialogA11y` hook with real `id`/`htmlFor` pairs; the list's row actions were hover-only invisible
+to keyboard/touch users; two field-pair rows used a bare `grid-cols-2` instead of the documented
+`grid-cols-1 sm:grid-cols-2`. Verified live in-browser (not just code review) — see CHANGELOG.md
+2026-07-30. `CustomerSelector.tsx` (the picker this module feeds into the Quotation form) was already
+fixed in an earlier pass the same day and needed no further changes.
+
 ## Future Improvements
 
 - "บันทึกเป็นลูกค้าใหม่" — save a manually-typed Customer Information section as a new Customer

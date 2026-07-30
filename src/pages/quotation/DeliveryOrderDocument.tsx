@@ -40,12 +40,19 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
     onChange({ ...installment, itemIds });
   };
 
+  // Ids are namespaced per-installment (this component renders once per installment in a list) so
+  // every label/input pair stays unique across the whole page rather than colliding on a shared id.
+  const documentNumberId = `do-installment-${installment.id}-documentNumber`;
+  const issueDateId = `do-installment-${installment.id}-issueDate`;
+  const itemsHeadingId = `do-installment-${installment.id}-items`;
+  const remarkId = `do-installment-${installment.id}-remark`;
+
   return (
     <div className="bg-card border border-border rounded-xl p-5 print:hidden">
       <div className="flex items-start justify-between gap-3 mb-3">
-        <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
           {installmentTitle(installment)}
-        </p>
+        </h2>
         {onPrint && (
           <button onClick={onPrint} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all flex-shrink-0">
             <Printer size={13} /> พิมพ์ใบส่งมอบงวดนี้
@@ -54,8 +61,9 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">เลขที่</label>
+          <label htmlFor={documentNumberId} className="text-xs text-muted-foreground block mb-1">เลขที่</label>
           <input
+            id={documentNumberId}
             disabled={disabled}
             value={installment.documentNumber}
             onChange={(e) => onChange({ ...installment, documentNumber: e.target.value })}
@@ -63,8 +71,9 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
           />
         </div>
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">วันที่</label>
+          <label htmlFor={issueDateId} className="text-xs text-muted-foreground block mb-1">วันที่</label>
           <input
+            id={issueDateId}
             disabled={disabled}
             type="date"
             value={installment.issueDate}
@@ -74,11 +83,11 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
         </div>
       </div>
 
-      <label className="text-xs text-muted-foreground block mb-1.5">รายการที่ส่งมอบในงวดนี้</label>
+      <p id={itemsHeadingId} className="text-xs text-muted-foreground block mb-1.5">รายการที่ส่งมอบในงวดนี้</p>
       {items.length === 0 ? (
         <p className="text-xs text-muted-foreground italic mb-3">Scope of Work นี้ยังไม่มีรายการสินค้า</p>
       ) : (
-        <div className="border border-border/70 rounded-lg divide-y divide-border/60 mb-3">
+        <div role="group" aria-labelledby={itemsHeadingId} className="border border-border/70 rounded-lg divide-y divide-border/60 mb-3">
           {items.map((item) => {
             const checked = installment.itemIds.includes(item.id);
             return (
@@ -103,8 +112,9 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
         </div>
       )}
 
-      <label className="text-xs text-muted-foreground block mb-1">Remark</label>
+      <label htmlFor={remarkId} className="text-xs text-muted-foreground block mb-1">Remark</label>
       <textarea
+        id={remarkId}
         disabled={disabled}
         rows={2}
         value={installment.remark}
@@ -147,10 +157,14 @@ export function DeliveryOrderDocument({
 }) {
   const { t } = useI18n();
   const [deliveryOrder, setDeliveryOrder] = useState<DeliveryOrder | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"submit" | "finalize" | "withdraw" | "rewrite" | "refresh" | "delete" | null>(null);
+  // Guards against a double-click on Confirm firing the same action twice while the first request
+  // is still in flight (accessibility/correctness hardening pass) — matters most here since these
+  // are largely irreversible transitions (finalize, delete).
+  const [actionRunning, setActionRunning] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [printInstallmentId, setPrintInstallmentId] = useState<string | null>(null);
   const [rejectPromptOpen, setRejectPromptOpen] = useState(false);
@@ -170,7 +184,12 @@ export function DeliveryOrderDocument({
     let cancelled = false;
     fetchDeliveryOrder(deliveryOrderId)
       .then((d) => { if (!cancelled) setDeliveryOrder(d); })
-      .catch(() => { if (!cancelled) setLoadError(true); });
+      .catch((err) => {
+        if (cancelled) return;
+        // Surface the server's own message (404/403/etc.) instead of always showing the same
+        // generic string, consistent with how every mutation error in this file already behaves.
+        setLoadError(err instanceof ApiError ? err.message : "ไม่สามารถโหลดข้อมูลใบส่งมอบสินค้าได้");
+      });
     return () => { cancelled = true; };
   }, [deliveryOrderId, reloadKey]);
 
@@ -189,22 +208,39 @@ export function DeliveryOrderDocument({
     autoStart: !!deliveryOrder && deliveryOrder.installments.length > 0,
   });
 
+  // Both branches below keep a minimal toolbar (just the back button) visible instead of a bare
+  // full-page block — accessibility/UX hardening pass: previously a hung or repeatedly-failing
+  // fetch left the user with no in-app way back except the retry button.
   if (loadError) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
-        <AlertTriangle size={20} className="text-[#e05252]" />
-        <p className="text-sm text-muted-foreground">ไม่สามารถโหลดข้อมูลใบส่งมอบสินค้าได้</p>
-        <button onClick={() => { setLoadError(false); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-          <RotateCw size={12} /> ลองใหม่
-        </button>
+      <div className="flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronRight size={14} className="rotate-180" /> {backLabel}
+          </button>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <AlertTriangle size={20} className="text-[#e05252]" />
+          <p className="text-sm text-muted-foreground">{loadError}</p>
+          <button onClick={() => { setLoadError(""); setReloadKey((k) => k + 1); }} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <RotateCw size={12} /> ลองใหม่
+          </button>
+        </div>
       </div>
     );
   }
   if (!deliveryOrder) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-2.5 p-6">
-        <Loader2 size={20} className="text-muted-foreground animate-spin" />
-        <p className="text-xs text-muted-foreground">กำลังโหลดใบส่งมอบสินค้า...</p>
+      <div className="flex-1 overflow-y-auto">
+        <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronRight size={14} className="rotate-180" /> {backLabel}
+          </button>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-2.5 p-6">
+          <Loader2 size={20} className="text-muted-foreground animate-spin" />
+          <p className="text-xs text-muted-foreground">กำลังโหลดใบส่งมอบสินค้า...</p>
+        </div>
       </div>
     );
   }
@@ -255,7 +291,8 @@ export function DeliveryOrderDocument({
   };
 
   const runConfirmedAction = async () => {
-    if (!deliveryOrder || !confirmAction) return;
+    if (!deliveryOrder || !confirmAction || actionRunning) return;
+    setActionRunning(true);
     try {
       if (confirmAction === "submit") {
         const updated = await submitDeliveryOrderApproval(deliveryOrder.id);
@@ -288,6 +325,7 @@ export function DeliveryOrderDocument({
     } finally {
       setRefreshing(false);
       setConfirmAction(null);
+      setActionRunning(false);
     }
   };
 
@@ -306,10 +344,14 @@ export function DeliveryOrderDocument({
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
         <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{deliveryOrder.scopeNumber}</span>
+        {/* Background/border keep the status hue; text is a darkened variant of the same hue
+            (accessibility hardening pass, mirrors src/lib/quotes.tsx's statusStyle) — the original
+            scheme reused one hex for bg/10 + text + border/20, which put mid-tone text directly on
+            a ~10%-tint-of-itself background and failed WCAG AA contrast (as low as 2.4:1). */}
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-          isDraft ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20"
-          : deliveryOrder.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#e08a3c] border border-[#e08a3c]/20"
-          : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"
+          isDraft ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20"
+          : deliveryOrder.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"
+          : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"
         }`}>
           {isDraft ? "Draft" : deliveryOrder.status === "PendingApproval" ? "รออนุมัติ" : "Final"}
         </span>
@@ -363,13 +405,13 @@ export function DeliveryOrderDocument({
         {/* Header card */}
         <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <p className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">ใบส่งมอบสินค้าและบริการ</p>
+            <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">ใบส่งมอบสินค้าและบริการ</h1>
             <p className="text-[#a8bed8] text-xs mt-1">Scope of Work {deliveryOrder.scopeNumber}</p>
           </div>
           <div className="p-6 space-y-2.5">
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">เรียน (จากใบเสนอราคา)</label>
-              <input readOnly className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none opacity-80" value={deliveryOrder.customerCompanyName} />
+              <label htmlFor="do-customerCompanyName" className="text-xs text-muted-foreground block mb-1">เรียน (จากใบเสนอราคา)</label>
+              <input id="do-customerCompanyName" readOnly className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none opacity-80" value={deliveryOrder.customerCompanyName} />
             </div>
             {deliveryOrder.customerAddress.trim() && (
               <p className="text-xs text-muted-foreground whitespace-pre-line pl-1">{deliveryOrder.customerAddress}</p>
@@ -411,6 +453,7 @@ export function DeliveryOrderDocument({
         title="ส่งขออนุมัติ"
         message="เมื่อส่งแล้วใบส่งมอบสินค้านี้จะถูกล็อกระหว่างรออนุมัติ (ถอนคำขอได้หากต้องการกลับมาแก้ไข) ส่งขออนุมัติหรือไม่?"
         confirmLabel="ส่งขออนุมัติ"
+        busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
@@ -419,6 +462,7 @@ export function DeliveryOrderDocument({
         title="ถอนคำขออนุมัติ"
         message="เอกสารจะกลับเป็นฉบับร่างและแก้ไขได้อีกครั้ง ถอนคำขอหรือไม่?"
         confirmLabel="ถอนคำขอ"
+        busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
@@ -427,6 +471,7 @@ export function DeliveryOrderDocument({
         title="สร้างฉบับแก้ไข"
         message="ระบบจะสร้างใบส่งมอบสินค้าฉบับร่างใหม่จากฉบับอนุมัติแล้วนี้ (ข้อมูลงวด/รายการที่ติ๊กถูกคัดลอกมาทั้งหมด) โดยฉบับเดิมคงอยู่ตามเดิม ดำเนินการหรือไม่?"
         confirmLabel="สร้างฉบับแก้ไข"
+        busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
@@ -435,6 +480,7 @@ export function DeliveryOrderDocument({
         title="อนุมัติใบส่งมอบสินค้า"
         message="เมื่ออนุมัติแล้วเอกสารจะเป็นสถานะ Final ถาวร แก้ไขไม่ได้อีก (ต้องใช้ แก้ไข/สร้างฉบับใหม่ เท่านั้น) ยืนยันหรือไม่?"
         confirmLabel="อนุมัติ"
+        busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
@@ -444,6 +490,7 @@ export function DeliveryOrderDocument({
         message="การอัปเดตจะเขียนทับข้อมูลลูกค้าและรายการสินค้าด้วยข้อมูลล่าสุดจาก Scope of Work — รายการที่เลือกไว้ในแต่ละงวด, เลขที่, วันที่ และ Remark จะยังคงอยู่ (ยกเว้นรายการที่ถูกลบไปแล้ว) ยืนยันหรือไม่?"
         confirmLabel="อัปเดตข้อมูล"
         danger
+        busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />
@@ -453,6 +500,7 @@ export function DeliveryOrderDocument({
         message="ยืนยันการลบใบส่งมอบสินค้านี้? รายการนี้จะถูกซ่อนจากหน้ารายการ ปัจจุบันยังไม่มีช่องทางกู้คืนผ่านหน้าจอ"
         confirmLabel="ลบ"
         danger
+        busy={actionRunning}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}
       />

@@ -735,6 +735,37 @@ click.
   analysis via ad-hoc Node scripts during development, never imported by any runtime `api/`/`src/`
   code, so it's been fully removed rather than kept as a stale dependency).
 
+## Accessibility Hardening (2026-07-30)
+
+An `/impeccable audit` of the complete Template Management workflow (`TemplateManagementPage.tsx` +
+`TemplateEditorView.tsx` — list, search/filters, create/edit, section/item editors, product selector,
+reorder controls, activation, dialogs) found this module had never been touched by any of this
+session's earlier accessibility hardening passes — it was the only module still in the exact "before"
+state Products/Customers/Quotation/Scope of Work/Delivery Order all started from. Found and fixed:
+the Preview and Duplicate modals were hand-rolled `fixed inset-0` divs with no `role="dialog"`, no
+focus trap, and no Escape-to-close — both split into wrapper+form components (mirroring
+`ProductPickerModal.tsx`) so `useDialogA11y` only runs while open; the list's row actions were
+`opacity-0`-hover-only (hiding them from touch/keyboard users entirely) — fixed to
+`opacity-50`/`group-focus-within`; every row-action button relied on `title` alone — added
+item-specific `aria-label`s (e.g. "Edit Bag Filter"); at least 9 icon-only buttons across the editor
+(section move-up/down/delete, item-row move/duplicate/delete, delete-term, remove-sub-detail) had
+**zero accessible name at all** — added `aria-label`/`title` to every one, reusing existing generic
+keys (`quotation.lineItems.moveUp/moveDown`, `common.delete`, `templates.action.duplicate`) rather
+than minting duplicates; the remove-sub-detail button was also hover-only — fixed the same way as the
+list's row actions; every field in the editor's template-info/settings panels (code, name,
+description, job type, version, internal notes) had a `<label>` with no `htmlFor` and an input with
+no `id` — added `useId()`-generated pairs for all 6; loading states gained `role="status"
+aria-live="polite"`, load/save errors gained `role="alert"`. The Preview modal's title was also
+enriched to name the template being previewed ("Preview: {name}") — a small UX bonus that fell out of
+giving the split-out component a real prop to use. **Files changed**:
+`src/pages/templates/{TemplateManagementPage,TemplateEditorView}.tsx` only — no API/schema/RBAC/
+business-logic changes; template data, Excel-imported content, Job Type mappings, versioning, and
+quotation-snapshot independence are all untouched. Verified live via `vercel dev`: both modals'
+`role="dialog"`/`aria-modal`/Escape-to-close confirmed via direct DOM inspection and a dispatched
+`Escape` keydown; all 6 editor fields' `htmlFor`/`id` pairs confirmed matched; a full-page scan found
+zero icon-only buttons anywhere on the page (111 checked, including sidebar/topbar chrome) with a
+missing accessible name. `lint`/`build`/`test` (56/56) all pass clean. See CHANGELOG.md 2026-07-30.
+
 ## Known Limitations
 
 - **No live MongoDB/Vercel access was available during development, on any of the 3 passes.**

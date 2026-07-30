@@ -1,23 +1,35 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Search, X, Package } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
+import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { useI18n } from "../../lib/i18n";
 
-export function ProductPickerModal({
-  open,
-  products,
-  categories,
-  onSelect,
-  onClose,
-}: {
+export interface ProductPickerModalProps {
   open: boolean;
   products: Product[];
   categories: ProductCategory[];
   onSelect: (product: Product) => void;
   onClose: () => void;
-}) {
+}
+
+// The form is a separate component mounted only while `open` — same pattern as PromptDialog.tsx —
+// so useDialogA11y's Escape/focus-trap effect only ever runs while the modal actually exists,
+// rather than sitting registered globally for this component's whole (always-mounted) lifetime.
+export function ProductPickerModal(props: ProductPickerModalProps) {
+  if (!props.open) return null;
+  return <ProductPickerModalForm {...props} />;
+}
+
+function ProductPickerModalForm({
+  products,
+  categories,
+  onSelect,
+  onClose,
+}: ProductPickerModalProps) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
+  const panelRef = useDialogA11y(onClose);
+  const titleId = useId();
 
   const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? t("products.categoryUnspecified");
 
@@ -28,14 +40,12 @@ export function ProductPickerModal({
       .filter((p) => (q ? p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) : true));
   }, [products, search]);
 
-  if (!open) return null;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.lineItems.pickFromCatalog")}</p>
+          <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.lineItems.pickFromCatalog")}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
         </div>
         <div className="px-5 py-3 border-b border-border">

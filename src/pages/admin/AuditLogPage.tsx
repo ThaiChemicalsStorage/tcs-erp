@@ -79,13 +79,13 @@ export function AuditLogPage({
                 <td className="px-4 py-3 text-xs text-foreground font-medium whitespace-nowrap">{e.userName}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{e.roleName}</td>
                 <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{e.module}</td>
-                <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/20 whitespace-nowrap">{e.action}</span></td>
+                <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-[#c9a84c]/10 text-[#866d28] border border-[#c9a84c]/20 whitespace-nowrap">{e.action}</span></td>
                 <td className="px-4 py-3 text-xs text-muted-foreground">{e.details}</td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center text-xs text-muted-foreground py-10">
+                <td colSpan={6} className="text-center text-xs text-muted-foreground py-10" role={loading ? "status" : undefined} aria-live={loading ? "polite" : undefined}>
                   {loading ? t("auditLog.loading") : entries.length === 0 ? (
                     <div className="flex flex-col items-center gap-1">
                       <span className="font-medium text-foreground">{t("empty.auditLog.title")}</span>

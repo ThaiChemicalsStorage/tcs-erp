@@ -4,7 +4,457 @@
 
 ---
 
-## Session — 2026-07-29 (absolute latest), Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence + Impeccable design-system setup + Dashboard hardening
+## Session — 2026-07-30 (absolute latest), Authentication UI `/impeccable audit` + fix pass
+
+### What was implemented
+Ran `/impeccable audit` against the authentication UI — `SignInPage.tsx`, `AuthLayout.tsx`, and
+`App.tsx`'s `BootLoading`/`BootError` session-check presentation. Same pattern as Template
+Management and Admin before it: never touched by any earlier accessibility pass this session — but
+this time on the one page literally every user of the app passes through first.
+
+Findings recurred the same two bug classes seen in Admin (icon-only button with zero accessible
+name; missing label association) plus a new instance of the "silent loading state" pattern on the
+single most-seen loading screen in the app — `BootLoading`, shown both during the initial session
+check and as the `Suspense` fallback while the sign-in page's own code chunk loads. Also found a
+genuine heading-hierarchy defect not seen in any other module this session: the branding panel's
+decorative marketing headline was the page's only `<h1>`, and that panel is entirely hidden below
+the `lg` breakpoint — meaning a real (if less common) usage scenario, a browser window narrower than
+1024px, has literally zero `<h1>` anywhere on the sign-in page.
+
+Fixed all P1/P2 findings — see CHANGELOG.md 2026-07-30 "Authentication UI accessibility hardening
+pass" for the itemized list. The heading fix was a straightforward tag swap with zero visual change:
+`AuthLayout.tsx`'s branding headline dropped from `<h1>` to a styled `<p>` (identical classes), and
+`SignInPage.tsx`'s existing "Sign In" heading became the page's real `<h1>`.
+
+One process note worth recording: verifying this pass live required logging out of the `vercel dev`
+session (the only way to actually reach `SignInPage.tsx` while a session cookie was active), which
+also surfaced a real but unrelated **Vite HMR artifact** — after the many `i18n.tsx` edits made
+throughout this entire session, the dev server had accumulated multiple differently-timestamped
+module instances of the file, and `SignInPage`'s `useI18n()` call briefly threw "must be used within
+I18nProvider" because its `useContext` call was resolving against a stale `I18nContext` object from
+an earlier HMR update. A single hard page reload (not a code fix) resolved it completely — confirmed
+this was a dev-server-only artifact of extensive live-editing, not a real bug in the shipped fix.
+
+### Problems found and fixed
+See CHANGELOG.md 2026-07-30 (Authentication UI entry) for the itemized list.
+
+### Verification
+`npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing). Live browser
+click-through (after logging out to reach the real sign-in page, then logging back in manually):
+field label associations, the password toggle's `aria-label`/`aria-pressed` state changes, the
+error message's `role="alert"`, and the page's `<h1>`/`<main>` landmark all confirmed via direct DOM
+inspection.
+
+### Recommendations / what's next
+- Products, Customers, Quotation, Scope of Work, Delivery Order, Template Management, Admin, and now
+  Authentication have all had an accessibility pass this session. Dashboard and Settings remain the
+  two `src/pages/*` surfaces not yet named in any of this session's audits — worth checking before
+  assuming the sweep is complete.
+- The icon-only-button-with-zero-accessible-name bug class has now been found in Templates, Admin,
+  and here — worth a lint rule or code-review checklist item (e.g. "every `<button>` containing only
+  an icon must have `aria-label` or `title`") rather than continuing to catch each instance by audit.
+- Still open, not touched this pass (all P3/out of scope): the branding panel's copyright-text
+  contrast (~3.11:1, decorative footer copy), missing `autoComplete` tokens on the login fields, the
+  systemic `text-[11px]`-below-floor pattern, the `ConfirmDialog` Escape-guard-runs-while-closed gap,
+  the uncommitted `mongodb.ts` DNS fix, and the URL-routing product decision.
+
+---
+
+## Session — 2026-07-30, Admin module `/impeccable audit` + fix pass
+
+### What was implemented
+Ran `/impeccable audit` against the complete Admin module — `UserManagementPage.tsx` (list, search,
+create/edit user, reset password, activate/suspend, delete, role assignment), `RoleManagementPage.tsx`
+(role list, create/edit/view, permission matrix, delete), and `AuditLogPage.tsx` (log list, search,
+loading/empty states).
+
+Same pattern as Template Management the prior turn: this module had never been touched by any
+earlier accessibility pass this session. Two bug classes recurred here that had already been fixed
+repeatedly elsewhere — the raw-hex-as-text status-pill contrast bug (this makes at least four
+independent modules this session that reintroduced it: Delivery Order's list, User Management's role/
+status pills, Audit Log's action pill, and Role Management's "System" badge as plain text) and the
+zero-dialog-semantics hand-rolled modal (Reset Password, matching Template Management's Preview/
+Duplicate modals from the prior turn). New to this pass: the largest single-form instance of the
+missing-label-association bug found this session — 11 fields in one Create/Edit User form, plus 2
+more in the Reset Password modal.
+
+Fixed all P1/P2 findings — see CHANGELOG.md 2026-07-30 "Admin module accessibility hardening pass"
+for the itemized list. Reused the exact darkened-hex values already established for gold/active/
+inactive brand colors throughout the app (`#866d28`/`#207e52`/`#657085`) rather than deriving new
+ones, keeping the contrast formula consistent across every module that's had this fix applied.
+
+Live-verified via the running `vercel dev` instance across all three pages: read computed pill
+colors directly from the DOM on User Management, Role Management, and Audit Log; confirmed the
+Reset Password modal's dialog semantics and Escape-to-close (again briefly disambiguating from the
+driver.js guided-tour popover, which also uses `role="dialog"` — same false-positive shape as the
+Template Management verification); and confirmed every field-label pair on both the User create form
+and the Role create form resolves correctly via `document.getElementById`.
+
+### Problems found and fixed
+See CHANGELOG.md 2026-07-30 (Admin module entry) for the itemized list.
+
+### Verification
+`npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing). Live browser
+click-through across all three Admin pages: pill contrast, modal dialog semantics, and form-field
+label associations.
+
+### Recommendations / what's next
+- The status-pill duplication bug has now recurred across at least seven independent files this
+  session (Quotation, Scope of Work document and list, Customers, Products, Delivery Order list, and
+  now three places in Admin). This is well past the point of being a one-off oversight — a shared
+  `StatusBadge`-only convention (or a lint rule) is worth prioritizing over continuing to fix each
+  fresh instance as it's found.
+- Products, Customers, Quotation, Scope of Work, Delivery Order, Template Management, and Admin have
+  now all had an accessibility pass this session. Worth checking whether any other `src/pages/*`
+  module was missed before assuming the sweep is complete — Dashboard and Settings, in particular,
+  haven't been named in any of this session's audits.
+- Still open, not touched this pass (all P3/out of scope): the systemic `text-[11px]`-below-floor
+  pattern (present here too, in `RoleManagementPage.tsx`), the `ConfirmDialog`
+  Escape-guard-runs-while-closed gap, the uncommitted `mongodb.ts` DNS fix, and the URL-routing
+  product decision.
+
+---
+
+## Session — 2026-07-30, Quotation Template Management `/impeccable audit` + fix pass
+
+### What was implemented
+Ran `/impeccable audit` against the complete Quotation Template Management workflow — the list
+(`TemplateManagementPage.tsx`) and editor (`TemplateEditorView.tsx`), covering search/filters,
+create/edit, section/item editors, product selector, custom items, sub-details, reorder controls,
+activation states, dialogs, and loading/empty/error states.
+
+The finding pattern was different from every other module audited this session: rather than one or
+two recurring bug classes, this module had **never been touched by any earlier accessibility
+pass** — it was the one place in the app still in the exact "before" state every other module
+(Products, Customers, Quotation, Scope of Work, Delivery Order) started from at the beginning of
+this session. Notably, this module already had full i18n coverage (unlike Scope of Work/Delivery
+Order at the start of their own passes) — the gap here was purely accessibility, not translation.
+
+Findings included the same status-pill/label-association bug classes seen elsewhere, but also two
+new, more severe variants: the Preview and Duplicate modals had literally zero dialog semantics (not
+even the `useDialogA11y` hook — a completely hand-rolled `fixed inset-0` div with a backdrop click to
+close and nothing else), and at least 9 icon-only buttons in the editor (section/item reorder,
+delete, delete-term, remove-sub-detail) had **no accessible name whatsoever** — not even the
+`title`-only fallback already flagged as insufficient in earlier passes. Fixed all of it — see
+CHANGELOG.md 2026-07-30 "Quotation Template Management accessibility hardening pass" for the
+itemized list. Reused existing generic i18n keys (`quotation.lineItems.moveUp/moveDown`,
+`common.delete`, `templates.action.duplicate`) for the newly-labeled buttons rather than minting
+near-duplicates.
+
+One incidental UX improvement fell out of the required refactor: splitting the Preview modal into
+its own component (to give `useDialogA11y` a real mount/unmount boundary) meant it now had a `target`
+prop available, so its title was enriched from a bare "Preview" to "Preview: {template name}" —
+small, but a genuine improvement, not scope creep, since the component had to be restructured anyway.
+
+Live-verified via the running `vercel dev` instance: confirmed both modals' `role="dialog"`/
+`aria-modal="true"` via DOM inspection, confirmed Escape actually closes each one via a dispatched
+`keydown` event (careful to disambiguate from the driver.js guided-tour popover, which *also* uses
+`role="dialog"` and briefly caused a false "still open" reading), confirmed all 6 editor fields'
+`htmlFor`/`id` pairs resolve to the correct element via `document.getElementById`, and ran a
+full-page scan for icon-only buttons with no accessible name — 111 checked (including sidebar/topbar
+chrome), zero unlabeled.
+
+### Problems found and fixed
+See CHANGELOG.md 2026-07-30 (Quotation Template Management entry) for the itemized list.
+
+### Verification
+`npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing). Live browser
+click-through: modal dialog semantics + Escape-to-close, editor field label associations, and a
+full-page unlabeled-button scan.
+
+### Recommendations / what's next
+- This module being untouched by every prior pass this session is worth flagging as a process gap:
+  future full-app accessibility sweeps should explicitly enumerate every admin/management page up
+  front (a checklist derived from the sidebar nav) rather than relying on the user naming each module
+  in turn — Template Management was simply never asked about until this request.
+- Still open, not touched this pass (all P3/out of scope): the systemic `text-[11px]`-below-floor
+  pattern (present here too, in `TemplateEditorView.tsx` and `TemplatePreview.tsx`), the
+  `ConfirmDialog` Escape-guard-runs-while-closed gap, the uncommitted `mongodb.ts` DNS fix, and the
+  URL-routing product decision.
+
+---
+
+## Session — 2026-07-30, Scope of Work full-workflow `/impeccable audit` + fix pass
+
+### What was implemented
+Ran a broader `/impeccable audit` than the earlier same-day pass: instead of just
+`ScopeOfWorkDocument.tsx`, this covered the *complete* Scope of Work workflow per explicit user
+scope — list, quotation-selection entry point, create/edit, document info, checklist groups, item
+sections, manually-added items, notes, signatures, validation, approval actions, responsive/loading/
+empty/error states, excluding print/PDF.
+
+Found that the earlier pass's fixes (status-pill contrast, field labels, `ConfirmDialog` busy-guards)
+never reached two other files in the same workflow, because it only touched the document component:
+`ScopeOfWorkList.tsx` still had the exact pre-2026-07-29 contrast bug and keyboard-inaccessible rows
+— the same bug class already fixed on `DeliveryOrderList.tsx` earlier the same day, just not yet
+applied here. More seriously, `ScopeOfWorkDocument.tsx`'s loading and error states had **no way back
+at all** — a genuine P0, not just an accessibility gap, and notably a case where the project's own
+documentation (`docs/MODULES/DeliveryOrder.md`'s cross-reference claiming "this pass also touched
+Quotation and Scope of Work") turned out to overstate what had actually landed once checked against
+the real source.
+
+Fixed all P0/P1/P2 findings — see CHANGELOG.md 2026-07-30 "Scope of Work full-workflow re-audit +
+accessibility fix pass" for the itemized list. The i18n portion was a genuinely large lift compared
+to Delivery Order's list-only translation: ~90 new keys covering the entire document (toolbar, every
+header field, checklist/payment/revision/remarks/signature headings, all 5 confirm dialogs, both
+prompt dialogs), while deliberately preserving the same three carve-outs established all session:
+status-label literals, toast messages, and — newly relevant here — checklist group *content*
+(`documentRequirements.ts`), which is config/business data the user explicitly asked to preserve, not
+UI chrome to translate. Also left the field-level validation error strings untranslated, since they
+come from the same shared client/server validation config this pass was told not to touch.
+
+One structural note: `PaymentInstallmentsEditor`/`SignatoryEditor` are components defined inside
+`ScopeOfWorkDocument.tsx` but outside the main exported function — they call `useI18n()` directly
+rather than threading a `t` prop down, which is both simpler and consistent with how every other
+sub-component in the app accesses translations.
+
+Live-verified via the running `vercel dev` instance: read computed pill colors directly from the DOM
+across both English and Thai; confirmed the previously-dead-end loading state now shows a working
+back button; opened, read, and safely cancelled a delete `ConfirmDialog` without side effects; and
+toggled the app language back and forth twice, confirming every new string renders correctly in both
+directions while checklist content and validation error text correctly stay in Thai.
+
+### Problems found and fixed
+See CHANGELOG.md 2026-07-30 (Scope of Work full-workflow entry) for the itemized list.
+
+### Verification
+`npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing). Live browser
+click-through: status-pill contrast, keyboard row activation, the loading-state back button, a
+cancelled delete dialog, and full Thai/English toggle across list + document.
+
+### Recommendations / what's next
+- The status-pill duplication bug has now recurred across six different files this session
+  (Quotation, Scope of Work document *and* list, Customers, Products, Delivery Order list). The
+  standing recommendation is unchanged: consider making `StatusBadge` (or an equivalent shared
+  component) the only sanctioned way to render this kind of pill.
+- Worth a general note for future passes in this app: when a module's docs claim "this pass also
+  touched X," verify against X's actual source rather than trusting the cross-reference — that
+  assumption was wrong here and could be wrong elsewhere too.
+- Still open, not touched this pass (all P3, explicitly out of the requested P0-P2 scope): filter
+  pills' missing `aria-pressed` on both `ScopeOfWorkList.tsx` and `DeliveryOrderList.tsx`, the stray
+  `text-[11px]` instances below the documented 12px chrome floor, the `ConfirmDialog`
+  Escape-guard-runs-while-closed gap, the uncommitted `mongodb.ts` DNS fix, and the URL-routing
+  product decision.
+
+---
+
+## Session — 2026-07-30, Delivery Order standalone list/page module `/impeccable audit` + fix pass
+
+### What was implemented
+Ran `/impeccable audit` on `src/pages/deliveryOrder/` — the standalone Delivery Order list/page
+module, distinct from `DeliveryOrderDocument.tsx` (already hardened earlier this session). This
+closes out the "keyboard-inaccessible list rows across all three list pages" and "reintroduced
+status-pill bug in the standalone Scope of Work/Delivery Order list pages" items flagged as still
+open at the end of the Products module session below — this pass covers the Delivery Order half
+of that backlog item.
+
+Found the same recurring pattern class as every other module audited this session:
+`DeliveryOrderList.tsx`'s status pills still carried the pre-2026-07-29 one-hex contrast formula
+(all 3 statuses failing AA), and its table rows (`<tr onClick>`) had zero keyboard support. Also
+found: `DeliveryOrderPage.tsx`'s loading skeleton had no text/ARIA signal at all, and the whole
+module was hardcoded Thai-only — only the guided-tour text had ever been wired to `t()`.
+
+Fixed all P1/P2 findings — see CHANGELOG.md 2026-07-30 "Delivery Order standalone list/page module
+accessibility hardening pass" for the itemized list. One deliberate scoping decision: the three
+status-label literals ("Draft"/"รออนุมัติ"/"Final") were left hardcoded rather than run through
+`t()`, matching `DeliveryOrderDocument.tsx`'s own already-established (and previously unflagged)
+convention — translating the list but leaving its own detail view untranslated would have created
+a new inconsistency rather than fixed one. Also reused the existing `quotation.filterAll` i18n key
+for the "all" labels instead of adding a duplicate.
+
+Live-verified via the running `vercel dev` instance: read the status pill's computed text color
+directly from the DOM (`rgb(87, 111, 148)` = `#576f94`, confirming the darkened value actually
+renders, not just present in source); focused a row via `element.focus()` and pressed Enter to
+confirm it opens the detail view exactly like a click; confirmed the loading skeleton's
+`role="status"` in the DOM; and toggled the app's language setting to English and back to confirm
+every new string renders correctly in both languages while the deliberately-untranslated status
+labels stay put.
+
+### Problems found and fixed
+See CHANGELOG.md 2026-07-30 (Delivery Order standalone list/page module entry) for the itemized
+list.
+
+### Verification
+`npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing). Live browser
+click-through: status-pill contrast, keyboard row activation, loading-state ARIA, and full
+Thai/English i18n toggle.
+
+### Recommendations / what's next
+- The status-pill duplication bug has now recurred across five different files this session
+  (Quotation, Scope of Work, Customers, Products, and now Delivery Order's list module). The same
+  recommendation stands: consider making `StatusBadge` the only sanctioned way to render this kind
+  of pill.
+- Still open: the `ConfirmDialog` Escape-guard-runs-while-closed gap, the filter pills' missing
+  `aria-pressed` (P3, explicitly out of scope for this pass), the uncommitted `mongodb.ts` DNS fix,
+  and the URL-routing product decision — none touched this session, all still in TODO.md.
+
+---
+
+## Session — 2026-07-30 (absolute latest), Products module `/impeccable audit` + fix pass
+
+### What was implemented
+Ran `/impeccable audit` on the Products module (list, search/filters/sort/pagination, categories
+manager, create/edit form, and the `ProductPickerModal` Quotation's `LineItemsEditor.tsx` uses) —
+found the same recurring pattern class as every module audited this session, plus two new ones
+specific to this module. `CategoriesManager.tsx` had independently reintroduced the status-pill
+contrast bug — the fourth time this exact bug has resurfaced (after Quotation, the Scope of
+Work/Delivery Order lists, and now here) because it hand-rolled its own pill instead of importing
+`StatusBadge`. New to this module: `ProductForm.tsx` (the create/edit view) had *no* busy-guard on
+Save whatsoever — not even a `saving` state, unlike every other form/dialog audited so far — and
+`ProductList.tsx`'s sortable column headers were plain `<th onClick>` with zero keyboard support,
+a first-of-its-kind finding (no other audited module has sortable columns).
+
+Fixed all P1/P2 findings — see CHANGELOG.md 2026-07-30 "Products module accessibility hardening
+pass" for the itemized list. One deliberate design choice while fixing `ProductPickerModal`: rather
+than just adding `useDialogA11y` inline (which would have reproduced the exact latent bug found in
+`ConfirmDialog` during the earlier re-audit — the hook running even while the dialog is closed,
+because the early-return sits after the hook call), split the component into an outer wrapper + an
+inner form, the same pattern `PromptDialog.tsx` already uses correctly. This avoided introducing a
+bug that's already on the backlog to fix elsewhere.
+
+Live-verified every fix via the running `vercel dev` instance (browser tools), including one check
+beyond visual/accessibility-tree inspection: used `document.getElementById(...).labels` in the
+browser's own JS console to prove `ProductForm`'s label association is real at the DOM level, not
+just present in source. Also opened `ProductPickerModal` from an actual Quotation's line-items
+editor (not just in isolation) to confirm the whole flow — catalog picker open → Escape closes it —
+still works end-to-end after the fix.
+
+### Problems found and fixed
+See CHANGELOG.md 2026-07-30 (Products module entry) for the itemized list.
+
+### Verification
+`npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing). Live browser
+click-through covering every fixed file, including a cross-module check (Quotation → Products
+picker).
+
+### Recommendations / what's next
+- The status-pill duplication bug has now recurred four times across four different files. Worth
+  seriously considering whether `StatusBadge` (or a lint rule / code-review checklist item) should
+  be the *only* sanctioned way to render this kind of pill, since "remember to reuse it" keeps
+  failing as a convention on its own.
+- Still open from earlier today: the `ConfirmDialog` Escape-guard-runs-while-closed gap, the
+  reintroduced status-pill bug in the standalone Scope of Work/Delivery Order list pages, the
+  keyboard-inaccessible list rows across all three list pages, the uncommitted `mongodb.ts` DNS fix,
+  and the URL-routing product decision — none touched this session, all still in TODO.md.
+
+---
+
+## Session — 2026-07-30, Customers module `/impeccable audit` + fix pass, plus a local `vercel dev` MongoDB DNS fix
+
+### What was implemented
+Ran `/impeccable audit` on the Customers module (list, search/filters, create/edit modal, status/
+archive actions, and the `CustomerSelector` Quotations use) — a small, single-file module
+(`CustomersPage.tsx`, 408 lines). Found the same class of issues the Quotation/Scope of Work/
+Delivery Order pass found earlier the same day: `StatusBadge.tsx` (shared, used for every customer's
+active/inactive/archived pill) still carried the pre-2026-07-29 one-hex contrast formula; the
+create/edit `CustomerFormModal` had zero label association and no dialog semantics at all (a
+completely hand-rolled modal, not even attempting to reuse `ConfirmDialog`'s shell); the list's row
+actions were hover-only invisible; two field-pair rows used a bare `grid-cols-2`. Fixed all of it —
+see CHANGELOG.md 2026-07-30 "Customers module accessibility hardening pass" for the itemized list.
+`CustomerSelector.tsx` (already fixed in an earlier pass this session) needed no changes and was
+re-verified clean.
+
+Unlike the earlier passes this session, this one included a **live browser verification** step (the
+user's own `vercel dev` instance, reached via `mcp__claude-in-chrome__*` tools, already
+authenticated) — confirmed the darkened status-pill color visually, confirmed Escape closes
+`CustomerFormModal` and returns focus to the triggering row's Edit button (now visibly focus-ringed
+thanks to the opacity fix), and pulled the accessibility tree to confirm every form field now reports
+its correct name instead of being unlabeled. This is the first fix pass this session with actual
+in-browser confirmation rather than code-level verification only.
+
+### Separately this session: local `vercel dev` was broken, diagnosed and fixed
+Before the audit, the user's local `vercel dev` was returning `ไม่สามารถเชื่อมต่อระบบได้` (boot
+connection error) in the browser. Diagnosed step by step: a stale/orphaned `vercel dev` process was
+already bound to port 3000; killed it, pulled fresh env vars (`vercel env pull` — `.env.local` didn't
+exist locally at all), restarted — still failed. Server logs then showed the real cause: `Error:
+querySrv ECONNREFUSED _mongodb._tcp.tcsdb.zdnus3w.mongodb.net` — Node's own DNS SRV resolution for
+the `mongodb+srv://` connection string failing, even though Windows' own `nslookup` resolved the
+identical query fine (a known Node-on-Windows issue, usually a firewall/antivirus/VPN blocking
+Node's raw UDP:53 queries specifically). Fixed with the user's explicit go-ahead: `api/_lib/
+mongodb.ts` now calls `dns.setServers(["8.8.8.8", "1.1.1.1"])` before connecting, guarded by
+`!process.env.VERCEL_ENV` so it only ever runs under local `vercel dev`, never an actual deployment.
+Confirmed fixed: `/api/auth/session` went from a consistent 500 to a clean 200 with no DNS errors in
+the log. Not yet committed — see TODO below.
+
+### Problems found and fixed
+See CHANGELOG.md 2026-07-30 (Customers module entry) for the itemized accessibility list. The
+`vercel dev` DNS fix isn't a CHANGELOG-tracked "feature" entry since it's a local-dev-environment
+resilience fix, not a product change — noted here and in the `mongodb.ts` code comment instead.
+
+### Verification
+`npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing) for the Customers
+fixes. Live browser click-through (see above) for the same. `npx tsc --noEmit -p tsconfig.api.json`
+clean for the `mongodb.ts` DNS change.
+
+### Recommendations / what's next
+- The `api/_lib/mongodb.ts` DNS fix is uncommitted — decide whether to commit it (it's a real, tested
+  fix for a real local-dev breakage, safe for production since it's gated on `!VERCEL_ENV`).
+- `StatusBadge.tsx` is likely also used by Products/Users pages for the same active/inactive/archived
+  vocabulary — worth a quick check that no other consumer expected the old (broken) colors
+  specifically, though this is extremely unlikely given the fix only changes text color, not meaning.
+- The re-audit's two still-open findings from earlier today (the `ConfirmDialog` Escape-guard-runs-
+  while-closed gap, and the reintroduced status-pill bug in the standalone Scope of Work/Delivery
+  Order list pages) remain unfixed — the user hasn't yet asked for that fix pass.
+
+---
+
+## Session — 2026-07-30, Quotation/Scope of Work/Delivery Order `/impeccable audit` + fix pass
+
+### What was implemented
+Ran `/impeccable audit` twice at the user's request: first scoped to the Quotation editor screens
+(`QuoteList`/`QuotationTemplateWizard`/`QuoteDocument` + their editor components), then a second,
+broader pass covering the complete Quotation → Scope of Work → Delivery Order workflow (list,
+search/filters, wizard, create/edit/detail, approval actions, dialogs, loading/empty/error states —
+explicitly excluding print/PDF layouts). The second pass used three parallel research subagents
+(one per document type plus routing/state) whose highest-impact claims were spot-verified directly
+(grepped the actual hex values, confirmed no router package exists, confirmed the Save button's
+missing `disabled`) before being folded into the combined report — one correction came out of that:
+the first pass's claim that Quotation's own status pills currently fail contrast turned out to be
+stale reasoning from DESIGN.md's documented formula, not the actual `src/lib/quotes.tsx` code, which
+a 2026-07-29 pass had already fixed; only Scope of Work/Delivery Order still had the old formula.
+
+The user then asked to fix every P0/P1/P2 finding from the combined audit, UI files only, explicitly
+preserving calculations/customerId/customerSnapshot/template snapshots/APIs/schemas/RBAC/validation/
+workflow/numbering, excluding print/PDF. All 5 P1s and the full P2 list were fixed — see CHANGELOG.md
+2026-07-30 for the itemized list (status-pill contrast, `htmlFor`/`id` label association, a
+double-submit risk on Save/Confirm actions, drag-only reordering with no keyboard path, missing
+dialog semantics on the shared `ConfirmDialog`/`PromptDialog`, the `opacity-0`-hover icon-action
+rule, missing headings, `Toast`'s missing `aria-live`, an optimistic success toast, a silent
+blank-form fallback for an inaccessible deep-linked quote, a duplicated dialog, `DeliveryOrder`'s
+loading/error states hiding the back button, a per-keystroke `JSON.stringify` perf issue). One
+finding (no URL routing below the module level) was deliberately deferred as a product decision, not
+a mechanical fix, and reported to the user rather than silently implemented or silently skipped.
+
+Two of the fixes required a real judgment call about "UI files only": `src/components/ConfirmDialog.tsx`/
+`PromptDialog.tsx`/`Toast.tsx`/`RequiredFieldLabel.tsx` and a new `src/hooks/useDialogA11y.ts` are
+shared, non-quotation-specific files — but they're where the actual defects the audit found live
+(the shared dialogs' missing semantics, the label component's missing `htmlFor`), and every change
+was additive/optional-prop (no existing non-quotation caller's behavior changed). Flagged this
+explicitly to the user rather than silently expanding scope without disclosure.
+
+### Problems found and fixed
+See CHANGELOG.md 2026-07-30 for the full itemized list — not repeated here.
+
+### Verification
+`npm run lint` (0 errors — one real issue caught and fixed here: the `beforeunload`-guard perf fix
+initially tripped `react-hooks/refs`, "cannot access refs during render," fixed by moving the ref
+write into its own dependency-less `useEffect`), `npm run build` (`tsc -b` + API typecheck + `vite
+build`, clean), `npm test` (56/56 passing, unchanged count — no test file needed updating since
+nothing tested (money math, RBAC, workflow transitions, validation, login) was touched). No live
+browser click-through this session (standing sandboxed-session limitation, see prior entries).
+
+### Recommendations / what's next
+- The deferred URL-routing decision (should quote/wizard/Scope-of-Work detail be reflected in the
+  URL so refresh/Back/deep-linking work below the module level?) is a real product question worth
+  raising with the owner explicitly — it's an app-wide pattern, not a Quotation-specific gap.
+- A live browser pass over the actual fixes (tab through the Customer Info panel with a screen
+  reader, confirm the up/down reorder buttons genuinely move rows, confirm double-clicking Confirm
+  during a slow network no longer double-fires) is still owed, same standing limitation as every
+  prior session.
+
+---
+
+## Session — 2026-07-29, Scope of Work manual-ONLY document number entry + CI + "ทวง PO" + login rate limiting + first test suite + UX polish/manual + module tours + hash page persistence + Impeccable design-system setup + Dashboard hardening
 
 ### What was implemented (seventeenth task this session: Impeccable design-system setup + full Dashboard audit→fix cycle)
 - First-ever run of the `/impeccable` skill on this project. `init` interviewed the owner (in Thai,

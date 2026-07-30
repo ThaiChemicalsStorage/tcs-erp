@@ -1,7 +1,7 @@
 import { Fragment, useRef, useState } from "react";
 import {
   Plus, Trash2, Percent, PackageSearch, Layers,
-  GripVertical, StickyNote, Pin, X,
+  GripVertical, StickyNote, Pin, X, ChevronUp, ChevronDown,
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
 import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
@@ -65,7 +65,34 @@ function PinnedSubDetailRows({
                 placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
                 className="flex-1 text-sm text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
               />
-              <button onClick={() => onRemove(sd.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover/pin:opacity-100 flex-shrink-0">
+              {/* Keyboard/touch alternative to the drag handle above — native HTML5 drag events have
+                  no keyboard equivalent, so reordering was previously mouse-only. */}
+              <button
+                type="button"
+                onClick={() => onReorder(idx, idx - 1)}
+                disabled={idx === 0}
+                title={t("quotation.lineItems.moveUp")}
+                aria-label={t("quotation.lineItems.moveUp")}
+                className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover/pin:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none flex-shrink-0"
+              >
+                <ChevronUp size={12} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onReorder(idx, idx + 1)}
+                disabled={idx === subDetails.length - 1}
+                title={t("quotation.lineItems.moveDown")}
+                aria-label={t("quotation.lineItems.moveDown")}
+                className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover/pin:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none flex-shrink-0"
+              >
+                <ChevronDown size={12} />
+              </button>
+              <button
+                onClick={() => onRemove(sd.id)}
+                title={t("common.delete")}
+                aria-label={t("common.delete")}
+                className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover/pin:opacity-100 focus-visible:opacity-100 flex-shrink-0"
+              >
                 <Trash2 size={12} />
               </button>
             </div>
@@ -188,7 +215,7 @@ export function LineItemsEditor({
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
-        <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.lineItems.title")}</p>
+        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.lineItems.title")}</h2>
         <div className="flex items-center gap-2">
           <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all font-medium">
             <PackageSearch size={12} /> {t("quotation.lineItems.pickFromCatalog")}
@@ -232,7 +259,7 @@ export function LineItemsEditor({
                     </td>
                     <td className="px-4 py-2.5 align-top">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => removeLine(line.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={13} /></button>
+                        <button onClick={() => removeLine(line.id)} title={t("common.delete")} aria-label={t("common.delete")} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Trash2 size={13} /></button>
                       </div>
                     </td>
                   </tr>
@@ -276,19 +303,21 @@ export function LineItemsEditor({
                         <button
                           onClick={() => addSubDetail(line.id)}
                           title={t("quotation.lineItems.addSubDetail")}
-                          className={`transition-colors relative ${hasSubDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-0 group-hover:opacity-100"} hover:text-[#c9a84c]`}
+                          aria-label={t("quotation.lineItems.addSubDetail")}
+                          className={`transition-colors relative ${hasSubDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-50 group-hover:opacity-100 focus-visible:opacity-100"} hover:text-[#c9a84c]`}
                         >
                           <Pin size={13} />
                         </button>
                         <button
                           onClick={() => toggleExpand(line.id)}
                           title={t("quotation.lineItems.tagsTitle")}
-                          className={`transition-colors relative ${hasCardDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-0 group-hover:opacity-100"} hover:text-[#c9a84c]`}
+                          aria-label={t("quotation.lineItems.tagsTitle")}
+                          className={`transition-colors relative ${hasCardDetails ? "text-[#c9a84c]" : "text-muted-foreground opacity-50 group-hover:opacity-100 focus-visible:opacity-100"} hover:text-[#c9a84c]`}
                         >
                           <StickyNote size={13} />
                           {hasCardDetails && !isExpanded && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[#c9a84c]" />}
                         </button>
-                        <button onClick={() => removeLine(line.id)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={13} /></button>
+                        <button onClick={() => removeLine(line.id)} title={t("common.delete")} aria-label={t("common.delete")} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Trash2 size={13} /></button>
                       </div>
                     </td>
                   </tr>

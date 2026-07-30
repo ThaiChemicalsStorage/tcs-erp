@@ -840,6 +840,75 @@ gain a *value* import that transitively pulls in JSX/React.
    review Low Priority finding — the delete confirmation's wording was corrected to stop implying
    one exists). Add a real restore action if this is ever needed in practice.
 
+## Accessibility Hardening (2026-07-30)
+
+An `/impeccable audit` pass + fix found this document had inherited the pre-2026-07-29 status-pill
+formula (`ScopeOfWorkDocument.tsx`'s toolbar badge hardcoded the same raw hex for bg/text/border,
+which `src/lib/quotes.tsx`'s own statuses had already been fixed away from) — now uses the same
+darkened-text-variant formula. Also fixed: every field in the two main panels + payment section now
+has a real `htmlFor`/`id` label association; the 5 workflow `ConfirmDialog`s now guard against a
+double-click firing the same (often irreversible) action twice; `ScopeOfWorkItemsEditor.tsx`'s
+whole-item reordering gained up/down keyboard buttons alongside its drag handle, and its
+`opacity-0`-hover row actions were fixed to the documented `opacity-50`/`focus-visible` pattern; its
+zero-items state now uses the shared `EmptyState` component. See CHANGELOG.md 2026-07-30 for the
+full list (this pass also touched Quotation and Delivery Order).
+
+## Accessibility Hardening, full workflow re-audit + fix (2026-07-30, second pass)
+
+A follow-up `/impeccable audit` targeted at the *complete* Scope of Work workflow (list, create/edit,
+document info, checklist groups, item sections, notes, signatures, validation, approval actions, the
+"สร้าง Scope of Work" entry point on `QuoteDocument.tsx`, responsive/loading/empty/error states —
+explicitly excluding the print/PDF layout) found that the first 2026-07-30 pass above had fixed
+`ScopeOfWorkDocument.tsx`'s own status pill and field labels, but **two classes of bug it fixed
+elsewhere in the app were still present here**:
+
+**[P0] `ScopeOfWorkDocument.tsx`'s loading and error states had no way back at all** — unlike
+`DeliveryOrderDocument.tsx` (fixed in the same first pass), a slow or failing fetch dropped the user
+on a bare centered block with no back button, no breadcrumb, nothing but a retry button on the error
+branch and nothing at all while loading. Fixed with the same sticky mini-toolbar-with-back-button
+pattern already proven on `DeliveryOrderDocument.tsx`.
+
+**[P1] `ScopeOfWorkList.tsx` still had the exact pre-2026-07-29 status-pill-contrast bug and
+keyboard-inaccessible rows** — this file was never touched by the earlier passes (they only reached
+the *document* view, not the standalone list page). Fixed identically to `DeliveryOrderList.tsx`'s
+own fix earlier the same day: darkened status-pill text (`#576f94`/`#a75d1a`/`#207e52`), and
+`tabIndex`/`role="button"`/`onKeyDown`/`aria-label` on every row.
+
+**[P2s]**: `ScopeOfWorkPage.tsx`'s loading skeleton and error message gained `role="status"
+aria-live="polite"` / `role="alert"`; the shared `ValidationSummary` component (the mechanism behind
+every "ยังไม่สามารถดำเนินการต่อได้" blocked-action message across Quotation/Scope of Work/Delivery
+Order) gained `role="alert"` so screen readers are actually notified when it appears; the "ยังไม่มี
+PO" list badge was undersized (`text-[10px]`) relative to the documented Status Pill spec (`text-xs`)
+and its own sibling pills on the same row — bumped to match; and the entire list+document chrome —
+not just the list, unlike the earlier Delivery Order pass — was hardcoded Thai-only despite the app's
+live language toggle. Added ~90 new `scopeOfWork.*`/`scopeOfWorkDoc.*` i18n keys covering the list
+page and the full document (toolbar, header fields, checklist/payment/revision/remarks/signature
+section headings, all 5 `ConfirmDialog`s, both `PromptDialog`s). Deliberately **not** translated,
+matching established precedent: the three status-label literals ("Draft"/"รออนุมัติ"/"Final"),
+toast/notification messages, and the checklist group content itself (`documentRequirements.ts` —
+config data, not UI chrome, and explicitly preserved per the "checkbox business rules" scope
+constraint) — translating those would have been a content decision, not a design one. Also left
+untranslated: the individual field-level Thai error messages `ValidationSummary`/`FieldError` render
+(sourced from `scopeOfWorkValidation.ts`'s shared client/server config) — out of scope for a UI-only
+pass since that config is validation business logic, not page chrome.
+
+`PaymentInstallmentsEditor`/`SignatoryEditor` (both defined inside `ScopeOfWorkDocument.tsx`) now
+call `useI18n()` directly rather than threading a `t` prop through, matching how every other
+sub-component in the app accesses translations. `backLabel`'s default value moved from a literal
+Thai string in the function signature to `resolvedBackLabel = backLabel ?? t(...)` computed inside
+the component body, since a parameter default can't call a hook.
+
+Preserved exactly as before, verified via live inspection: quotation/customer snapshot data,
+Job Code (manually-typed `scopeNumber`) generation and uniqueness checks, all checklist selection
+rules (single vs. multiple, mandatory-group validation), required-field validation
+(`scopeOfWorkValidation.ts` untouched), the full approval workflow state machine, RBAC gating, and
+every API/MongoDB read-write path. `tsc`/`lint`/`build`/`test` (56/56) all pass clean. Verified live
+via `vercel dev`: computed pill colors (`#576f94` Draft, `#a75d1a` No-PO badge) read directly from
+the DOM, row `tabIndex`/`role`/`aria-label`, the loading state's back button now present and
+functional, a delete `ConfirmDialog` opened/read/cancelled without side effects, and full-page
+Thai↔English toggling confirmed correct on both the list and the document view. See CHANGELOG.md
+2026-07-30.
+
 ## Guided Tour (2026-07-29)
 
 `ScopeOfWorkDocument.tsx` has a 4-step driver.js tour (tourKey `scopeOfWorkDoc` via

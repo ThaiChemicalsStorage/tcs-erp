@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ChevronRight, Printer, Copy, Save, Send, CheckCircle2, Building2, Hash, CalendarDays,
   ThumbsUp, ThumbsDown, Trophy, Frown, Ban, XCircle, History, ClipboardList, GitBranch, Wand2,
@@ -6,6 +6,8 @@ import {
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
+import { PromptDialog } from "../../components/PromptDialog";
+import { useDialogA11y } from "../../hooks/useDialogA11y";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
 import type { JobType } from "../../lib/jobTypes";
@@ -108,7 +110,7 @@ export function QuoteDocument({
   canCreateScopeOfWork: boolean;
   onOpenScopeOfWork: (scopeOfWorkId: string) => void;
   onBack: () => void;
-  onSave: (data: QuoteDraftFields) => void;
+  onSave: (data: QuoteDraftFields) => Promise<void>;
   onDuplicate: () => void;
   /** Creates a new revision (`{root}-R{n}`) of the open quote and navigates to it — returns a
    * Promise (unlike `onDuplicate`) so this component can disable the button for the duration of
@@ -242,7 +244,6 @@ export function QuoteDocument({
   // owner's explicit decision), replacing the old required-`secondaryCode` prompt from the
   // auto-numbering era. The server enforces non-blank + uniqueness (409 with a clear message).
   const [scopeOfWorkPromptOpen, setScopeOfWorkPromptOpen] = useState(false);
-  const [scopeOfWorkNumber, setScopeOfWorkNumber] = useState("");
   const [scopeOfWorkPromptError, setScopeOfWorkPromptError] = useState("");
   useEffect(() => {
     // `isDetail`/`canViewScopeOfWork` can't actually flip during this component's lifetime (a
@@ -264,12 +265,11 @@ export function QuoteDocument({
       onOpenScopeOfWork(existingScopeOfWork.id);
       return;
     }
-    setScopeOfWorkNumber("");
     setScopeOfWorkPromptError("");
     setScopeOfWorkPromptOpen(true);
   };
 
-  const confirmCreateScopeOfWork = async () => {
+  const confirmCreateScopeOfWork = async (scopeOfWorkNumber: string) => {
     if (!quote) return;
     const scopeNumber = scopeOfWorkNumber.trim();
     if (!scopeNumber) { setScopeOfWorkPromptError("กรุณาระบุเลขที่เอกสาร"); return; }
@@ -401,36 +401,72 @@ export function QuoteDocument({
   // page guard; it doesn't need to be a precise field-by-field diff. Covers real browser
   // navigation (`beforeunload`) only — switching sidebar sections is a React state change, not a
   // browser navigation event, so this doesn't catch that case; a further enhancement, not done here.
+  //
+  // Performance hardening pass: this used to run with no dependency array, so it re-serialized the
+  // *entire* draft (every line item/sub-detail) via JSON.stringify and removed+re-added the
+  // `beforeunload` listener on every single render — i.e. on every keystroke in any field. The
+  // listener is now registered once (only re-registering if `disabled` changes) and reads the
+  // latest draft lazily, through a ref, only at the moment the browser actually tries to unload —
+  // not on every render.
   const initialDraftJson = useRef(JSON.stringify(currentDraft()));
+  const currentDraftRef = useRef(currentDraft);
+  // Ref writes must happen outside render (react-hooks/refs) — this effect's only job is keeping
+  // the ref current every render; it's a plain reference assignment (no JSON.stringify, no listener
+  // churn), so it stays cheap even though it runs on every render, unlike the effect below it.
+  useEffect(() => {
+    currentDraftRef.current = currentDraft;
+  });
   useEffect(() => {
     if (disabled) return;
-    const isDirty = JSON.stringify(currentDraft()) !== initialDraftJson.current;
-    if (!isDirty) return;
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    const handler = (e: BeforeUnloadEvent) => {
+      const isDirty = JSON.stringify(currentDraftRef.current()) !== initialDraftJson.current;
+      if (!isDirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  });
+  }, [disabled]);
 
   // Client-side check for the two most common save failures — instant, clear Thai feedback
   // instead of a round trip to the server just to learn the same thing (the server still
   // validates both regardless; this only saves a request in the common case).
-  const save = (message: string) => {
+  //
+  // Awaits `onSave` before toasting success (accessibility hardening pass) — this used to fire the
+  // "Saved!" toast synchronously before the request even began, so a slow or failing save briefly
+  // showed a false-positive confirmation. `savingBusy` also guards the button itself against a
+  // double-click firing two concurrent creates/updates while the first request is still in flight.
+  const [savingBusy, setSavingBusy] = useState(false);
+  const save = async (message: string) => {
     if (!client.trim()) { showToast(t("quotation.errorClientRequired")); return; }
     if (mode === "new" && !jobTypeCode) { showToast(t("quotation.errorJobTypeRequired")); return; }
-    onSave(currentDraft());
-    showToast(message);
+    if (savingBusy) return;
+    setSavingBusy(true);
+    try {
+      await onSave(currentDraft());
+      showToast(message);
+    } catch {
+      // QuotationPage.tsx's handleSave already shows the specific error toast and rethrows purely
+      // so this catch exists to swallow it here — nothing further to do.
+    } finally {
+      setSavingBusy(false);
+    }
   };
 
   const commentRequired = pendingAction === "rejected" || pendingAction === "customer_rejected" || pendingAction === "cancelled";
   const openAction = (a: ApprovalAction) => { setPendingAction(a); setActionComment(""); setActionError(""); };
+  // Guards against a double-click on Confirm firing the same irreversible workflow transition
+  // twice while the first request is still in flight (accessibility/correctness hardening pass).
+  const [actionBusy, setActionBusy] = useState(false);
   const confirmAction = async () => {
-    if (!pendingAction) return;
+    if (!pendingAction || actionBusy) return;
     // Defensive re-check — guardedWorkflowAction() already keeps this modal from opening for a
     // gated action on an incomplete document, but the server is the actual source of truth
     // (see api/handlers/quotes.ts's handleWorkflow); this just avoids a pointless round trip.
     if (!VALIDATION_EXEMPT_ACTIONS.has(pendingAction) && !validation.valid) { setActionError(BLOCKED_TOOLTIP); return; }
     if (commentRequired && !actionComment.trim()) { setActionError(t("quotation.errorCommentRequired")); return; }
     setServerValidationErrors(null);
+    setActionBusy(true);
     try {
       // Pass the current on-screen draft, not just the action — otherwise any unsaved edit
       // (e.g. line items changed but "บันทึก" not yet clicked) is silently discarded when the
@@ -445,6 +481,8 @@ export function QuoteDocument({
         setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
         summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }
+    } finally {
+      setActionBusy(false);
     }
   };
 
@@ -520,7 +558,7 @@ export function QuoteDocument({
             </button>
           )}
           {!disabled && (
-            <button onClick={() => save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast"))} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+            <button onClick={() => save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast"))} disabled={savingBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <Save size={13} /> {mode === "new" ? t("quotation.saveDraft") : t("common.save")}
             </button>
           )}
@@ -593,7 +631,7 @@ export function QuoteDocument({
               <p className="text-[#a8bed8] text-sm">{t("quotation.field.contactPhone")}: {companyHeader.phone} · {t("settings.company.emailLabel")}: {companyHeader.email}</p>
             </div>
             <div className="text-right">
-              <p className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("quotation.pageTitle")}</p>
+              <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("quotation.pageTitle")}</h1>
               <p className="text-[#a8bed8] text-xs font-mono mt-1">QUOTATION</p>
               <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/30">
                 {statusIcon[quoteStatus]}
@@ -605,11 +643,12 @@ export function QuoteDocument({
           {/* Meta fields — editable on screen */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-b border-border print:hidden">
             <div data-tour="qdoc-customer" className="p-6 border-b sm:border-b-0 sm:border-r border-border">
-              <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</p>
+              <h2 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</h2>
               <div className="space-y-2.5">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("quotation.customerSelector.label")}</label>
+                  <label htmlFor="quote-customerSelector" className="text-xs text-muted-foreground block mb-1">{t("quotation.customerSelector.label")}</label>
                   <CustomerSelector
+                    inputId="quote-customerSelector"
                     customers={customers}
                     selectedId={customerId}
                     onSelect={handleSelectCustomer}
@@ -621,87 +660,87 @@ export function QuoteDocument({
                   )}
                 </div>
                 <div>
-                  <RequiredFieldLabel>{t("quotation.field.clientName")}</RequiredFieldLabel>
-                  <input disabled={disabled} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={client} onChange={(e) => setClient(e.target.value)} />
+                  <RequiredFieldLabel htmlFor="quote-client">{t("quotation.field.clientName")}</RequiredFieldLabel>
+                  <input id="quote-client" disabled={disabled} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={client} onChange={(e) => setClient(e.target.value)} />
                   <FieldError message={validation.fieldErrors.client} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <RequiredFieldLabel required={false}>{t("quotation.field.contactName")}</RequiredFieldLabel>
-                    <input disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder={t("quotation.field.contactNamePlaceholder")} />
+                    <RequiredFieldLabel required={false} htmlFor="quote-contactName">{t("quotation.field.contactName")}</RequiredFieldLabel>
+                    <input id="quote-contactName" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder={t("quotation.field.contactNamePlaceholder")} />
                   </div>
                   <div>
-                    <RequiredFieldLabel required={false}>{t("quotation.field.contactPhone")}</RequiredFieldLabel>
-                    <input disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="0XX-XXX-XXXX" />
+                    <RequiredFieldLabel required={false} htmlFor="quote-contactPhone">{t("quotation.field.contactPhone")}</RequiredFieldLabel>
+                    <input id="quote-contactPhone" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="0XX-XXX-XXXX" />
                   </div>
                 </div>
                 <div>
-                  <RequiredFieldLabel required={false}>{t("quotation.field.contactEmail")}</RequiredFieldLabel>
-                  <input disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="name@company.com" />
+                  <RequiredFieldLabel required={false} htmlFor="quote-contactEmail">{t("quotation.field.contactEmail")}</RequiredFieldLabel>
+                  <input id="quote-contactEmail" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="name@company.com" />
                 </div>
                 <div>
-                  <RequiredFieldLabel required={false}>{t("quotation.field.address")}</RequiredFieldLabel>
-                  <input disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t("quotation.field.addressPlaceholder")} />
+                  <RequiredFieldLabel required={false} htmlFor="quote-address">{t("quotation.field.address")}</RequiredFieldLabel>
+                  <input id="quote-address" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t("quotation.field.addressPlaceholder")} />
                 </div>
                 <div>
-                  <RequiredFieldLabel required={false}>{t("quotation.field.taxId")}</RequiredFieldLabel>
-                  <input disabled={disabled} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder={t("quotation.field.taxIdPlaceholder")} />
+                  <RequiredFieldLabel required={false} htmlFor="quote-taxId">{t("quotation.field.taxId")}</RequiredFieldLabel>
+                  <input id="quote-taxId" disabled={disabled} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder={t("quotation.field.taxIdPlaceholder")} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <RequiredFieldLabel required={false}>{t("quotation.field.deliveryMethod")}</RequiredFieldLabel>
-                    <input disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder={t("quotation.field.deliveryMethodPlaceholder")} />
+                    <RequiredFieldLabel required={false} htmlFor="quote-deliveryMethod">{t("quotation.field.deliveryMethod")}</RequiredFieldLabel>
+                    <input id="quote-deliveryMethod" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryMethod} onChange={(e) => setDeliveryMethod(e.target.value)} placeholder={t("quotation.field.deliveryMethodPlaceholder")} />
                   </div>
                   <div>
-                    <RequiredFieldLabel required={false}>{t("quotation.field.project")}</RequiredFieldLabel>
-                    <input disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={project} onChange={(e) => setProject(e.target.value)} />
+                    <RequiredFieldLabel required={false} htmlFor="quote-project">{t("quotation.field.project")}</RequiredFieldLabel>
+                    <input id="quote-project" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={project} onChange={(e) => setProject(e.target.value)} />
                   </div>
                 </div>
                 <div>
-                  <RequiredFieldLabel required={false}>{t("quotation.field.deliveryAddress")}</RequiredFieldLabel>
-                  <input disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t("quotation.field.deliveryAddressPlaceholder")} />
+                  <RequiredFieldLabel required={false} htmlFor="quote-deliveryAddress">{t("quotation.field.deliveryAddress")}</RequiredFieldLabel>
+                  <input id="quote-deliveryAddress" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t("quotation.field.deliveryAddressPlaceholder")} />
                 </div>
               </div>
             </div>
             <div className="p-6">
-              <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Hash size={10} /> {t("quotation.section.docDetails")}</p>
+              <h2 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Hash size={10} /> {t("quotation.section.docDetails")}</h2>
               <div className="space-y-2.5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1">{t("quotation.field.quoteNumber")}</label>
-                    <input readOnly className="w-full text-sm font-mono text-[#c9a84c] font-medium bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
+                    <label htmlFor="quote-number" className="text-xs text-muted-foreground block mb-1">{t("quotation.field.quoteNumber")}</label>
+                    <input id="quote-number" readOnly className="w-full text-sm font-mono text-[#c9a84c] font-medium bg-secondary border border-border rounded-lg px-3 py-2 outline-none" value={isDetail ? quote!.id : nextId} />
                   </div>
                   <div>
-                    <RequiredFieldLabel required={false}>{t("quotation.field.poRef")}</RequiredFieldLabel>
-                    <input disabled={disabled} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />
+                    <RequiredFieldLabel required={false} htmlFor="quote-poRef">{t("quotation.field.poRef")}</RequiredFieldLabel>
+                    <input id="quote-poRef" disabled={disabled} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={poRef} onChange={(e) => setPoRef(e.target.value)} placeholder={t("quotation.field.poRefPlaceholder")} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <RequiredFieldLabel required={false} className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</RequiredFieldLabel>
-                    <input disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+                    <RequiredFieldLabel required={false} htmlFor="quote-issueDate" className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.issueDate")}</RequiredFieldLabel>
+                    <input id="quote-issueDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
                     <FieldError message={validation.fieldErrors.issueDate} />
                   </div>
                   <div>
-                    <RequiredFieldLabel required={false} className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</RequiredFieldLabel>
-                    <input disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+                    <RequiredFieldLabel required={false} htmlFor="quote-expiryDate" className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.expiryDate")}</RequiredFieldLabel>
+                    <input id="quote-expiryDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
                     <FieldError message={validation.fieldErrors.expiryDate} />
                   </div>
                 </div>
                 <div>
-                  <RequiredFieldLabel required={false}>{t("quotation.field.salesperson")}</RequiredFieldLabel>
-                  <input disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={salesperson} onChange={(e) => setSalesperson(e.target.value)} />
+                  <RequiredFieldLabel required={false} htmlFor="quote-salesperson">{t("quotation.field.salesperson")}</RequiredFieldLabel>
+                  <input id="quote-salesperson" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={salesperson} onChange={(e) => setSalesperson(e.target.value)} />
                 </div>
                 <div>
-                  <RequiredFieldLabel required={false}>{t("quotation.field.paymentTerms")}</RequiredFieldLabel>
-                  <select disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
+                  <RequiredFieldLabel required={false} htmlFor="quote-paymentTerms">{t("quotation.field.paymentTerms")}</RequiredFieldLabel>
+                  <select id="quote-paymentTerms" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
                     {paymentTermsOptions.map((opt) => <option key={opt}>{opt}</option>)}
                   </select>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
-                    <RequiredFieldLabel required={false}>{t("quotation.field.jobType")}</RequiredFieldLabel>
-                    <select disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
+                    <RequiredFieldLabel required={false} htmlFor="quote-jobType">{t("quotation.field.jobType")}</RequiredFieldLabel>
+                    <select id="quote-jobType" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
                       {/* A brand-new quote must be assigned a real Job Type — required server-side
                           too (see api/_lib/quoteValidation.ts) — so the blank "unclassified" choice
                           is only offered when editing an existing quote that already has one
@@ -717,8 +756,8 @@ export function QuoteDocument({
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
-                    <input disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
+                    <label htmlFor="quote-followUpDate" className="text-xs text-muted-foreground block mb-1 flex items-center gap-1"><CalendarDays size={9} /> {t("quotation.field.followUpDate")}</label>
+                    <input id="quote-followUpDate" disabled={disabled} type="date" className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} />
                   </div>
                 </div>
                 {quotationTemplateId && (
@@ -759,12 +798,12 @@ export function QuoteDocument({
         {/* Remarks + Signature — screen preview only; print output is PrintDocument below */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
           <div className="bg-card border border-border rounded-xl p-5">
-            <p className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.section.remarks")}</p>
-            <textarea rows={5} disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed disabled:opacity-60"
+            <h2 id="quote-remarks-heading" className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.section.remarks")}</h2>
+            <textarea rows={5} disabled={disabled} aria-labelledby="quote-remarks-heading" className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none leading-relaxed disabled:opacity-60"
               value={remarks} onChange={(e) => setRemarks(e.target.value)} />
           </div>
           <div className="bg-card border border-border rounded-xl p-5">
-            <p className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.section.signatures")}</p>
+            <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.section.signatures")}</h2>
             <div className="space-y-3">
               {signatureRoles.map(({ key, label }) => {
                 const isPreparer = key === "preparer";
@@ -799,9 +838,9 @@ export function QuoteDocument({
         {isDetail && quote && isRevisionQuote(quote.id) && (
           <div className="bg-card border border-border rounded-xl p-5 print:hidden">
             <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+              <h2 id="quote-revisionNote-heading" className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
                 หมายเหตุการแก้ไข (Revision Note)
-              </p>
+              </h2>
               <button
                 type="button"
                 onClick={handleGenerateRevisionNote}
@@ -817,6 +856,7 @@ export function QuoteDocument({
             <textarea
               rows={6}
               disabled={disabled}
+              aria-labelledby="quote-revisionNote-heading"
               className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60 font-mono"
               value={revisionNote}
               onChange={(e) => setRevisionNote(e.target.value)}
@@ -828,9 +868,9 @@ export function QuoteDocument({
         {/* Approval history */}
         {isDetail && quote!.approvalHistory.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-5 print:hidden">
-            <p className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+            <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
               <History size={13} /> {t("quotation.section.approvalHistory")}
-            </p>
+            </h2>
             <div className="space-y-2.5">
               {reversedApprovalHistory.map((entry) => (
                 <div key={entry.id} className="flex items-start gap-3 text-sm">
@@ -888,65 +928,103 @@ export function QuoteDocument({
       </div>
 
       {pendingAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setPendingAction(null)} />
-          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-            <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t(approvalActionLabelKey[pendingAction])}</p>
-            <p className="text-xs text-muted-foreground mb-4">{t("quotation.modal.forQuote").replace("{id}", isDetail ? quote!.id : "").replace("{client}", client)}</p>
-            <label className="text-xs text-muted-foreground block mb-1.5">
-              {t("quotation.modal.commentLabel")} {commentRequired ? t("quotation.modal.commentRequired") : t("quotation.modal.commentOptional")}
-            </label>
-            <textarea
-              rows={3}
-              className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none"
-              value={actionComment}
-              onChange={(e) => setActionComment(e.target.value)}
-            />
-            {actionError && <p className="text-xs text-[#e05252] mt-1.5">{actionError}</p>}
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setPendingAction(null)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-              <button
-                onClick={confirmAction}
-                className={`px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"}`}
-              >
-                {t("quotation.modal.confirm")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <WorkflowActionDialog
+          actionLabel={t(approvalActionLabelKey[pendingAction])}
+          forQuoteMessage={t("quotation.modal.forQuote").replace("{id}", isDetail ? quote!.id : "").replace("{client}", client)}
+          commentLabel={t("quotation.modal.commentLabel")}
+          commentRequiredLabel={t("quotation.modal.commentRequired")}
+          commentOptionalLabel={t("quotation.modal.commentOptional")}
+          commentRequired={commentRequired}
+          actionComment={actionComment}
+          onActionCommentChange={setActionComment}
+          actionError={actionError}
+          confirmLabel={t("quotation.modal.confirm")}
+          cancelLabel={t("common.cancel")}
+          busy={actionBusy}
+          onConfirm={confirmAction}
+          onCancel={() => setPendingAction(null)}
+        />
       )}
 
-      {scopeOfWorkPromptOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setScopeOfWorkPromptOpen(false)} />
-          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-            <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>สร้าง Scope of Work</p>
-            <p className="text-xs text-muted-foreground mb-4">
-              กรุณาพิมพ์เลขที่เอกสาร Scope of Work ด้วยตนเอง (ระบบไม่สร้างเลขอัตโนมัติแล้ว) — กำหนดรูปแบบได้อิสระ ระบบจะตรวจสอบให้ว่าเลขไม่ซ้ำกับใบอื่น
-            </p>
-            <label className="text-xs text-muted-foreground block mb-1.5">เลขที่เอกสาร <span className="text-[#e05252]">*</span></label>
-            <input
-              autoFocus
-              className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
-              value={scopeOfWorkNumber}
-              onChange={(e) => setScopeOfWorkNumber(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") confirmCreateScopeOfWork(); }}
-              placeholder="เช่น PQ202607-15-LI-SK"
-            />
-            {scopeOfWorkPromptError && <p className="text-xs text-[#e05252] mt-1.5">{scopeOfWorkPromptError}</p>}
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => setScopeOfWorkPromptOpen(false)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-              <button
-                onClick={confirmCreateScopeOfWork}
-                disabled={scopeOfWorkBusy}
-                className="px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] disabled:opacity-60"
-              >
-                สร้าง Scope of Work
-              </button>
-            </div>
-          </div>
+      <PromptDialog
+        open={scopeOfWorkPromptOpen}
+        title="สร้าง Scope of Work"
+        message="กรุณาพิมพ์เลขที่เอกสาร Scope of Work ด้วยตนเอง (ระบบไม่สร้างเลขอัตโนมัติแล้ว) — กำหนดรูปแบบได้อิสระ ระบบจะตรวจสอบให้ว่าเลขไม่ซ้ำกับใบอื่น"
+        label="เลขที่เอกสาร"
+        placeholder="เช่น PQ202607-15-LI-SK"
+        confirmLabel="สร้าง Scope of Work"
+        cancelLabel={t("common.cancel")}
+        requiredMessage="กรุณาระบุเลขที่เอกสาร"
+        error={scopeOfWorkPromptError}
+        mono
+        busy={scopeOfWorkBusy}
+        onConfirm={confirmCreateScopeOfWork}
+        onCancel={() => setScopeOfWorkPromptOpen(false)}
+      />
+    </div>
+  );
+}
+
+/**
+ * The workflow-action confirm modal (submit/approve/reject/send-to-customer/etc.) — not migrated
+ * onto the shared `PromptDialog` (accessibility hardening pass) because it needs a `danger`-style
+ * confirm button and a dynamic required/optional comment label that `PromptDialog` doesn't model;
+ * forcing it into that shape risked a behavior regression in the approval workflow. Instead it gets
+ * the same underlying accessibility fix directly: `role="dialog"`/`aria-modal`, Escape-to-close and
+ * a Tab focus trap via `useDialogA11y` (only safe to call unconditionally here because this
+ * component itself is only ever mounted while the dialog is open — same pattern as
+ * `PromptDialogForm`), a real `<h2>` title, and a busy-guard on both buttons.
+ */
+function WorkflowActionDialog({
+  actionLabel, forQuoteMessage, commentLabel, commentRequiredLabel, commentOptionalLabel,
+  commentRequired, actionComment, onActionCommentChange, actionError, confirmLabel, cancelLabel,
+  busy, onConfirm, onCancel,
+}: {
+  actionLabel: string;
+  forQuoteMessage: string;
+  commentLabel: string;
+  commentRequiredLabel: string;
+  commentOptionalLabel: string;
+  commentRequired: boolean;
+  actionComment: string;
+  onActionCommentChange: (value: string) => void;
+  actionError: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const panelRef = useDialogA11y(onCancel);
+  const titleId = useId();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
+      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
+        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{actionLabel}</h2>
+        <p className="text-xs text-muted-foreground mb-4">{forQuoteMessage}</p>
+        <label className="text-xs text-muted-foreground block mb-1.5">
+          {commentLabel} {commentRequired ? commentRequiredLabel : commentOptionalLabel}
+        </label>
+        <textarea
+          autoFocus
+          rows={3}
+          className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-none"
+          value={actionComment}
+          onChange={(e) => onActionCommentChange(e.target.value)}
+        />
+        {actionError && <p className="text-xs text-[#e05252] mt-1.5">{actionError}</p>}
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button onClick={onCancel} disabled={busy} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">{cancelLabel}</button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className={`px-3.5 py-1.5 text-xs rounded-lg font-semibold transition-colors disabled:opacity-60 ${commentRequired ? "bg-[#e05252] text-white hover:bg-[#c94444]" : "bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040]"}`}
+          >
+            {confirmLabel}
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

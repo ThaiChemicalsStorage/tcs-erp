@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Eye, EyeOff, LogIn, User as UserIcon } from "lucide-react";
 import { AuthLayout } from "./AuthLayout";
 import { useI18n } from "../lib/i18n";
@@ -15,6 +15,8 @@ export function SignInPage({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const identifierId = useId();
+  const passwordId = useId();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,15 +32,16 @@ export function SignInPage({
 
   return (
     <AuthLayout>
-      <h2 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("signin.title")}</h2>
+      <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("signin.title")}</h1>
       <p className="text-sm text-muted-foreground mt-1 mb-7">{t("signin.subtitle")}</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="text-xs font-medium text-foreground block mb-1.5">{t("signin.identifierLabel")}</label>
+          <label htmlFor={identifierId} className="text-xs font-medium text-foreground block mb-1.5">{t("signin.identifierLabel")}</label>
           <div className="relative">
             <UserIcon size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
+              id={identifierId}
               type="text"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
@@ -49,9 +52,10 @@ export function SignInPage({
         </div>
 
         <div>
-          <label className="text-xs font-medium text-foreground block mb-1.5">{t("signin.passwordLabel")}</label>
+          <label htmlFor={passwordId} className="text-xs font-medium text-foreground block mb-1.5">{t("signin.passwordLabel")}</label>
           <div className="relative">
             <input
+              id={passwordId}
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -61,6 +65,8 @@ export function SignInPage({
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? t("signin.hidePassword") : t("signin.showPassword")}
+              aria-pressed={showPassword}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             >
               {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -71,7 +77,7 @@ export function SignInPage({
         {/* The old "จดจำฉันไว้ในระบบ" checkbox was removed 2026-07-29 (UX pass): it never did
             anything — sessions are always a 7-day cookie regardless — so it only misled users
             into thinking unchecking it would log them out sooner (a long-tracked Codex finding). */}
-        {error && <p className="text-xs text-[#e05252]">{error}</p>}
+        {error && <p role="alert" className="text-xs text-[#e05252]">{error}</p>}
 
         <button
           type="submit"

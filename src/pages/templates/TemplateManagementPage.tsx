@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   Plus, Search, Pencil, Power, Archive, ArchiveRestore, Copy, Eye, FileStack, X, Loader2, Upload, FileText, HelpCircle,
 } from "lucide-react";
@@ -18,6 +18,7 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { TemplatePreview } from "../../components/TemplatePreview";
 import { useI18n } from "../../lib/i18n";
+import { useDialogA11y } from "../../hooks/useDialogA11y";
 import { TemplateEditorView } from "./TemplateEditorView";
 
 type StatusFilter = "all" | "active" | "inactive";
@@ -25,6 +26,67 @@ type SourceFilter = "all" | "excel_import" | "manual";
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Split into a wrapper + form component (mounted only while a target is set) so
+ * `useDialogA11y`'s Escape/focus-trap effect only ever runs while the modal actually exists —
+ * same pattern as `PromptDialog.tsx`/`ProductPickerModal.tsx`. Previously a hand-rolled
+ * `fixed inset-0` div with no `role="dialog"`, no focus trap, and no Escape-to-close
+ * (accessibility hardening pass, found in the 2026-07-30 Template Management audit). */
+function TemplatePreviewModal({ target, full, onClose }: {
+  target: QuotationTemplateSummary;
+  full: QuotationTemplate | null;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const panelRef = useDialogA11y(onClose);
+  const titleId = useId();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 id={titleId} className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("templates.action.preview")}: {target.templateName}</h2>
+          <button onClick={onClose} aria-label={t("common.cancel")} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
+        </div>
+        {full ? <TemplatePreview template={full} /> : (
+          <div role="status" aria-live="polite" className="flex items-center justify-center py-10 gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> {t("common.loading")}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Same wrapper+form split and rationale as `TemplatePreviewModal` above. */
+function TemplateDuplicateModal({ target, code, onCodeChange, duplicating, onConfirm, onCancel }: {
+  target: QuotationTemplateSummary;
+  code: string;
+  onCodeChange: (next: string) => void;
+  duplicating: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  const panelRef = useDialogA11y(onCancel);
+  const titleId = useId();
+  const codeInputId = useId();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
+        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("templates.action.duplicate")}</h2>
+        <p className="text-xs text-muted-foreground mb-3">{t("templates.duplicate.prompt").replace("{name}", target.templateName)}</p>
+        <label htmlFor={codeInputId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.code")}</label>
+        <input id={codeInputId} autoFocus value={code} onChange={(e) => onCodeChange(e.target.value)} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors mb-4" />
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+          <button onClick={onConfirm} disabled={duplicating || !code.trim()} className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60">
+            {t("templates.action.duplicate")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -278,11 +340,11 @@ export function TemplateManagementPage({
 
       <div data-tour="templates-list" className="bg-card border border-border rounded-xl overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 gap-2 text-sm text-muted-foreground">
+          <div role="status" aria-live="polite" className="flex items-center justify-center py-16 gap-2 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" /> {t("common.loading")}
           </div>
         ) : loadError ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <div role="alert" className="flex flex-col items-center justify-center py-16 gap-3">
             <p className="text-sm text-muted-foreground">{t("templates.loadError")}</p>
             <button onClick={load} className="px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("quotation.wizard.retry")}</button>
           </div>
@@ -328,20 +390,20 @@ export function TemplateManagementPage({
                     <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{tpl.sourceType === "excel_import" ? t("templates.source.excelImport") : t("templates.source.manual")}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">{fmtDate(tpl.updatedAt)}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => void openPreview(tpl)} title={t("templates.action.preview")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Eye size={14} /></button>
-                        {canEdit && <button onClick={() => setView({ editId: tpl.id })} title={t("common.edit")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Pencil size={14} /></button>}
-                        {canDuplicate && <button onClick={() => openDuplicate(tpl)} title={t("templates.action.duplicate")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Copy size={14} /></button>}
+                      <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                        <button onClick={() => void openPreview(tpl)} title={t("templates.action.preview")} aria-label={`${t("templates.action.preview")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Eye size={14} /></button>
+                        {canEdit && <button onClick={() => setView({ editId: tpl.id })} title={t("common.edit")} aria-label={`${t("common.edit")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Pencil size={14} /></button>}
+                        {canDuplicate && <button onClick={() => openDuplicate(tpl)} title={t("templates.action.duplicate")} aria-label={`${t("templates.action.duplicate")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Copy size={14} /></button>}
                         {canActivate && !tpl.isDeleted && (
-                          <button onClick={() => void handleToggleActive(tpl)} title={tpl.isActive ? t("templates.action.deactivate") : t("templates.action.activate")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Power size={14} /></button>
+                          <button onClick={() => void handleToggleActive(tpl)} title={tpl.isActive ? t("templates.action.deactivate") : t("templates.action.activate")} aria-label={`${tpl.isActive ? t("templates.action.deactivate") : t("templates.action.activate")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Power size={14} /></button>
                         )}
                         {canArchive && (
-                          <button onClick={() => setArchiveTarget(tpl)} title={tpl.isDeleted ? t("common.unarchive") : t("common.archive")} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors">
+                          <button onClick={() => setArchiveTarget(tpl)} title={tpl.isDeleted ? t("common.unarchive") : t("common.archive")} aria-label={`${tpl.isDeleted ? t("common.unarchive") : t("common.archive")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors">
                             {tpl.isDeleted ? <ArchiveRestore size={14} /> : <Archive size={14} />}
                           </button>
                         )}
                         {!tpl.isDeleted && tpl.isActive && onCreateQuotationFromTemplate && (
-                          <button onClick={() => onCreateQuotationFromTemplate(tpl.jobTypeCode, tpl.id)} title={t("templates.action.createQuotation")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><FileText size={14} /></button>
+                          <button onClick={() => onCreateQuotationFromTemplate(tpl.jobTypeCode, tpl.id)} title={t("templates.action.createQuotation")} aria-label={`${t("templates.action.createQuotation")} ${tpl.templateName}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><FileText size={14} /></button>
                         )}
                       </div>
                     </td>
@@ -354,36 +416,18 @@ export function TemplateManagementPage({
       </div>
 
       {previewTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setPreviewTarget(null)} />
-          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-5">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("templates.action.preview")}</p>
-              <button onClick={() => setPreviewTarget(null)} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
-            </div>
-            {previewFull ? <TemplatePreview template={previewFull} /> : (
-              <div className="flex items-center justify-center py-10 gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> {t("common.loading")}</div>
-            )}
-          </div>
-        </div>
+        <TemplatePreviewModal target={previewTarget} full={previewFull} onClose={() => setPreviewTarget(null)} />
       )}
 
       {duplicateTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setDuplicateTarget(null)} />
-          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-            <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("templates.action.duplicate")}</p>
-            <p className="text-xs text-muted-foreground mb-3">{t("templates.duplicate.prompt").replace("{name}", duplicateTarget.templateName)}</p>
-            <label className="text-xs text-muted-foreground block mb-1">{t("templates.col.code")}</label>
-            <input value={duplicateCode} onChange={(e) => setDuplicateCode(e.target.value)} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors mb-4" />
-            <div className="flex items-center justify-end gap-2">
-              <button onClick={() => setDuplicateTarget(null)} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-              <button onClick={() => void handleDuplicateConfirm()} disabled={duplicating || !duplicateCode.trim()} className="px-3.5 py-1.5 text-xs rounded-lg font-semibold bg-[#c9a84c] text-[#0b1d3a] hover:bg-[#f0c040] transition-colors disabled:opacity-60">
-                {t("templates.action.duplicate")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <TemplateDuplicateModal
+          target={duplicateTarget}
+          code={duplicateCode}
+          onCodeChange={setDuplicateCode}
+          duplicating={duplicating}
+          onConfirm={() => void handleDuplicateConfirm()}
+          onCancel={() => setDuplicateTarget(null)}
+        />
       )}
 
       <ConfirmDialog

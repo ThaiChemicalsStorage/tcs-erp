@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Plus, Pencil, KeyRound, UserCheck, UserX, Trash2, Search, ShieldCheck, HelpCircle } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -11,6 +11,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
+import { useDialogA11y } from "../../hooks/useDialogA11y";
 
 type View = "list" | "create" | "edit";
 
@@ -33,6 +34,50 @@ interface UserFormState {
 
 function emptyForm(defaultRoleKey: string): UserFormState {
   return { fullName: "", employeeId: "", username: "", email: "", phone: "", department: "", position: "", roleKey: defaultRoleKey, status: "active", password: "", confirm: "" };
+}
+
+/** Split into a wrapper + form component (mounted only while a target is set) so
+ * `useDialogA11y`'s Escape/focus-trap effect only ever runs while the modal actually exists —
+ * same pattern as `PromptDialog.tsx`/`ProductPickerModal.tsx`. Previously a hand-rolled
+ * `fixed inset-0` div with no `role="dialog"`, no focus trap, and no Escape-to-close
+ * (accessibility hardening pass, found in the 2026-07-30 Admin module audit). */
+function ResetPasswordModal({ target, value, onChange, error, onConfirm, onCancel }: {
+  target: User;
+  value: { password: string; confirm: string };
+  onChange: (next: { password: string; confirm: string }) => void;
+  error: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  const panelRef = useDialogA11y(onCancel);
+  const titleId = useId();
+  const passwordId = useId();
+  const confirmId = useId();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
+        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("users.resetPasswordTitle")}</h2>
+        <p className="text-xs text-muted-foreground mb-4">{t("users.resetPasswordFor").replace("{name}", target.fullName)}</p>
+        <div className="space-y-3">
+          <div>
+            <label htmlFor={passwordId} className={labelCls}>{t("users.field.newPassword")}</label>
+            <input id={passwordId} type="password" className={inputCls} value={value.password} onChange={(e) => onChange({ ...value, password: e.target.value })} />
+          </div>
+          <div>
+            <label htmlFor={confirmId} className={labelCls}>{t("users.field.confirmNewPassword")}</label>
+            <input id={confirmId} type="password" className={inputCls} value={value.confirm} onChange={(e) => onChange({ ...value, confirm: e.target.value })} />
+          </div>
+          {error && <p role="alert" className="text-xs text-[#e05252]">{error}</p>}
+        </div>
+        <div className="flex items-center justify-end gap-2 mt-4">
+          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
+          <button onClick={onConfirm} className="px-3.5 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("users.resetAction")}</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function UserManagementPage({
@@ -77,6 +122,18 @@ export function UserManagementPage({
   const [statusTarget, setStatusTarget] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const { message, show } = useToast();
+
+  const fullNameId = useId();
+  const employeeIdId = useId();
+  const usernameId = useId();
+  const emailId = useId();
+  const phoneId = useId();
+  const departmentId = useId();
+  const positionId = useId();
+  const roleId = useId();
+  const statusId = useId();
+  const passwordId = useId();
+  const confirmId = useId();
 
   const assignableRoles = roles.filter((r) => !r.isSuperAdmin || isSuperAdmin);
   const roleName = (roleKey: string) => roles.find((r) => r.key === roleKey)?.name ?? roleKey;
@@ -224,18 +281,18 @@ export function UserManagementPage({
           </h2>
           <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-5 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div><label className={labelCls}>{t("users.field.fullName")} <span className="text-[#e05252]">*</span></label><input className={inputCls} value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} /></div>
-              <div><label className={labelCls}>{t("users.field.employeeId")} <span className="text-[#e05252]">*</span></label><input className={inputCls} value={form.employeeId} onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))} /></div>
+              <div><label htmlFor={fullNameId} className={labelCls}>{t("users.field.fullName")} <span className="text-[#e05252]">*</span></label><input id={fullNameId} className={inputCls} value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} /></div>
+              <div><label htmlFor={employeeIdId} className={labelCls}>{t("users.field.employeeId")} <span className="text-[#e05252]">*</span></label><input id={employeeIdId} className={inputCls} value={form.employeeId} onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div><label className={labelCls}>{t("users.field.username")} <span className="text-[#e05252]">*</span></label><input className={inputCls} value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} /></div>
-              <div><label className={labelCls}>{t("users.field.email")} <span className="text-[#e05252]">*</span></label><input type="email" className={inputCls} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
+              <div><label htmlFor={usernameId} className={labelCls}>{t("users.field.username")} <span className="text-[#e05252]">*</span></label><input id={usernameId} className={inputCls} value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} /></div>
+              <div><label htmlFor={emailId} className={labelCls}>{t("users.field.email")} <span className="text-[#e05252]">*</span></label><input id={emailId} type="email" className={inputCls} value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div><label className={labelCls}>{t("users.field.phone")}</label><input className={inputCls} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
+              <div><label htmlFor={phoneId} className={labelCls}>{t("users.field.phone")}</label><input id={phoneId} className={inputCls} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
               <div>
-                <label className={labelCls}>{t("users.field.department")}</label>
-                <select className={inputCls} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
+                <label htmlFor={departmentId} className={labelCls}>{t("users.field.department")}</label>
+                <select id={departmentId} className={inputCls} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
                   <option value="">{t("users.field.department.none")}</option>
                   {DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => <option key={d.key} value={d.label}>{d.label}</option>)}
                   {/* A legacy value predating this dropdown (added 2026-07-23 — department used to be
@@ -251,13 +308,14 @@ export function UserManagementPage({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className={labelCls}>{t("users.field.position")}</label>
-                <input className={inputCls} list="position-suggestions" value={form.position} onChange={(e) => setForm((f) => ({ ...f, position: e.target.value }))} />
+                <label htmlFor={positionId} className={labelCls}>{t("users.field.position")}</label>
+                <input id={positionId} className={inputCls} list="position-suggestions" value={form.position} onChange={(e) => setForm((f) => ({ ...f, position: e.target.value }))} />
                 <datalist id="position-suggestions">{POSITION_SUGGESTIONS.map((p) => <option key={p} value={p} />)}</datalist>
               </div>
               <div>
-                <label className={labelCls}>{t("users.field.role")} <span className="text-[#e05252]">*</span></label>
+                <label htmlFor={roleId} className={labelCls}>{t("users.field.role")} <span className="text-[#e05252]">*</span></label>
                 <select
+                  id={roleId}
                   className={inputCls}
                   value={form.roleKey}
                   onChange={(e) => setForm((f) => ({ ...f, roleKey: e.target.value }))}
@@ -270,8 +328,8 @@ export function UserManagementPage({
             </div>
             {view === "edit" && (
               <div>
-                <label className={labelCls}>{t("users.field.status")}</label>
-                <select className={inputCls} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as UserStatus }))} disabled={editingId === currentUser.id}>
+                <label htmlFor={statusId} className={labelCls}>{t("users.field.status")}</label>
+                <select id={statusId} className={inputCls} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as UserStatus }))} disabled={editingId === currentUser.id}>
                   <option value="active">{t("users.status.active")}</option>
                   <option value="inactive">{t("users.status.inactive")}</option>
                 </select>
@@ -279,11 +337,11 @@ export function UserManagementPage({
             )}
             {view === "create" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label className={labelCls}>{t("users.field.initialPassword")} <span className="text-[#e05252]">*</span></label><input type="password" className={inputCls} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} /></div>
-                <div><label className={labelCls}>{t("users.field.confirmPassword")} <span className="text-[#e05252]">*</span></label><input type="password" className={inputCls} value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} /></div>
+                <div><label htmlFor={passwordId} className={labelCls}>{t("users.field.initialPassword")} <span className="text-[#e05252]">*</span></label><input id={passwordId} type="password" className={inputCls} value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} /></div>
+                <div><label htmlFor={confirmId} className={labelCls}>{t("users.field.confirmPassword")} <span className="text-[#e05252]">*</span></label><input id={confirmId} type="password" className={inputCls} value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} /></div>
               </div>
             )}
-            {error && <p className="text-xs text-[#e05252]">{error}</p>}
+            {error && <p role="alert" className="text-xs text-[#e05252]">{error}</p>}
             <div className="flex items-center justify-end gap-2 pt-2">
               <button type="button" onClick={() => { setView("list"); setEditingId(null); }} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
               <button type="submit" className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("common.save")}</button>
@@ -347,20 +405,21 @@ export function UserManagementPage({
                   </td>
                   <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{u.employeeId}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{u.department || t("common.dash")} {u.position && `· ${u.position}`}</td>
-                  <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/20">{role?.name ?? u.roleKey}</span></td>
+                  <td className="px-4 py-3"><span className="text-xs px-2 py-0.5 rounded-full bg-[#c9a84c]/10 text-[#866d28] border border-[#c9a84c]/20">{role?.name ?? u.roleKey}</span></td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${u.status === "active" ? "bg-[#2aa36b]/10 text-[#2aa36b] border-[#2aa36b]/20" : "bg-[#8a94a6]/10 text-[#8a94a6] border-[#8a94a6]/20"}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${u.status === "active" ? "bg-[#2aa36b]/10 text-[#207e52] border-[#2aa36b]/20" : "bg-[#8a94a6]/10 text-[#657085] border-[#8a94a6]/20"}`}>
                       {u.status === "active" ? t("users.status.active") : t("users.status.inactive")}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => startEdit(u)} title={t("users.action.edit")} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><Pencil size={14} /></button>
-                      <button onClick={() => { setResetTarget(u); setResetPw({ password: "", confirm: "" }); setError(""); }} title={t("users.action.resetPassword")} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><KeyRound size={14} /></button>
+                      <button onClick={() => startEdit(u)} title={t("users.action.edit")} aria-label={`${t("users.action.edit")} ${u.fullName}`} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><Pencil size={14} /></button>
+                      <button onClick={() => { setResetTarget(u); setResetPw({ password: "", confirm: "" }); setError(""); }} title={t("users.action.resetPassword")} aria-label={`${t("users.action.resetPassword")} ${u.fullName}`} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><KeyRound size={14} /></button>
                       <button
                         onClick={() => setStatusTarget(u)}
                         disabled={u.id === currentUser.id || isLastActiveSuperAdmin(u)}
                         title={isLastActiveSuperAdmin(u) ? t("users.action.suspendLastSuperAdminTitle") : u.status === "active" ? t("users.action.suspend") : t("users.action.activate")}
+                        aria-label={`${isLastActiveSuperAdmin(u) ? t("users.action.suspendLastSuperAdminTitle") : u.status === "active" ? t("users.action.suspend") : t("users.action.activate")} ${u.fullName}`}
                         className="p-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                       >
                         {u.status === "active" ? <UserX size={14} /> : <UserCheck size={14} />}
@@ -369,6 +428,7 @@ export function UserManagementPage({
                         onClick={() => setDeleteTarget(u)}
                         disabled={!canDelete(u)}
                         title={t("users.action.deleteUser")}
+                        aria-label={`${t("users.action.deleteUser")} ${u.fullName}`}
                         className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                       >
                         <Trash2 size={14} />
@@ -387,22 +447,14 @@ export function UserManagementPage({
       </div>
 
       {resetTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={() => setResetTarget(null)} />
-          <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-            <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("users.resetPasswordTitle")}</p>
-            <p className="text-xs text-muted-foreground mb-4">{t("users.resetPasswordFor").replace("{name}", resetTarget.fullName)}</p>
-            <div className="space-y-3">
-              <div><label className={labelCls}>{t("users.field.newPassword")}</label><input type="password" className={inputCls} value={resetPw.password} onChange={(e) => setResetPw((p) => ({ ...p, password: e.target.value }))} /></div>
-              <div><label className={labelCls}>{t("users.field.confirmNewPassword")}</label><input type="password" className={inputCls} value={resetPw.confirm} onChange={(e) => setResetPw((p) => ({ ...p, confirm: e.target.value }))} /></div>
-              {error && <p className="text-xs text-[#e05252]">{error}</p>}
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-4">
-              <button onClick={() => { setResetTarget(null); setError(""); }} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("common.cancel")}</button>
-              <button onClick={confirmResetPassword} className="px-3.5 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">{t("users.resetAction")}</button>
-            </div>
-          </div>
-        </div>
+        <ResetPasswordModal
+          target={resetTarget}
+          value={resetPw}
+          onChange={setResetPw}
+          error={error}
+          onConfirm={() => void confirmResetPassword()}
+          onCancel={() => { setResetTarget(null); setError(""); }}
+        />
       )}
 
       <ConfirmDialog

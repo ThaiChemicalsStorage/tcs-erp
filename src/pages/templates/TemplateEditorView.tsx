@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 import {
   ChevronLeft, Plus, Trash2, ArrowUp, ArrowDown, Copy, Package, PencilLine, Loader2, X,
   FileText, Settings2, Layers, ScrollText, StickyNote, CheckCircle2, Circle, Pin,
@@ -102,6 +102,12 @@ export function TemplateEditorView({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [productPickerFor, setProductPickerFor] = useState<string | null>(null);
+  const codeId = useId();
+  const nameId = useId();
+  const descriptionId = useId();
+  const jobTypeId = useId();
+  const versionId = useId();
+  const internalNotesId = useId();
 
   useEffect(() => {
     if (!templateId) return;
@@ -197,7 +203,7 @@ export function TemplateEditorView({
   };
 
   if (loading) {
-    return <div className="flex-1 flex items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> {t("common.loading")}</div>;
+    return <div role="status" aria-live="polite" className="flex-1 flex items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 size={16} className="animate-spin" /> {t("common.loading")}</div>;
   }
 
   const termsOfType = (type: TemplateTermLine["type"]) => draft.defaultTerms.map((term, i) => ({ term, i })).filter(({ term }) => term.type === type);
@@ -234,16 +240,16 @@ export function TemplateEditorView({
             <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><FileText size={10} /> {t("templates.form.templateInfo")}</p>
             <div className="space-y-2.5">
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">{t("templates.col.code")} <span className="text-[#e05252]">*</span></label>
-                <input value={draft.templateCode} onChange={(e) => setDraft((d) => ({ ...d, templateCode: e.target.value.toUpperCase() }))} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                <label htmlFor={codeId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.code")} <span className="text-[#e05252]">*</span></label>
+                <input id={codeId} value={draft.templateCode} onChange={(e) => setDraft((d) => ({ ...d, templateCode: e.target.value.toUpperCase() }))} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">{t("templates.col.name")} <span className="text-[#e05252]">*</span></label>
-                <input value={draft.templateName} onChange={(e) => setDraft((d) => ({ ...d, templateName: e.target.value }))} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                <label htmlFor={nameId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.name")} <span className="text-[#e05252]">*</span></label>
+                <input id={nameId} value={draft.templateName} onChange={(e) => setDraft((d) => ({ ...d, templateName: e.target.value }))} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">{t("templates.form.description")}</label>
-                <textarea value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} rows={3} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y" />
+                <label htmlFor={descriptionId} className="text-xs text-muted-foreground block mb-1">{t("templates.form.description")}</label>
+                <textarea id={descriptionId} value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} rows={3} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y" />
               </div>
             </div>
           </div>
@@ -252,8 +258,9 @@ export function TemplateEditorView({
             <div className="space-y-2.5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("templates.col.jobType")} <span className="text-[#e05252]">*</span></label>
+                  <label htmlFor={jobTypeId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.jobType")} <span className="text-[#e05252]">*</span></label>
                   <select
+                    id={jobTypeId}
                     value={draft.jobTypeCode}
                     onChange={(e) => {
                       const jt = jobTypes.find((j) => j.code === e.target.value);
@@ -266,8 +273,8 @@ export function TemplateEditorView({
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1">{t("templates.col.version")}</label>
-                  <input value={draft.version} onChange={(e) => setDraft((d) => ({ ...d, version: e.target.value }))} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+                  <label htmlFor={versionId} className="text-xs text-muted-foreground block mb-1">{t("templates.col.version")}</label>
+                  <input id={versionId} value={draft.version} onChange={(e) => setDraft((d) => ({ ...d, version: e.target.value }))} className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors" />
                 </div>
               </div>
               <div className="pt-1">
@@ -311,9 +318,9 @@ export function TemplateEditorView({
                   className="flex-1 text-sm font-semibold text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-2 py-1.5 transition-colors"
                   style={SERIF}
                 />
-                <button onClick={() => moveSection(sIdx, -1)} disabled={sIdx === 0} className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowUp size={14} /></button>
-                <button onClick={() => moveSection(sIdx, 1)} disabled={sIdx === draft.sections.length - 1} className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowDown size={14} /></button>
-                <button onClick={() => deleteSection(section.id)} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors"><Trash2 size={14} /></button>
+                <button onClick={() => moveSection(sIdx, -1)} disabled={sIdx === 0} title={t("quotation.lineItems.moveUp")} aria-label={t("quotation.lineItems.moveUp")} className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowUp size={14} /></button>
+                <button onClick={() => moveSection(sIdx, 1)} disabled={sIdx === draft.sections.length - 1} title={t("quotation.lineItems.moveDown")} aria-label={t("quotation.lineItems.moveDown")} className="p-1.5 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowDown size={14} /></button>
+                <button onClick={() => deleteSection(section.id)} title={t("common.delete")} aria-label={t("common.delete")} className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors"><Trash2 size={14} /></button>
               </div>
 
               {section.items.length > 0 && (
@@ -380,7 +387,7 @@ export function TemplateEditorView({
                 {termsOfType(type).map(({ term, i }) => (
                   <div key={i} className="flex items-center gap-2">
                     <input value={term.text} onChange={(e) => updateTermText(i, e.target.value)} className="flex-1 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
-                    <button onClick={() => deleteTerm(i)} className="p-1 text-muted-foreground hover:text-[#e05252] transition-colors"><Trash2 size={13} /></button>
+                    <button onClick={() => deleteTerm(i)} title={t("common.delete")} aria-label={t("common.delete")} className="p-1 text-muted-foreground hover:text-[#e05252] transition-colors"><Trash2 size={13} /></button>
                   </div>
                 ))}
                 {termsOfType(type).length === 0 && <p className="text-[11px] text-muted-foreground/70">—</p>}
@@ -391,11 +398,12 @@ export function TemplateEditorView({
       </div>
 
       <div className="bg-card border border-border rounded-xl p-5">
-        <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1.5" style={SERIF}>
+        <label htmlFor={internalNotesId} className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1.5" style={SERIF}>
           <StickyNote size={13} className="text-[#e08a3c]" /> {t("templates.form.internalNotes")}
         </label>
         <p className="text-[11px] text-muted-foreground mb-1.5">{t("templates.form.internalNotesHint")}</p>
         <textarea
+          id={internalNotesId}
           value={draft.internalNotes.join("\n")}
           onChange={(e) => setDraft((d) => ({ ...d, internalNotes: linesToArray(e.target.value) }))}
           rows={3}
@@ -403,7 +411,7 @@ export function TemplateEditorView({
         />
       </div>
 
-      {error && <p className="text-xs text-[#e05252]">{error}</p>}
+      {error && <p role="alert" className="text-xs text-[#e05252]">{error}</p>}
 
       <div className="flex items-center justify-end gap-2 pt-2 pb-6 border-t border-border">
         <button onClick={onCancel} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors mt-3">{t("common.cancel")}</button>
@@ -496,14 +504,15 @@ function ItemEditor({
             <button
               onClick={addSubDetail}
               title={t("quotation.lineItems.addSubDetail")}
+              aria-label={t("quotation.lineItems.addSubDetail")}
               className={`p-1 transition-colors ${item.subDetails.some((s) => s.trim()) ? "text-[#c9a84c]" : "text-muted-foreground hover:text-[#c9a84c]"}`}
             >
               <Pin size={12} />
             </button>
-            <button onClick={onMoveUp} disabled={!canMoveUp} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowUp size={12} /></button>
-            <button onClick={onMoveDown} disabled={!canMoveDown} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowDown size={12} /></button>
-            <button onClick={onDuplicate} className="p-1 text-muted-foreground hover:text-foreground transition-colors"><Copy size={12} /></button>
-            <button onClick={onDelete} className="p-1 text-muted-foreground hover:text-[#e05252] transition-colors"><X size={12} /></button>
+            <button onClick={onMoveUp} disabled={!canMoveUp} title={t("quotation.lineItems.moveUp")} aria-label={t("quotation.lineItems.moveUp")} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowUp size={12} /></button>
+            <button onClick={onMoveDown} disabled={!canMoveDown} title={t("quotation.lineItems.moveDown")} aria-label={t("quotation.lineItems.moveDown")} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"><ArrowDown size={12} /></button>
+            <button onClick={onDuplicate} title={t("templates.action.duplicate")} aria-label={t("templates.action.duplicate")} className="p-1 text-muted-foreground hover:text-foreground transition-colors"><Copy size={12} /></button>
+            <button onClick={onDelete} title={t("common.delete")} aria-label={t("common.delete")} className="p-1 text-muted-foreground hover:text-[#e05252] transition-colors"><X size={12} /></button>
           </div>
         </td>
       </tr>
@@ -521,7 +530,7 @@ function ItemEditor({
                 placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
                 className="flex-1 text-[11px] text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
               />
-              <button onClick={() => removeSubDetail(subIndex)} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-0 group-hover/pin:opacity-100 flex-shrink-0">
+              <button onClick={() => removeSubDetail(subIndex)} title={t("common.delete")} aria-label={t("common.delete")} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover/pin:opacity-100 group-focus-within/pin:opacity-100 flex-shrink-0">
                 <Trash2 size={11} />
               </button>
             </div>

@@ -42,6 +42,10 @@ export function ProductForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [specifications, setSpecifications] = useState(initial?.specifications ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Guards against a double-click on Save firing two concurrent create/update requests — this form
+  // previously had no busy-guard at all, unlike every other form/dialog in the app (accessibility/
+  // correctness hardening pass).
+  const [saving, setSaving] = useState(false);
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -56,17 +60,22 @@ export function ProductForm({
   };
 
   const handleSave = async () => {
-    if (!validate()) return;
-    const error = await onSave({
-      code: code.trim().toUpperCase(),
-      name: name.trim(),
-      categoryId,
-      unit: unit.trim(),
-      defaultPrice,
-      description: description.trim(),
-      specifications: specifications.trim(),
-    });
-    if (error) setErrors({ code: error });
+    if (saving || !validate()) return;
+    setSaving(true);
+    try {
+      const error = await onSave({
+        code: code.trim().toUpperCase(),
+        name: name.trim(),
+        categoryId,
+        unit: unit.trim(),
+        defaultPrice,
+        description: description.trim(),
+        specifications: specifications.trim(),
+      });
+      if (error) setErrors({ code: error });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -80,10 +89,10 @@ export function ProductForm({
           {mode === "create" ? t("products.addNew") : t("products.form.editTitle").replace("{code}", initial?.code ?? "")}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <button onClick={onCancel} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+          <button onClick={onCancel} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
             <X size={13} /> {t("common.cancel")}
           </button>
-          <button onClick={handleSave} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors">
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60">
             <Save size={13} /> {t("products.form.save")}
           </button>
         </div>
@@ -91,15 +100,15 @@ export function ProductForm({
 
       <div className="p-6 max-w-3xl mx-auto">
         <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>{t("products.form.codeLabel")} <span className="text-[#e05252]">*</span></label>
-              <input className={`${inputCls} font-mono`} value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("products.form.codePlaceholder")} />
+              <label htmlFor="product-code" className={labelCls}>{t("products.form.codeLabel")} <span className="text-[#e05252]">*</span></label>
+              <input id="product-code" className={`${inputCls} font-mono`} value={code} onChange={(e) => setCode(e.target.value)} placeholder={t("products.form.codePlaceholder")} />
               {errors.code && <p className="text-xs text-[#e05252] mt-1">{errors.code}</p>}
             </div>
             <div>
-              <label className={labelCls}>{t("products.col.category")} <span className="text-[#e05252]">*</span></label>
-              <select className={`${inputCls} appearance-none`} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <label htmlFor="product-categoryId" className={labelCls}>{t("products.col.category")} <span className="text-[#e05252]">*</span></label>
+              <select id="product-categoryId" className={`${inputCls} appearance-none`} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                 {activeCategories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}{c.archived ? t("products.categoryArchivedSuffix") : ""}</option>
                 ))}
@@ -109,32 +118,32 @@ export function ProductForm({
           </div>
 
           <div>
-            <label className={labelCls}>{t("products.col.name")} <span className="text-[#e05252]">*</span></label>
-            <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("products.form.namePlaceholder")} />
+            <label htmlFor="product-name" className={labelCls}>{t("products.col.name")} <span className="text-[#e05252]">*</span></label>
+            <input id="product-name" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("products.form.namePlaceholder")} />
             {errors.name && <p className="text-xs text-[#e05252] mt-1">{errors.name}</p>}
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>{t("products.col.unit")}</label>
-              <input className={inputCls} value={unit} onChange={(e) => setUnit(e.target.value)} placeholder={t("products.form.unitPlaceholder")} />
+              <label htmlFor="product-unit" className={labelCls}>{t("products.col.unit")}</label>
+              <input id="product-unit" className={inputCls} value={unit} onChange={(e) => setUnit(e.target.value)} placeholder={t("products.form.unitPlaceholder")} />
               {errors.unit && <p className="text-xs text-[#e05252] mt-1">{errors.unit}</p>}
             </div>
             <div>
-              <label className={labelCls}>{t("products.form.priceLabel")}</label>
-              <input type="number" min={0} className={`${inputCls} font-mono`} value={defaultPrice} onChange={(e) => setDefaultPrice(parseFloat(e.target.value) || 0)} />
+              <label htmlFor="product-defaultPrice" className={labelCls}>{t("products.form.priceLabel")}</label>
+              <input id="product-defaultPrice" type="number" min={0} className={`${inputCls} font-mono`} value={defaultPrice} onChange={(e) => setDefaultPrice(parseFloat(e.target.value) || 0)} />
               {errors.defaultPrice && <p className="text-xs text-[#e05252] mt-1">{errors.defaultPrice}</p>}
             </div>
           </div>
 
           <div>
-            <label className={labelCls}>{t("products.form.descriptionLabel")}</label>
-            <textarea rows={3} className={`${inputCls} resize-none leading-relaxed`} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("products.form.descriptionPlaceholder")} />
+            <label htmlFor="product-description" className={labelCls}>{t("products.form.descriptionLabel")}</label>
+            <textarea id="product-description" rows={3} className={`${inputCls} resize-none leading-relaxed`} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("products.form.descriptionPlaceholder")} />
           </div>
 
           <div>
-            <label className={labelCls}>{t("products.form.specLabel")}</label>
-            <textarea rows={3} className={`${inputCls} resize-none leading-relaxed`} value={specifications} onChange={(e) => setSpecifications(e.target.value)} placeholder={t("products.form.specPlaceholder")} />
+            <label htmlFor="product-specifications" className={labelCls}>{t("products.form.specLabel")}</label>
+            <textarea id="product-specifications" rows={3} className={`${inputCls} resize-none leading-relaxed`} value={specifications} onChange={(e) => setSpecifications(e.target.value)} placeholder={t("products.form.specPlaceholder")} />
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed pt-1 border-t border-border">

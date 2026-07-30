@@ -4,7 +4,393 @@
 
 ---
 
-## 2026-07-29 (absolute latest) — Impeccable design-system setup + Dashboard accessibility/responsive hardening pass
+## 2026-07-30 (absolute latest) — Authentication UI accessibility hardening pass
+
+An `/impeccable audit` of the authentication UI (`SignInPage.tsx`, `AuthLayout.tsx`, and `App.tsx`'s
+`BootLoading`/`BootError` session-check presentation) found this had never been touched by any
+earlier accessibility pass this session — the same gap as Template Management and Admin, but on the
+single page every user passes through before reaching anything else. This pass fixed every P1/P2
+finding, UI-files only — authentication APIs, credential handling, session behavior, redirects, and
+security controls are all untouched; nothing was weakened.
+
+**Identifier and password fields lacked label association (P1)**: both `<label>`s were plain
+siblings with no `htmlFor`, neither input had an `id`. Added `useId()`-generated pairs to both.
+
+**Password visibility toggle had zero accessible name (P1)**: icon-only button, not even a `title`
+— worse than the title-only gap found elsewhere, on arguably the single most-used icon button in the
+app. Added `aria-label` (toggling "Show password"/"Hide password") and `aria-pressed` since it's a
+genuine two-state toggle, not a momentary action.
+
+**Session-loading screen had no text or ARIA signal (P1)**: `BootLoading` — shown while the initial
+session check is in flight and as the `Suspense` fallback while the sign-in page's own lazy chunk
+downloads — was a silently-pulsing logo image with no loading text and no `role="status"`. Added
+`role="status" aria-live="polite"` plus an `sr-only` label, matching every other loading state fixed
+this session.
+
+**P2s**: the login-failure error message gained `role="alert"` (previously the only feedback after a
+failed sign-in had no announcement at all); `AuthLayout.tsx` gained a `<main>` landmark (previously
+absent entirely); and the heading hierarchy was fixed — the branding panel's marketing headline
+(hidden below `lg`, leaving zero `<h1>` on smaller screens) is now a styled `<p>`, while
+`SignInPage.tsx`'s actual "Sign In" heading is now the page's real `<h1>` (was an `<h2>`).
+
+**Files changed**: `src/pages/{SignInPage,AuthLayout}.tsx`, `src/App.tsx`, `src/lib/i18n.tsx` (new
+`signin.showPassword`/`signin.hidePassword`/`boot.loading` keys).
+
+**Verification**: `npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing),
+plus a live click-through via `vercel dev`: `document.getElementById` confirmed both field label
+pairs resolve correctly, the password toggle's `aria-label`/`aria-pressed` flip correctly on click
+("Show password" → "Hide password", `false` → `true`), the required-field error carries
+`role="alert"` after a blocked submit, and the page's `<h1>`("Sign In")/`<main>` are present in the
+DOM.
+
+---
+
+## 2026-07-30 (absolute latest) — Admin module accessibility hardening pass
+
+An `/impeccable audit` of the complete Admin module (`UserManagementPage.tsx`, `RoleManagementPage.tsx`,
+`AuditLogPage.tsx` — user list/create/edit/reset-password/activate/delete, role list/create/edit/
+permission-matrix/delete, audit log list/search) found this was another module never touched by any
+earlier accessibility pass this session — same pattern as Template Management. This pass fixed every
+P1/P2 finding, UI-files only — authentication, RBAC, role definitions, permission enforcement,
+audit-log integrity, APIs, MongoDB data, and business logic are all untouched; no permission was
+weakened or changed.
+
+**Reset Password modal had zero dialog semantics (P1)**: hand-rolled `fixed inset-0` div, no
+`role="dialog"`, no focus trap, no Escape-to-close. Split into a wrapper+form component
+(`ResetPasswordModal`) so `useDialogA11y` only runs while open, matching `ProductPickerModal.tsx`'s
+established pattern.
+
+**Status/role pill contrast recurred in 3 places (P1)**: `UserManagementPage.tsx`'s role pill and
+active/inactive pills, and `AuditLogPage.tsx`'s action pill, all reused raw brand hex as text on
+their own tint — the same bug already fixed on every other status pill this session. Darkened to
+`#866d28` (gold/role/action), `#207e52` (active), `#657085` (inactive), reusing the exact values
+already established elsewhere in the app for these same brand colors.
+
+**"System" role badge was plain gold text on white (P1)**: `RoleManagementPage.tsx` — not even a
+tinted pill, computed contrast ≈2.37:1. Same darkened value, `#866d28`.
+
+**~13 form fields lacked label association (P1)**: all 11 fields in the Create/Edit User form plus
+the 2 fields in the Reset Password modal (`UserManagementPage.tsx`), and the name/description fields
+in the Create/Edit Role form (`RoleManagementPage.tsx`) — `<label>`s with no `htmlFor`, inputs with
+no `id`. Added `useId()`-generated pairs to all of them (the Role form's permission-matrix checkboxes
+were already correctly `<label>`-wrapped, no change needed there).
+
+**P2s**: row-action buttons relying on `title` alone gained item-specific `aria-label`s across both
+`UserManagementPage.tsx` (edit/reset-password/suspend-activate/delete) and `RoleManagementPage.tsx`
+(edit/view, delete); `AuditLogPage.tsx`'s inline loading indicator gained `role="status"
+aria-live="polite"`.
+
+**Files changed**: `src/pages/admin/{UserManagementPage,RoleManagementPage,AuditLogPage}.tsx`.
+
+**Verification**: `npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing),
+plus a live click-through via `vercel dev`: computed pill colors read directly from the DOM across
+all three pages (`rgb(134, 109, 40)` = `#866d28`, `rgb(32, 126, 82)` = `#207e52`), the Reset Password
+modal's `role="dialog"`/`aria-modal` and Escape-to-close confirmed, and all form-field label
+associations (User create form, Reset Password modal, Role create form) confirmed matched via
+`document.getElementById`.
+
+---
+
+## 2026-07-30 (absolute latest) — Quotation Template Management accessibility hardening pass
+
+An `/impeccable audit` of the complete Template Management workflow (`TemplateManagementPage.tsx` +
+`TemplateEditorView.tsx` — list, search/filters, create/edit, section/item editors, product selector,
+custom items, sub-details, reorder controls, activation states, dialogs) found this was the one
+module in the app never touched by any of this session's earlier accessibility passes — the "before"
+state every other module (Products, Customers, Quotation, Scope of Work, Delivery Order) started
+from. This pass fixed every P1/P2 finding, UI-files only — template data, Excel-imported content,
+Job Type mappings, versioning, quotation-snapshot independence, APIs, MongoDB schemas, RBAC, and
+business logic are all untouched.
+
+**Zero dialog semantics on Preview + Duplicate modals (P1)**: both were hand-rolled `fixed inset-0`
+divs — no `role="dialog"`, no focus trap, no Escape-to-close. Split into wrapper+form components
+(`TemplatePreviewModal`/`TemplateDuplicateModal`) so `useDialogA11y` only runs while open, matching
+`ProductPickerModal.tsx`'s established pattern. The Preview modal's title now also names the template
+being previewed ("Preview: {name}").
+
+**Hover-only row actions (P1)**: the list's row-action buttons were `opacity-0 group-hover:opacity-100`
+— DESIGN.md is explicit that this hides actions from touch devices and keyboard users entirely. Fixed
+to `opacity-50 group-hover:opacity-100 group-focus-within:opacity-100`, the same fix already applied
+to `ProductList.tsx` earlier this session.
+
+**At least 9 icon-only buttons in the editor had zero accessible name at all (P1)**: section
+move-up/move-down/delete, item-row move/duplicate/delete, delete-term, and remove-sub-detail buttons
+carried no `title` or `aria-label` whatsoever — worse than the "title-only" gap already fixed
+elsewhere. Added labels to all of them, reusing existing generic i18n keys
+(`quotation.lineItems.moveUp/moveDown`, `common.delete`, `templates.action.duplicate`) instead of
+minting duplicates.
+
+**Every field in the editor's template-info/settings panels lacked label association (P1)**:
+template code, name, description, job type, version, and internal notes all had a `<label>` with no
+`htmlFor` and an input/select/textarea with no `id`. Added `useId()`-generated pairs to all 6,
+matching `ScopeOfWorkDocument.tsx`'s established pattern.
+
+**P2s**: row-action buttons relying on `title` alone gained item-specific `aria-label`s (e.g. "Edit
+Bag Filter"); the remove-sub-detail button was also hover-only, fixed the same way as the list's row
+actions; loading states gained `role="status" aria-live="polite"`, load/save errors gained
+`role="alert"`.
+
+**Files changed**: `src/pages/templates/{TemplateManagementPage,TemplateEditorView}.tsx`.
+
+**Verification**: `npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing),
+plus a live click-through via `vercel dev`: both modals' `role="dialog"`/`aria-modal="true"` confirmed
+via DOM inspection, Escape-to-close confirmed via a dispatched keydown event on both, all 6 editor
+fields' `htmlFor`/`id` pairs confirmed matched via `document.getElementById`, and a full-page scan
+(111 icon-only buttons checked, including sidebar/topbar chrome) confirmed zero remaining buttons
+with a missing accessible name.
+
+---
+
+## 2026-07-30 (absolute latest) — Scope of Work full-workflow re-audit + accessibility fix pass
+
+A follow-up `/impeccable audit` of the *complete* Scope of Work workflow (list, quotation-selection
+entry point, create/edit, document info, checklist groups, item sections, manually-added items,
+notes, signatures, validation, approval actions, responsive/loading/empty/error states — explicitly
+excluding print/PDF) found that the earlier same-day `ScopeOfWorkDocument.tsx` hardening pass hadn't
+reached two other files in the same workflow. This pass fixed every P0/P1/P2 finding, UI-files only —
+quotation/customer snapshot data, Job Code generation, checklist business rules, required-field
+validation, the approval workflow, APIs, MongoDB data, RBAC, and business logic are all untouched.
+
+**Loading/error dead end (P0)**: `ScopeOfWorkDocument.tsx`'s loading and error branches had no way
+back at all — no toolbar, no breadcrumb, nothing but a retry button on error and nothing while
+loading. Fixed with the same sticky back-button toolbar already proven on `DeliveryOrderDocument.tsx`
+earlier the same day.
+
+**Status-pill contrast + keyboard-inaccessible rows (P1)**: `ScopeOfWorkList.tsx` — untouched by the
+first pass, which only reached the document view — still had the exact pre-2026-07-29 one-hex
+contrast formula and `<tr onClick>` rows with no keyboard support. Fixed identically to
+`DeliveryOrderList.tsx`'s own fix: darkened text (`#576f94`/`#a75d1a`/`#207e52`), `tabIndex`/
+`role="button"`/`onKeyDown`/`aria-label` on every row.
+
+**P2s**: `ScopeOfWorkPage.tsx`'s loading/error states gained `role="status" aria-live="polite"` /
+`role="alert"`; the shared `ValidationSummary` component (the blocked-action mechanism used across
+Quotation/Scope of Work/Delivery Order) gained `role="alert"` so it's actually announced when it
+appears; the "ยังไม่มี PO" list badge was undersized (`text-[10px]`) against the documented Status
+Pill spec (`text-xs`) and its own sibling pills — bumped to match; and — a larger scope than the
+Delivery Order pass, which only translated its list — the *entire* Scope of Work list and document
+was hardcoded Thai-only. Added ~90 new `scopeOfWork.*`/`scopeOfWorkDoc.*` i18n keys (list page chrome
+plus the document's toolbar, header fields, checklist/payment/revision/remarks/signature section
+headings, all 5 `ConfirmDialog`s, both `PromptDialog`s). Deliberately left untranslated: the 3
+status-label literals, toast/notification messages, checklist group content (config data, preserved
+per the explicit "checkbox business rules" constraint), and the field-level validation error strings
+(`scopeOfWorkValidation.ts` — shared client/server business logic, not page chrome).
+
+**Files changed**: `src/pages/scopeOfWork/{ScopeOfWorkList,ScopeOfWorkPage}.tsx`,
+`src/pages/quotation/ScopeOfWorkDocument.tsx`, `src/components/ValidationSummary.tsx`,
+`src/lib/i18n.tsx`.
+
+**Verification**: `npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing),
+plus a live click-through via `vercel dev`: computed pill colors read directly from the DOM
+(`rgb(87, 111, 148)` = `#576f94`, `rgb(167, 93, 26)` = `#a75d1a`), row `tabIndex`/`role`/`aria-label`
+confirmed, the previously-dead-end loading state confirmed now showing a working back button, a
+delete `ConfirmDialog` opened/read/cancelled cleanly, and full Thai↔English toggling confirmed
+correct across both the list and the full document view (including checklist labels and the
+validation summary's field-level messages correctly staying in Thai, matching their documented
+scope exclusion).
+
+---
+
+## 2026-07-30 (absolute latest) — Delivery Order standalone list/page module accessibility hardening pass
+
+An `/impeccable audit` of `src/pages/deliveryOrder/` (the standalone Delivery Order list/page
+module, distinct from `DeliveryOrderDocument.tsx`, which was already hardened in the 2026-07-30
+Quotation/Scope of Work/Delivery Order pass below) found and this pass fixed every P1/P2 finding.
+UI files only — no API/schema/RBAC/validation/business-logic changes; one-Delivery-Note-per-
+milestone printing, deposit exclusion, selected-item isolation, and milestone-specific validation
+are all untouched.
+
+**Status-pill contrast (P1)**: `DeliveryOrderList.tsx` still carried the pre-2026-07-29 one-hex
+formula (Draft 4.32:1, PendingApproval 2.44:1, Final 2.89:1 — all fail 4.5:1 AA). Now uses the
+same darkened-text formula already established elsewhere (`#576f94`/`#a75d1a`/`#207e52`).
+
+**List rows not keyboard-operable at all (P1)**: `<tr onClick>` had no `tabIndex`, role, or
+keyboard handler. Added `tabIndex={0}`, `role="button"`, `onKeyDown` (Enter/Space triggers the
+same `onOpen`), and an `aria-label` naming the row's job code, plus a visible focus ring.
+
+**P2s**: `DeliveryOrderPage.tsx`'s loading skeleton (4 pulsing divs) had zero text/ARIA signal —
+added `role="status" aria-live="polite"` plus an `sr-only` loading label; the entire module was
+hardcoded Thai-only despite the app's live language toggle (only tour text used `t()`) — added
+~15 `deliveryOrder.*` i18n keys (page title/subtitle, search placeholder, empty states, column
+headers, loading/error/retry) and wired them via `t()`, reusing the existing `quotation.filterAll`
+key for the "all" labels instead of duplicating it. The three status-label literals
+("Draft"/"รออนุมัติ"/"Final") were deliberately left untranslated, matching
+`DeliveryOrderDocument.tsx`'s own established, unflagged convention.
+
+**Out of scope, tracked for later**: filter pills missing `aria-pressed` (P3, not requested).
+
+**Files changed**: `src/pages/deliveryOrder/{DeliveryOrderList,DeliveryOrderPage}.tsx`,
+`src/lib/i18n.tsx`.
+
+**Verification**: `npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing),
+plus a live click-through via `vercel dev`: status-pill computed text color confirmed
+`rgb(87, 111, 148)` (`#576f94`) in the browser console, row `tabIndex`/`role`/`aria-label`
+confirmed, Enter-key activation confirmed opening the detail view, the loading skeleton's
+`role="status"` confirmed present mid-load, and full-page English rendering confirmed via the
+Settings language toggle (page title, subtitle, search placeholder, filter pills, and all 5
+column headers).
+
+---
+
+## 2026-07-30 (absolute latest) — Products module accessibility hardening pass
+
+An `/impeccable audit` of the Products module (list, search/filters/sort/pagination, categories,
+create/edit, the `ProductPickerModal` selector Quotation's `LineItemsEditor.tsx` uses) found and this
+pass fixed every P1/P2 finding. UI files only — no API/schema/RBAC/validation/business-logic changes,
+SKU/code behavior untouched.
+
+**Status-pill contrast reintroduced a fourth time (P1)**: `CategoriesManager.tsx` hand-rolled its own
+status pill instead of using the shared `StatusBadge` component, carrying the exact pre-2026-07-29
+raw-hex formula (Active 2.89:1, Archived 4.32:1 — both fail AA). Replaced with `<StatusBadge>`
+directly — fixes the contrast and the duplication in one move. `ProductList.tsx` already used
+`StatusBadge` correctly and needed no change.
+
+**`ProductPickerModal` had zero dialog semantics (P1)**: no `role="dialog"`, no Escape-to-close, no
+focus trap, styled `<p>` title. This is the modal opened every time a Quotation line item is picked
+from the catalog. Split into a wrapper + form component (mirroring `PromptDialog.tsx`'s pattern) so
+`useDialogA11y` only runs while the modal is actually open — deliberately *not* replicating the
+still-open `ConfirmDialog` gap (see the 2026-07-30 Quotation re-audit) where the hook runs even while
+closed.
+
+**Zero `htmlFor`/`id` label association across `ProductForm`'s 7 fields (P1)**: fixed; verified via
+`element.labels` in the live DOM (not just visual review) that every field now has a real associated
+label.
+
+**`ProductForm`'s Save button had no busy-guard at all (P1)**: unlike every other form/dialog in the
+app, there wasn't even a `saving` state — a double-click during a slow request could fire two
+concurrent `createProduct`/`updateProduct` calls. Added, mirroring `CustomerFormModal`'s pattern.
+
+**P2s**: `ProductList.tsx`'s row actions were `opacity-0`-hover-only — fixed to `opacity-50`/
+`group-focus-within`; its sortable column headers were `<th onClick>` with no keyboard support at
+all — converted to real `<button>`s inside each `<th>` (plus `aria-sort` on the `<th>` itself) —
+verified live that clicking still sorts correctly; row-action buttons in `ProductList.tsx` and
+`CategoriesManager.tsx` relied on generic `title` only — added item-specific `aria-label`s (e.g.
+"แก้ไข {product name}"), verified via the live accessibility tree; `CategoriesManager`'s "add new
+category" section title promoted from `<p>` to `<h2>` (also gained a proper `aria-labelledby` on its
+input, a small bonus beyond the original finding); `ProductForm`'s two field-pair grids changed from
+`grid sm:grid-cols-2` to the canonical `grid-cols-1 sm:grid-cols-2` (functionally equivalent already,
+tidied for consistency with the documented pattern — a minor aside, not one of the audit's findings).
+
+**Files changed**: `src/pages/products/{CategoriesManager,ProductPickerModal,ProductForm,
+ProductList}.tsx`.
+
+**Verification**: `npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing),
+plus a live click-through via `vercel dev`: status-pill color, the categories heading's accessible
+role, `ProductForm`'s label association confirmed with `element.labels` in the browser console,
+sortable-header buttons confirmed keyboard-focusable and still functionally correct, row-action
+`aria-label`s confirmed via the live accessibility tree, and `ProductPickerModal` confirmed opening
+with proper dialog semantics and closing cleanly on Escape from within an actual Quotation.
+
+---
+
+## 2026-07-30 — Customers module accessibility hardening pass
+
+An `/impeccable audit` of the Customers module (list, search/filters, create/edit, status/archive
+actions, and the `CustomerSelector` Quotations use) found and this pass fixed every P1/P2 finding.
+UI files only — no API/schema/RBAC/validation/business-logic changes.
+
+**Status-pill contrast (P1)**: `src/components/StatusBadge.tsx` — used for every customer's active/
+inactive/archived pill — still carried the pre-2026-07-29 one-hex formula (`bg`/`text`/`border` all
+the same raw hex). Computed contrast before the fix: Active `#2aa36b` → 2.89:1, Inactive `#e08a3c` →
+2.44:1, Archived `#5a7299` → 4.32:1 — all fail the 4.5:1 AA text minimum. Now uses the same
+darkened-text-variant formula already established on `src/lib/quotes.tsx` (and reuses the identical
+hex values for the two brand colors shared with the Quotation workflow's own statuses).
+
+**Missing dialog semantics + zero label association (P1)**: `CustomerFormModal` (the create/edit form
+— every customer in the system goes through it) was a hand-rolled `fixed inset-0` div with no
+`role="dialog"`/`aria-modal`/Escape-to-close/focus-trap, a styled `<p>` title instead of a heading,
+and none of its 9 fields had `id`/`htmlFor` label association. Now wired to the shared
+`useDialogA11y` hook (same as `ConfirmDialog`/`PromptDialog`) and every field has a real `id`/
+`htmlFor` pair — verified live: the accessibility tree now reports each field by its correct name
+(previously unlabeled), and Escape correctly closes the dialog and returns focus to the triggering
+row's Edit button.
+
+**P2s**: the list's row actions (edit/deactivate/archive) were `opacity-0 group-hover:opacity-100` —
+invisible to keyboard/touch users — now `opacity-50` at rest, full opacity on hover *or*
+`group-focus-within` (verified live: tabbing to the row's Edit button now shows it, focus-ringed, at
+full opacity). `CustomerFormModal`'s two field-pair rows (contact name/phone, delivery method/
+project) used a bare `grid-cols-2` instead of the documented `grid-cols-1 sm:grid-cols-2` — fixed.
+
+**Files changed**: `src/pages/customers/CustomersPage.tsx`, `src/components/StatusBadge.tsx`.
+
+**Verification**: `npm run lint` (0 errors), `npm run build` (clean), `npm test` (56/56 passing), plus
+a live click-through in the browser (via `vercel dev`) confirming the status-pill color change, the
+modal's Escape-to-close, and the accessibility-tree field names.
+
+---
+
+## 2026-07-30 — Quotation/Scope of Work/Delivery Order accessibility + correctness hardening pass
+
+Two `/impeccable audit` passes (first scoped to the Quotation editor screens, then expanded to the
+full Quotation → Scope of Work → Delivery Order document chain, excluding print/PDF layouts by
+request) found and this pass fixed every P1/P2 finding. No business logic, calculations, RBAC,
+validation rules, approval workflow, numbering, or API/MongoDB schemas were touched — UI files only.
+
+**Status-pill contrast (P1)**: `ScopeOfWorkDocument.tsx` and `DeliveryOrderDocument.tsx` each hardcoded
+the same one-hex-for-everything tinted-pill formula `src/lib/quotes.tsx`'s `statusStyle` had already
+been fixed away from on 2026-07-29 — both now use the same darkened-text-variant formula (see
+`DESIGN.md`'s Tinted Pill Rule, updated to match). Quotation's own statuses were already correct;
+this closes the two places the older, unfixed pattern still lived.
+
+**Zero `htmlFor`/`id` label association (P1)**: every field across `QuoteDocument.tsx`'s Customer
+Info/Document Details panels, `ScopeOfWorkDocument.tsx`'s equivalent panels + payment section, and
+`DeliveryOrderDocument.tsx`'s installment editor now has a real `id`↔`htmlFor` (or `aria-labelledby`
+for section-captioned textareas) pair. `RequiredFieldLabel`/`CustomerSelector` gained `htmlFor`/
+`inputId` props to support this.
+
+**Double-submit risk on Save/Confirm (P1)**: `QuoteDocument.tsx`'s Save button and the shared
+`ConfirmDialog`/`PromptDialog` components had no busy-guard, so a double-click during a slow request
+could fire the same (sometimes irreversible — finalize, delete) action twice. Both shared dialogs
+gained a `busy` prop; every Confirm/Prompt dialog across all three documents now wires it to an
+in-flight flag.
+
+**Drag-only reordering (P1)**: `LineItemsEditor.tsx`'s sub-detail pins and `ScopeOfWorkItemsEditor.tsx`'s
+whole item rows were reorderable only via native HTML5 drag events, with no keyboard path. Both now
+have up/down icon buttons alongside the existing drag handle.
+
+**Missing dialog semantics (P1)**: `ConfirmDialog`/`PromptDialog` were plain unlabeled `<div>`s — no
+`role="dialog"`, no `aria-modal`, no Escape-to-close, no focus trap. New shared `src/hooks/useDialogA11y.ts`
+adds all four; `QuoteDocument.tsx`'s bespoke workflow-action modal (not a good fit for `PromptDialog`'s
+shape — dynamic required/optional label, danger-vs-gold Confirm color) was extracted into its own
+`WorkflowActionDialog` component so it could get the identical treatment without risking the approval
+workflow's behavior.
+
+**P2s**: the 9 `opacity-0 group-hover:opacity-100` icon actions in `LineItemsEditor.tsx`/
+`ScopeOfWorkItemsEditor.tsx` (a direct violation of the 2026-07-29-documented `opacity-50`/
+`focus-visible` rule) fixed, plus several bare icon buttons that had no `aria-label`/`title` at all;
+every card/section title across the three documents promoted from a styled `<p>` to a real
+`<h1>`/`<h2>` (screen-reader heading navigation was previously broken on every one of these screens);
+`Toast.tsx` gained `role="status" aria-live="polite"`; `QuoteDocument.tsx`'s Save now awaits the
+request before showing its success toast (previously optimistic — "Saved!" could appear moments
+before an error); `QuotationPage.tsx` now shows an explicit "quote not found / no access" state
+(reusing `EmptyState`) instead of silently rendering a blank editable form when a deep-linked quote
+isn't in the caller's loaded list (reachable today only via a custom role missing `viewAll`);
+`QuoteDocument.tsx`'s Scope-of-Work-number modal, previously a hand-rolled duplicate, now uses
+`PromptDialog` directly; `DeliveryOrderDocument.tsx`'s loading/error states keep a minimal
+toolbar/back button visible instead of a bare full-page block, and its initial-fetch failure now
+surfaces the server's actual error message instead of one hardcoded string; `ScopeOfWorkItemsEditor.tsx`'s
+zero-items state now uses the shared `EmptyState` component; the unsaved-changes `beforeunload` guard
+in `QuoteDocument.tsx` no longer re-serializes the entire draft via `JSON.stringify` on every
+keystroke — it now reads the latest draft lazily through a ref, only at actual unload time;
+`InterestButtons.tsx` gained `aria-pressed`; `CustomerSelector.tsx`'s search dropdown gained
+ARIA combobox/listbox semantics and Escape-to-close.
+
+**Deferred, not fixed**: the audit's "no URL routing below the module level" finding (refresh/Back
+don't preserve which quote/wizard/Scope-of-Work is open) was explicitly flagged as needing a product
+decision, not a mechanical fix — it's an app-wide architectural pattern (see `App.tsx`'s hash-only
+top-level nav), not unique to Quotation, and out of scope for a UI-files-only fix pass.
+
+**Files changed**: `src/pages/quotation/{QuoteDocument,QuotationPage,LineItemsEditor,
+ScopeOfWorkDocument,ScopeOfWorkItemsEditor,DeliveryOrderDocument,CustomerSelector,
+DocumentRecipientsPicker,InterestButtons}.tsx`, `src/components/{ConfirmDialog,PromptDialog,
+RequiredFieldLabel,Toast}.tsx`, `src/hooks/useDialogA11y.ts` (new), `src/lib/i18n.tsx` (new
+translation keys), `DESIGN.md`, `docs/UI_GUIDELINES.md`.
+
+**Verification**: `npm run lint` (0 errors), `npm run build` (`tsc -b` + API typecheck + `vite build`,
+clean), `npm test` (56/56 passing) — all run after the fixes.
+
+---
+
+## 2026-07-29 — Impeccable design-system setup + Dashboard accessibility/responsive hardening pass
 
 Ran the `/impeccable` skill end-to-end for the first time on this project: `init` wrote a new
 `PRODUCT.md` (users, positioning, durable constraints — incl. the new "Permanent UI and Impeccable

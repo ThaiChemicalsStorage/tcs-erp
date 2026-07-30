@@ -42,6 +42,18 @@ The `audit_log` MongoDB collection — see [DATABASE.md](../DATABASE.md) for the
 - Read-only, searchable table view, self-fetched on mount (`useEffect`) since the route is permission-gated
 - Records actor, their role **at the time of the action** (not looked up live, so it stays accurate even if the user's role later changes)
 
+## Accessibility Hardening (2026-07-30)
+
+An `/impeccable audit` of the Admin module found and fixed: the action pill (`Login`/`User
+Created`/etc.) reused raw gold (`text-[#c9a84c]`) as text on its own `/10` tint, the same contrast
+bug already fixed on every other status pill this session — darkened to `#866d28`; the loading
+indicator (shown inline in the empty-table row while `fetchAuditLog()` is in flight) had no
+`role="status"`/`aria-live`, so a screen reader wasn't notified when the table populated — added
+`role="status" aria-live="polite"`, applied only while `loading` is true. See
+[UserManagement.md](./UserManagement.md) for the fuller writeup of this pass (same audit, same
+session). No API/schema/audit-log-integrity changes — entries remain append-only and
+server-authoritative exactly as before. See CHANGELOG.md 2026-07-30.
+
 ## Future Improvements
 
 - Filter by module/action/date-range, not just free-text search

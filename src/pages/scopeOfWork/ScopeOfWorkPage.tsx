@@ -5,6 +5,7 @@ import { ScopeOfWorkList } from "./ScopeOfWorkList";
 import { ScopeOfWorkDocument } from "../quotation/ScopeOfWorkDocument";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
+import { useI18n } from "../../lib/i18n";
 
 /**
  * Standalone Scope of Work management page (added 2026-07-22, per direct user request) — a
@@ -51,6 +52,7 @@ export function ScopeOfWorkPage({
   initialScopeOfWorkId?: string | null;
   onScopeOfWorkIdConsumed?: () => void;
 }) {
+  const { t } = useI18n();
   const [view, setView] = useState<"list" | "detail">("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scopeOfWorks, setScopeOfWorks] = useState<ScopeOfWorkListItem[]>([]);
@@ -119,7 +121,7 @@ export function ScopeOfWorkPage({
           canCreateDeliveryOrder={canCreateDeliveryOrder}
           onOpenDeliveryOrder={onOpenDeliveryOrder}
           onBack={backToList}
-          backLabel="กลับไปรายการ Scope of Work"
+          backLabel={t("scopeOfWorkDoc.backToList")}
           onDuplicated={(newId) => setSelectedId(newId)}
           onRewritten={(newId) => setSelectedId(newId)}
           showToast={toast.show}
@@ -131,10 +133,11 @@ export function ScopeOfWorkPage({
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="flex-1 flex items-center justify-center p-6" role="status" aria-live="polite">
         <div className="space-y-3 w-full max-w-3xl">
+          <span className="sr-only">{t("scopeOfWork.loading")}</span>
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />
+            <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" aria-hidden="true" />
           ))}
         </div>
       </div>
@@ -143,13 +146,13 @@ export function ScopeOfWorkPage({
 
   if (loadError) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-sm text-muted-foreground">ไม่สามารถโหลดข้อมูล Scope of Work ได้</p>
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
+        <p className="text-sm text-muted-foreground">{t("scopeOfWork.loadError")}</p>
         <button
           onClick={loadList}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
         >
-          ลองใหม่
+          {t("scopeOfWork.retry")}
         </button>
       </div>
     );

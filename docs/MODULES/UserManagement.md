@@ -44,6 +44,25 @@ Reuses `ConfirmDialog`/`Toast`/`useToast` from `src/components/`/`src/hooks/`.
 - Last-Super-Admin protection (can't delete the only remaining Super Admin)
 - Every action audit-logged
 
+## Accessibility Hardening (2026-07-30)
+
+An `/impeccable audit` of the Admin module (User Management, Role Management, Audit Log) found this
+had never been touched by any earlier accessibility pass this session — it read like the "before"
+state every other module started from. Found and fixed here: the Reset Password modal was a
+hand-rolled `fixed inset-0` div with zero dialog semantics — split into a wrapper+form component
+(`ResetPasswordModal`) so `useDialogA11y` only runs while open, matching `ProductPickerModal.tsx`'s
+established pattern; all 11 fields across the Create/Edit User form plus the 2 fields in the
+Reset Password modal had `<label>`s with no `htmlFor` and inputs with no `id` — added
+`useId()`-generated pairs to all 13; the role and active/inactive status pills reused the raw brand
+hex as text on their own tint (`text-[#c9a84c]`/`text-[#2aa36b]`/`text-[#8a94a6]`) — the same
+contrast bug already fixed elsewhere this session, darkened to `#866d28`/`#207e52`/`#657085`; and
+row-action buttons relied on `title` alone — added item-specific `aria-label`s (e.g. "Edit Admin
+Admin"). See [RoleManagement.md](./RoleManagement.md) and [AuditLog.md](./AuditLog.md) for the fixes
+in those two files from the same pass. Verified live via `vercel dev`: computed pill colors, modal
+dialog semantics + Escape-to-close, and all form-field label associations confirmed via
+`document.getElementById`. `lint`/`build`/`test` (56/56) all pass clean — no RBAC, authentication,
+or business-logic changes. See CHANGELOG.md 2026-07-30.
+
 ## Future Improvements
 
 - Bulk actions (bulk deactivate, bulk role reassignment)

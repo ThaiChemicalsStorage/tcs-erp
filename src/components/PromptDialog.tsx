@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useId, useState } from "react";
+import { useDialogA11y } from "../hooks/useDialogA11y";
 
 /**
  * Styled replacement for `window.prompt()` (added 2026-07-29, UX pass) — the native prompt broke
@@ -18,6 +19,11 @@ export interface PromptDialogProps {
   cancelLabel?: string;
   /** When set, a blank submission shows this error instead of calling onConfirm. */
   requiredMessage?: string;
+  /** Server/async error from a failed `onConfirm` (e.g. a 409 uniqueness conflict) — shown below
+   * the input instead of/alongside the blank-required error, without closing the dialog or losing
+   * what the user typed. The caller owns clearing it (typically: reset to "" each time the dialog
+   * is reopened). */
+  error?: string;
   /** Textarea instead of a single-line input — for reasons/comments rather than codes. */
   multiline?: boolean;
   /** Monospace input — for document numbers/codes. */
@@ -36,24 +42,28 @@ export function PromptDialog(props: PromptDialogProps) {
 
 function PromptDialogForm({
   title, message, label, placeholder, confirmLabel, cancelLabel = "ยกเลิก",
-  requiredMessage, multiline = false, mono = false, busy = false, onConfirm, onCancel,
+  requiredMessage, error: externalError, multiline = false, mono = false, busy = false, onConfirm, onCancel,
 }: PromptDialogProps) {
   const [value, setValue] = useState("");
-  const [error, setError] = useState("");
+  const [blankError, setBlankError] = useState("");
+  const panelRef = useDialogA11y(onCancel);
+  const titleId = useId();
 
   const submit = () => {
+    if (busy) return;
     const trimmed = value.trim();
-    if (!trimmed && requiredMessage) { setError(requiredMessage); return; }
+    if (!trimmed && requiredMessage) { setBlankError(requiredMessage); return; }
     onConfirm(trimmed);
   };
 
+  const displayError = externalError || blankError;
   const inputClass = `w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors ${mono ? "font-mono" : ""}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
-      <div className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
-        <p className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</p>
+      <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5">
+        <h2 id={titleId} className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</h2>
         {message && <p className="text-xs text-muted-foreground mb-4 leading-relaxed">{message}</p>}
         <label className="text-xs text-muted-foreground block mb-1.5">{label} {requiredMessage && <span className="text-[#e05252]">*</span>}</label>
         {multiline ? (
@@ -62,7 +72,7 @@ function PromptDialogForm({
             rows={3}
             className={`${inputClass} resize-none leading-relaxed`}
             value={value}
-            onChange={(e) => { setValue(e.target.value); setError(""); }}
+            onChange={(e) => { setValue(e.target.value); setBlankError(""); }}
             placeholder={placeholder}
           />
         ) : (
@@ -70,14 +80,14 @@ function PromptDialogForm({
             autoFocus
             className={inputClass}
             value={value}
-            onChange={(e) => { setValue(e.target.value); setError(""); }}
+            onChange={(e) => { setValue(e.target.value); setBlankError(""); }}
             onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
             placeholder={placeholder}
           />
         )}
-        {error && <p className="text-xs text-[#e05252] mt-1.5">{error}</p>}
+        {displayError && <p className="text-xs text-[#e05252] mt-1.5">{displayError}</p>}
         <div className="flex items-center justify-end gap-2 mt-4">
-          <button onClick={onCancel} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{cancelLabel}</button>
+          <button onClick={onCancel} disabled={busy} className="px-3.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60">{cancelLabel}</button>
           <button
             onClick={submit}
             disabled={busy}

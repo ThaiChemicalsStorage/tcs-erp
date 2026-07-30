@@ -11,13 +11,17 @@ export function RequiredFieldLabel({
   children,
   required = true,
   className = "text-xs text-muted-foreground block mb-1",
+  htmlFor,
 }: {
   children: ReactNode;
   required?: boolean;
   className?: string;
+  /** Pairs this label with its field's `id` so screen readers announce the field's name — pass the
+   * same string as the input/select/textarea's own `id` prop. */
+  htmlFor?: string;
 }) {
   return (
-    <label className={className}>
+    <label htmlFor={htmlFor} className={className}>
       {children} {required && <span className="text-[#e05252]">*</span>}
     </label>
   );

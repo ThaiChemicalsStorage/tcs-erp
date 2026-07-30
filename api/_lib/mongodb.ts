@@ -1,6 +1,15 @@
+import { setServers } from "node:dns";
 import { MongoClient, type Db } from "mongodb";
 
 const dbName = process.env.MONGODB_DB || "tcs_erp";
+
+// Local `vercel dev` only (`VERCEL_ENV` is always set on an actual Vercel deployment, never here)
+// — some local networks/firewalls/antivirus block Node's own DNS SRV lookups (`querySrv
+// ECONNREFUSED`) for the `mongodb+srv://` connection string even though the OS resolver (and every
+// other DNS lookup) works fine. Explicit public resolvers sidestep it; never applies in production.
+if (!process.env.VERCEL_ENV) {
+  setServers(["8.8.8.8", "1.1.1.1"]);
+}
 
 /**
  * One client per warm serverless instance, reused across invocations on that instance

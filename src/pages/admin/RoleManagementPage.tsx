@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Plus, Pencil, Trash2, Lock, ShieldCheck, HelpCircle } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -54,6 +54,8 @@ export function RoleManagementPage({
   const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
   const { message, show } = useToast();
+  const nameId = useId();
+  const descriptionId = useId();
 
   const editingRole = roles.find((r) => r.key === editingKey);
 
@@ -139,12 +141,12 @@ export function RoleManagementPage({
           <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-5 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs font-medium text-foreground block mb-1.5">{t("roles.nameLabel")}</label>
-                <input disabled={nameLocked} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                <label htmlFor={nameId} className="text-xs font-medium text-foreground block mb-1.5">{t("roles.nameLabel")}</label>
+                <input id={nameId} disabled={nameLocked} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
               </div>
               <div>
-                <label className="text-xs font-medium text-foreground block mb-1.5">{t("roles.descriptionLabel")}</label>
-                <input disabled={readOnly} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+                <label htmlFor={descriptionId} className="text-xs font-medium text-foreground block mb-1.5">{t("roles.descriptionLabel")}</label>
+                <input id={descriptionId} disabled={readOnly} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
               </div>
             </div>
 
@@ -224,11 +226,12 @@ export function RoleManagementPage({
                 <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{r.name}</p>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => startEdit(r)} title={r.isSuperAdmin ? t("roles.viewDetails") : t("common.edit")} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><Pencil size={13} /></button>
+                <button onClick={() => startEdit(r)} title={r.isSuperAdmin ? t("roles.viewDetails") : t("common.edit")} aria-label={`${r.isSuperAdmin ? t("roles.viewDetails") : t("common.edit")} ${r.name}`} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"><Pencil size={13} /></button>
                 <button
                   onClick={() => setDeleteTarget(r)}
                   disabled={r.isSystem || usersWithRole(r.key) > 0}
                   title={r.isSystem ? t("roles.deleteSystemTitle") : usersWithRole(r.key) > 0 ? t("roles.deleteInUseTitle") : t("roles.deleteAction")}
+                  aria-label={`${r.isSystem ? t("roles.deleteSystemTitle") : usersWithRole(r.key) > 0 ? t("roles.deleteInUseTitle") : t("roles.deleteAction")} ${r.name}`}
                   className="p-1.5 text-muted-foreground hover:text-[#e05252] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <Trash2 size={13} />
@@ -240,7 +243,7 @@ export function RoleManagementPage({
               <span>{r.isSuperAdmin ? t("roles.allPermissions") : t("roles.permissionCount").replace("{n}", String(r.permissions.length))}</span>
               <span>·</span>
               <span>{t("roles.userCount").replace("{n}", String(usersWithRole(r.key)))}</span>
-              {r.isSystem && <span className="flex items-center gap-1 text-[#c9a84c]"><Lock size={10} /> {t("roles.systemBadge")}</span>}
+              {r.isSystem && <span className="flex items-center gap-1 text-[#866d28]"><Lock size={10} /> {t("roles.systemBadge")}</span>}
             </div>
           </div>
         ))}

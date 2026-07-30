@@ -268,6 +268,41 @@ lifetime — harmless, nothing reads it. See CHANGELOG.md 2026-07-24.
   same standing sandboxed-session limitation as every other pass this session (Playwright MCP
   disconnected, no live MongoDB credentials). See [TODO.md](../TODO.md).
 
+## Accessibility Hardening (2026-07-30)
+
+An `/impeccable audit` pass + fix found this document had inherited the pre-2026-07-29 status-pill
+formula (same fix as Scope of Work, see [ScopeOfWork.md](./ScopeOfWork.md)). Also fixed: the
+installment editor's fields now have real `htmlFor`/`id` label associations (ids namespaced per
+installment since the component renders once per row); the 5 workflow `ConfirmDialog`s now guard
+against a double-click firing the same action twice; the loading and load-error states now keep a
+minimal toolbar/back button visible instead of a bare full-page block, and the load-error message is
+now the server's actual error instead of one hardcoded string regardless of cause. See
+CHANGELOG.md 2026-07-30 for the full list (this pass also touched Quotation and Scope of Work).
+
+## Accessibility Hardening, standalone list/page module (2026-07-30, second pass)
+
+A second `/impeccable audit` pass targeted at `src/pages/deliveryOrder/` specifically (the
+standalone list/page module, distinct from `DeliveryOrderDocument.tsx` above) found and fixed:
+`DeliveryOrderList.tsx`'s status pills reused the raw un-darkened brand hex as text color (same
+class of bug as the other modules' pre-2026-07-29 formula, just not yet caught here since the
+detector can't see this semantic contrast issue on its own) — now uses the same darkened
+`#576f94`/`#a75d1a`/`#207e52` triplet; table rows (`<tr onClick>`) were not keyboard-operable at
+all — added `tabIndex={0}`, `role="button"`, `onKeyDown` (Enter/Space), and an `aria-label`
+naming the row's job code; `DeliveryOrderPage.tsx`'s loading skeleton (4 pulsing divs) had zero
+text/ARIA signal — added `role="status" aria-live="polite"` plus an `sr-only` loading label; the
+entire module was hardcoded Thai-only despite the app's live language toggle — added ~15
+`deliveryOrder.*` i18n keys (page title/subtitle, search placeholder, empty states, column
+headers, loading/error/retry) and wired them via `t()`, reusing the existing `quotation.filterAll`
+key for the "all" labels rather than duplicating it. The three status-label literals
+("Draft"/"รออนุมัติ"/"Final") were deliberately left untranslated, matching
+`DeliveryOrderDocument.tsx`'s own established, unflagged convention — translating the list but not
+its own detail view would have been a new inconsistency, not a fix. Out of scope, tracked for a
+future pass: filter pills missing `aria-pressed` (P3, not requested this pass). `tsc`/`lint`/
+`build`/`test` (56 tests) all pass clean; verified live via `vercel dev` — status-pill computed
+text color (`rgb(87, 111, 148)` = `#576f94`), row `tabIndex`/`role`/`aria-label`, Enter-key
+activation opening the detail view, the loading skeleton's `role="status"`, and full-page English
+rendering via the Settings language toggle. See CHANGELOG.md 2026-07-30.
+
 ## Guided Tour (2026-07-29)
 
 `DeliveryOrderDocument.tsx` has a 2-step driver.js tour (tourKey `deliveryOrderDoc` via

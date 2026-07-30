@@ -12,7 +12,7 @@ export function ValidationSummary({ missingCount, messages = [] }: { missingCoun
   const shown = messages.slice(0, 8);
   const remaining = messages.length - shown.length;
   return (
-    <div className="bg-[#e05252]/10 border border-[#e05252]/30 rounded-xl p-4 print:hidden">
+    <div role="alert" className="bg-[#e05252]/10 border border-[#e05252]/30 rounded-xl p-4 print:hidden">
       <div className="flex items-start gap-2.5">
         <AlertTriangle size={16} className="text-[#e05252] flex-shrink-0 mt-0.5" />
         <div className="min-w-0">

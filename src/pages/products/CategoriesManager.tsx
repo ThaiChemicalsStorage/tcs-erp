@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight, Plus, Pencil, Archive, ArchiveRestore, Check, X, Tags } from "lucide-react";
 import type { ProductCategory } from "../../lib/products";
 import { createCategory, updateCategory } from "../../lib/products";
+import { StatusBadge } from "../../components/StatusBadge";
 import { useI18n } from "../../lib/i18n";
 
 export function CategoriesManager({
@@ -71,11 +72,12 @@ export function CategoriesManager({
 
       <div className="p-6 max-w-2xl mx-auto space-y-5">
         <div className="bg-card border border-border rounded-xl p-5">
-          <p className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+          <h2 id="categories-addNew-heading" className="text-xs font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
             <Tags size={13} /> {t("products.categories.addNewTitle")}
-          </p>
+          </h2>
           <div className="flex items-center gap-2">
             <input
+              aria-labelledby="categories-addNew-heading"
               value={newName}
               onChange={(e) => { setNewName(e.target.value); setError(""); }}
               onKeyDown={(e) => e.key === "Enter" && addCategory()}
@@ -108,15 +110,14 @@ export function CategoriesManager({
                 <>
                   <div className="flex items-center gap-2.5">
                     <span className="text-sm text-foreground font-medium">{c.name}</span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                      c.archived ? "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20" : "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20"
-                    }`}>
-                      {c.archived ? t("common.status.archived") : t("common.status.active")}
-                    </span>
+                    <StatusBadge
+                      status={c.archived ? "archived" : "active"}
+                      label={c.archived ? t("common.status.archived") : t("common.status.active")}
+                    />
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => startEdit(c)} title={t("products.categories.editNameTitle")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Pencil size={14} /></button>
-                    <button onClick={() => toggleArchive(c.id)} title={c.archived ? t("common.unarchive") : t("common.archive")} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
+                    <button onClick={() => startEdit(c)} title={t("products.categories.editNameTitle")} aria-label={`${t("products.categories.editNameTitle")} ${c.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors"><Pencil size={14} /></button>
+                    <button onClick={() => toggleArchive(c.id)} title={c.archived ? t("common.unarchive") : t("common.archive")} aria-label={`${c.archived ? t("common.unarchive") : t("common.archive")} ${c.name}`} className="p-1.5 text-muted-foreground hover:text-[#c9a84c] transition-colors">
                       {c.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
                     </button>
                   </div>

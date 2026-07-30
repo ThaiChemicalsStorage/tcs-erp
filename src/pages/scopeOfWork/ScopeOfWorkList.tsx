@@ -10,9 +10,9 @@ import { useI18n } from "../../lib/i18n";
 const FILTER_ALL = "all";
 
 const statusStyle: Record<ScopeOfWorkStatus, string> = {
-  Draft: "bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20",
-  PendingApproval: "bg-[#e08a3c]/10 text-[#e08a3c] border border-[#e08a3c]/20",
-  Final: "bg-[#2aa36b]/10 text-[#2aa36b] border border-[#2aa36b]/20",
+  Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
+  PendingApproval: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
+  Final: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
 };
 const statusLabel: Record<ScopeOfWorkStatus, string> = { Draft: "Draft", PendingApproval: "รออนุมัติ", Final: "Final" };
 
@@ -85,7 +85,7 @@ export function ScopeOfWorkList({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>Scope of Work</h1>
-          <p className="text-sm text-muted-foreground mt-0.5 font-mono">จัดการและติดตาม Scope of Work ทั้งหมด</p>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("scopeOfWork.pageSubtitle")}</p>
         </div>
         <button
           onClick={tour.start}
@@ -100,11 +100,11 @@ export function ScopeOfWorkList({
       {/* Summary cards */}
       <div data-tour="sow-summary" className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         {[
-          { label: "ทั้งหมด", count: scopeOfWorks.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
+          { label: t("quotation.filterAll"), count: scopeOfWorks.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
           { label: "Draft", count: scopeOfWorks.filter((s) => s.status === "Draft").length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
           { label: "รออนุมัติ", count: scopeOfWorks.filter((s) => s.status === "PendingApproval").length, color: "#e08a3c", bg: "from-[#e08a3c]/15 to-[#e08a3c]/5" },
           { label: "Final", count: scopeOfWorks.filter((s) => s.status === "Final").length, color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
-          { label: "ยังไม่มี PO", count: noPoCount, color: "#e08a3c", bg: "from-[#e08a3c]/15 to-[#e08a3c]/5" },
+          { label: t("scopeOfWork.noPoBadge"), count: noPoCount, color: "#e08a3c", bg: "from-[#e08a3c]/15 to-[#e08a3c]/5" },
         ].map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">
             <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.bg} flex items-center justify-center mb-3`}>
@@ -125,7 +125,7 @@ export function ScopeOfWorkList({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ค้นหารหัสงาน / ลูกค้า / ใบเสนอราคา"
+              placeholder={t("scopeOfWork.searchPlaceholder")}
               className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
             />
             {searchQuery && (
@@ -139,7 +139,7 @@ export function ScopeOfWorkList({
             onChange={(e) => setFilterJobType(e.target.value)}
             className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
           >
-            <option value={FILTER_ALL}>ประเภทงาน: ทั้งหมด</option>
+            <option value={FILTER_ALL}>{t("scopeOfWork.filterJobTypeAll")}</option>
             {jobTypesInList.map((code) => (
               <option key={code} value={code}>{code}</option>
             ))}
@@ -149,7 +149,7 @@ export function ScopeOfWorkList({
             onChange={(e) => setFilterSalesperson(e.target.value)}
             className="h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors"
           >
-            <option value={FILTER_ALL}>พนักงานขาย: ทั้งหมด</option>
+            <option value={FILTER_ALL}>{t("scopeOfWork.filterSalespersonAll")}</option>
             {salespeopleInList.map((name) => (
               <option key={name} value={name}>{name}</option>
             ))}
@@ -160,7 +160,7 @@ export function ScopeOfWorkList({
             {[FILTER_ALL, "Draft", "PendingApproval", "Final"].map((s) => (
               <button key={s} onClick={() => setFilterStatus(s)}
                 className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
-                {s === FILTER_ALL ? "ทั้งหมด" : statusLabel[s as ScopeOfWorkStatus] ?? s}
+                {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as ScopeOfWorkStatus] ?? s}
               </button>
             ))}
           </div>
@@ -171,7 +171,7 @@ export function ScopeOfWorkList({
             onClick={() => setFilterNoPo((v) => !v)}
             className={`h-9 px-3 text-xs rounded-xl font-medium border transition-all ${filterNoPo ? "bg-[#e08a3c] text-white border-[#e08a3c]" : "bg-secondary text-muted-foreground border-border hover:text-foreground hover:border-[#e08a3c]/40"}`}
           >
-            เฉพาะที่ยังไม่มี PO {noPoCount > 0 && `(${noPoCount})`}
+            {t("scopeOfWork.noPoFilter")} {noPoCount > 0 && `(${noPoCount})`}
           </button>
         </div>
       </div>
@@ -181,8 +181,8 @@ export function ScopeOfWorkList({
         {scopeOfWorks.length === 0 ? (
           <EmptyState
             icon={ClipboardList}
-            title="ยังไม่มี Scope of Work"
-            description='สร้าง Scope of Work ได้จากปุ่ม "สร้าง Scope of Work" ในหน้ารายละเอียดใบเสนอราคา'
+            title={t("scopeOfWork.empty.title")}
+            description={t("scopeOfWork.empty.description")}
             compact
           />
         ) : filtered.length === 0 ? (
@@ -190,21 +190,44 @@ export function ScopeOfWorkList({
             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
               <ClipboardList size={20} className="text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground">ไม่พบ Scope of Work ที่ตรงกับเงื่อนไข</p>
+            <p className="text-sm text-muted-foreground">{t("scopeOfWork.noFilterResults")}</p>
           </div>
         ) : (
         <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              {["รหัสงาน", "ลูกค้า", "พนักงานขาย", "ประเภทงาน", "ใบเสนอราคา", "PO", "วันที่ส่งของ", "สถานะ", "แก้ไขล่าสุด"].map((h) => (
+              {[
+                t("scopeOfWork.col.scopeNumber"),
+                t("scopeOfWork.col.customer"),
+                t("scopeOfWork.col.salesperson"),
+                t("scopeOfWork.col.jobType"),
+                t("scopeOfWork.col.quotation"),
+                t("scopeOfWork.col.po"),
+                t("scopeOfWork.col.deliveryDate"),
+                t("scopeOfWork.col.status"),
+                t("scopeOfWork.col.updatedAt"),
+              ].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.map((s) => (
-              <tr key={s.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer" onClick={() => onOpen(s.id)}>
+              <tr
+                key={s.id}
+                tabIndex={0}
+                role="button"
+                aria-label={`${t("scopeOfWork.openRow")} ${s.scopeNumber}`}
+                onClick={() => onOpen(s.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onOpen(s.id);
+                  }
+                }}
+                className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 focus-visible:bg-secondary/30"
+              >
                 <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{s.scopeNumber}</td>
                 <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[220px] truncate" title={s.customerName}>{s.customerName}</td>
                 <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{s.quotationSalesperson || "—"}</td>
@@ -222,7 +245,7 @@ export function ScopeOfWorkList({
                   {s.customerPoNumber.trim() ? (
                     <span className="font-mono text-muted-foreground">{s.customerPoNumber}</span>
                   ) : (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#e08a3c]/10 text-[#e08a3c] border border-[#e08a3c]/25">ยังไม่มี PO</span>
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/25">{t("scopeOfWork.noPoBadge")}</span>
                   )}
                 </td>
                 <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(s.deliveryDate)}</td>
