@@ -65,6 +65,15 @@ function useSavedFlash() {
 }
 
 function Toggle({ checked, onChange, labelledBy }: { checked: boolean; onChange: (v: boolean) => void; labelledBy: string }) {
+  // Every dimension here is an explicit px arbitrary value, not a rem-based Tailwind utility
+  // (`w-10`, `h-4`, `top-0.5`, etc.) — this app sets the document root font-size to 15px
+  // (theme.css `--font-size: 15px`), not the browser's default 16px that those rem utilities
+  // assume, so they were quietly rendering smaller than intended and the knob ended up
+  // vertically off-center in its track (visible as a lopsided/clipped-looking circle — reported
+  // bug, 2026-07-30). Track is 40x22px; knob is 16px, centered with a 3px margin on every side
+  // (checked translateX = 40 - 16 - 3 = 21px). The border is now always present (transparent
+  // when checked) rather than conditionally added, so the knob's containing block doesn't shift
+  // by a border-width between states.
   return (
     <button
       type="button"
@@ -72,11 +81,10 @@ function Toggle({ checked, onChange, labelledBy }: { checked: boolean; onChange:
       aria-checked={checked}
       aria-labelledby={labelledBy}
       onClick={() => onChange(!checked)}
-      className={`w-10 h-5.5 rounded-full transition-colors relative flex-shrink-0 ${checked ? "bg-[#c9a84c]" : "bg-muted border border-border"}`}
-      style={{ height: "22px" }}
+      className={`w-[40px] h-[22px] rounded-full border transition-colors relative flex-shrink-0 ${checked ? "bg-[#c9a84c] border-transparent" : "bg-muted border-border"}`}
     >
       <span
-        className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-[19px]" : "translate-x-0.5"}`}
+        className={`absolute top-[3px] w-[16px] h-[16px] rounded-full bg-white shadow transition-transform ${checked ? "translate-x-[21px]" : "translate-x-[3px]"}`}
       />
     </button>
   );
