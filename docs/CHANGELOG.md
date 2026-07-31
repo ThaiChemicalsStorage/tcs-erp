@@ -4,7 +4,29 @@
 
 ---
 
-## 2026-07-31 (absolute latest) — Rolling/sliding session expiration
+## 2026-07-31 (absolute latest) — `ConfirmDialog` mount-while-closed fix
+
+Closes the latent-bug shape flagged in the 2026-07-30 re-audit (`docs/TODO.md`): `ConfirmDialog.tsx`
+called `useDialogA11y()`/`useId()` unconditionally, before its `if (!open) return null` guard — so the
+Escape-key/focus-trap listener from `useDialogA11y` was wired up even while the dialog was closed
+(harmless today, since `onCancel()` firing against an already-closed dialog is a no-op, but the same
+shape that caused a real bug elsewhere). `PromptDialog.tsx` already avoided this by splitting into an
+outer component (checks `open`) and an inner form component (mounted only while open, owns the hooks).
+
+**Fix**: split `ConfirmDialog` the same way — outer `ConfirmDialog` returns `null` when closed; inner
+`ConfirmDialogPanel` (new) owns `useDialogA11y`/`useId`/the actual markup, mounted only while `open` is
+true. Extracted `ConfirmDialogProps` as a named export (previously an inline object type) so both
+components can share it. Pure lifecycle refactor — no visual or behavioral change; every call site
+(`onConfirm`/`onCancel`/`busy`/`danger`/etc.) is unchanged.
+
+**Verification**: `npx tsc --noEmit`, `npm run lint` (0 errors), `npm run build`, `npm test` (56/56) all
+clean. Not click-through-verified live — the fix has no visual/behavioral surface to observe (dialogs
+open/close identically either way; the only difference is *when* the Escape listener attaches, which
+isn't independently observable through the UI).
+
+---
+
+## 2026-07-31 — Rolling/sliding session expiration
 
 Direct user request: sessions should auto-logout after 7 days of **inactivity**, but an actively-used
 session should never expire. Previously, `SESSION_DAYS = 7` in `api/_lib/auth.ts` was a fixed absolute

@@ -47,6 +47,17 @@ still independently re-verifies the user's live DB status on each request, uncha
   leaked token that's actively replayed no longer dies after a fixed 7 days. Still low risk (httpOnly,
   never XSS-readable) but flagged in docs for honesty.
 
+### Follow-up same session: `ConfirmDialog` mount-while-closed fix
+After deploying the session-expiry change to production (confirmed `READY`, commit-matched, no new
+runtime errors via the Vercel MCP tools) and walking the user through manually checking `Set-Cookie` in
+DevTools (httpOnly cookies can't be read by page JS or the browser-automation tools, so this genuinely
+needs a human with real DevTools), asked what else was outstanding. Surfaced the `docs/TODO.md` High
+Priority list; the user picked off the one purely mechanical item — `ConfirmDialog.tsx` calling
+`useDialogA11y()`/`useId()` before its `open` guard, unlike `PromptDialog.tsx`'s wrapper+form split.
+Applied the identical split (`ConfirmDialog` outer / `ConfirmDialogPanel` inner, `ConfirmDialogProps`
+extracted as a named export). `tsc`/`lint`/`build`/`test` all clean; not live-click-through-verified
+since the fix has no observable visual/behavioral surface (see CHANGELOG.md 2026-07-31).
+
 ---
 
 ## Session — 2026-07-30, Authentication UI `/impeccable audit` + fix pass

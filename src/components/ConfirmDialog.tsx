@@ -3,35 +3,42 @@ import { AlertTriangle } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 import { useDialogA11y } from "../hooks/useDialogA11y";
 
-export function ConfirmDialog({
-  open,
-  title,
-  message,
-  confirmLabel,
-  cancelLabel,
-  danger = false,
-  /** Disables both buttons while the confirmed action is still in flight — pass this whenever
-   * `onConfirm` kicks off an async request (accessibility/correctness hardening pass: without it, a
-   * double-click on Confirm during a slow request could fire the action twice, which matters most
-   * for the irreversible actions — finalize, delete — this dialog is usually guarding). */
-  busy = false,
-  onConfirm,
-  onCancel,
-}: {
+export interface ConfirmDialogProps {
   open: boolean;
   title: string;
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** Disables both buttons while the confirmed action is still in flight — pass this whenever
+   * `onConfirm` kicks off an async request (accessibility/correctness hardening pass: without it, a
+   * double-click on Confirm during a slow request could fire the action twice, which matters most
+   * for the irreversible actions — finalize, delete — this dialog is usually guarding). */
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
-}) {
+}
+
+export function ConfirmDialog(props: ConfirmDialogProps) {
+  // The form is a separate component mounted only while open, so its dialog-a11y hook (Escape/focus
+  // trap) only wires up while actually shown — same split as PromptDialog.tsx.
+  if (!props.open) return null;
+  return <ConfirmDialogPanel {...props} />;
+}
+
+function ConfirmDialogPanel({
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  danger = false,
+  busy = false,
+  onConfirm,
+  onCancel,
+}: ConfirmDialogProps) {
   const { t } = useI18n();
   const panelRef = useDialogA11y(onCancel);
   const titleId = useId();
-  if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onCancel} />
