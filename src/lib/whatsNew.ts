@@ -20,6 +20,16 @@ export interface WhatsNewEntry {
 
 // Newest first.
 export const WHATS_NEW_ENTRIES: WhatsNewEntry[] = [
+  {
+    id: "2026-07-31-rolling-session",
+    date: "2026-07-31",
+    title: "เข้าสู่ระบบค้างได้นานขึ้น ตราบใดที่ยังใช้งานอยู่",
+    bullets: [
+      "เดิมระบบจะให้ออกจากระบบอัตโนมัติทุก 7 วันหลังเข้าสู่ระบบ ไม่ว่าจะใช้งานอยู่หรือไม่",
+      "ตอนนี้ ถ้ายังเข้าใช้งานระบบอย่างน้อยครั้งหนึ่งในทุกๆ 7 วัน จะไม่ถูกออกจากระบบอัตโนมัติเลย",
+      "จะถูกออกจากระบบอัตโนมัติก็ต่อเมื่อไม่ได้เข้าใช้งานเลยติดต่อกันครบ 7 วันเท่านั้น",
+    ],
+  },
   // Moved (back) to the top when the document-editor-tours bullet was added: the unseen badge
   // compares against WHATS_NEW_ENTRIES[0].id only, so editing an entry lower in the list is
   // silent for every user who already opened the panel — an updated entry must lead the list.

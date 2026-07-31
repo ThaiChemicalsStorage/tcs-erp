@@ -74,7 +74,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  await withErrorHandling(res, async () => {
+  await withErrorHandling(req, res, async () => {
     // Quotation Templates (added 2026-07-14) shares this function file rather than getting its
     // own — Vercel Hobby's 12-function cap is still fully used (see docs/ARCHITECTURE.md).
     // Checked first, on the raw pathname, before falling through to the Job Types logic below —

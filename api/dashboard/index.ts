@@ -259,7 +259,7 @@ function periodEnd(kind: "month" | "quarter" | "year"): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  await withErrorHandling(res, async () => {
+  await withErrorHandling(req, res, async () => {
     if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
     const ctx = await requirePermission(req, "dashboard:view");
 

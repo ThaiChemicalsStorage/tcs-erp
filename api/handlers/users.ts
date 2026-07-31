@@ -207,7 +207,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  await withErrorHandling(res, async () => {
+  await withErrorHandling(req, res, async () => {
     const parts = getPathSegments(req, "/api/users");
 
     if (parts.length === 0) return handleList(req, res);

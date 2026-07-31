@@ -5,7 +5,7 @@ import { auditLogCollection, withStringId } from "../_lib/collections.js";
 import { nowIso } from "../../src/lib/products.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  await withErrorHandling(res, async () => {
+  await withErrorHandling(req, res, async () => {
     if (req.method === "GET") {
       await requirePermission(req, "auditLog:view");
       const auditLog = await auditLogCollection();

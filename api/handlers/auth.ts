@@ -161,7 +161,7 @@ async function handleLogout(req: VercelRequest, res: VercelResponse) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  await withErrorHandling(res, async () => {
+  await withErrorHandling(req, res, async () => {
     const [path] = getPathSegments(req, "/api/auth");
 
     if (path === "session") return handleSession(req, res);

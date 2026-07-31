@@ -47,6 +47,28 @@ export function clearSessionCookie(res: VercelResponse) {
   res.setHeader("Set-Cookie", stringifySetCookie({ name: COOKIE_NAME, value: "", ...cookieOptions(0) }));
 }
 
+/**
+ * Rolling/sliding expiration: re-signs and re-issues the session cookie with a fresh SESSION_DAYS
+ * window on every request that carries a still-valid token, so an active user is never logged out
+ * mid-session. A token only ever reaches its `exp` (and thus 401s) after SESSION_DAYS have passed
+ * with zero requests in between. No DB lookup here — cheap enough to run unconditionally per request.
+ */
+export function refreshSessionCookie(req: VercelRequest, res: VercelResponse) {
+  const token = readSessionToken(req);
+  if (!token) return;
+
+  let payload: JwtPayload;
+  try {
+    payload = jwt.verify(token, getJwtSecret()) as JwtPayload;
+  } catch {
+    return;
+  }
+  const userId = typeof payload.sub === "string" ? payload.sub : null;
+  if (!userId) return;
+
+  issueSessionCookie(res, userId);
+}
+
 function readSessionToken(req: VercelRequest): string | null {
   const raw = req.headers.cookie;
   if (!raw) return null;

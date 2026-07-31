@@ -4,7 +4,43 @@
 
 ---
 
-## 2026-07-30 (absolute latest) — Authentication UI accessibility hardening pass
+## 2026-07-31 (absolute latest) — Rolling/sliding session expiration
+
+Direct user request: sessions should auto-logout after 7 days of **inactivity**, but an actively-used
+session should never expire. Previously, `SESSION_DAYS = 7` in `api/_lib/auth.ts` was a fixed absolute
+window from login time — a user working every day would still get force-logged-out exactly 7 days
+after their last sign-in, regardless of activity in between.
+
+**Fix**: added `refreshSessionCookie()` (`api/_lib/auth.ts`) — reads the session cookie, `jwt.verify()`s
+it (no DB call, cheap), and if valid, re-signs and re-issues it via `issueSessionCookie()` with a fresh
+7-day window. Wired into `withErrorHandling()` (`api/_lib/http.ts`), the shared try/catch wrapper all 12
+API entry-point files (`api/handlers/*.ts`, `api/company/index.ts`, `api/dashboard/index.ts`,
+`api/audit-log/index.ts`) already call — so the refresh runs unconditionally at the top of every API
+request with zero changes needed to any of the ~70 `requireUser()`/`requirePermission()` call sites
+deeper in the route handlers. `withErrorHandling()`'s signature changed from `(res, handler)` to
+`(req, res, handler)`; all 12 call sites updated to pass `req`.
+
+Net effect: a token only reaches its `exp` (triggering the existing `"Not authenticated"` 401 →
+"session expired" toast flow, unchanged) after a full 7 days with *zero* API requests. Any request
+within that window resets the clock. `refreshSessionCookie()` no-ops silently (no cookie, invalid
+token, expired token) so it never interferes with login/logout — `issueSessionCookie()`/
+`clearSessionCookie()` called later in those specific handlers simply overwrite the `Set-Cookie` header
+the refresh set earlier in the same request (Node's `res.setHeader` replaces, doesn't append).
+
+Docs updated: [RBAC.md](./RBAC.md) (Session Model bullet + Known Gaps — a leaked-and-replayed token now
+also rides the rolling window, a slightly wider version of the pre-existing "no true session
+revocation" gap), [ARCHITECTURE.md](./ARCHITECTURE.md), [API.md](./API.md), [PROJECT_STATUS.md](./PROJECT_STATUS.md),
+[MODULES/Auth.md](./MODULES/Auth.md), [CLAUDE.md](./CLAUDE.md) module table.
+
+**Verification**: `npx tsc --noEmit` (clean, incl. the `auth.ts`⇄`http.ts` circular import — safe since
+both usages are inside function bodies, not module-level), `npm run build` (clean), `npm run lint` (0
+errors, 2 pre-existing unrelated warnings), `npm test` (56/56 passing). Not yet manually verified in a
+live browser session (would require waiting out or mocking a multi-day window) — logically verified via
+the code path and existing 401→session-expired handling, which is unchanged.
+
+---
+
+## 2026-07-30 — Authentication UI accessibility hardening pass
 
 An `/impeccable audit` of the authentication UI (`SignInPage.tsx`, `AuthLayout.tsx`, and `App.tsx`'s
 `BootLoading`/`BootError` session-check presentation) found this had never been touched by any

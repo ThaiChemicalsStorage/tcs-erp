@@ -9,7 +9,7 @@ import { validateImageDataUrl } from "../_lib/uploadValidation.js";
 const SINGLETON_ID = "singleton";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  await withErrorHandling(res, async () => {
+  await withErrorHandling(req, res, async () => {
     if (req.method === "GET") {
       // Company info is displayed on every quotation/settings screen, so any authenticated
       // user may read it — only company:manage gates writes.

@@ -21,7 +21,7 @@ import { handleSearch } from "../_lib/searchHandler.js";
  * `customersHandler.ts` below; they just happen to share one Vercel function slot.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  await withErrorHandling(res, async () => {
+  await withErrorHandling(req, res, async () => {
     const pathname = (req.url ?? "").split("?")[0];
     if (pathname === "/api/search") return handleSearch(req, res);
     return handleCustomers(req, res);

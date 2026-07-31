@@ -40,7 +40,7 @@ Every signed-in user can reach the app shell; what they see inside it is gated p
 - One-time Initial Setup Wizard, never reappears once a user exists
 - Real, server-verified username/email + password check (bcrypt) against MongoDB, with an inactive-account error message
 - No public self-registration — accounts are Wizard- or admin-created only
-- Session is a JWT in an httpOnly, secure, `sameSite=lax` cookie (`tcs_erp_session`, 7-day expiry); every request re-verifies it and re-fetches the user's current status from MongoDB
+- Session is a JWT in an httpOnly, secure, `sameSite=lax` cookie (`tcs_erp_session`, 7-day **rolling** expiry — added 2026-07-31, `refreshSessionCookie()` re-issues the cookie with a fresh 7-day window on every API request that carries a still-valid token, so an actively-used session never force-expires; only 7 full days of zero activity logs the user out); every request re-verifies it and re-fetches the user's current status from MongoDB
 - Login/Logout are audit-logged, with the audit entry's actor identity always server-derived
 
 ## Accessibility Hardening (2026-07-30)
@@ -69,7 +69,7 @@ UI-files only. See CHANGELOG.md 2026-07-30.
 
 ## Future Improvements
 
-- True session revocation (a server-side deny-list or database-backed sessions) so a still-active account's leaked token can be force-invalidated before its natural 7-day expiry — currently only a *deactivated* account is locked out immediately; see [RBAC.md](../RBAC.md) "What Was Achieved vs. the Old Proposed Design."
+- True session revocation (a server-side deny-list or database-backed sessions) so a still-active account's leaked token can be force-invalidated before its natural expiry — currently only a *deactivated* account is locked out immediately; see [RBAC.md](../RBAC.md) "What Was Achieved vs. the Old Proposed Design." Now a bigger gap than before: since expiry became rolling on 2026-07-31, a leaked-and-actively-replayed token no longer dies after a fixed 7 days.
 - ~~Rate limiting on `POST /api/auth/login`~~ — **done 2026-07-29**: failed attempts tracked in the TTL-purged `login_attempts` MongoDB collection; ≥5 failures per identifier or ≥20 per IP within 15 minutes → `429` with a Thai "รอประมาณ X นาที" message + `Retry-After`; success clears the identifier's failures; the check runs before the bcrypt compare. See [RBAC.md](../RBAC.md) Known Gaps and [API.md](../API.md).
 
 ## Known Issues

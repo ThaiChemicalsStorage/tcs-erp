@@ -4,7 +4,52 @@
 
 ---
 
-## Session — 2026-07-30 (absolute latest), Authentication UI `/impeccable audit` + fix pass
+## Session — 2026-07-31 (absolute latest), Rolling session expiration
+
+### What was implemented
+Direct user request (in Thai): sessions should auto-logout after 7 days of no activity, but should
+never expire while the user keeps being active within that window. The prior implementation
+(`SESSION_DAYS = 7` in `api/_lib/auth.ts`) was a fixed absolute 7-day window from login time —
+inactivity had nothing to do with it.
+
+Investigated via a background research agent first: confirmed there was no existing "last activity"
+tracking, no refresh/renewal endpoint, and no client-side inactivity timer — expiry was enforced
+purely server-side, per-request, via `jwt.verify()`'s `exp` claim.
+
+Considered threading a `res` parameter through `requireUser()`/`requirePermission()` so each of their
+~70 call sites across 15 files could re-issue the cookie, but found a much smaller lever: every one of
+the 12 Vercel API entry-point files already funnels through the shared `withErrorHandling(res, handler)`
+wrapper in `api/_lib/http.ts`. Added `refreshSessionCookie(req, res)` to `auth.ts` (verify the existing
+token, cheap — no DB call — then re-sign and re-issue with a fresh 7-day window) and called it from
+inside `withErrorHandling`, whose signature changed to `(req, res, handler)`. Only the 12 call sites of
+`withErrorHandling` itself needed updating (mechanical `sed` replacement), not the ~70 deeper auth
+checks — those still work exactly as before, just now running against a token that keeps sliding
+forward as long as requests keep coming in.
+
+### Problems found and fixed
+See CHANGELOG.md 2026-07-31 "Rolling/sliding session expiration" for the full technical writeup.
+
+### Verification
+`npx tsc --noEmit` (clean — including the new `auth.ts`⇄`http.ts` circular import, safe since both
+cross-references are inside function bodies rather than evaluated at module load time), `npm run
+build` (clean), `npm run lint` (0 errors, 2 pre-existing unrelated `i18n.tsx` fast-refresh warnings),
+`npm test` (56/56 passing, unchanged). **Not** verified live in a browser/`vercel dev` session — doing
+so meaningfully would require waiting out or artificially mocking a multi-day inactivity window, which
+wasn't practical this session. The change is logically low-risk: it only ever *extends* an
+already-valid token's life and never grants access it wouldn't otherwise have (every permission check
+still independently re-verifies the user's live DB status on each request, unchanged).
+
+### Recommendations / what's next
+- Worth a manual/live check next time someone's actually mid-session for several days: confirm the
+  `Set-Cookie` header is actually landing on the client and the cookie's expiry is visibly sliding
+  forward in devtools, not just that the server-side logic type-checks.
+- The existing "no true session revocation" gap (see RBAC.md Known Gaps) is now marginally wider — a
+  leaked token that's actively replayed no longer dies after a fixed 7 days. Still low risk (httpOnly,
+  never XSS-readable) but flagged in docs for honesty.
+
+---
+
+## Session — 2026-07-30, Authentication UI `/impeccable audit` + fix pass
 
 ### What was implemented
 Ran `/impeccable audit` against the authentication UI — `SignInPage.tsx`, `AuthLayout.tsx`, and

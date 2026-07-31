@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { refreshSessionCookie } from "./auth.js";
 
 /**
  * `code`/`details` (added for the Quotation/Scope of Work required-field validation pass) let a
@@ -46,10 +47,12 @@ export function getPathSegments(req: VercelRequest, prefix: string): string[] {
 }
 
 export async function withErrorHandling(
+  req: VercelRequest,
   res: VercelResponse,
   handler: () => Promise<void>,
 ): Promise<void> {
   try {
+    refreshSessionCookie(req, res);
     await handler();
   } catch (err) {
     sendError(res, err);
