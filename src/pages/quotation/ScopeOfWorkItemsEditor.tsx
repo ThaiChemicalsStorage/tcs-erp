@@ -4,14 +4,8 @@ import { type ScopeOfWorkItem, newScopeItemId, newScopeSpecLineId, blankScopeOfW
 import { FieldError } from "../../components/FieldError";
 import { EmptyState } from "../../components/EmptyState";
 
-/**
- * Editable table for a Scope of Work's item list — copied at creation time from the source
- * quotation's line items (see `deriveFromQuotation()` in api/_lib/scopeOfWorkHandler.ts), then
- * fully independent: add/remove/duplicate/reorder items, edit quantity/unit, add specification
- * lines. Deliberately carries no price/discount columns at all (Scope of Work never shows pricing
- * — see docs/MODULES/ScopeOfWork.md "Item Layout"). Modeled after `LineItemsEditor.tsx`'s
- * interaction patterns (drag-reorder, expand-to-edit-details) for a consistent feel.
- */
+// ตารางแก้ไขรายการ Scope of Work: เพิ่ม/ลบ/ทำสำเนา/จัดลำดับ และแก้ไขข้อกำหนดย่อย โดยไม่มีคอลัมน์ราคา
+// Editable table for Scope of Work items: add/remove/duplicate/reorder and edit spec lines, with no pricing columns
 export function ScopeOfWorkItemsEditor({
   items,
   onChange,
@@ -22,16 +16,15 @@ export function ScopeOfWorkItemsEditor({
   items: ScopeOfWorkItem[];
   onChange: (items: ScopeOfWorkItem[]) => void;
   disabled: boolean;
-  /** ScopeOfWorkItem.id -> Thai error message, from validateScopeOfWorkItems() (src/lib/validation/
-   * scopeOfWorkValidation.ts) — added 2026-07-16, required-field validation pass. */
   itemErrors?: Record<string, string>;
-  /** Shown above the table when there are zero non-header items at all. */
   noItemsError?: string;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const dragIndex = useRef<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
+  // เปิด/ปิดการแสดงรายละเอียดข้อกำหนดย่อยของรายการนั้น
+  // Toggles the expanded specification-lines detail for a given item
   const toggleExpand = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -46,6 +39,8 @@ export function ScopeOfWorkItemsEditor({
   const addSectionHeader = () =>
     onChange([...items, { id: newScopeItemId(), name: "", specifications: [], quantity: null, unit: "", remark: "", isSectionHeader: true }]);
   const removeItem = (id: string) => onChange(items.filter((it) => it.id !== id));
+  // ทำสำเนารายการพร้อมข้อกำหนดย่อย แล้ววางไว้ถัดจากรายการต้นฉบับ
+  // Duplicates an item along with its spec lines, inserting the copy right after the original
   const duplicateItem = (id: string) => {
     const idx = items.findIndex((it) => it.id === id);
     if (idx === -1) return;
@@ -58,6 +53,8 @@ export function ScopeOfWorkItemsEditor({
     next.splice(idx + 1, 0, copy);
     onChange(next);
   };
+  // ย้ายรายการจากตำแหน่งหนึ่งไปอีกตำแหน่งหนึ่งในรายการทั้งหมด
+  // Moves an item from one index to another within the full list
   const reorder = (from: number, to: number) => {
     const next = [...items];
     const [moved] = next.splice(from, 1);
@@ -127,9 +124,6 @@ export function ScopeOfWorkItemsEditor({
                     <td className="px-4 py-2.5 align-top">
                       {!disabled && (
                         <div className="flex items-center justify-end gap-1">
-                          {/* Keyboard/touch alternative to the drag handle — native HTML5 drag
-                              events have no keyboard equivalent, so whole-row reordering was
-                              previously mouse-only. */}
                           <button onClick={() => reorder(idx, idx - 1)} disabled={idx === 0} title="ย้ายขึ้น" aria-label="ย้ายขึ้น" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronUp size={13} /></button>
                           <button onClick={() => reorder(idx, idx + 1)} disabled={idx === items.length - 1} title="ย้ายลง" aria-label="ย้ายลง" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronDown size={13} /></button>
                           <button onClick={() => removeItem(item.id)} title="ลบ" aria-label="ลบ" className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Trash2 size={13} /></button>
@@ -179,9 +173,6 @@ export function ScopeOfWorkItemsEditor({
                         </button>
                         {!disabled && (
                           <>
-                            {/* Keyboard/touch alternative to the drag handle — native HTML5 drag
-                                events have no keyboard equivalent, so whole-row reordering was
-                                previously mouse-only. */}
                             <button onClick={() => reorder(idx, idx - 1)} disabled={idx === 0} title="ย้ายขึ้น" aria-label="ย้ายขึ้น" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronUp size={13} /></button>
                             <button onClick={() => reorder(idx, idx + 1)} disabled={idx === items.length - 1} title="ย้ายลง" aria-label="ย้ายลง" className="text-muted-foreground hover:text-[#c9a84c] transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-20 disabled:pointer-events-none"><ChevronDown size={13} /></button>
                             <button onClick={() => duplicateItem(item.id)} title="ทำสำเนารายการ" aria-label="ทำสำเนารายการ" className="text-muted-foreground hover:text-foreground transition-colors opacity-50 group-hover:opacity-100 focus-visible:opacity-100"><Copy size={13} /></button>

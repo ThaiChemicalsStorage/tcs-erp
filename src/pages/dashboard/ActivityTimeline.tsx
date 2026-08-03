@@ -2,15 +2,8 @@ import { History } from "lucide-react";
 import type { AuditLogEntry } from "../../lib/auditLog";
 import { useI18n } from "../../lib/i18n";
 
-/**
- * "Recent Activities" (กิจกรรมล่าสุด) — a compact table, not a card list, per the P'Keng/P'Kee
- * business requirement's explicit column set: date/time, salesperson, activity, quotation number,
- * customer. **2026-07-13**: the quotation number/customer columns are real fields
- * (`relatedQuoteId`/`relatedCustomerName`, written by `writeQuoteAuditEntry()` in
- * api/handlers/quotes.ts) rather than parsed out of the free-text `details` string — only present
- * on quote-workflow entries (not User/Role/Settings/Login audit events), so both render as "—"
- * when absent. The quotation number is a link (`onOpenQuote`) when present.
- */
+// ตารางแสดงกิจกรรมล่าสุด พร้อมลิงก์ไปยังใบเสนอราคาที่เกี่ยวข้อง (ถ้ามี)
+// Recent activities table, with a link to the related quotation when available
 export function ActivityTimeline({ entries, onOpenQuote }: { entries: AuditLogEntry[]; onOpenQuote: (quoteId: string) => void }) {
   const { t } = useI18n();
   return (

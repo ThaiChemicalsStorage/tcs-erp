@@ -16,16 +16,14 @@ import { useI18n } from "../../lib/i18n";
 
 type StatusFilter = "all" | "active" | "inactive";
 
+// จัดรูปแบบวันที่เป็นสไตล์ไทย
+// Formats an ISO date string in Thai locale style
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
 }
 
-/**
- * Customer master data admin page (added 2026-07-14) — where saved customers used by the
- * Quotation form's Customer selector actually get created/edited. Deliberately a single
- * list+modal-form page (unlike Company Profiles' list/form/detail three-file split) since a
- * Customer record has far fewer fields and no logo/bank-account/multi-section complexity.
- */
+// หน้าจัดการข้อมูลหลักลูกค้า แสดงรายการ สร้าง แก้ไข และเก็บถาวรลูกค้า
+// Customer master data page — list, create, edit, and archive customers
 export function CustomersPage({
   customers,
   onCustomersChange,
@@ -40,23 +38,18 @@ export function CustomersPage({
 }: {
   customers: Customer[];
   onCustomersChange: (customers: Customer[]) => void;
-  /** For the one-time guided tour "seen" tracking (see useModuleTour). */
   currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
   canArchive: boolean;
-  /** Set by a Global Search customer result click — opens that customer's edit form directly, whether CustomersPage is mounting fresh or already on-screen (reacts to every change, like QuotationPage's initialQuoteId, since a second search click while already here should still jump to the newly-clicked customer). Optional: pages composed without a search feature (none today) simply never set it. */
   initialEditId?: string | null;
   onEditIdConsumed?: () => void;
-  /** Set (to a fresh, ever-increasing number) by the Global Search "Add Customer" page result — opens the create form once per dispatch. A monotonic sequence number rather than a boolean so two consecutive identical dispatches (e.g. the same result clicked twice) both still fire, not just the first. */
   autoCreateSeq?: number | null;
   onAutoActionConsumed?: () => void;
 }) {
   const { t } = useI18n();
   const { message, show } = useToast();
 
-  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
-  // as the other list pages' tours.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="customers-create"]', popover: { title: t("tour.customers.create.title"), description: t("tour.customers.create.desc"), side: "bottom" } },
     { element: '[data-tour="customers-toolbar"]', popover: { title: t("tour.customers.toolbar.title"), description: t("tour.customers.toolbar.desc"), side: "bottom" } },
@@ -71,15 +64,6 @@ export function CustomersPage({
   const [archiveTarget, setArchiveTarget] = useState<Customer | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<Customer | null>(null);
 
-  // React's "adjust state during rendering" pattern (see QuotationPage.tsx's identical
-  // initialQuoteId handling) — reacts to every change of initialEditId, not just once per mount.
-  // 2026-07-14, Codex review Medium fix: only actually opens the edit form when `canEdit` is true
-  // — previously this bypassed the same permission gate the list's own edit (pencil) button
-  // already respects, dropping a view-only user (`customers:view` without `customers:edit`) into
-  // an editable form they could never normally reach from this page's own UI. A view-only search
-  // click instead lands on the list, filtered down to just that customer (status/archived filters
-  // reset so the record is guaranteed visible regardless of its own active/archived state) — a
-  // real "found it" result without an edit affordance the server would reject anyway.
   const [appliedEditId, setAppliedEditId] = useState<string | null>(null);
   if (initialEditId && initialEditId !== appliedEditId) {
     setAppliedEditId(initialEditId);
@@ -115,6 +99,8 @@ export function CustomersPage({
       .filter((c) => (q ? [c.companyName, c.contactName, c.phone, c.email, c.taxId].some((f) => f.toLowerCase().includes(q)) : true));
   }, [customers, search, statusFilter, showArchived]);
 
+  // สลับสถานะเปิด/ปิดใช้งานของลูกค้าตาม id
+  // Toggles a customer's active/inactive status by id
   const handleToggleActive = async (id: string) => {
     const target = customers.find((c) => c.id === id);
     if (!target) return;
@@ -127,6 +113,8 @@ export function CustomersPage({
     }
   };
 
+  // สลับสถานะเก็บถาวร/กู้คืนของลูกค้าตาม id
+  // Toggles a customer's archived/unarchived status by id
   const handleArchiveToggle = async (id: string) => {
     const target = customers.find((c) => c.id === id);
     if (!target) return;
@@ -139,6 +127,8 @@ export function CustomersPage({
     }
   };
 
+  // บันทึกฟอร์มลูกค้า สร้างใหม่หรืออัปเดตข้อมูลตามเป้าหมายที่แก้ไข
+  // Saves the customer form — creates a new customer or updates the targeted one
   const handleSave = async (draft: CustomerDraft): Promise<string | null> => {
     try {
       if (formTarget === "new") {
@@ -306,6 +296,8 @@ export function CustomersPage({
   );
 }
 
+// กล่องโต้ตอบฟอร์มสร้าง/แก้ไขข้อมูลลูกค้า
+// Modal form dialog for creating or editing a customer
 function CustomerFormModal({
   initial,
   onSave,

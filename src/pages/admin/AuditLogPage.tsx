@@ -6,16 +6,15 @@ import { fetchAuditLog } from "../../lib/auditLog";
 import { useModuleTour } from "../../components/GuidedTour";
 import { useI18n } from "../../lib/i18n";
 
+// หน้าแสดงประวัติการใช้งานระบบ (Audit Log) พร้อมช่องค้นหาและทัวร์แนะนำการใช้งาน
+// Displays the audit log with a search box and a first-run guided tour
 export function AuditLogPage({
   currentUserId,
 }: {
-  /** For the one-time guided tour "seen" tracking (see useModuleTour). */
   currentUserId: string;
 }) {
   const { t } = useI18n();
 
-  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
-  // as the other list pages' tours.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="audit-search"]', popover: { title: t("tour.audit.search.title"), description: t("tour.audit.search.desc"), side: "bottom" } },
     { element: '[data-tour="audit-table"]', popover: { title: t("tour.audit.table.title"), description: t("tour.audit.table.desc"), side: "top" } },

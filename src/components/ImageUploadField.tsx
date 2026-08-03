@@ -5,15 +5,8 @@ import { useI18n } from "../lib/i18n";
 const MAX_IMAGE_BYTES = 1_000_000;
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
 
-/**
- * Shared logo/stamp/signature/profile-picture upload field — extracted 2026-07-13 (Company
- * Profiles module) from what was previously an `ImageUploadField` inlined only inside
- * `SettingsPage.tsx`. Client-side MIME/size checks only (mirrors, doesn't replace, the
- * authoritative server-side `validateImageDataUrl()` check in `api/_lib/uploadValidation.ts` —
- * this is UX/fail-fast, not the security boundary). Converts to a base64 data URL via
- * `FileReader`, same inline-on-document storage approach every other image field in this app uses
- * (see DATABASE.md's "still base64-in-document" note) — no separate upload endpoint exists yet.
- */
+// ช่องอัปโหลดรูปภาพ (โลโก้/ตราประทับ/ลายเซ็น/รูปโปรไฟล์) ตรวจชนิด/ขนาดไฟล์เบื้องต้นแล้วแปลงเป็น base64
+// Shared image upload field (logo/stamp/signature/profile picture) — checks type/size, then converts to a base64 data URL
 export function ImageUploadField({
   label,
   icon: Icon,
@@ -32,6 +25,8 @@ export function ImageUploadField({
   const [error, setError] = useState("");
   const inputId = useId();
 
+  // ตรวจสอบไฟล์ที่เลือก (ต้องเป็นรูปภาพและไม่เกินขนาดที่กำหนด) แล้วอ่านเป็น data URL
+  // Validates the selected file (must be an image, within the size limit) then reads it as a data URL
   const handleFile = (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {

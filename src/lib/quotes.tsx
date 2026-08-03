@@ -18,7 +18,6 @@ export type QuoteStatus =
   | "ยกเลิก";
 export type QuoteInterest = "น่าสนใจ" | "ไม่น่าสนใจ" | null;
 
-/** A list-view filter — e.g. built by the Dashboard's pipeline-stage/follow-up click-through and consumed by QuoteList. Lives here (not in a page component) since it's a Quote-domain concept any future caller could construct against, not something specific to the Dashboard page. */
 export interface QuotationListFilter {
   status?: QuoteStatus;
   client?: string;
@@ -71,13 +70,6 @@ export interface QuoteLine {
   discount: number;
   tags: string[];
   subDetails: SubDetail[];
-  /** True for a line copied from a Quotation Template's section heading (e.g. "Preparation
-   * work") — renders as a full-width, non-priced divider in `LineItemsEditor.tsx`/
-   * `PrintDocument.tsx` instead of a normal qty/unit-price item row. Optional and defaults to
-   * falsy for every quote created before this field existed (2026-07-14) or built without a
-   * template — fully backward compatible, no behavior change for existing lines. A section-header
-   * line is a completely ordinary `QuoteLine` otherwise (freely editable/removable), just flagged
-   * for display purposes. See docs/MODULES/QuotationTemplates.md. */
   isSectionHeader?: boolean;
 }
 
@@ -105,77 +97,19 @@ export interface Quote {
   issueDate: string;
   expiryDate: string;
   remarks: string;
-  /** Empty string = unclassified (incl. every quote created before this field existed). */
   jobTypeCode: string;
-  /** Snapshot of the job type's display name at save time, same snapshot rationale as Product Library line items — renaming a job type later doesn't rewrite historical quotes. */
   jobTypeName: string;
-  /** Sales-marked "likely to close" flag, feeds the Dashboard's Expected Sales KPI/forecast. */
   isPotentialOpportunity: boolean;
-  /** Empty string = no follow-up scheduled. */
   followUpDate: string;
-  /** Free-text summary of what changed in this revision vs. the one it was rewritten from — added
-   * 2026-07-23, per direct user request. Always starts blank on a brand-new quote, a Duplicate, or
-   * a fresh Rewrite (never inherited from the source, even though most other fields are copied) —
-   * this note is meant to describe changes made *in this* revision, not carry over the previous
-   * revision's own note. `generateQuoteRevisionSummary()` (src/lib/revisionDiff.ts) can auto-fill
-   * an editable starting draft by comparing this revision against its immediate predecessor (see
-   * `getRevisionPredecessorId()` in the same file); the user is always free to edit/replace it
-   * afterward like any other field — the auto-fill is a one-time, explicitly-triggered starting
-   * point, never silently regenerated or overwritten by anything. */
   revisionNote: string;
-  /** User id of the creator, used for ownership-scoped edit permission. Empty string for legacy/seed quotes. */
   createdByUserId: string;
-  /** User id of whoever last edited the quote (plain edit or workflow action). Empty string until first edit. */
   updatedBy: string;
   approvalHistory: ApprovalHistoryEntry[];
-  /**
-   * → `Customer.id` — which saved Customer this quote is issued to, set when the user picks one
-   * from the Quotation form's Customer selector (`src/pages/quotation/CustomerSelector.tsx`,
-   * added 2026-07-14, replacing an earlier — wrong — "issuer company" selector built the same
-   * week). Optional: a quote can still be created with the Customer Information fields typed in
-   * manually, with no linked customer record at all. Changing the selected customer on an
-   * existing quote is restricted server-side to Draft status, same rule as every other structural
-   * field on this quote — see `api/handlers/quotes.ts`.
-   */
   customerId?: string;
-  /**
-   * Frozen-at-save-time copy of the Customer Information fields actually submitted with this
-   * quote (whether autofilled from `customerId` and then possibly edited, or typed manually) —
-   * always server-derived, never trusted from the client. Exists so that later edits to the
-   * Customer master record (or to this quote's own fields, on a further edit) don't retroactively
-   * change what an already-issued quotation is understood to have said at the time. See
-   * `src/lib/customers.ts`'s `CustomerSnapshot` and docs/MODULES/Customer.md.
-   */
   customerSnapshot?: CustomerSnapshot;
-  /**
-   * Which Quotation Template (if any) this quote's `lines` were originally copied from — recorded
-   * once at creation time, added 2026-07-14 (see docs/MODULES/QuotationTemplates.md). Purely
-   * provenance metadata: `lines` itself is already an independent, quote-owned copy (same as every
-   * other quote), so editing this quotation was never able to affect the master template and vice
-   * versa, with or without these fields. Optional and always empty on quotes created without a
-   * template (including every quote from before this pass) or built from "เริ่มจากใบเสนอราคาเปล่า" /
-   * "เริ่มจากแบบฟอร์มเปล่า" (blank start) — a template is never required. Never changed after
-   * creation (not part of `QuoteUpdateFields`) — the whole point is a frozen record of what was
-   * used when the quote was first built, matching `customerSnapshot`'s "frozen at save time" rule.
-   */
   quotationTemplateId?: string;
   quotationTemplateName?: string;
   quotationTemplateVersion?: string;
-  /**
-   * A server-created, structured copy of the master template's `sections`/`defaultTerms`/
-   * `internalNotes`/`sourceHash` **at the moment this quote was created** — added 2026-07-15
-   * (second Codex-review fix pass), closing the review's High Priority #2 finding that only
-   * flattened `QuoteLine[]` + 3 provenance strings were stored, not a real structured snapshot.
-   * Frozen forever at creation, same as `customerSnapshot`/`quotationTemplateName` — editing the
-   * master template afterward never touches this, and this is never itself editable. **Audit/
-   * reconstruction record only** — no rendering path reads it: the customer-facing quotation form,
-   * editor, and printed PDF all continue to read only `lines` (the already-independent, per-line
-   * copy every quote has always had), exactly as before this field existed. Deliberately **does**
-   * include `internalNotes` (unlike `lines`, which `applyTemplateToQuoteDraft()` still never copies
-   * into customer-facing content) — this is an internal-only audit trail, gated by the same
-   * `quotations:view`-family permissions as the rest of the quote document, never surfaced in the
-   * UI or PDF. See docs/MODULES/QuotationTemplates.md "Structured Template Snapshot."
-   */
   templateSnapshot?: {
     sections: TemplateSection[];
     defaultTerms: TemplateTermLine[];
@@ -192,32 +126,16 @@ export type QuoteDraftFields = Pick<
   | "deliveryMethod" | "deliveryAddress" | "project"
   | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks" | "revisionNote"
   | "jobTypeCode" | "jobTypeName" | "isPotentialOpportunity" | "followUpDate"
-  // Client only ever sends the id — the server always re-derives `customerSnapshot` itself from
-  // the submitted Customer Information fields, the same "never trust a client-supplied derived
-  // value" rule `amount`/`jobTypeName` already follow. See api/handlers/quotes.ts.
   | "customerId"
-  // Same pattern as `customerId`/`jobTypeCode` above — the client only ever sends the id (on
-  // create only; a template can never be attached to an existing quote after the fact), and the
-  // server re-derives `quotationTemplateName`/`quotationTemplateVersion` from the matched
-  // `quotation_templates` record. See api/handlers/quotes.ts.
   | "quotationTemplateId"
 > & { amount: number };
 
-/** Fields the server accepts on general quote edits — everything except id/status/date/valid/createdByUserId/updatedBy/approvalHistory, which only the server (or the workflow endpoint) sets. */
 export type QuoteUpdateFields = Partial<
   Omit<Quote, "id" | "status" | "date" | "valid" | "createdByUserId" | "updatedBy" | "approvalHistory">
 >;
 
 export const VAT_RATE = 7;
 
-/**
- * Background/border keep each status's original hue (unchanged); the text color is a darkened
- * variant of the same hue (2026-07-29, accessibility hardening pass) — the original scheme used
- * the identical hex for bg/10, text, and border/20, which put a mid-tone color's text directly on
- * a ~10%-tint-of-itself background and failed WCAG AA contrast (as low as 2.1:1 for Pending
- * Approval's gold). Each text hex below is the minimum darkening (same hue/saturation, reduced
- * lightness only) needed to clear 4.5:1 against its own pill background — computed, not eyeballed.
- */
 export const statusStyle: Record<QuoteStatus, string> = {
   "ร่าง": "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
   "รออนุมัติ": "bg-[#c9a84c]/10 text-[#866d28] border border-[#c9a84c]/20",
@@ -230,7 +148,6 @@ export const statusStyle: Record<QuoteStatus, string> = {
   "ยกเลิก": "bg-[#8a94a6]/10 text-[#657085] border border-[#8a94a6]/20",
 };
 
-/** Translated display label per status — `QuoteStatus` itself stays the fixed Thai literal stored in MongoDB and used for all comparisons/state-machine logic; this map is display-only. */
 export const statusLabelKey: Record<QuoteStatus, TranslationKey> = {
   "ร่าง": "quotation.status.draft",
   "รออนุมัติ": "quotation.status.pendingApproval",
@@ -243,7 +160,6 @@ export const statusLabelKey: Record<QuoteStatus, TranslationKey> = {
   "ยกเลิก": "quotation.status.cancelled",
 };
 
-/** Translated display label per approval action — `approvalActionLabel` (Thai) stays as-is for audit-log data; this is for on-screen UI only. */
 export const approvalActionLabelKey: Record<ApprovalAction, TranslationKey> = {
   submitted: "quotation.action.submitted",
   approved: "quotation.action.approved",
@@ -256,7 +172,6 @@ export const approvalActionLabelKey: Record<ApprovalAction, TranslationKey> = {
   cancelled: "quotation.action.cancelled",
 };
 
-/** Translated display label for the two non-null QuoteInterest values — the stored value itself stays Thai. */
 export const interestLabelKey: Record<"น่าสนใจ" | "ไม่น่าสนใจ", TranslationKey> = {
   "น่าสนใจ": "quotation.interest.interested",
   "ไม่น่าสนใจ": "quotation.interest.notInterested",
@@ -274,7 +189,6 @@ export const statusIcon: Record<QuoteStatus, React.ReactNode> = {
   "ยกเลิก": <Ban size={10} />,
 };
 
-/** The quotation approval-workflow state machine: which statuses each ApprovalAction may move a quote from/to. */
 export const workflowTransitions: Record<ApprovalAction, { from: QuoteStatus[]; to: QuoteStatus }> = {
   submitted: { from: ["ร่าง"], to: "รออนุมัติ" },
   approved: { from: ["รออนุมัติ"], to: "อนุมัติแล้ว" },
@@ -303,6 +217,8 @@ export interface QuotePermissions {
   canRewrite: boolean;
 }
 
+// คำนวณสิทธิ์การกระทำต่างๆ ของผู้ใช้บนใบเสนอราคานี้ (แก้ไข/อนุมัติ/ยกเลิก ฯลฯ) ตามบทบาทและสถานะเอกสาร
+// Computes what actions the current user may perform on this quote (edit/approve/cancel etc.) based on role and status
 export function computeQuotePermissions(quote: Quote | undefined, isNew: boolean, currentUser: User, roles: Role[]): QuotePermissions {
   const isOwner = !quote || !quote.createdByUserId || quote.createdByUserId === currentUser.id;
   const hasCreate = hasPermission(currentUser, roles, "quotations:create");
@@ -326,9 +242,6 @@ export function computeQuotePermissions(quote: Quote | undefined, isNew: boolean
     canCancel: !isNew && !!status && ["ร่าง", "รออนุมัติ", "อนุมัติแล้ว"].includes(status) && hasDelete,
     canExport: hasPermission(currentUser, roles, "quotations:export"),
     canDuplicate: hasCreate,
-    // Same permission as Duplicate — a rewrite is also "create a brand-new quote document",
-    // just with a revision-numbered id instead of an unrelated fresh one. Only shown in detail
-    // view (isNew is irrelevant, matching canDuplicate's own semantics).
     canRewrite: !isNew && hasCreate,
   };
 }
@@ -336,6 +249,8 @@ export function computeQuotePermissions(quote: Quote | undefined, isNew: boolean
 const PAYMENT_TERMS = ["ชำระภายใน 30 วัน", "ชำระภายใน 60 วัน", "ชำระทันที", "แบ่งชำระ 3 งวด"];
 export const paymentTermsOptions = PAYMENT_TERMS;
 
+// จัดรูปแบบตัวเลขเป็นสตริงแบบไทย มีทศนิยม 2 ตำแหน่งเสมอ
+// Formats a number as a Thai-locale string with exactly 2 decimal places
 export function fmt(n: number): string {
   return n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -343,6 +258,8 @@ export function fmt(n: number): string {
 const THAI_DIGITS = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
 const THAI_POSITIONS = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"];
 
+// แปลงตัวเลขกลุ่มหลักหน่วยถึงแสนให้เป็นคำอ่านภาษาไทย (ใช้ภายใน bahtText)
+// Converts a single digit-group (up to hundred-thousands) into Thai number words (internal helper for bahtText)
 function convertDigitGroup(n: number, hasPrecedingDigits: boolean): string {
   if (n === 0) return "";
   const digits = String(n).split("").map(Number);
@@ -359,7 +276,8 @@ function convertDigitGroup(n: number, hasPrecedingDigits: boolean): string {
   return out;
 }
 
-/** Converts a THB amount to its Thai-language words form, e.g. 802500 -> "(แปดแสนสองพันห้าร้อยบาทถ้วน)". */
+// แปลงจำนวนเงินบาทเป็นคำอ่านภาษาไทย เช่น 802500 -> "(แปดแสนสองพันห้าร้อยบาทถ้วน)"
+// Converts a THB amount into its Thai-language words form, e.g. 802500 -> "(แปดแสนสองพันห้าร้อยบาทถ้วน)"
 export function bahtText(amount: number): string {
   const rounded = Math.round(Math.abs(amount) * 100) / 100;
   const intPart = Math.floor(rounded);
@@ -388,39 +306,56 @@ export function bahtText(amount: number): string {
   return `(${intText}บาท${satangText})`;
 }
 
+// แปลงวันที่เป็นสตริง ISO แบบวันที่เท่านั้น (YYYY-MM-DD)
+// Converts a Date to an ISO date-only string (YYYY-MM-DD)
 function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
+// คืนวันที่วันนี้ในรูปแบบ ISO
+// Returns today's date as an ISO string
 export function todayIso(): string {
   return toIsoDate(new Date());
 }
+// คืนวันที่ในอนาคต/อดีตห่างจากวันนี้ตามจำนวนวันที่กำหนด ในรูปแบบ ISO
+// Returns a date offset from today by the given number of days, as an ISO string
 export function plusDaysIso(days: number): string {
   return toIsoDate(new Date(Date.now() + days * 86400000));
 }
 
 let lineIdCounter = 1000;
+// สร้างรหัส id ใหม่สำหรับรายการสินค้าในใบเสนอราคา
+// Generates a new id for a quote line item
 export function newLineId(): number {
   lineIdCounter += 1;
   return Date.now() + lineIdCounter;
 }
 
+// สร้างรหัส id ใหม่สำหรับรายการย่อย
+// Generates a new id for a sub-detail row
 export function newSubDetailId(): string {
   return `sd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// สร้างรายการสินค้าเปล่าเริ่มต้นสำหรับใบเสนอราคา
+// Creates a blank quote line item
 export function blankLine(): QuoteLine {
   return { id: newLineId(), description: "", unit: "ชิ้น", qty: 1, unitPrice: 0, discount: 0, tags: [], subDetails: [] };
 }
 
+// คำนวณยอดรวมของรายการเดียว (จำนวน x ราคา หักส่วนลด)
+// Computes the subtotal of a single line (qty x price, minus discount)
 export function lineSubtotal(l: QuoteLine): number {
   return l.qty * l.unitPrice * (1 - l.discount / 100);
 }
 
-/** Whether a line has any sub-details/tags worth showing in the print output. */
+// ตรวจสอบว่ารายการนี้มีรายละเอียดย่อยหรือแท็กที่ควรแสดงในเอกสารพิมพ์หรือไม่
+// Checks whether a line has any sub-details/tags worth showing in the print output
 export function lineHasDetails(l: QuoteLine): boolean {
   return l.subDetails.some((sd) => sd.text.trim() !== "") || l.tags.length > 0;
 }
 
+// จัดรูปแบบวันที่แบบไทย (เช่น "3 ส.ค. 2569")
+// Formats a date in Thai display format (e.g. "3 ส.ค. 2569")
 export function formatQuoteDateThai(iso: string): string {
   if (!iso) return "";
   try {
@@ -430,6 +365,8 @@ export function formatQuoteDateThai(iso: string): string {
   }
 }
 
+// จัดรูปแบบวันที่แบบตัวเลข (DD/MM/YYYY)
+// Formats a date in numeric DD/MM/YYYY format
 export function formatQuoteDateNumeric(iso: string): string {
   if (!iso) return "";
   try {
@@ -440,6 +377,8 @@ export function formatQuoteDateNumeric(iso: string): string {
   }
 }
 
+// คำนวณยอดรวมทั้งหมดของใบเสนอราคา (ยอดก่อนลด ส่วนลด ภาษี และยอดสุทธิ)
+// Computes the quote's aggregate totals (subtotal, discount, VAT, and grand total)
 export function computeTotals(lines: QuoteLine[], discountPct: number) {
   const subtotal = lines.reduce((s, l) => s + lineSubtotal(l), 0);
   const discountAmt = subtotal * (discountPct / 100);
@@ -449,14 +388,14 @@ export function computeTotals(lines: QuoteLine[], discountPct: number) {
   return { subtotal, discountAmt, afterDiscount, vatAmt, total };
 }
 
-/** True for a quote id ending in a "Rewrite/แก้ไข" revision suffix (e.g. `QT-2567-0041-R2`) — see
- * `handleRewrite()` in api/handlers/quotes.ts. Purely a display-side check (e.g. QuoteList's
- * summary cards); the authoritative server-side parsing lives in api/_lib/quoteRevisions.ts, kept
- * separate since that file is server-only. */
+// ตรวจสอบว่ารหัสนี้เป็นใบเสนอราคาที่เป็นรีวิชัน (มีส่วนต่อท้าย -R) หรือไม่
+// Checks whether an id belongs to a revision quote (has a -R suffix)
 export function isRevisionQuote(id: string): boolean {
   return /-R\d+$/.test(id);
 }
 
+// สร้างรหัสใบเสนอราคาถัดไปตามลำดับเลขที่มากที่สุดในรายการปัจจุบัน
+// Generates the next quote id based on the highest existing sequence number
 export function nextQuoteId(quotes: Quote[]): string {
   const year = 2567;
   const maxNum = quotes
@@ -466,36 +405,43 @@ export function nextQuoteId(quotes: Quote[]): string {
   return `QT-${year}-${String(maxNum + 1).padStart(4, "0")}`;
 }
 
+// ดึงรายการใบเสนอราคาทั้งหมดจากเซิร์ฟเวอร์
+// Fetches all quotes from the server
 export async function fetchQuotes(): Promise<Quote[]> {
   const { quotes } = await apiFetch<{ quotes: Quote[] }>("/quotes");
   return quotes;
 }
+// สร้างใบเสนอราคาใหม่
+// Creates a new quote
 export async function createQuote(fields: QuoteDraftFields): Promise<Quote> {
   const { quote } = await apiFetch<{ quote: Quote }>("/quotes", { method: "POST", body: JSON.stringify(fields) });
   return quote;
 }
+// แก้ไขใบเสนอราคาที่มีอยู่ตาม id
+// Updates an existing quote identified by id
 export async function updateQuote(id: string, fields: QuoteUpdateFields): Promise<Quote> {
   const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
   return quote;
 }
+// ทำสำเนาใบเสนอราคา
+// Duplicates a quote
 export async function duplicateQuote(id: string): Promise<Quote> {
   const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}/duplicate`, { method: "POST" });
   return quote;
 }
-/** Creates a new revision of `id` — `{root}-R{n}` (server-derives the root by stripping any
- * existing `-R<n>` suffix and atomically reserves the next revision number), preserving the
- * source's data with a fresh `_id`/Draft status/empty approval history. The source quote is never
- * modified. See api/handlers/quotes.ts's `handleRewrite()`. */
+// สร้างรีวิชันใหม่ของใบเสนอราคาโดยไม่แก้ไขต้นฉบับ
+// Creates a new revision of a quote without modifying the source record
 export async function rewriteQuote(id: string): Promise<Quote> {
   const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}/rewrite`, { method: "POST" });
   return quote;
 }
-/** Server-side print/PDF completeness gate (added 2026-07-16) — call this before `window.print()`.
- * Throws `ApiError` (422, DOCUMENT_INCOMPLETE) if the quote is missing required fields/selections,
- * so a direct browser print can never bypass validation. See api/handlers/quotes.ts. */
+// ตรวจสอบความครบถ้วนของเอกสารก่อนพิมพ์/ส่งออก PDF
+// Validates document completeness before printing/exporting as PDF
 export async function printQuote(id: string): Promise<void> {
   await apiFetch<void>(`/quotes/${id}/print`, { method: "POST" });
 }
+// ดำเนินการตามขั้นตอนอนุมัติของใบเสนอราคา (ส่งขออนุมัติ/อนุมัติ/ปฏิเสธ ฯลฯ)
+// Performs a workflow action on a quote (submit/approve/reject etc.)
 export async function performWorkflowAction(
   id: string,
   action: ApprovalAction,

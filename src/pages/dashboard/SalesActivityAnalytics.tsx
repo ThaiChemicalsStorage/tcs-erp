@@ -19,28 +19,8 @@ const CATEGORIES: { key: ActivityCategory; color: string }[] = [
   { key: "approvalCompleted", color: "#2aa36b" },
 ];
 
-/**
- * New section (2026-07-10 UI/UX redesign): quotation activity, grouped by period, filterable by
- * the same salesperson/department controls as the rest of the Dashboard (already applied
- * server-side in `api/dashboard/index.ts`'s `salesActivity` aggregation — this component just
- * renders whichever grouping tab is selected). Kept intentionally compact (one chart + one table,
- * tabs instead of four separate always-visible charts) per "avoid making this section too large."
- *
- * **2026-07-13, Codex-review fix**: expanded from 2 tracked categories (Created/Edited) to the 5
- * originally requested — Created, Edited, Status Changed, Approval Requested, Approval Completed
- * — as a **stacked** bar chart (not 5 grouped bars per period, which would triple the visual
- * density this section is explicitly supposed to avoid). The section's `sub` copy also now states
- * plainly that this is a rolling trend anchored to the filter's end date, not limited by its start
- * date — the previous silence on that was flagged as misleading (the date-range filter visibly
- * has a "from" control that doesn't affect this chart).
- *
- * **2026-07-14, Codex-review fix**: the query behind `data` now actually respects the filter's
- * `from`/`to` (see `api/dashboard/index.ts`) — an independent review found the "rolling trend, not
- * limited by filter's start date" caption was misleading in a different way than the 2026-07-13
- * fix addressed: the chart *said* it ignored `from`, and the query genuinely did, all the time,
- * even when a date range was actively selected. `dateFiltered` (derived from whether the caller
- * picked a `from` date) switches the caption to reflect which behavior is actually in effect.
- */
+// แสดงกิจกรรมใบเสนอราคาแบบแยกตามช่วงเวลาและตำแหน่งพนักงานขาย เป็นกราฟแท่งซ้อนกันพร้อมตาราง
+// Renders quotation activity grouped by period and by salesperson as a stacked bar chart plus tables
 export function SalesActivityAnalytics({ data, anchorDate, dateFiltered }: { data: SalesActivityTrend; anchorDate: string; dateFiltered: boolean }) {
   const { t, lang } = useI18n();
   const [grouping, setGrouping] = useState<Grouping>("monthly");
@@ -120,9 +100,6 @@ export function SalesActivityAnalytics({ data, anchorDate, dateFiltered }: { dat
             </table>
           </div>
 
-          {/* Per-salesperson breakdown (2026-07-13, P'Keng/P'Kee business requirement) — a
-              distinct table from the one above: that one is period-only totals across everyone in
-              scope, this one is (period, salesperson) rows, Created/Edited only. */}
           <div className="mt-5 pt-4 border-t border-border">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("dashboard.salesActivity.bySalesperson.title")}</p>
             {bySalespersonRows.length === 0 ? (

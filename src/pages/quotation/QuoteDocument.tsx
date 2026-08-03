@@ -37,10 +37,6 @@ import { mergeServerValidationErrors } from "../../lib/validation/types";
 import { useI18n } from "../../lib/i18n";
 
 const BLOCKED_TOOLTIP = "กรุณากรอกข้อมูลและเลือกหัวข้อที่จำเป็นให้ครบก่อนดำเนินการ";
-/** Workflow actions exempt from the completeness gate — "rejected" sends the quote back to Draft
- * (which may stay incomplete) and "cancelled" abandons it outright; every other transition moves
- * toward a final status and must leave the document complete. Mirrors the server's own
- * VALIDATION_EXEMPT_ACTIONS in api/handlers/quotes.ts — the two must never drift apart. */
 const VALIDATION_EXEMPT_ACTIONS = new Set<ApprovalAction>(["rejected", "cancelled"]);
 
 const DEFAULT_TERMS = "1. ราคานี้ยังไม่รวมค่าขนส่งและค่าติดตั้ง\n2. ราคามีผลภายใน 30 วันนับจากวันที่ในเอกสาร\n3. การส่งมอบภายใน 45 วันทำการหลังได้รับ PO\n4. การชำระเงินมัดจำ 30% ก่อนเริ่มผลิต";
@@ -57,6 +53,8 @@ const ACTION_ICON: Record<ApprovalAction, React.ReactNode> = {
   cancelled: <Ban size={13} />,
 };
 
+// แบบฟอร์มใบเสนอราคาแบบเต็ม รวมข้อมูลลูกค้า รายการสินค้า ขั้นตอนอนุมัติ และมุมมองสำหรับพิมพ์
+// Full quotation document form, covering customer info, line items, approval workflow, and print view
 export function QuoteDocument({
   mode,
   quote,
@@ -84,15 +82,7 @@ export function QuoteDocument({
 }: {
   mode: "new" | "detail";
   quote?: Quote;
-  /** The full company-wide-or-own-only quote list already loaded at boot (`App.tsx`) — used only
-   * to look up a revision's immediate predecessor for "สร้างสรุปการแก้ไขอัตโนมัติ" (added
-   * 2026-07-23, see src/lib/revisionDiff.ts). No extra fetch: every quote this user can already
-   * see is already in memory app-wide. */
   allQuotes: Quote[];
-  /** Set only in "new" mode, when the quotation was started via the Job Type -> Template wizard
-   * (`QuotationTemplateWizard.tsx`). `null`/`undefined` means "start blank" — no fallback to any
-   * live template lookup happens here, matching the "template = one-time copy, never a live
-   * reference" rule (see docs/MODULES/QuotationTemplates.md). */
   wizardResult?: QuotationWizardResult | null;
   nextId: string;
   company: Company;
@@ -103,18 +93,12 @@ export function QuoteDocument({
   jobTypes: JobType[];
   customers: Customer[];
   permissions: QuotePermissions;
-  /** Gates the "สร้าง Scope of Work"/"เปิด / แก้ไข Scope of Work" toolbar action — added
-   * 2026-07-15, see docs/MODULES/ScopeOfWork.md. `canViewScopeOfWork` alone shows the button in its
-   * "open existing" form; creating a brand-new one additionally needs `canCreateScopeOfWork`. */
   canViewScopeOfWork: boolean;
   canCreateScopeOfWork: boolean;
   onOpenScopeOfWork: (scopeOfWorkId: string) => void;
   onBack: () => void;
   onSave: (data: QuoteDraftFields) => Promise<void>;
   onDuplicate: () => void;
-  /** Creates a new revision (`{root}-R{n}`) of the open quote and navigates to it — returns a
-   * Promise (unlike `onDuplicate`) so this component can disable the button for the duration of
-   * the request, guarding against duplicate revisions from a rapid double-click. */
   onRewrite: () => Promise<void>;
   onInterestChange: (v: QuoteInterest) => void;
   onWorkflowAction: (action: ApprovalAction, comment: string, draft: QuoteDraftFields) => Promise<void>;
@@ -123,28 +107,11 @@ export function QuoteDocument({
   const { t } = useI18n();
   const isDetail = mode === "detail" && !!quote;
 
-  // Snapshot-first display resolver (2026-07-14, Codex review High #1 fix) — the specified
-  // fallback order when reopening a quotation is (1) the quote's own frozen `customerSnapshot`
-  // (what was actually submitted the last time a customer field was saved), (2) the quote's
-  // legacy top-level fields (quotes that predate this feature, or the rare case a snapshot is
-  // absent), (3) empty. Deliberately does NOT fall back further to a *live* lookup of the current
-  // customer master record by `customerId` — that would silently overwrite whatever the user
-  // already typed/edited on this quote with today's master data, exactly the "editing copied data
-  // must not retroactively change the quotation" guarantee `customerSnapshot` exists to give. Uses
-  // `??`, not `||`, so a real empty string stored in the snapshot (e.g. no contact name was ever
-  // given) is respected as-is rather than incorrectly falling through to the legacy field.
   const customerSnapshot = quote?.customerSnapshot;
 
   const [client, setClient] = useState(customerSnapshot?.companyName ?? quote?.client ?? "");
-  // Derived, not local state: the component doesn't remount on a workflow-driven status change
-  // (same `key`, since selectedId is unchanged), so this must always reflect the live prop.
   const quoteStatus: QuoteStatus = quote?.status ?? "ร่าง";
 
-  // Quotation Template wizard result (2026-07-14) — a ONE-TIME copy consumed at mount only (see
-  // `QuotationTemplateWizard.tsx`/`applyTemplate.ts`). `quote` always wins when present (reopening
-  // an existing quotation must never re-apply a template), so this only ever affects a fresh "new"
-  // mount. `quotationTemplateId/Name/Version` are frozen provenance metadata: no setter is exposed
-  // because nothing in this form is meant to change them after creation (see `src/lib/quotes.tsx`).
   const templateSnapshot = wizardResult?.templateSnapshot ?? null;
   const quotationTemplateId = quote?.quotationTemplateId ?? templateSnapshot?.quotationTemplateId ?? "";
   const quotationTemplateName = quote?.quotationTemplateName ?? templateSnapshot?.quotationTemplateName ?? "";
@@ -168,33 +135,18 @@ export function QuoteDocument({
   const [remarks, setRemarks] = useState(quote?.remarks ?? (templateSnapshot?.remarks || company.termsAndConditions || DEFAULT_TERMS));
   const [revisionNote, setRevisionNote] = useState(quote?.revisionNote ?? "");
   const [jobTypeCode, setJobTypeCode] = useState(quote?.jobTypeCode ?? wizardResult?.jobTypeCode ?? "");
-  // Seeded from the quote's own persisted snapshot, not re-derived from the live `jobTypes` list on
-  // every render — jobTypeCode/jobTypeName are a deliberate snapshot (see src/lib/quotes.tsx), so
-  // renaming or recoding a Job Type after this quote was saved must not silently change what this
-  // quote displays or re-save a different name the next time it's edited.
   const [jobTypeName, setJobTypeName] = useState(quote?.jobTypeName ?? wizardResult?.jobTypeName ?? "");
   const [isPotentialOpportunity, setIsPotentialOpportunity] = useState(quote?.isPotentialOpportunity ?? false);
   const [followUpDate, setFollowUpDate] = useState(quote?.followUpDate ?? "");
   const disabled = !permissions.canEdit;
 
-  // ── Customer selection (added 2026-07-14, replacing an earlier — wrong — "issuer company"
-  // feature) ───────────────────────────────────────────────────────────────────────────────────
-  // "Save customer info once, pick which one this quote is for" — see CustomerSelector.tsx and
-  // docs/MODULES/Customer.md. This app only ever issues quotations under a single company
-  // identity, so there is no separate issuer-selection concept here at all.
   const originalCustomerId = quote?.customerId ?? "";
   const [customerId, setCustomerId] = useState(originalCustomerId);
   const customerChanged = customerId !== originalCustomerId;
-  // "If quotation is Draft, allow changing the selected customer... if already approved/sent/won/
-  // lost, block the change" — enforced again server-side (api/handlers/quotes.ts) since this is
-  // only the UI convenience layer.
   const canChangeCustomer = !disabled && (mode === "new" || quoteStatus === "ร่าง");
 
-  // Assigns all nine fields unconditionally, including blanks (2026-07-14, Codex review High #2
-  // fix) — previously deliveryMethod/project/deliveryAddress were only overwritten when the
-  // selected customer's value was truthy, so selecting a customer with no delivery info left
-  // whatever the *previous* customer/manual entry had typed there, silently carrying stale data
-  // into the newly-selected customer's quotation.
+  // เติมข้อมูลลูกค้าทั้งหมดในแบบฟอร์มจากลูกค้าที่เลือก รวมถึงช่องที่ว่างเปล่าด้วย
+  // Fills in all customer fields on the form from the selected customer, including blank ones
   const handleSelectCustomer = (c: Customer) => {
     setCustomerId(c.id);
     setClient(c.companyName);
@@ -209,9 +161,6 @@ export function QuoteDocument({
   };
   const handleClearCustomer = () => setCustomerId("");
 
-  // This app only issues quotations under a single company identity (the Settings -> Company Info
-  // singleton) — no per-quote issuer selection. `CompanyHeaderInfo` (`src/lib/storage.ts`) is the
-  // shared shape PrintDocument.tsx renders (name/logo/address/phone/email/tax id/stamp).
   const companyHeader: CompanyHeaderInfo = {
     name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
     phone: company.phone, fax: "", email: company.email, website: "", taxId: company.taxId,
@@ -222,6 +171,8 @@ export function QuoteDocument({
   const [actionComment, setActionComment] = useState("");
   const [actionError, setActionError] = useState("");
   const [rewriteBusy, setRewriteBusy] = useState(false);
+  // เขียนใบเสนอราคาใหม่ พร้อมกันการกดซ้ำระหว่างที่กำลังดำเนินการ
+  // Triggers rewrite, guarding against a repeat click while the request is in flight
   const handleRewriteClick = async () => {
     if (rewriteBusy) return;
     setRewriteBusy(true);
@@ -232,25 +183,11 @@ export function QuoteDocument({
     }
   };
 
-  // ── Scope of Work (added 2026-07-15) ──────────────────────────────────────────────────────────
-  // "Does a Scope of Work already exist for this quotation?" — looked up once per opened quotation
-  // (not per render) so the toolbar button can show "เปิด / แก้ไข Scope of Work" instead of
-  // "สร้าง Scope of Work" when one already does. Only the most-recently-updated one is opened by
-  // this button if more than one exists (e.g. from "ทำสำเนา") — see docs/MODULES/ScopeOfWork.md.
   const [existingScopeOfWork, setExistingScopeOfWork] = useState<ScopeOfWorkSummary | null>(null);
   const [scopeOfWorkBusy, setScopeOfWorkBusy] = useState(false);
-  // Manual-ONLY document number (2026-07-29, owner: "ระบบไม่ต้องสร้างเลขเองดิ") — this modal now
-  // collects the WHOLE document number typed by the user (free-form, no format guardrails per the
-  // owner's explicit decision), replacing the old required-`secondaryCode` prompt from the
-  // auto-numbering era. The server enforces non-blank + uniqueness (409 with a clear message).
   const [scopeOfWorkPromptOpen, setScopeOfWorkPromptOpen] = useState(false);
   const [scopeOfWorkPromptError, setScopeOfWorkPromptError] = useState("");
   useEffect(() => {
-    // `isDetail`/`canViewScopeOfWork` can't actually flip during this component's lifetime (a
-    // mode/permission change always comes with a fresh mount via QuotationPage's `key`), so
-    // there's no stale-`existingScopeOfWork`-from-a-different-mode case to reset here — the
-    // `useState(null)` initial value already covers it. Skipping the fetch outright (rather than
-    // setState-ing back to null first) avoids a synchronous setState at the top of the effect.
     if (!isDetail || !canViewScopeOfWork) return;
     let cancelled = false;
     fetchScopeOfWorksByQuotation(quote!.id)
@@ -259,6 +196,8 @@ export function QuoteDocument({
     return () => { cancelled = true; };
   }, [isDetail, quote, canViewScopeOfWork]);
 
+  // เปิด Scope of Work ที่มีอยู่แล้ว หรือเปิด modal ให้กรอกเลขที่เอกสารเพื่อสร้างใหม่
+  // Opens the existing Scope of Work, or opens the prompt to create one with a document number
   const handleScopeOfWorkClick = () => {
     if (!quote) return;
     if (existingScopeOfWork) {
@@ -269,6 +208,8 @@ export function QuoteDocument({
     setScopeOfWorkPromptOpen(true);
   };
 
+  // สร้าง Scope of Work ใหม่จากใบเสนอราคานี้ด้วยเลขที่เอกสารที่กรอก แล้วเปิดขึ้นมา
+  // Creates a new Scope of Work from this quote with the entered document number, then opens it
   const confirmCreateScopeOfWork = async (scopeOfWorkNumber: string) => {
     if (!quote) return;
     const scopeNumber = scopeOfWorkNumber.trim();
@@ -285,12 +226,6 @@ export function QuoteDocument({
     }
   };
 
-  // Document tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button
-  // convention as the list pages' tours. Anchors exist in both new and detail modes, but the
-  // one-time auto-fire is gated to DETAIL mode (`autoStart: isDetail`): the actions step
-  // enumerates duplicate/rewrite/create-SOW and the approval-workflow buttons, all of which are
-  // `isDetail`-gated — auto-firing over the blank create form would burn the single attempt on a
-  // toolbar that doesn't show them yet. The replay button still works in both modes.
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="qdoc-actions"]', popover: { title: t("tour.qdoc.actions.title"), description: t("tour.qdoc.actions.desc"), side: "bottom" } },
     { element: '[data-tour="qdoc-customer"]', popover: { title: t("tour.qdoc.customer.title"), description: t("tour.qdoc.customer.desc"), side: "right" } },
@@ -301,11 +236,15 @@ export function QuoteDocument({
   const { total } = computeTotals(lines, discount);
   const jobTypeDisplay = jobTypeCode ? `${jobTypeCode} — ${jobTypeName}` : "";
 
+  // เปลี่ยนประเภทงานที่เลือก แล้วอัปเดตชื่อประเภทงานที่แสดงให้ตรงกัน
+  // Changes the selected job type and syncs its display name
   const handleJobTypeChange = (code: string) => {
     setJobTypeCode(code);
     setJobTypeName(jobTypes.find((jt) => jt.code === code)?.name ?? "");
   };
 
+  // รวบรวมข้อมูลร่างปัจจุบันบนหน้าจอทั้งหมดเป็นก้อนเดียวสำหรับบันทึก/ส่งอนุมัติ
+  // Gathers the current on-screen draft into one object for saving or workflow actions
   const currentDraft = (): QuoteDraftFields => ({
     client, status: quoteStatus, lines, discount, amount: total,
     salesperson, contactName, contactPhone, contactEmail, address, taxId,
@@ -315,22 +254,13 @@ export function QuoteDocument({
     jobTypeName,
     isPotentialOpportunity,
     followUpDate,
-    // Only sent when it actually changed from what the quote already had — avoids tripping the
-    // server's Draft-only guard on every unrelated save of an already-non-Draft quote (see
-    // api/handlers/quotes.ts's resolveCustomerIdUpdate()). A brand-new quote always sends it
-    // (customerChanged is trivially true against the empty original).
     ...(customerChanged ? { customerId } : {}),
-    // Template provenance — create-only (see `QuoteDraftFields`'s Pick union in src/lib/quotes.tsx
-    // and `sanitizePartialQuoteFields()` in api/handlers/quotes.ts, which never accepts this field
-    // on update). Server re-derives quotationTemplateName/Version from this id; never send those.
     ...(mode === "new" && quotationTemplateId ? { quotationTemplateId } : {}),
   });
 
-  // ── Revision note auto-summary (added 2026-07-23, per direct user request) ──────────────────
-  // Only applies to a quote that's actually a revision (`{root}-R{n}`) — the record this one was
-  // rewritten from is already loaded in `allQuotes` (the app's own boot-time full list), so no
-  // extra fetch is needed here (unlike Scope of Work's equivalent, whose records aren't preloaded).
   const revisionPredecessorId = isDetail && quote ? getRevisionPredecessorId(quote.id) : null;
+  // สร้างสรุปการแก้ไขอัตโนมัติโดยเทียบใบต้นฉบับกับร่างปัจจุบัน
+  // Auto-generates a revision-note summary by diffing the predecessor quote against the current draft
   const handleGenerateRevisionNote = () => {
     if (!revisionPredecessorId) return;
     const predecessor = allQuotes.find((q) => q.id === revisionPredecessorId);
@@ -342,12 +272,6 @@ export function QuoteDocument({
     showToast("สร้างสรุปการแก้ไขอัตโนมัติแล้ว — ตรวจสอบและแก้ไขเพิ่มเติมได้ตามต้องการ");
   };
 
-  // ── Required-field validation (added 2026-07-16, relaxed back to a minimal set the same day —
-  // see docs/MODULES/Quotation.md "Required-Field Validation") ─────────────────────────────────
-  // Mirrors validateQuotationForFinalization() server-side exactly (same shared function, see
-  // src/lib/validation/quotationValidation.ts) — recomputed on every render from the live on-screen
-  // draft so Print/Submit/Approve/etc. reflect the current, possibly-just-edited state, not the
-  // last-saved one. Only `client` is actually required today; every other field may stay empty.
   const clientValidation = useMemo(
     () => validateQuotationForFinalization({
       client, salesperson, contactName, contactPhone, contactEmail, address, taxId,
@@ -358,16 +282,14 @@ export function QuoteDocument({
       project, poRef, paymentTerms, issueDate, expiryDate, jobTypeCode, remarks,
       followUpDate, isPotentialOpportunity],
   );
-  // A `422 DOCUMENT_INCOMPLETE` from the server (print/workflow — see handlePrintClick/confirmAction
-  // below) is merged in on top of the live client-side result, added 2026-07-16 (Codex review Medium
-  // Priority fix) — previously a server-only rejection (e.g. a race against a just-saved change) was
-  // surfaced only as a toast, never reflected in the inline field/group errors or the summary.
   const [serverValidationErrors, setServerValidationErrors] = useState<{ fieldErrors: Record<string, string>; groupErrors: Record<string, string[]> } | null>(null);
   const validation = mergeServerValidationErrors(clientValidation, serverValidationErrors);
   const validationSummaryMessages = [...Object.values(validation.fieldErrors), ...Object.values(validation.groupErrors).flat()];
   const totalRequiredChecks = Object.values(quotationRequiredFields).filter((f) => f.required).length;
   const summaryRef = useRef<HTMLDivElement>(null);
 
+  // เรียกใช้ workflow action ก็ต่อเมื่อเอกสารผ่านการตรวจสอบครบถ้วนแล้ว (ยกเว้นบาง action)
+  // Runs a workflow action only when the document passes validation (except exempt actions)
   const guardedWorkflowAction = (action: ApprovalAction) => {
     if (!VALIDATION_EXEMPT_ACTIONS.has(action) && !validation.valid) {
       showToast(BLOCKED_TOOLTIP);
@@ -377,6 +299,8 @@ export function QuoteDocument({
     openAction(action);
   };
 
+  // ตรวจสอบความครบถ้วน บันทึกสถานะการพิมพ์ที่เซิร์ฟเวอร์ แล้วเปิดหน้าต่างพิมพ์ของเบราว์เซอร์
+  // Validates completeness, records the print on the server, then opens the browser print dialog
   const handlePrintClick = async () => {
     if (!validation.valid) {
       showToast(BLOCKED_TOOLTIP);
@@ -396,23 +320,8 @@ export function QuoteDocument({
     }
   };
 
-  // Warn on an accidental tab close/refresh while there are unsaved edits — a plain JSON diff
-  // against the form's state at mount is a cheap, good-enough "is this dirty" check for a leave-
-  // page guard; it doesn't need to be a precise field-by-field diff. Covers real browser
-  // navigation (`beforeunload`) only — switching sidebar sections is a React state change, not a
-  // browser navigation event, so this doesn't catch that case; a further enhancement, not done here.
-  //
-  // Performance hardening pass: this used to run with no dependency array, so it re-serialized the
-  // *entire* draft (every line item/sub-detail) via JSON.stringify and removed+re-added the
-  // `beforeunload` listener on every single render — i.e. on every keystroke in any field. The
-  // listener is now registered once (only re-registering if `disabled` changes) and reads the
-  // latest draft lazily, through a ref, only at the moment the browser actually tries to unload —
-  // not on every render.
   const initialDraftJson = useRef(JSON.stringify(currentDraft()));
   const currentDraftRef = useRef(currentDraft);
-  // Ref writes must happen outside render (react-hooks/refs) — this effect's only job is keeping
-  // the ref current every render; it's a plain reference assignment (no JSON.stringify, no listener
-  // churn), so it stays cheap even though it runs on every render, unlike the effect below it.
   useEffect(() => {
     currentDraftRef.current = currentDraft;
   });
@@ -428,14 +337,8 @@ export function QuoteDocument({
     return () => window.removeEventListener("beforeunload", handler);
   }, [disabled]);
 
-  // Client-side check for the two most common save failures — instant, clear Thai feedback
-  // instead of a round trip to the server just to learn the same thing (the server still
-  // validates both regardless; this only saves a request in the common case).
-  //
-  // Awaits `onSave` before toasting success (accessibility hardening pass) — this used to fire the
-  // "Saved!" toast synchronously before the request even began, so a slow or failing save briefly
-  // showed a false-positive confirmation. `savingBusy` also guards the button itself against a
-  // double-click firing two concurrent creates/updates while the first request is still in flight.
+  // บันทึกใบเสนอราคาหลังตรวจข้อมูลจำเป็นเบื้องต้น พร้อมกันบันทึกซ้ำระหว่างกำลังส่งคำขอ
+  // Saves the quote after basic required-field checks, guarding against a concurrent duplicate save
   const [savingBusy, setSavingBusy] = useState(false);
   const save = async (message: string) => {
     if (!client.trim()) { showToast(t("quotation.errorClientRequired")); return; }
@@ -446,8 +349,7 @@ export function QuoteDocument({
       await onSave(currentDraft());
       showToast(message);
     } catch {
-      // QuotationPage.tsx's handleSave already shows the specific error toast and rethrows purely
-      // so this catch exists to swallow it here — nothing further to do.
+      // caller already surfaced the error toast; nothing further to do
     } finally {
       setSavingBusy(false);
     }
@@ -455,28 +357,19 @@ export function QuoteDocument({
 
   const commentRequired = pendingAction === "rejected" || pendingAction === "customer_rejected" || pendingAction === "cancelled";
   const openAction = (a: ApprovalAction) => { setPendingAction(a); setActionComment(""); setActionError(""); };
-  // Guards against a double-click on Confirm firing the same irreversible workflow transition
-  // twice while the first request is still in flight (accessibility/correctness hardening pass).
   const [actionBusy, setActionBusy] = useState(false);
+  // ยืนยันและดำเนินการ workflow action ที่ค้างอยู่ พร้อมตรวจสอบความครบถ้วน/ความคิดเห็นก่อนส่ง
+  // Confirms and runs the pending workflow action, re-checking completeness and comment requirements first
   const confirmAction = async () => {
     if (!pendingAction || actionBusy) return;
-    // Defensive re-check — guardedWorkflowAction() already keeps this modal from opening for a
-    // gated action on an incomplete document, but the server is the actual source of truth
-    // (see api/handlers/quotes.ts's handleWorkflow); this just avoids a pointless round trip.
     if (!VALIDATION_EXEMPT_ACTIONS.has(pendingAction) && !validation.valid) { setActionError(BLOCKED_TOOLTIP); return; }
     if (commentRequired && !actionComment.trim()) { setActionError(t("quotation.errorCommentRequired")); return; }
     setServerValidationErrors(null);
     setActionBusy(true);
     try {
-      // Pass the current on-screen draft, not just the action — otherwise any unsaved edit
-      // (e.g. line items changed but "บันทึก" not yet clicked) is silently discarded when the
-      // workflow transition is applied to the last-saved quote record instead.
       await onWorkflowAction(pendingAction, actionComment.trim(), currentDraft());
       setPendingAction(null);
     } catch (err) {
-      // QuotationPage.tsx's handleWorkflowAction already showed a toast and rethrew — this only
-      // adds the inline field/group highlighting a server-side rejection wouldn't otherwise get
-      // (2026-07-16, Codex review Medium Priority fix). Keep the modal open so the user can see why.
       if (err instanceof ApiError && err.code === "DOCUMENT_INCOMPLETE") {
         setServerValidationErrors({ fieldErrors: err.fieldErrors ?? {}, groupErrors: err.groupErrors ?? {} });
         summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -486,7 +379,6 @@ export function QuoteDocument({
     }
   };
 
-  // Signature integration: preparer = quote creator (or current user for a brand-new quote); approver = whoever most recently approved.
   const preparerUser = isDetail
     ? users.find((u) => u.id === quote!.createdByUserId)
     : currentUser;
@@ -503,7 +395,6 @@ export function QuoteDocument({
 
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
-      {/* Toolbar */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
         <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("quotation.breadcrumb")}
@@ -616,7 +507,6 @@ export function QuoteDocument({
           <ValidationSummary missingCount={validation.missingCount} messages={validationSummaryMessages} />
         </div>
 
-        {/* Document header band */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 flex flex-wrap items-start justify-between gap-4 print:hidden">
             <div className="min-w-0">
@@ -640,7 +530,6 @@ export function QuoteDocument({
             </div>
           </div>
 
-          {/* Meta fields — editable on screen */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-b border-border print:hidden">
             <div data-tour="qdoc-customer" className="p-6 border-b sm:border-b-0 sm:border-r border-border">
               <h2 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</h2>
@@ -741,12 +630,6 @@ export function QuoteDocument({
                   <div>
                     <RequiredFieldLabel required={false} htmlFor="quote-jobType">{t("quotation.field.jobType")}</RequiredFieldLabel>
                     <select id="quote-jobType" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={jobTypeCode} onChange={(e) => handleJobTypeChange(e.target.value)}>
-                      {/* A brand-new quote must be assigned a real Job Type — required server-side
-                          too (see api/_lib/quoteValidation.ts) — so the blank "unclassified" choice
-                          is only offered when editing an existing quote that already has one
-                          (legacy data predating this field, or explicitly cleared before). A
-                          disabled placeholder keeps the select non-blank-looking until a real
-                          choice is made, instead of silently defaulting to "unclassified." */}
                       {mode === "new"
                         ? <option value="" disabled>{t("quotation.field.jobTypeSelectPrompt")}</option>
                         : <option value="">{t("quotation.field.jobTypeUnclassified")}</option>}
@@ -761,10 +644,6 @@ export function QuoteDocument({
                   </div>
                 </div>
                 {quotationTemplateId && (
-                  // Read-only provenance display — no input, since this is frozen at creation (see
-                  // the `quotationTemplateId` comment above). Only ever shown for a quote actually
-                  // created from a template; a manually-started ("เริ่มจากใบเสนอราคาเปล่า") quote
-                  // never has this set, in "new" mode or after reopening it later.
                   <p className="text-xs text-muted-foreground -mt-1">
                     {t("quotation.field.appliedTemplate")}: {quotationTemplateName} (v{quotationTemplateVersion})
                   </p>
@@ -795,7 +674,6 @@ export function QuoteDocument({
           <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} />
         </div>
 
-        {/* Remarks + Signature — screen preview only; print output is PrintDocument below */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
           <div className="bg-card border border-border rounded-xl p-5">
             <h2 id="quote-remarks-heading" className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("quotation.section.remarks")}</h2>
@@ -834,7 +712,6 @@ export function QuoteDocument({
           </div>
         </div>
 
-        {/* Revision note — only for a quote that IS itself a revision (added 2026-07-23) */}
         {isDetail && quote && isRevisionQuote(quote.id) && (
           <div className="bg-card border border-border rounded-xl p-5 print:hidden">
             <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
@@ -865,7 +742,6 @@ export function QuoteDocument({
           </div>
         )}
 
-        {/* Approval history */}
         {isDetail && quote!.approvalHistory.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-5 print:hidden">
             <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
@@ -965,16 +841,8 @@ export function QuoteDocument({
   );
 }
 
-/**
- * The workflow-action confirm modal (submit/approve/reject/send-to-customer/etc.) — not migrated
- * onto the shared `PromptDialog` (accessibility hardening pass) because it needs a `danger`-style
- * confirm button and a dynamic required/optional comment label that `PromptDialog` doesn't model;
- * forcing it into that shape risked a behavior regression in the approval workflow. Instead it gets
- * the same underlying accessibility fix directly: `role="dialog"`/`aria-modal`, Escape-to-close and
- * a Tab focus trap via `useDialogA11y` (only safe to call unconditionally here because this
- * component itself is only ever mounted while the dialog is open — same pattern as
- * `PromptDialogForm`), a real `<h2>` title, and a busy-guard on both buttons.
- */
+// โมดัลยืนยัน workflow action (ส่งอนุมัติ/อนุมัติ/ตีกลับ/ส่งลูกค้า ฯลฯ) พร้อมช่องความคิดเห็นและการดักโฟกัสสำหรับผู้ใช้คีย์บอร์ด
+// Confirm modal for workflow actions (submit/approve/reject/send-to-customer/etc.), with a comment field and keyboard focus trapping
 function WorkflowActionDialog({
   actionLabel, forQuoteMessage, commentLabel, commentRequiredLabel, commentOptionalLabel,
   commentRequired, actionComment, onActionCommentChange, actionError, confirmLabel, cancelLabel,

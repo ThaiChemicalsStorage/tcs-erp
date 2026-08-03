@@ -2,6 +2,8 @@ import { CalendarClock } from "lucide-react";
 import type { FollowUps, FollowUpSummary } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 
+// แถวรายการติดตามงานหนึ่งรายการ กดแล้วเปิดรายชื่อใบเสนอราคาของลูกค้ารายนั้น
+// A single follow-up row; clicking it opens that customer's filtered quotation list.
 function Row({ f, onClick }: { f: FollowUpSummary; onClick: (client: string) => void }) {
   return (
     <button onClick={() => onClick(f.client)} className="w-full flex items-center justify-between text-xs py-2 border-b border-border/40 last:border-0 hover:bg-secondary/40 transition-colors px-1 rounded text-left">
@@ -14,7 +16,8 @@ function Row({ f, onClick }: { f: FollowUpSummary; onClick: (client: string) => 
   );
 }
 
-/** Clicking a follow-up opens the filtered quotation list for that customer — the plan's simplified version of "clicking opens customer details" since there's no Customer detail view yet. */
+// แสดงรายการติดตามงานที่เกินกำหนด/วันนี้/กำลังจะถึง แบ่งเป็นกลุ่ม
+// Shows follow-up reminders grouped into overdue, today, and upcoming sections.
 export function FollowUpReminders({ followUps, onOpenClient }: { followUps: FollowUps; onOpenClient: (client: string) => void }) {
   const { t } = useI18n();
   const sections: { key: keyof FollowUps; label: string; accent: string }[] = [

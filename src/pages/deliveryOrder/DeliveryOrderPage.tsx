@@ -7,14 +7,8 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
 
-/**
- * Standalone Delivery Order management page (added 2026-07-23, per direct user request "ให้ทำหน้า
- * แยกตรง side bar ออกมาด้วยเหมือนกับพวก scope of work กับ ใบเสนอราคา") — same "list page owns list↔
- * detail view state, detail component is keyed by id" pattern ScopeOfWorkPage.tsx already uses. A
- * Delivery Order is still only ever *created* from the "สร้างใบส่งมอบสินค้า" button on
- * ScopeOfWorkDocument.tsx's toolbar — this page is purely for browsing/opening ones that already
- * exist, plus editing/printing/finalizing/deleting them.
- */
+// หน้าจัดการใบส่งมอบสินค้าแบบแยกอิสระ สลับระหว่างมุมมองรายการและรายละเอียดของแต่ละใบ
+// Standalone delivery order management page, switching between the list view and a per-order detail view
 export function DeliveryOrderPage({
   company,
   currentUserId,
@@ -27,16 +21,12 @@ export function DeliveryOrderPage({
   onDeliveryOrderIdConsumed,
 }: {
   company: Company;
-  /** For the list's one-time guided tour "seen" tracking (see useModuleTour). */
   currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
-  /** Gates the detail view's Rewrite action (added 2026-07-24) — `deliveryOrder:create`. */
   canCreate: boolean;
-  /** Set when navigated here from ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button — same
-   * "adjust state during rendering" pattern as ScopeOfWorkPage.tsx's `initialScopeOfWorkId`. */
   initialDeliveryOrderId?: string | null;
   onDeliveryOrderIdConsumed?: () => void;
 }) {

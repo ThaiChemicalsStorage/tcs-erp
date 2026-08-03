@@ -7,15 +7,8 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
 
-/**
- * Standalone Scope of Work management page (added 2026-07-22, per direct user request) — a
- * top-level sidebar module, separate from the Quotation module a Scope of Work is still always
- * *created* from (the "สร้าง Scope of Work" button on QuoteDocument.tsx's toolbar is unchanged).
- * This page is purely for browsing/opening ones that already exist — the same "list page owns
- * list↔detail view state, detail component is keyed by id" pattern QuotationPage.tsx already uses
- * for quotes, reusing the exact same `ScopeOfWorkDocument.tsx` component that page also renders
- * inline (only `onBack`/`backLabel` differ, since there's no quotation to return to from here).
- */
+// หน้าจัดการ Scope of Work แบบแยกต่างหาก แสดงรายการและรายละเอียดของเอกสารที่มีอยู่แล้ว
+// Standalone Scope of Work page managing list/detail view state for existing records.
 export function ScopeOfWorkPage({
   users,
   currentUserId,
@@ -32,23 +25,16 @@ export function ScopeOfWorkPage({
   onScopeOfWorkIdConsumed,
 }: {
   users: User[];
-  /** For the list's one-time guided tour "seen" tracking (see useModuleTour). */
   currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
-  /** Gates the detail view's "ทวงเลข PO" button (`scopeOfWork:chasePo`, added 2026-07-29). */
   canChasePo: boolean;
-  /** Threaded straight through to ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button
-   * (added 2026-07-23) — see that component's own doc comment. */
   canViewDeliveryOrder: boolean;
   canCreateDeliveryOrder: boolean;
   onOpenDeliveryOrder: (deliveryOrderId: string) => void;
-  /** Set by a notification click (added 2026-07-23, "scope_of_work_document_sent" — see
-   * App.tsx's `onNavigate`) — jumps straight to that record's detail view instead of just the
-   * list. Same "adjust state during rendering" pattern as `QuotationPage.tsx`'s `initialQuoteId`. */
   initialScopeOfWorkId?: string | null;
   onScopeOfWorkIdConsumed?: () => void;
 }) {
@@ -60,9 +46,8 @@ export function ScopeOfWorkPage({
   const [loadError, setLoadError] = useState(false);
   const toast = useToast();
 
-  // Extracted so returning from the detail view can re-fetch too (see `onBack` below) — without
-  // this, creating a Rewrite/Duplicate/edit while viewing a record and then going "back to list"
-  // would show a stale list missing whatever just changed, until a full page reload.
+  // โหลดรายการ Scope of Work ใหม่จากเซิร์ฟเวอร์ (ใช้ตอนกลับมาจากหน้ารายละเอียดด้วย)
+  // Reloads the Scope of Work list from the server, also used when returning from detail view.
   const loadList = () => {
     setLoading(true);
     setLoadError(false);
@@ -79,20 +64,19 @@ export function ScopeOfWorkPage({
     return () => { cancelled = true; };
   }, []);
 
+  // เปิดหน้ารายละเอียดของ Scope of Work ตาม id ที่ระบุ
+  // Opens the detail view for the given Scope of Work id.
   const openScopeOfWork = (id: string) => {
     setSelectedId(id);
     setView("detail");
   };
+  // กลับไปหน้ารายการและโหลดข้อมูลใหม่
+  // Returns to the list view and reloads the data.
   const backToList = () => {
     setView("list");
     loadList();
   };
 
-  // React's "adjust state during rendering" pattern (not an effect — this only touches this
-  // component's own local state), mirroring QuotationPage.tsx's identical `initialQuoteId`
-  // handling. Reacts to every change of `initialScopeOfWorkId`, not just once per mount, so a
-  // second notification click while this page is already open showing some other record still
-  // jumps straight to the newly-clicked one.
   const [appliedScopeOfWorkId, setAppliedScopeOfWorkId] = useState<string | null>(null);
   if (initialScopeOfWorkId && initialScopeOfWorkId !== appliedScopeOfWorkId) {
     setAppliedScopeOfWorkId(initialScopeOfWorkId);

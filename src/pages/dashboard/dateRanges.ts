@@ -1,14 +1,5 @@
 export type DateRangePreset = "today" | "yesterday" | "last7" | "last14" | "thisMonth" | "lastMonth" | "thisQuarter" | "thisYear" | "custom" | "all";
 
-/**
- * Thailand is UTC+7 with no DST. Every date below is computed by shifting the current instant
- * by this fixed offset and then reading it back through UTC getters/`Date.UTC` only, never local
- * ones — mixing `new Date(y, m, d)` (local) with `.toISOString()` (UTC) shifts every boundary
- * back a day for any positive-UTC-offset user, and relying on the local getters alone would only
- * be correct if the browser's (or, server-side, Vercel's) configured timezone happens to be
- * Thailand's, which isn't guaranteed. This fixed-offset technique is correct regardless of the
- * runtime's ambient timezone.
- */
 const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
 
 function bangkokNow(): Date {
@@ -18,13 +9,15 @@ function iso(y: number, m: number, d: number): string {
   return new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
 }
 
-/** Today's date (YYYY-MM-DD) in Thailand's fixed UTC+7 offset — safe to use as a rolling trend's anchor date when no explicit `to` filter is selected. */
+// วันที่วันนี้ (YYYY-MM-DD) ตามเวลาไทย UTC+7 ใช้เป็นวันอ้างอิงเมื่อไม่ได้เลือกช่วงวันที่
+// Today's date (YYYY-MM-DD) in Thailand's fixed UTC+7 offset, used as a rolling trend's anchor date.
 export function todayIsoBangkok(): string {
   const now = bangkokNow();
   return iso(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 }
 
-/** Computes {from, to} for every preset except "custom" (caller supplies its own range) and "all" (no filter). */
+// คำนวณช่วง {from, to} ตามพรีเซ็ตที่เลือก ยกเว้น "custom" และ "all" ที่ไม่มีช่วงตายตัว
+// Computes {from, to} for every preset except "custom" (caller-supplied range) and "all" (no filter).
 export function rangeForPreset(preset: DateRangePreset): { from: string; to: string } | null {
   const now = bangkokNow();
   const y = now.getUTCFullYear();

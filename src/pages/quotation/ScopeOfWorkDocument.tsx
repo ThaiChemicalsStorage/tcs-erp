@@ -33,6 +33,8 @@ import { validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS } from "../../l
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint, scopeOfWorkRequiredFields } from "../../lib/validation/scopeOfWorkValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
 
+// แปลงข้อมูล Scope of Work เต็มรูปแบบให้เหลือเฉพาะฟิลด์ที่ใช้บันทึกอัปเดตได้ (สำหรับฉบับร่าง)
+// Converts a full Scope of Work record into just the fields allowed for a Draft update
 function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
   return {
     scopeNumber: s.scopeNumber,
@@ -58,11 +60,8 @@ function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
   };
 }
 
-/** The only fields a PATCH may carry on a PendingApproval/Final record — follow-up data exempt
- * from the approval lock (2026-07-29, the "ทวง PO" pass; see `FOLLOW_UP_FIELDS` in
- * api/_lib/scopeOfWorkHandler.ts): a customer PO usually arrives AFTER approval. Used by `save()`/
- * `handleSendDocuments()` whenever the record isn't a Draft, so a non-Draft save never trips the
- * server's content lock by sending the full field set. */
+// แปลงข้อมูลให้เหลือเฉพาะฟิลด์ติดตามผลที่แก้ไขได้แม้เอกสารผ่านการอนุมัติแล้ว (เช่น เลข PO)
+// Converts a record into just the follow-up fields editable even after approval (e.g. PO number)
 function toFollowUpFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
   return {
     customerPoNumber: s.customerPoNumber,
@@ -71,6 +70,8 @@ function toFollowUpFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
   };
 }
 
+// ช่องแก้ไขข้อมูลผู้ลงนามคนหนึ่ง (เลือกพนักงานหรือกรอกชื่อเอง พร้อมวันที่)
+// Editor for one signatory: pick an employee or type a free-text name, plus a date
 function SignatoryEditor({ label, value, onChange, users, disabled, required, error }: {
   label: string;
   value: ScopeOfWorkSignatory;
@@ -117,13 +118,8 @@ function SignatoryEditor({ label, value, onChange, users, disabled, required, er
   );
 }
 
-/**
- * Payment schedule editor — arbitrarily many installment rows (not capped at 2), added 2026-07-23
- * per direct user request. The 3 preset buttons (`PAYMENT_TERM_PRESETS`) replace the whole row set
- * with a common 2-installment schedule in one click; every row (preset-applied or manually added)
- * stays fully editable/removable afterward, and a user can freely build a 3+-installment plan (e.g.
- * 20% Down Payment / 40% Materials / 40% After Delivered Date) that no preset covers.
- */
+// ตารางแก้ไขงวดการชำระเงิน เพิ่ม/ลบ/แก้ไขงวดได้อิสระ พร้อมปุ่มเลือกรูปแบบสำเร็จรูป
+// Editable payment installment table, freely addable/removable, with quick-apply preset buttons
 function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
   installments: ScopeOfWorkPaymentInstallment[];
   onChange: (next: ScopeOfWorkPaymentInstallment[]) => void;
@@ -213,6 +209,8 @@ function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
   );
 }
 
+// แบบฟอร์มเอกสาร Scope of Work แบบเต็ม รวมข้อมูลลูกค้า รายการงาน เงื่อนไขชำระเงิน ขั้นตอนอนุมัติ และมุมมองพิมพ์
+// Full Scope of Work document form, covering customer info, work items, payment terms, approval workflow, and print view
 export function ScopeOfWorkDocument({
   scopeOfWorkId,
   users,
@@ -234,35 +232,19 @@ export function ScopeOfWorkDocument({
 }: {
   scopeOfWorkId: string;
   users: User[];
-  /** For the document tour's per-user "seen" tracking (see useModuleTour). */
   currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
-  /** Gates the "ทวงเลข PO" toolbar button — the dedicated `scopeOfWork:chasePo` permission
-   * (2026-07-29, owner request: chasing is an explicitly-granted right, not implied by view). */
   canChasePo: boolean;
-  /** Gates the "สร้าง/เปิดใบส่งมอบสินค้า" toolbar action (added 2026-07-23, per direct user
-   * request) — mirrors the same "does one already exist?" existence-check pattern QuoteDocument.tsx
-   * uses for its own "สร้าง/เปิด Scope of Work" button. `canCreateDeliveryOrder` alone (without
-   * `canViewDeliveryOrder`) would let a caller create one they then can't see the existence-check
-   * result for on a future visit — both are required together, same as Scope of Work's own
-   * create-button gating in QuoteDocument.tsx. */
   canViewDeliveryOrder: boolean;
   canCreateDeliveryOrder: boolean;
   onOpenDeliveryOrder: (deliveryOrderId: string) => void;
   onBack: () => void;
-  /** Defaults to the original "back to the quotation" framing (QuoteDocument.tsx's embedded usage)
-   * — the standalone Scope of Work management page (added 2026-07-22, ScopeOfWorkPage.tsx) passes
-   * "กลับไปรายการ Scope of Work" instead, since there's no quotation to go back to from there. */
   backLabel?: string;
   onDuplicated: (newId: string) => void;
-  /** Added 2026-07-22, mirroring `onDuplicated` above — called with the new revision's id once
-   * "Rewrite/แก้ไข" succeeds, same self-contained-API-call-then-report-the-id shape this component
-   * already uses for Duplicate (unlike Quotation's Rewrite, where the API call itself lives in the
-   * parent — kept consistent with this component's own existing convention instead). */
   onRewritten: (newId: string) => void;
   showToast: (msg: string) => void;
 }) {
@@ -273,27 +255,16 @@ export function ScopeOfWorkDocument({
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"submit" | "finalize" | "withdraw" | "refresh" | "delete" | null>(null);
-  // Guards against a double-click on Confirm firing the same action twice while the first request
-  // is still in flight (accessibility/correctness hardening pass) — matters most here since these
-  // are largely irreversible transitions (finalize, delete).
   const [actionRunning, setActionRunning] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const summaryRef = useRef<HTMLDivElement>(null);
-  // A `422 DOCUMENT_INCOMPLETE` from the server (print/finalize) merged on top of the live
-  // client-side result — added 2026-07-16, Codex review Medium Priority fix, see QuoteDocument.tsx's
-  // identical pattern.
   const [serverValidationErrors, setServerValidationErrors] = useState<{ fieldErrors: Record<string, string>; groupErrors: Record<string, string[]> } | null>(null);
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [sendingDocs, setSendingDocs] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [generatingRevisionNote, setGeneratingRevisionNote] = useState(false);
   const [chasingPo, setChasingPo] = useState(false);
-  // Which styled PromptDialog is open (replaces window.prompt, 2026-07-29 UX pass) — the two
-  // single-value prompts this page needs: a rejection reason and a duplicate's document number.
   const [promptOpen, setPromptOpen] = useState<"reject" | "duplicate" | null>(null);
-  // "Does a Delivery Order already exist for this Scope of Work?" (added 2026-07-23, per direct
-  // user request) — same existence-check pattern QuoteDocument.tsx uses for its own "สร้าง/เปิด
-  // Scope of Work" button. Opens the most-recently-updated one if more than one exists.
   const [existingDeliveryOrder, setExistingDeliveryOrder] = useState<DeliveryOrderSummary | null>(null);
   const [deliveryOrderBusy, setDeliveryOrderBusy] = useState(false);
   useEffect(() => {
@@ -305,14 +276,6 @@ export function ScopeOfWorkDocument({
     return () => { cancelled = true; };
   }, [scopeOfWorkId, canViewDeliveryOrder]);
 
-  // `scope`/`loadError` reset to their initial values (null/false) via a fresh mount whenever
-  // `scopeOfWorkId` changes — the parent renders this component with `key={scopeOfWorkId}` for
-  // exactly this reason (also closes a real correctness hazard: without a remount, switching to a
-  // different record before its fetch resolves could leave the OLD record's data on screen and
-  // savable against the NEW id). `reloadKey` only exists for the retry-after-error case, where the
-  // reset is triggered directly by the retry button's onClick (see below), not synchronously here
-  // — calling setState as the first thing an effect does causes an avoidable extra render cascade
-  // (react-hooks/set-state-in-effect), same convention as DashboardPage.tsx's retry pattern.
   useEffect(() => {
     let cancelled = false;
     fetchScopeOfWork(scopeOfWorkId)
@@ -321,9 +284,6 @@ export function ScopeOfWorkDocument({
     return () => { cancelled = true; };
   }, [scopeOfWorkId, reloadKey]);
 
-  // Document tour (added 2026-07-29) — `autoStart: !!scope` defers the one-time auto-fire until
-  // the record has actually loaded (the anchors don't exist over the loading spinner); the replay
-  // button in the toolbar restarts it any time.
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="sowdoc-actions"]', popover: { title: t("tour.sowdoc.actions.title"), description: t("tour.sowdoc.actions.desc"), side: "bottom" } },
     { element: '[data-tour="sowdoc-completion"]', popover: { title: t("tour.sowdoc.completion.title"), description: t("tour.sowdoc.completion.desc"), side: "bottom" } },
@@ -332,10 +292,6 @@ export function ScopeOfWorkDocument({
   ];
   const docTour = useModuleTour("scopeOfWorkDoc", currentUserId, docTourSteps, { autoStart: !!scope });
 
-  // Both branches below keep a minimal toolbar (just the back button) visible instead of a bare
-  // full-page block — accessibility/UX hardening pass: previously a hung or repeatedly-failing
-  // fetch left the user with no in-app way back except the retry button (mirrors
-  // DeliveryOrderDocument.tsx's identical fix).
   if (loadError) {
     return (
       <div className="flex-1 overflow-y-auto">
@@ -374,11 +330,6 @@ export function ScopeOfWorkDocument({
   const editable = canEdit && isDraft;
   const updateField = <K extends keyof ScopeOfWork>(field: K, value: ScopeOfWork[K]) => setScope((prev) => (prev ? { ...prev, [field]: value } : prev));
 
-  // ── Required-field/mandatory-selection validation (added 2026-07-16) ─────────────────────────
-  // Mirrors validateScopeOfWorkForFinalization/Print() server-side exactly (same shared functions,
-  // see src/lib/validation/scopeOfWorkValidation.ts). `printValidation` doesn't require an approver
-  // signature while still Draft (that's only a Finalize-time requirement); `finalizeValidation`
-  // always does — used to gate "ยืนยัน Final" specifically, everything else uses the more lenient one.
   const clientPrintValidation = validateScopeOfWorkForPrint(scope);
   const clientFinalizeValidation = validateScopeOfWorkForFinalization(scope);
   const printValidation = mergeServerValidationErrors(clientPrintValidation, serverValidationErrors);
@@ -391,8 +342,8 @@ export function ScopeOfWorkDocument({
   const summaryMessages = [...Object.values(finalizeValidation.fieldErrors), ...Object.values(finalizeValidation.groupErrors).flat()];
   const totalRequiredChecks = Object.values(scopeOfWorkRequiredFields).filter((f) => f.required).length + MANDATORY_CHECKLIST_GROUP_KEYS.length + 1 + 1;
 
-  // A non-Draft record saves only the follow-up subset (PO number/recipients/message) — the
-  // server's content lock rejects anything else; see toFollowUpFields() above.
+  // บันทึกฉบับร่างเต็มรูปแบบ หรือเฉพาะฟิลด์ติดตามผลถ้าเอกสารผ่านการอนุมัติแล้ว
+  // Saves the full draft, or just the follow-up fields once the record is no longer a Draft
   const save = async () => {
     if (!scope) return;
     try {
@@ -407,8 +358,8 @@ export function ScopeOfWorkDocument({
     }
   };
 
-  /** "ทวงเลข PO" (added 2026-07-29) — repeatable in-app chase to the record's salesperson; the
-   * server resolves who that actually is and reports the name back for the toast. */
+  // ส่งการแจ้งเตือนทวงเลข PO ไปยังพนักงานขายของเอกสารนี้
+  // Sends a chase-for-PO-number notification to this record's salesperson
   const handleChasePo = async () => {
     if (!scope || chasingPo) return;
     setChasingPo(true);
@@ -422,9 +373,8 @@ export function ScopeOfWorkDocument({
     }
   };
 
-  /** Saves first (the server reads recipients from the persisted record, not unsaved client state —
-   * see handleSendDocumentNotifications() in api/_lib/scopeOfWorkHandler.ts), then triggers the
-   * actual email send. Added 2026-07-23. */
+  // บันทึกข้อมูลก่อน แล้วจึงส่งอีเมลแจ้งผู้รับเอกสารที่เลือกไว้
+  // Saves first, then sends the document-notification emails to the selected recipients
   const handleSendDocuments = async () => {
     if (!scope || sendingDocs) return;
     setSendingDocs(true);
@@ -444,8 +394,8 @@ export function ScopeOfWorkDocument({
     }
   };
 
-  // ── ไฟล์แนบ (added 2026-07-24) — immediate API actions, not part of the unsaved draft; the
-  // file bytes are stored server-side in the scope_attachment_files collection. ─────────────────
+  // อัปโหลดไฟล์แนบทันที (ไม่ต้องรอกดบันทึก) โดยแปลงเป็น base64 ก่อนส่งขึ้นเซิร์ฟเวอร์
+  // Uploads an attachment immediately (not part of the unsaved draft), converting it to base64 first
   const handleUploadAttachment = async (file: File) => {
     if (!scope || uploadingAttachment) return;
     if (file.size > MAX_ATTACHMENT_BYTES) {
@@ -457,8 +407,6 @@ export function ScopeOfWorkDocument({
       const buffer = await file.arrayBuffer();
       let binary = "";
       const bytes = new Uint8Array(buffer);
-      // Chunked conversion — String.fromCharCode(...entireArray) overflows the argument limit on
-      // multi-MB files.
       for (let i = 0; i < bytes.length; i += 0x8000) {
         binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
       }
@@ -475,6 +423,8 @@ export function ScopeOfWorkDocument({
       setUploadingAttachment(false);
     }
   };
+  // ลบไฟล์แนบทันทีจากเซิร์ฟเวอร์
+  // Deletes an attachment immediately on the server
   const handleDeleteAttachment = async (attachmentId: string) => {
     if (!scope || uploadingAttachment) return;
     setUploadingAttachment(true);
@@ -489,13 +439,9 @@ export function ScopeOfWorkDocument({
     }
   };
 
-  /** "สร้างสรุปการแก้ไขอัตโนมัติ" — added 2026-07-23, per direct user request. Only applies when
-   * `scope.scopeNumber` is itself a revision (`{root}-R{n}`). Unlike Quotation's equivalent, the
-   * predecessor record isn't already loaded client-side (Scope of Work records are fetched
-   * per-id, not preloaded app-wide) — looked up via the existing by-quotation list (every
-   * revision of the same job shares one `quotationId`, unaffected by Rewrite) to find its `id`,
-   * then fetched in full. No new API route needed. */
   const revisionPredecessorScopeNumber = getRevisionPredecessorId(scope.scopeNumber);
+  // สร้างสรุปการแก้ไขอัตโนมัติโดยดึงข้อมูลต้นฉบับมาเทียบกับฉบับปัจจุบัน
+  // Auto-generates a revision-note summary by fetching the predecessor and diffing it against the current record
   const handleGenerateRevisionNote = async () => {
     if (!revisionPredecessorScopeNumber || generatingRevisionNote) return;
     setGeneratingRevisionNote(true);
@@ -516,10 +462,8 @@ export function ScopeOfWorkDocument({
     }
   };
 
-  /** "สร้าง/เปิดใบส่งมอบสินค้า" (added 2026-07-23, per direct user request) — mirrors
-   * QuoteDocument.tsx's `handleScopeOfWorkClick()`/`confirmCreateScopeOfWork()` exactly, minus the
-   * document-number prompt (a Delivery Order needs no extra input to create — everything it needs
-   * is already on the Scope of Work). */
+  // เปิดใบส่งมอบสินค้าที่มีอยู่แล้ว หรือสร้างใหม่จาก Scope of Work นี้แล้วเปิดขึ้นมา
+  // Opens the existing Delivery Order, or creates a new one from this Scope of Work and opens it
   const handleDeliveryOrderClick = async () => {
     if (!scope || deliveryOrderBusy) return;
     if (existingDeliveryOrder) {
@@ -537,6 +481,8 @@ export function ScopeOfWorkDocument({
     }
   };
 
+  // ตรวจสอบความครบถ้วน บันทึกการพิมพ์ที่เซิร์ฟเวอร์ แล้วเปิดหน้าต่างพิมพ์ของเบราว์เซอร์
+  // Validates completeness, logs the print on the server, then opens the browser print dialog
   const handlePrint = async () => {
     if (!scope) return;
     if (!printValidation.valid) {
@@ -548,10 +494,6 @@ export function ScopeOfWorkDocument({
     try {
       await logScopeOfWorkPrinted(scope.id);
     } catch (err) {
-      // The print endpoint now also re-validates server-side (see handlePrint in
-      // api/_lib/scopeOfWorkHandler.ts) — a 422 there means the client-side check above raced with
-      // a real change and must still block printing. Any other failure (e.g. the audit-log write
-      // itself hiccuping) must never block printing.
       if (err instanceof ApiError && err.status === 422) {
         showToast(err.message);
         if (err.code === "DOCUMENT_INCOMPLETE") {
@@ -564,8 +506,8 @@ export function ScopeOfWorkDocument({
     window.print();
   };
 
-  /** ส่งขออนุมัติ — print-level completeness only; the approver signatory is filled by whoever
-   * approves, so `finalizeValidation` (which requires it) would wrongly block every submission. */
+  // ส่งขออนุมัติ โดยตรวจสอบเฉพาะระดับความครบถ้วนสำหรับพิมพ์ ไม่บังคับลายเซ็นผู้อนุมัติ
+  // Submits for approval, checking only print-level completeness (approver signature not required yet)
   const handleSubmitClick = () => {
     if (!printValidation.valid) {
       showToast(BLOCKED_TOOLTIP);
@@ -575,8 +517,8 @@ export function ScopeOfWorkDocument({
     setConfirmAction("submit");
   };
 
-  /** ปฏิเสธ — comment required server-side; collected via the styled PromptDialog (2026-07-29
-   * UX pass, previously a jarring native `window.prompt`). */
+  // ปฏิเสธเอกสารพร้อมเหตุผลที่กรอกไว้ ตีกลับเป็นฉบับร่าง
+  // Rejects the document with the given comment, sending it back to Draft
   const confirmReject = async (comment: string) => {
     if (!scope) return;
     setPromptOpen(null);
@@ -589,9 +531,8 @@ export function ScopeOfWorkDocument({
     }
   };
 
-  /** Manual-ONLY numbers (2026-07-29): the copy needs its own user-typed document number — the
-   * system no longer mints one. Collected via the styled PromptDialog; a duplicate number
-   * surfaces the server's own 409 message as a toast. */
+  // ทำสำเนา Scope of Work ด้วยเลขที่เอกสารที่กรอกเอง แล้วเปิดฉบับสำเนาขึ้นมา
+  // Duplicates the Scope of Work with a manually entered document number, then opens the copy
   const confirmDuplicate = async (scopeNumber: string) => {
     if (!scope) return;
     setPromptOpen(null);
@@ -604,6 +545,8 @@ export function ScopeOfWorkDocument({
     }
   };
 
+  // เขียน Scope of Work ใหม่เป็นฉบับแก้ไข แล้วเปิดฉบับที่สร้างขึ้นมา
+  // Rewrites the Scope of Work into a new revision, then opens it
   const handleRewrite = async () => {
     if (!scope || rewriteBusy) return;
     setRewriteBusy(true);
@@ -618,6 +561,8 @@ export function ScopeOfWorkDocument({
     }
   };
 
+  // ดำเนินการตาม action ที่รอยืนยันอยู่ (ส่งอนุมัติ/อนุมัติ/ถอนคำขอ/รีเฟรช/ลบ) ตามที่เลือกไว้
+  // Runs the currently pending confirmed action (submit/finalize/withdraw/refresh/delete)
   const runConfirmedAction = async () => {
     if (!scope || !confirmAction || actionRunning) return;
     if (confirmAction === "finalize" || confirmAction === "submit") setServerValidationErrors(null);
@@ -665,17 +610,12 @@ export function ScopeOfWorkDocument({
 
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
-      {/* Toolbar */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
         <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {resolvedBackLabel}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
         <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{scope.scopeNumber}</span>
-        {/* Background/border keep the status hue; text is a darkened variant of the same hue
-            (accessibility hardening pass, mirrors src/lib/quotes.tsx's statusStyle) — the original
-            scheme reused one hex for bg/10 + text + border/20, which put mid-tone text directly on
-            a ~10%-tint-of-itself background and failed WCAG AA contrast (as low as 2.4:1). */}
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
           isDraft ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20"
           : scope.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"
@@ -686,9 +626,6 @@ export function ScopeOfWorkDocument({
 
         <div data-tour="sowdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
-          {/* div, not span: DocumentCompletionIndicator renders a <div> root and a span may not
-              contain flow content (invalid HTML that only survives because React bypasses the
-              parser). */}
           <div data-tour="sowdoc-completion">
             <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={finalizeValidation.missingCount} />
           </div>
@@ -728,8 +665,6 @@ export function ScopeOfWorkDocument({
               <RotateCw size={13} /> {t("scopeOfWorkDoc.refreshFromQuotation")}
             </button>
           )}
-          {/* Non-Draft: the save button stays (canEdit, not editable) but only persists the
-              follow-up subset — PO number/recipients/message; see save() above (2026-07-29). */}
           {canEdit && (
             <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <Save size={13} /> {isDraft ? t("scopeOfWorkDoc.saveDraft") : t("scopeOfWorkDoc.saveFollowUp")}
@@ -792,7 +727,6 @@ export function ScopeOfWorkDocument({
           <ValidationSummary missingCount={finalizeValidation.missingCount} messages={summaryMessages} />
         </div>
 
-        {/* Header fields */}
         <div data-tour="sowdoc-header" className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 print:hidden">
             <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">SCOPE OF WORK</h1>
@@ -874,8 +808,6 @@ export function ScopeOfWorkDocument({
               </div>
               <div>
                 <RequiredFieldLabel required={false} htmlFor="sow-customerPoNumber">{t("scopeOfWorkDoc.field.customerPoNumber")}</RequiredFieldLabel>
-                {/* canEdit (not editable): PO is follow-up data, still editable on a
-                    PendingApproval/Final record — see FOLLOW_UP_FIELDS (2026-07-29). */}
                 <input id="sow-customerPoNumber" disabled={!canEdit} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.customerPoNumber} onChange={(e) => updateField("customerPoNumber", e.target.value)} />
                 {canEdit && !isDraft && <p className="text-[10px] text-muted-foreground mt-1">{t("scopeOfWorkDoc.field.poHelp")}</p>}
               </div>
@@ -890,7 +822,6 @@ export function ScopeOfWorkDocument({
           </div>
         </div>
 
-        {/* Checklist groups */}
         <div data-tour="sowdoc-checklist" className="bg-card border border-border rounded-xl p-5 print:hidden">
           <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("scopeOfWorkDoc.checklistTitle")}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -911,9 +842,6 @@ export function ScopeOfWorkDocument({
           </div>
         </div>
 
-        {/* Document recipients — real people to email for whichever "เอกสารส่งถึง" departments are
-            checked above, added 2026-07-23. Card only renders once at least one department is
-            checked (see DocumentRecipientsPicker's own early-return). */}
         <DocumentRecipientsPicker
           documentsToSendGroup={documentsToSendGroup}
           users={users}
@@ -921,20 +849,12 @@ export function ScopeOfWorkDocument({
           onChange={(next) => updateField("documentRecipients", next)}
           message={scope.documentRecipientMessage ?? ""}
           onMessageChange={(next) => updateField("documentRecipientMessage", next)}
-          // canEdit (not editable): recipients/message/attachments are follow-up data, still
-          // editable on a PendingApproval/Final record — see FOLLOW_UP_FIELDS (2026-07-29). This
-          // also un-breaks "ส่งอีเมลแจ้งผู้รับเอกสาร" on Final records, whose save-then-send
-          // previously always tripped the server's content lock.
           disabled={!canEdit}
           attachments={scope.attachments ?? []}
           uploading={uploadingAttachment}
           onUploadAttachment={handleUploadAttachment}
           onDeleteAttachment={handleDeleteAttachment}
         />
-        {/* Send gated by `canEdit` (not `editable`) — 2026-07-24 direct user report: a view-only
-            role could fire the send while unable to pick recipients. `canEdit` alone (without the
-            Draft check) so an editor can still send a Final record — the server gate
-            (`scopeOfWork:edit` on POST /send-documents) matches. */}
         {canEdit && documentsToSendGroup && checkedDocumentsToSendKeys.size > 0 && (
           <div className="flex justify-end print:hidden -mt-2">
             <button
@@ -973,7 +893,6 @@ export function ScopeOfWorkDocument({
           noItemsError={finalizeValidation.fieldErrors.items}
         />
 
-        {/* Payment conditions */}
         <div className="bg-card border border-border rounded-xl p-5 print:hidden">
           <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("scopeOfWorkDoc.paymentTitle")}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -999,7 +918,6 @@ export function ScopeOfWorkDocument({
           </div>
         </div>
 
-        {/* Revision note — only for a record that IS itself a revision (added 2026-07-23) */}
         {revisionPredecessorScopeNumber && (
           <div className="bg-card border border-border rounded-xl p-5 print:hidden">
             <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
@@ -1030,7 +948,6 @@ export function ScopeOfWorkDocument({
           </div>
         )}
 
-        {/* Remarks + Signatures */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
           <div className="bg-card border border-border rounded-xl p-5">
             <h2 id="sow-remarks-heading" className="text-xs font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("scopeOfWorkDoc.remarksTitle")}</h2>

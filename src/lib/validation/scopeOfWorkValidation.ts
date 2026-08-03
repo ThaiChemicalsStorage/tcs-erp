@@ -3,37 +3,18 @@ import { validateChecklistGroups, type ChecklistGroup } from "../documentRequire
 import { isValidIsoDateOrEmpty } from "./dateUtils.js";
 import type { ValidationResult } from "./types.js";
 
-/**
- * Centralized required-field configuration for the Scope of Work form (added 2026-07-16) — mirrors
- * `quotationRequiredFields` (src/lib/validation/quotationValidation.ts): `required: false` entries
- * are the only sanctioned optional-field exceptions, each with its own business reason.
- *
- * Dotted paths (`customerSnapshot.companyName`) address nested fields; every other key is a
- * top-level `ScopeOfWork` field. Excludes server-derived/read-only fields (yearMonth, jobSequence,
- * quotationNumber, jobTypeCode/Name, quotationSalesperson, version, timestamps) — never "missing"
- * from the user's perspective. `scopeNumber` joined this config 2026-07-29 when it became a
- * manually-typed (no longer server-generated) field.
- */
 export const scopeOfWorkRequiredFields: Record<string, { label: string; required: boolean }> = {
-  // Manually typed by the user since 2026-07-29 (free-form, uniqueness enforced server-side) —
-  // required, since it's the document's identity.
   scopeNumber: { label: "เลขที่เอกสาร", required: true },
   "customerSnapshot.companyName": { label: "ชื่อลูกค้า", required: true },
   "customerSnapshot.contactName": { label: "ชื่อผู้ติดต่อ", required: true },
   "customerSnapshot.address": { label: "ที่อยู่ลูกค้า", required: true },
-  // Optional exception: a Thai tax ID isn't always known/collectible before a PO is issued.
   "customerSnapshot.taxId": { label: "เลขประจำตัวผู้เสียภาษี", required: false },
   "customerSnapshot.phone": { label: "เบอร์โทรลูกค้า", required: true },
-  // Optional exception: a usable customer email isn't always on file.
   "customerSnapshot.email": { label: "อีเมลลูกค้า", required: false },
   issueDate: { label: "วันที่", required: true },
   deliveryDate: { label: "วันที่ส่งของ/ส่งแบบอนุมัติ", required: true },
   drawingCode: { label: "รหัส Drawing", required: true },
-  // Optional exception (2026-07-29): legacy reference field from the removed auto-numbering scheme
-  // — no longer part of the document number (which the user now types whole), kept only so old
-  // records' values stay visible/editable. New records leave it blank.
   secondaryCode: { label: "รหัสอ้างอิงท้ายงาน", required: false },
-  // Optional exception: a customer PO number normally doesn't exist yet at this stage.
   customerPoNumber: { label: "เอกสารใบสั่งซื้อเลขที่ (PO)", required: false },
   deliveryLocation: { label: "สถานที่ส่งของ", required: true },
   shippingContact: { label: "ชื่อผู้ติดต่อส่งของ", required: true },
@@ -41,49 +22,37 @@ export const scopeOfWorkRequiredFields: Record<string, { label: string; required
   billingContact: { label: "ชื่อผู้ติดต่อวางบิล", required: true },
   billingPhone: { label: "เบอร์โทรผู้ติดต่อวางบิล", required: true },
   "paymentConditions.description": { label: "รายละเอียดการชำระเงิน", required: true },
-  // Optional exception (2026-07-16, Codex review Medium Priority fix — every visible editable field
-  // must be centrally classified): the percentage-based schedule + description above already carry
-  // the actual billing condition; `notes` is supplementary free text. `paymentConditions.method`
-  // was removed 2026-07-23 when the fixed down-payment/final-payment pair became a per-installment
-  // `installments` array — each row's own `method` is validated by `validatePaymentPercentages`
-  // below, not this dotted-path config (which only reaches string leaf fields, not array rows).
   "paymentConditions.notes": { label: "หมายเหตุการชำระเงิน", required: false },
   "seller.name": { label: "ชื่อผู้ขาย", required: true },
-  // Optional exception: a signature date is normally filled in at the moment of actually signing,
-  // not necessarily while the rest of the document is still being drafted.
   "seller.date": { label: "วันที่ผู้ขายลงนาม", required: false },
   "approver.date": { label: "วันที่ผู้อนุมัติลงนาม", required: false },
-  // Optional exception: remarks are free-form notes, not always needed.
   remarks: { label: "หมายเหตุ", required: false },
 };
 
-/** Per-item field deliberately NOT required — `remark` is a free-form note on a Scope of Work item,
- * distinct from the `specifications` at least one of which IS required by `validateScopeOfWorkItems`
- * below. Declared explicitly (2026-07-16, Codex review Medium Priority fix) rather than silently
- * omitted from any central policy. */
 export const SCOPE_ITEM_OPTIONAL_FIELDS = ["remark"] as const;
 
-/** Date fields checked for semantic (not just non-blank) validity — added 2026-07-16, Codex review
- * Medium Priority fix. Dotted paths address the two signatory dates the same way
- * `scopeOfWorkRequiredFields` does. */
 const DATE_FIELD_KEYS = new Set(["issueDate", "deliveryDate", "seller.date", "approver.date"]);
 
+// ตรวจว่าค่าเป็นค่าว่างหรือมีแต่ช่องว่างหรือไม่
+// Checks whether a value is null/undefined/blank (whitespace-only).
 function isBlank(v: string | null | undefined): boolean {
   return v === null || v === undefined || v.trim() === "";
 }
 
+// อ่านค่าจาก object ตาม path แบบมีจุดคั่น (เช่น "customerSnapshot.companyName")
+// Reads a value from an object via a dotted path (e.g. "customerSnapshot.companyName").
 function getPath(obj: unknown, path: string): unknown {
   return path.split(".").reduce<unknown>((acc, key) => (acc && typeof acc === "object" ? (acc as Record<string, unknown>)[key] : undefined), obj);
 }
 
 export interface ScopeOfWorkItemValidation {
   valid: boolean;
-  /** ScopeOfWorkItem.id -> Thai error message for the first problem found on that item. */
   itemErrors: Record<string, string>;
   hasNoItems: boolean;
 }
 
-/** A completely blank item row is never valid — either complete it or delete it before proceeding. */
+// ตรวจสอบรายการสินค้า/งานแต่ละแถวของ Scope of Work ว่ากรอกครบถ้วนหรือไม่
+// Validates each Scope of Work item row for completeness.
 export function validateScopeOfWorkItems(items: ScopeOfWorkItem[]): ScopeOfWorkItemValidation {
   const activeItems = items.filter((it) => !it.isSectionHeader);
   const itemErrors: Record<string, string> = {};
@@ -96,15 +65,8 @@ export function validateScopeOfWorkItems(items: ScopeOfWorkItem[]): ScopeOfWorkI
   return { valid: activeItems.length > 0 && Object.keys(itemErrors).length === 0, itemErrors, hasNoItems: activeItems.length === 0 };
 }
 
-/**
- * If the user has added at least one payment installment row (via a preset or manually — see
- * `PAYMENT_TERM_PRESETS`/`ScopeOfWorkPaymentInstallment` in scopeOfWork.ts), every row's percentage
- * must be filled in and all rows together must sum to exactly 100% — arbitrarily many installments
- * (not capped at 2), the actual quotation/business payment split, never a hardcoded assumption. If
- * no installment rows exist, the free-text `description` field alone carries the billing condition
- * and no percentage check applies. Generalized 2026-07-23 from the previous fixed down-payment/
- * final-payment pair.
- */
+// ตรวจว่างวดชำระเงินทุกงวดกรอกเปอร์เซ็นต์ครบและรวมกันได้ 100% พอดี (ถ้ามีการเพิ่มงวด)
+// Checks that all payment installment rows have a percentage filled in and sum to exactly 100%.
 function validatePaymentPercentages(payment: ScopeOfWorkPaymentConditions): string | null {
   if (payment.installments.length === 0) return null;
   if (payment.installments.some((i) => i.pct === null)) return "กรุณากรอกเปอร์เซ็นต์ให้ครบทุกงวดชำระเงิน";
@@ -134,6 +96,8 @@ export interface ScopeOfWorkValidationInput {
   approver: ScopeOfWorkSignatory;
 }
 
+// ตรวจสอบข้อมูล Scope of Work ทั้งฟอร์มตามฟิลด์ที่กำหนด รวมรายการ เงื่อนไขชำระเงิน และเอกสารแนบ
+// Validates a Scope of Work's fields, items, payment conditions, and document requirements.
 function computeScopeOfWorkValidation(scope: ScopeOfWorkValidationInput, opts: { requireApprover: boolean }): ValidationResult {
   const fieldErrors: Record<string, string> = {};
   for (const [path, cfg] of Object.entries(scopeOfWorkRequiredFields)) {
@@ -149,9 +113,6 @@ function computeScopeOfWorkValidation(scope: ScopeOfWorkValidationInput, opts: {
     }
   }
 
-  // Seller/approver information "when reaching the relevant workflow stage" — seller always signs
-  // (even a Draft has a starting seller, defaulted at creation), approver only required once
-  // finalizing (see validateScopeOfWorkForFinalization/Print below).
   if (opts.requireApprover && isBlank(scope.approver.name)) {
     fieldErrors["approver.name"] = "กรุณากรอกชื่อผู้อนุมัติ";
   }
@@ -178,14 +139,14 @@ function computeScopeOfWorkValidation(scope: ScopeOfWorkValidationInput, opts: {
   return { valid: missingCount === 0, fieldErrors, groupErrors, missingCount };
 }
 
-/** Called before the Draft -> Final transition (see handleFinalize in api/_lib/scopeOfWorkHandler.ts). */
+// ตรวจสอบความครบถ้วนก่อนเปลี่ยนสถานะจาก Draft เป็น Final (ต้องมีชื่อผู้อนุมัติด้วย)
+// Validates completeness before the Draft -> Final transition (requires an approver name).
 export function validateScopeOfWorkForFinalization(scope: ScopeOfWorkValidationInput): ValidationResult {
   return computeScopeOfWorkValidation(scope, { requireApprover: true });
 }
 
-/** Called before Print/PDF export. A still-Draft record doesn't yet need an approver signature
- * (that's a Finalize-time requirement) — everything else must already be complete, since an
- * incomplete Draft must never be printed. */
+// ตรวจสอบความครบถ้วนก่อนพิมพ์/ส่งออก PDF (ต้องมีผู้อนุมัติเฉพาะเมื่อสถานะเป็น Final แล้ว)
+// Validates completeness before Print/PDF export (approver only required once status is Final).
 export function validateScopeOfWorkForPrint(scope: ScopeOfWorkValidationInput & { status: "Draft" | "PendingApproval" | "Final" }): ValidationResult {
   return computeScopeOfWorkValidation(scope, { requireApprover: scope.status === "Final" });
 }

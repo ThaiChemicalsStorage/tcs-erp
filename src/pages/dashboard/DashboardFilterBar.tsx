@@ -12,6 +12,8 @@ export interface DashboardFilterState {
 
 const PRESETS: DateRangePreset[] = ["all", "today", "yesterday", "last7", "last14", "thisMonth", "lastMonth", "thisQuarter", "thisYear", "custom"];
 
+// แถบตัวกรองของแดชบอร์ด: ช่วงวันที่ ฝ่ายขาย และพนักงานขาย
+// Dashboard filter bar for date range, department, and salesperson selection.
 export function DashboardFilterBar({
   filters, onChange, availableSalespeople, availableDepartments, hidePeopleFilters = false,
 }: {
@@ -19,9 +21,6 @@ export function DashboardFilterBar({
   onChange: (next: DashboardFilterState) => void;
   availableSalespeople: string[];
   availableDepartments: string[];
-  /** Own-data-only callers (no `quotations:viewAll`) — the server already scopes everything to
-   * their own quotes, so a salesperson/department picker would only offer themselves or produce
-   * empty charts. See `DashboardStats.ownDataOnly`. */
   hidePeopleFilters?: boolean;
 }) {
   const { t } = useI18n();
@@ -70,8 +69,6 @@ export function DashboardFilterBar({
         </div>
       )}
 
-      {/* Grouped so department+salesperson wrap together as a unit instead of `ml-auto` on a lone
-          select detaching it from the row it was meant to stay aligned with once the bar wraps. */}
       {!hidePeopleFilters && <div className="flex items-center gap-2.5 flex-wrap sm:ml-auto">
         <select
           value={filters.department}

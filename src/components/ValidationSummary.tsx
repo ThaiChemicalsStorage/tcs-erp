@@ -1,12 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 
-/**
- * Top-of-form validation summary — shown whenever a document is incomplete, so the user sees at a
- * glance how much is left before Preview/Submit/Approve/Print/etc. become available, without
- * hunting through the form for red asterisks one at a time. Added 2026-07-16 (required-field
- * validation pass), shared between Quotation and Scope of Work per "use the same validation
- * behavior... do not create two unrelated implementations."
- */
+// สรุปรายการข้อมูลที่ยังกรอกไม่ครบด้านบนฟอร์ม แสดงเฉพาะเมื่อมีรายการที่ขาดหาย
+// Top-of-form summary listing what's still missing, shown only when something is incomplete
 export function ValidationSummary({ missingCount, messages = [] }: { missingCount: number; messages?: string[] }) {
   if (missingCount <= 0) return null;
   const shown = messages.slice(0, 8);

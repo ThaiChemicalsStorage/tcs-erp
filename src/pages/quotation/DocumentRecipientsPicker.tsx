@@ -6,24 +6,8 @@ import {
   type ScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE, formatFileSize,
 } from "../../lib/scopeOfWork";
 
-/**
- * "ผู้รับเอกสาร" — real people to actually email when a `documentsToSend` (เอกสารส่งถึง) checklist
- * option is checked, added 2026-07-23 per direct user request ("อยากให้ลิงค์ข้อมูลกับแผนกที่จะเลือก
- * ตอนสร้างพนักงาน"). Only renders a row for a department currently checked in `documentsToSendGroup`
- * — candidates are `users` filtered by an exact match against `User.department` (now a controlled
- * dropdown sourced from the same `DOCUMENT_RECIPIENT_DEPARTMENTS` list, see
- * `src/pages/admin/UserManagementPage.tsx`), so the match is reliable rather than fuzzy free-text.
- * Purely a selection UI — the actual "send email" action lives in `ScopeOfWorkDocument.tsx` (it
- * needs to save first, since the server reads recipients from the persisted record, not from
- * unsaved client state).
- *
- * **2026-07-23, same-day UX pass**: real `<input type="checkbox">` per candidate (matching
- * `ChecklistGroupCard.tsx`'s already-established, unambiguous checkbox convention directly above
- * this card) replaced the original color-only toggle-chip design — a direct user report that the
- * chip's subtle selected/unselected color difference alone wasn't a clear enough "you're choosing
- * who this gets emailed to" affordance for a first-time user. Also added a per-department selected
- * count next to the title, so it's obvious at a glance which departments still need a pick.
- */
+// เลือกพนักงานที่จะรับอีเมลเอกสารตามแผนกที่ติ๊กไว้ พร้อมจัดการไฟล์แนบและข้อความเพิ่มเติม
+// Picks which employees receive the document email per checked department, plus attachments and an extra message
 export function DocumentRecipientsPicker({
   documentsToSendGroup,
   users,
@@ -41,15 +25,9 @@ export function DocumentRecipientsPicker({
   users: User[];
   value: Record<string, string[]>;
   onChange: (next: Record<string, string[]>) => void;
-  /** Free text prepended above the auto-generated summary in the email — see
-   * `ScopeOfWork.documentRecipientMessage`'s doc comment (added 2026-07-23). */
   message: string;
   onMessageChange: (next: string) => void;
   disabled: boolean;
-  /** Extra files attached to the record (added 2026-07-24) — bytes live in the
-   * `scope_attachment_files` MongoDB collection, links are included in the recipient email; see
-   * `ScopeOfWork.attachments`'s doc comment. Uploads/deletes are immediate API actions (not part
-   * of the unsaved draft), handled by the parent. */
   attachments: ScopeOfWorkAttachment[];
   uploading: boolean;
   onUploadAttachment: (file: File) => void;
@@ -61,6 +39,8 @@ export function DocumentRecipientsPicker({
   const checkedDepartments = DOCUMENT_RECIPIENT_DEPARTMENTS.filter((d) => checkedByKey.get(d.key));
   if (checkedDepartments.length === 0) return null;
 
+  // สลับสถานะเลือก/ไม่เลือกผู้รับคนหนึ่งในแผนกที่ระบุ
+  // Toggles a single recipient's selection within a given department
   const toggleRecipient = (deptKey: string, userId: string) => {
     if (disabled) return;
     const current = value[deptKey] ?? [];
@@ -126,7 +106,6 @@ export function DocumentRecipientsPicker({
           );
         })}
       </div>
-      {/* ── ไฟล์แนบ (added 2026-07-24) ── */}
       <div className="mt-4 pt-4 border-t border-border/70">
         <div className="flex items-center justify-between gap-2 mb-1">
           <label className="block text-xs font-semibold text-foreground">

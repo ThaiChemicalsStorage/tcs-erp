@@ -3,13 +3,8 @@ import { Search, X, Building2, ChevronDown } from "lucide-react";
 import type { Customer } from "../../lib/customers";
 import { useI18n } from "../../lib/i18n";
 
-/**
- * "เลือกลูกค้า / บริษัท" — lets the user pick a saved Customer to autofill the Quotation form's
- * Customer Information section instead of retyping it every time (added 2026-07-14, replacing an
- * earlier — wrong — "issuer company" selector built the same week). Purely a search + pick
- * control: all autofill/edit-after-autofill logic lives in `QuoteDocument.tsx`, which owns the
- * actual field state and only calls `onSelect`/`onClear` here.
- */
+// ช่องค้นหาและเลือกลูกค้าที่บันทึกไว้ เพื่อเติมข้อมูลลูกค้าในฟอร์มใบเสนอราคาอัตโนมัติ
+// Search-and-pick control for choosing a saved customer to autofill the quotation form.
 export function CustomerSelector({
   customers,
   selectedId,
@@ -19,14 +14,10 @@ export function CustomerSelector({
   inputId,
 }: {
   customers: Customer[];
-  /** The currently-linked customer's id, or "" for a manually-entered quote with no linked customer. */
   selectedId: string;
   onSelect: (customer: Customer) => void;
   onClear: () => void;
   disabled: boolean;
-  /** Applied to the search `<input>` so a caller's `<label htmlFor={inputId}>` associates with it.
-   * Only rendered while no customer is selected (the selected state shows a static readout with no
-   * input) — that's fine, an unresolved `htmlFor` target is inert, not an error. */
   inputId?: string;
 }) {
   const { t } = useI18n();
@@ -46,8 +37,9 @@ export function CustomerSelector({
       .slice(0, 20);
   }, [customers, query]);
 
+  // ปิดดรอปดาวน์เมื่อโฟกัสหลุดออกจากกล่องค้นหา หน่วงเวลาเล็กน้อยเพื่อให้คลิกเลือกตัวเลือกยังทำงานได้
+  // Closes the dropdown on blur, deferred slightly so a click on a dropdown option still registers.
   const closeOnBlur = () => {
-    // Deferred so a click on a dropdown option (which blurs the input first) still registers.
     window.setTimeout(() => {
       if (!containerRef.current?.contains(document.activeElement)) setOpen(false);
     }, 120);

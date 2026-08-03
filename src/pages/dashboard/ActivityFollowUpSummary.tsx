@@ -3,6 +3,8 @@ import type { DashboardKpis } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 
+// การ์ดแสดงตัวเลขสรุปหนึ่งรายการ คลิกได้ถ้ามีการกำหนด onClick
+// A single summary count tile, clickable when an onClick handler is provided
 function ActionItem({ icon: Icon, label, count, accent, onClick }: { icon: LucideIcon; label: string; count: number; accent: string; onClick?: () => void }) {
   const Tag = onClick ? "button" : "div";
   return (
@@ -21,16 +23,8 @@ function ActionItem({ icon: Icon, label, count, accent, onClick }: { icon: Lucid
   );
 }
 
-/**
- * "What needs attention right now" as a compact, clickable-where-possible tile row — not 4 more
- * full-size KPI cards. Added 2026-07-13 (third Dashboard simplification pass), pulled out of the
- * old flat `KpiGrid.tsx` (removed). Only Pending Approvals is wired to navigate (to the quotation
- * list filtered to that status, the same filter the Pipeline Steps stage cards already use) —
- * Overdue Follow-ups/Expired Quotations have no equivalent single-status filter to jump to
- * (both are date-derived, not a `QuoteStatus` value), and New Customers has no dedicated page yet
- * (Customer Management is schema-only, see MODULES/Customer.md), so those three stay
- * informational rather than being wired to a filter that doesn't really exist.
- */
+// แถวสรุปสิ่งที่ต้องติดตามด่วน เช่น รออนุมัติ เกินกำหนดติดตาม และใบเสนอราคาหมดอายุ
+// Compact row of "needs attention now" tiles — pending approvals, overdue follow-ups, etc.
 export function ActivityFollowUpSummary({ kpis, onPendingApprovalsClick }: { kpis: DashboardKpis; onPendingApprovalsClick: () => void }) {
   const { t } = useI18n();
   const items: { icon: LucideIcon; label: string; count: number; accent: string; onClick?: () => void }[] = [

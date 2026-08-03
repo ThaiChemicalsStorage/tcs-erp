@@ -14,6 +14,8 @@ import type { Role } from "../lib/roles";
 import { useI18n, type Lang } from "../lib/i18n";
 import { ImageUploadField } from "../components/ImageUploadField";
 
+// ช่องเลือกภาษาของระบบ (ไทย/อังกฤษ)
+// Field for switching the system language (Thai/English).
 function LanguageField() {
   const { lang, setLang, t } = useI18n();
   const options: { key: Lang; label: string }[] = [
@@ -44,6 +46,8 @@ function LanguageField() {
 
 type Tab = "profile" | "company" | "security" | "notifications";
 
+// แสดงข้อความ "บันทึกแล้ว" ชั่วคราว
+// Shows a transient "saved" note.
 function SavedNote({ show }: { show: boolean }) {
   const { t } = useI18n();
   if (!show) return null;
@@ -54,6 +58,8 @@ function SavedNote({ show }: { show: boolean }) {
   );
 }
 
+// hook แสดงสถานะบันทึกสำเร็จชั่วคราวแล้วซ่อนอัตโนมัติ
+// Hook toggling a temporary "saved" flag that auto-clears.
 function useSavedFlash() {
   const [saved, setSaved] = useState(false);
   useEffect(() => {
@@ -64,22 +70,9 @@ function useSavedFlash() {
   return [saved, () => setSaved(true)] as const;
 }
 
+// แสดงสวิตช์เปิด/ปิดแบบ toggle
+// Renders an on/off toggle switch button.
 function Toggle({ checked, onChange, labelledBy }: { checked: boolean; onChange: (v: boolean) => void; labelledBy: string }) {
-  // Every dimension here is an explicit px arbitrary value, not a rem-based Tailwind utility
-  // (`w-10`, `h-4`, `top-0.5`, etc.) — this app sets the document root font-size to 15px
-  // (theme.css `--font-size: 15px`), not the browser's default 16px that those rem utilities
-  // assume, so they were quietly rendering smaller than intended and the knob ended up
-  // vertically off-center in its track (visible as a lopsided/clipped-looking circle — reported
-  // bug, 2026-07-30). Track is 40x22px; knob is 16px, centered with a 3px margin on every side
-  // (checked translateX = 40 - 16 - 3 = 21px). The border is now always present (transparent
-  // when checked) rather than conditionally added, so the knob's containing block doesn't shift
-  // by a border-width between states.
-  // `left-0` pins the knob's un-translated position to the track's edge. Without it, `left`
-  // stays `auto` and the browser falls back to a "static position" for this absolutely
-  // positioned (but display: inline by default) span — since <button> has `text-align: center`
-  // in the UA stylesheet, that static position lands at the track's horizontal center, so
-  // translate-x then overshoots off the right edge instead of landing at the intended offset
-  // (visible as the knob spilling out of the track — reported bug, 2026-07-30).
   return (
     <button
       type="button"
@@ -97,13 +90,11 @@ function Toggle({ checked, onChange, labelledBy }: { checked: boolean; onChange:
 }
 
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
-// Darkened variant of muted-foreground (not the shared token) — text-muted-foreground (#5a7299) on
-// this field's bg-muted (#eef1f8) measures ~4.3:1, just under the 4.5:1 AA floor for normal text;
-// this hex clears ~5.3:1 while staying in the same blue-slate family (Impeccable audit 2026-07-30).
-// Scoped to this file only, not the global --muted-foreground token used across the rest of the app.
 const readOnlyCls = "w-full text-sm text-[#4c6488] bg-muted border border-border rounded-lg px-3 py-2 outline-none cursor-default";
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
 
+// หน้าตั้งค่าระบบ รวมโปรไฟล์ผู้ใช้ ข้อมูลบริษัท ความปลอดภัย และการแจ้งเตือน
+// Settings page covering user profile, company info, security, and notifications.
 export function SettingsPage({
   company,
   onCompanyChange,
@@ -123,9 +114,6 @@ export function SettingsPage({
 }) {
   const { t } = useI18n();
 
-  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
-  // as the other pages' tours. The profile step targets the default tab's card, so both steps are
-  // present on a fresh visit.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="settings-tabs"]', popover: { title: t("tour.settings.tabs.title"), description: t("tour.settings.tabs.desc"), side: "bottom" } },
     { element: '[data-tour="settings-profile"]', popover: { title: t("tour.settings.profile.title"), description: t("tour.settings.profile.desc"), side: "top" } },
@@ -163,9 +151,6 @@ export function SettingsPage({
     weeklyDigest: false,
   });
 
-  // Field ids for label/input association (screen readers otherwise can't tell which label
-  // belongs to which field — Impeccable audit 2026-07-30, matches the useId() convention already
-  // used for this in TemplateEditorView.tsx / UserManagementPage.tsx).
   const fullNameId = useId();
   const profilePhoneId = useId();
   const employeeIdId = useId();
@@ -194,6 +179,8 @@ export function SettingsPage({
 
   const roleName = roles.find((r) => r.key === currentUser.roleKey)?.name ?? currentUser.roleKey;
 
+  // บันทึกการแก้ไขโปรไฟล์ผู้ใช้ปัจจุบัน
+  // Saves changes to the current user's profile.
   const saveProfile = async () => {
     setProfileSaving(true);
     try {
@@ -214,6 +201,8 @@ export function SettingsPage({
     }
   };
 
+  // บันทึกการแก้ไขข้อมูลบริษัท
+  // Saves changes to the company settings.
   const saveCompany = async () => {
     setCompanySaving(true);
     try {
@@ -229,6 +218,8 @@ export function SettingsPage({
     }
   };
 
+  // ตรวจสอบและบันทึกการเปลี่ยนรหัสผ่าน
+  // Validates and saves a password change.
   const savePassword = async () => {
     if (!currentPw || !newPw || !confirmPw) {
       setPwError(t("settings.security.errorRequired"));
@@ -296,7 +287,6 @@ export function SettingsPage({
         ))}
       </div>
 
-      {/* Profile */}
       {tab === "profile" && (
         <div data-tour="settings-profile" className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
           <h2 id={profileHeadingId} className="sr-only">{t("settings.tab.profile")}</h2>
@@ -378,7 +368,6 @@ export function SettingsPage({
         </div>
       )}
 
-      {/* Company */}
       {tab === "company" && canManageCompany && (
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
           <h2 id={companyHeadingId} className="sr-only">{t("settings.tab.company")}</h2>
@@ -445,7 +434,6 @@ export function SettingsPage({
         </div>
       )}
 
-      {/* Security */}
       {tab === "security" && (
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-5">
           <h2 id={securityHeadingId} className="text-xs font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("settings.security.title")}</h2>
@@ -475,7 +463,6 @@ export function SettingsPage({
         </div>
       )}
 
-      {/* Notifications */}
       {tab === "notifications" && (
         <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-1">
           <h2 id={notificationsHeadingId} className="sr-only">{t("settings.tab.notifications")}</h2>

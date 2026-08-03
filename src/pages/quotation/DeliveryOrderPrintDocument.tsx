@@ -3,27 +3,6 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { DeliveryOrder, DeliveryOrderInstallment } from "../../lib/deliveryOrder";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
 
-/**
- * Print/PDF output for a Delivery Order — rebuilt 2026-07-24 to visually reproduce the reference
- * PDF ("ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf", `public/`, company form
- * FM-SL-05 Rev.01) as closely as possible: a plain black-on-white formal document (Times/Thai-serif,
- * thin black borders, no app design-system styling), one independent document per payment
- * milestone. Layout facts taken from a page-image inspection of all 3 reference pages, not just the
- * extracted text: English letterhead with the round TCS logo top-left and a Facebook/LINE/website
- * contact row, centered Thai+English titles, a two-column เรียน/เลขที่-วันที่-WORK ORDER section
- * with underlined value lines, then ONE full-width bordered table (intro statement row → underlined
- * bold column headers → bold item rows with each spec on its own row → empty filler rows padding
- * the table to a fixed height so the Remark row lands near the bottom → Remark row), a borderless
- * two-column signature block, and the FM-SL-05 form code bottom-right (sans-serif, like the
- * reference). The sample's own customer/items/dates/work-order/remark values are NOT hardcoded —
- * only the fixed company-form chrome is.
- */
-
-/** The FM-SL-05 form's official English letterhead, reproduced verbatim from the reference PDF.
- * Deliberately fixed text, not the Settings → Company Info singleton: that singleton holds the
- * company's Thai identity used by the in-app UI and other documents, while this printed form uses
- * the company's English letterhead including Facebook/LINE handles that have no data-model field.
- * The logo and the Thai legal name in the signature block DO come from live company data. */
 const LETTERHEAD = {
   nameEn: "THAI CHEMICALS STORAGE CO.,LTD.",
   addressLine1: "200 Jasmine International Tower, 25th Floor, Room 2504, Moo4",
@@ -36,16 +15,9 @@ const LETTERHEAD = {
 };
 const FORM_CODE = "FM-SL-05 Rev.01: 11/09/67";
 
-/** Times for Latin glyphs + Noto Serif Thai (loaded in fonts.css) for Thai — together they
- * reproduce the reference's serif look without depending on Windows-only fonts like Angsana New. */
 const DOC_FONT = "'Times New Roman', 'Noto Serif Thai', serif";
 const LINE = "1px solid #000";
 
-/** Reference behavior: on a short milestone the table is padded with empty bordered rows so the
- * Remark row and signature block sit in a consistent position near the bottom of the page. This is
- * the single-page row budget (intro/header/Remark rows excluded) tuned for A4 with the app's global
- * 12mm @page margin; when real content exceeds it, no filler is added and the document flows onto
- * additional pages naturally. Purely visual — filler rows are never part of the business data. */
 const SINGLE_PAGE_ROW_TARGET = 30;
 
 function FacebookIcon() {
@@ -65,7 +37,8 @@ function LineAppIcon() {
   );
 }
 
-/** One value line with the reference's thin black underline — used for the เรียน customer lines. */
+// บรรทัดข้อความที่มีเส้นขีดเส้นใต้สีดำบาง ใช้แสดงข้อมูลลูกค้าในส่วนเรียน
+// A text line with a thin black underline, used for the "เรียน" customer info lines.
 function UnderlinedLine({ children }: { children: ReactNode }) {
   return (
     <p style={{ borderBottom: LINE, padding: "0 6px 1px", minHeight: "18px", lineHeight: 1.35 }}>{children}</p>
@@ -75,6 +48,8 @@ function UnderlinedLine({ children }: { children: ReactNode }) {
 const CELL_PAD = "1px 6px";
 const specCellStyle = { borderLeft: LINE, borderBottom: LINE, padding: CELL_PAD };
 
+// หนึ่งหน้าเอกสารพิมพ์ของงวดชำระเงินหนึ่งงวด ตามแบบฟอร์ม FM-SL-05
+// One printed page for a single payment installment, following the FM-SL-05 form layout.
 function InstallmentPage({
   deliveryOrder,
   installment,
@@ -101,11 +76,7 @@ function InstallmentPage({
       className="hidden print:block"
       style={{ breakAfter: "page", fontFamily: DOC_FONT, color: "#000", background: "#fff", padding: "12mm" }}
     >
-      {/* Letterhead/titles/customer info live OUTSIDE the table: Chromium only repeats a printed
-          <thead> across pages when it's reasonably small, so the thead holds just the intro +
-          column-header rows — those repeat on continuation pages, the letterhead doesn't. */}
       <div>
-              {/* ── Letterhead ───────────────────────────────────────────── */}
               <div style={{ display: "flex", alignItems: "flex-start", gap: "14px" }}>
                 <img
                   src={companyHeader.logoDataUrl || "/logo.png"}
@@ -131,7 +102,6 @@ function InstallmentPage({
                 </div>
               </div>
 
-              {/* ── Titles ───────────────────────────────────────────────── */}
               <p style={{ textAlign: "center", fontWeight: 700, fontSize: "18px", marginTop: "6px", lineHeight: 1.4 }}>
                 ใบส่งมอบสินค้าและบริการ
               </p>
@@ -139,7 +109,6 @@ function InstallmentPage({
                 Delivery Order &amp; Service Order
               </p>
 
-              {/* ── เรียน / เลขที่-วันที่-WORK ORDER ─────────────────────── */}
               <div style={{ display: "flex", gap: "24px", marginTop: "10px", marginBottom: "8px", fontSize: "12.5px" }}>
                 <div style={{ flex: "1 1 55%", display: "flex", gap: "8px" }}>
                   <p style={{ fontWeight: 700, whiteSpace: "nowrap", lineHeight: 1.35 }}>เรียน :</p>
@@ -176,13 +145,11 @@ function InstallmentPage({
           <col style={{ width: "10%" }} />
         </colgroup>
         <thead>
-          {/* ── Intro statement row (table top) ─────────────────────────── */}
           <tr>
             <td colSpan={4} style={{ border: LINE, fontWeight: 700, fontSize: "13.5px", padding: "4px 8px" }}>
               บริษัทฯ ขอส่งมอบสินค้า และงานบริการตามรายการดังต่อไปนี้
             </td>
           </tr>
-          {/* ── Column headers: underlined bold text, no fill, no vertical separators ── */}
           <tr style={{ fontWeight: 700, fontSize: "12px" }}>
             <td style={{ borderLeft: LINE, borderBottom: LINE }} />
             <td style={{ borderBottom: LINE, padding: "2px 6px 2px 34px" }}>
@@ -197,8 +164,6 @@ function InstallmentPage({
           </tr>
         </thead>
 
-        {/* Item + its spec rows share one unbreakable <tbody> so a page break can't split a main
-            item from its specifications. Every row carries the reference's horizontal border. */}
         {pageItems.map((item, idx) => (
           <tbody key={item.id} style={{ breakInside: "avoid" }}>
             <tr style={{ fontWeight: 700 }}>
@@ -227,7 +192,6 @@ function InstallmentPage({
               </td>
             </tr>
           )}
-          {/* Empty filler rows — visual only, keep the Remark row anchored near the page bottom. */}
           {Array.from({ length: fillerRows }, (_, i) => (
             <tr key={i} style={{ height: "16px" }}>
               <td style={specCellStyle} />
@@ -238,7 +202,6 @@ function InstallmentPage({
           ))}
         </tbody>
 
-        {/* Remark row — this milestone's remark only, last row of the bordered table. */}
         <tbody style={{ breakInside: "avoid" }}>
           <tr>
             <td colSpan={4} style={{ border: LINE, padding: "3px 8px" }}>
@@ -249,7 +212,6 @@ function InstallmentPage({
         </tbody>
       </table>
 
-      {/* ── Signature block: customer (receiver) left, TCS (sender) right, no borders ── */}
       <div style={{ breakInside: "avoid" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: "80px", marginTop: "10px", fontSize: "13px" }}>
           {[
@@ -273,7 +235,6 @@ function InstallmentPage({
           ))}
         </div>
 
-        {/* Form code footer — sans-serif in the reference, unlike the rest of the document. */}
         <p style={{ textAlign: "right", fontSize: "11px", fontFamily: "Arial, Helvetica, sans-serif", marginTop: "4px" }}>
           {FORM_CODE}
         </p>
@@ -282,11 +243,8 @@ function InstallmentPage({
   );
 }
 
-/** `onlyInstallmentId` scopes the print output to a single payment milestone's page — the
- * per-milestone "พิมพ์" buttons (`DeliveryOrderDocument.tsx`) pass the clicked installment's id so
- * the printed document contains that milestone's Delivery Note alone, never a sibling milestone's
- * items/เลขที่/วันที่/Remark. When null (e.g. a raw browser Ctrl+P with no button clicked), every
- * milestone's page renders — each page is still self-contained per installment either way. */
+// เอกสารพิมพ์ใบส่งมอบสินค้า แสดงทีละงวดตาม onlyInstallmentId หรือทุกงวดถ้าไม่ระบุ
+// Delivery order print document — renders one installment's page if onlyInstallmentId is set, otherwise all of them.
 export function DeliveryOrderPrintDocument({ deliveryOrder, companyHeader, onlyInstallmentId = null }: {
   deliveryOrder: DeliveryOrder;
   companyHeader: CompanyHeaderInfo;
@@ -297,20 +255,7 @@ export function DeliveryOrderPrintDocument({ deliveryOrder, companyHeader, onlyI
     : deliveryOrder.installments;
   return (
     <>
-      {/* Zero-margin page override, scoped to this component's lifetime (it unmounts with the
-          Delivery Order detail view, so no other document's print is affected): with no margin
-          area, Chrome has nowhere to draw its own "Headers and footers" texts — the page URL at
-          the bottom-left in particular — so they're suppressed regardless of the user's print
-          dialog setting (user report: "มันมีลิ้งเว็บอยู่ในใบซ้ายล่างเอาออกด้วย"). The 12mm the
-          global @page rule used to provide moves onto each page wrapper as padding. Known
-          trade-off: on a rare multi-page milestone, continuation pages start at the physical
-          paper edge (only left/right padding carries across page breaks). */}
       <style>{"@media print { @page { margin: 0 } }"}</style>
-      {/* The print tables are display:none on screen, so the browser never encounters their Thai
-          glyphs and would not download Noto Serif Thai until the print dialog is already rendering —
-          silently falling back to whatever Thai system font the machine happens to have. This
-          zero-size probe stays rendered (visibility:hidden, NOT display:none) so the CSS engine
-          fetches both used weights as soon as the Delivery Order detail page mounts. */}
       <span
         aria-hidden="true"
         className="print:hidden"

@@ -1,16 +1,7 @@
 import type { ChecklistGroup } from "../../lib/documentRequirements";
 
-/**
- * One printed checkbox/radio group card (e.g. "Safety", "Logo", "เอกสารส่งถึง") — shared by
- * Quotation and Scope of Work's "ข้อกำหนดเอกสารและการส่งมอบ" section (renamed from
- * ScopeOfWorkChecklistGroup.tsx 2026-07-16, required-field validation pass, since Quotation now
- * renders the exact same checklist-group model — see docs/MODULES/Quotation.md/ScopeOfWork.md).
- * `selectionType: "single"` renders radio-style (checking one option unchecks any other in the
- * same group, enforced here AND re-clamped server-side on save); `"multiple"` renders plain
- * independent checkboxes. `required`/`error` add the red-asterisk marker and inline Thai error
- * message for the 8 mandatory groups (Safety/ขนส่ง/Logo/เงื่อนไขการวางบิล/เอกสารส่งถึง/Nameplate/
- * เงื่อนไขการส่งมอบงาน/ปจ.2) — see src/lib/documentRequirements.ts.
- */
+// การ์ดกลุ่มตัวเลือกแบบ checkbox/radio หนึ่งกลุ่ม ใช้ร่วมกันระหว่างใบเสนอราคาและ Scope of Work
+// One checkbox/radio group card, shared between the Quotation and Scope of Work checklist sections.
 export function ChecklistGroupCard({
   group,
   onChange,
@@ -24,6 +15,8 @@ export function ChecklistGroupCard({
   required?: boolean;
   error?: string;
 }) {
+  // สลับสถานะติ๊กของตัวเลือก: โหมด single จะเลือกได้ทีละหนึ่งรายการเท่านั้น
+  // Toggles an option's checked state; in "single" mode, selecting one clears the others.
   const toggleOption = (key: string) => {
     if (disabled) return;
     if (group.selectionType === "single") {

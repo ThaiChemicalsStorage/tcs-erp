@@ -6,33 +6,8 @@ import { EmptyState } from "../../components/EmptyState";
 import { PieChart as PieChartIcon } from "lucide-react";
 import { fmtShort, fmtPercent } from "./format";
 
-/**
- * Win / Lose / Active / Non-Active summary — replaces the previous `QuotationStatusDonut` (all 9
- * raw statuses) + `WinLoseDonut` pair, which overlapped with the new `PipelineSteps` per-stage
- * breakdown and the KPI cards. This is the one place those 4 headline outcomes get a combined
- * count + value view, per the 2026-07-10 UI/UX redesign request.
- *
- * Both count and value come straight from `DashboardKpis` (`closedSales`/`lostValue`/
- * `activeQuotationsValue`/`nonActiveQuotationsValue`), computed server-side with the *exact same*
- * predicate as their matching count field. **2026-07-13 fix** (Codex-flagged population
- * mismatch): this used to derive the value column by summing the `pipeline` prop's per-stage
- * totals grouped by raw status, which didn't carve out expired-but-unclosed quotes the way the
- * Active/Non-Active *counts* do — so a row could show, say, an Active count that excludes an
- * expired quote sitting right next to an Active value that still included its amount. Now that
- * both columns are computed from the same server-side predicate, this component no longer needs
- * the `pipeline` prop at all.
- *
- * 2026-07-13 (third Dashboard simplification pass): added a Percentage column (each row's count
- * ÷ the sum of all 4 rows' counts) per a user request for this exact status/count/value/% shape.
- *
- * **2026-07-13 fix (independent review)**: the 4 rows are now a true partition of every quote —
- * every quote counts in exactly one row, so the 4 percentages always sum to 100%. Previously a
- * Lost quote (`เสียโอกาส`) was counted in *both* the Lose row and the Non-Active row (Non-Active's
- * server-side predicate included Lost as one of its "closed without success" statuses), so the
- * 4-row total exceeded `docs.length` and the percentage column didn't add up — misleading for an
- * executive-facing summary. Fixed at the source: `NON_ACTIVE_OUTCOME_STATUSES` in
- * `api/dashboard/index.ts` no longer includes Lost, since Lost already has its own row here.
- */
+// สรุปผลใบเสนอราคา 4 กลุ่ม (ชนะ/แพ้/ยังดำเนินการ/ไม่ได้ดำเนินการ) พร้อมจำนวน มูลค่า และเปอร์เซ็นต์ที่รวมกันได้ 100%
+// Summarizes quotations into 4 outcome groups (won/lost/active/non-active) with count, value, and percentages that sum to 100%
 export function QuotationStatusSummary({ kpis }: { kpis: DashboardKpis }) {
   const { t } = useI18n();
 

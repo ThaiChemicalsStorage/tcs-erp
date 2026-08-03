@@ -1,5 +1,7 @@
 import { CheckCircle2 } from "lucide-react";
 
+// ข้อความแจ้งเตือนสั้น ๆ มุมล่างขวาของหน้าจอ แสดงเมื่อมีข้อความเท่านั้น
+// Short toast notification in the bottom-right corner, rendered only when a message is present
 export function Toast({ message }: { message: string | null }) {
   if (!message) return null;
   return (

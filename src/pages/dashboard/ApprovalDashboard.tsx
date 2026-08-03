@@ -9,19 +9,8 @@ import { Toast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { fmtDaysOrDash, fmtShort } from "./format";
 
-/**
- * 2026-07-29, critique-driven hardening pass: `approve()` used to fire directly from the button's
- * `onClick` — the only action in this row (and the only place in the app) that committed this exact
- * workflow transition with zero confirmation, even though `QuoteDocument.tsx`'s own editor already
- * confirms the identical `"approved"` transition via its `pendingAction` modal. The transition also
- * has no reverse edge in `api/_lib/quoteWorkflow.ts`, so an accidental click was unrecoverable from
- * this widget. `confirmOpen` now gates the real `approve()` call behind `ConfirmDialog`, reusing the
- * same shared component the rest of the app already uses for confirmations (`docs/UI_GUIDELINES.md`
- * "Dialogs") instead of hand-rolling a new modal — Approve needs no comment field, so `ConfirmDialog`
- * fits better here than `QuoteDocument.tsx`'s own comment-capable inline modal. The message itself
- * names the quote id/client (so the confirm step doubles as the pre-commit review Assessment A found
- * missing) and states plainly that this can't be undone from this screen.
- */
+// แถวรายการรออนุมัติหนึ่งรายการ พร้อมปุ่มอนุมัติ (ต้องยืนยันก่อน) และปฏิเสธ
+// A single pending-approval row with confirm-gated approve and reject actions
 function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; canReject: boolean; onDone: (message: string) => void }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -30,6 +19,8 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
 
+  // ยืนยันและอนุมัติใบเสนอราคานี้
+  // Confirms and approves this quotation
   const approve = async () => {
     setConfirmOpen(false);
     setBusy(true);
@@ -43,6 +34,8 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
     }
   };
 
+  // ปฏิเสธใบเสนอราคานี้พร้อมเหตุผลที่กรอก
+  // Rejects this quotation with the entered comment
   const confirmReject = async () => {
     if (!comment.trim()) { setError(t("dashboard.approval.rejectRequired")); return; }
     setBusy(true);
@@ -96,12 +89,6 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
           </div>
         )}
       </td>
-      {/* Portal to document.body: a <tr>'s only valid children are <td>/<th>, so ConfirmDialog's
-          fixed-overlay <div> can't be a direct DOM child here without producing invalid table
-          markup. createPortal keeps this row's own confirmOpen/approve closure (no need to lift
-          busy/error state up to the parent, unlike ProductList.tsx's shared confirmDeleteId
-          pattern, which doesn't carry per-row inline busy/error state the way this row does) while
-          rendering the actual overlay outside the table entirely. */}
       {createPortal(
         <ConfirmDialog
           open={confirmOpen}
@@ -117,16 +104,11 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
   );
 }
 
+// แดชบอร์ดสรุปการอนุมัติ แสดงตัวเลขภาพรวมและรายการรออนุมัติ
+// Approval dashboard — summary tiles plus the list of pending approvals
 export function ApprovalDashboard({ data, onRefresh }: { data: ApprovalDashboardData; onRefresh: () => void }) {
   const { t } = useI18n();
   const toast = useToast();
-  /**
-   * `accent` colors the value text directly against `bg-secondary/40` — same accessibility
-   * hardening pass as `statusStyle` (2026-07-29): the raw brand hexes (gold especially, 2.15:1)
-   * failed WCAG AA here too, so each is the minimum darkened (same hue/saturation, reduced
-   * lightness only) variant that clears 4.5:1 against this tile's actual background, computed
-   * the same way as `src/lib/quotes.tsx`'s `statusStyle`.
-   */
   const items = [
     { label: t("dashboard.approval.pending"), value: data.pendingApprovals.toLocaleString("th-TH"), accent: "#886f29" },
     { label: t("dashboard.approval.approvedToday"), value: data.approvedToday.toLocaleString("th-TH"), accent: "#218155" },

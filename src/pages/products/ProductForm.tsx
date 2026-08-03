@@ -16,6 +16,8 @@ export interface ProductDraft {
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
 
+// ฟอร์มสำหรับสร้างหรือแก้ไขข้อมูลสินค้าหนึ่งรายการ
+// Form for creating or editing a single product.
 export function ProductForm({
   mode,
   initial,
@@ -42,11 +44,10 @@ export function ProductForm({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [specifications, setSpecifications] = useState(initial?.specifications ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  // Guards against a double-click on Save firing two concurrent create/update requests — this form
-  // previously had no busy-guard at all, unlike every other form/dialog in the app (accessibility/
-  // correctness hardening pass).
   const [saving, setSaving] = useState(false);
 
+  // ตรวจสอบความถูกต้องของทุกฟิลด์ในฟอร์มก่อนบันทึก
+  // Validates all form fields before saving.
   const validate = () => {
     const e: Record<string, string> = {};
     if (!code.trim()) e.code = t("products.form.errorCode");
@@ -59,6 +60,8 @@ export function ProductForm({
     return Object.keys(e).length === 0;
   };
 
+  // ตรวจสอบฟอร์มแล้วเรียก onSave พร้อมป้องกันการกดซ้ำระหว่างบันทึก
+  // Validates the form then calls onSave, guarding against double-submit while saving.
   const handleSave = async () => {
     if (saving || !validate()) return;
     setSaving(true);

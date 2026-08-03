@@ -6,15 +6,13 @@ import { fmtShort, fmtPercent, fmtDaysOrDash } from "./format";
 
 type SortKey = "totalValue" | "revenue" | "quotationCount" | "won" | "lost" | "pending" | "conversionRate" | "avgClosingTime" | "avgDealSize" | "expectedRevenue";
 
-/** Powers both the "Sales Performance" section (full list) and the "Executive Ranking" (top N, sorted by revenue by default) — same data, same table shape, per the plan's single-query design. */
+// ตารางผลงานพนักงานขาย ใช้ได้ทั้งแบบรายการเต็มและแบบจัดอันดับ Top N พร้อมการเรียงลำดับคอลัมน์
+// Sales performance table, usable both as a full list and a top-N ranking, with sortable columns
 export function SalesPerformanceTable({ title, sub, entries, limit }: { title: string; sub: string; entries: SalesPerformanceEntry[]; limit?: number }) {
   const { t } = useI18n();
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const days = t("dashboard.unit.days");
 
-  // avgClosingTime can be null (no closed deals yet) — coerce to -1 so "no data" always sinks to the
-  // bottom regardless of sort direction, rather than `null - number` silently coercing to 0 (which
-  // would misplace it among genuinely-fast closers).
   const sorted = [...entries].sort((a, b) => (b[sortKey] ?? -1) - (a[sortKey] ?? -1));
   const rows = limit ? sorted.slice(0, limit) : sorted;
 

@@ -28,11 +28,8 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
 }
 
-/** Split into a wrapper + form component (mounted only while a target is set) so
- * `useDialogA11y`'s Escape/focus-trap effect only ever runs while the modal actually exists —
- * same pattern as `PromptDialog.tsx`/`ProductPickerModal.tsx`. Previously a hand-rolled
- * `fixed inset-0` div with no `role="dialog"`, no focus trap, and no Escape-to-close
- * (accessibility hardening pass, found in the 2026-07-30 Template Management audit). */
+// หน้าต่างแสดงตัวอย่าง Template แบบ modal พร้อมการจัดการโฟกัส/ปุ่ม Escape
+// Modal dialog for previewing a template, with focus trap and Escape handling.
 function TemplatePreviewModal({ target, full, onClose }: {
   target: QuotationTemplateSummary;
   full: QuotationTemplate | null;
@@ -57,7 +54,8 @@ function TemplatePreviewModal({ target, full, onClose }: {
   );
 }
 
-/** Same wrapper+form split and rationale as `TemplatePreviewModal` above. */
+// หน้าต่าง modal สำหรับทำสำเนา Template พร้อมตั้งรหัสใหม่
+// Modal dialog for duplicating a template with a new code.
 function TemplateDuplicateModal({ target, code, onCodeChange, duplicating, onConfirm, onCancel }: {
   target: QuotationTemplateSummary;
   code: string;
@@ -89,14 +87,8 @@ function TemplateDuplicateModal({ target, code, onCodeChange, duplicating, onCon
   );
 }
 
-/**
- * Template Management module (added 2026-07-15) — "จัดการ Template ใบเสนอราคา", the admin-facing
- * counterpart to the Create Quotation wizard's read-only browse (`QuotationTemplateWizard.tsx`).
- * List + create/edit/duplicate/activate/archive, all server-RBAC-enforced per granular
- * `quotationTemplates:*` permission (see docs/RBAC.md). A single list+editor-view page (like
- * `QuotationPage.tsx`'s own list/detail split) rather than list+modal (like `CustomersPage.tsx`) —
- * a template's section/item editor is too large for a modal.
- */
+// หน้าจัดการ Template ใบเสนอราคา แสดงรายการและฟอร์มสร้าง/แก้ไข/ทำสำเนา/เปิดใช้งาน/เก็บถาวร
+// Template management page: list plus create/edit/duplicate/activate/archive actions.
 export function TemplateManagementPage({
   jobTypes,
   products,
@@ -115,7 +107,6 @@ export function TemplateManagementPage({
   jobTypes: JobType[];
   products: Product[];
   categories: ProductCategory[];
-  /** For the list view's one-time guided tour "seen" tracking (see useModuleTour). */
   currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
@@ -123,18 +114,12 @@ export function TemplateManagementPage({
   canActivate: boolean;
   canArchive: boolean;
   canImport: boolean;
-  /** Set by the Create Quotation wizard's "สร้าง Template ใหม่สำหรับประเภทงานนี้" action — opens
-   * the create form pre-filled with that Job Type instead of making the admin reselect it. */
   initialCreateForJobType?: { jobTypeCode: string; jobTypeName: string; seq: number } | null;
   onCreateForJobTypeConsumed?: () => void;
   onCreateQuotationFromTemplate?: (jobTypeCode: string, templateId: string) => void;
 }) {
   const { t } = useI18n();
 
-  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
-  // as the other list pages' tours. If the page mounts straight into the editor view (wizard
-  // deep-link), no tour target exists, start() no-ops, and nothing is marked seen — it simply
-  // offers itself again on the next list-view mount.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="templates-import"]', popover: { title: t("tour.templates.import.title"), description: t("tour.templates.import.desc"), side: "bottom" } },
     { element: '[data-tour="templates-create"]', popover: { title: t("tour.templates.create.title"), description: t("tour.templates.create.desc"), side: "bottom" } },
@@ -161,12 +146,8 @@ export function TemplateManagementPage({
   const [duplicating, setDuplicating] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<QuotationTemplateSummary | null>(null);
 
-  // `fetchList` never calls setState synchronously as the first thing it does — every setState
-  // here runs inside a `.then`/`.catch`/`.finally` callback, the same effect-safe pattern already
-  // established in QuotationTemplateWizard.tsx — so the mount effect below can call it directly.
-  // `load()` (used by the retry button and post-mutation refreshes, always from an event handler,
-  // never from inside an effect body) additionally flips `loading`/`loadError` synchronously before
-  // kicking off the fetch, which is fine outside an effect.
+  // โหลดรายการ Template จากเซิร์ฟเวอร์ (รวมที่เก็บถาวรแล้ว)
+  // Fetches the template list from the server, including archived ones.
   const fetchList = () => fetchQuotationTemplates({ includeArchived: true })
     .then((list) => { setTemplates(list); setLoadError(false); })
     .catch(() => setLoadError(true))
@@ -193,6 +174,8 @@ export function TemplateManagementPage({
       .filter((tpl) => (q ? [tpl.templateCode, tpl.templateName, tpl.jobTypeCode, tpl.jobTypeName].some((f) => f.toLowerCase().includes(q)) : true));
   }, [templates, search, jobTypeFilter, statusFilter, sourceFilter, showArchived]);
 
+  // สลับสถานะเปิด/ปิดใช้งานของ Template
+  // Toggles a template's active/inactive status.
   const handleToggleActive = async (tpl: QuotationTemplateSummary) => {
     try {
       const updated = await setQuotationTemplateActive(tpl.id, !tpl.isActive);
@@ -203,6 +186,8 @@ export function TemplateManagementPage({
     }
   };
 
+  // สลับสถานะเก็บถาวร/เรียกคืนของ Template ที่เลือก
+  // Toggles archive/unarchive status for the selected template.
   const handleArchiveToggle = async () => {
     if (!archiveTarget) return;
     const target = archiveTarget;
@@ -216,6 +201,8 @@ export function TemplateManagementPage({
     }
   };
 
+  // เปิด modal แสดงตัวอย่าง Template และโหลดข้อมูลฉบับเต็ม
+  // Opens the preview modal and loads the full template data.
   const openPreview = async (tpl: QuotationTemplateSummary) => {
     setPreviewTarget(tpl);
     setPreviewFull(null);
@@ -231,6 +218,8 @@ export function TemplateManagementPage({
     setDuplicateTarget(tpl);
     setDuplicateCode(`${tpl.templateCode}-COPY`);
   };
+  // ยืนยันการทำสำเนา Template ด้วยรหัสใหม่ที่ระบุ
+  // Confirms duplicating the template with the entered code.
   const handleDuplicateConfirm = async () => {
     if (!duplicateTarget) return;
     setDuplicating(true);
@@ -247,15 +236,14 @@ export function TemplateManagementPage({
     }
   };
 
+  // นำเข้า Template จากไฟล์ Excel และแสดงผลสรุป
+  // Imports templates from Excel and shows a summary toast.
   const handleImport = async () => {
     setImporting(true);
     try {
       const report = await importQuotationTemplates();
       load();
       const base = t("templates.toast.imported").replace("{created}", String(report.created.length)).replace("{updated}", String(report.updated.length)).replace("{skipped}", String(report.skipped.length));
-      // Warnings (e.g. a real workbook-content change detected but not yet re-transcribed into
-      // templateSeedData.ts) get a permanent Audit Log entry (see the server side); the toast just
-      // flags that they exist so an admin knows to go look, rather than silently vanishing.
       const warningNote = report.warnings.length > 0 ? ` — ${t("templates.toast.importWarnings").replace("{n}", String(report.warnings.length))}` : "";
       show(base + warningNote);
     } catch (err) {

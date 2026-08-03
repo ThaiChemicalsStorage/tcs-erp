@@ -21,6 +21,8 @@ function SimpleTooltip({ active, payload, label, formatter }: { active?: boolean
   );
 }
 
+// แสดงข้อความ "ไม่มีข้อมูล" ตรงกลางเมื่อกราฟไม่มีข้อมูลให้แสดง
+// Renders a centered "no data" message when a chart has nothing to show.
 function EmptyNote({ children }: { children: React.ReactNode }) {
   return <p className="text-xs text-muted-foreground text-center py-10">{children}</p>;
 }
@@ -28,6 +30,8 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 type TrendGrouping = "weekly" | "monthly" | "quarterly" | "yearly";
 const TREND_GROUPINGS: TrendGrouping[] = ["weekly", "monthly", "quarterly", "yearly"];
 
+// กราฟแนวโน้มรายได้ เลือกดูแบบรายสัปดาห์/เดือน/ไตรมาส/ปีได้
+// Area chart of revenue trend, switchable between weekly/monthly/quarterly/yearly grouping.
 export function RevenueTrendChart({ trend, anchorDate }: { trend: RevenueTrend; anchorDate: string }) {
   const { t, lang } = useI18n();
   const [grouping, setGrouping] = useState<TrendGrouping>("monthly");
@@ -75,7 +79,8 @@ export function RevenueTrendChart({ trend, anchorDate }: { trend: RevenueTrend; 
   );
 }
 
-/** All active job types are shown (not top-N) — a job type with zero quotes this period is a real, meaningful zero, not noise to hide. */
+// กราฟแท่งแสดงมูลค่ารวมและมูลค่าที่ชนะ แยกตามประเภทงาน (แสดงทุกประเภท ไม่ใช่แค่ top-N)
+// Bar chart of total vs. won value per job type; shows all active job types, not just top-N.
 export function RevenueByJobTypeChart({ jobTypeAnalytics }: { jobTypeAnalytics: JobTypeStat[] }) {
   const { t } = useI18n();
   const data = jobTypeAnalytics;
@@ -99,6 +104,8 @@ export function RevenueByJobTypeChart({ jobTypeAnalytics }: { jobTypeAnalytics: 
   );
 }
 
+// กราฟวงกลมแสดงสัดส่วนจำนวนใบเสนอราคาแยกตามประเภทงาน
+// Donut chart showing the share of quotation count by job type.
 export function JobTypeDistributionChart({ jobTypeAnalytics }: { jobTypeAnalytics: JobTypeStat[] }) {
   const { t } = useI18n();
   const data = jobTypeAnalytics.filter((j) => j.count > 0).map((j) => ({ name: j.jobTypeCode, value: j.count }));
@@ -131,6 +138,8 @@ export function JobTypeDistributionChart({ jobTypeAnalytics }: { jobTypeAnalytic
   );
 }
 
+// กราฟคาดการณ์ยอดขายที่คาดว่าจะได้ในเดือนนี้/ไตรมาสนี้/ปีนี้
+// Area chart of expected sales forecast for this month/quarter/year.
 export function ExpectedSalesForecastChart({ forecast }: { forecast: Forecast }) {
   const { t } = useI18n();
   const data = [
@@ -161,6 +170,8 @@ export function ExpectedSalesForecastChart({ forecast }: { forecast: Forecast })
   );
 }
 
+// กราฟวงกลมแสดงสัดส่วนสินค้าแยกตามหมวดหมู่ พร้อมแถบเปอร์เซ็นต์
+// Donut chart plus percentage bars showing product breakdown by category.
 export function ProductsByCategoryChart({ categoryBreakdown }: { categoryBreakdown: { categoryId: string; categoryName: string; count: number; percentage: number }[] }) {
   const { t } = useI18n();
   return (

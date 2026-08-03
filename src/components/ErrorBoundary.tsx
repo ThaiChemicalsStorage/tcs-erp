@@ -2,21 +2,6 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RotateCw } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 
-/**
- * This app previously had no error boundary anywhere — a real incident (2026-07-22): a client-side
- * crash rendering the new Scope of Work page (an unguarded `undefined` field from a real MongoDB
- * document) went completely blank white, since React unmounts the whole tree on an uncaught render
- * error with nothing to catch it. Wraps the page-content area (see `App.tsx`) so a future bug in
- * any one page degrades to a recoverable in-place error screen instead of taking down the entire
- * app — the sidebar/header shell around it is a sibling, not a child, so it stays interactive.
- *
- * **Caller must pass `key={effectiveNav}`** (or equivalent) — a caught error otherwise sticks in
- * `hasError: true` forever (React error boundaries don't auto-reset when their children's content
- * changes), permanently stranding the user on this fallback screen even after navigating to a
- * different, perfectly fine page. Changing `key` forces React to unmount/remount this component
- * fresh on the next navigation, which is what actually clears the error state — the "reload the
- * page" button below is a fallback for recovering the *current* crashed page, not the only way out.
- */
 interface Props {
   children: ReactNode;
 }
@@ -24,11 +9,8 @@ interface State {
   hasError: boolean;
 }
 
-/** Split out from the class component below purely to call `useI18n()` — React error boundaries
- * must be class components (no hook-based equivalent exists), but the actual presentational output
- * doesn't need to be. Previously the only hardcoded-Thai user-facing text in the app: every other
- * string routes through `t()`, and this is exactly the screen where an English-mode user most needs
- * to understand what happened (Impeccable shell audit 2026-07-30). */
+// แสดงหน้าจอ error สำรอง แยกออกมาเป็น function component เพื่อใช้ hook แปลภาษาได้
+// Renders the error fallback screen, split out from the class component so it can use the i18n hook
 function ErrorBoundaryFallback() {
   const { t } = useI18n();
   return (
@@ -48,6 +30,8 @@ function ErrorBoundaryFallback() {
   );
 }
 
+// ดัก error ที่เกิดขึ้นระหว่าง render ของหน้าลูก แล้วแสดงหน้าจอ error สำรองแทนที่จะพังทั้งแอป
+// Catches render errors in child pages and shows a fallback screen instead of crashing the whole app
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
 

@@ -16,19 +16,18 @@ const statusStyle: Record<DeliveryOrderStatus, string> = {
 };
 const statusLabel: Record<DeliveryOrderStatus, string> = { Draft: "Draft", PendingApproval: "รออนุมัติ", Final: "Final" };
 
+// แสดงรายการใบส่งมอบสินค้า พร้อมค้นหา กรองตามสถานะ และการ์ดสรุปจำนวน
+// Renders the delivery order list with search, status filtering, and summary count cards
 export function DeliveryOrderList({
   deliveryOrders,
   currentUserId,
   onOpen,
 }: {
   deliveryOrders: DeliveryOrderListItem[];
-  /** For the per-user "seen" tracking of this page's one-time guided tour (see useModuleTour). */
   currentUserId: string;
   onOpen: (id: string) => void;
 }) {
   const { t } = useI18n();
-  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
-  // as the other list pages' tours.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="do-summary"]', popover: { title: t("tour.do.summary.title"), description: t("tour.do.summary.desc"), side: "bottom" } },
     { element: '[data-tour="do-filters"]', popover: { title: t("tour.do.filters.title"), description: t("tour.do.filters.desc"), side: "bottom" } },
@@ -40,7 +39,6 @@ export function DeliveryOrderList({
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
-  // Defensive normalization, same "MongoDB enforces no schema" rationale as ScopeOfWorkList.tsx.
   const items = deliveryOrders.map((d) => ({
     ...d,
     scopeNumber: d.scopeNumber ?? "",
@@ -69,7 +67,6 @@ export function DeliveryOrderList({
         </button>
       </div>
 
-      {/* Summary cards */}
       <div data-tour="do-summary" className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           { label: t("quotation.filterAll"), count: deliveryOrders.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
@@ -87,7 +84,6 @@ export function DeliveryOrderList({
         ))}
       </div>
 
-      {/* Filter */}
       <div data-tour="do-filters" className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative h-9 w-72">
@@ -116,7 +112,6 @@ export function DeliveryOrderList({
         </div>
       </div>
 
-      {/* Table */}
       <div data-tour="do-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {deliveryOrders.length === 0 ? (
           <EmptyState

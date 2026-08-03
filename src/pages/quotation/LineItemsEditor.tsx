@@ -8,11 +8,8 @@ import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { useI18n } from "../../lib/i18n";
 
-/** Renders each sub-detail as its own "pinned" row directly under the parent line item's row in
- * the main table — a highlighted (gold-tinted) inline strip with a Pin icon, mirroring how
- * `PrintDocument.tsx` prints sub-details with a Pin marker — rather than inside the collapsible
- * tags card below. `colSpan` covers every column after "No." (description through the
- * row-actions column) so the pinned strip runs the full width of the row it belongs to. */
+// แสดงรายการรายละเอียดย่อยแบบ "ปักหมุด" ใต้แถวรายการหลักในตาราง พร้อมลากสลับลำดับได้
+// Renders each sub-detail as a "pinned" row under its parent line item, with drag-to-reorder support
 function PinnedSubDetailRows({
   lineId,
   subDetails,
@@ -65,8 +62,6 @@ function PinnedSubDetailRows({
                 placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
                 className="flex-1 text-sm text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
               />
-              {/* Keyboard/touch alternative to the drag handle above — native HTML5 drag events have
-                  no keyboard equivalent, so reordering was previously mouse-only. */}
               <button
                 type="button"
                 onClick={() => onReorder(idx, idx - 1)}
@@ -103,10 +98,14 @@ function PinnedSubDetailRows({
   );
 }
 
+// แก้ไขรายการแท็กของรายการหนึ่ง เพิ่มด้วยการพิมพ์แล้วกด Enter หรือคลิกออกจากช่อง
+// Edits a line item's tags, adding one on Enter or blur
 function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
 
+  // เพิ่มแท็กใหม่จากข้อความที่พิมพ์ไว้ ถ้ายังไม่มีแท็กนี้อยู่แล้ว
+  // Adds a new tag from the typed draft text, if not already present
   const addTag = () => {
     const tag = draft.trim();
     if (tag && !tags.includes(tag)) onChange([...tags, tag]);
@@ -138,6 +137,8 @@ function TagsEditor({ tags, onChange }: { tags: string[]; onChange: (tags: strin
   );
 }
 
+// ตารางแก้ไขรายการสินค้า/บริการในใบเสนอราคา รวมส่วนลด ยอดรวม และตัวเลือกจากแคตตาล็อก
+// Editable table of quote line items, with discount, totals, and catalog picker
 export function LineItemsEditor({
   lines,
   onChange,
@@ -158,6 +159,8 @@ export function LineItemsEditor({
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
 
+  // เปิด/ปิดการแสดงการ์ดรายละเอียดเพิ่มเติม (แท็ก) ของรายการนั้น
+  // Toggles the expanded tags-detail card for a given line
   const toggleExpand = (id: number) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -170,6 +173,8 @@ export function LineItemsEditor({
 
   const addLine = () => onChange([...lines, blankLine()]);
   const addSectionHeader = () => onChange([...lines, { ...blankLine(), isSectionHeader: true }]);
+  // เพิ่มรายการใหม่โดยดึงชื่อ หน่วย ราคา และสเปกจากสินค้าที่เลือกในแคตตาล็อก
+  // Adds a new line pre-filled from a picked catalog product (name, unit, price, spec)
   const addLineFromProduct = (product: Product) => {
     const spec = product.specifications.trim();
     onChange([...lines, {
@@ -182,6 +187,8 @@ export function LineItemsEditor({
   };
   const removeLine = (id: number) => onChange(lines.filter((l) => l.id !== id));
 
+  // เพิ่มรายละเอียดย่อยใหม่ให้กับรายการ แล้วตั้งโฟกัสไปที่ช่องที่เพิ่ง
+  // Adds a new sub-detail to a line and focuses the newly created input
   const addSubDetail = (lineId: number) => {
     const newId = newSubDetailId();
     updateLine(lineId, "subDetails", [...(lines.find((l) => l.id === lineId)?.subDetails ?? []), { id: newId, text: "" }]);
@@ -191,6 +198,8 @@ export function LineItemsEditor({
     updateLine(lineId, "subDetails", (lines.find((l) => l.id === lineId)?.subDetails ?? []).map((sd) => (sd.id === subId ? { ...sd, text } : sd)));
   const removeSubDetail = (lineId: number, subId: string) =>
     updateLine(lineId, "subDetails", (lines.find((l) => l.id === lineId)?.subDetails ?? []).filter((sd) => sd.id !== subId));
+  // ย้ายตำแหน่งรายละเอียดย่อยในรายการเดียวกันจากตำแหน่งหนึ่งไปอีกตำแหน่ง
+  // Moves a sub-detail within a line from one index to another
   const reorderSubDetails = (lineId: number, from: number, to: number) => {
     const current = [...(lines.find((l) => l.id === lineId)?.subDetails ?? [])];
     const [moved] = current.splice(from, 1);
@@ -200,9 +209,6 @@ export function LineItemsEditor({
 
   const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount);
 
-  // "No." numbering counts only ordinary priced lines — a section-header line (see below) gets its
-  // own "§" marker instead, so numbering a template-seeded quotation stays a clean 1, 2, 3... across
-  // its real line items rather than skipping a number at every section divider.
   let itemNumber = 0;
   const itemNumbers = lines.map((l) => (l.isSectionHeader ? null : ++itemNumber));
 
@@ -241,10 +247,6 @@ export function LineItemsEditor({
           </thead>
           <tbody>
             {lines.map((line, idx) => {
-              // Section-header line copied from a Quotation Template (see applyTemplate.ts) — a
-              // non-priced divider, not an ordinary priced line. Rendered as one full-width row
-              // (editable title, no unit/qty/price/discount) instead of the normal 8-column
-              // layout below.
               if (line.isSectionHeader) {
                 return (
                   <tr key={line.id} className="border-b border-border/50 bg-muted/20 group">
@@ -349,7 +351,6 @@ export function LineItemsEditor({
         </table>
       </div>
 
-      {/* Totals */}
       <div className="flex justify-end p-5 border-t border-border">
         <div className="w-72 space-y-2">
           <div className="flex justify-between text-sm text-muted-foreground">

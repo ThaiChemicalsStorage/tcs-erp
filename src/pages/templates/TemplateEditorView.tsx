@@ -26,12 +26,8 @@ function emptyItem(sortOrder: number): TemplateItem {
   };
 }
 
-/** `specifications` was removed from `TemplateItem` entirely 2026-07-21 (unused UI, direct user
- * request — see CHANGELOG.md); any pre-existing content (real spec text like "Substrate option:
- * SS/SUS tank...", not placeholder data) is folded into `subDetails` here, once, the moment an
- * existing template is opened for editing — so it shows up immediately as pinned rows instead of
- * silently disappearing, and the next save naturally drops the now-unused raw field. Reads the raw
- * value defensively since the type no longer declares it. */
+// ย้ายข้อมูล specifications แบบเก่าเข้าไปรวมกับ subDetails ของแต่ละรายการ
+// Migrates legacy per-item specifications into the subDetails field.
 function migrateLegacySpecifications(sections: TemplateSection[]): TemplateSection[] {
   return sections.map((sec) => ({
     ...sec,
@@ -52,27 +48,14 @@ function emptyDraft(jobTypeCode: string, jobTypeName: string): TemplateContentDr
   };
 }
 
-/** Multi-line-textarea <-> string[] helper — a free-text list field edits as one line-per-entry
- * textarea rather than N separate add/remove rows, matching how an admin would naturally
- * paste/type a list of scope lines. Blank lines are dropped on blur/save (see the server's own
- * `sanitizeStringArray`, mirrored here so the on-screen count doesn't visibly disagree with what
- * gets saved). **2026-07-21**: item-level specifications/internalNotes were removed entirely (see
- * CHANGELOG.md) — this helper is now only used for the template-level internal notes field below. */
+// แปลงข้อความหลายบรรทัดเป็นอาร์เรย์ของบรรทัด โดยตัดบรรทัดว่างออก
+// Converts multi-line text into an array of non-empty trimmed lines.
 function linesToArray(text: string): string[] {
   return text.split("\n").map((s) => s.trim()).filter(Boolean);
 }
 
-/**
- * Template Management create/edit form (added 2026-07-15, restyled 2026-07-21 to mirror the real
- * quotation document's look — navy/gold header band, meta grid, table-style line items — so editing
- * a template reads like a preview of the document it produces rather than a generic settings form).
- * Sections/items CRUD, reorder (up/down — no drag-and-drop dependency in this codebase), "select
- * existing product" vs "add custom item," per-item pinned sub-details, and payment/warranty/tax
- * default terms. **2026-07-21**: per-item specifications/editable parameters/internal notes/
- * visible-to-customer were removed entirely (unused UI, direct user request) — sub-details is now
- * the only per-item "extra content" mechanism, matching the same restyle already applied to the
- * live quotation editor. See docs/MODULES/QuotationTemplates.md "Template Management Module — Editor."
- */
+// ฟอร์มสร้าง/แก้ไข Template ใบเสนอราคา จัดการหมวดหมู่ รายการ และเงื่อนไขต่างๆ
+// Create/edit form for quotation templates, managing sections, items, and default terms.
 export function TemplateEditorView({
   templateId,
   jobTypes,
@@ -136,6 +119,8 @@ export function TemplateEditorView({
   };
   const addSection = () => setDraft((d) => ({ ...d, sections: [...d.sections, emptySection(d.sections.length)] }));
   const deleteSection = (sectionId: string) => setDraft((d) => ({ ...d, sections: d.sections.filter((s) => s.id !== sectionId).map((s, i) => ({ ...s, sortOrder: i })) }));
+  // ย้ายลำดับหมวดหมู่ขึ้นหรือลง
+  // Moves a section up or down in the order.
   const moveSection = (index: number, dir: -1 | 1) => {
     setDraft((d) => {
       const arr = [...d.sections];
@@ -147,6 +132,8 @@ export function TemplateEditorView({
   };
   const addItem = (sectionId: string, item: TemplateItem) => updateSection(sectionId, (s) => ({ ...s, items: [...s.items, { ...item, sortOrder: s.items.length }] }));
   const deleteItem = (sectionId: string, itemId: string) => updateSection(sectionId, (s) => ({ ...s, items: s.items.filter((it) => it.id !== itemId).map((it, i) => ({ ...it, sortOrder: i })) }));
+  // ทำสำเนารายการภายในหมวดหมู่เดิม
+  // Duplicates an item within the same section.
   const duplicateItemInSection = (sectionId: string, item: TemplateItem) => updateSection(sectionId, (s) => {
     const idx = s.items.findIndex((it) => it.id === item.id);
     const copy: TemplateItem = { ...item, id: newId(), name: `${item.name} (Copy)` };
@@ -154,6 +141,8 @@ export function TemplateEditorView({
     items.splice(idx + 1, 0, copy);
     return { ...s, items: items.map((it, i) => ({ ...it, sortOrder: i })) };
   });
+  // ย้ายลำดับรายการขึ้นหรือลงภายในหมวดหมู่
+  // Moves an item up or down within its section.
   const moveItem = (sectionId: string, index: number, dir: -1 | 1) => {
     updateSection(sectionId, (s) => {
       const arr = [...s.items];
@@ -164,6 +153,8 @@ export function TemplateEditorView({
     });
   };
 
+  // เพิ่มรายการจากสินค้าที่เลือกไว้ในหมวดหมู่
+  // Adds an item to a section based on a selected product.
   const addProductItem = (sectionId: string, product: Product) => {
     addItem(sectionId, {
       ...emptyItem(0),
@@ -181,15 +172,14 @@ export function TemplateEditorView({
   const updateTermText = (index: number, text: string) => setDraft((d) => ({ ...d, defaultTerms: d.defaultTerms.map((term, i) => (i === index ? { ...term, text } : term)) }));
   const deleteTerm = (index: number) => setDraft((d) => ({ ...d, defaultTerms: d.defaultTerms.filter((_, i) => i !== index) }));
 
+  // ตรวจสอบข้อมูลและบันทึก Template (สร้างใหม่หรืออัปเดต)
+  // Validates and saves the template draft (create or update).
   const handleSave = async () => {
     if (!draft.templateCode.trim()) { setError(t("templates.form.error.code")); return; }
     if (!draft.templateName.trim()) { setError(t("templates.form.error.name")); return; }
     if (!draft.jobTypeCode.trim()) { setError(t("templates.form.error.jobType")); return; }
     setError("");
     setSaving(true);
-    // A plain `:edit` holder (no `:activate`) must never have this save silently flip active
-    // status — the server enforces this too (see `handleOne`'s `touchesActive`), this is just the
-    // client staying in sync with what it's actually allowed to submit.
     const payload: TemplateContentDraft = canActivate ? draft : { ...draft, isActive: originalActive };
     try {
       if (templateId) await updateQuotationTemplate(templateId, payload);
@@ -215,8 +205,6 @@ export function TemplateEditorView({
         <ChevronLeft size={14} /> {t("quotation.wizard.back")}
       </button>
 
-      {/* Document header band + meta grid — mirrors QuoteDocument's header so editing a template
-          reads like a preview of the quotation it will generate. */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
@@ -292,8 +280,6 @@ export function TemplateEditorView({
         </div>
       </div>
 
-      {/* Sections + items — styled like LineItemsEditor's table so this reads as a preview of the
-          quotation's line-item table rather than a generic list of form rows. */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-muted/30">
           <p className="text-sm font-semibold text-foreground flex items-center gap-2" style={SERIF}>
@@ -369,7 +355,6 @@ export function TemplateEditorView({
         </div>
       </div>
 
-      {/* Terms — three columns to mirror the printed quotation's payment/warranty/tax layout. */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-5 py-3.5 border-b border-border bg-muted/30">
           <p className="text-sm font-semibold text-foreground flex items-center gap-2" style={SERIF}>
@@ -431,6 +416,8 @@ export function TemplateEditorView({
   );
 }
 
+// แถวแก้ไขรายการแต่ละอันในตาราง พร้อมช่องเพิ่ม sub-detail
+// Row editor for a single template item, including sub-detail management.
 function ItemEditor({
   index, item, onChange, onDelete, onDuplicate, onMoveUp, onMoveDown, canMoveUp, canMoveDown,
 }: {

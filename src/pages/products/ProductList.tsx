@@ -16,10 +16,14 @@ type SortKey = "code" | "name" | "category" | "unit" | "defaultPrice" | "status"
 const PAGE_SIZE = 8;
 const ALL_CATEGORIES = "all";
 
+// จัดรูปแบบวันที่ ISO ให้เป็นรูปแบบไทยแบบสั้น
+// Formats an ISO date string into a short Thai date format.
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// หน้ารายการสินค้า พร้อมค้นหา กรองตามหมวดหมู่ เรียงลำดับ และแบ่งหน้า
+// Product list page with search, category filtering, sorting, and pagination.
 export function ProductList({
   products,
   categories,
@@ -33,7 +37,6 @@ export function ProductList({
 }: {
   products: Product[];
   categories: ProductCategory[];
-  /** For the per-user "seen" tracking of this page's one-time guided tour (see useModuleTour). */
   currentUserId: string;
   onEdit: (id: string) => void;
   onArchiveToggle: (id: string) => void;
@@ -44,8 +47,6 @@ export function ProductList({
 }) {
   const { t } = useI18n();
 
-  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
-  // as QuoteList.tsx's tour; mounted in the list view only, never over the form/categories views.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="products-create"]', popover: { title: t("tour.products.create.title"), description: t("tour.products.create.desc"), side: "bottom" } },
     { element: '[data-tour="products-categories"]', popover: { title: t("tour.products.categories.title"), description: t("tour.products.categories.desc"), side: "bottom" } },
@@ -95,6 +96,8 @@ export function ProductList({
   const clampedPage = Math.min(page, totalPages);
   const pageItems = sorted.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE);
 
+  // สลับทิศทางการเรียงลำดับ หรือเปลี่ยนคอลัมน์ที่ใช้เรียง แล้วกลับไปหน้าแรก
+  // Toggles sort direction or switches the sort column, resetting to page 1.
   const toggleSort = (key: SortKey) => {
     setSort((p) => (p.key === key ? { key, dir: p.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
     setPage(1);
@@ -135,7 +138,6 @@ export function ProductList({
         </div>
       </div>
 
-      {/* Toolbar */}
       <div data-tour="products-toolbar" className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 focus-within:border-[#c9a84c]/40 transition-colors">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
@@ -168,7 +170,6 @@ export function ProductList({
         </label>
       </div>
 
-      {/* Table */}
       <div data-tour="products-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {products.length === 0 ? (
           <EmptyState icon={Package} title={t("empty.products.title")} description={t("empty.products.sub")} actionLabel={t("empty.products.action")} onAction={onCreateNew} compact />
@@ -241,7 +242,6 @@ export function ProductList({
             </table>
             </div>
 
-            {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-border">
               <p className="text-xs text-muted-foreground font-mono">
                 {t("products.showingRange")

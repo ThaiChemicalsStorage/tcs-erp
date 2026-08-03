@@ -3,6 +3,8 @@ import type { DeliveryOrderSummary as DeliveryOrderSummaryData } from "../../lib
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 
+// การ์ดเล็กแสดงไอคอนพร้อมตัวเลขและป้ายกำกับหนึ่งรายการ
+// A small tile showing an icon, a count, and a label.
 function Tile({ icon: Icon, label, count, accent }: { icon: LucideIcon; label: string; count: number; accent: string }) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border border-border min-w-0">
@@ -17,13 +19,8 @@ function Tile({ icon: Icon, label, count, accent }: { icon: LucideIcon; label: s
   );
 }
 
-/**
- * Company-wide Delivery Order document counts (Total/Draft/Final) — added 2026-07-24 per a direct
- * user request to bring the newer modules' data onto the Dashboard, mirroring
- * `ScopeOfWorkSummary.tsx` exactly (same tier, same unfiltered all-time semantics, same
- * null-hides-card gating — here on `deliveryOrder:view`). Same "exactly 4 KPI cards" constraint
- * applies: supporting detail, never a 5th ExecutiveSummaryCards tile.
- */
+// สรุปจำนวนเอกสารใบส่งของทั้งบริษัท (ทั้งหมด/ฉบับร่าง/รอดำเนินการ/ฉบับสมบูรณ์)
+// Company-wide Delivery Order document counts — total, draft, pending, and final.
 export function DeliveryOrderSummary({ data }: { data: DeliveryOrderSummaryData }) {
   const { t } = useI18n();
   const items: { icon: LucideIcon; label: string; count: number; accent: string }[] = [

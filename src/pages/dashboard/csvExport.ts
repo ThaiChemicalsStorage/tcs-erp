@@ -1,20 +1,19 @@
 import type { DashboardStats } from "../../lib/dashboard";
 
-/**
- * Dashboard report export — added per the 2026-07-10 Codex review's High-priority finding that no
- * Dashboard export existed at all. Client-side CSV built from the already-fetched, already-filtered
- * `DashboardStats` the user is currently looking at (same `dashboard:view`-gated data already on
- * screen — generating a CSV from data the caller is already authorized to see doesn't need a new
- * permission or a server round trip). PDF/Excel export remain explicitly deferred — see TODO.md.
- */
+// ครอบค่าเป็นเซลล์ CSV ที่ถูกต้อง (ใส่เครื่องหมายคำพูดถ้ามีจุลภาคหรือขึ้นบรรทัดใหม่)
+// Escapes a value into a valid CSV cell (quotes it if it contains a comma or newline)
 function csvCell(v: string | number): string {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
+// รวมเซลล์หลายค่าเป็นหนึ่งแถว CSV
+// Joins multiple cells into one CSV row
 function csvRow(cells: (string | number)[]): string {
   return cells.map(csvCell).join(",");
 }
 
+// สร้างไฟล์ CSV สรุปรายงานแดชบอร์ดจากข้อมูลที่กรองไว้แล้วบนหน้าจอ
+// Builds a dashboard report CSV from the already-filtered stats currently on screen
 export function buildDashboardCsv(stats: DashboardStats, filters: { from: string; to: string; salesperson: string; department: string }): string {
   const lines: string[] = [];
   lines.push(csvRow(["Thai Chemicals Storage ERP — Dashboard Export"]));
@@ -77,10 +76,9 @@ export function buildDashboardCsv(stats: DashboardStats, filters: { from: string
   return lines.join("\r\n");
 }
 
+// ดาวน์โหลดสตริง CSV เป็นไฟล์ในเบราว์เซอร์ (ใส่ BOM เพื่อให้ Excel อ่านภาษาไทยถูกต้อง)
+// Triggers a browser download of a CSV string (with a BOM so Excel reads Thai text correctly)
 export function downloadCsv(filename: string, csv: string): void {
-  // Leading BOM so Excel (still the most common opener for a plain .csv on Windows) detects UTF-8
-  // instead of misreading Thai text as the system's legacy codepage. Built via fromCharCode rather
-  // than a literal/escaped character in source, which trips eslint's no-irregular-whitespace rule.
   const bom = String.fromCharCode(0xfeff);
   const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);

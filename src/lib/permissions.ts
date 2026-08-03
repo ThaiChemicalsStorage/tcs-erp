@@ -38,9 +38,6 @@ export type Permission =
   | "scopeOfWork:finalize"
   | "scopeOfWork:print"
   | "scopeOfWork:delete"
-  // "ทวงเลข PO" (added 2026-07-29, direct owner request: the chase button must be its own
-  // grantable permission, not implied by scopeOfWork:view) — gates both the toolbar button and
-  // POST /api/scope-of-works/:id/chase-po.
   | "scopeOfWork:chasePo"
   | "deliveryOrder:view"
   | "deliveryOrder:viewAll"
@@ -146,7 +143,6 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "deliveryOrder:delete": "ลบใบส่งมอบสินค้า",
 };
 
-/** Translated display label per permission — `PERMISSION_LABELS` (Thai) stays as-is since it's also used to seed the `permissions` collection's stored `label` field; this map is UI-display only. */
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "dashboard:view": "permission.dashboardView",
   "quotations:view": "permission.quotationsView",
@@ -251,10 +247,4 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
   },
 ];
 
-/**
- * "roles:manage" and "company:manage" are enterprise-critical (creating/deleting roles, editing
- * permissions, promoting to Super Admin, and company-wide settings). Per spec these are Super
- * Admin-only regardless of what a role's permission list says, so a non-Super-Admin role can never
- * be misconfigured into unlocking them.
- */
 export const SUPER_ADMIN_ONLY_PERMISSIONS: Permission[] = ["roles:manage", "company:manage"];

@@ -1,43 +1,10 @@
 import { apiFetch } from "./apiClient.js";
 import type { ChecklistOption, ChecklistGroup } from "./documentRequirements.js";
 
-// Re-exported for backward compatibility — `ChecklistOption`/`ChecklistGroup` moved to
-// documentRequirements.ts (2026-07-16) so Quotation can share the same checklist-group model
-// without depending on this Scope-of-Work-specific module. Every existing import of these two
-// types from "./scopeOfWork" (this file) keeps working unchanged.
 export type { ChecklistOption, ChecklistGroup };
 
-/**
- * Scope of Work (added 2026-07-15) — a printable job document generated from an existing
- * Quotation, reproducing the printed structure of the reference PDF ("Scope Of Work
- * PQ202607-174-LI-SK บริษัท เค ไทย ไฮดรอลิค จำกัด.pdf", `public/`). See
- * docs/MODULES/ScopeOfWork.md for the full field-by-field PDF mapping.
- *
- * **This file is type-imported into the API bundle** (`api/_lib/collections.ts`,
- * `api/_lib/scopeOfWorkHandler.ts`) — per the standing rule in docs/CLAUDE.md, never add a
- * *value* import here that transitively pulls in JSX/React (e.g. don't import anything from
- * `src/lib/quotes.tsx`, which has module-scope JSX in `statusIcon` that would execute on import
- * and break every authenticated API route). Only type-only imports from `quotes.tsx` are safe.
- *
- * A Scope of Work is created FROM a quotation (`quotationId`) but stores its own independent
- * snapshot of every quotation-derived field (`customerSnapshot`, `items`, `jobTypeCode`, etc.) —
- * editing a Scope of Work never modifies the source quotation, and later edits to the quotation/
- * customer/product master data never silently change an already-created Scope of Work. An
- * explicit "อัปเดตข้อมูลจากใบเสนอราคา" action can re-pull the snapshot on demand only.
- */
-
-/** "PendingApproval" added 2026-07-24 (approval workflow, direct user request): Draft →
- * ส่งขออนุมัติ → PendingApproval → อนุมัติ → Final (or ปฏิเสธ/ถอนคำขอ → back to Draft). Editing is
- * Draft-only; Final is terminal — the only way to change an approved document is Rewrite. */
 export type ScopeOfWorkStatus = "Draft" | "PendingApproval" | "Final";
 
-/** Frozen-at-creation-time copy of the quotation's Customer Information — same "snapshot, not
- * live reference" rule as `Quote.customerSnapshot` (src/lib/customers.ts). `contactName` (added
- * 2026-07-15, Codex review High Priority fix) is the quotation's own generic contact — real
- * quotation data, not a sample/handwritten value — kept here for reference even though it isn't
- * automatically pushed into the more specific `shippingContact`/`billingContact` fields below
- * (there's no reliable way to tell which of those two, if either, a single generic contact maps
- * to — see docs/MODULES/ScopeOfWork.md "Field-by-field mapping"). */
 export interface ScopeOfWorkCustomerSnapshot {
   companyName: string;
   contactName: string;
@@ -48,9 +15,6 @@ export interface ScopeOfWorkCustomerSnapshot {
   projectName: string;
 }
 
-/** One printed item row (e.g. "1. FRP Lining for concrete floors") — copied from the source
- * quotation's line items at creation time, then independently editable. `isSectionHeader` mirrors
- * `QuoteLine.isSectionHeader` (a non-priced divider copied from a Quotation Template section). */
 export interface ScopeOfWorkSpecLine {
   id: string;
   text: string;
@@ -65,20 +29,8 @@ export interface ScopeOfWorkItem {
   isSectionHeader?: boolean;
 }
 
-/** Cash or Credit — a structured dropdown selection rather than free text, so the print/PDF output
- * and the sum-to-100% validation both read a consistent value instead of parsing arbitrary user
- * text. `""` means "not yet chosen." */
 export type ScopeOfWorkPaymentType = "" | "Cash" | "Credit";
 
-/** One payment schedule row (e.g. "40% Down Payment (Cash)") — arbitrarily many rows are allowed
- * (not capped at 2), added 2026-07-23 per direct user request for 3+-installment plans (e.g. 20%
- * Down Payment (Cash 30 days) / 40% Materials (Credit 30 days) / 40% After Delivered Date (Credit
- * 30 days)). `label` is the free-text installment name ("Down Payment", "Materials", "After Job
- * Complete", ...). `paymentType`/`days` (added 2026-07-23, same day, per a direct follow-up
- * request replacing the initial free-text `method` field) are a structured Cash/Credit dropdown
- * plus an optional day count — `days` applies to either type (the user's own example used "Cash 30
- * days", not just Credit), kept per-row rather than one shared method for the whole schedule since
- * a real multi-installment plan can legitimately mix Cash and Credit terms across rows. */
 export interface ScopeOfWorkPaymentInstallment {
   id: string;
   pct: number | null;
@@ -87,38 +39,30 @@ export interface ScopeOfWorkPaymentInstallment {
   days: number | null;
 }
 
-/** `"Cash"` / `"Credit 30 Days"` / `""` — the display string derived from a row's structured
- * `paymentType`/`days`, used for the printed document and the "(...)" hint after each installment's
- * label. Kept as a pure function (not a stored field) so `paymentType`/`days` stay the single
- * source of truth — nothing can drift out of sync with a separately-stored string. */
+// แปลงข้อมูลประเภทการชำระเงินและจำนวนวันเป็นข้อความแสดงผล เช่น "Credit 30 Days"
+// Formats a payment installment's type/days into a display string, e.g. "Credit 30 Days"
 export function formatPaymentMethod(installment: Pick<ScopeOfWorkPaymentInstallment, "paymentType" | "days">): string {
   if (!installment.paymentType) return "";
   return installment.days !== null ? `${installment.paymentType} ${installment.days} Days` : installment.paymentType;
 }
 
-/** Editable payment fields — pulled from the quotation's `paymentTerms` text when available
- * (as free-text `description`), otherwise left blank. The sample PDF's "40% / 60%" split is never
- * saved as a universal default (see docs/MODULES/ScopeOfWork.md "Payment Conditions"). `installments`
- * replaced the previous fixed `{downPaymentPct, finalPaymentPct, method}` pair on 2026-07-23 — see
- * `normalizePaymentConditions()` below for how an existing pre-2026-07-23 record's legacy shape is
- * read. Three quick-select presets (`PAYMENT_TERM_PRESETS`) populate common 2-installment schedules;
- * the array itself is always freely editable — add/remove/edit rows without limit. */
 export interface ScopeOfWorkPaymentConditions {
   installments: ScopeOfWorkPaymentInstallment[];
   description: string;
   notes: string;
 }
 
+// สร้างรหัส id ใหม่สำหรับงวดชำระเงิน
+// Generates a new payment installment id
 export function newPaymentInstallmentId(): string {
   return `pi-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
+// สร้างงวดชำระเงินเปล่าเริ่มต้น
+// Creates a blank payment installment
 export function blankPaymentInstallment(): ScopeOfWorkPaymentInstallment {
   return { id: newPaymentInstallmentId(), pct: null, label: "", paymentType: "", days: null };
 }
 
-/** 3 quick-select presets a salesperson can apply with one click, then still freely edit (add more
- * rows, retitle a row, change a percentage/type/days) — never a silently-assumed default written
- * without the user choosing it. Per direct user request, 2026-07-23. */
 export const PAYMENT_TERM_PRESETS: { label: string; installments: Omit<ScopeOfWorkPaymentInstallment, "id">[] }[] = [
   {
     label: "40% Down Payment (Cash) / 60% After Job Complete (Cash)",
@@ -144,13 +88,8 @@ export const PAYMENT_TERM_PRESETS: { label: string; installments: Omit<ScopeOfWo
 
 const VALID_PAYMENT_TYPES: readonly ScopeOfWorkPaymentType[] = ["", "Cash", "Credit"];
 
-/** Best-effort parse of a free-text payment method string (e.g. "Cash", "Credit 30 Days", "Cash 30
- * days") into the structured `{paymentType, days}` shape — used only when reading a legacy record
- * whose installment rows predate the 2026-07-23 structured-dropdown change (see
- * `normalizePaymentConditions()` below). Not exhaustive by design: arbitrary free text that names
- * neither "Cash" nor "Credit" falls back to `paymentType: ""` (the day count, if any, is still
- * kept) rather than guessing — the user re-selects it once, same one-time cost as any other
- * legacy-shape migration in this codebase. */
+// แกะข้อความวิธีชำระเงินแบบเก่า (free text) ให้เป็นรูปแบบ paymentType/days ที่มีโครงสร้าง
+// Parses a legacy free-text payment method string into the structured paymentType/days shape
 function parsePaymentMethodText(text: string): { paymentType: ScopeOfWorkPaymentType; days: number | null } {
   const dayMatch = /(\d+)\s*Days?/i.exec(text);
   const days = dayMatch ? parseInt(dayMatch[1], 10) : null;
@@ -158,18 +97,8 @@ function parsePaymentMethodText(text: string): { paymentType: ScopeOfWorkPayment
   return { paymentType, days };
 }
 
-/**
- * Reads a stored `paymentConditions` value and normalizes it to the current `installments`-array
- * shape with structured `paymentType`/`days` rows — a Scope of Work saved before 2026-07-23 still
- * has an older shape in MongoDB (either the very first fixed `{downPaymentPct, finalPaymentPct,
- * method}` pair, or the same-day intermediate `installments` array whose rows carried a free-text
- * `method` string instead of `paymentType`/`days` — no migration script was run for either; MongoDB
- * enforces no schema, so old documents are simply read-compatible via this function until they're
- * next saved, at which point the server persists the current shape for good — see
- * `sanitizePaymentConditions()` in api/_lib/scopeOfWorkHandler.ts). Applied server-side to every
- * response (`normalizeScope()`), so the frontend only ever sees the current shape. Exported (not
- * handler-local) since it's also used directly by the handler's finalize/print validation input
- * mapping. */
+// แปลงข้อมูลเงื่อนไขการชำระเงินที่บันทึกไว้ (รวมข้อมูลรูปแบบเก่า) ให้เป็นรูปแบบปัจจุบัน
+// Normalizes a stored payment conditions value (including legacy shapes) to the current format
 export function normalizePaymentConditions(raw: unknown): ScopeOfWorkPaymentConditions {
   const r = (raw ?? {}) as Record<string, unknown>;
   const description = typeof r.description === "string" ? r.description : "";
@@ -183,7 +112,6 @@ export function normalizePaymentConditions(raw: unknown): ScopeOfWorkPaymentCond
         if (typeof it.paymentType === "string" && (VALID_PAYMENT_TYPES as readonly string[]).includes(it.paymentType)) {
           return { id, pct, label, paymentType: it.paymentType as ScopeOfWorkPaymentType, days: typeof it.days === "number" ? it.days : null };
         }
-        // Intermediate same-day shape: a free-text `method` string instead of paymentType/days.
         const parsed = typeof it.method === "string" ? parsePaymentMethodText(it.method) : { paymentType: "" as ScopeOfWorkPaymentType, days: null };
         return { id, pct, label, ...parsed };
       }),
@@ -198,9 +126,8 @@ export function normalizePaymentConditions(raw: unknown): ScopeOfWorkPaymentCond
   return { installments, description, notes };
 }
 
-/** A record saved before 2026-07-23 has no `documentRecipients` field in MongoDB at all
- * (`undefined`) — defaults to `{}` rather than letting the frontend crash calling `.entries()`/
- * indexing into it. See `ScopeOfWork.documentRecipients`'s own doc comment. */
+// แปลงค่า documentRecipients ดิบให้เป็นรูปแบบมาตรฐาน (ป้องกันข้อมูลเก่าที่ไม่มีฟิลด์นี้)
+// Normalizes a raw documentRecipients value to the standard shape (handles legacy records missing the field)
 export function normalizeDocumentRecipients(raw: unknown): Record<string, string[]> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {};
   const out: Record<string, string[]> = {};
@@ -210,10 +137,6 @@ export function normalizeDocumentRecipients(raw: unknown): Record<string, string
   return out;
 }
 
-/** A signature block (ผู้ขาย / ผู้อนุมัติ) — name/date always start blank/editable; blue
- * handwritten sample names are never used as default data. `userId` optionally links a real ERP
- * user so their saved `signatureDataUrl` can render at print time, same convention as
- * `PrintDocument.tsx`'s preparer/approver signatures. */
 export interface ScopeOfWorkSignatory {
   name: string;
   userId: string;
@@ -222,30 +145,14 @@ export interface ScopeOfWorkSignatory {
 
 export interface ScopeOfWork {
   id: string;
-  /** The document number — manually TYPED by the user since 2026-07-29 (owner decision: "ระบบ
-   * ไม่ต้องสร้างเลขเองดิ", completely free-form, no format guardrails), replacing the old
-   * server-generated `PQ{YYYYMM}-{seq}-{jobType}-{secondaryCode}` scheme. Required at creation,
-   * unique across all records (server-enforced, friendly 409 on a duplicate), editable only while
-   * Draft. Rewrite still auto-appends `-R{n}` to whatever was typed; Duplicate asks the user for
-   * the copy's own number. Records created before 2026-07-29 keep their auto-generated numbers. */
   scopeNumber: string;
-  /** Legacy (auto-numbering era, pre-2026-07-29): real values on old records, `""` on new ones. */
   yearMonth: string;
-  /** Legacy (auto-numbering era, pre-2026-07-29): real values on old records, `0` on new ones. */
   jobSequence: number;
-  /** Legacy reference field (pre-2026-07-29 it was the number's required 4th segment) — now an
-   * optional free-text reference, no longer part of `scopeNumber` and blank on new records. */
   secondaryCode: string;
   quotationId: string;
   quotationNumber: string;
   jobTypeCode: string;
   jobTypeName: string;
-  /** Frozen-at-creation-time copy of `quote.salesperson` — added 2026-07-15 (Codex review High
-   * Priority fix: "quotation salesperson is not retained"). Read-only provenance, refreshed only
-   * by the explicit "อัปเดตข้อมูลจากใบเสนอราคา" action — never itself editable, and distinct from
-   * `seller` below (who actually signs *this* Scope of Work document, which may be a different
-   * person and is freely editable). `seller.name` defaults from this value at creation time when
-   * non-empty, so the common case ("the assigned salesperson signs it") needs no manual retyping. */
   quotationSalesperson: string;
   issueDate: string;
   deliveryDate: string;
@@ -260,52 +167,13 @@ export interface ScopeOfWork {
   checklistGroups: ChecklistGroup[];
   items: ScopeOfWorkItem[];
   paymentConditions: ScopeOfWorkPaymentConditions;
-  /** Real people to email when a `documentsToSend` (เอกสารส่งถึง) checklist option is checked —
-   * added 2026-07-23, per direct user request to actually route this checklist to real staff
-   * instead of it being a plain printed-form checkbox list. Keyed by the checked option's `key`
-   * (e.g. `"purchase"`, `"accounting"` — see `DOCUMENT_RECIPIENT_DEPARTMENTS` in
-   * documentRequirements.ts), each value an array of `User.id`s picked from whoever has that exact
-   * `department` value. Never includes the `"other"` key (free text, no real department to resolve
-   * against). Independent of `checked` state — unchecking an option doesn't clear its recipients,
-   * so re-checking it later remembers the previous picks; only the email-send action reads this. */
   documentRecipients: Record<string, string[]>;
-  /** Free-text note prepended above the auto-generated summary in the "ส่งอีเมลแจ้งผู้รับเอกสาร" email
-   * — added 2026-07-23, per direct user request ("อยากให้เพิ่มช่องใส่ข้อความ...เพิ่มข้อความไว้ด้านบน
-   * ข้อความออโต้ในอีเมล") for a way to add context (e.g. "กรุณาตรวจสอบภายในวันศุกร์นี้ด่วน") that the
-   * auto-generated card content alone can't express. Purely additive — blank means the email shows
-   * only the auto-generated content, same as before this field existed. Unlike `revisionNote`, this
-   * DOES carry over on Duplicate/Rewrite (via the `...rest` spread, same as `documentRecipients`
-   * itself) — a recurring instruction for the same job is more often still relevant to the next
-   * revision than not, and it's always trivially editable/clearable before the next send. */
   documentRecipientMessage: string;
-  /** Free-text summary of what changed in this revision vs. the one it was rewritten from — added
-   * 2026-07-23, per direct user request, same field/semantics as `Quote.revisionNote`
-   * (src/lib/quotes.tsx). Always starts blank on a brand-new record, a Duplicate, or a fresh
-   * Rewrite — never inherited from the source. `generateScopeOfWorkRevisionSummary()`
-   * (src/lib/revisionDiff.ts) can auto-fill an editable starting draft; freely editable afterward. */
   revisionNote: string;
   remarks: string;
   seller: ScopeOfWorkSignatory;
   approver: ScopeOfWorkSignatory;
-  /** Extra files attached to this record (added 2026-07-24, per direct user request to attach
-   * additional documents where the record is emailed to recipients). File BYTES live in the
-   * separate `scope_attachment_files` MongoDB collection (api/_lib/collections.ts) — NOT embedded
-   * here, so fetching a record never drags file data along. Storage was originally Vercel Blob but
-   * was reworked to MongoDB the same day once the user clarified the Vercel deployment is only a
-   * trial — files must travel with the database to whatever hosts the system next. The "กลัว db
-   * เต็ม" concern is answered with hard limits (MAX_ATTACHMENT_BYTES / MAX_ATTACHMENTS_PER_SCOPE)
-   * instead of external storage. Managed exclusively through the dedicated upload/delete routes
-   * (never part of a PATCH), and NOT carried over by Duplicate/Rewrite — copies would share the
-   * same underlying file document, and deleting the attachment from one record would break the
-   * other record's link. Pre-2026-07-24 records lack the field entirely — read it as
-   * `scope.attachments ?? []`. */
   attachments: ScopeOfWorkAttachment[];
-  /** Email-thread anchor (added 2026-07-24): the RFC Message-ID generated server-side on this
-   * record's FIRST "ส่งอีเมลแจ้งผู้รับเอกสาร" send; follow-up sends reference it via
-   * `In-Reply-To`/`References` + a `Re:` subject so they land in the recipients' existing email
-   * conversation. Server-written only (never PATCHable — not in ScopeOfWorkUpdateFields), never
-   * inherited by Duplicate/Rewrite (a new document starts its own thread), absent/"" until the
-   * first send. */
   emailThreadId?: string;
   status: ScopeOfWorkStatus;
   version: number;
@@ -316,16 +184,10 @@ export interface ScopeOfWork {
   isDeleted: boolean;
 }
 
-/** One attached file's metadata — the actual bytes live in the `scope_attachment_files`
- * collection, fetched through `url`. */
 export interface ScopeOfWorkAttachment {
   id: string;
   fileName: string;
-  /** App-relative capability URL (`/api/scope-of-works/.../download?key=<random>`) — opens the
-   * file with no session (the random key IS the authorization), so it also works as a direct link
-   * in the recipient email. The email builder prefixes the app origin. */
   url: string;
-  /** Original size in bytes — display only. */
   size: number;
   contentType: string;
   uploadedBy: string;
@@ -333,24 +195,16 @@ export interface ScopeOfWorkAttachment {
   uploadedAt: string;
 }
 
-/** Per-file / per-record attachment limits — enforced server-side, mirrored in the UI. Kept
- * deliberately tight because the file bytes live in MongoDB (free Atlas tier is 512 MB — at
- * 2 MB × 5 files/record that's ~50 fully-loaded records per 500 MB, plenty for a trial and easy
- * to raise later on self-hosted storage). The 2 MB cap also keeps the JSON-base64 upload body
- * comfortably under Vercel's ~4.5 MB serverless request limit. */
 export const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 export const MAX_ATTACHMENTS_PER_SCOPE = 5;
 
-/** Human display for an attachment's byte size — shared by the ไฟล์แนบ list in
- * `DocumentRecipientsPicker.tsx` and the recipient email builder (api/_lib/scopeOfWorkHandler.ts),
- * so a 50 KB file never renders as "0.05 MB". */
+// แปลงขนาดไฟล์เป็นข้อความแสดงผลที่อ่านง่าย (KB หรือ MB)
+// Formats a byte count into a human-readable display string (KB or MB)
 export function formatFileSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-/** Compact shape for a quotation-detail "does a Scope of Work already exist?" lookup — omits
- * full checklist/item content. */
 export interface ScopeOfWorkSummary {
   id: string;
   scopeNumber: string;
@@ -359,10 +213,6 @@ export interface ScopeOfWorkSummary {
   updatedAt: string;
 }
 
-/** Row shape for the standalone Scope of Work management page's list (added 2026-07-22) — a bit
- * richer than `ScopeOfWorkSummary` (which only ever needs to answer "does one exist for this
- * quotation?"), since this powers an actual browsable table with the same kind of at-a-glance
- * fields `QuoteList.tsx` shows for quotations. Still omits full checklist/item content. */
 export interface ScopeOfWorkListItem {
   id: string;
   scopeNumber: string;
@@ -372,9 +222,7 @@ export interface ScopeOfWorkListItem {
   jobTypeCode: string;
   jobTypeName: string;
   customerName: string;
-  /** Added 2026-07-22 for the list page's Salesperson filter — see `ScopeOfWork.quotationSalesperson`. */
   quotationSalesperson: string;
-  /** Added 2026-07-29 for the list's "ยังไม่มี PO" badge/filter (the "ทวง PO" feature). */
   customerPoNumber: string;
   issueDate: string;
   deliveryDate: string;
@@ -382,16 +230,6 @@ export interface ScopeOfWorkListItem {
   updatedAt: string;
 }
 
-/** Fields a Scope of Work editor actually submits on PATCH — everything except the
- * id/quotationId/status/version/audit fields, which are always server-derived or only change via a
- * dedicated action (finalize/duplicate/refresh). `scopeNumber` became PATCHable 2026-07-29
- * (manual-ONLY numbering): editable while Draft only, server-checked for uniqueness (409 on a
- * duplicate). `issueDate`/`secondaryCode` edits no longer recompute anything — the number only
- * changes when the user retypes it. `jobTypeCode` never changes after creation.
- * **Follow-up fields** (2026-07-29, the "ทวง PO" pass): `customerPoNumber`/`documentRecipients`/
- * `documentRecipientMessage` are the only fields a PATCH may carry on a PendingApproval/Final
- * record (`FOLLOW_UP_FIELDS` in api/_lib/scopeOfWorkHandler.ts — a customer PO usually arrives
- * after approval); everything else remains Draft-only. */
 export type ScopeOfWorkUpdateFields = Partial<{
   scopeNumber: string;
   issueDate: string;
@@ -415,25 +253,26 @@ export type ScopeOfWorkUpdateFields = Partial<{
   approver: ScopeOfWorkSignatory;
 }>;
 
+// ดึงรายการ Scope of Work แบบย่อของใบเสนอราคาที่ระบุ
+// Fetches summary Scope of Work records for a given quotation
 export async function fetchScopeOfWorksByQuotation(quotationId: string): Promise<ScopeOfWorkSummary[]> {
   const { scopeOfWorks } = await apiFetch<{ scopeOfWorks: ScopeOfWorkSummary[] }>(`/scope-of-works?quotationId=${encodeURIComponent(quotationId)}`);
   return scopeOfWorks;
 }
-/** Every non-deleted Scope of Work company-wide, for the standalone management page's list
- * (added 2026-07-22) — omitting `quotationId` from the query switches the server from its
- * by-quotation lookup to this "list everything" mode (`api/_lib/scopeOfWorkHandler.ts`). */
+// ดึงรายการ Scope of Work ทั้งหมดในระบบ (สำหรับหน้าจัดการแบบรายการ)
+// Fetches every Scope of Work company-wide (for the standalone management list page)
 export async function fetchAllScopeOfWorks(): Promise<ScopeOfWorkListItem[]> {
   const { scopeOfWorks } = await apiFetch<{ scopeOfWorks: ScopeOfWorkListItem[] }>("/scope-of-works");
   return scopeOfWorks;
 }
+// ดึงข้อมูลเต็มของ Scope of Work รายการเดียวตาม id
+// Fetches the full content of a single Scope of Work by id
 export async function fetchScopeOfWork(id: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}`);
   return scopeOfWork;
 }
-/** `scopeNumber` is the user's own typed document number (manual-ONLY since 2026-07-29, replacing
- * both the auto-generated number and the old required-`secondaryCode` prompt) — required non-blank,
- * free-form, server-checked for uniqueness (409 with a clear Thai message on a duplicate). The
- * caller (the "สร้าง Scope of Work" prompt in QuoteDocument.tsx) collects it from the user. */
+// สร้าง Scope of Work ใหม่จากใบเสนอราคาที่ระบุ
+// Creates a new Scope of Work from the given quotation
 export async function createScopeOfWorkFromQuotation(quotationId: string, scopeNumber: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>("/scope-of-works", {
     method: "POST",
@@ -441,6 +280,8 @@ export async function createScopeOfWorkFromQuotation(quotationId: string, scopeN
   });
   return scopeOfWork;
 }
+// แก้ไขข้อมูล Scope of Work ที่มีอยู่ตาม id
+// Updates an existing Scope of Work identified by id
 export async function updateScopeOfWork(id: string, fields: ScopeOfWorkUpdateFields): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}`, {
     method: "PATCH",
@@ -448,20 +289,20 @@ export async function updateScopeOfWork(id: string, fields: ScopeOfWorkUpdateFie
   });
   return scopeOfWork;
 }
-/** Approve (2026-07-24: the `/finalize` route now means "อนุมัติ" — only valid from
- * `PendingApproval`, requires `scopeOfWork:finalize`, auto-fills the approver signatory with the
- * approving user server-side). */
+// อนุมัติ Scope of Work (PendingApproval → Final)
+// Approves a Scope of Work (PendingApproval → Final)
 export async function finalizeScopeOfWork(id: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/finalize`, { method: "POST" });
   return scopeOfWork;
 }
-/** ส่งขออนุมัติ — Draft → PendingApproval (added 2026-07-24). Server validates completeness
- * (print-level — the approver signatory is filled at approve time, not here). */
+// ส่งขออนุมัติ Scope of Work (Draft → PendingApproval)
+// Submits a Scope of Work for approval (Draft → PendingApproval)
 export async function submitScopeOfWorkApproval(id: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/submit-approval`, { method: "POST" });
   return scopeOfWork;
 }
-/** ปฏิเสธ/ตีกลับ — PendingApproval → Draft, comment required (added 2026-07-24). */
+// ปฏิเสธ/ตีกลับ Scope of Work พร้อมความคิดเห็น (PendingApproval → Draft)
+// Rejects a Scope of Work with a required comment (PendingApproval → Draft)
 export async function rejectScopeOfWork(id: string, comment: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/reject`, {
     method: "POST",
@@ -469,14 +310,14 @@ export async function rejectScopeOfWork(id: string, comment: string): Promise<Sc
   });
   return scopeOfWork;
 }
-/** ถอนคำขออนุมัติ (by the requester) — PendingApproval → Draft (added 2026-07-24). */
+// ถอนคำขออนุมัติ Scope of Work (PendingApproval → Draft)
+// Withdraws a pending Scope of Work approval request (PendingApproval → Draft)
 export async function withdrawScopeOfWorkApproval(id: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/withdraw-approval`, { method: "POST" });
   return scopeOfWork;
 }
-/** `scopeNumber` (added 2026-07-29, manual-ONLY numbering): the copy's own user-typed document
- * number — Duplicate no longer mints one automatically; same required/unique/free-form rules as
- * `createScopeOfWorkFromQuotation()`. */
+// ทำสำเนา Scope of Work ด้วยเลขเอกสารใหม่ที่ผู้ใช้กำหนด
+// Duplicates a Scope of Work under a new user-provided document number
 export async function duplicateScopeOfWork(id: string, scopeNumber: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/duplicate`, {
     method: "POST",
@@ -484,42 +325,41 @@ export async function duplicateScopeOfWork(id: string, scopeNumber: string): Pro
   });
   return scopeOfWork;
 }
-/** Creates a new revision (`{root}-R{n}`) of `id`, added 2026-07-22 to mirror Quotation's identical
- * feature — see `handleRewrite()` in api/_lib/scopeOfWorkHandler.ts. The source record is never
- * modified. */
+// สร้างรีวิชันใหม่ของ Scope of Work โดยไม่แก้ไขต้นฉบับ
+// Creates a new revision of a Scope of Work without modifying the source record
 export async function rewriteScopeOfWork(id: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/rewrite`, { method: "POST" });
   return scopeOfWork;
 }
+// ดึงข้อมูลล่าสุดจากใบเสนอราคาต้นทางมาอัปเดต Scope of Work
+// Re-pulls the latest data from the source quotation into this Scope of Work
 export async function refreshScopeOfWorkFromQuotation(id: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/refresh`, { method: "POST" });
   return scopeOfWork;
 }
+// ลบ Scope of Work ตาม id
+// Deletes a Scope of Work identified by id
 export async function deleteScopeOfWork(id: string): Promise<void> {
   await apiFetch<void>(`/scope-of-works/${id}`, { method: "DELETE" });
 }
-/** "ทวงเลข PO" (added 2026-07-29) — in-app bell notification chasing the customer PO number,
- * sent to the record's resolved salesperson (name-matched user → seller link → creator; see
- * `handleChasePo` in api/_lib/scopeOfWorkHandler.ts). Repeatable, audit-logged; 400 with a clear
- * message once the record already has a PO number. Returns who actually got notified, for the
- * confirmation toast. */
+// ส่งแจ้งเตือนทวงเลข PO ไปยังพนักงานขายที่รับผิดชอบ
+// Sends a notification chasing the customer PO number to the resolved salesperson
 export async function chaseScopeOfWorkPo(id: string): Promise<{ notifiedUserName: string }> {
   return apiFetch<{ notifiedUserName: string }>(`/scope-of-works/${id}/chase-po`, { method: "POST" });
 }
+// บันทึกประวัติว่ามีการพิมพ์ Scope of Work นี้
+// Logs that this Scope of Work was printed
 export async function logScopeOfWorkPrinted(id: string): Promise<void> {
   await apiFetch<void>(`/scope-of-works/${id}/print`, { method: "POST" });
 }
 
-/** Emails every user picked in `documentRecipients` (see the field's own doc comment) — one email
- * per distinct recipient, deduped across departments so a person picked under two checked options
- * only gets one message. Added 2026-07-23. `sentCount`/`failedCount` let the UI report a partial
- * failure (e.g. one recipient's address rejected) without treating the whole action as failed. */
+// ส่งอีเมลเอกสารไปยังผู้รับทุกคนที่เลือกไว้ใน documentRecipients
+// Emails the document to every recipient selected in documentRecipients
 export async function sendScopeOfWorkDocumentNotifications(id: string): Promise<{ sentCount: number; failedCount: number; recipientCount: number }> {
   return apiFetch<{ sentCount: number; failedCount: number; recipientCount: number }>(`/scope-of-works/${id}/send-documents`, { method: "POST" });
 }
-/** Uploads one attachment (JSON base64 body — see MAX_ATTACHMENT_BYTES) and returns the updated
- * record. The file bytes are stored server-side in the `scope_attachment_files` collection;
- * the record itself only stores metadata. */
+// อัปโหลดไฟล์แนบหนึ่งไฟล์เข้ากับ Scope of Work นี้
+// Uploads a single attachment to this Scope of Work
 export async function uploadScopeOfWorkAttachment(
   id: string,
   file: { fileName: string; contentType: string; dataBase64: string },
@@ -530,6 +370,8 @@ export async function uploadScopeOfWorkAttachment(
   });
   return scopeOfWork;
 }
+// ลบไฟล์แนบออกจาก Scope of Work นี้
+// Deletes an attachment from this Scope of Work
 export async function deleteScopeOfWorkAttachment(id: string, attachmentId: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(
     `/scope-of-works/${id}/attachments/${encodeURIComponent(attachmentId)}`,
@@ -538,12 +380,18 @@ export async function deleteScopeOfWorkAttachment(id: string, attachmentId: stri
   return scopeOfWork;
 }
 
+// สร้างรหัส id ใหม่สำหรับบรรทัดข้อกำหนด
+// Generates a new spec line id
 export function newScopeSpecLineId(): string {
   return `sl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
+// สร้างรหัส id ใหม่สำหรับรายการงาน
+// Generates a new item id
 export function newScopeItemId(): string {
   return `si-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
+// สร้างรายการงานเปล่าเริ่มต้น
+// Creates a blank Scope of Work item
 export function blankScopeOfWorkItem(): ScopeOfWorkItem {
   return { id: newScopeItemId(), name: "", specifications: [], quantity: null, unit: "", remark: "" };
 }

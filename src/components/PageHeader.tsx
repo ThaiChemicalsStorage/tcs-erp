@@ -1,18 +1,13 @@
 import type { ReactNode } from "react";
 
-/**
- * Shared page header — title + one-line description of what the page is for, plus an optional
- * primary action slot. Answers "where am I / what can I do here" at a glance, consistently across
- * every module instead of each page hand-rolling its own heading markup.
- */
+// หัวข้อหน้ากลาง แสดงชื่อหน้า คำอธิบายสั้น และปุ่มการทำงานหลัก (ถ้ามี)
+// Shared page header showing title, short description, and an optional primary action slot
 export function PageHeader({
   title, description, actions, path,
 }: {
   title: string;
-  /** One sentence, plain business language — what this page is for, not a restatement of the title. */
   description?: string;
   actions?: ReactNode;
-  /** Optional short trail, e.g. "การขาย / ใบเสนอราคา" — this app has no URL router, so this is a static orientation cue, not a clickable breadcrumb. */
   path?: string;
 }) {
   return (

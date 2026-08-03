@@ -3,10 +3,11 @@ import { Eye, EyeOff, LogIn, User as UserIcon } from "lucide-react";
 import { AuthLayout } from "./AuthLayout";
 import { useI18n } from "../lib/i18n";
 
+// หน้าเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน
+// Sign-in page for authenticating with username/identifier and password.
 export function SignInPage({
   onSignIn,
 }: {
-  /** Returns an error message on failure, or null on success. */
   onSignIn: (identifier: string, password: string) => Promise<string | null>;
 }) {
   const { t } = useI18n();
@@ -18,6 +19,8 @@ export function SignInPage({
   const identifierId = useId();
   const passwordId = useId();
 
+  // ตรวจสอบข้อมูลและเรียกฟังก์ชันเข้าสู่ระบบ
+  // Validates input and calls the sign-in handler.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!identifier.trim() || !password.trim()) {
@@ -74,9 +77,6 @@ export function SignInPage({
           </div>
         </div>
 
-        {/* The old "จดจำฉันไว้ในระบบ" checkbox was removed 2026-07-29 (UX pass): it never did
-            anything — sessions are always a 7-day cookie regardless — so it only misled users
-            into thinking unchecking it would log them out sooner (a long-tracked Codex finding). */}
         {error && <p role="alert" className="text-xs text-[#e05252]">{error}</p>}
 
         <button

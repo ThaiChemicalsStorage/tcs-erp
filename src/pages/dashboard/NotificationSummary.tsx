@@ -2,6 +2,8 @@ import { Bell } from "lucide-react";
 import type { NotificationSummary as NotificationSummaryData } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 
+// แสดงสรุปการแจ้งเตือน จำนวนที่ยังไม่อ่าน แยกตามประเภท
+// Shows a notification summary — unread count broken down by type
 export function NotificationSummary({ summary }: { summary: NotificationSummaryData }) {
   const { t } = useI18n();
   const byType = Object.entries(summary.byType);

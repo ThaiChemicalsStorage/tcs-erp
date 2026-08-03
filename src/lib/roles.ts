@@ -7,13 +7,10 @@ export interface Role {
   name: string;
   description: string;
   permissions: Permission[];
-  /** Bypasses every permission check and is the only role allowed roles:manage/company:manage. */
   isSuperAdmin: boolean;
-  /** Built-in roles (Super Admin, Administrator) can't be deleted and their name/isSuperAdmin flag can't change. */
   isSystem: boolean;
 }
 
-/** Seeded server-side into the roles collection on first-run setup (see api/_lib/rbacSeed.ts). */
 export const defaultRoles: Role[] = [
   {
     key: "super_admin",
@@ -136,31 +133,42 @@ export const defaultRoles: Role[] = [
   },
 ];
 
+// ค้นหาบทบาทจาก key ที่กำหนด
+// Finds a role by its key
 export function findRole(roles: Role[], roleKey: string): Role | undefined {
   return roles.find((r) => r.key === roleKey);
 }
 
+// ตรวจสอบว่าบทบาทนี้มีสิทธิ์ที่ระบุหรือไม่ (Super Admin ผ่านเสมอ)
+// Checks whether a role has the given permission (Super Admin always passes)
 export function roleHasPermission(role: Role | undefined, permission: Permission): boolean {
   if (!role) return false;
   if (role.isSuperAdmin) return true;
   return role.permissions.includes(permission);
 }
 
-/** A permission a role is not allowed to hold unless that role is the Super Admin role itself. */
+// ตรวจสอบว่าสิทธิ์นี้ถูกจำกัดให้เฉพาะบทบาท Super Admin เท่านั้นหรือไม่
+// Checks whether a permission is locked to the Super Admin role only
 export function isPermissionLockedToSuperAdmin(permission: Permission): boolean {
   return (SUPER_ADMIN_ONLY_PERMISSIONS as Permission[]).includes(permission);
 }
 
+// ตรวจสอบว่าผู้ใช้ที่กำหนดมีสิทธิ์นี้หรือไม่ ตามบทบาทของผู้ใช้
+// Checks whether a given user has the specified permission via their role
 export function hasPermission(user: User | null | undefined, roles: Role[], permission: Permission): boolean {
   if (!user) return false;
   return roleHasPermission(findRole(roles, user.roleKey), permission);
 }
 
+// ตรวจสอบว่าผู้ใช้เป็น Super Admin หรือไม่
+// Checks whether a given user is a Super Admin
 export function userIsSuperAdmin(user: User | null | undefined, roles: Role[]): boolean {
   if (!user) return false;
   return findRole(roles, user.roleKey)?.isSuperAdmin ?? false;
 }
 
+// คืนชื่อบทบาทของผู้ใช้ เพื่อแสดงผล
+// Returns the display name of the user's role
 export function roleNameFor(user: User | null | undefined, roles: Role[]): string {
   if (!user) return "";
   return findRole(roles, user.roleKey)?.name ?? user.roleKey;
@@ -172,18 +180,26 @@ export interface RoleFields {
   permissions: Permission[];
 }
 
+// ดึงรายการบทบาททั้งหมดจากเซิร์ฟเวอร์
+// Fetches all roles from the server
 export async function fetchRoles(): Promise<Role[]> {
   const { roles } = await apiFetch<{ roles: Role[] }>("/roles");
   return roles;
 }
+// สร้างบทบาทใหม่ด้วยข้อมูลที่กำหนด
+// Creates a new role with the given fields
 export async function createRole(fields: RoleFields): Promise<Role> {
   const { role } = await apiFetch<{ role: Role }>("/roles", { method: "POST", body: JSON.stringify(fields) });
   return role;
 }
+// แก้ไขบทบาทที่มีอยู่ตาม key
+// Updates an existing role identified by key
 export async function updateRole(key: string, fields: Partial<RoleFields>): Promise<Role> {
   const { role } = await apiFetch<{ role: Role }>(`/roles/${key}`, { method: "PATCH", body: JSON.stringify(fields) });
   return role;
 }
+// ลบบทบาทตาม key
+// Deletes a role identified by key
 export async function deleteRole(key: string): Promise<void> {
   await apiFetch<void>(`/roles/${key}`, { method: "DELETE" });
 }

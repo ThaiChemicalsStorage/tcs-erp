@@ -1,24 +1,10 @@
-/**
- * "มีอะไรใหม่" (What's New) panel content — added 2026-07-23 per direct user request for an
- * in-app update log. A plain hand-maintained list, not database-backed: these are short,
- * end-user-facing announcements (not the technical changelog in docs/CHANGELOG.md), so they're
- * authored directly in Thai and kept here like any other seed/persisted business content (see
- * CLAUDE.md's i18n rule on persisted content vs. app chrome). Add a new entry to the TOP of
- * WHATS_NEW_ENTRIES whenever a feature genuinely worth telling users about ships — not every
- * internal fix or refactor belongs here.
- *
- * "Seen" state is a per-user client-side UI preference, not business data — stored in
- * `localStorage`, same convention as `tour.ts`'s guided-tour completion tracking.
- */
-
 export interface WhatsNewEntry {
   id: string;
-  date: string; // yyyy-mm-dd
+  date: string;
   title: string;
   bullets: string[];
 }
 
-// Newest first.
 export const WHATS_NEW_ENTRIES: WhatsNewEntry[] = [
   {
     id: "2026-07-31-rolling-session",
@@ -30,9 +16,6 @@ export const WHATS_NEW_ENTRIES: WhatsNewEntry[] = [
       "จะถูกออกจากระบบอัตโนมัติก็ต่อเมื่อไม่ได้เข้าใช้งานเลยติดต่อกันครบ 7 วันเท่านั้น",
     ],
   },
-  // Moved (back) to the top when the document-editor-tours bullet was added: the unseen badge
-  // compares against WHATS_NEW_ENTRIES[0].id only, so editing an entry lower in the list is
-  // silent for every user who already opened the panel — an updated entry must lead the list.
   {
     id: "2026-07-29-module-tours",
     date: "2026-07-29",
@@ -251,6 +234,8 @@ export const WHATS_NEW_ENTRIES: WhatsNewEntry[] = [
 
 const STORAGE_KEY = "tcs_erp_whats_new_last_seen_id_by_user";
 
+// อ่านแผนที่ id ของประกาศล่าสุดที่แต่ละผู้ใช้เคยเห็นแล้วจาก localStorage
+// Reads the map of each user's last-seen entry ID from localStorage.
 function readLastSeenMap(): Record<string, string> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -260,11 +245,15 @@ function readLastSeenMap(): Record<string, string> {
   }
 }
 
+// ตรวจว่าผู้ใช้คนนี้ยังไม่เคยเห็นประกาศล่าสุด (What's New) หรือไม่
+// Checks whether this user has not yet seen the latest What's New entry.
 export function hasUnseenWhatsNew(userId: string): boolean {
   if (WHATS_NEW_ENTRIES.length === 0) return false;
   return readLastSeenMap()[userId] !== WHATS_NEW_ENTRIES[0].id;
 }
 
+// บันทึกว่าผู้ใช้คนนี้เห็นประกาศล่าสุดแล้ว
+// Marks this user as having seen the latest What's New entry.
 export function markWhatsNewSeen(userId: string): void {
   if (WHATS_NEW_ENTRIES.length === 0) return;
   try {
@@ -272,7 +261,6 @@ export function markWhatsNewSeen(userId: string): void {
     map[userId] = WHATS_NEW_ENTRIES[0].id;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
   } catch {
-    // Storage unavailable (private browsing, quota) — the badge will just reappear next
-    // sign-in, a harmless degradation, not a functional failure.
+    // storage unavailable — harmless degradation, ignore
   }
 }

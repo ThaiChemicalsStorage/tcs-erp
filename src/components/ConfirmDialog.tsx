@@ -10,22 +10,20 @@ export interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
-  /** Disables both buttons while the confirmed action is still in flight — pass this whenever
-   * `onConfirm` kicks off an async request (accessibility/correctness hardening pass: without it, a
-   * double-click on Confirm during a slow request could fire the action twice, which matters most
-   * for the irreversible actions — finalize, delete — this dialog is usually guarding). */
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
+// แสดงกล่องยืนยันการทำรายการ ซ่อนไว้จนกว่าจะเปิด
+// Renders the confirm dialog, mounted only while open
 export function ConfirmDialog(props: ConfirmDialogProps) {
-  // The form is a separate component mounted only while open, so its dialog-a11y hook (Escape/focus
-  // trap) only wires up while actually shown — same split as PromptDialog.tsx.
   if (!props.open) return null;
   return <ConfirmDialogPanel {...props} />;
 }
 
+// เนื้อหาจริงของกล่องยืนยัน แยกออกมาเพื่อให้ hook โฟกัส/trap ทำงานเฉพาะตอนเปิดเท่านั้น
+// The actual dialog panel, split out so its focus-trap hook only wires up while shown
 function ConfirmDialogPanel({
   title,
   message,

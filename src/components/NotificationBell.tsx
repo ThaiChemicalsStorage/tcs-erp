@@ -23,6 +23,8 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   delivery_order_rejected: <XCircle size={14} />,
 };
 
+// แปลงเวลาเป็นข้อความ "เมื่อกี้ / ผ่านมากี่นาที/ชั่วโมง/วัน"
+// Formats a timestamp as a relative "time ago" string
 function timeAgo(iso: string, t: (key: TranslationKey) => string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -34,6 +36,8 @@ function timeAgo(iso: string, t: (key: TranslationKey) => string): string {
   return t("notif.daysAgo").replace("{n}", String(days));
 }
 
+// กระดิ่งแจ้งเตือนพร้อมแผงรายการ อ่านแล้ว/ยังไม่อ่าน และการจัดการรายการ
+// Notification bell with a dropdown panel listing read/unread items and actions
 export function NotificationBell({
   notifications,
   currentUserId,
@@ -57,9 +61,6 @@ export function NotificationBell({
   const unread = mine.filter((n) => !n.read).length;
   const badgeText = unread > 99 ? "99+" : String(unread);
 
-  // Escape closes the panel — matches the mobile nav drawer's own Escape handling in App.tsx
-  // (Impeccable shell audit 2026-07-30); this panel previously had no keyboard-only way to dismiss
-  // without activating a row inside it.
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
@@ -96,9 +97,6 @@ export function NotificationBell({
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("notif.title")}</p>
               {unread > 0 && (
-                // #866d28 not #c9a84c (Impeccable shell audit 2026-07-30) — #c9a84c on this white
-                // panel measured 2.29:1, well under the 4.5:1 AA floor; same darkened-gold text
-                // variant already used to fix the identical mistake elsewhere this session.
                 <button onClick={onMarkAllRead} className="flex items-center gap-1 text-xs text-[#866d28] hover:text-[#a07830] transition-colors">
                   <Check size={12} /> {t("notif.markAllRead")}
                 </button>
@@ -109,11 +107,6 @@ export function NotificationBell({
                 <p className="text-center text-xs text-muted-foreground py-10">{t("empty.notifications.title")}</p>
               ) : (
                 mine.map((n) => (
-                  // role="button"/tabIndex/onKeyDown (Impeccable shell audit 2026-07-30) — this row
-                  // is the entire point of the notification panel and was previously only openable
-                  // by mouse click; a real <button> isn't used here because it would illegally nest
-                  // the delete <button> below inside it. aria-label gives the row its own clean
-                  // accessible name rather than letting it concatenate the nested delete button's.
                   <div
                     key={n.id}
                     role="button"
@@ -144,9 +137,6 @@ export function NotificationBell({
                         <span className="text-[10px] text-muted-foreground">{timeAgo(n.createdAt, t)}</span>
                       </div>
                     </div>
-                    {/* Always visible at reduced opacity (2026-07-29 UX pass) — the previous
-                        `opacity-0 group-hover:opacity-100` made it undiscoverable on touch
-                        devices (no hover) and invisible to keyboard users tabbing onto it. */}
                     <button
                       onClick={(e) => { e.stopPropagation(); onDelete(n.id); }}
                       className="opacity-50 hover:opacity-100 focus-visible:opacity-100 text-muted-foreground hover:text-[#e05252] transition-all flex-shrink-0 p-1"

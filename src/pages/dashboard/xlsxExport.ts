@@ -1,17 +1,9 @@
 import type { DashboardStats } from "../../lib/dashboard";
 
-/**
- * Dashboard report export as a real multi-sheet Excel workbook (added 2026-07-24, direct user
- * request — CSV alone was the 2026-07-10 stopgap, see csvExport.ts). Same principle as the CSV:
- * built client-side from the already-fetched, already-filtered `DashboardStats` on screen, so no
- * new permission or server round trip — and the monthly report the user asked for is exactly this
- * export with the "เดือนนี้"/"เดือนที่แล้ว" filter preset applied (the period lands in the header
- * block and the filename). Reuses the `xlsx` package already shipped for Template workbook
- * parsing, loaded via dynamic import so the ~400 KB library is fetched only on the first click,
- * not in the Dashboard bundle.
- */
 type Cell = string | number;
 
+// สร้างแถวข้อมูล KPI สำหรับชีตสรุปในไฟล์ Excel
+// Builds the KPI rows for the summary sheet
 function kpiRows(stats: DashboardStats): Cell[][] {
   const k = stats.kpis;
   return [
@@ -39,6 +31,8 @@ function kpiRows(stats: DashboardStats): Cell[][] {
   ];
 }
 
+// ส่งออกรายงานแดชบอร์ดเป็นไฟล์ Excel หลายชีต (สรุป, ผลงานขาย, ลูกค้า, ประเภทงาน, ไปป์ไลน์, แนวโน้มรายเดือน)
+// Exports the dashboard report as a multi-sheet Excel workbook (summary, sales performance, customers, job types, pipeline, monthly trend)
 export async function exportDashboardXlsx(
   stats: DashboardStats,
   filters: { from: string; to: string; salesperson: string; department: string },
@@ -98,8 +92,6 @@ export async function exportDashboardXlsx(
   ];
   for (const [name, rows] of sheets) {
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    // Column widths sized to the widest cell (capped) — Excel's default 8.43 chars truncates
-    // every Thai company name and most English headers.
     const colCount = Math.max(...rows.map((r) => r.length));
     ws["!cols"] = Array.from({ length: colCount }, (_, i) => ({
       wch: Math.min(45, Math.max(12, ...rows.map((r) => String(r[i] ?? "").length + 2))),

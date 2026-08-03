@@ -3,18 +3,20 @@ import { Sparkles } from "lucide-react";
 import { WHATS_NEW_ENTRIES, hasUnseenWhatsNew, markWhatsNewSeen } from "../lib/whatsNew";
 import { useI18n } from "../lib/i18n";
 
+// แปลงวันที่แบบ ISO ให้เป็นรูปแบบวันที่ภาษาไทย
+// Formats an ISO date string as a Thai-locale date
 function formatThaiDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   return d.toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" });
 }
 
+// แผงแสดงรายการฟีเจอร์ใหม่ พร้อมจุดแดงแจ้งเตือนเมื่อมีรายการที่ยังไม่ได้ดู
+// Panel showing "what's new" entries, with an unseen-indicator dot
 export function WhatsNewPanel({ currentUserId }: { currentUserId: string }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [unseen, setUnseen] = useState(() => hasUnseenWhatsNew(currentUserId));
 
-  // Escape closes the panel — same rationale as NotificationBell's identical fix (Impeccable shell
-  // audit 2026-07-30).
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };

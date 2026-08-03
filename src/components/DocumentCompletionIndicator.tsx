@@ -1,9 +1,5 @@
-/**
- * Compact "ความสมบูรณ์ของข้อมูล" progress indicator for the Quotation/Scope of Work toolbar — a
- * user aid only (per the validation spec: "Do not use this indicator as the only validation
- * mechanism"), never itself a gate. The real gate is always the ValidationSummary +
- * disabled-button + server-side re-check. Added 2026-07-16.
- */
+// แสดงแถบความสมบูรณ์ของข้อมูลในเอกสาร เป็นแค่ตัวช่วยแสดงผล ไม่ใช่ตัวตรวจสอบหลัก
+// Shows a data-completion progress bar for the document toolbar; a visual aid only, not the real validation gate
 export function DocumentCompletionIndicator({ totalCount, missingCount }: { totalCount: number; missingCount: number }) {
   if (totalCount <= 0) return null;
   const completed = Math.max(0, totalCount - missingCount);

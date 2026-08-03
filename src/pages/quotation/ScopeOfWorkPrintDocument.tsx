@@ -2,17 +2,8 @@ import { formatPaymentMethod, type ScopeOfWork } from "../../lib/scopeOfWork";
 import type { User } from "../../lib/users";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
 
-/**
- * Print/PDF output for a Scope of Work — closely follows the printed black structure of the
- * reference PDF ("Scope Of Work PQ202607-174-LI-SK บริษัท เค ไทย ไฮดรอลิค จำกัด.pdf", `public/`):
- * SCOPE OF WORK title, two-column header, checklist groups grid with visible checked/unchecked
- * boxes, numbered item table (no pricing columns), remarks, and a ผู้ขาย/ผู้อนุมัติ signature
- * table. Deliberately does NOT reproduce: the sample's blue handwritten values (this renders the
- * live editable field values only, blank where the user hasn't filled them in), the yellow
- * highlighter marks (annotation-only in the sample, never part of the real document), or any
- * pricing (Scope of Work never shows unit price/discount/VAT/grand total).
- */
-
+// แสดงแถวข้อมูล label กับค่า สำหรับเอกสารพิมพ์
+// Renders a label/value row for the print document.
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex gap-2 text-[10px] leading-[1.7]">
@@ -22,6 +13,8 @@ function Field({ label, value, mono = false }: { label: string; value: string; m
   );
 }
 
+// แสดงกล่องเช็คบอกซ์ ติ๊กถูกหรือว่าง
+// Renders a checkbox box, checked or empty.
 function Checkbox({ checked }: { checked: boolean }) {
   return (
     <span className="inline-flex items-center justify-center w-3 h-3 border border-[#0b1d3a] flex-shrink-0 align-middle">
@@ -30,6 +23,8 @@ function Checkbox({ checked }: { checked: boolean }) {
   );
 }
 
+// สร้างเอกสาร Scope of Work สำหรับพิมพ์/PDF ตามรูปแบบเอกสารต้นฉบับ ไม่แสดงราคา
+// Renders the printable Scope of Work document matching the reference layout, without pricing.
 export function ScopeOfWorkPrintDocument({ scopeOfWork, sellerUser, approverUser }: {
   scopeOfWork: ScopeOfWork;
   sellerUser?: User;
@@ -54,7 +49,6 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, sellerUser, approverUser
               SCOPE OF WORK
             </p>
 
-            {/* Two-column header, matching the reference PDF's field order */}
             <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-3">
               <div className="space-y-1">
                 <Field label="ชื่อลูกค้า" value={s.customerSnapshot.companyName} />
@@ -74,7 +68,6 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, sellerUser, approverUser
               </div>
             </div>
 
-            {/* Checklist groups grid */}
             <div className="grid grid-cols-4 gap-x-3 gap-y-2 border-t border-b border-[#0b1d3a]/30 py-2 mb-2">
               {s.checklistGroups.map((group) => (
                 <div key={group.key} className="break-inside-avoid">
@@ -111,16 +104,6 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, sellerUser, approverUser
           ))}
         </tr>
       </thead>
-      {/*
-        Each item is its own top-level `<tbody>` (a `<table>` may contain any number of sibling
-        `<tbody>` elements) rather than everything sharing one big `<tbody>` — 2026-07-15, Codex
-        review Medium fix: the previous single-`<tbody>` structure only put `breakInside: "avoid"`
-        on the item row itself, which stops a break *inside* that row but does nothing to stop a
-        page break falling *between* the item row and its own specification/remark row right below
-        it. Grouping both rows into one `<tbody>` with `breakInside: "avoid"` keeps that whole pair
-        together as a single unbreakable unit across a page boundary, per "do not split a main item
-        heading from its first detail line."
-      */}
       {s.items.map((item, idx) => {
         if (item.isSectionHeader) {
           return (

@@ -14,28 +14,34 @@ export interface SetupFields {
   password: string;
 }
 
+// ดึงข้อมูล session ปัจจุบันของผู้ใช้จากเซิร์ฟเวอร์
+// Fetches the current user's session info from the server.
 export async function fetchSession(): Promise<SessionInfo> {
   return apiFetch<SessionInfo>("/auth/session");
 }
 
+// สร้างบัญชี Super Admin คนแรกตอนตั้งค่าระบบครั้งแรก
+// Creates the first Super Admin account during initial setup.
 export async function setupSuperAdmin(fields: SetupFields): Promise<User> {
   const { user } = await apiFetch<{ user: User }>("/auth/setup", { method: "POST", body: JSON.stringify(fields) });
   return user;
 }
 
-/** Returns an error message on failure, or null on success. */
+// เข้าสู่ระบบด้วยชื่อผู้ใช้/อีเมลและรหัสผ่าน คืนค่า error message ถ้าไม่สำเร็จ หรือ null ถ้าสำเร็จ
+// Logs in with a username/email and password; returns an error message on failure, or null on success.
 export async function login(identifier: string, password: string): Promise<{ user: User | null; error: string | null }> {
   try {
     const { user } = await apiFetch<{ user: User }>("/auth/login", { method: "POST", body: JSON.stringify({ identifier, password }) });
     return { user, error: null };
   } catch (err) {
     if (err instanceof ApiError) return { user: null, error: err.message };
-    // Deliberately not importing from "./i18n" here — see apiClient.ts's comment on currentLangIsEnglish().
     const isEnglish = typeof window !== "undefined" && window.localStorage.getItem("tcs_erp_lang") === "en";
     return { user: null, error: isEnglish ? "Login failed. Please try again." : "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" };
   }
 }
 
+// ออกจากระบบ (ลบ session ฝั่งเซิร์ฟเวอร์)
+// Logs out (clears the server-side session).
 export async function logout(): Promise<void> {
   await apiFetch<void>("/auth/logout", { method: "POST" });
 }

@@ -1,64 +1,17 @@
 import { apiFetch } from "./apiClient.js";
 
-/**
- * Quotation Templates (added 2026-07-14) — reusable Job-Type-specific starting structures for a
- * new quotation, imported from the real "Scope of work new template for air pollution control"
- * Excel workbook (`public/Scope of work new template for air pollution control_Technic.xlsx`).
- * See docs/MODULES/QuotationTemplates.md for the full Job Type → template mapping, the Excel
- * parsing/classification rules applied, and the FRP Tank/FRP Lining split.
- *
- * A template is master reference data (`quotation_templates` collection) — never a completed
- * quotation. Prices are always blank (`0`/empty) unless the source workbook explicitly gave one;
- * this codebase never invents pricing. Applying a template COPIES its sections/items into a new
- * `Quote.lines` array (see `src/lib/quotes.tsx`) as an independent snapshot — editing the resulting
- * quotation never modifies the master template, and editing the master template later never
- * changes quotations already created from it (see `QuoteDraftFields`'s `quotationTemplateId`/
- * `quotationTemplateName`/`quotationTemplateVersion` fields).
- *
- * **This file is type-imported into the API bundle** (`api/_lib/collections.ts`,
- * `api/_lib/quotationTemplatesHandler.ts` both do `import type { ... } from
- * "src/lib/quotationTemplates.js"`) — per the standing rule in docs/CLAUDE.md, never add a
- * *value* import here that transitively pulls in JSX/React (e.g. don't import
- * `newLineId`/anything else from `src/lib/quotes.tsx`, which has module-scope JSX in
- * `statusIcon` that would execute on import and break every authenticated API route, the same
- * class of incident documented in CLAUDE.md's 2026-07-09 postmortem). The template→`QuoteLine[]`
- * conversion (`applyTemplateToQuoteDraft()`) deliberately lives in
- * `src/pages/quotation/applyTemplate.ts` instead — a page-scoped file api/ has no reason to ever
- * reference, even by type — precisely to keep this file safe to type-import.
- */
-
 export type TemplateItemType = "item" | "subItem" | "specification";
 
 export interface TemplateItem {
   id: string;
   itemType: TemplateItemType;
-  /** Optional stable code for a future exact-match lookup (e.g. "1", "1.1") — display order is
-   * always driven by array order, never by re-parsing this code, since the source workbook's own
-   * numbering has real inconsistencies (duplicate section numbers, etc.) that array order already
-   * sidesteps cleanly. */
   itemCode: string;
   name: string;
   description: string;
   quantity: number | null;
   unit: string;
-  /** Free-text sub-detail lines (matches `QuoteLine.subDetails`' shape once copied into a
-   * quotation). **2026-07-21**: this item's `specifications`/`editableParameters`/`internalNotes`/
-   * `visibleToCustomer` fields were removed entirely (unused UI, direct user request — see
-   * CHANGELOG.md); any pre-existing `specifications` content is folded into this array instead (see
-   * `TemplateEditorView.tsx`'s load-time migration and `applyTemplate.ts`'s defensive read), so
-   * customer-visible spec text keeps working through this one remaining mechanism. */
   subDetails: string[];
-  /** Optionally links to an existing Product Master record — set only when a real match exists;
-   * never used to auto-create new Product Master records from template rows. */
   productId?: string;
-  /** A one-time copy of the linked product's catalog fields, taken at the moment it was added to
-   * this template item (Template Management "Select Existing Product") — informational context for
-   * whoever edits the template later, never a live reference. `name`/`unit`/`subDetails` above
-   * are the actual editable copy the template carries; this is purely provenance metadata (e.g. "this
-   * item started from Product ABC-123, catalog price ฿500"). Never read by
-   * `applyTemplateToQuoteDraft()` — templates never carry a price, matching the "no prices unless
-   * the source explicitly gave one" rule; `unitPrice` on the resulting quote line is always 0
-   * regardless of what a linked product's catalog price was. */
   productSnapshot?: { code: string; name: string; unit: string; defaultPrice: number };
   sortOrder: number;
 }
@@ -71,19 +24,11 @@ export interface TemplateSection {
   items: TemplateItem[];
 }
 
-/** A single payment-term / warranty / tax line — kept as parallel-Thai-only free text, matching
- * how `Quote.paymentTerms`/`Quote.remarks` are themselves plain Thai strings today (see
- * `src/lib/quotes.tsx`). */
 export interface TemplateTermLine {
   type: "paymentTerm" | "warrantyTerm" | "taxNote";
   text: string;
 }
 
-/** "excel_import" — created/updated by `POST /api/quotation-templates/import` from
- * `api/_lib/templateSeedData.ts`. "manual" — created via the Template Management "create" form, or
- * produced by duplicating any template (a duplicate can immediately diverge from its source, so it
- * stops being import-tracked the moment it's created). Drives the list page's imported/manual
- * filter — see docs/MODULES/QuotationTemplates.md "Template Management Module." */
 export type TemplateSourceType = "excel_import" | "manual";
 
 export interface QuotationTemplate {
@@ -98,17 +43,9 @@ export interface QuotationTemplate {
   sourceFileName: string;
   sourceSheetName: string;
   sourceHash: string;
-  /** SHA-256 fingerprint of the real source workbook's matching sheet, computed at import time by
-   * `api/_lib/templateWorkbookParser.ts` (added 2026-07-15, second Codex-review fix pass) — changes
-   * if the workbook file itself changes, independent of `sourceHash` (which only reflects the
-   * hand-transcribed seed content). Absent on manually-created templates and on any template
-   * created before this field existed. See docs/MODULES/QuotationTemplates.md "Real Workbook
-   * Change Detection." */
   sourceWorkbookHash?: string;
   sections: TemplateSection[];
   defaultTerms: TemplateTermLine[];
-  /** Internal-only notes captured at the template level (not tied to one specific item) — e.g. a
-   * general staff reminder found near the top/bottom of a sheet. Never customer-visible. */
   internalNotes: string[];
   isActive: boolean;
   isDeleted: boolean;
@@ -118,7 +55,6 @@ export interface QuotationTemplate {
   updatedBy: string;
 }
 
-/** Compact shape for list views (Step 2 template picker, Global Search, Template Management list) — omits full section/item content. */
 export interface QuotationTemplateSummary {
   id: string;
   templateCode: string;
@@ -147,12 +83,6 @@ export interface TemplateImportReport {
   internalNotesDetected: number;
 }
 
-/** The subset of `QuotationTemplate` a Template Management create/edit form actually submits — the
- * rest (`id`/`sourceHash`/`isDeleted`/`createdAt`/`updatedAt`/`createdBy`/`updatedBy`) is always
- * server-derived, matching the same "client describes content, server owns provenance" split
- * already established for `Quote.quotationTemplateName`/`quotationTemplateVersion`. `sourceType` is
- * also server-derived (never client-writable): a manually created template is always "manual"; an
- * excel-imported one only ever changes via the import route. */
 export interface TemplateContentDraft {
   templateCode: string;
   templateName: string;
@@ -166,9 +96,8 @@ export interface TemplateContentDraft {
   isActive: boolean;
 }
 
-/** `includeArchived` only has an effect for a caller with template-management view access — the
- * server silently ignores it for a plain Sales browse-for-a-quotation request (see
- * `handleList` in api/_lib/quotationTemplatesHandler.ts), so it's always safe to pass. */
+// ดึงรายการสรุป Template ใบเสนอราคา กรองตามประเภทงาน/สถานะเก็บถาวรได้
+// Fetches a summarized list of quotation templates, optionally filtered by job type / archived state
 export async function fetchQuotationTemplates(opts?: { jobTypeCode?: string; includeArchived?: boolean }): Promise<QuotationTemplateSummary[]> {
   const params = new URLSearchParams();
   if (opts?.jobTypeCode) params.set("jobTypeCode", opts.jobTypeCode);
@@ -178,15 +107,21 @@ export async function fetchQuotationTemplates(opts?: { jobTypeCode?: string; inc
   return res.templates;
 }
 
+// ดึงข้อมูลเต็มของ Template ใบเสนอราคารายการเดียวตาม id
+// Fetches the full content of a single quotation template by id
 export async function fetchQuotationTemplate(id: string): Promise<QuotationTemplate> {
   const res = await apiFetch<{ template: QuotationTemplate }>(`/quotation-templates/${id}`);
   return res.template;
 }
 
+// นำเข้า Template จากไฟล์ Excel ต้นทาง
+// Imports quotation templates from the source Excel workbook
 export async function importQuotationTemplates(): Promise<TemplateImportReport> {
   return apiFetch<TemplateImportReport>("/quotation-templates/import", { method: "POST" });
 }
 
+// เปิด/ปิดใช้งาน Template ใบเสนอราคา
+// Activates or deactivates a quotation template
 export async function setQuotationTemplateActive(id: string, isActive: boolean): Promise<QuotationTemplateSummary> {
   const res = await apiFetch<{ template: QuotationTemplateSummary }>(`/quotation-templates/${id}`, {
     method: "PATCH",
@@ -195,8 +130,8 @@ export async function setQuotationTemplateActive(id: string, isActive: boolean):
   return res.template;
 }
 
-/** "Archive" — sets `isDeleted: true` (soft-delete), the same convention Customers already uses.
- * `setQuotationTemplateArchived(id, false)` un-archives (restores) a previously archived template. */
+// เก็บถาวร/กู้คืน Template ใบเสนอราคา (soft-delete)
+// Archives or restores a quotation template (soft-delete)
 export async function setQuotationTemplateArchived(id: string, isDeleted: boolean): Promise<QuotationTemplateSummary> {
   const res = await apiFetch<{ template: QuotationTemplateSummary }>(`/quotation-templates/${id}`, {
     method: "PATCH",
@@ -205,6 +140,8 @@ export async function setQuotationTemplateArchived(id: string, isDeleted: boolea
   return res.template;
 }
 
+// สร้าง Template ใบเสนอราคาใหม่
+// Creates a new quotation template
 export async function createQuotationTemplate(draft: TemplateContentDraft): Promise<QuotationTemplate> {
   const res = await apiFetch<{ template: QuotationTemplate }>("/quotation-templates", {
     method: "POST",
@@ -213,11 +150,8 @@ export async function createQuotationTemplate(draft: TemplateContentDraft): Prom
   return res.template;
 }
 
-/** Full content update — templateCode/jobTypeCode changes are allowed (an admin correcting a typo
- * or reclassifying a manual template), unlike `Quote.quotationTemplateId` which is frozen forever
- * once a quotation references it. Existing quotations already hold their own frozen snapshot
- * (`quotationTemplateName`/`quotationTemplateVersion`), so editing the master template — even its
- * code/name — can never retroactively change a quotation created from it. */
+// แก้ไขเนื้อหาทั้งหมดของ Template ใบเสนอราคาที่มีอยู่
+// Updates the full content of an existing quotation template
 export async function updateQuotationTemplate(id: string, draft: TemplateContentDraft): Promise<QuotationTemplate> {
   const res = await apiFetch<{ template: QuotationTemplate }>(`/quotation-templates/${id}`, {
     method: "PATCH",
@@ -226,9 +160,8 @@ export async function updateQuotationTemplate(id: string, draft: TemplateContent
   return res.template;
 }
 
-/** Duplicates a template's full content under a new `templateCode`, always inactive
- * (Draft/Inactive until the admin reviews and activates it) — see docs/MODULES/QuotationTemplates.md
- * "Duplicate." The server generates fresh section/item ids and appends " (Copy)" to the name. */
+// ทำสำเนา Template ใบเสนอราคาด้วยรหัสใหม่ (จะไม่เปิดใช้งานทันที)
+// Duplicates a quotation template under a new code (created inactive)
 export async function duplicateQuotationTemplate(id: string, newTemplateCode: string): Promise<QuotationTemplate> {
   const res = await apiFetch<{ template: QuotationTemplate }>(`/quotation-templates/${id}/duplicate`, {
     method: "POST",

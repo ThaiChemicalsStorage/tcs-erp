@@ -16,19 +16,18 @@ const statusStyle: Record<ScopeOfWorkStatus, string> = {
 };
 const statusLabel: Record<ScopeOfWorkStatus, string> = { Draft: "Draft", PendingApproval: "รออนุมัติ", Final: "Final" };
 
+// แสดงตารางรายการ Scope of Work พร้อมตัวกรองและช่องค้นหา
+// Renders the Scope of Work list table with filters and search.
 export function ScopeOfWorkList({
   scopeOfWorks,
   currentUserId,
   onOpen,
 }: {
   scopeOfWorks: ScopeOfWorkListItem[];
-  /** For the per-user "seen" tracking of this page's one-time guided tour (see useModuleTour). */
   currentUserId: string;
   onOpen: (id: string) => void;
 }) {
   const { t } = useI18n();
-  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
-  // as QuoteList.tsx/ProductList.tsx; mounted in the list view only.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="sow-summary"]', popover: { title: t("tour.sow.summary.title"), description: t("tour.sow.summary.desc"), side: "bottom" } },
     { element: '[data-tour="sow-filters"]', popover: { title: t("tour.sow.filters.title"), description: t("tour.sow.filters.desc"), side: "bottom" } },
@@ -40,16 +39,10 @@ export function ScopeOfWorkList({
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [filterJobType, setFilterJobType] = useState<string>(FILTER_ALL);
   const [filterSalesperson, setFilterSalesperson] = useState<string>(FILTER_ALL);
-  // "เฉพาะที่ยังไม่มี PO" — added 2026-07-29 (the "ทวง PO" feature): a record counts as "no PO"
-  // when its customerPoNumber snapshot is blank.
   const [filterNoPo, setFilterNoPo] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
-  // Defensive, matching QuoteList.tsx/api/dashboard's own "MongoDB enforces no schema" normalization
-  // — the server already defaults every field (see toListItem() in scopeOfWorkHandler.ts), but this
-  // is a second, independent line of defense: a record missing a field must degrade to an empty
-  // string here too, never a crash calling `.trim()`/`.toLowerCase()` on `undefined` during render.
   const items = scopeOfWorks.map((s) => ({
     ...s,
     scopeNumber: s.scopeNumber ?? "",
@@ -58,17 +51,10 @@ export function ScopeOfWorkList({
     jobTypeCode: s.jobTypeCode ?? "",
     quotationSalesperson: s.quotationSalesperson ?? "",
     customerPoNumber: s.customerPoNumber ?? "",
-    // Not itself unsafe to leave undefined (indexing `statusStyle[undefined]` just yields an
-    // undefined class name, not a crash), but normalized anyway for the same reason every other
-    // field here is — `s.status` indexes a lookup table, so a real value keeps the badge looking
-    // right instead of silently rendering with no color at all.
     status: s.status ?? "Draft",
   }));
 
   const jobTypesInList = [...new Set(items.map((s) => s.jobTypeCode).filter((c) => c.trim()))].sort();
-  // Salesperson filter (added 2026-07-22, per direct request "เหมือนหน้าใบเสนอราคา") — mirrors
-  // QuoteList.tsx's own dropdown exactly: distinct names actually present in the fetched list, not
-  // a separate master list, since `quotationSalesperson` is a frozen snapshot, not a live reference.
   const salespeopleInList = [...new Set(items.map((s) => s.quotationSalesperson).filter((n) => n.trim()))].sort();
 
   const noPoCount = items.filter((s) => !s.customerPoNumber.trim()).length;
@@ -97,7 +83,6 @@ export function ScopeOfWorkList({
         </button>
       </div>
 
-      {/* Summary cards */}
       <div data-tour="sow-summary" className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         {[
           { label: t("quotation.filterAll"), count: scopeOfWorks.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
@@ -116,7 +101,6 @@ export function ScopeOfWorkList({
         ))}
       </div>
 
-      {/* Filter */}
       <div data-tour="sow-filters" className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative h-9 w-72">
@@ -164,8 +148,6 @@ export function ScopeOfWorkList({
               </button>
             ))}
           </div>
-          {/* Independent of the status pills — "ยังไม่มี PO" composes with any status
-              (added 2026-07-29, the "ทวง PO" feature). */}
           <button
             data-tour="sow-nopo"
             onClick={() => setFilterNoPo((v) => !v)}
@@ -176,7 +158,6 @@ export function ScopeOfWorkList({
         </div>
       </div>
 
-      {/* Table */}
       <div data-tour="sow-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {scopeOfWorks.length === 0 ? (
           <EmptyState

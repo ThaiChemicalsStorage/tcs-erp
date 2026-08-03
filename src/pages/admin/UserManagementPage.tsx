@@ -32,15 +32,14 @@ interface UserFormState {
   confirm: string;
 }
 
+// สร้างค่าเริ่มต้นว่างสำหรับฟอร์มผู้ใช้งาน
+// Returns an empty user form state
 function emptyForm(defaultRoleKey: string): UserFormState {
   return { fullName: "", employeeId: "", username: "", email: "", phone: "", department: "", position: "", roleKey: defaultRoleKey, status: "active", password: "", confirm: "" };
 }
 
-/** Split into a wrapper + form component (mounted only while a target is set) so
- * `useDialogA11y`'s Escape/focus-trap effect only ever runs while the modal actually exists —
- * same pattern as `PromptDialog.tsx`/`ProductPickerModal.tsx`. Previously a hand-rolled
- * `fixed inset-0` div with no `role="dialog"`, no focus trap, and no Escape-to-close
- * (accessibility hardening pass, found in the 2026-07-30 Admin module audit). */
+// กล่องโต้ตอบสำหรับรีเซ็ตรหัสผ่านผู้ใช้ พร้อมจัดการโฟกัสและปิดด้วย Escape
+// Modal dialog for resetting a user's password, with focus trap and Escape-to-close
 function ResetPasswordModal({ target, value, onChange, error, onConfirm, onCancel }: {
   target: User;
   value: { password: string; confirm: string };
@@ -80,6 +79,8 @@ function ResetPasswordModal({ target, value, onChange, error, onConfirm, onCance
   );
 }
 
+// หน้าจัดการผู้ใช้งาน แสดงรายการ สร้าง แก้ไข รีเซ็ตรหัสผ่าน และเปลี่ยนสถานะผู้ใช้
+// Manages users — list, create, edit, reset passwords, and toggle status
 export function UserManagementPage({
   users,
   onUsersChange,
@@ -96,15 +97,11 @@ export function UserManagementPage({
   currentUser: User;
   isSuperAdmin: boolean;
   onAudit: (action: string, details: string) => void;
-  /** Set by a Global Search user result click — opens that user's edit form directly, whether UserManagementPage is mounting fresh or already on-screen (see CustomersPage's identical `initialEditId` for the full rationale). */
   initialEditId?: string | null;
   onEditIdConsumed?: () => void;
 }) {
   const { t } = useI18n();
 
-  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
-  // as the other list pages' tours; harmless if the page mounts straight into the edit form (a
-  // Global Search deep link): no target exists, start() no-ops, nothing is marked seen.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="users-create"]', popover: { title: t("tour.users.create.title"), description: t("tour.users.create.desc"), side: "bottom" } },
     { element: '[data-tour="users-search"]', popover: { title: t("tour.users.search.title"), description: t("tour.users.search.desc"), side: "bottom" } },
@@ -170,6 +167,8 @@ export function UserManagementPage({
     if (initialEditId) onEditIdConsumed?.();
   }, [initialEditId, onEditIdConsumed]);
 
+  // บันทึกฟอร์มผู้ใช้ ตรวจสอบข้อมูลซ้ำและกฎการเปลี่ยนบทบาทก่อนสร้างหรืออัปเดต
+  // Submits the user form — validates uniqueness and role-change rules, then creates or updates
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.fullName.trim() || !form.employeeId.trim() || !form.username.trim() || !form.email.trim()) {
@@ -215,6 +214,8 @@ export function UserManagementPage({
     setEditingId(null);
   };
 
+  // ยืนยันการรีเซ็ตรหัสผ่านของผู้ใช้ที่เลือกไว้
+  // Confirms and applies a password reset for the targeted user
   const confirmResetPassword = async () => {
     if (!resetTarget) return;
     if (resetPw.password.length < 6) { setError(t("users.errorPasswordLength")); return; }
@@ -232,6 +233,8 @@ export function UserManagementPage({
     }
   };
 
+  // ยืนยันการเปิด/ปิดใช้งานบัญชีผู้ใช้ที่เลือกไว้
+  // Confirms and toggles the targeted user's active/inactive status
   const confirmToggleStatus = async () => {
     if (!statusTarget) return;
     if (statusTarget.status === "active" && isLastActiveSuperAdmin(statusTarget)) { setStatusTarget(null); return; }
@@ -247,6 +250,8 @@ export function UserManagementPage({
     setStatusTarget(null);
   };
 
+  // ยืนยันการลบผู้ใช้ที่เลือกไว้
+  // Confirms and deletes the targeted user
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     try {
@@ -261,6 +266,8 @@ export function UserManagementPage({
   };
 
   const superAdminCount = users.filter((u) => roles.find((r) => r.key === u.roleKey)?.isSuperAdmin).length;
+  // ตรวจสอบว่าลบผู้ใช้นี้ได้หรือไม่ (ห้ามลบตัวเองหรือ Super Admin คนสุดท้าย)
+  // Checks whether a user can be deleted (not self, not the last Super Admin)
   const canDelete = (u: User) => {
     if (u.id === currentUser.id) return false;
     const isTargetSuperAdmin = roles.find((r) => r.key === u.roleKey)?.isSuperAdmin;
@@ -269,6 +276,8 @@ export function UserManagementPage({
   };
 
   const activeSuperAdminCount = users.filter((u) => u.status === "active" && roles.find((r) => r.key === u.roleKey)?.isSuperAdmin).length;
+  // ตรวจสอบว่าผู้ใช้นี้คือ Super Admin ที่ยัง active อยู่คนสุดท้ายหรือไม่
+  // Checks whether the user is the last remaining active Super Admin
   const isLastActiveSuperAdmin = (u: User) =>
     u.status === "active" && !!roles.find((r) => r.key === u.roleKey)?.isSuperAdmin && activeSuperAdminCount <= 1;
 
@@ -295,10 +304,6 @@ export function UserManagementPage({
                 <select id={departmentId} className={inputCls} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
                   <option value="">{t("users.field.department.none")}</option>
                   {DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => <option key={d.key} value={d.label}>{d.label}</option>)}
-                  {/* A legacy value predating this dropdown (added 2026-07-23 — department used to be
-                      free text) is kept selectable rather than silently discarded on save; picking a
-                      real option below replaces it for good. See docs/MODULES/ScopeOfWork.md
-                      "Document Recipients". */}
                   {form.department && !DOCUMENT_RECIPIENT_DEPARTMENTS.some((d) => d.label === form.department) && (
                     <option value={form.department}>{form.department} ({t("users.field.department.legacy")})</option>
                   )}

@@ -2,15 +2,8 @@ import { Layers, ChevronRight } from "lucide-react";
 import type { QuotationTemplate } from "../lib/quotationTemplates";
 import { useI18n } from "../lib/i18n";
 
-/**
- * Shared "ดูตัวอย่าง" (Preview) rendering — used by both the Create Quotation wizard's Step 3
- * (`compact`, a short teaser before applying) and the Template Management module's standalone
- * preview action (full detail, before an admin edits/activates a template). A single source of
- * truth for "what's safe to show" so the two call sites can never drift apart on the one rule that
- * actually matters here: **never render `internalNotes`** (template-level or item-level) or any
- * cost figure — templates don't even carry a price field (see `TemplateItem` in
- * src/lib/quotationTemplates.ts), so there's nothing to accidentally leak on that front either.
- */
+// แสดงตัวอย่างเทมเพลตใบเสนอราคา (แบบย่อหรือแบบเต็ม) โดยไม่แสดงหมายเหตุภายในหรือราคา
+// Renders a quotation template preview (compact or full), never showing internal notes or price
 export function TemplatePreview({ template, compact = false }: { template: QuotationTemplate; compact?: boolean }) {
   const { t } = useI18n();
   const allItems = template.sections.flatMap((s) => s.items);

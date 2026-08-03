@@ -12,7 +12,8 @@ import { useI18n } from "../../lib/i18n";
 const AVATAR_COLORS = ["#c9a84c", "#1a5fb4", "#2aa36b", "#7c4dbb", "#e05252"];
 const FILTER_ALL = "all";
 
-/** Deterministic initials-avatar color for any salesperson name — works for every real name, not just a fixed roster. */
+// เลือกสีอวาตาร์ตัวย่อชื่อแบบคงที่ตามชื่อพนักงานขาย (ชื่อเดียวกันได้สีเดียวกันเสมอ)
+// Picks a deterministic avatar color for a salesperson's initials, based on their name
 function avatarColorFor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
@@ -31,6 +32,8 @@ const statuses: QuoteStatus[] = [
   "ยกเลิก",
 ];
 
+// หน้ารายการใบเสนอราคาทั้งหมด พร้อมค้นหา กรอง และการ์ดสรุปยอด
+// Lists all quotations, with search, filters, and summary stat cards
 export function QuoteList({
   quotes,
   jobTypes,
@@ -42,9 +45,7 @@ export function QuoteList({
 }: {
   quotes: Quote[];
   jobTypes: JobType[];
-  /** Seeds the filters below on mount (a Dashboard pipeline-stage/follow-up click-through) — not re-applied on prop changes since QuoteList remounts fresh each visit, see QuotationPage.tsx. */
   initialFilter: QuotationListFilter | null;
-  /** For the per-user "seen" tracking of this page's one-time guided tour (see useModuleTour). */
   currentUserId: string;
   onOpen: (id: string) => void;
   onCreateNew: () => void;
@@ -52,9 +53,6 @@ export function QuoteList({
 }) {
   const { t } = useI18n();
 
-  // Page tour (added 2026-07-29) — auto-starts once per user on their first visit to this list;
-  // the HelpCircle button in the header replays it. Mounted here (not QuotationPage) so it can
-  // never fire over the detail/editor views.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="quotation-create"]', popover: { title: t("tour.quotation.create.title"), description: t("tour.quotation.create.desc"), side: "bottom" } },
     { element: '[data-tour="quotation-summary"]', popover: { title: t("tour.quotation.summary.title"), description: t("tour.quotation.summary.desc"), side: "bottom" } },
@@ -68,11 +66,6 @@ export function QuoteList({
   const [clientFilter, setClientFilter] = useState<string>(initialFilter?.client ?? "");
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  // Distinct salespeople actually present in `quotes` (not a separate master list — salesperson is
-  // a free-text snapshot, not a live user reference, same as everywhere else this field is used).
-  // A caller without `quotations:viewAll` only ever receives their own quotes from the server, so
-  // this list naturally narrows to just themselves for that case — no separate client-side gating
-  // needed.
   const salespeopleInList = [...new Set(quotes.map((q) => q.salesperson).filter((s) => s.trim()))].sort();
   const filtered = quotes
     .filter((q) => filterStatus === FILTER_ALL || q.status === filterStatus)
@@ -108,7 +101,6 @@ export function QuoteList({
         </div>
       </div>
 
-      {/* Summary cards */}
       <div data-tour="quotation-summary" className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           { label: t("quotation.filterAll"), count: quotes.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
@@ -131,7 +123,6 @@ export function QuoteList({
         })}
       </div>
 
-      {/* Filter */}
       <div data-tour="quotation-filters" className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative h-9 w-72">
@@ -189,7 +180,6 @@ export function QuoteList({
         </div>
       </div>
 
-      {/* Table */}
       <div data-tour="quotation-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {quotes.length === 0 ? (
           <EmptyState icon={FileText} title={t("empty.quotations.title")} description={t("empty.quotations.sub")} actionLabel={t("empty.quotations.action")} onAction={onCreateNew} compact />

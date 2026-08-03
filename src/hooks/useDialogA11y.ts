@@ -2,14 +2,8 @@ import { useEffect, useRef } from "react";
 
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-/**
- * Escape-to-close + a basic Tab focus trap for a modal overlay — shared by `ConfirmDialog`/
- * `PromptDialog` (accessibility hardening pass) so every dialog in the app gets the same fix from
- * one place instead of each dialog re-implementing it. Both dialogs already only mount their form
- * while `open` is true, so this hook doesn't need its own `open` guard — mounting it *is* "the
- * dialog just opened." Returns a ref to attach to the dialog's outer panel element (not the
- * fixed-inset-0 overlay wrapper — the actual bordered card that contains the real controls).
- */
+// จัดการปิดด้วยปุ่ม Escape และดักโฟกัสให้วนอยู่ในกล่องโต้ตอบ (focus trap) สำหรับ dialog แบบ modal
+// Handles Escape-to-close and a Tab focus trap for a modal dialog
 export function useDialogA11y(onCancel: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
 

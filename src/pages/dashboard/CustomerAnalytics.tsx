@@ -5,6 +5,8 @@ import { fmtShort, fmtPercent } from "./format";
 
 type Tab = "revenue" | "quotationCount" | "wonCount" | "repeat";
 
+// แสดงตารางลูกค้าแยกตามแท็บ (รายได้/จำนวนใบเสนอราคา/จำนวนที่ชนะ/ลูกค้าประจำ)
+// Shows a tabbed table of top customers by revenue, quotation count, won count, or repeat rate.
 export function CustomerAnalytics({ data }: { data: CustomerAnalyticsData }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("revenue");

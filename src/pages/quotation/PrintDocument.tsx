@@ -8,15 +8,15 @@ import {
 } from "../../lib/quotes";
 import { BrandMark } from "../../components/BrandMark";
 
-/** A section-header line with no item directly following it (e.g. every item under it was deleted
- * but the header itself wasn't) is never printed — an empty section heading on the customer PDF
- * reads as a mistake, not real content. Only checks the immediately-following line since
- * `applyTemplate.ts` always emits a header's items contiguously right after it. */
+// ตรวจว่าหัวข้อหมวดมีรายการตามหลังหรือไม่ ถ้าไม่มีจะไม่พิมพ์หัวข้อนั้นออกมา
+// Checks whether a section header has an item right after it, so empty headers are skipped when printing
 function sectionHeaderHasItems(lines: QuoteLine[], headerIdx: number): boolean {
   const next = lines[headerIdx + 1];
   return !!next && !next.isSectionHeader;
 }
 
+// แสดงป้ายชื่อ-ค่าหนึ่งบรรทัด ซ่อนตัวเองถ้าค่าว่างเปล่า
+// Renders a label-value line, hiding itself when the value is blank
 function Field({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   if (!value.trim()) return null;
   return (
@@ -27,6 +27,8 @@ function Field({ label, value, mono = false }: { label: string; value: string; m
   );
 }
 
+// ตารางใบเสนอราคาแบบสำหรับพิมพ์ (แสดงเฉพาะตอนสั่งพิมพ์) รวมหัวเอกสาร รายการ ยอดรวม และช่องลายเซ็น
+// Print-only quotation table (shown only when printing), including header, line items, totals, and signatures
 export function PrintDocument({
   isDetail,
   quote,
@@ -41,9 +43,6 @@ export function PrintDocument({
   isDetail: boolean;
   quote?: Quote;
   nextId: string;
-  /** Built once by QuoteDocument.tsx directly from the Settings -> Company Info singleton
-   * (`Company`) — this app only ever issues quotations under a single company identity, so
-   * there's no per-quote issuer selection. Typed as `CompanyHeaderInfo` (`src/lib/storage.ts`). */
   companyHeader: CompanyHeaderInfo;
   client: string;
   contactName: string;
@@ -72,10 +71,6 @@ export function PrintDocument({
   const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount);
   const quoteId = isDetail ? quote!.id : nextId;
 
-  // "No." numbering counts only ordinary priced lines, matching LineItemsEditor.tsx — a
-  // section-header row (see `sectionHeaderHasItems` above) gets no number of its own. Precomputed
-  // as a plain array rather than a mutable counter reassigned inside the render's line-mapping
-  // closure, which React's render-purity lint rule (react-hooks/immutability) flags.
   let runningItemNumber = 0;
   const itemNumbers = lines.map((l) => (l.isSectionHeader ? null : ++runningItemNumber));
 

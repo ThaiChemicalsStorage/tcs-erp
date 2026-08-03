@@ -1,12 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 
-/**
- * Shared "genuinely no data yet" state — consolidates a pattern previously copy-pasted across
- * `ProductList.tsx`, `QuoteList.tsx`, `AuditLogPage.tsx`, and `DashboardPage.tsx` with slightly
- * different markup each time. Always pairs a short title with a one-line explanation and,
- * where there's a real next step, an action button — a plain "No data" with nothing else tells
- * the user nothing about what to do about it.
- */
+// แสดงสถานะ "ยังไม่มีข้อมูล" พร้อมคำอธิบายและปุ่มดำเนินการ (ถ้ามี) ใช้ร่วมกันหลายหน้า
+// Shared "no data yet" state with a title, description, and optional action button
 export function EmptyState({
   icon: Icon, title, description, actionLabel, onAction, compact = false,
 }: {
@@ -15,7 +10,6 @@ export function EmptyState({
   description: string;
   actionLabel?: string;
   onAction?: () => void;
-  /** Tighter padding for use inside an already-boxed table/card area rather than a full page. */
   compact?: boolean;
 }) {
   return (

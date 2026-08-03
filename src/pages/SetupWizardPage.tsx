@@ -12,6 +12,8 @@ export interface SetupWizardFields {
   password: string;
 }
 
+// หน้าตั้งค่าระบบครั้งแรก สร้างบัญชีผู้ดูแลระบบคนแรก
+// Setup wizard page for creating the first admin account.
 export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWizardFields) => Promise<string | null> }) {
   const { t } = useI18n();
   const [fullName, setFullName] = useState("");
@@ -24,8 +26,6 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Field ids for label/input association (Impeccable audit 2026-07-30 — this page predated the
-  // 2026-07-29 accessibility hardening pass SignInPage.tsx got; same useId() convention as there).
   const fullNameId = useId();
   const employeeIdId = useId();
   const usernameId = useId();
@@ -35,6 +35,8 @@ export function SetupWizardPage({ onComplete }: { onComplete: (fields: SetupWiza
 
   const labelCls = "text-xs font-medium text-foreground block mb-1.5";
 
+  // ตรวจสอบข้อมูลฟอร์มและส่งคำขอสร้างบัญชีผู้ดูแลระบบ
+  // Validates the form and submits the admin account setup request.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !employeeId.trim() || !username.trim() || !email.trim() || !password) {

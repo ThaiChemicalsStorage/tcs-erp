@@ -9,43 +9,26 @@ export interface AuditLogEntry {
   action: string;
   details: string;
   createdAt: string;
-  /** Quotation number (same value as `Quote.id`) this entry relates to — only present on
-   * quote-workflow entries written by `writeQuoteAuditEntry()` (api/handlers/quotes.ts), added
-   * 2026-07-13 so the Dashboard's Recent Activities list can render/link to it as a real field
-   * instead of parsing it out of `details`. Absent on older entries and on entries from other
-   * modules (Users, Roles, Settings, Login/Logout). */
   relatedQuoteId?: string;
-  /** Customer/client name this entry relates to — same provenance/caveats as `relatedQuoteId`. */
   relatedCustomerName?: string;
-  /** Company Profile `id` this entry relates to — a leftover field from the Company Profiles
-   * module (added 2026-07-13, **removed 2026-07-14**, see MODULES/CompanyProfiles.md "Removed").
-   * Nothing writes this field anymore; kept only so historical `audit_log` entries from when the
-   * module was live still type-check and render without special-casing. */
   relatedCompanyProfileId?: string;
-  /** Company name (Thai) this entry relates to — same provenance/caveats as `relatedCompanyProfileId`. */
   relatedCompanyProfileName?: string;
-  /** Quotation Template `id` this entry relates to (import/create/edit/duplicate/activate/archive
-   * events written by `api/_lib/quotationTemplatesHandler.ts`, added for the Template Management
-   * module) — same optional/backward-compatible provenance as `relatedQuoteId`. */
   relatedTemplateId?: string;
   relatedTemplateName?: string;
   relatedJobTypeCode?: string;
-  /** Scope of Work `id`/`scopeNumber` this entry relates to (create/update/finalize/duplicate/
-   * refresh/print/delete events written by `api/_lib/scopeOfWorkHandler.ts`, added 2026-07-15) —
-   * same optional/backward-compatible provenance as `relatedTemplateId`. */
   relatedScopeId?: string;
   relatedScopeNumber?: string;
 }
 
+// ดึงรายการบันทึกการใช้งาน (audit log) ทั้งหมดจากเซิร์ฟเวอร์
+// Fetches the full audit log entry list from the server
 export async function fetchAuditLog(): Promise<AuditLogEntry[]> {
   const { entries } = await apiFetch<{ entries: AuditLogEntry[] }>("/audit-log");
   return entries;
 }
 
-/**
- * Server-side: userId/userName/roleName are always taken from the authenticated session, never
- * from this payload — so a client can only describe what happened, not claim to be someone else.
- */
+// บันทึกเหตุการณ์ใหม่ลงในบันทึกการใช้งาน (ผู้ใช้/บทบาทมาจากเซสชันฝั่งเซิร์ฟเวอร์เสมอ)
+// Writes a new audit log entry (user/role always come from the server session)
 export async function logAudit(entry: { module: string; action: string; details?: string }): Promise<AuditLogEntry> {
   const { entry: created } = await apiFetch<{ entry: AuditLogEntry }>("/audit-log", {
     method: "POST",

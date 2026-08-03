@@ -1,20 +1,3 @@
-/**
- * Auto-generates a human-readable, editable starting draft for `revisionNote` — added 2026-07-23,
- * per direct user request ("อยากได้แบบ Comment auto...ว่าแก้ตรงไหนไปสามารถทำได้ไหม...ให้ตรวจดูว่า
- * แก้ตรงไหนไปละเป็นข้อความ auto ไปก่อนละค่อยแบบถ้าผู้ใช้อยากเพิ่มหรืออยากแก้ก็สามารถแก้เองได้"):
- * compares a rewritten Quotation/Scope of Work against the record it was rewritten from and
- * produces a Thai bullet-list summary of every field that differs. Explicitly user-triggered (a
- * button in the editor calls `generateQuoteRevisionSummary()`/`generateScopeOfWorkRevisionSummary()`
- * and places the result into the already-editable `revisionNote` textarea) — never run
- * automatically/silently, so it can never clobber a user's own edits to that field without them
- * choosing to regenerate.
- *
- * Pure, framework-agnostic TS (no JSX, no browser globals) — safe to value-import from both the
- * Vite frontend bundle and the Node serverless API bundle, same convention as
- * src/lib/documentRequirements.ts already follows (this module isn't currently used server-side,
- * but keeping it import-safe costs nothing and avoids a future trap).
- */
-
 import type { Quote, QuoteLine } from "./quotes";
 import type { ScopeOfWork, ScopeOfWorkItem, ScopeOfWorkPaymentConditions } from "./scopeOfWork";
 import { formatPaymentMethod } from "./scopeOfWork";
@@ -22,26 +5,21 @@ import type { ChecklistGroup } from "./documentRequirements";
 import { DOCUMENT_RECIPIENT_DEPARTMENTS } from "./documentRequirements";
 import type { User } from "./users";
 
-/** Strips a trailing `-R<digits>` revision suffix (e.g. `QT-2567-0041-R2` → `QT-2567-0041`, same
- * for a Scope of Work's `scopeNumber`). Deliberately duplicated from `getRevisionRoot()` in
- * `api/_lib/quoteRevisions.ts` rather than imported — `api/_lib/*` isn't part of the Vite frontend
- * bundle, and this is the same "small deliberate duplication" precedent already used elsewhere
- * (e.g. `isWorkflowActionAllowed()` in `api/_lib/quoteWorkflow.ts` vs. `quotes.tsx`'s
- * `workflowTransitions`). Ids/scope numbers never otherwise end in `-R<digits>`. */
+// ตัดส่วนท้าย -R<เลข> ของรหัสเอกสารออก เพื่อหารหัสต้นฉบับ
+// Strips a trailing -R<digits> revision suffix to get the original document id
 export function getRevisionRoot(id: string): string {
   return id.replace(/-R\d+$/, "");
 }
 
-/** The revision number encoded in an id/scopeNumber, or `0` for an original (never-rewritten) record. */
+// หาลำดับเลขรีวิชันจากรหัสเอกสาร (0 หากเป็นต้นฉบับ ไม่เคยถูกแก้ไขใหม่)
+// Extracts the revision number from a document id (0 for an original record)
 export function getRevisionNumber(id: string): number {
   const match = id.match(/-R(\d+)$/);
   return match ? parseInt(match[1], 10) : 0;
 }
 
-/** The id/scopeNumber of the record this one was rewritten from, or `null` if this isn't a
- * revision at all (`getRevisionNumber` is `0`). Revision numbers are atomically, sequentially
- * reserved per root (`nextRevisionNumber()`/`nextScopeRevisionNumber()` server-side) — so `-R{n}`'s
- * predecessor is always exactly `-R{n-1}` (or the bare root, for `-R1`), never a gap to guess at. */
+// หารหัสของเอกสารต้นฉบับที่ถูกใช้สร้างรีวิชันนี้ (null หากไม่ใช่รีวิชัน)
+// Returns the id of the record this revision was rewritten from (null if not a revision)
 export function getRevisionPredecessorId(id: string): string | null {
   const n = getRevisionNumber(id);
   if (n === 0) return null;
@@ -49,31 +27,38 @@ export function getRevisionPredecessorId(id: string): string | null {
   return n === 1 ? root : `${root}-R${n - 1}`;
 }
 
+// เปรียบเทียบข้อความเก่ากับใหม่ คืนบรรทัดสรุปหากต่างกัน
+// Compares old vs new text, returning a summary line if they differ
 function diffText(label: string, oldVal: string, newVal: string): string | null {
   if (oldVal === newVal) return null;
   return `${label}: "${oldVal.trim() || "(ว่าง)"}" → "${newVal.trim() || "(ว่าง)"}"`;
 }
+// เปรียบเทียบตัวเลขเก่ากับใหม่ คืนบรรทัดสรุปหากต่างกัน
+// Compares old vs new numbers, returning a summary line if they differ
 function diffNumber(label: string, oldVal: number, newVal: number, fmt: (n: number) => string = (n) => n.toLocaleString("th-TH")): string | null {
   if (oldVal === newVal) return null;
   return `${label}: ${fmt(oldVal)} → ${fmt(newVal)}`;
 }
+// เปรียบเทียบค่าบูลีนเก่ากับใหม่ คืนบรรทัดสรุปหากต่างกัน
+// Compares old vs new booleans, returning a summary line if they differ
 function diffBool(label: string, oldVal: boolean, newVal: boolean): string | null {
   if (oldVal === newVal) return null;
   return `${label}: ${oldVal ? "ใช่" : "ไม่ใช่"} → ${newVal ? "ใช่" : "ไม่ใช่"}`;
 }
+// เพิ่มค่าเข้าไปในลิสต์ผลลัพธ์ถ้าไม่ใช่ null
+// Pushes a value onto the results list if it isn't null
 function push(out: string[], v: string | null): void {
   if (v) out.push(v);
 }
+// รวมรายการความเปลี่ยนแปลงเป็นข้อความบูลเล็ต หรือข้อความ "ไม่มีการเปลี่ยนแปลง" หากว่าง
+// Joins the diff list into bullet points, or a "no changes" message if empty
 function joinOrNone(out: string[]): string {
   return out.length > 0 ? out.map((s) => `• ${s}`).join("\n") : "ไม่มีการเปลี่ยนแปลงจากต้นฉบับ";
 }
 
+// เปรียบเทียบรายการสินค้าของใบเสนอราคาเก่ากับใหม่ทีละตำแหน่ง
+// Compares old vs new quote line items by array position
 function diffQuoteLines(oldLines: QuoteLine[], newLines: QuoteLine[]): string[] {
-  // Matched by array position, not `id` — Rewrite/Duplicate always regenerate every line's `id`
-  // (see `cloneLines()` in api/handlers/quotes.ts), so an id-based match would report every line
-  // as both "removed" and "added" even when genuinely unchanged. Position-based matching is exact
-  // for the common case (in-place edits, trailing add/remove) and only approximate if the user
-  // reordered/inserted mid-list — a documented simplification, not a full list-diff algorithm.
   const out: string[] = [];
   const max = Math.max(oldLines.length, newLines.length);
   for (let i = 0; i < max; i++) {
@@ -92,10 +77,6 @@ function diffQuoteLines(oldLines: QuoteLine[], newLines: QuoteLine[]): string[] 
   return out;
 }
 
-/** Exactly the fields `generateQuoteRevisionSummary()` below reads — a `Pick`, not the full
- * `Quote`, so callers can pass either a fetched `Quote` (the source) or the live in-progress
- * `QuoteDraftFields` (the current, possibly-unsaved edit state `QuoteDocument.tsx` already builds
- * for its own save payload) without assembling a fully-composed `Quote` object just for this. */
 export type QuoteRevisionDiffInput = Pick<
   Quote,
   | "client" | "project" | "address" | "taxId" | "contactName" | "contactPhone" | "contactEmail"
@@ -104,13 +85,8 @@ export type QuoteRevisionDiffInput = Pick<
   | "followUpDate" | "remarks" | "lines" | "customerId"
 >;
 
-/** Compares `current` against `source` (the record it was rewritten from) and returns a Thai
- * bullet-list summary of every changed field — an editable starting draft for `revisionNote`, not
- * a final answer. Covers every field actually editable in `QuoteDocument.tsx` (see
- * `QuoteDraftFields` in quotes.ts): header fields and a line-by-line diff of `lines`. Deliberately
- * excludes pure workflow/provenance fields (`status`, `approvalHistory`, `amount` — derived from
- * `lines`, `createdByUserId`/`updatedBy`, `templateSnapshot`) since those aren't things a user
- * edits when rewriting a quote. */
+// สร้างข้อความสรุปการเปลี่ยนแปลงของใบเสนอราคาเทียบกับต้นฉบับที่ถูกแก้ไขใหม่ (สำหรับ revisionNote)
+// Generates a bullet-list summary of what changed in a quotation vs. the record it was rewritten from
 export function generateQuoteRevisionSummary(source: QuoteRevisionDiffInput, current: QuoteRevisionDiffInput): string {
   const out: string[] = [];
   push(out, diffText("ลูกค้า", source.client, current.client));
@@ -139,9 +115,9 @@ export function generateQuoteRevisionSummary(source: QuoteRevisionDiffInput, cur
   return joinOrNone(out);
 }
 
+// เปรียบเทียบรายการงานของ Scope of Work เก่ากับใหม่ทีละตำแหน่ง
+// Compares old vs new Scope of Work items by array position
 function diffScopeItems(oldItems: ScopeOfWorkItem[], newItems: ScopeOfWorkItem[]): string[] {
-  // Same array-position matching rationale as diffQuoteLines() above — Rewrite/Duplicate regenerate
-  // every item's `id` (see handleRewrite()/handleDuplicate() in api/_lib/scopeOfWorkHandler.ts).
   const out: string[] = [];
   const max = Math.max(oldItems.length, newItems.length);
   for (let i = 0; i < max; i++) {
@@ -160,12 +136,14 @@ function diffScopeItems(oldItems: ScopeOfWorkItem[], newItems: ScopeOfWorkItem[]
   return out;
 }
 
+// เปรียบเทียบกลุ่มรายการเช็คลิสต์เก่ากับใหม่ (ตัวเลือกที่เพิ่ม/ลบ และหมายเหตุ)
+// Compares old vs new checklist groups (added/removed options and notes)
 function diffChecklistGroups(oldGroups: ChecklistGroup[], newGroups: ChecklistGroup[]): string[] {
   const out: string[] = [];
   const oldByKey = new Map(oldGroups.map((g) => [g.key, g]));
   for (const ng of newGroups) {
     const og = oldByKey.get(ng.key);
-    if (!og) continue; // every group is server-generated up front; shouldn't happen in practice
+    if (!og) continue;
     const oldChecked = new Set(og.options.filter((o) => o.checked).map((o) => o.key));
     const newChecked = new Set(ng.options.filter((o) => o.checked).map((o) => o.key));
     const labelOf = (key: string) => ng.options.find((o) => o.key === key)?.label ?? key;
@@ -178,10 +156,9 @@ function diffChecklistGroups(oldGroups: ChecklistGroup[], newGroups: ChecklistGr
   return out;
 }
 
+// เปรียบเทียบเงื่อนไขการชำระเงิน (งวดชำระที่เพิ่ม/ลบ/แก้ไข) เก่ากับใหม่
+// Compares old vs new payment conditions (installments added/removed/changed)
 function diffPaymentConditions(oldPc: ScopeOfWorkPaymentConditions, newPc: ScopeOfWorkPaymentConditions): string[] {
-  // Installment ids ARE preserved through Rewrite/Duplicate (paymentConditions passes through the
-  // `...rest` spread untouched — see handleRewrite()/handleDuplicate()), so id-based matching is
-  // reliable here, unlike quote lines/scope items above.
   const out: string[] = [];
   const oldById = new Map(oldPc.installments.map((i) => [i.id, i]));
   const newById = new Map(newPc.installments.map((i) => [i.id, i]));
@@ -204,6 +181,8 @@ function diffPaymentConditions(oldPc: ScopeOfWorkPaymentConditions, newPc: Scope
   return out;
 }
 
+// เปรียบเทียบผู้รับเอกสารตามแผนกเก่ากับใหม่ (แปลง id เป็นชื่อจริง)
+// Compares old vs new document recipients by department (resolving ids to real names)
 function diffDocumentRecipients(oldRec: Record<string, string[]>, newRec: Record<string, string[]>, users: User[]): string[] {
   const out: string[] = [];
   const nameOf = (userId: string) => users.find((u) => u.id === userId)?.fullName ?? userId;
@@ -218,11 +197,8 @@ function diffDocumentRecipients(oldRec: Record<string, string[]>, newRec: Record
   return out;
 }
 
-/** Same shape/purpose as `generateQuoteRevisionSummary()` above, for Scope of Work. Covers every
- * field editable in `ScopeOfWorkDocument.tsx`: header fields, items, checklist groups, payment
- * conditions/installments, document recipients (resolved to real names via `users`), seller/
- * approver names, and remarks. Excludes pure workflow/provenance fields (`status`, `version`,
- * `createdBy`/`updatedBy`, `quotationSalesperson` — frozen provenance, not user-editable). */
+// สร้างข้อความสรุปการเปลี่ยนแปลงของ Scope of Work เทียบกับต้นฉบับที่ถูกแก้ไขใหม่ (สำหรับ revisionNote)
+// Generates a bullet-list summary of what changed in a Scope of Work vs. the record it was rewritten from
 export function generateScopeOfWorkRevisionSummary(source: ScopeOfWork, current: ScopeOfWork, users: User[]): string {
   const out: string[] = [];
   push(out, diffText("วันที่", source.issueDate, current.issueDate));

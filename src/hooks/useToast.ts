@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+// จัดการข้อความ toast ที่แสดงชั่วคราวแล้วหายไปเองอัตโนมัติ
+// Manages a toast message that auto-dismisses after a timeout
 export function useToast() {
   const [message, setMessage] = useState<string | null>(null);
 

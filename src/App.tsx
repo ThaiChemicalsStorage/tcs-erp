@@ -45,10 +45,8 @@ const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateMana
 const ScopeOfWorkPage = lazy(() => import("./pages/scopeOfWork/ScopeOfWorkPage").then((m) => ({ default: m.ScopeOfWorkPage })));
 const DeliveryOrderPage = lazy(() => import("./pages/deliveryOrder/DeliveryOrderPage").then((m) => ({ default: m.DeliveryOrderPage })));
 
-/** `role="status"`/`aria-live`/`sr-only` label added (Impeccable shell audit 2026-07-30) — this is
- * the highest-frequency loading state in the app (the `Suspense` fallback for every lazy-loaded
- * page, i.e. every navigation) and previously had zero text of any kind, visible or otherwise.
- * Matches the pattern already proven on `BootLoading` below. */
+// แสดงสถานะกำลังโหลดหน้าย่อยระหว่างรอโหลดโค้ด (Suspense fallback) พร้อมข้อความสำหรับ screen reader
+// Loading placeholder shown as the Suspense fallback for every lazy-loaded page, with a screen-reader label
 function PageLoading() {
   const { t } = useI18n();
   return (
@@ -63,11 +61,8 @@ function PageLoading() {
   );
 }
 
-/** Shown while the initial session check is in flight (and as the `Suspense` fallback while
- * SignInPage/SetupWizardPage's own lazy chunk downloads) — the very first thing most users ever
- * see. Previously just a pulsing logo with no text/ARIA signal (accessibility hardening pass,
- * found in the 2026-07-30 authentication UI audit); now announces itself the same way every other
- * loading state in the app does. */
+// แสดงหน้าจอโหลดตอนเริ่มแอป ระหว่างตรวจสอบ session ครั้งแรก
+// Boot-time loading screen shown while the initial session check is in flight
 function BootLoading() {
   const { t } = useI18n();
   return (
@@ -78,10 +73,8 @@ function BootLoading() {
   );
 }
 
-/** Shown only if the session check itself fails (network/server error) — distinct from `signedOut`
- * (a resolved "you are not logged in" answer). Fixes a previously-documented gap: the boot effect
- * had no error handling at all, so a thrown fetch error left `bootStatus` stuck at `"loading"`
- * forever with no way out — see TODO.md/CHANGELOG.md 2026-07-14 progressive-loading pass. */
+// แสดงหน้าจอ error พร้อมปุ่มลองใหม่ เมื่อตรวจสอบ session ตอนเริ่มแอปไม่สำเร็จ
+// Shown when the initial session check itself fails, with a retry button
 function BootError({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
   return (
@@ -99,14 +92,8 @@ function BootError({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-/** Lightweight per-section placeholder used while *the specific boot-time domain resources a page
- * needs* (see `NAV_RESOURCES` above) are still in flight — the sidebar/header/page chrome around
- * it is already visible by this point (see `bootStatus === "ready"` rendering below), so this only
- * needs to cover the content area, not the whole screen. Deliberately not a full skeleton grid: a
- * page that's purely prop-driven off this data (Quotations/Products/Customers/Users/Roles) would
- * otherwise render a false "no records yet" empty state while data is still loading — showing this
- * instead keeps "loading" and "genuinely empty" visually distinct. Dashboard/AuditLog fetch their
- * own data independently and never show this. */
+// แสดงสถานะโหลด/error เฉพาะส่วนเนื้อหา ระหว่างรอข้อมูลที่หน้านั้นๆ ต้องใช้
+// Shows a loading/error placeholder for the content area while a page's required data is still in flight
 function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => void }) {
   const { t } = useI18n();
   if (error) {
@@ -128,19 +115,11 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-/** Stable routing identifiers — decoupled from the (now translatable) display label, so switching language never breaks navigation. */
 type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
 
-/** The boot-time domain resources fetched once after sign-in — see `loadDomainData()`/`resourceStatus` below. */
 type ResourceKey = "users" | "roles" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
 
-/**
- * Which boot-time resources a given page actually needs, for per-page loading/error gating
- * (2026-07-14, Codex review High Priority fix — see the `resourceStatus` doc comment in `App()`).
- * Dashboard/AuditLog aren't listed: they fetch their own data and never wait on this at all.
- * "settings" needs `company` (Company Info tab, Super-Admin-only) and `roles` (role name display).
- */
 const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
   quotations: ["quotes", "company", "users", "roles", "products", "categories", "jobTypes", "customers"],
   quotationTemplates: ["jobTypes", "products", "categories"],
@@ -151,19 +130,11 @@ const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
   settings: ["company", "roles"],
 };
 
-/** Module-scope (not component-local) so it's a referentially stable object across every render —
- * required for `loadDomainData` below to itself be stable under `useCallback`, which is what lets
- * the boot effect's dependency array correctly list it without re-running on every render. */
 const INITIAL_RESOURCE_STATUS: Record<ResourceKey, ResourceState> = {
   users: "loading", roles: "loading", company: "loading", products: "loading", categories: "loading",
   notifications: "loading", quotes: "loading", jobTypes: "loading", customers: "loading",
 };
 
-/** Same selector `useDialogA11y` (`ConfirmDialog`/`PromptDialog`) already uses for its Tab-trap —
- * kept as a local constant here rather than importing that hook, since the mobile nav drawer stays
- * permanently mounted (only translated off-screen, never unmounted) while that hook assumes the
- * panel unmounts on close; the trap below is written to only ever attach its listener while
- * `mobileNavOpen` is actually true (Impeccable shell audit 2026-07-30). */
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 interface NavItem {
@@ -186,20 +157,6 @@ const navItems: NavItem[] = [
   { key: "auditLog", icon: ScrollText, labelKey: "nav.auditLog", permission: "auditLog:view" },
 ];
 
-/**
- * Sidebar grouping (2026-07-10 UI/UX redesign) — purely a display grouping over the same flat
- * `navItems`/`NavKey` list above, not a new data model. "Leads" still has no group/UI (schema-only,
- * see MODULES/Lead.md) — "Customers" got one 2026-07-14 (Customer master data, used to autofill
- * the Quotation form's Customer selector, see MODULES/Customer.md). No separate "Approvals" group
- * (approval actions live inside the Quotation module's own workflow, there's no dedicated Pending
- * Approvals/Approval History page). The former "Company Profiles" entry (multi-issuer master data)
- * was removed 2026-07-14 — this ERP has exactly one issuer company, so a management page for
- * multiple was unused scope; see docs/MODULES/CompanyProfiles.md "Removed (2026-07-14)."
- * "Scope of Work" got its own top-level entry 2026-07-22 (previously only reachable via a button on
- * the Quotation detail page, with no standalone browse/list view) — per direct user request; a
- * Scope of Work is still only ever *created* from that same Quotation-detail button, this page is
- * purely for browsing/opening ones that already exist. See docs/MODULES/ScopeOfWork.md.
- */
 const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
@@ -221,22 +178,15 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   settings: "nav.settings",
 };
 
-/**
- * URL-hash page persistence (added 2026-07-29, direct user request: "ทำไมเวลารีเฟรชหน้ามันเด้งไป
- * หน้า dashboard ตลอด") — this app deliberately has no router (`activeNav` is plain React state,
- * see docs/CLAUDE.md "Current Architecture"), so before this, the URL never changed and a refresh
- * always reset to the Dashboard. The lightest possible fix, not a router migration: mirror
- * `activeNav` into `location.hash` (`#quotations`, `#products`, ...) and read it back on load and
- * on `hashchange` — which also gives browser Back/Forward page navigation and shareable
- * page-level URLs for free. Page-level only, by explicit scope decision: which *document* a page
- * had open lives in each page's own internal state and is NOT restored (tracked in TODO.md as the
- * possible "level 2" follow-up).
- */
+// อ่านหน้าปัจจุบันจาก URL hash เพื่อให้รีเฟรชแล้วไม่เด้งกลับไปหน้า dashboard
+// Reads the current page from the URL hash, so a page refresh keeps the user on the same page
 function navFromHash(): NavKey | null {
   const raw = window.location.hash.replace(/^#\/?/, "");
   return raw in NAV_LABEL_KEYS ? (raw as NavKey) : null;
 }
 
+// แปลงชื่อ action ของ audit log ให้เป็นชื่อโมดูลภาษาไทย
+// Maps an audit log action name to its Thai module label
 function moduleForAction(action: string): string {
   if (action.startsWith("Quotation") || action === "Status Changed") return "ใบเสนอราคา";
   if (action.startsWith("User") || action === "Password Reset") return "ผู้ใช้งาน";
@@ -248,10 +198,10 @@ function moduleForAction(action: string): string {
   return "ระบบ";
 }
 
-// ─── Root App ──────────────────────────────────────────────────────────────────
-
 type BootStatus = "loading" | "needsSetup" | "signedOut" | "ready";
 
+// คอมโพเนนต์หลักของแอป จัดการ session, โหลดข้อมูลตั้งต้น, และแสดงผลชั้น sidebar/topbar/หน้าเนื้อหา
+// The app's root component — manages the session, loads boot-time data, and renders the sidebar/topbar/page shell
 export default function App() {
   const { t } = useI18n();
   const [bootStatus, setBootStatus] = useState<BootStatus>("loading");
@@ -261,22 +211,11 @@ export default function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window === "undefined" ? true : window.innerWidth >= 768));
-  /** Off-canvas drawer state for narrow (<768px, the `md` breakpoint) viewports — decoupled from
-   * `sidebarOpen` (the desktop 256px/64px width toggle) since on mobile the sidebar is either fully
-   * open as an overlay or fully hidden, never a persistent icon rail. See NAV_EXPANDED below. */
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  /** Focus-trap support for the mobile drawer (Impeccable shell audit 2026-07-30) — `panelRef` is
-   * the `<aside>` itself (its focusable descendants define the trap boundaries), `triggerRef` is
-   * the hamburger button that opens it, so focus can return there when the drawer closes. */
   const mobileNavPanelRef = useRef<HTMLElement>(null);
   const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
   const [activeNav, setActiveNav] = useState<NavKey>(() => navFromHash() ?? "dashboard");
 
-  // ── URL-hash sync (see navFromHash's doc comment) ─────────────────────────────────────────────
-  // State → hash: every page change becomes a history entry (enabling Back/Forward). The very
-  // first write on a hashless load uses replaceState so Back doesn't step through a phantom
-  // ""→"#dashboard" entry. Hash → state: covers Back/Forward and a hand-edited URL; an unknown
-  // hash is simply ignored (state and URL re-converge on the next navigation).
   useEffect(() => {
     const target = `#${activeNav}`;
     if (window.location.hash === target) return;
@@ -296,41 +235,16 @@ export default function App() {
   }, []);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quotationListFilter, setQuotationListFilter] = useState<QuotationListFilter | null>(null);
-  /** Set by a notification click when it has a `relatedQuoteId` — opens that quote's detail view directly instead of just the module's list, consumed once by QuotationPage then cleared (see below). */
   const [quotationDeepLinkId, setQuotationDeepLinkId] = useState<string | null>(null);
-  /** Same deep-link pattern as `quotationDeepLinkId` above, one per module — set by a Global Search
-   * result click (see `GlobalSearch.tsx`), consumed once by the target page then cleared. */
   const [customerDeepLinkId, setCustomerDeepLinkId] = useState<string | null>(null);
   const [productDeepLinkId, setProductDeepLinkId] = useState<string | null>(null);
   const [userDeepLinkId, setUserDeepLinkId] = useState<string | null>(null);
-  /** Set by a Global Search "Template ใบเสนอราคา" result click — opens the Create Quotation
-   * wizard with this Job Type + Template preselected (see QuotationTemplateWizard.tsx). */
   const [quotationTemplateDeepLink, setQuotationTemplateDeepLink] = useState<{ jobTypeCode: string; templateId: string } | null>(null);
-  /** Set by a Global Search "Scope of Work" result click (added 2026-07-15, Codex review High
-   * Priority fix) — opens the source quotation's detail view, then jumps straight into that Scope
-   * of Work's editor (see `QuotationPage.tsx`'s `initialScopeOfWorkDeepLink`). */
   const [scopeOfWorkDeepLink, setScopeOfWorkDeepLink] = useState<{ quotationId: string; scopeOfWorkId: string } | null>(null);
-  /** Set by a "scope_of_work_document_sent" notification click (added 2026-07-23) — jumps straight
-   * to that record's detail view on the standalone Scope of Work page. Distinct from
-   * `scopeOfWorkDeepLink` above (which requires a `quotationId` and opens the quotation-embedded
-   * view instead) since a document recipient may not be the quotation's owner/salesperson and this
-   * is the more natural landing spot for "a document was sent to me." */
   const [scopeOfWorkDeepLinkId, setScopeOfWorkDeepLinkId] = useState<string | null>(null);
-  /** Set by ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button (added 2026-07-23) — jumps
-   * straight to that record's detail view on the standalone Delivery Order page, same pattern as
-   * `scopeOfWorkDeepLinkId` above. */
   const [deliveryOrderDeepLinkId, setDeliveryOrderDeepLinkId] = useState<string | null>(null);
-  /** Set by the Create Quotation wizard's "สร้าง Template ใหม่สำหรับประเภทงานนี้" action — opens
-   * Template Management's create form pre-filled with that Job Type (see
-   * `TemplateManagementPage.tsx`'s `initialCreateForJobType` prop). `seq` follows the same
-   * monotonic-sequence-number convention as `pageAction` below, for the same reason (a second click
-   * while already on the page must still re-fire). */
   const [templateCreateForJobType, setTemplateCreateForJobType] = useState<{ jobTypeCode: string; jobTypeName: string; seq: number } | null>(null);
   const templateCreateSeq = useRef(0);
-  /** Set by a Global Search "page action" result (e.g. "Create Quotation," "Product Categories")
-   * — `seq` is a monotonic sequence number, not a boolean, so the same result clicked twice in a
-   * row still re-fires on the target page (see CustomersPage/ProductsPage's `autoCreateSeq`/
-   * `autoViewSeq` props for the consuming side). Cleared once the target page has applied it. */
   const [pageAction, setPageAction] = useState<{ nav: NavKey; action: "create" | "categories"; seq: number } | null>(null);
   const pageActionSeq = useRef(0);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -339,26 +253,8 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
-  /** Same `.catch(() => [])` guard applied at every call site: not every default role holds
-   * `customers:view` (Viewer/Approver only get it as a read-only grant, but a hypothetical custom
-   * role might not), and `quotations:create` alone is enough to read active customers via the
-   * server's carve-out — see api/_lib/customersHandler.ts. A rejection here must not be treated as
-   * a real data-load failure (see `loadDomainData` below) — it's an expected, valid 403 for some
-   * roles, not an error to surface. */
   const [customers, setCustomers] = useState<Customer[]>([]);
 
-  // ── Progressive boot data loading (2026-07-14, reworked same day — Codex review High Priority
-  // fix) ────────────────────────────────────────────────────────────────────────────────────────
-  // `bootStatus` flips to `"ready"` as soon as the session check resolves — the sidebar/header
-  // shell renders immediately at that point (see the render logic below), *before* any of the bulk
-  // domain data (users/roles/quotes/products/etc.) has arrived. The first version of this pass
-  // tracked that separate, slower fetch behind ONE flag (`initialDataLoading`) shared by every
-  // boot-time resource — which meant navigating straight to e.g. Products still waited on
-  // `notifications`/`quotes`/`users`/etc. even though Products only needs `products`/`categories`.
-  // An independent Codex review flagged this as still effectively a global blocking gate. Fixed by
-  // tracking each resource's own status independently (`resourceStatus`), so a given page's
-  // readiness is computed only from the resources *it* actually needs (see `NAV_RESOURCES` above) —
-  // Dashboard/AuditLog still don't wait on any of this at all, they fetch their own data.
   const [resourceStatus, setResourceStatus] = useState<Record<ResourceKey, ResourceState>>(INITIAL_RESOURCE_STATUS);
   const [bootError, setBootError] = useState(false);
 
@@ -368,24 +264,15 @@ export default function App() {
     if (currentUser) markTourCompleted(currentUser.id);
   });
 
-  /**
-   * Fires every boot-data fetch independently (not one blocking `Promise.all`) so each domain list
-   * populates the UI — and its own `resourceStatus` entry flips to `"ready"`/`"error"` — as soon as
-   * *its own* request resolves, rather than every resource (and every page gated on one) waiting
-   * for the single slowest of the nine. No shared `Promise.allSettled` gate anymore — each resource
-   * is independently observable, which is what lets `NAV_RESOURCES` below compute per-page
-   * readiness from only the subset a given page actually needs.
-   */
-  // `useCallback` with an empty dep array (both here and on `loadDomainData` below) — `setXxx`
-  // setters are React-guaranteed stable and `INITIAL_RESOURCE_STATUS` is a module-level constant,
-  // so neither function's *real* behavior depends on anything that changes across renders. Making
-  // them referentially stable is what lets the boot effect below list `loadDomainData` in its
-  // dependency array (satisfying `react-hooks/exhaustive-deps`) without re-running on every render.
+  // ติดตามผลของการโหลดข้อมูลแต่ละอย่างแยกกัน อัปเดตสถานะเป็น ready/error ทันทีที่ request นั้นเสร็จ
+  // Tracks one boot-data fetch independently, flipping its own resourceStatus entry to ready/error as soon as it resolves
   const trackResource = useCallback(<T,>(key: ResourceKey, promise: Promise<T>, onSuccess: (v: T) => void) => {
     promise
       .then((v) => { onSuccess(v); setResourceStatus((s) => ({ ...s, [key]: "ready" })); })
       .catch(() => { setResourceStatus((s) => ({ ...s, [key]: "error" })); });
   }, []);
+  // ยิงคำขอโหลดข้อมูลตั้งต้นทั้งหมดพร้อมกันแบบแยกอิสระ ไม่รอกันเป็นชุดเดียว
+  // Fires every boot-time data fetch independently, rather than one blocking Promise.all
   const loadDomainData = useCallback(() => {
     setResourceStatus(INITIAL_RESOURCE_STATUS);
     trackResource("users", fetchUsers(), setUsers);
@@ -396,10 +283,6 @@ export default function App() {
     trackResource("notifications", fetchNotifications(), setNotifications);
     trackResource("quotes", fetchQuotes(), setQuotes);
     trackResource("jobTypes", fetchJobTypes(), setJobTypes);
-    // Not every default role holds `customers:view` (see the `customers` state doc comment above) —
-    // a 403 here is an expected, valid outcome for some roles, not a real data-load failure, so it
-    // resolves as "ready" with an empty list rather than "error" (which would show a retry prompt
-    // for something retrying can never fix).
     trackResource("customers", fetchCustomers().catch(() => []), setCustomers);
   }, [trackResource]);
 
@@ -410,9 +293,6 @@ export default function App() {
       try {
         session = await fetchSession();
       } catch {
-        // Previously unhandled — a thrown network/API error here left `bootStatus` stuck at
-        // `"loading"` forever with no way out (documented gap, see TODO.md/CHANGELOG.md
-        // 2026-07-14). Now surfaces a real, retryable error screen instead.
         if (!cancelled) setBootError(true);
         return;
       }
@@ -426,22 +306,9 @@ export default function App() {
     return () => { cancelled = true; };
   }, [loadDomainData]);
 
-  // Mobile drawer: Escape closes it (never survives a nav change made some other way, e.g. browser
-  // back, since it's plain UI state, not routed — no cleanup needed there), Tab is trapped inside
-  // it while open, and focus moves in on open / back to the trigger on close. Previously declared
-  // `role="dialog" aria-modal="true"` on the `<aside>` (see App.tsx render below) without any of
-  // this — telling assistive tech "your focus is contained here" while it wasn't (Impeccable shell
-  // audit 2026-07-30). Gated entirely on `mobileNavOpen` (both the listener attach below and the
-  // early return) rather than using the shared `useDialogA11y` hook, since that hook assumes its
-  // panel unmounts on close — this `<aside>` never does, it's only translated off-screen.
   useEffect(() => {
     if (!mobileNavOpen) return;
     const panel = mobileNavPanelRef.current;
-    // `offsetParent !== null` excludes elements CSS currently hides (e.g. the close button is
-    // `md:hidden` — display:none at desktop widths) — a raw querySelectorAll match with no
-    // visibility filter would otherwise let items[0] silently be unfocusable, breaking both the
-    // focus-on-open and the Tab-wrap boundaries without any error (caught in the Impeccable shell
-    // audit's own verification pass, 2026-07-30).
     const items = panel
       ? Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null)
       : [];
@@ -462,11 +329,6 @@ export default function App() {
     };
   }, [mobileNavOpen]);
 
-  // User menu: Escape closes it, matching the mobile drawer's own Escape handling above — the
-  // dropdown previously had no keyboard-only way to dismiss without activating one of its three
-  // items (Impeccable shell audit 2026-07-30). Not a full focus trap (unlike the drawer above) since
-  // this is a lightweight disclosure panel, not a modal — clicking outside or Tab-ing past it already
-  // closes/exits it, matching NotificationBell/WhatsNewPanel's existing non-modal dropdown pattern.
   useEffect(() => {
     if (!userMenuOpen) return;
     const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setUserMenuOpen(false); };
@@ -474,14 +336,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [userMenuOpen]);
 
-  // ── Notification polling (2026-07-24, direct user request) ──────────────────────────────────
-  // Notifications were previously fetched once at boot only, so e.g. a "เอกสารส่งถึงคุณ" event
-  // never appeared until a full page reload. Polling (not SSE/WebSocket) is deliberate: the
-  // current Vercel serverless backend can't hold a connection open, and polling stays portable to
-  // the future self-managed server — SSE is recorded as a possible post-migration upgrade in
-  // docs/SERVER_MIGRATION_PLAN.md. Skips while the tab is hidden (no wasted requests for a
-  // backgrounded tab); a hidden→visible transition and window focus both refetch immediately, so
-  // returning to the tab never waits out the remainder of an interval.
   useEffect(() => {
     if (bootStatus !== "ready") return;
     const refetch = () => {
@@ -499,13 +353,6 @@ export default function App() {
     };
   }, [bootStatus]);
 
-  // Offers the guided tour once per user, the first time they land on a "ready" session — not
-  // forced (see `showTourPrompt`'s Start/Skip banner below), and never shown again once they've
-  // either finished or explicitly skipped it (tracked in localStorage, see src/lib/tour.ts).
-  // React's "adjust state during rendering" pattern (not an effect — a bare setState call in an
-  // effect body trips react-hooks/set-state-in-effect): reacts to `currentUser` changing (i.e.
-  // sign-in completing), checked against state (not a ref — refs can't be read/written during
-  // render) so it only evaluates once per sign-in, not on every unrelated re-render.
   const [tourCheckedForUserId, setTourCheckedForUserId] = useState<string | null>(null);
   if (bootStatus === "ready" && currentUser && tourCheckedForUserId !== currentUser.id) {
     setTourCheckedForUserId(currentUser.id);
@@ -566,10 +413,8 @@ export default function App() {
     setTemplateCreateForJobType({ jobTypeCode, jobTypeName, seq: templateCreateSeq.current });
     setActiveNav("quotationTemplates");
   };
-  /** `navKey` arrives from Global Search as a plain string (see `SearchPageResult` in
-   * src/lib/search.ts) — validated against the known `NavKey` union here, at the one place a
-   * server-supplied string actually needs to become a real `NavKey`, rather than trusting it
-   * blindly or threading an unsafe cast through GlobalSearch.tsx. */
+  // ไปยังหน้าที่ระบุ (มาจากผลค้นหา) พร้อมตรวจสอบว่าเป็น NavKey ที่ถูกต้องก่อน
+  // Navigates to the given page (from a search result), validating it as a real NavKey first
   const navigateToPage = (navKey: string, action?: "create" | "categories") => {
     if (!navItems.some((n) => n.key === navKey) && navKey !== "settings") return;
     const key = navKey as NavKey;
@@ -603,6 +448,8 @@ export default function App() {
     logAudit({ module: moduleForAction(action), action, details }).catch(() => {});
   };
 
+  // ทำขั้นตอนตั้งค่าเริ่มต้นระบบให้เสร็จ สร้างบัญชี Super Admin คนแรก แล้วเข้าสู่ระบบทันที
+  // Completes the setup wizard, creates the first Super Admin account, and signs them in
   const handleSetupComplete = async (fields: SetupWizardFields): Promise<string | null> => {
     try {
       const created = await setupSuperAdmin(fields);
@@ -618,6 +465,8 @@ export default function App() {
     }
   };
 
+  // เข้าสู่ระบบด้วยชื่อผู้ใช้/รหัสผ่าน แล้วโหลดข้อมูลตั้งต้นของแอป
+  // Signs the user in with their identifier/password, then loads the app's boot-time data
   const handleSignIn = async (identifier: string, password: string): Promise<string | null> => {
     const result = await login(identifier, password);
     if (result.error || !result.user) return result.error;
@@ -628,6 +477,8 @@ export default function App() {
     return null;
   };
 
+  // ออกจากระบบและล้างข้อมูลทั้งหมดในสถานะกลับสู่ค่าเริ่มต้น
+  // Logs the user out and resets all app state back to its defaults
   const handleLogout = async () => {
     if (currentUser) {
       await logAudit({ module: "ระบบ", action: "Logout", details: "" }).catch(() => {});
@@ -653,8 +504,6 @@ export default function App() {
   const activeNavItem = navItems.find((n) => n.key === activeNav);
   const activeNavAllowed = activeNav === "settings" || !activeNavItem?.permission || hasPermission(currentUser, roles, activeNavItem.permission);
   const effectiveNav = activeNavAllowed ? activeNav : "dashboard";
-  // Only the resources `effectiveNav`'s own page actually needs gate it — see `NAV_RESOURCES`
-  // above. A page not listed there (Dashboard/AuditLog) is never gated here at all.
   const requiredResources = NAV_RESOURCES[effectiveNav] ?? [];
   const pageDataLoading = requiredResources.some((k) => resourceStatus[k] === "loading");
   const pageDataError = requiredResources.some((k) => resourceStatus[k] === "error");
@@ -687,19 +536,12 @@ export default function App() {
   const canCreateCustomers = hasPermission(currentUser, roles, "customers:create");
   const canEditCustomers = hasPermission(currentUser, roles, "customers:edit");
   const canArchiveCustomers = hasPermission(currentUser, roles, "customers:archive");
-  // Same flat permission checks QuotationPage.tsx already computes for its own embedded
-  // ScopeOfWorkDocument usage — the standalone page (added 2026-07-22) reuses the exact same
-  // component, so it needs the exact same props.
   const canCreateScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:create");
   const canEditScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:edit");
   const canFinalizeScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:finalize");
   const canPrintScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:print");
   const canDeleteScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:delete");
   const canChasePoScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:chasePo");
-  // Delivery Order (added 2026-07-23) — `canViewDeliveryOrder`/`canCreateDeliveryOrder` gate
-  // ScopeOfWorkDocument.tsx's "สร้าง/เปิดใบส่งมอบสินค้า" button (passed into both QuotationPage.tsx
-  // and ScopeOfWorkPage.tsx, since that same component renders from either); the rest back
-  // DeliveryOrderPage.tsx's own detail view, same flat-props convention as Scope of Work above.
   const canViewDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:view");
   const canCreateDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:create");
   const canEditDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:edit");
@@ -707,10 +549,8 @@ export default function App() {
   const canPrintDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:print");
   const canDeleteDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:delete");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
-  // `quotationTemplates:manage` is a legacy superset permission kept for backward compatibility
-  // with role assignments made before the granular `quotationTemplates:*` permissions existed (see
-  // docs/RBAC.md) — every granular check here also accepts it, so a pre-existing custom role that
-  // only ever held `:manage` keeps full access without an admin having to re-save it.
+  // ตรวจสิทธิ์ template โดยยอมรับสิทธิ์ระดับ manage แบบเก่า (superset) ควบคู่กับสิทธิ์ย่อยแบบใหม่
+  // Checks a template permission, accepting the legacy superset "manage" permission alongside the granular one
   const hasTemplatePerm = (perm: Permission) => hasPermission(currentUser, roles, "quotationTemplates:manage") || hasPermission(currentUser, roles, perm);
   const canCreateTemplates = hasTemplatePerm("quotationTemplates:create");
   const canEditTemplates = hasTemplatePerm("quotationTemplates:edit");
@@ -718,30 +558,21 @@ export default function App() {
   const canActivateTemplates = hasTemplatePerm("quotationTemplates:activate");
   const canArchiveTemplates = hasTemplatePerm("quotationTemplates:archive");
   const canImportTemplates = hasTemplatePerm("quotationTemplates:import");
-  /** Whether the sidebar should render its expanded content (group labels, nav text, full brand
-   * wordmark) — true on desktop when the user hasn't collapsed it, and always true inside the
-   * mobile off-canvas drawer (there's no icon-only state for an overlay, it's open-and-full or
-   * closed). Kept separate from `sidebarOpen` itself, which only ever controls desktop width. */
   const navExpanded = sidebarOpen || mobileNavOpen;
   const closeMobileNav = () => setMobileNavOpen(false);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden font-sans text-foreground print:h-auto print:overflow-visible print:block">
-      {/* Skip link — invisible until keyboard-focused (Impeccable shell audit 2026-07-30). Without
-          this, a keyboard user must tab through the entire sidebar (up to 10 nav items) plus every
-          topbar control on every single page load before ever reaching page content. */}
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#c9a84c] focus:text-[#0b1d3a] focus:rounded-lg focus:font-semibold focus:shadow-xl"
       >
         {t("nav.skipToContent")}
       </a>
-      {/* Mobile drawer backdrop */}
       {mobileNavOpen && (
         <div className="fixed inset-0 bg-[#0b1d3a]/50 z-30 md:hidden" onClick={closeMobileNav} aria-hidden="true" />
       )}
 
-      {/* Sidebar — static column on desktop (md+), off-canvas overlay drawer below md */}
       <aside
         ref={mobileNavPanelRef}
         role={mobileNavOpen ? "dialog" : undefined}
@@ -765,9 +596,6 @@ export default function App() {
             return (
               <div key={group.labelKey} className="space-y-0.5">
                 {navExpanded && (
-                  // /70 not /50 (Impeccable shell audit 2026-07-30) — #a8bed8 at 50% opacity on the
-                  // navy sidebar measured 3.22:1, under the 4.5:1 AA floor; /70 clears 5.00:1 while
-                  // staying visibly quieter than the full-opacity nav item text (8.81:1).
                   <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/70">{t(group.labelKey)}</p>
                 )}
                 {items.map(({ key, icon: Icon, labelKey }) => (
@@ -802,7 +630,6 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible print:block">
         <header className="flex items-center gap-2 md:gap-4 px-3 md:px-6 py-3 md:py-4 border-b border-border bg-card min-h-[60px] md:min-h-[68px] relative print:hidden">
           <button ref={mobileNavTriggerRef} onClick={() => setMobileNavOpen(true)} aria-label={t("nav.openMenu")} className="md:hidden text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
@@ -825,17 +652,11 @@ export default function App() {
             onNavigateToTemplate={navigateToTemplate}
             onNavigateToScopeOfWork={navigateToScopeOfWork}
           />
-          {/* User manual — deliberately a labeled gold pill, not just an icon, per direct user
-              request that anyone who can't use the system immediately sees where the manual is. */}
           <a
             href={encodeURI("/คู่มือการใช้งาน TCS ERP.pdf")}
             target="_blank"
             rel="noreferrer"
             aria-label={t("topbar.manual")}
-            // #866d28 not #a07830 (Impeccable shell audit 2026-07-30) — #a07830 measured ~3.7-4.0:1
-            // against this pill's actual backgrounds, under the 4.5:1 AA floor; #866d28 is the same
-            // darkened-gold text variant already used to fix the identical mistake on the Setup
-            // Wizard badge and BrandMark's light-theme subtitle earlier this session.
             className="flex-shrink-0 flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 rounded-full border border-[#c9a84c]/60 bg-[#c9a84c]/10 text-[#866d28] hover:bg-[#c9a84c]/20 hover:border-[#c9a84c] transition-all text-xs font-semibold"
           >
             <BookOpen size={15} className="flex-shrink-0" />
@@ -907,24 +728,9 @@ export default function App() {
           </div>
         </header>
 
-        {/* <main> landmark + tabIndex={-1} (Impeccable shell audit 2026-07-30) — previously a plain
-            div with no landmark role at all; tabIndex={-1} lets the skip link above actually move
-            focus here (not just scroll to it) without adding this container to the normal Tab
-            order. */}
         <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden outline-none print:overflow-visible print:block">
           <ErrorBoundary key={effectiveNav}>
           <Suspense fallback={<PageLoading />}>
-            {/* Dashboard and Audit Log fetch their own data independently (see AREA 2 in the
-                2026-07-14 progressive-loading pass) — they render immediately regardless of any
-                boot-time resource's status. Every other page here is purely prop-driven off the
-                boot-time domain fetch (`loadDomainData`), so it shows a lightweight `SectionLoading`
-                placeholder instead while *its own required resources* (`NAV_RESOURCES`/
-                `pageDataLoading`/`pageDataError` above — not every boot resource) are still in
-                flight — rendering the real page early with empty arrays would otherwise look like a
-                false "no records yet" empty state. Reworked 2026-07-14 (Codex review High Priority
-                fix) from one global flag shared by all nine boot resources to this per-page subset,
-                so e.g. navigating straight to Products no longer waits on unrelated resources like
-                `notifications`/`quotes` that Products never reads. */}
             {effectiveNav === "dashboard"
               ? <DashboardPage currentUserId={currentUser.id} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
               : effectiveNav === "auditLog"

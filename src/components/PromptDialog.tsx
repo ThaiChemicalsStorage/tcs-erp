@@ -1,45 +1,32 @@
 import { useId, useState } from "react";
 import { useDialogA11y } from "../hooks/useDialogA11y";
 
-/**
- * Styled replacement for `window.prompt()` (added 2026-07-29, UX pass) — the native prompt broke
- * the app's visual language entirely (unstyled browser chrome, no Thai font, awkward on mobile)
- * at exactly the moments that matter most (rejecting an approval, numbering a duplicate). Same
- * shell/overlay/button conventions as ConfirmDialog.tsx — reuse this for any single-value text
- * prompt; never reach for `window.prompt` again.
- */
 export interface PromptDialogProps {
   open: boolean;
   title: string;
-  /** Explanatory sentence under the title — keep it short; this is a prompt, not a form. */
   message?: string;
   label: string;
   placeholder?: string;
   confirmLabel: string;
   cancelLabel?: string;
-  /** When set, a blank submission shows this error instead of calling onConfirm. */
   requiredMessage?: string;
-  /** Server/async error from a failed `onConfirm` (e.g. a 409 uniqueness conflict) — shown below
-   * the input instead of/alongside the blank-required error, without closing the dialog or losing
-   * what the user typed. The caller owns clearing it (typically: reset to "" each time the dialog
-   * is reopened). */
   error?: string;
-  /** Textarea instead of a single-line input — for reasons/comments rather than codes. */
   multiline?: boolean;
-  /** Monospace input — for document numbers/codes. */
   mono?: boolean;
   busy?: boolean;
   onConfirm: (value: string) => void;
   onCancel: () => void;
 }
 
+// กล่องโต้ตอบสำหรับกรอกข้อความแทน window.prompt() ของเบราว์เซอร์ ให้สไตล์ตรงกับแอป
+// Styled dialog that replaces the browser's native window.prompt()
 export function PromptDialog(props: PromptDialogProps) {
-  // The form is a separate component mounted only while open, so its input/error state starts
-  // fresh on every open with no reset-in-effect needed (react-hooks/set-state-in-effect).
   if (!props.open) return null;
   return <PromptDialogForm {...props} />;
 }
 
+// ฟอร์มจริงของกล่องโต้ตอบ ทำงานเฉพาะตอนเปิดเท่านั้น เพื่อให้ค่าที่กรอกรีเซ็ตใหม่ทุกครั้ง
+// The actual form, mounted only while open so its input state always starts fresh
 function PromptDialogForm({
   title, message, label, placeholder, confirmLabel, cancelLabel = "ยกเลิก",
   requiredMessage, error: externalError, multiline = false, mono = false, busy = false, onConfirm, onCancel,

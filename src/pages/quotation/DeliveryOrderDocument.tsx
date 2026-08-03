@@ -19,12 +19,16 @@ function toUpdateFields(d: DeliveryOrder): DeliveryOrderUpdateFields {
   return { installments: d.installments };
 }
 
+// สร้างข้อความหัวข้อของงวดชำระเงินหนึ่งงวด (เปอร์เซ็นต์ ชื่องวด และวิธีชำระ)
+// Builds the display title for one payment installment (percentage, label, and payment method).
 function installmentTitle(inst: DeliveryOrderInstallment): string {
   const pctPart = inst.pct !== null ? `${inst.pct}% ` : "";
   const methodPart = inst.paymentType ? ` (${inst.paymentType}${inst.days !== null ? ` ${inst.days} Days` : ""})` : "";
   return `${pctPart}${inst.label || "งวดชำระเงิน"}${methodPart}`;
 }
 
+// การ์ดแก้ไขข้อมูลงวดชำระเงินหนึ่งงวด: เลขที่ วันที่ รายการสินค้าที่ส่งมอบ และ Remark
+// Editor card for one payment installment: document number, date, delivered items, and remark.
 function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: {
   installment: DeliveryOrderInstallment;
   items: DeliveryOrder["items"];
@@ -32,6 +36,8 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
   disabled: boolean;
   onPrint: (() => void) | null;
 }) {
+  // สลับว่ารายการสินค้าใดถูกรวมอยู่ในงวดนี้
+  // Toggles whether an item is included in this installment.
   const toggleItem = (itemId: string) => {
     if (disabled) return;
     const itemIds = installment.itemIds.includes(itemId)
@@ -40,8 +46,6 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
     onChange({ ...installment, itemIds });
   };
 
-  // Ids are namespaced per-installment (this component renders once per installment in a list) so
-  // every label/input pair stays unique across the whole page rather than colliding on a shared id.
   const documentNumberId = `do-installment-${installment.id}-documentNumber`;
   const issueDateId = `do-installment-${installment.id}-issueDate`;
   const itemsHeadingId = `do-installment-${installment.id}-items`;
@@ -125,6 +129,8 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
   );
 }
 
+// หน้าเอกสารใบส่งมอบสินค้า: ดู แก้ไข ส่งขออนุมัติ อนุมัติ ปฏิเสธ สร้างฉบับใหม่ และพิมพ์ตามงวดชำระเงิน
+// Delivery order document page: view, edit, submit/approve/reject, rewrite, and print per installment.
 export function DeliveryOrderDocument({
   deliveryOrderId,
   company,
@@ -141,16 +147,13 @@ export function DeliveryOrderDocument({
 }: {
   deliveryOrderId: string;
   company: Company;
-  /** For the document tour's per-user "seen" tracking (see useModuleTour). */
   currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
-  /** Gates the Rewrite action (added 2026-07-24 with the approval workflow) — `deliveryOrder:create`. */
   canCreate: boolean;
   onBack: () => void;
-  /** Rewrite created a fresh Draft copy — navigate to it (the parent keys this component by id). */
   onRewritten: (newId: string) => void;
   backLabel?: string;
   showToast: (msg: string) => void;
@@ -161,17 +164,11 @@ export function DeliveryOrderDocument({
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"submit" | "finalize" | "withdraw" | "rewrite" | "refresh" | "delete" | null>(null);
-  // Guards against a double-click on Confirm firing the same action twice while the first request
-  // is still in flight (accessibility/correctness hardening pass) — matters most here since these
-  // are largely irreversible transitions (finalize, delete).
   const [actionRunning, setActionRunning] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [printInstallmentId, setPrintInstallmentId] = useState<string | null>(null);
   const [rejectPromptOpen, setRejectPromptOpen] = useState(false);
 
-  // Print fires from an effect so the just-set `printInstallmentId` has already committed to the
-  // DOM (scoping DeliveryOrderPrintDocument to that one milestone's page) before the dialog opens;
-  // the browser's own afterprint event resets it once the dialog closes.
   useEffect(() => {
     if (!printInstallmentId) return;
     const reset = () => setPrintInstallmentId(null);
@@ -186,20 +183,11 @@ export function DeliveryOrderDocument({
       .then((d) => { if (!cancelled) setDeliveryOrder(d); })
       .catch((err) => {
         if (cancelled) return;
-        // Surface the server's own message (404/403/etc.) instead of always showing the same
-        // generic string, consistent with how every mutation error in this file already behaves.
         setLoadError(err instanceof ApiError ? err.message : "ไม่สามารถโหลดข้อมูลใบส่งมอบสินค้าได้");
       });
     return () => { cancelled = true; };
   }, [deliveryOrderId, reloadKey]);
 
-  // Document tour (added 2026-07-29) — the auto-fire waits until the record has loaded AND at
-  // least one installment card is actually on screen: a DO created from an SOW with an empty (or
-  // deposit-only) payment schedule has `installments: []`, and firing there would burn the
-  // one-time attempt narrating per-installment cards over the "no installments yet" warning.
-  // (The `data-tour` anchor is likewise only present on the non-empty branch, so a manual replay
-  // in the empty state skips that step instead of highlighting the warning.) The toolbar replay
-  // button restarts the tour any time.
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="dodoc-actions"]', popover: { title: t("tour.dodoc.actions.title"), description: t("tour.dodoc.actions.desc"), side: "bottom" } },
     { element: '[data-tour="dodoc-installments"]', popover: { title: t("tour.dodoc.installments.title"), description: t("tour.dodoc.installments.desc"), side: "top" } },
@@ -208,9 +196,6 @@ export function DeliveryOrderDocument({
     autoStart: !!deliveryOrder && deliveryOrder.installments.length > 0,
   });
 
-  // Both branches below keep a minimal toolbar (just the back button) visible instead of a bare
-  // full-page block — accessibility/UX hardening pass: previously a hung or repeatedly-failing
-  // fetch left the user with no in-app way back except the retry button.
   if (loadError) {
     return (
       <div className="flex-1 overflow-y-auto">
@@ -248,10 +233,14 @@ export function DeliveryOrderDocument({
   const isDraft = deliveryOrder.status === "Draft";
   const editable = canEdit && isDraft;
 
+  // แทนที่ข้อมูลงวดชำระเงินหนึ่งงวดในรายการงวดทั้งหมด
+  // Replaces one installment's data within the full installments list.
   const updateInstallment = (id: string, next: DeliveryOrderInstallment) => {
     setDeliveryOrder((prev) => (prev ? { ...prev, installments: prev.installments.map((i) => (i.id === id ? next : i)) } : prev));
   };
 
+  // บันทึกใบส่งมอบสินค้าฉบับร่างไปยังเซิร์ฟเวอร์
+  // Saves the draft delivery order to the server.
   const save = async () => {
     if (!deliveryOrder) return;
     try {
@@ -266,8 +255,8 @@ export function DeliveryOrderDocument({
     }
   };
 
-  // Each payment milestone prints as its own independent Delivery Note — only the clicked
-  // installment's items/เลขที่/วันที่/Remark ever reach the printed document, never a sibling's.
+  // เตรียมพิมพ์ใบส่งมอบสินค้าเฉพาะงวดที่เลือก โดยต้องมีรายการสินค้าอย่างน้อย 1 รายการ
+  // Prepares to print the delivery note for one installment; requires at least one selected item.
   const handlePrintInstallment = (installment: DeliveryOrderInstallment) => {
     if (installment.itemIds.length === 0) {
       showToast("กรุณาเลือกรายการสินค้าอย่างน้อย 1 รายการในงวดนี้ก่อนพิมพ์");
@@ -276,8 +265,8 @@ export function DeliveryOrderDocument({
     setPrintInstallmentId(installment.id);
   };
 
-  /** Comment collected via the styled PromptDialog (2026-07-29 UX pass, previously a jarring
-   * native `window.prompt`) — same convention as ScopeOfWorkDocument.tsx's reject. */
+  // ปฏิเสธการอนุมัติพร้อมเหตุผล แล้วตีกลับใบส่งมอบสินค้าเป็นฉบับร่าง
+  // Rejects the approval with a comment, sending the delivery order back to draft.
   const confirmReject = async (comment: string) => {
     if (!deliveryOrder) return;
     setRejectPromptOpen(false);
@@ -290,6 +279,8 @@ export function DeliveryOrderDocument({
     }
   };
 
+  // ดำเนินการตามคำสั่งที่ผู้ใช้ยืนยันในไดอะล็อก (ส่งขออนุมัติ, อนุมัติ, ถอนคำขอ, สร้างฉบับใหม่, อัปเดตข้อมูล, ลบ)
+  // Runs the action the user confirmed in the dialog (submit, finalize, withdraw, rewrite, refresh, or delete).
   const runConfirmedAction = async () => {
     if (!deliveryOrder || !confirmAction || actionRunning) return;
     setActionRunning(true);
@@ -337,17 +328,12 @@ export function DeliveryOrderDocument({
 
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
-      {/* Toolbar */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
         <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {backLabel}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
         <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{deliveryOrder.scopeNumber}</span>
-        {/* Background/border keep the status hue; text is a darkened variant of the same hue
-            (accessibility hardening pass, mirrors src/lib/quotes.tsx's statusStyle) — the original
-            scheme reused one hex for bg/10 + text + border/20, which put mid-tone text directly on
-            a ~10%-tint-of-itself background and failed WCAG AA contrast (as low as 2.4:1). */}
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
           isDraft ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20"
           : deliveryOrder.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"
@@ -402,7 +388,6 @@ export function DeliveryOrderDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
-        {/* Header card */}
         <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">ใบส่งมอบสินค้าและบริการ</h1>

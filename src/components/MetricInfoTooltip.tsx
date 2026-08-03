@@ -1,12 +1,8 @@
 import { useState } from "react";
 import { Info } from "lucide-react";
 
-/**
- * Small "what does this metric mean?" affordance for KPI cards/columns whose name alone isn't
- * self-explanatory to a non-technical user (Expected Sales, Win Rate, Active/Non-Active Jobs,
- * Average Deal Size, ...). Click-to-toggle (not hover-only) so it works the same on touch devices
- * and via keyboard, not just a mouse.
- */
+// ปุ่มไอคอนเล็ก ๆ สำหรับกดดูคำอธิบายความหมายของตัวชี้วัด (KPI) แบบคลิกเปิด/ปิด
+// Small info-icon button that toggles a tooltip explaining a KPI's meaning
 export function MetricInfoTooltip({ label, text }: { label: string; text: string }) {
   const [open, setOpen] = useState(false);
   return (

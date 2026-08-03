@@ -8,15 +8,8 @@ import { statusLabelKey } from "../lib/quotes";
 import { useI18n } from "../lib/i18n";
 
 const MIN_QUERY_LENGTH = 2;
-/** Must stay in sync with `MAX_QUERY_LENGTH` in api/_lib/searchHandler.ts — this is a native HTML
- * `maxLength` constraint (defense-in-depth, bypassable by a modified client), the server-side
- * check there is the real enforcement. Added 2026-07-14, Codex review High Priority fix: the
- * endpoint previously had no upper bound, letting an oversized query force an expensive
- * multi-collection regex scan. */
 const MAX_QUERY_LENGTH = 100;
 const DEBOUNCE_MS = 300;
-/** Desktop dropdown vs. mobile full-screen panel render the same result rows with different DOM
- * `id` namespaces (two live instances would otherwise collide on the same `id`) — see `rowId()`. */
 const DESKTOP_LISTBOX_ID = "global-search-listbox-desktop";
 const MOBILE_LISTBOX_ID = "global-search-listbox-mobile";
 
@@ -37,7 +30,8 @@ function rowId(idPrefix: string, idx: number): string {
   return `global-search-option-${idPrefix}-${idx}`;
 }
 
-/** Wraps every case-insensitive occurrence of `query` inside `text` in a highlighted `<mark>` — simple substring highlighting only, no fuzzy-match spans (matches the task's "highlight if simple and safe" scope). */
+// ไฮไลต์ข้อความที่ตรงกับคำค้นหาแบบไม่สนตัวพิมพ์เล็ก-ใหญ่ ด้วย <mark>
+// Wraps every case-insensitive match of the query in a highlighted <mark>
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!text) return null;
   const trimmed = query.trim();
@@ -63,23 +57,8 @@ function fmtDate(iso: string): string {
   }
 }
 
-/**
- * Global Search (added 2026-07-14) — replaces the previously non-functional topbar search input
- * (no `value`/`onChange` at all, plus a generic template placeholder mentioning purchase
- * orders/SKU/vendors that don't match this ERP). Debounced (300ms), cancels stale in-flight
- * requests via `AbortController`, keeps the previous result set visible (with a small inline
- * spinner) while a new query is loading rather than flashing to empty — see
- * docs/UI_GUIDELINES.md "Global Search" for the full behavior writeup.
- *
- * Every result category is already RBAC-filtered server-side (`api/_lib/searchHandler.ts`) — this
- * component just renders whatever groups the response actually contains; a category the caller
- * lacks permission for is indistinguishable here from a genuine zero-result search, by design.
- *
- * **2026-07-14, Codex review fix pass**: added a real mobile/narrow-viewport entry point (a
- * `lg:hidden` trigger button opening a full-screen panel — previously the entire feature was
- * `hidden lg:flex` with no visible affordance below 1024px, and Ctrl/Cmd+K silently focused an
- * invisible input) and combobox/listbox ARIA semantics with active-row scroll-into-view.
- */
+// ช่องค้นหาส่วนกลางของแอป ดีบาวซ์การค้นหา ยกเลิกคำขอเก่าอัตโนมัติ และรองรับทั้งเดสก์ท็อป/มือถือ
+// The app's global search box — debounced, cancels stale requests, works on both desktop and mobile
 export function GlobalSearch({
   onNavigateToQuotation,
   onNavigateToCustomer,
@@ -94,14 +73,7 @@ export function GlobalSearch({
   onNavigateToProduct: (id: string) => void;
   onNavigateToUser: (id: string) => void;
   onNavigateToPage: (navKey: string, action?: "create" | "categories") => void;
-  /** Opens the Create Quotation wizard with this template's Job Type + Template preselected (see
-   * `QuotationTemplateWizard.tsx`'s `initialSelection` prop) rather than just its preview — a
-   * Sales user searching for "Wet Scrubber" almost always wants to start a quotation from it, not
-   * merely look at it. */
   onNavigateToTemplate: (jobTypeCode: string, templateId: string) => void;
-  /** Opens the source quotation's detail view then jumps straight into this Scope of Work's editor
-   * — added 2026-07-15, Codex review High Priority fix (Scope of Work previously had no Global
-   * Search integration at all). See `QuotationPage.tsx`'s `initialScopeOfWorkDeepLink`. */
   onNavigateToScopeOfWork: (quotationId: string, scopeOfWorkId: string) => void;
 }) {
   const { t, lang } = useI18n();
@@ -118,14 +90,8 @@ export function GlobalSearch({
 
   const trimmedQuery = query.trim();
 
-  // setLoading(true)/setError(false)/setResults(null) below all live in the *handlers* that
-  // trigger them (here, and in `retry` further down) rather than at the top of the effect — the
-  // same pattern DashboardPage.tsx's handleFiltersChange/retry already use, for the same reason:
-  // calling setState synchronously as the first thing an effect does causes an avoidable extra
-  // render cascade (react-hooks/set-state-in-effect). `results` is deliberately NOT cleared just
-  // because a new search started (only when the query drops below the minimum length) — the
-  // previous results stay on screen with `loading` driving a small spinner instead of a blank
-  // flash between keystrokes, per the "previous data stays visible during refetch" requirement.
+  // อัปเดตคำค้นหา และตั้งสถานะโหลด/error ตามความยาวของคำที่พิมพ์
+  // Updates the query and sets loading/error state based on the typed length
   const handleQueryChange = (value: string) => {
     setQuery(value);
     if (value.trim().length < MIN_QUERY_LENGTH) {
@@ -140,12 +106,6 @@ export function GlobalSearch({
   };
   const retry = () => { setLoading(true); setError(false); setRetryToken((n) => n + 1); };
 
-  // Debounced fetch + stale-request cancellation combined in one effect: the timer delays the
-  // request itself (debounce), and the AbortController cancels it if `query` changes again before
-  // either the timer or the fetch has resolved (stale-response guard). Every setState call here
-  // happens inside an async callback (the timeout, then the fetch's .then/.catch) — never
-  // synchronously in the effect body itself. `query` is capped client-side at MAX_QUERY_LENGTH via
-  // the input's own `maxLength`, so `trimmedQuery` here can never itself exceed the server's limit.
   useEffect(() => {
     if (trimmedQuery.length < MIN_QUERY_LENGTH) return;
     const controller = new AbortController();
@@ -153,7 +113,7 @@ export function GlobalSearch({
       fetchGlobalSearch(trimmedQuery, controller.signal)
         .then((r) => { setResults(r); setLoading(false); setActiveIndex(-1); })
         .catch(() => {
-          if (controller.signal.aborted) return; // superseded by a newer query — not a real error
+          if (controller.signal.aborted) return;
           setLoading(false);
           setError(true);
         });
@@ -174,9 +134,6 @@ export function GlobalSearch({
     ];
   }, [results]);
 
-  // Precomputed once per `results` change instead of a mutable counter threaded through render —
-  // each group's starting position in `flatItems`, so keyboard nav (`activeIndex`) and click
-  // handlers can address any row by a single flat index without a shared mutable variable.
   const groupOffsets = useMemo(() => {
     const r = results;
     let o = 0;
@@ -190,9 +147,6 @@ export function GlobalSearch({
     return { quotations, customers, products, templates, scopeOfWorks, pages, users };
   }, [results]);
 
-  // Active row scroll-into-view (Codex review Medium fix) — harmless no-op for whichever panel
-  // (desktop/mobile) isn't currently rendered/visible, since `document.getElementById` simply
-  // returns null for an id that isn't mounted.
   useEffect(() => {
     if (activeIndex < 0) return;
     document.getElementById(rowId("desktop", activeIndex))?.scrollIntoView({ block: "nearest" });
@@ -200,11 +154,10 @@ export function GlobalSearch({
   }, [activeIndex]);
 
   const hasAnyResults = flatItems.length > 0;
-  // Shown as soon as the box is focused/clicked, even before typing — the "type at least 2
-  // characters" hint (below) is itself the dropdown's content in that state, per the requirement
-  // that clicking/focusing the search box shows a dropdown, not just typing into it.
   const showDropdown = open;
 
+  // เปิดหน้าที่เกี่ยวข้องตามประเภทของผลลัพธ์ที่เลือก แล้วปิดกล่องค้นหาและล้างคำค้นหา
+  // Navigates to the target page based on the selected result's type, then closes and clears the search box
   const activate = (item: FlatItem) => {
     if (item.type === "quotation") onNavigateToQuotation(item.data.id);
     else if (item.type === "customer") onNavigateToCustomer(item.data.id);
@@ -218,6 +171,8 @@ export function GlobalSearch({
     setQuery("");
   };
 
+  // จัดการปุ่มลูกศร/Enter/Escape สำหรับไล่ดูและเลือกผลลัพธ์ด้วยคีย์บอร์ด
+  // Handles arrow keys/Enter/Escape for keyboard navigation and selection of results
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, isMobilePanel: boolean) => {
     if (e.key === "Escape") {
       setOpen(false);
@@ -240,10 +195,6 @@ export function GlobalSearch({
     }
   };
 
-  // Ctrl/Cmd+K focuses whichever search UI is actually visible at the current viewport width — a
-  // matchMedia check against the same 1024px `lg` breakpoint the two UIs render at, rather than
-  // always targeting the desktop input, which previously focused an invisible `display:none`
-  // element below `lg` (2026-07-14, Codex review High Priority fix).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -261,12 +212,12 @@ export function GlobalSearch({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // Focuses the mobile input as soon as the full-screen panel mounts — the panel has no other way
-  // to receive focus (there's no persistent input to already be focused, unlike the desktop box).
   useEffect(() => {
     if (mobileOpen) mobileInputRef.current?.focus();
   }, [mobileOpen]);
 
+  // เรนเดอร์กลุ่มผลลัพธ์หนึ่งกลุ่ม (พร้อมป้ายชื่อและไอคอน) ข้ามการแสดงผลถ้าไม่มีรายการ
+  // Renders one labeled result group with its icon; skips rendering when the group is empty
   const renderGroup = <T,>(
     idPrefix: string, label: string, icon: React.ReactNode, items: T[], startIndex: number,
     renderItem: (item: T, isActive: boolean, id: string, onClick: () => void) => React.ReactNode,
@@ -289,9 +240,8 @@ export function GlobalSearch({
   const rowCls = (isActive: boolean) =>
     `w-full text-left px-3 py-2 cursor-pointer transition-colors ${isActive ? "bg-[#c9a84c]/10" : "hover:bg-secondary/50"}`;
 
-  /** Same result content rendered into both the desktop dropdown and the mobile full-screen panel
-   * — `idPrefix` keeps each instance's row/listbox `id`s distinct so the two never collide in the
-   * DOM (only one is ever actually visible at a given viewport width, but both may be mounted). */
+  // เรนเดอร์แผงผลลัพธ์ ใช้ร่วมกันทั้งเดสก์ท็อปและมือถือ โดยแยก id ตาม idPrefix ไม่ให้ชนกัน
+  // Renders the results panel, shared by desktop and mobile, with ids namespaced by idPrefix so they don't collide
   const renderResultsPanel = (idPrefix: string) => (
     <div id={idPrefix === "desktop" ? DESKTOP_LISTBOX_ID : MOBILE_LISTBOX_ID} role="listbox" aria-label={t("topbar.searchAria")} className="flex-1 overflow-y-auto">
       {trimmedQuery.length < MIN_QUERY_LENGTH ? (
@@ -390,7 +340,6 @@ export function GlobalSearch({
 
   return (
     <>
-      {/* Desktop (lg and up): inline input + anchored dropdown, unchanged visual chrome from before. */}
       <div className="hidden lg:flex items-center relative ml-auto">
         <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-72 focus-within:border-[#c9a84c]/40 transition-colors">
           <Search size={14} className="text-muted-foreground flex-shrink-0" />
@@ -427,9 +376,6 @@ export function GlobalSearch({
         )}
       </div>
 
-      {/* Mobile/tablet (below lg): icon-only trigger + full-screen search takeover — added
-          2026-07-14, Codex review High Priority fix. Previously Global Search had no visible
-          affordance at all below the `lg` breakpoint. */}
       <button
         onClick={() => setMobileOpen(true)}
         aria-label={t("topbar.searchAria")}

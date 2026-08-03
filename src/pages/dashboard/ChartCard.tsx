@@ -1,3 +1,5 @@
+// การ์ดกรอบมาตรฐานสำหรับส่วนต่างๆ ของแดชบอร์ด พร้อมหัวข้อและปุ่มการทำงานเสริม
+// Standard card wrapper for dashboard sections, with a title and optional actions
 export function ChartCard({ title, sub, children, className = "", actions }: { title: string; sub?: string; children: React.ReactNode; className?: string; actions?: React.ReactNode }) {
   return (
     <div className={`bg-card border border-border rounded-xl p-5 ${className}`}>

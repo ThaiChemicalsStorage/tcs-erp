@@ -12,14 +12,15 @@ export interface ProductPickerModalProps {
   onClose: () => void;
 }
 
-// The form is a separate component mounted only while `open` — same pattern as PromptDialog.tsx —
-// so useDialogA11y's Escape/focus-trap effect only ever runs while the modal actually exists,
-// rather than sitting registered globally for this component's whole (always-mounted) lifetime.
+// มอดัลเลือกสินค้าจากแคตตาล็อก จะ mount ฟอร์มจริงเฉพาะตอนเปิดเท่านั้น
+// Product picker modal — only mounts the inner form while open.
 export function ProductPickerModal(props: ProductPickerModalProps) {
   if (!props.open) return null;
   return <ProductPickerModalForm {...props} />;
 }
 
+// ฟอร์มค้นหาและเลือกสินค้าจากรายการสินค้าที่ยังไม่ถูกเก็บถาวร
+// Form for searching and selecting a product from the non-archived catalog.
 function ProductPickerModalForm({
   products,
   categories,

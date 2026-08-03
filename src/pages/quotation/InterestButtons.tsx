@@ -2,6 +2,8 @@ import { ThumbsUp, ThumbsDown } from "lucide-react";
 import type { QuoteInterest } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 
+// ปุ่มสำหรับติดตั้งสถานะความสนใจ (สนใจ/ไม่สนใจ) ของใบเสนอราคา
+// Toggle buttons for marking a quote's interest status (interested / not interested)
 export function InterestButtons({ value, onChange }: { value: QuoteInterest; onChange: (v: QuoteInterest) => void }) {
   const { t } = useI18n();
   return (

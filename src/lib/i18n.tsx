@@ -4,12 +4,6 @@ export type Lang = "th" | "en";
 
 const STORAGE_KEY = "tcs_erp_lang";
 
-/**
- * Scope note: this dictionary only covers strings introduced/touched by the
- * 2026-07 production-readiness pass (Dashboard, empty states, Settings toggle).
- * The rest of the app's existing Thai UI text is intentionally left as-is —
- * full app-wide translation is tracked as a follow-up in docs/TODO.md.
- */
 const translations = {
   th: {
     "settings.language": "ภาษา",
@@ -2350,6 +2344,8 @@ const translations = {
 
 export type TranslationKey = keyof typeof translations.th;
 
+// อ่านค่าภาษาที่ผู้ใช้เลือกไว้จาก localStorage (ค่าเริ่มต้นคือไทย)
+// Reads the user's stored language preference from localStorage (defaults to Thai)
 function readStoredLang(): Lang {
   if (typeof window === "undefined") return "th";
   const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -2364,6 +2360,8 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
+// จัดเตรียม context ภาษาให้ทั้งแอป พร้อมบันทึกค่าที่เลือกไว้ใน localStorage
+// Provides the language context to the app and persists the chosen language to localStorage
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(readStoredLang);
 
@@ -2371,10 +2369,6 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem(STORAGE_KEY, lang);
   }, [lang]);
 
-  // <html lang> never tracked the user's actual language choice — every screen after switching to
-  // English was still announced to assistive tech as Thai content (Impeccable shell audit
-  // 2026-07-30, WCAG 3.1.1). Set once on mount too (not just on change), since `lang` may already
-  // be "en" from localStorage on a fresh page load, before any setLang call ever fires.
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
@@ -2391,13 +2385,16 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
+// เรียกใช้ context ภาษาปัจจุบัน — ต้องอยู่ภายใน I18nProvider เท่านั้น
+// Hook to access the current language context — must be used within I18nProvider
 export function useI18n(): I18nContextValue {
   const ctx = useContext(I18nContext);
   if (!ctx) throw new Error("useI18n must be used within I18nProvider");
   return ctx;
 }
 
-/** Non-hook translation lookup for plain functions (e.g. apiClient.ts, session.ts) that can't call useI18n(). Reads the persisted language directly from localStorage. */
+// ฟังก์ชันแปลภาษาสำหรับใช้นอก React component (อ่านภาษาจาก localStorage โดยตรง)
+// Non-hook translation lookup for plain functions that can't call useI18n()
 export function translate(key: TranslationKey): string {
   const lang = readStoredLang();
   return translations[lang][key] ?? translations.th[key] ?? key;

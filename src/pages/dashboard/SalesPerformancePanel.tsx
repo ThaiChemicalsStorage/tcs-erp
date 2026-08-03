@@ -3,14 +3,8 @@ import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 import { fmtShort, fmtPercent, fmtDaysOrDash } from "./format";
 
-/**
- * Efficiency/rate metrics that don't need their own KPI card — a compact label/value grid inside
- * one `ChartCard`, not 8 more same-size tiles. Added 2026-07-13 (third Dashboard simplification
- * pass) pulling these fields out of the old flat `KpiGrid.tsx` (removed). Active/Non-Active
- * Quotations added 2026-07-13 (fifth pass) alongside the original 6 rate/cycle-time metrics —
- * also shown in `QuotationStatusSummary`'s table, kept here too since the requested layout
- * explicitly lists them as part of this panel.
- */
+// แสดงตัวชี้วัดประสิทธิภาพการขาย (อัตราชนะ/แพ้/ปิดการขาย ฯลฯ) เป็นตารางกริดกะทัดรัด
+// Renders sales efficiency metrics (win/lose/conversion rates, etc.) as a compact grid
 export function SalesPerformancePanel({ kpis }: { kpis: DashboardKpis }) {
   const { t } = useI18n();
   const days = t("dashboard.unit.days");

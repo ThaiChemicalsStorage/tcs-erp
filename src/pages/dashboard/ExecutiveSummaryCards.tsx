@@ -4,6 +4,8 @@ import { useI18n } from "../../lib/i18n";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { fmtShort } from "./format";
 
+// การ์ดสรุปตัวเลขหนึ่งใบ พร้อมไอคอน คำอธิบายสั้น และ tooltip ช่วยเหลือ (ถ้ามี)
+// A single KPI card with icon, value, helper caption, and an optional info tooltip.
 function SummaryCard({ title, value, icon: Icon, accent, help, helper }: { title: string; value: string; icon: LucideIcon; accent: string; help?: string; helper: string }) {
   return (
     <div className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all duration-200">
@@ -22,24 +24,8 @@ function SummaryCard({ title, value, icon: Icon, accent, help, helper }: { title
   );
 }
 
-/**
- * The 4 numbers an office user needs first, at a glance — deliberately just 4, not a wall of
- * cards (2026-07-13, third simplification pass: direct user feedback that a 22-card flat grid
- * still "feels like a generated template" and "everything looks equally important"). Everything
- * else `DashboardKpis` computes now lives in a compact panel/list further down the page instead
- * of a same-size card: see `QuotationStatusSummary.tsx` (Won/Lost/Active/Non-Active),
- * `SalesPerformancePanel.tsx` (rates + cycle times), `ActivityFollowUpSummary.tsx` (pending
- * approvals/follow-ups/expired/new customers). `totalCustomers`/`totalLeads`/`totalProducts`/
- * `repeatCustomers` are no longer given their own dashboard tile at all — they're still computed
- * server-side (untouched), just not part of this executive-overview spec; total customers/repeat
- * customers remain visible in the richer `CustomerAnalytics.tsx` table further down the page, and
- * total products on the Products page itself.
- *
- * **2026-07-13, P'Keng/P'Kee requirement**: each card now shows a one-line `helper` caption below
- * the value (was previously bare value + label, with an (i) tooltip only on Expected Sales) —
- * the business requirement calls for explicit helper text under all 4, not just the one with a
- * non-obvious calculation.
- */
+// การ์ด KPI หลัก 4 ใบที่ผู้ใช้ต้องเห็นก่อนสิ่งอื่น: จำนวน/มูลค่าใบเสนอราคา ยอดขายที่ปิดแล้ว และยอดขายที่คาดว่าจะได้
+// The 4 executive KPI cards a user needs first: quotation count/value, closed sales, expected sales.
 export function ExecutiveSummaryCards({ kpis }: { kpis: DashboardKpis }) {
   const { t } = useI18n();
   const cards: { title: string; value: string; icon: LucideIcon; accent: string; help?: string; helper: string }[] = [

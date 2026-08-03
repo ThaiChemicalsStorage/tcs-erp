@@ -6,6 +6,8 @@ import { fmtShort, fmtPercent } from "./format";
 
 type SortKey = "totalValue" | "revenue" | "count" | "winRate" | "avgDealSize";
 
+// ตารางวิเคราะห์ประเภทงาน เรียงลำดับได้ตามมูลค่า/จำนวน/อัตราชนะ/ขนาดดีลเฉลี่ย
+// Sortable table of job-type analytics — total value, count, win rate, and average deal size.
 export function JobTypeAnalytics({ jobTypeAnalytics }: { jobTypeAnalytics: JobTypeStat[] }) {
   const { t } = useI18n();
   const [sortKey, setSortKey] = useState<SortKey>("totalValue");

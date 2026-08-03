@@ -20,10 +20,14 @@ interface RoleFormState {
   permissions: Permission[];
 }
 
+// สร้างค่าเริ่มต้นว่างสำหรับฟอร์มบทบาท
+// Returns an empty role form state
 function emptyForm(): RoleFormState {
   return { name: "", description: "", permissions: [] };
 }
 
+// หน้าจัดการบทบาทและสิทธิ์การใช้งาน แสดงรายการ สร้าง แก้ไข และลบบทบาท
+// Manages roles and permissions — list, create, edit, and delete roles
 export function RoleManagementPage({
   roles,
   onRolesChange,
@@ -34,14 +38,11 @@ export function RoleManagementPage({
   roles: Role[];
   onRolesChange: (roles: Role[]) => void;
   users: User[];
-  /** For the list view's one-time guided tour "seen" tracking (see useModuleTour). */
   currentUserId: string;
   onAudit: (action: string, details: string) => void;
 }) {
   const { t } = useI18n();
 
-  // Page tour (added 2026-07-29) — same one-time-per-user auto-start + replay-button convention
-  // as the other list pages' tours.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="roles-create"]', popover: { title: t("tour.roles.create.title"), description: t("tour.roles.create.desc"), side: "bottom" } },
     { element: '[data-tour="roles-list"]', popover: { title: t("tour.roles.list.title"), description: t("tour.roles.list.desc"), side: "top" } },
@@ -60,12 +61,12 @@ export function RoleManagementPage({
   const editingRole = roles.find((r) => r.key === editingKey);
 
   const startCreate = () => { setForm(emptyForm()); setError(""); setEditingKey(null); setView("create"); };
+  // เริ่มแก้ไขบทบาท เปิดโหมดดูอย่างเดียวถ้าเป็น Super Admin เท่านั้น
+  // Starts editing a role — Super Admin opens in view-only mode, other roles are editable
   const startEdit = (r: Role) => {
     setForm({ name: r.name, description: r.description, permissions: [...r.permissions] });
     setEditingKey(r.key);
     setError("");
-    // Only the Super Admin role itself is fully locked (view-only). Other system roles
-    // (e.g. Administrator) are editable — just with their name locked, see nameLocked below.
     setView(r.isSuperAdmin ? "view" : "edit");
   };
 
@@ -74,6 +75,8 @@ export function RoleManagementPage({
     setForm((f) => ({ ...f, permissions: f.permissions.includes(p) ? f.permissions.filter((x) => x !== p) : [...f.permissions, p] }));
   };
 
+  // บันทึกฟอร์มบทบาท ตรวจสอบชื่อซ้ำก่อนสร้างหรืออัปเดตบทบาท
+  // Submits the role form — validates the name then creates or updates the role
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { setError(t("roles.errorNameRequired")); return; }
@@ -102,6 +105,8 @@ export function RoleManagementPage({
 
   const usersWithRole = (roleKey: string) => users.filter((u) => u.roleKey === roleKey).length;
 
+  // ยืนยันการลบบทบาทที่เลือกไว้
+  // Confirms and deletes the currently targeted role
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     try {
@@ -116,7 +121,6 @@ export function RoleManagementPage({
   };
 
   const readOnly = view === "view";
-  /** Name can't change for any built-in role (Super Admin or Administrator) — permissions/description still can, for non-Super-Admin system roles. */
   const nameLocked = readOnly || !!editingRole?.isSystem;
 
   if (view !== "list") {

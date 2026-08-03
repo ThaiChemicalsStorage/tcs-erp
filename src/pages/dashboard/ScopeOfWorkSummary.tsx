@@ -3,6 +3,8 @@ import type { ScopeOfWorkSummary as ScopeOfWorkSummaryData } from "../../lib/das
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 
+// การ์ดแสดงไอคอนและจำนวนตัวเลขหนึ่งค่าพร้อมป้ายกำกับ
+// Renders a single icon + count tile with a label
 function Tile({ icon: Icon, label, count, accent }: { icon: LucideIcon; label: string; count: number; accent: string }) {
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border border-border min-w-0">
@@ -17,14 +19,8 @@ function Tile({ icon: Icon, label, count, accent }: { icon: LucideIcon; label: s
   );
 }
 
-/**
- * Company-wide Scope of Work document counts (Total/Draft/Final) — added to the "supporting
- * detail" section per a user request to show how many SOW documents exist. Deliberately not a 5th
- * `ExecutiveSummaryCards` tile: that row is a documented, repeatedly-reaffirmed "exactly 4 cards"
- * business requirement (see ExecutiveSummaryCards.tsx), so a new metric goes in supporting detail
- * instead, same tier as `ActivityFollowUpSummary`. Not rendered at all when `stats.scopeOfWork` is
- * null (caller lacks scopeOfWork:view) — same pattern as `approvalDashboard`/`activityTimeline`.
- */
+// สรุปจำนวนเอกสาร Scope of Work ทั้งหมดของบริษัท แยกตามสถานะ
+// Shows company-wide Scope of Work document counts, broken down by status
 export function ScopeOfWorkSummary({ data }: { data: ScopeOfWorkSummaryData }) {
   const { t } = useI18n();
   const items: { icon: LucideIcon; label: string; count: number; accent: string }[] = [
@@ -32,8 +28,6 @@ export function ScopeOfWorkSummary({ data }: { data: ScopeOfWorkSummaryData }) {
     { icon: FilePen, label: t("dashboard.scopeOfWork.draft"), count: data.draft, accent: "#5a7299" },
     { icon: FileClock, label: t("dashboard.scopeOfWork.pending"), count: data.pending, accent: "#e08a3c" },
     { icon: FileCheck2, label: t("dashboard.scopeOfWork.final"), count: data.final, accent: "#2aa36b" },
-    // "งานที่ยังไม่มี PO" — added 2026-07-29 (the "ทวง PO" feature). `?? 0` guards a cached/stale
-    // API response from before the field existed.
     { icon: BellRing, label: t("dashboard.scopeOfWork.noPo"), count: data.noPo ?? 0, accent: "#e08a3c" },
   ];
   return (

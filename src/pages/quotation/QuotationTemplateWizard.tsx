@@ -9,20 +9,6 @@ import { applyTemplateToQuoteDraft, type AppliedTemplateDraft } from "./applyTem
 import { TemplatePreview } from "../../components/TemplatePreview";
 import { useI18n } from "../../lib/i18n";
 
-/**
- * "สร้างใบเสนอราคา" pre-form wizard — added 2026-07-14 per the P'Suki/P'Keng requirement that a
- * new quotation must start from a Job Type + Template choice, not a blank form. See
- * docs/MODULES/QuotationTemplates.md "Required Quotation Creation Flow." This component only
- * decides *what* the new quotation should start with; `QuoteDocument.tsx` (via the
- * `templateSnapshot` prop) is what actually seeds the form once the wizard completes.
- *
- * Step count is dynamic, not fixed at 4: a Job Type with exactly one active template (TA/BF/LI)
- * skips the template-choice screen entirely and goes straight to Preview, per the task's explicit
- * "skip an unnecessary second selection since only one active template" instruction. A Job Type
- * with 2+ active templates (SC: Wet Scrubber / Activated Carbon) shows the choice screen. A Job
- * Type with zero active templates shows the empty state (still counted as the "template" step).
- */
-
 export interface QuotationWizardResult {
   jobTypeCode: string;
   jobTypeName: string;
@@ -37,6 +23,8 @@ export interface QuotationWizardResult {
 
 type Step = "jobType" | "template" | "preview";
 
+// ตัวช่วยสร้างใบเสนอราคาแบบเป็นขั้นตอน: เลือกประเภทงาน -> เลือก Template -> ดูตัวอย่าง ก่อนเริ่มแบบฟอร์มจริง
+// Step-by-step wizard for starting a new quote: pick job type -> pick template -> preview, before the real form
 export function QuotationTemplateWizard({
   jobTypes,
   onComplete,
@@ -50,27 +38,12 @@ export function QuotationTemplateWizard({
   onComplete: (result: QuotationWizardResult) => void;
   onCancel: () => void;
   showToast: (msg: string) => void;
-  /** Set by a Global Search "Template ใบเสนอราคา" result click (see `GlobalSearch.tsx` /
-   * `QuotationPage.tsx`) — jumps straight to that template's Preview step instead of starting at
-   * Step 1. Consumed once at mount only; a stale/unmatched code+id (e.g. the template was
-   * deactivated between the search result loading and the click) just falls back to the normal
-   * Step 1 job-type grid rather than erroring. */
   initialSelection?: { jobTypeCode: string; templateId: string } | null;
-  /** Whether the current user holds `quotationTemplates:create` (or `:manage`) — gates the "สร้าง
-   * Template ใหม่สำหรับประเภทงานนี้" affordance on the template-choice/empty-state screens, per the
-   * spec's "Do Not Confuse 'OTHER' Job Type with Blank Template" requirement: this button routes to
-   * the real Template Management create flow, never to "เริ่มจากแบบฟอร์มเปล่า". */
   canCreateTemplate?: boolean;
   onCreateTemplateForJobType?: (jobTypeCode: string, jobTypeName: string) => void;
 }) {
   const { t } = useI18n();
 
-  // Resolved once, straight from props, for the lazy `useState` initializers below — NOT a
-  // `useEffect` synchronous setState (that pattern is flagged by react-hooks/set-state-in-effect;
-  // see the fetch-triggering effect further down for why). Falls back to `null` for a
-  // stale/unmatched `initialSelection.jobTypeCode` (e.g. the Job Type was deactivated between the
-  // search result loading and the click), which naturally makes every initializer below fall back
-  // to the normal Step 1 job-type grid.
   const initialJobType = initialSelection
     ? jobTypes.find((j) => j.code === initialSelection.jobTypeCode && j.isActive) ?? null
     : null;
@@ -87,17 +60,6 @@ export function QuotationTemplateWizard({
 
   const activeJobTypesUnsorted = jobTypes.filter((jt) => jt.isActive);
 
-  // Per-Job-Type active-template counts for the grid's "มี Template N แบบ" / "ยังไม่มี Template"
-  // badges — fetched once, unfiltered, independent of `templates` (which only ever holds the
-  // *selected* Job Type's list). A separate small fetch rather than reusing/caching into `templates`
-  // deliberately keeps the existing per-Job-Type fetch/retry flow below untouched.
-  //
-  // 2026-07-15, second Codex-review fix pass (Medium Priority): a loading-in-progress state and a
-  // failed-fetch state used to both collapse into the same "no template" badge (`templateCounts`
-  // was `null` while loading, then `new Map()` on failure — `badgeFor`'s `?? 0` fallback treated
-  // both identically to a genuine zero-templates result), which could falsely advertise the blank
-  // fallback for a Job Type that actually has templates, just not loaded yet. Now tracked as 3
-  // explicit states so the grid never claims "no template" until the count is actually known.
   const [templateCounts, setTemplateCounts] = useState<Map<string, number> | null>(null);
   const [templateCountsError, setTemplateCountsError] = useState(false);
   useEffect(() => {
@@ -123,17 +85,6 @@ export function QuotationTemplateWizard({
     return t("quotation.wizard.badge.many").replace("{n}", String(n));
   };
 
-  // Step 1 grid order, a stable 4-way partition (not a fresh alphabetical sort — each group keeps
-  // its original relative order):
-  //   1. Ordinary Job Types with an active Template — the ones a user can actually pick a template
-  //      for, so they're the first thing seen.
-  //   2. Ordinary Job Types with no Template yet.
-  //   3. The `"OTHER "`-prefixed *specific* sub-categories (`OTHER BF`/`OTHER SC`/`OTHER TA` — Other
-  //      Dust Collector/Wet Scrubber/Fiberglass Tank Related Work) — real, narrower categories, not
-  //      the fully generic fallback, so they sort ahead of it.
-  //   4. The generic `"OTHER"` ("Other Jobs") catch-all, always last.
-  // Depends on `templateCounts`, so groups 1/2 quietly reorder once that fetch resolves — the same
-  // "badge appears once loaded" behavior `badgeFor` above already has.
   const isGenericOtherJobType = (code: string) => code === "OTHER";
   const isOtherSubcategoryJobType = (code: string) => code.startsWith("OTHER") && code !== "OTHER";
   const hasActiveTemplate = (code: string) => (templateCounts?.get(code) ?? 0) > 0;
@@ -144,11 +95,6 @@ export function QuotationTemplateWizard({
     ...activeJobTypesUnsorted.filter((jt) => isGenericOtherJobType(jt.code)),
   ];
 
-  // Kicks off the actual template fetch for a deep-linked selection — the synchronous "start
-  // loading" state above already happened at mount via the lazy initializers, so this effect body
-  // begins directly with the async call itself (matches the working pattern already established
-  // in GlobalSearch.tsx: every setState here runs inside a `.then`/`.catch`/`.finally` callback,
-  // never synchronously as the first thing the effect does).
   const consumedInitialSelection = useRef(false);
   useEffect(() => {
     if (consumedInitialSelection.current || !initialSelection || !initialJobType) return;
@@ -174,12 +120,10 @@ export function QuotationTemplateWizard({
         setTemplatesError(t("quotation.wizard.loadTemplatesError"));
         setLoadingTemplates(false);
       });
-    // The ref guard above makes this idempotent past the first real run, so it's safe to list every
-    // value the body actually closes over — a later identity change of `initialSelection`/
-    // `initialJobType` (there shouldn't be one; this component only ever mounts fresh per wizard
-    // run) would just re-enter and immediately no-op via the guard.
   }, [initialSelection, initialJobType, t]);
 
+  // โหลด template แบบเต็มเพื่อแสดงตัวอย่างในขั้นตอนพรีวิว
+  // Loads the full template to show in the preview step
   const loadPreview = async (summary: QuotationTemplateSummary) => {
     setSelectedSummary(summary);
     setFullTemplate(null);
@@ -196,6 +140,8 @@ export function QuotationTemplateWizard({
     }
   };
 
+  // โหลดรายการ template ที่ใช้งานได้ของประเภทงานนั้น ถ้ามีเพียงอันเดียวจะข้ามไปพรีวิวเลย
+  // Loads active templates for a job type, auto-skipping to preview if there's only one
   const loadTemplates = async (jt: JobType) => {
     setLoadingTemplates(true);
     setTemplatesError("");
@@ -213,6 +159,8 @@ export function QuotationTemplateWizard({
     }
   };
 
+  // จัดการเมื่อเลือกประเภทงานในขั้นที่ 1 แล้วรีเซ็ตสถานะขั้นถัดไปพร้อมโหลด template
+  // Handles picking a job type in step 1, resetting downstream state and loading its templates
   const handleSelectJobType = (jt: JobType) => {
     setSelectedJobType(jt);
     setTemplates([]);
@@ -224,6 +172,8 @@ export function QuotationTemplateWizard({
     void loadTemplates(jt);
   };
 
+  // ใช้ template ที่เลือกไว้เป็นจุดเริ่มต้นของใบเสนอราคาใหม่ แล้วส่งผลลัพธ์กลับไป
+  // Uses the selected template as the seed for a new quote and completes the wizard
   const handleUseTemplate = () => {
     if (!selectedJobType || !fullTemplate) return;
     const applied = applyTemplateToQuoteDraft(fullTemplate);
@@ -239,6 +189,8 @@ export function QuotationTemplateWizard({
     });
   };
 
+  // เริ่มใบเสนอราคาจากแบบฟอร์มเปล่า โดยไม่ใช้ template ใด
+  // Starts a new quote from a blank form, with no template applied
   const handleStartBlank = () => {
     onComplete({
       jobTypeCode: selectedJobType?.code ?? "",
@@ -249,6 +201,8 @@ export function QuotationTemplateWizard({
 
   const handleNotifyAdmin = () => showToast(t("quotation.wizard.notifyAdminToast"));
 
+  // ย้อนกลับไปขั้นตอนเลือกประเภทงาน พร้อมล้างการเลือก template/พรีวิวที่ค้างอยู่
+  // Goes back to the job-type step, clearing any selected template and preview state
   const backToJobType = () => {
     setStep("jobType");
     setSelectedJobType(null);
@@ -259,11 +213,11 @@ export function QuotationTemplateWizard({
     setPreviewError("");
   };
 
+  // ย้อนกลับจากขั้นตอนพรีวิว ไปที่ขั้นเลือก template ถ้ามีให้เลือกหลายอัน มิฉะนั้นย้อนไปเลือกประเภทงานเลย
+  // Goes back from the preview step to template selection when there's more than one, otherwise straight to job type
   const backFromPreview = () => {
     setPreviewError("");
     setFullTemplate(null);
-    // A single-template Job Type never showed the choice screen, so "back" from its preview must
-    // return straight to Job Type selection, not to a screen the user never saw.
     if (templates.length > 1) {
       setSelectedSummary(null);
       setStep("template");

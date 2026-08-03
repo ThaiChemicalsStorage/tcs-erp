@@ -5,6 +5,8 @@ import { createCategory, updateCategory } from "../../lib/products";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useI18n } from "../../lib/i18n";
 
+// หน้าจัดการหมวดหมู่สินค้า: เพิ่ม แก้ไขชื่อ และเก็บ/เลิกเก็บถาวรหมวดหมู่
+// Page for managing product categories: add, rename, and archive/unarchive categories.
 export function CategoriesManager({
   categories,
   onChange,
@@ -20,6 +22,8 @@ export function CategoriesManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
 
+  // ตรวจสอบชื่อและสร้างหมวดหมู่ใหม่ ป้องกันชื่อซ้ำ
+  // Validates the name and creates a new category, guarding against duplicates.
   const addCategory = async () => {
     const trimmed = newName.trim();
     if (!trimmed) {
@@ -41,6 +45,8 @@ export function CategoriesManager({
   };
 
   const startEdit = (c: ProductCategory) => { setEditingId(c.id); setEditingName(c.name); };
+  // บันทึกชื่อหมวดหมู่ที่แก้ไขแล้วไปยังเซิร์ฟเวอร์
+  // Saves the edited category name to the server.
   const saveEdit = async () => {
     const trimmed = editingName.trim();
     if (!trimmed || !editingId) return;
@@ -53,6 +59,8 @@ export function CategoriesManager({
     }
   };
 
+  // สลับสถานะเก็บถาวร/เลิกเก็บถาวรของหมวดหมู่ที่ระบุ
+  // Toggles the archived/unarchived state of the given category.
   const toggleArchive = async (id: string) => {
     const target = categories.find((c) => c.id === id);
     if (!target) return;

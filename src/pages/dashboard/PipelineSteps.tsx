@@ -6,10 +6,11 @@ import { ChartCard } from "./ChartCard";
 import { EmptyState } from "../../components/EmptyState";
 import { fmtShort, fmtPercent } from "./format";
 
-/** Main forward flow (Draft → ... → Won) rendered as connected step cards; the three "left the flow" outcomes render as a separate row below, since they're branches off the main path, not sequential steps in it. */
 const MAIN_FLOW: QuoteStatus[] = ["ร่าง", "รออนุมัติ", "อนุมัติแล้ว", "ส่งให้ลูกค้าแล้ว", "ลูกค้ายอมรับ", "ปิดการขายสำเร็จ"];
 const OFF_RAMP: QuoteStatus[] = ["ลูกค้าปฏิเสธ", "เสียโอกาส", "ยกเลิก"];
 
+// การ์ดแสดงข้อมูลของแต่ละขั้นตอนในไปป์ไลน์ พร้อมอัตราการแปลงจากขั้นก่อนหน้า
+// Renders a single pipeline stage card, including conversion rate from the previous stage
 function StageCard({ stage, onStageClick }: { stage: PipelineStage; onStageClick: (s: QuoteStatus) => void }) {
   const { t } = useI18n();
   const status = stage.stage as QuoteStatus;
@@ -32,13 +33,8 @@ function StageCard({ stage, onStageClick }: { stage: PipelineStage; onStageClick
   );
 }
 
-/**
- * Replaces the previous `recharts` `FunnelChart` (`PipelineFunnel.tsx`, now unused) — the funnel
- * shape squeezed 9 Thai status labels into a shrinking silhouette, which overlapped and read as
- * broken/unprofessional. Horizontal connected step cards (2026-07-10 UI/UX redesign, "Option A")
- * show the same real count/value/conversion% data per stage without that layout problem, and stay
- * legible with real (not fixed-width English) Thai labels.
- */
+// แสดงไปป์ไลน์ใบเสนอราคาเป็นการ์ดขั้นตอนแนวนอนที่เชื่อมต่อกัน แยกแถวสำหรับสถานะที่ออกจากไปป์ไลน์
+// Renders the quotation pipeline as connected horizontal step cards, with off-ramp statuses in a separate row
 export function PipelineSteps({ pipeline, onStageClick }: { pipeline: PipelineStage[]; onStageClick: (stage: QuoteStatus) => void }) {
   const { t } = useI18n();
   const hasData = pipeline.some((p) => p.count > 0);

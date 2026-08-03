@@ -32,35 +32,18 @@ import {
   ExpectedSalesForecastChart, ProductsByCategoryChart,
 } from "./DashboardCharts";
 
-/** A single pulsing bar standing in for a not-yet-loaded value. */
+// แท่งกะพริบแทนค่าที่ยังโหลดไม่เสร็จ
+// A single pulsing placeholder bar standing in for a not-yet-loaded value.
 function SkeletonBar({ className = "h-4 w-16" }: { className?: string }) {
   return <div className={`rounded bg-muted animate-pulse ${className}`} />;
 }
 
-/**
- * Content-area-only placeholder for the very first load (2026-07-14, progressive-loading pass;
- * reworked the same day into a section-first version — Codex review Medium finding: the first
- * cut was shell-first but not section-first, i.e. real section titles/table headers/named card
- * containers weren't visible during loading, just one generic animated block). Deliberately does
- * NOT cover the page title/description/filter bar above it, which now render immediately
- * regardless of whether `stats` has arrived yet (see the component body below) — only the
- * data-driven widget area waits on the fetch, and even that area now mirrors the real P'Keng/Kee
- * required 4-section structure (`ExecutiveSummaryCards` → `QuotationStatusSummary` →
- * `SalesActivityAnalytics` → `ActivityTimeline`) with each section's *real* translated title/table
- * headers (via `t()`, the same keys the loaded components use) rather than an anonymous shape, so
- * there's no layout/text jump when the real data arrives — only the pulsing placeholders inside
- * each section resolve into real values/rows. `ChartCard` is reused directly for the middle two
- * sections so their header markup is pixel-identical to the loaded state, not an approximation.
- * On every *subsequent* load (a filter change, a retry, an approve/reject refresh) this never
- * shows at all — `stats` is already non-null by then, so the previous real data stays on screen
- * with just a small "refreshing" indicator in the header (see `loading` below) instead of
- * reverting to this skeleton.
- */
+// โครงหน้าจอแบบกะพริบสำหรับตอนโหลดข้อมูลแดชบอร์ดครั้งแรกเท่านั้น ไม่ครอบหัวข้อ/ตัวกรองด้านบน
+// Skeleton placeholder for the first load only; mirrors the real section layout so nothing jumps when data arrives.
 function DashboardContentSkeleton() {
   const { t } = useI18n();
   return (
     <div className="space-y-6">
-      {/* 1. Executive KPI summary — 4 named cards, same title row as ExecutiveSummaryCards.tsx */}
       <div>
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("dashboard.section.overview")}</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -76,17 +59,14 @@ function DashboardContentSkeleton() {
         </div>
       </div>
 
-      {/* 2. Quotation status summary */}
       <ChartCard title={t("dashboard.statusSummary.title")} sub={t("dashboard.statusSummary.sub")}>
         <SkeletonBar className="h-40 w-full" />
       </ChartCard>
 
-      {/* 3. Sales activity analytics */}
       <ChartCard title={t("dashboard.salesActivity.title")} sub={t("dashboard.salesActivity.sub")}>
         <SkeletonBar className="h-52 w-full" />
       </ChartCard>
 
-      {/* 4. Recent activity details — real table headers, pulsing rows underneath */}
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="text-base font-semibold text-foreground mb-4 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
           <History size={15} /> {t("dashboard.activity.title")}
@@ -117,6 +97,8 @@ function DashboardContentSkeleton() {
   );
 }
 
+// แสดงสถานะโหลดข้อมูลล้มเหลว พร้อมปุ่มลองใหม่
+// Renders an error state with a retry button when the dashboard fails to load.
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   const { t } = useI18n();
   return (
@@ -133,54 +115,15 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-/**
- * Executive Dashboard.
- *
- * **Top of page — the 4 sections P'Keng/P'Kee's business requirement names, in the exact
- * requested order** (2026-07-13, sixth/seventh same-day passes): page title + compact filters,
- * `ExecutiveSummaryCards` (4 cards only — Total Quotations/Value, Closed/Expected Sales),
- * `QuotationStatusSummary` (Won/Lost/Active/Non-Active donut+table, full width — the forecast
- * chart used to sit alongside it but was moved to supporting detail, see below),
- * `SalesActivityAnalytics` (5-category trend chart + period table + a per-salesperson breakdown
- * table, full width), then `ActivityTimeline` ("Recent Activity Details" — date/salesperson/
- * activity/quotation-number/customer-name columns, quotation number links to the quote). This
- * replaces the flat 22-card `KpiGrid.tsx` (removed 2026-07-13 in an earlier pass) — the business
- * requirement explicitly names only these 4 sections as required, with an instruction to "focus
- * first on the exact required business information" and move anything else lower.
- *
- * **Below that — supporting detail, still real filter-aware MongoDB data, not removed**:
- * `SalesPerformancePanel` (rates/cycle-times/Active-Non-Active counts) + `ExpectedSalesForecastChart`,
- * `ActivityFollowUpSummary` (pending approvals/follow-ups/expired/new-customer counts), revenue/
- * job-type charts, the sales pipeline step cards (`PipelineSteps.tsx` — the non-overlapping
- * horizontal-step-card replacement for the old broken `recharts` `FunnelChart`), ranking tables,
- * top customers/job types, the actionable Pending Approvals + Follow-up Reminders lists (distinct
- * from the compact *counts* in `ActivityFollowUpSummary` — those are real clickable/actionable
- * line-item lists), the notification summary, and the customer-interest breakdown. None of this
- * data was removed — it moved out of the 4 required top sections because the business requirement
- * doesn't name it as required, not because it stopped mattering. See CHANGELOG.md.
- *
- * History: 2026-07-10 (UI/UX redesign) split the original flat KPI grid into a tiered "primary
- * hero cards + dense secondary mini-cards" layout and added `QuotationStatusSummary`/
- * `PipelineSteps`/`SalesActivityAnalytics`, removing 5 now-redundant charts. 2026-07-13 (first
- * revert pass) merged the tiered KPI cards back into one flat `KpiGrid`. 2026-07-13 (second revert
- * pass) replaced that flat grid with `ExecutiveSummaryCards` + 2 new compact panels. 2026-07-13
- * (third pass) reordered into a fully-specified 7-section structure. 2026-07-13 (this pass, the
- * P'Keng/P'Kee business-requirement pass) fixed 4 High Priority Codex data/filter bugs, then
- * simplified to the exact 4-section required layout above, added Sales Activity's per-salesperson
- * breakdown table, and added structured quotation/customer fields to Recent Activity Details.
- */
+// หน้าแดชบอร์ดผู้บริหาร: 4 การ์ดสรุปหลัก + สถานะใบเสนอราคา + กิจกรรมการขาย + รายละเอียดสนับสนุนด้านล่าง
+// The Executive Dashboard page — 4 KPI cards, quotation status, sales activity, plus supporting detail sections below.
 export function DashboardPage({ currentUserId, onNavigateToQuotations, onOpenQuote }: {
-  /** For the page tour's per-user "seen" tracking (see useModuleTour). */
   currentUserId: string;
   onNavigateToQuotations: (filter: QuotationListFilter) => void;
   onOpenQuote: (quoteId: string) => void;
 }) {
   const { t } = useI18n();
 
-  // Page tour (added 2026-07-29) — a deeper dive than the MAIN first-sign-in tour (which also
-  // covers this page's basics): auto-starts only AFTER the user has finished/skipped the main
-  // tour (`hasTourCompleted`), so the two driver.js instances can never race each other on a
-  // brand-new user's very first visit; the replay button works regardless.
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="dashboard-export"]', popover: { title: t("tour.dashboard.export.title"), description: t("tour.dashboard.export.desc"), side: "bottom" } },
     { element: '[data-tour="dashboard-filters"]', popover: { title: t("tour.dashboard.filters.title"), description: t("tour.dashboard.filters.desc"), side: "bottom" } },
@@ -205,40 +148,31 @@ export function DashboardPage({ currentUserId, onNavigateToQuotations, onOpenQuo
     return () => { cancelled = true; };
   }, [filters, retryToken]);
 
-  // setLoading(true)/setLoadError(false) live here (triggered by the filter change/retry click
-  // itself) rather than at the top of the effect above — calling setState synchronously as the
-  // first thing an effect does causes an avoidable extra render cascade (react-hooks/set-state-in-effect).
+  // ตั้งค่ากำลังโหลดใหม่และล้าง error ก่อนเปลี่ยนตัวกรอง
+  // Marks the dashboard as loading and clears any error before applying new filters.
   const handleFiltersChange = (next: DashboardFilterState) => {
     setLoading(true);
     setLoadError(false);
     setFilters(next);
   };
   const retry = () => { setLoading(true); setLoadError(false); setRetryToken((n) => n + 1); };
-  // Approve/Reject from the Approval Dashboard widget mutates a quote's status server-side, then
-  // re-fetches so every other filter-scoped widget stays consistent with the new pending-approvals
-  // count instead of only patching that one card in place. `setLoading(true)` here (2026-07-14,
-  // Codex review High Priority fix) surfaces the same small header spinner a filter change/retry
-  // already shows — previously this path left the *previous* stats on screen with zero visible
-  // indication a refresh was even happening, which reads as "did my approval actually take effect?"
-  // `stats` itself is untouched until the new response lands (see the `!stats` skeleton guard
-  // below, which only fires on the very first load), so the real data never disappears/resets —
-  // only the spinner appears, exactly the "keep previous data visible during refetch, with a small
-  // indicator" behavior the progressive-loading requirement calls for.
+  // ดึงข้อมูลแดชบอร์ดใหม่หลังทำรายการอนุมัติ/ปฏิเสธ เพื่อให้ทุกวิดเจ็ตซิงค์กัน
+  // Re-fetches dashboard stats after an approve/reject action so every widget stays in sync.
   const refreshAfterAction = () => { setLoading(true); setRetryToken((n) => n + 1); };
 
-  // `stats?.field` below (not a destructure at the top) is deliberate — see the 2026-07-14
-  // progressive-loading pass: the header/filter bar render unconditionally, before the first
-  // fetch resolves, so they must not depend on `stats` already existing.
+  // สร้างและดาวน์โหลดไฟล์ CSV ของข้อมูลแดชบอร์ดปัจจุบัน
+  // Builds and downloads a CSV export of the current dashboard data.
   const exportCsv = () => {
     if (!stats) return;
     const csv = buildDashboardCsv(stats, stats.filters);
     downloadCsv(`dashboard-export-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
   const [exportingXlsx, setExportingXlsx] = useState(false);
+  // สร้างและดาวน์โหลดไฟล์ Excel ของข้อมูลแดชบอร์ดปัจจุบัน ชื่อไฟล์มีช่วงวันที่กำกับ
+  // Builds and downloads an Excel export of the current dashboard data, named with its filter period.
   const exportXlsx = () => {
     if (!stats || exportingXlsx) return;
     setExportingXlsx(true);
-    // Filename carries the filter period so a "เดือนที่แล้ว" export reads as that month's report.
     const period = stats.filters.from || stats.filters.to
       ? `${stats.filters.from || "start"}_${stats.filters.to || todayIsoBangkok()}`
       : new Date().toISOString().slice(0, 10);
@@ -254,11 +188,6 @@ export function DashboardPage({ currentUserId, onNavigateToQuotations, onOpenQuo
           description={t("dashboard.subtitle")}
           actions={
             <>
-              {/* Bare spinner on the very first load (no `stats` yet — the content area below shows
-                  its own full skeleton). Once `stats` exists, every subsequent load (filter change,
-                  retry, or an approve/reject-triggered refresh) keeps the previous data on screen
-                  and adds this text label instead — "previous data stays visible during refetch,
-                  with a small indicator" per the progressive-loading requirement. */}
               {loading && (
                 stats
                   ? <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><div className="w-3.5 h-3.5 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin flex-shrink-0" />{t("dashboard.refreshing")}</div>
@@ -295,8 +224,6 @@ export function DashboardPage({ currentUserId, onNavigateToQuotations, onOpenQuo
         <DashboardFilterBar filters={filters} onChange={handleFiltersChange} availableSalespeople={stats?.availableSalespeople ?? []} availableDepartments={stats?.availableDepartments ?? []} hidePeopleFilters={stats?.ownDataOnly ?? false} />
       </div>
 
-      {/* Filter-honesty notice (see UI_GUIDELINES.md): own-data-only callers must be told the
-          Dashboard is scoped to them, or the smaller numbers read as missing data. */}
       {stats?.ownDataOnly && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-[#c9a84c]/8 border border-[#c9a84c]/25 rounded-lg px-3 py-2 -mt-3">
           <UserRound size={13} className="text-[#c9a84c] flex-shrink-0" />
@@ -313,12 +240,8 @@ export function DashboardPage({ currentUserId, onNavigateToQuotations, onOpenQuo
   );
 }
 
-/**
- * The actual data-driven widget tree — split out of `DashboardPage` (2026-07-14, progressive-
- * loading pass) purely so the parent's early-render shell (header/filter bar) doesn't need to
- * duplicate this component's large JSX tree behind an `if (!stats) return ...` guard. Same content
- * as before this pass, unchanged; only the extraction is new.
- */
+// แสดงเนื้อหาแดชบอร์ดทั้งหมดเมื่อโหลดข้อมูลเสร็จแล้ว: การ์ดสรุป สถานะ กิจกรรมขาย และรายละเอียดสนับสนุน
+// Renders the full data-driven widget tree once dashboard stats have loaded.
 function DashboardContent({
   stats, onNavigateToQuotations, onOpenQuote, refreshAfterAction,
 }: {
@@ -334,25 +257,10 @@ function DashboardContent({
     approvalDashboard, notificationSummary, scopeOfWork, deliveryOrder,
   } = stats;
   const interestTotal = interestBreakdown.interested + interestBreakdown.notInterested + interestBreakdown.notEvaluated;
-  // Sales Activity Analytics / Revenue Trend are rolling windows that ignore the filter's `from`
-  // bound by design (see UI_GUIDELINES.md "Filter Honesty") — this anchor date is what "ending on"
-  // actually means: the selected `to` date if the user picked one, else today (Bangkok-local, not
-  // the server/browser's ambient timezone). Threaded into both charts so their sub-copy can state
-  // a real date instead of a generic "rolling trend" phrase — 2026-07-13, independent review fix.
   const trendAnchorDate = stats.filters.to || todayIsoBangkok();
 
   return (
     <>
-      {/* 2026-07-14, Codex-review fix (High Priority): `hasAnyData` used to gate the ENTIRE page
-          behind one full-page `EmptyState`, so a genuinely empty database (no quotations, no
-          products anywhere) hid the required KPI cards instead of showing them at zero — the
-          business requirement calls for the 4 KPI cards plus Status/Sales Activity's own empty
-          states to remain visible even then. Now: a slim inline banner communicates "no business
-          data yet" without blocking the rest of the page, and every section below always renders
-          (each already has its own per-widget "no data" fallback for an empty filtered/real result
-          — `QuotationStatusSummary`/`SalesActivityAnalytics` show their own `EmptyState compact`
-          when their own data is empty, same as before). A narrow filter matching zero results was
-          already handled correctly before this fix; this only changes the *no data anywhere* case. */}
       {!hasAnyData && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[#c9a84c]/10 border border-[#c9a84c]/25">
           <LayoutDashboard size={18} className="text-[#c9a84c] flex-shrink-0" />
@@ -363,36 +271,20 @@ function DashboardContent({
         </div>
       )}
 
-      {/* ── The required P'Keng/P'Kee 5-section overview, in the exact requested order ── */}
-
-      {/* 1. Executive KPI summary — 4 cards only */}
       <div data-tour="dashboard-kpis">
         <ExecutiveSummaryCards kpis={kpis} />
       </div>
 
-      {/* 2. Quotation status summary — full width, not paired with Forecast (Forecast moved to
-          supporting detail below per "if it makes the Dashboard cluttered, move it lower") */}
       <div data-tour="dashboard-status">
         <QuotationStatusSummary kpis={kpis} />
       </div>
 
-      {/* 3. Sales activity analytics — trend + recent-period table + per-salesperson
-          breakdown, filter-aware, full width. Always present for every `dashboard:view` role as
-          of 2026-07-14 (previously null/hidden for roles without `auditLog:view` — a Codex-review
-          Critical finding, see api/dashboard/index.ts); `salesActivity &&` stays as a defensive
-          null-check, not a real permission gate anymore. */}
       {salesActivity && (
         <SalesActivityAnalytics data={salesActivity} anchorDate={trendAnchorDate} dateFiltered={!!stats.filters.from} />
       )}
 
-      {/* 4. Recent activity details */}
       {activityTimeline && <ActivityTimeline entries={activityTimeline} onOpenQuote={onOpenQuote} />}
 
-      {/* ── Supporting detail — real data, unchanged, just not part of the 4 required
-          sections above. Sales Performance/Tasks&Follow-up/Forecast moved here 2026-07-13
-          (P'Keng/P'Kee pass) since they weren't named in the required 5-row layout — "focus
-          first on the exact required business information." Not removed, still real,
-          filter-aware MongoDB data. ── */}
       <div data-tour="dashboard-indepth" className="pt-2 border-t border-border space-y-6">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.section.detail")}</p>
 
