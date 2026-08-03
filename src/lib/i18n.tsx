@@ -562,7 +562,7 @@ const translations = {
     "auth.brand.feature1": "ติดตามคลังเคมีภัณฑ์แบบเรียลไทม์",
     "auth.brand.feature2": "แดชบอร์ดภาพรวมธุรกิจครบวงจร",
     "auth.brand.feature3": "จัดการใบเสนอราคาอย่างปลอดภัย",
-    "auth.brand.copyright": "© 2567 TCS ERP · บริษัท ไทย เคมิคอลส์ สโตเรจ จำกัด",
+    "auth.brand.copyright": "© 2569 TCS ERP · บริษัท ไทย เคมิคอลส์ สโตเรจ จำกัด",
 
     "signin.title": "เข้าสู่ระบบ",
     "signin.subtitle": "ยินดีต้อนรับกลับ กรอกข้อมูลเพื่อเข้าใช้งาน TCS ERP",
