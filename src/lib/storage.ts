@@ -5,6 +5,9 @@ export interface Company {
   address: string;
   phone: string;
   email: string;
+  website: string;
+  facebookName: string;
+  lineId: string;
   taxId: string;
   logoDataUrl: string;
   stampDataUrl: string;
@@ -23,6 +26,9 @@ export const defaultCompany: Company = {
   address: "[ที่อยู่บริษัท]",
   phone: "[เบอร์โทรศัพท์]",
   email: "info@tcs-erp.co.th",
+  website: "",
+  facebookName: "",
+  lineId: "",
   taxId: "[เลขประจำตัวผู้เสียภาษี]",
   logoDataUrl: "",
   stampDataUrl: "",
@@ -45,6 +51,8 @@ export interface CompanyHeaderInfo {
   fax: string;
   email: string;
   website: string;
+  facebookName: string;
+  lineId: string;
   taxId: string;
   branchName: string;
   branchCode: string;

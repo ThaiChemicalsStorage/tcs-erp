@@ -17,7 +17,7 @@ import {
   statusIcon, statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
   printQuote, isRevisionQuote,
 } from "../../lib/quotes";
-import { getRevisionPredecessorId, generateQuoteRevisionSummary } from "../../lib/revisionDiff";
+import { getRevisionPredecessorId, getRevisionNumber, generateQuoteRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import type { Customer } from "../../lib/customers";
 import { fetchScopeOfWorksByQuotation, createScopeOfWorkFromQuotation, type ScopeOfWorkSummary } from "../../lib/scopeOfWork";
 import { ApiError } from "../../lib/apiClient";
@@ -27,7 +27,6 @@ import { CustomerSelector } from "./CustomerSelector";
 import { PrintDocument } from "./PrintDocument";
 import type { QuotationWizardResult } from "./QuotationTemplateWizard";
 import { BrandMark } from "../../components/BrandMark";
-import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
 import { FieldError } from "../../components/FieldError";
 import { ValidationSummary } from "../../components/ValidationSummary";
@@ -163,7 +162,8 @@ export function QuoteDocument({
 
   const companyHeader: CompanyHeaderInfo = {
     name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
-    phone: company.phone, fax: "", email: company.email, website: "", taxId: company.taxId,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
     branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
   };
 
@@ -262,13 +262,14 @@ export function QuoteDocument({
   // สร้างสรุปการแก้ไขอัตโนมัติโดยเทียบใบต้นฉบับกับร่างปัจจุบัน
   // Auto-generates a revision-note summary by diffing the predecessor quote against the current draft
   const handleGenerateRevisionNote = () => {
-    if (!revisionPredecessorId) return;
+    if (!revisionPredecessorId || !quote) return;
     const predecessor = allQuotes.find((q) => q.id === revisionPredecessorId);
     if (!predecessor) {
       showToast("ไม่พบข้อมูลต้นฉบับสำหรับเปรียบเทียบ (อาจเป็นเพราะสิทธิ์การเข้าถึง)");
       return;
     }
-    setRevisionNote(generateQuoteRevisionSummary(predecessor, currentDraft()));
+    const summary = generateQuoteRevisionSummary(predecessor, currentDraft());
+    setRevisionNote(appendRevisionNoteEntry(predecessor.revisionNote, getRevisionNumber(quote.id), summary));
     showToast("สร้างสรุปการแก้ไขอัตโนมัติแล้ว — ตรวจสอบและแก้ไขเพิ่มเติมได้ตามต้องการ");
   };
 
@@ -429,9 +430,6 @@ export function QuoteDocument({
             >
               <Printer size={13} /> {t("quotation.printPdf")}
             </button>
-          )}
-          {permissions.canExport && (
-            <MetricInfoTooltip label={t("quotation.printHint.label")} text={t("quotation.printHint.text")} />
           )}
           {isDetail && permissions.canDuplicate && (
             <button onClick={onDuplicate} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">

@@ -4,7 +4,148 @@
 
 ---
 
-## Session — 2026-07-31 (absolute latest), Rolling session expiration
+## Session — 2026-08-04 (absolute latest), Revision Note history + print header/footer removal + Website/Facebook/Line letterhead fields
+
+### What was implemented
+Direct user request (in Thai): the auto-generated Revision Note on a Quotation/Scope of Work rewrite
+should keep a running per-revision log — "R1 - <what R1 changed>" then, on a later rewrite, "R2 -
+<what R2 changed>" underneath it — referencing the full chain up to the latest rewrite every time the
+auto-summary button is pressed, rather than only showing the diff against the immediate predecessor.
+
+Traced the existing feature (added 2026-07-23, see CHANGELOG.md that date) to `generateQuoteRevision
+Summary()`/`generateScopeOfWorkRevisionSummary()` in `src/lib/revisionDiff.ts`, called from `handle
+GenerateRevisionNote` in both `QuoteDocument.tsx` and `ScopeOfWorkDocument.tsx` — both simply called
+`setRevisionNote(generate...Summary(predecessor, current))`, replacing the field outright every click.
+
+Added `appendRevisionNoteEntry(predecessorRevisionNote, revisionNumber, summary)` to `revisionDiff.ts`:
+prefixes the diff with `R{n} - ` and appends it onto the predecessor's own `revisionNote` (which, if
+generated the same way, already reads `R1 - ...`, `R2 - ...`) instead of discarding it. Wired into both
+call sites — `revisionNumber` comes from the already-exported `getRevisionNumber()` applied to the
+current record's own id/`scopeNumber`.
+
+### Problems found and fixed
+None beyond the feature request itself — no pre-existing bug. See CHANGELOG.md 2026-08-04 for the
+technical writeup.
+
+### Verification
+`npx tsc --noEmit` (clean), `npm run build` (clean), `npm run lint` (0 errors, same 2 pre-existing
+unrelated `i18n.tsx` fast-refresh warnings as prior sessions), `npm test` (56/56 passing, unchanged —
+no test file covers this UI-only textarea-generation path). **Not** verified live in a browser/`vercel
+dev` session — doing so would need creating a multi-revision rewrite chain (Quote → Rewrite → Rewrite)
+and clicking the auto-summary button at each step to visually confirm the R1/R2 accumulation.
+
+### Recommendations / what's next
+- Worth a manual `vercel dev` check next session: create `QT-...`, rewrite to `-R1`, generate its note,
+  rewrite again to `-R2`, generate its note, and confirm the textarea shows both `R1 - ...` and
+  `R2 - ...` blocks stacked with a blank line between them.
+- No new automated test was added (the two `handleGenerateRevisionNote` functions are React-component
+  closures wired to `useState`/`fetchScopeOfWork`, not easily unit-tested in isolation) — the new
+  `appendRevisionNoteEntry()` pure function in `revisionDiff.ts` would be a reasonable target for a
+  future `tests/revisionDiff.test.ts` if this area gets touched again.
+
+### What was implemented (part 2, same session): Quotation print header/footer removal
+Direct user report with a screenshot: printing/exporting a Quotation shows the browser's own print
+date (top-left) and page title/URL (bottom-left). This exact question was investigated once before
+(2026-07-16) and confirmed to be the browser's own "Headers and footers" print-dialog option, not
+anything the app renders — `@page` CSS margins normally can't suppress it, so the only prior fix was a
+tooltip telling users to disable it themselves. Delivery Order later (2026-07-24) found the one real
+exception: `@page { margin: 0 }` genuinely suppresses it, at the cost of losing the page's real
+top/bottom margin on continuation pages of a flowing multi-page document — which is exactly what
+Quotation's `PrintDocument.tsx` is, so the fix was deliberately not applied there at the time.
+
+Rather than silently re-apply that fix and accept the visual trade-off on the user's behalf, surfaced
+it via `AskUserQuestion` (margin:0 + best-effort padding compensation vs. keep the tooltip-only status
+quo). User chose the zero-margin approach. Implemented the same component-scoped `@page { margin: 0 }`
+pattern Delivery Order already uses, plus compensating `12mm` padding: left/right on the outer
+`<table>` (repeats every page inherently), top on the letterhead block inside `<thead>` (also repeats
+every page), bottom on the final signature-block row (covers the last page only). Removed the now-
+stale print-hint tooltip and its `quotation.printHint.*` i18n keys since the browser no longer draws
+what it was warning about.
+
+### Verification (part 2)
+`npx tsc --noEmit`, `npm run lint` (0 errors, same 2 pre-existing warnings), `npm run build`, `npm test`
+(56/56) all clean. **Not verified live** — no test credentials were available this session to actually
+log in and drive a print preview/PDF export; this is a real gap given the fix is specifically a visual
+print-layout change. The logic mirrors Delivery Order's already-live-verified pattern exactly, which is
+reassuring but not a substitute for seeing it.
+
+### Recommendations / what's next (part 2)
+- **Priority**: do a live `vercel dev` print-preview check next session — print/export a short
+  (1-page) Quotation to confirm the date/URL are gone and the page still looks correctly margined, then
+  a genuinely long one (enough line items to force a 2nd page) to see the accepted interior-page-break
+  gap firsthand and judge whether it's actually acceptable in practice or needs a better compensation
+  approach.
+- If the user later wants the same fix on Scope of Work's print view, `ScopeOfWorkPrintDocument.tsx`
+  currently still uses the tooltip-only approach — apply the identical pattern there.
+
+### What was implemented (part 3, same session): same fix extended to Scope of Work
+User asked to check whether Scope of Work and Delivery Order's print views had the same
+browser-injected date/URL problem as Quotation just had, and fix them if they did — rather than
+assuming, checked both print components directly. Delivery Order (`DeliveryOrderPrintDocument.tsx`)
+already had the `@page { margin: 0 }` fix from 2026-07-24 — nothing to do. Scope of Work
+(`ScopeOfWorkPrintDocument.tsx`) still used the old tooltip and, on inspection, has the exact same
+shape as Quotation's `PrintDocument.tsx` (one flowing multi-page `<table>`/`<thead>`), so the same
+fix applied cleanly with no new design decision needed — the trade-off was already explicitly
+accepted by the user for the Quotation case minutes earlier in this same session. Applied the
+identical `@page { margin: 0 }` + `12mm` compensating-padding pattern (table left/right, `<thead>`
+letterhead top, final signature row bottom) and removed the matching stale tooltip/i18n keys
+(`scopeOfWorkDoc.printTipLabel`/`.printTipText`).
+
+### Verification (part 3)
+Same as part 2: `tsc`/`lint`/`build`/`test` (56/56) all clean; not verified live (same missing test
+credentials). Because part 3 is a mechanical repeat of an already-reviewed pattern onto structurally
+identical code, the live-verification gap matters less here than for part 2's original fix — but both
+should ideally be checked together in the same `vercel dev` session recommended above.
+
+### What was implemented (part 4, same session): Website/Facebook/Line in Company Settings + all 3 letterheads
+User sent a screenshot of the company's real letterhead graphic (logo, name, address, TEL/E-mail,
+Facebook, Line, website) and asked "isn't every document header supposed to come from the Settings
+company info?" — a genuine question, not obviously a feature request, so investigated the actual
+wiring before responding rather than assuming.
+
+Found: name/address/phone/email/logo genuinely already came from `Company` (Settings) on Quotation
+and Delivery Order. But `website` was hardcoded to `""` everywhere despite `CompanyHeaderInfo` having
+a slot for it — no Settings field ever fed it. Facebook/Line had no field at all. And Scope of Work's
+print view — surprisingly — had **no company letterhead whatsoever**, just the bare "SCOPE OF WORK"
+title. Separately, Delivery Order's print view carried a fully hardcoded `LETTERHEAD` object with real
+Facebook/Line/website values matching the reference form exactly — which, on reflection, is almost
+certainly the actual source of the screenshot the user was holding up as "the target."
+
+Surfaced the finding and a scope choice via `AskUserQuestion` rather than guessing how far to go; user
+picked the full fix (add all 3 fields, wire into all 3 documents). Implemented across 9 files: `Company`/
+`CompanyHeaderInfo` types (`storage.ts`), 3 new Settings inputs, a new shared `PrintSocialIcons.tsx`
+(de-duplicating icons that were previously only in `DeliveryOrderPrintDocument.tsx`), Quotation's
+letterhead gained a Facebook/Line/website row, Scope of Work gained an entire letterhead block it never
+had (requiring a new `company` prop threaded through both of its entry points —
+`ScopeOfWorkPage.tsx`/`App.tsx` and `QuotationPage.tsx`, neither of which passed it before), and
+Delivery Order swapped just the 3 relevant `LETTERHEAD` fields for the live `companyHeader` equivalent
+while deliberately keeping name/address/tel/email hardcoded (different shape need — English name,
+split address lines — than Settings' single-line Thai fields provide; not a same-day-reshuffle
+candidate for a formal reference-form document).
+
+Also corrected two now-stale claims in `MODULES/DeliveryOrder.md` found while updating it: one said the
+whole letterhead came from Settings ("not a hardcoded copy" — only the logo did), another said Settings
+"has no Facebook/LINE fields" (true when written, false now).
+
+### Verification (part 4)
+`tsc`/`lint`/`build`/`test` (56/56) all clean. **Not verified live** — same missing-credentials gap as
+parts 2-3, but this one matters more: it's a genuinely new UI surface (3 new Settings inputs) and a
+newly-added print section (Scope of Work's letterhead) that has literally never been rendered before,
+not a mechanical repeat of reviewed code.
+
+### Recommendations / what's next (part 4)
+- **Priority for next session**: open Settings → Company Info in a live `vercel dev` session, fill in
+  Website/Facebook/Line, save, then open and print-preview all 3 document types (Quotation, Scope of
+  Work, Delivery Order) to confirm the letterhead renders correctly — especially Scope of Work's, since
+  it's brand-new layout territory with no prior visual reference to compare against.
+- If Delivery Order's English name/split-address letterhead fields should also eventually come from
+  Settings (matching what this session did for Facebook/Line/website), that needs its own decision:
+  either add English-name/split-address fields to `Company`, or accept the current split permanently.
+  Not decided this session — flagged only, not started.
+
+---
+
+## Session — 2026-07-31, Rolling session expiration
 
 ### What was implemented
 Direct user request (in Thai): sessions should auto-logout after 7 days of no activity, but should

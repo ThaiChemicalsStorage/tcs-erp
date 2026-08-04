@@ -4,7 +4,161 @@
 
 ---
 
-## 2026-07-31 (absolute latest) — `ConfirmDialog` mount-while-closed fix
+## 2026-08-04 (absolute latest) — Website/Facebook/Line added to Company Settings + all 3 print letterheads
+
+Direct user question after seeing the app's printed Quotation header next to the company's real
+letterhead graphic (logo, name, address, TEL/E-mail, Facebook icon+page name, Line icon+ID, website):
+"isn't every document header supposed to come from the Settings company info?"
+
+Investigation confirmed the premise was half right: name/address/phone/email/logo genuinely already
+came from `Company` (Settings) on Quotation and Delivery Order's print views. But `website` was
+hardcoded to `""` in every `CompanyHeaderInfo` construction site (the type had a slot for it, nothing
+ever filled it — no Settings field existed to source it from), Facebook/Line had no field anywhere,
+and **Scope of Work's print view had no company letterhead at all** — no logo, no name, nothing, just
+the centered "SCOPE OF WORK" title. Separately, Delivery Order's print view had a fully hardcoded
+`LETTERHEAD` object (name/address/tel/email/facebook/lineId/website all fixed constants) matching the
+reference form exactly, disconnected from Settings — coincidentally the source of the reference image
+the user was comparing against.
+
+Resolved via `AskUserQuestion` (add Website+Facebook+Line to Settings and wire to all 3 documents, vs.
+narrower options) — user chose the full fix. Implemented:
+
+- **Data model** (`src/lib/storage.ts`): `Company` gains `website`/`facebookName`/`lineId: string`
+  (plain text, same as existing fields — no new server-side validation, matching the pre-existing
+  fields' own lack of any). `defaultCompany` defaults all three to `""`. `CompanyHeaderInfo` gains
+  `facebookName`/`lineId` (`website` already existed on this type, just always blank until now).
+- **Settings UI** (`SettingsPage.tsx`): 3 new inputs in the Company tab (Globe/Users/MessageCircle
+  lucide icons — lucide-react ships no dedicated Facebook/Line brand icons). `companyDraft` state
+  already flows the new fields through automatically via existing spread patterns; no extra wiring.
+- **Shared icons** (new `src/components/PrintSocialIcons.tsx`): `FacebookIcon`/`LineAppIcon` extracted
+  out of `DeliveryOrderPrintDocument.tsx` (previously defined locally there only) so all 3 print
+  documents can import the identical branded SVGs instead of duplicating them.
+- **Quotation** (`PrintDocument.tsx`): letterhead gains a Facebook/Line/website row below phone/email,
+  each independently hidden if blank.
+- **Scope of Work** (`ScopeOfWorkPrintDocument.tsx`): gained a full company letterhead block
+  (previously had none) — logo (falls back to `BrandMark`, same as Quotation), name, address,
+  phone/email, and the same Facebook/Line/website row — rendered above the "SCOPE OF WORK" title.
+  Required threading a new `company: Company` prop all the way through both of this document's entry
+  points, neither of which received it before: `App.tsx` → `ScopeOfWorkPage.tsx` (standalone sidebar
+  module) and `QuotationPage.tsx` (quotation-embedded view). `ScopeOfWorkDocument.tsx` builds the
+  `companyHeader` object and passes it down, same pattern as the other two documents.
+- **Delivery Order** (`DeliveryOrderPrintDocument.tsx`): swapped `LETTERHEAD.facebook`/`.lineId`/
+  `.website` for `companyHeader.facebookName`/`.lineId`/`.website` (now editable from Settings) —
+  deliberately **left name/address/tel/email hardcoded**, since Settings' `Company.name`/`.address`
+  are single-line Thai fields while the FM-SL-05 reference form needs English name + a split two-line
+  address, a genuinely different shape that would need its own follow-up feature (not requested here)
+  rather than a same-day reshuffle of a formal reference-form document.
+
+Corrected two related stale doc claims found while writing this up: `MODULES/DeliveryOrder.md`
+previously said the whole letterhead came from Settings "not a hardcoded copy" (only the logo did,
+until today) and separately said Settings "has no Facebook/LINE fields" (now false) — both fixed
+in place.
+
+`npx tsc --noEmit`, `npm run lint` (0 errors, same 2 pre-existing unrelated warnings), `npm run build`,
+`npm test` (56/56) all clean. **Not verified live** — no test credentials available this session to
+open Settings, fill in the 3 new fields, and visually confirm all 3 print letterheads. See
+[MODULES/Settings.md](./MODULES/Settings.md), [MODULES/Quotation.md](./MODULES/Quotation.md),
+[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md), [MODULES/DeliveryOrder.md](./MODULES/DeliveryOrder.md),
+and [DATABASE.md](./DATABASE.md).
+
+---
+
+## 2026-08-04 — Scope of Work print: same browser date/URL header-footer fix
+
+Follow-up to the Quotation print fix below, same session: user asked to check whether Scope of Work
+and Delivery Order's print views had the same browser-injected date/URL problem, and fix them if so.
+
+Checked both by inspecting their print components directly (not just re-testing symptoms): Delivery
+Order's `DeliveryOrderPrintDocument.tsx` already has the `@page { margin: 0 }` fix (added 2026-07-24)
+— genuinely clean, nothing to do. Scope of Work's `ScopeOfWorkPrintDocument.tsx` still used the old
+tooltip-only approach and, on inspection, turned out to share the exact same shape as Quotation's
+`PrintDocument.tsx` — one continuously-flowing `<table>` with a repeating `<thead>` across potentially
+several physical pages — so the same fix (and the same accepted interior-page-break trade-off, already
+explicitly accepted by the user for Quotation this session) applies cleanly.
+
+Applied verbatim: component-scoped `<style>{"@media print { @page { margin: 0 } }"}</style>`,
+`padding: "0 12mm"` on the outer `<table>`, the letterhead `<td>` changed from `p-0` to
+`pt-[12mm] px-0 pb-0` (top inset only, since horizontal is now handled by the table-level padding),
+and the final signature-block row's `pb-2` bumped to `pb-[12mm]`. Removed the now-stale
+`MetricInfoTooltip` "Printing tip" hint next to Scope of Work's Print button and its
+`scopeOfWorkDoc.printTipLabel`/`.printTipText` i18n keys (Thai + English) — same cleanup as Quotation's
+`quotation.printHint.*` removal.
+
+`npx tsc --noEmit`, `npm run lint` (0 errors, same 2 pre-existing unrelated warnings), `npm run build`,
+`npm test` (56/56) all clean. **Not verified live** — same gap as the Quotation fix below, no test
+credentials available this session. See [UI_GUIDELINES.md](./UI_GUIDELINES.md) "Print / PDF" and
+[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
+
+---
+
+## 2026-08-04 — Quotation print: suppress the browser's date/URL header-footer
+
+Direct user report with a screenshot: printing/exporting a Quotation shows the browser's own injected
+print date (top-left) and page title/URL (bottom-left) on the document. This was previously
+investigated (2026-07-16) and confirmed **not app-rendered** — it's Chrome/Edge's own "Headers and
+footers" print-dialog option, which `@page` CSS margins normally cannot suppress — so the app only
+ever showed a tooltip telling the user to disable it themselves in their browser's print settings
+(`quotation.printHint.*`).
+
+Delivery Order later (2026-07-24) found the one real exception: a document that sets
+`@page { margin: 0 }` gets no browser-drawn header/footer at all, because the browser only draws that
+text inside the page's own margin area. That fix was deliberately **not** applied to Quotation at the
+time because Quotation's `PrintDocument.tsx` is one continuously-flowing `<table>` across potentially
+several physical pages (unlike Delivery Order's one-page-per-milestone shape) — margin:0 would leave
+continuation pages with no top/bottom inset.
+
+**This session**: surfaced that trade-off to the user via `AskUserQuestion` (zero-margin + best-effort
+padding compensation vs. keep the tooltip-only status quo) — user chose the zero-margin approach.
+Implemented: `PrintDocument.tsx` gets a component-scoped `<style>{"@media print { @page { margin: 0 } }"}
+</style>` (unmounts with the view, so `ScopeOfWorkPrintDocument.tsx` keeps the global 12mm `@page` rule
+in `src/styles/index.css` untouched), plus compensating padding — `padding: "0 12mm"` on the outer
+`<table>` for left/right (inherent to every row's box, so it repeats on every page automatically),
+`pt-[12mm]` added to the letterhead block inside `<thead>` (also repeats every printed page, restoring
+the top inset even on continuation pages), and `pb-[12mm]` on the last `<tr>` (the signature block) for
+the last page's bottom inset. Accepted gap: an interior page break on a 3+-page quotation has no bottom
+inset at that break — content runs to the physical page edge there; same shape as the trade-off already
+accepted for Delivery Order.
+
+Removed the now-stale `MetricInfoTooltip` "Print tip" hint next to Quotation's Print button (and its
+`quotation.printHint.label`/`.text` i18n keys, Thai + English) — the browser no longer draws the text
+it was warning about, so the instruction to manually disable it is no longer applicable. Scope of
+Work's own print-hint tooltip is untouched (not part of this request).
+
+`npx tsc --noEmit`, `npm run lint` (0 errors, same 2 pre-existing unrelated warnings), `npm run build`,
+`npm test` (56/56) all clean. **Not verified live in a browser** — no test credentials were available
+this session to log in and drive an actual print preview/PDF export; the fix mirrors the already-live-
+verified Delivery Order pattern exactly (see 2026-07-24 entry below), but a follow-up `vercel dev`
+print-preview check (ideally against a genuinely multi-page quotation, to see the accepted
+interior-page-break gap firsthand) is recommended. See [UI_GUIDELINES.md](./UI_GUIDELINES.md) "Print /
+PDF" and [MODULES/Quotation.md](./MODULES/Quotation.md).
+
+---
+
+## 2026-08-04 — Revision Note becomes an accumulating R1/R2/... history
+
+Per direct user request: the auto-generated "หมายเหตุการแก้ไข (Revision Note)" on Quotation and Scope
+of Work revisions used to overwrite the note with only the current revision's own diff against its
+immediate predecessor, so what earlier revisions had changed was only visible by opening each older
+revision separately. The user asked for the note to instead read as a running log — "R1 - <what R1
+changed>" on one line, "R2 - <what R2 changed>" on the next, referencing every rewrite up to the
+latest each time the auto-summary button is pressed.
+
+**Fix**: new `appendRevisionNoteEntry(predecessorRevisionNote, revisionNumber, summary)` export in
+`src/lib/revisionDiff.ts` — prefixes the freshly-generated diff with `R{n} - ` (`n` = this record's own
+revision number, via the already-existing `getRevisionNumber()`) and appends it onto the
+**predecessor's** `revisionNote` (blank-line-separated) instead of replacing the field outright. Since
+every earlier revision's note was built the same way, the predecessor's `revisionNote` already reads
+`R1 - ...`, `R2 - ...`, ..., so the result accumulates one more entry per press instead of losing the
+earlier ones. Wired into both call sites: `QuoteDocument.tsx`'s `handleGenerateRevisionNote` (predecessor
+resolved from the already-loaded `allQuotes` array) and `ScopeOfWorkDocument.tsx`'s (predecessor fetched
+via `fetchScopeOfWork`). Still explicitly one-shot/manually-editable, same as before — see
+`docs/MODULES/Quotation.md` and `docs/MODULES/ScopeOfWork.md` "Revision Note" for the full history.
+`npx tsc --noEmit` clean; no schema change (still the same `revisionNote: string` field, just what gets
+written into it).
+
+---
+
+## 2026-07-31 — `ConfirmDialog` mount-while-closed fix
 
 Closes the latent-bug shape flagged in the 2026-07-30 re-audit (`docs/TODO.md`): `ConfirmDialog.tsx`
 called `useDialogA11y()`/`useId()` unconditionally, before its `if (!open) return null` guard — so the

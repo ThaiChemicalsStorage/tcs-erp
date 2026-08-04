@@ -246,6 +246,7 @@ export function QuotationPage({
         <ScopeOfWorkDocument
           key={scopeOfWorkId}
           scopeOfWorkId={scopeOfWorkId}
+          company={company}
           users={users}
           currentUserId={currentUser.id}
           canEdit={canEditScopeOfWork}

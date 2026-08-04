@@ -2,16 +2,21 @@ import type { ReactNode } from "react";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { DeliveryOrder, DeliveryOrderInstallment } from "../../lib/deliveryOrder";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
+import { FacebookIcon, LineAppIcon } from "../../components/PrintSocialIcons";
 
+// ชื่อ/ที่อยู่/เบอร์โทร/อีเมล คงที่ตามแบบฟอร์มอ้างอิง FM-SL-05 (ภาษาอังกฤษ, ที่อยู่แยกบรรทัด) —
+// ไม่ได้ดึงจากหน้าตั้งค่าเพราะ Company ใน Settings เป็นชื่อ/ที่อยู่ภาษาไทยบรรทัดเดียว ต่างรูปแบบ
+// ส่วน Facebook/Line/เว็บไซต์ (companyHeader.facebookName/lineId/website) ดึงจากหน้าตั้งค่าจริงแทน
+// Name/address/phone/email stay fixed to match the FM-SL-05 reference form (English, split address
+// lines) — not sourced from Settings, since Company there is a single-line Thai name/address, a
+// different shape. Facebook/Line/website (companyHeader.facebookName/lineId/website) DO come from
+// Settings, so editing them there updates this document too.
 const LETTERHEAD = {
   nameEn: "THAI CHEMICALS STORAGE CO.,LTD.",
   addressLine1: "200 Jasmine International Tower, 25th Floor, Room 2504, Moo4",
   addressLine2: "Chaengwatthana Rd, Pak Kret Subdistrict, Pak Kret District, Nonthaburi 11120",
   tel: "+66(2)-583-3615-6",
   email: "sales@thaichemicals.com",
-  facebook: "Thai Chemicals Storage Company Limited",
-  lineId: "@thaichemicals",
-  website: "www.thaichemicals.com",
 };
 const FORM_CODE = "FM-SL-05 Rev.01: 11/09/67";
 
@@ -19,23 +24,6 @@ const DOC_FONT = "'Times New Roman', 'Noto Serif Thai', serif";
 const LINE = "1px solid #000";
 
 const SINGLE_PAGE_ROW_TARGET = 30;
-
-function FacebookIcon() {
-  return (
-    <svg viewBox="0 0 24 24" style={{ width: "15px", height: "15px", flexShrink: 0 }} aria-hidden="true">
-      <circle cx="12" cy="12" r="12" fill="#1877F2" />
-      <path fill="#fff" d="M15.6 12.7h-2.4V20h-3v-7.3H8.4V10h1.8V8.5c0-2.1 1.1-3.5 3.4-3.5h2v2.7h-1.5c-.8 0-.9.4-.9 1V10h2.6l-.2 2.7z" />
-    </svg>
-  );
-}
-function LineAppIcon() {
-  return (
-    <svg viewBox="0 0 24 24" style={{ width: "15px", height: "15px", flexShrink: 0 }} aria-hidden="true">
-      <rect width="24" height="24" rx="5.5" fill="#06C755" />
-      <path fill="#fff" d="M12 4.9c-4 0-7.2 2.6-7.2 5.9 0 2.9 2.6 5.4 6.1 5.8.24.05.56.16.64.37.07.19.05.48.02.67l-.1.62c-.03.19-.15.73.64.4.79-.33 4.25-2.5 5.8-4.29 1.07-1.17 1.58-2.36 1.58-3.57 0-3.3-3.23-5.9-7.2-5.9z" />
-    </svg>
-  );
-}
 
 // บรรทัดข้อความที่มีเส้นขีดเส้นใต้สีดำบาง ใช้แสดงข้อมูลลูกค้าในส่วนเรียน
 // A text line with a thin black underline, used for the "เรียน" customer info lines.
@@ -88,17 +76,27 @@ function InstallmentPage({
                   <p>{LETTERHEAD.addressLine1}</p>
                   <p>{LETTERHEAD.addressLine2}</p>
                   <p>TEL : {LETTERHEAD.tel}&nbsp;&nbsp;&nbsp;&nbsp;E-mail : {LETTERHEAD.email}</p>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "-24px" }}>
-                    <FacebookIcon />
-                    <span>{LETTERHEAD.facebook}</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "70px" }}>
-                      <LineAppIcon />
-                      <span>{LETTERHEAD.lineId}</span>
-                    </span>
-                    <span style={{ color: "#1155cc", textDecoration: "underline", marginLeft: "16px" }}>
-                      {LETTERHEAD.website}
-                    </span>
-                  </div>
+                  {(companyHeader.facebookName.trim() || companyHeader.lineId.trim() || companyHeader.website.trim()) && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginLeft: "-24px" }}>
+                      {companyHeader.facebookName.trim() && (
+                        <>
+                          <FacebookIcon />
+                          <span>{companyHeader.facebookName}</span>
+                        </>
+                      )}
+                      {companyHeader.lineId.trim() && (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "70px" }}>
+                          <LineAppIcon />
+                          <span>{companyHeader.lineId}</span>
+                        </span>
+                      )}
+                      {companyHeader.website.trim() && (
+                        <span style={{ color: "#1155cc", textDecoration: "underline", marginLeft: "16px" }}>
+                          {companyHeader.website}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

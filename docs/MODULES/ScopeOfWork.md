@@ -1,6 +1,6 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23, Attachments (Vercel Blob file storage) added 2026-07-24
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23, Attachments (Vercel Blob file storage) added 2026-07-24, Revision Note made an accumulating per-revision (R1/R2/...) history added 2026-08-04, browser print date/URL header-footer suppressed 2026-08-04
 
 **2026-07-23, Own-Records-Only Viewing** (per direct user request, "หน้า scope of work อยากให้ทำสิทธิ์
 เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — mirroring Quotation's `quotations:viewAll`): new
@@ -471,8 +471,7 @@ action, ending in `-R<digits>`) now shows a "หมายเหตุการ�
 "สร้างสรุปการแก้ไขอัตโนมัติ" button, right before the Remarks/Signatures section:
 
 - New `ScopeOfWork.revisionNote: string` field, always blank on a brand-new record, Duplicate, or a
-  fresh Rewrite — never inherited from the source record (a revision note describes changes made
-  *within* this revision, so copying the predecessor's note forward would misattribute it).
+  fresh Rewrite — the field itself is never copied from the source record at creation time.
 - Clicking the button calls `fetchScopeOfWorksByQuotation(scope.quotationId)` (an existing route —
   every revision of the same job shares one `quotationId`) to resolve the immediate predecessor's
   real MongoDB id from its `scopeNumber`, fetches that full record, and diffs it against the
@@ -488,6 +487,15 @@ action, ending in `-R<digits>`) now shows a "หมายเหตุการ�
 - **Explicitly one-shot, never automatic**: the summary only regenerates on a click, so it can never
   silently overwrite text the user has already started editing themselves — same free-text
   `<textarea>` either way.
+- **2026-08-04: accumulating per-revision history, per direct user request** ("จะ note แยกไว้ว่า R1 -
+  ทำอะไรไว้ บรรทัดต่อมา R2 - ทำอะไรไว้...อิงข้อมูลไปถึง Rewrite ล่าสุดทุกรอบ"). The button no longer
+  just replaces the textarea with this revision's own diff — `appendRevisionNoteEntry()` (new export
+  in `revisionDiff.ts`) prefixes the diff with `R{n} - ` (`n` from `getRevisionNumber(scope.scopeNumber)`)
+  and appends it onto the **predecessor's** `revisionNote` (blank-separated) instead of overwriting it.
+  Since the predecessor's own note was built the same way, the field ends up reading as a running
+  `R1 - ...`, `R2 - ...`, ... log across the whole revision chain each time the button is pressed —
+  the "never inherited" rule above still governs the initial blank state on creation, just not what
+  the generate button now pulls forward.
 - `Quote.revisionNote` is the identical feature for Quotation (`src/pages/quotation/QuoteDocument.tsx`),
   diffed via `generateQuoteRevisionSummary()` in the same `revisionDiff.ts` — the predecessor there is
   resolved from the already-boot-loaded `allQuotes` array instead of a network fetch, since Quotation
@@ -734,12 +742,32 @@ and the ผู้ขาย/ผู้อนุมัติ signature table. Never
 field values render, blank where unfilled), yellow highlights, fake placeholder data, or any
 quotation pricing.
 
-**Print-hint tooltip** (added 2026-07-16): a small info icon next to the Print/PDF button (inside
-the `print:hidden` toolbar, so it never appears in the printed output) tells the user to disable
-"Headers and footers" in their browser's print settings if they don't want the browser's own
-injected website URL/print date on the page — this document never renders a URL itself, that
-content comes from the browser's print dialog, which the app has no CSS/DOM way to override; see
-[UI_GUIDELINES.md](../UI_GUIDELINES.md) "Print / PDF".
+**Browser print header/footer (date/URL/title) suppressed outright (2026-08-04, replaces the
+2026-07-16 tooltip)**: same fix as Quotation's `PrintDocument.tsx` the same session, applied here
+after the user asked to check whether Scope of Work/Delivery Order had the same browser-injected
+date/URL issue (Delivery Order already didn't — fixed 2026-07-24). `ScopeOfWorkPrintDocument.tsx`
+now sets a component-scoped `@page { margin: 0 }` and compensates the lost page margin with `12mm`
+padding: left/right on the outer `<table>`, top on the letterhead block inside `<thead>` (repeats
+every printed page), bottom on the final signature-block row. The old "Print-hint tooltip" info icon
+and its `scopeOfWorkDoc.printTipLabel`/`.printTipText` i18n keys were removed since they're no
+longer needed. Known accepted gap: an interior page break on a 3+-page Scope of Work has no bottom
+inset on that page — same trade-off already accepted for Delivery Order and for Quotation's
+identical fix; see [UI_GUIDELINES.md](../UI_GUIDELINES.md) "Print / PDF".
+
+**Company letterhead added to the printed document (2026-08-04) — previously had none at all.**
+Discovered while adding Website/Facebook/Line to the other two documents' letterheads (direct user
+request, see [Settings.md](./Settings.md) "Website/Facebook/Line fields"): unlike Quotation and
+Delivery Order, `ScopeOfWorkPrintDocument.tsx` never rendered any company branding — the printed page
+started directly at the centered "SCOPE OF WORK" title with no logo, name, address, phone, email, or
+social links anywhere. Fixed by adding a `companyHeader: CompanyHeaderInfo` prop (new — the component
+previously took none) rendered above the title: logo (falls back to `BrandMark` like Quotation's),
+name, address, phone/email, and a Facebook/Line/website row (branded icons from the shared
+`components/PrintSocialIcons.tsx`), each independently hidden if blank — visually matching Quotation's
+`PrintDocument.tsx` letterhead pattern at a slightly more compact scale. `companyHeader` is built in
+`ScopeOfWorkDocument.tsx` from a new `company: Company` prop, which had to be threaded all the way
+through both of Scope of Work's two entry points — `App.tsx` → `ScopeOfWorkPage.tsx` (the standalone
+sidebar module) and `QuotationPage.tsx` (the quotation-embedded view) — neither previously received
+`company` at all.
 
 **Multi-page item groups (2026-07-15, Codex review Medium fix)**: each item (and its following
 specification/remark row, when it has one) is grouped into its own `<tbody style="break-inside:

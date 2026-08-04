@@ -1,15 +1,18 @@
 # Module: Delivery Order
 
-## Status: ✅ Built (2026-07-23), Down Payment exclusion + signature-line fix same day, separate per-milestone printing + full print-layout rebuild to match the FM-SL-05 reference 2026-07-24
+## Status: ✅ Built (2026-07-23), Down Payment exclusion + signature-line fix same day, separate per-milestone printing + full print-layout rebuild to match the FM-SL-05 reference 2026-07-24, Facebook/Line/website letterhead fields wired to Settings 2026-08-04
 
 **2026-07-24, print layout rebuilt to visually match the reference PDF**: `DeliveryOrderPrintDocument.tsx`
 was rebuilt from scratch against a page-image inspection (rendered PNGs + zoomed crops, not just
 extracted text) of all 3 pages of the reference (`public/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM
 บริษัท อีจ.pdf`, company form FM-SL-05 Rev.01). The document is now a plain black-on-white formal
 form — no app design-system styling. Structure per printed page: English letterhead (round TCS logo
-from live company data falling back to `public/logo.png`; the letterhead text itself is a fixed
-`LETTERHEAD` constant reproduced from the form — the Settings singleton holds the Thai identity and
-has no Facebook/LINE fields — with inline-SVG Facebook/LINE icons and the website link); centered
+from live company data falling back to `public/logo.png`; the name/address/tel/email text is a fixed
+`LETTERHEAD` constant reproduced from the form, since the Settings singleton's `name`/`address` are a
+single-line Thai identity, a different shape from this English/split-address reference form —
+**Facebook/Line/website (2026-08-04) no longer share that limitation**, see below — with branded
+Facebook/Line icons (now the shared `components/PrintSocialIcons.tsx`, previously defined locally)
+and the website link); centered
 Thai/English titles; two-column เรียน (each customer/address line on a thin black underline) /
 เลขที่-วันที่-WORK ORDER value lines; one full-width bordered table (intro statement row → underlined
 bold รายการ/จำนวน/หน่วย headers, no vertical column separators → bold item rows, each spec on its
@@ -138,10 +141,12 @@ each showing only the items the preparer marks as covered by that shipment.
    data. There is no combined-print toolbar button anymore. Each page renders as a
    `<table className="hidden print:table ...">` with `style={{ breakAfter: "page" }}`; a raw browser
    Ctrl+P (no button clicked) falls back to rendering every milestone's page, each still fully
-   self-contained. Company letterhead comes from the live Settings → Company Info singleton
-   (`CompanyHeaderInfo`, same convention `PrintDocument.tsx`/`ScopeOfWorkPrintDocument.tsx` already
-   use), not a hardcoded copy of the sample's letterhead — so it stays in sync if the company's own
-   info ever changes. No required-field validation gate exists on this document type (deliberately
+   self-contained. Company letterhead is a **mix**: logo and (2026-08-04) Facebook/Line/website come
+   from the live Settings → Company Info singleton (`CompanyHeaderInfo`, same convention
+   `PrintDocument.tsx`/`ScopeOfWorkPrintDocument.tsx` already use — so those 4 fields stay in sync if
+   Settings changes), while name/address/tel/email stay a fixed `LETTERHEAD` constant matching the
+   reference form's English/split-line format exactly (Settings' `name`/`address` are single-line
+   Thai, a different shape — deliberately not wired up, see the Status section above). No required-field validation gate exists on this document type (deliberately
    simpler than Quotation/Scope of Work's validation machinery) — a milestone's print button only
    blocks with a toast if that milestone has zero items ticked.
 6. **Draft/Final lifecycle**, same two-state model as Scope of Work — "ยืนยัน Final" locks the record

@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import {
   User as UserIcon, Building2, ShieldCheck, Bell, CheckCircle2, Hash, Mail, Phone, MapPin, type LucideIcon,
-  Image as ImageIcon, Stamp, PenTool, Landmark, FileText, HelpCircle,
+  Image as ImageIcon, Stamp, PenTool, Landmark, FileText, HelpCircle, Globe, MessageCircle, Users,
 } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../components/GuidedTour";
@@ -162,6 +162,9 @@ export function SettingsPage({
   const addressId = useId();
   const companyPhoneId = useId();
   const companyEmailId = useId();
+  const websiteId = useId();
+  const facebookNameId = useId();
+  const lineIdFieldId = useId();
   const taxIdId = useId();
   const vatId = useId();
   const bankNameId = useId();
@@ -395,6 +398,20 @@ export function SettingsPage({
               <div>
                 <label htmlFor={companyEmailId} className={`${labelCls} flex items-center gap-1`}><Mail size={10} /> {t("settings.company.emailLabel")}</label>
                 <input id={companyEmailId} className={inputCls} value={companyDraft.email} onChange={(e) => setCompanyDraft((c) => ({ ...c, email: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor={websiteId} className={`${labelCls} flex items-center gap-1`}><Globe size={10} /> {t("settings.company.websiteLabel")}</label>
+                <input id={websiteId} className={inputCls} value={companyDraft.website} onChange={(e) => setCompanyDraft((c) => ({ ...c, website: e.target.value }))} />
+              </div>
+              <div>
+                <label htmlFor={facebookNameId} className={`${labelCls} flex items-center gap-1`}><Users size={10} /> {t("settings.company.facebookLabel")}</label>
+                <input id={facebookNameId} className={inputCls} value={companyDraft.facebookName} onChange={(e) => setCompanyDraft((c) => ({ ...c, facebookName: e.target.value }))} />
+              </div>
+              <div>
+                <label htmlFor={lineIdFieldId} className={`${labelCls} flex items-center gap-1`}><MessageCircle size={10} /> {t("settings.company.lineLabel")}</label>
+                <input id={lineIdFieldId} className={inputCls} value={companyDraft.lineId} onChange={(e) => setCompanyDraft((c) => ({ ...c, lineId: e.target.value }))} />
               </div>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">

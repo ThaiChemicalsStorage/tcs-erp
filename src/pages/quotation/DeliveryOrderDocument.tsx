@@ -322,7 +322,8 @@ export function DeliveryOrderDocument({
 
   const companyHeader: CompanyHeaderInfo = {
     name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
-    phone: company.phone, fax: "", email: company.email, website: "", taxId: company.taxId,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
     branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
   };
 

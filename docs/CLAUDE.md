@@ -76,6 +76,7 @@ ERP/
 │   │   ├── WhatsNewPanel.tsx      # header "มีอะไรใหม่" (What's New) sparkle icon + dropdown panel — added 2026-07-23, in-app update log, see this file's "Current Modules" table row "What's New (topbar)"
 │   │   ├── GlobalSearch.tsx       # topbar search dropdown — Quotations/Customers/Products/pages/Users, added 2026-07-14, replaces a never-functional dead input
 │   │   ├── BrandMark.tsx          # single shared logo/wordmark component — added 2026-07-09, replaces 6 copy-pasted inline blocks
+│   │   ├── PrintSocialIcons.tsx   # shared branded FacebookIcon/LineAppIcon SVGs for print letterheads — added 2026-08-04, extracted out of DeliveryOrderPrintDocument.tsx so Quotation/Scope of Work's print views could reuse them instead of duplicating
 │   │   ├── TemplatePreview.tsx    # shared Quotation Template preview rendering (compact + full) — added 2026-07-15, used by the wizard and Template Management
 │   │   ├── EmptyState.tsx         # shared {icon,title,description,actionLabel?,onAction?,compact?} empty state — added 2026-07-10
 │   │   ├── PageHeader.tsx         # shared {title,description?,actions?,path?} page header — added 2026-07-10, Dashboard only so far

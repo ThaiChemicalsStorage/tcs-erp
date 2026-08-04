@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing } from "lucide-react";
+import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import {
   type ScopeOfWork, type ScopeOfWorkUpdateFields, type ScopeOfWorkSignatory, type ScopeOfWorkPaymentInstallment,
@@ -12,7 +13,7 @@ import {
   chaseScopeOfWorkPo,
 } from "../../lib/scopeOfWork";
 import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOrderFromScope } from "../../lib/deliveryOrder";
-import { getRevisionPredecessorId, generateScopeOfWorkRevisionSummary } from "../../lib/revisionDiff";
+import { getRevisionPredecessorId, getRevisionNumber, generateScopeOfWorkRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
@@ -20,7 +21,6 @@ import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import type { DriveStep } from "driver.js";
 import { useI18n } from "../../lib/i18n";
-import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { ChecklistGroupCard } from "./ChecklistGroupCard";
 import { DocumentRecipientsPicker } from "./DocumentRecipientsPicker";
 import { ScopeOfWorkItemsEditor } from "./ScopeOfWorkItemsEditor";
@@ -213,6 +213,7 @@ function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
 // Full Scope of Work document form, covering customer info, work items, payment terms, approval workflow, and print view
 export function ScopeOfWorkDocument({
   scopeOfWorkId,
+  company,
   users,
   currentUserId,
   canEdit,
@@ -231,6 +232,7 @@ export function ScopeOfWorkDocument({
   showToast,
 }: {
   scopeOfWorkId: string;
+  company: Company;
   users: User[];
   currentUserId: string;
   canEdit: boolean;
@@ -251,6 +253,12 @@ export function ScopeOfWorkDocument({
   const { t } = useI18n();
   const resolvedBackLabel = backLabel ?? t("scopeOfWorkDoc.backToQuotation");
   const BLOCKED_TOOLTIP = t("scopeOfWorkDoc.blockedTooltip");
+  const companyHeader: CompanyHeaderInfo = {
+    name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
+    branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
+  };
   const [scope, setScope] = useState<ScopeOfWork | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -453,7 +461,12 @@ export function ScopeOfWorkDocument({
         return;
       }
       const predecessor = await fetchScopeOfWork(predecessorSummary.id);
-      setScope((prev) => (prev ? { ...prev, revisionNote: generateScopeOfWorkRevisionSummary(predecessor, prev, users) } : prev));
+      setScope((prev) => {
+        if (!prev) return prev;
+        const summary = generateScopeOfWorkRevisionSummary(predecessor, prev, users);
+        const revisionNote = appendRevisionNoteEntry(predecessor.revisionNote, getRevisionNumber(prev.scopeNumber), summary);
+        return { ...prev, revisionNote };
+      });
       showToast("สร้างสรุปการแก้ไขอัตโนมัติแล้ว — ตรวจสอบและแก้ไขเพิ่มเติมได้ตามต้องการ");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "สร้างสรุปไม่สำเร็จ");
@@ -638,12 +651,6 @@ export function ScopeOfWorkDocument({
             >
               <Printer size={13} /> {t("scopeOfWorkDoc.print")}
             </button>
-          )}
-          {canPrint && (
-            <MetricInfoTooltip
-              label={t("scopeOfWorkDoc.printTipLabel")}
-              text={t("scopeOfWorkDoc.printTipText")}
-            />
           )}
           {canCreate && (
             <button onClick={() => setPromptOpen("duplicate")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
@@ -962,6 +969,7 @@ export function ScopeOfWorkDocument({
 
         <ScopeOfWorkPrintDocument
           scopeOfWork={scope}
+          companyHeader={companyHeader}
           sellerUser={users.find((u) => u.id === scope.seller.userId)}
           approverUser={users.find((u) => u.id === scope.approver.userId)}
         />

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { Company } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import { type ScopeOfWorkListItem, fetchAllScopeOfWorks } from "../../lib/scopeOfWork";
 import { ScopeOfWorkList } from "./ScopeOfWorkList";
@@ -10,6 +11,7 @@ import { useI18n } from "../../lib/i18n";
 // หน้าจัดการ Scope of Work แบบแยกต่างหาก แสดงรายการและรายละเอียดของเอกสารที่มีอยู่แล้ว
 // Standalone Scope of Work page managing list/detail view state for existing records.
 export function ScopeOfWorkPage({
+  company,
   users,
   currentUserId,
   canEdit,
@@ -24,6 +26,7 @@ export function ScopeOfWorkPage({
   initialScopeOfWorkId,
   onScopeOfWorkIdConsumed,
 }: {
+  company: Company;
   users: User[];
   currentUserId: string;
   canEdit: boolean;
@@ -93,6 +96,7 @@ export function ScopeOfWorkPage({
         <ScopeOfWorkDocument
           key={selectedId}
           scopeOfWorkId={selectedId}
+          company={company}
           users={users}
           currentUserId={currentUserId}
           canEdit={canEdit}

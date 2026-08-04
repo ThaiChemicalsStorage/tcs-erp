@@ -68,6 +68,9 @@ interface Company {
   address: string;
   phone: string;
   email: string;
+  website: string;       // added 2026-08-04 — was always "" on CompanyHeaderInfo before this, no Settings field existed
+  facebookName: string;  // added 2026-08-04 — display name of the company's Facebook page, e.g. "Thai Chemicals Storage Company Limited"
+  lineId: string;        // added 2026-08-04 — Line handle, e.g. "@thaichemicals"
   taxId: string;
   logoDataUrl: string;   // base64 data URL, "" if none, 1MB client-side cap
   stampDataUrl: string;  // base64 data URL, "" if none, 1MB client-side cap
@@ -81,7 +84,7 @@ interface Company {
   updatedBy: string;              // → User.id, added 2026-07-09 — set server-side, not client-writable
 }
 ```
-Single record (not a list) — there is only ever one company, matching this app's single-company (not multi-tenant) design. Editable only by Super Admin (`company:manage`, hardcoded — see [RBAC.md](./RBAC.md)). `logoDataUrl`/`stampDataUrl` are rendered into the quotation PDF header/signature block — see [MODULES/Quotation.md](./MODULES/Quotation.md). If `logoDataUrl` is empty, quote/print headers and the app's own branding (sidebar/login/loading/favicon) fall back to the static official logo (`public/logo.png`, via `components/BrandMark.tsx`) — see ARCHITECTURE.md/UI_GUIDELINES.md.
+Single record (not a list) — there is only ever one company, matching this app's single-company (not multi-tenant) design. Editable only by Super Admin (`company:manage`, hardcoded — see [RBAC.md](./RBAC.md)). `logoDataUrl`/`stampDataUrl` are rendered into the quotation PDF header/signature block — see [MODULES/Quotation.md](./MODULES/Quotation.md). If `logoDataUrl` is empty, quote/print headers and the app's own branding (sidebar/login/loading/favicon) fall back to the static official logo (`public/logo.png`, via `components/BrandMark.tsx`) — see ARCHITECTURE.md/UI_GUIDELINES.md. `website`/`facebookName`/`lineId` (2026-08-04) feed the letterhead's social-info line on all 3 printed documents (Quotation/Scope of Work/Delivery Order) — see [MODULES/Settings.md](./MODULES/Settings.md) and each document's MODULES page.
 
 ### `User` (`src/lib/users.ts`, client-facing) / `UserFields` (`api/_lib/collections.ts`, server-only storage schema)
 ```ts

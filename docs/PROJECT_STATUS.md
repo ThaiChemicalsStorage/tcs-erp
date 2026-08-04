@@ -14,6 +14,51 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-04] Website/Facebook/Line added to Company Settings + all 3 print letterheads.**
+  Direct user question, prompted by comparing the printed Quotation header against the company's real
+  letterhead graphic — investigation found `website` was hardcoded blank everywhere (no Settings field
+  fed it despite the type having a slot), Facebook/Line had no field at all, and **Scope of Work's
+  print view had no company letterhead whatsoever**. Delivery Order separately had these 3 fields
+  fully hardcoded, disconnected from Settings. Added `website`/`facebookName`/`lineId` to `Company` +
+  3 new Settings inputs; new shared `components/PrintSocialIcons.tsx` (de-duplicated from Delivery
+  Order); wired into Quotation's and (newly-built) Scope of Work's letterheads, and swapped into
+  Delivery Order's in place of its hardcoded equivalents (name/address/tel/email deliberately stay
+  hardcoded — different shape than Settings provides). Scope of Work required threading a new
+  `company` prop through both its entry points for the first time. `tsc`/`lint`/`build`/`test`
+  (56/56) all clean; **not yet verified live** — flagged as priority follow-up, especially for Scope
+  of Work's brand-new letterhead section. See CHANGELOG.md, [MODULES/Settings.md](./MODULES/Settings.md),
+  and each document's own MODULES page.
+- ✅ **[2026-08-04] Scope of Work print: same browser date/URL header-footer fix.** Follow-up in the
+  same session, user-requested check of whether Scope of Work/Delivery Order had the same issue as
+  the Quotation fix below. Delivery Order already didn't (fixed 2026-07-24). Scope of Work's print
+  view shares Quotation's exact flowing-table shape, so the identical `@page { margin: 0 }` +
+  `12mm`-padding-compensation fix was applied there too, and its own stale print-hint tooltip/i18n
+  keys removed. `tsc`/`lint`/`build`/`test` (56/56) all clean; not yet verified live (same gap as
+  below). See CHANGELOG.md and [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md).
+- ✅ **[2026-08-04] Quotation print: browser date/URL header-footer suppressed.** Direct user report
+  with a screenshot. Previously (2026-07-16) confirmed to be the browser's own uncontrollable
+  "Headers and footers" print option, worked around only with a tooltip. Delivery Order's 2026-07-24
+  `@page { margin: 0 }` trick genuinely suppresses it, but was withheld from Quotation at the time
+  because its `PrintDocument.tsx` is one flowing multi-page `<table>` where zero margin costs
+  continuation pages their top/bottom inset. Surfaced that trade-off via `AskUserQuestion` instead of
+  deciding it silently; user chose zero-margin + compensating padding. Implemented: component-scoped
+  `@page { margin: 0 }` plus `12mm` compensating padding (table left/right, `<thead>` letterhead top —
+  both repeat every printed page — and the final signature row's bottom, covering the last page).
+  Removed the now-stale print-hint tooltip/i18n keys. `tsc`/`lint`/`build`/`test` (56/56) all pass
+  clean; **not yet verified live** (no test credentials available this session) — flagged as a
+  priority follow-up given this is a visual print-layout change. See CHANGELOG.md and
+  [UI_GUIDELINES.md](./UI_GUIDELINES.md)/[MODULES/Quotation.md](./MODULES/Quotation.md).
+- ✅ **[2026-08-04] Revision Note becomes an accumulating R1/R2/... history (Quotation + Scope of
+  Work).** Direct user request: the 2026-07-23 auto-generated Revision Note used to overwrite the
+  note with only the current revision's diff against its immediate predecessor, losing what earlier
+  revisions had recorded once you moved past them. New `appendRevisionNoteEntry()` in
+  `src/lib/revisionDiff.ts` prefixes each generated diff with `R{n} - ` and appends it onto the
+  predecessor's own `revisionNote` instead of replacing it, so the field reads as a running `R1 -
+  ...`, `R2 - ...`, ... log across the whole rewrite chain every time the auto-summary button is
+  pressed. Same field/UI, still one-shot/manually-editable. `tsc`/`lint`/`build`/`test` (56/56) all
+  pass clean; not yet verified live via `vercel dev`. See CHANGELOG.md and
+  [MODULES/Quotation.md](./MODULES/Quotation.md)/[MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md)
+  "Revision Note".
 - ✅ **[2026-07-30] Authentication UI accessibility hardening pass.** An `/impeccable audit` of
   `SignInPage.tsx`/`AuthLayout.tsx`/`App.tsx`'s session-check presentation — the single page every
   user passes through before reaching anything else, and another module never touched by any earlier

@@ -56,6 +56,17 @@ function joinOrNone(out: string[]): string {
   return out.length > 0 ? out.map((s) => `• ${s}`).join("\n") : "ไม่มีการเปลี่ยนแปลงจากต้นฉบับ";
 }
 
+// ต่อสรุปการแก้ไขของรีวิชันนี้ (เช่น "R2 - ...") เข้ากับประวัติของรีวิชันก่อนหน้า
+// (revisionNote ของต้นฉบับ ซึ่งมี "R1 - ..." อยู่แล้วถ้าต้นฉบับเองก็เป็นรีวิชัน) เพื่อให้ได้
+// รายการสะสม "R1 - ...", "R2 - ..." ต่อกันไปเรื่อย ๆ ทุกครั้งที่กดสร้างสรุปอัตโนมัติ
+// Appends this revision's diff summary (e.g. "R2 - ...") onto the predecessor's revisionNote
+// (which already contains "R1 - ..." if the predecessor is itself a revision), producing an
+// accumulating "R1 - ...", "R2 - ..." history each time the auto-summary button is pressed.
+export function appendRevisionNoteEntry(predecessorRevisionNote: string, revisionNumber: number, summary: string): string {
+  const entry = `R${revisionNumber} - ${summary}`;
+  return predecessorRevisionNote.trim() ? `${predecessorRevisionNote}\n\n${entry}` : entry;
+}
+
 // เปรียบเทียบรายการสินค้าของใบเสนอราคาเก่ากับใหม่ทีละตำแหน่ง
 // Compares old vs new quote line items by array position
 function diffQuoteLines(oldLines: QuoteLine[], newLines: QuoteLine[]): string[] {
