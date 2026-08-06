@@ -298,6 +298,14 @@ left unaddressed, deliberately out of scope for a "fix Critical/High" pass:
 
 ## Completed
 
+- [x] **[2026-08-06] Express migration step B — standalone server shell** (owner's go-ahead:
+  "ให้ย้ายจาก vercel มาเป็น express เดี่ยวๆเลย"): `server/` Express runtime mounting the unchanged
+  `api/` handlers, `.env.example`, [DEPLOYMENT.md](./DEPLOYMENT.md), `npm run dev` full local
+  stack + `npm start` production process, +7 real-HTTP integration tests. Remaining migration
+  work (server machine, domain/email, cutover, manual regeneration) tracked in
+  [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) steps A + C–H — now unblocked whenever a
+  machine exists. The SSE notification-push upgrade recorded there is also now possible on the
+  Express runtime.
 - [x] Initial Vite + React + TS + Tailwind v4 scaffold, rebranded from Figma Make source to TCS ERP
 - [x] Dashboard module (KPIs, charts, leaderboard, orders, activity feed) — **superseded 2026-07-09**: leaderboard/orders/activity-feed were fake sample data with no backing module and were removed, KPIs/charts rebuilt on real MongoDB data, see entry below
 - [x] Quotation module: list, create/edit, VAT/discount totals, print

@@ -29,7 +29,7 @@ src/
 
 ## Backend Architecture
 
-**Real backend, deployed and live**: Vite + React frontend (unchanged) + **Vercel Serverless Functions (Node.js)** backend + **MongoDB Atlas** database, live at https://tcs-erp-nine.vercel.app (Vercel project `tcs-erp`, GitHub repo `Wisarutbuasumlee/tcs-erp` connected for auto-deploy on push to `master`). Migrated 2026-07-09 from the fully client-side RBAC/localStorage simulation described in the historical record below — see [API.md](./API.md) for the full route-by-route breakdown and [DATABASE.md](./DATABASE.md) for the MongoDB collections.
+**Real backend, deployed and live**: Vite + React frontend (unchanged) + **Vercel Serverless Functions (Node.js)** backend + **MongoDB Atlas** database, live at https://tcs-erp-nine.vercel.app (Vercel project `tcs-erp`, GitHub repo `Wisarutbuasumlee/tcs-erp` connected for auto-deploy on push to `master`). Migrated 2026-07-09 from the fully client-side RBAC/localStorage simulation described in the historical record below — see [API.md](./API.md) for the full route-by-route breakdown and [DATABASE.md](./DATABASE.md) for the MongoDB collections. **As of 2026-08-06 the same `api/` handlers also run under a standalone Express server (`server/`)** — the runtime the real production host will use, and what `npm run dev`/`npm start` now run locally (see "Standalone Express server" below and [DEPLOYMENT.md](./DEPLOYMENT.md)); the Vercel deployment stays up unchanged as the demo until cutover.
 
 - **Auth**: bcrypt password hashing (`bcryptjs`, cost 10), JWT sessions (`jsonwebtoken`) in an httpOnly, `secure`, `sameSite=lax` cookie named `tcs_erp_session`, 7-day **rolling/sliding** expiry (added 2026-07-31, `refreshSessionCookie()` in `api/_lib/auth.ts`, called from `withErrorHandling()` in `api/_lib/http.ts` on every API request): each request that carries a still-valid token gets a freshly re-signed cookie with a full new 7-day window, so an actively-used session never hits its expiry — only 7 full days with *zero* requests logs the user out. Every authenticated request also re-fetches the user fresh from MongoDB (`getAuthContext()` in `api/_lib/auth.ts`) rather than trusting JWT claims for role/status — deactivating a user takes effect on their very next request, not just at token expiry. See [RBAC.md](./RBAC.md) for how this compares to true session revocation.
 - **RBAC enforced server-side**: every mutating API route calls `requirePermission()`/`requireUser()` (`api/_lib/auth.ts`), which check permissions via `roleHasPermission()` — the exact same pure permission-checking function from `src/lib/roles.ts`, value-imported into the API layer (not reimplemented). This is genuinely unbypassable via devtools now; the server is the source of truth.
@@ -76,10 +76,45 @@ Vercel's dynamic-route convention (`[...segments]`/`[[...segments]]` folders) ha
 
 The final, tested, working fix: a plain-named `api/handlers/` directory (no underscore, so it's not auto-excluded, but also not directly routable by folder name alone) plus an explicit **`vercel.json`** with `rewrites` mapping every `/api/<resource>` and `/api/<resource>/:path*` pattern to its one handler file. This is the real routing mechanism in production — a future engineer touching routing needs this context to avoid reintroducing the bug.
 
+### Standalone Express server (2026-08-06) — the primary runtime going forward
+
+On the owner's explicit go-ahead ("ให้ย้ายจาก vercel มาเป็น express เดี่ยวๆเลย"), the Express shell
+planned in [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) step B was built. **The `api/`
+handlers did not change** — `VercelRequest`/`VercelResponse` are type-only imports (erased at
+runtime), and everything the handlers actually touch (`req.url`/`headers`/`body`/`query`,
+`res.status().json()`/`setHeader()`/`send()`/`end()`) exists identically on Express's req/res.
+
+- **`server/app.ts`** — `createApp()`: `express.json({ limit: "25mb" })` (sized for Service photo
+  saves; Vercel's platform cap previously did this job), query parser forced to `"simple"` (string
+  | string[] values, matching what handlers were written against), then a single plain middleware
+  that maps the first path segment after `/api/` to a handler via a table replicating
+  `vercel.json`'s rewrites exactly. Deliberately **not** Express path mounts
+  (`app.use("/api/quotes", ...)`) — those strip the prefix from `req.url`, which would break every
+  handler's raw-pathname dispatch (`getPathSegments()`, and the multi-resource handlers like
+  quotes.ts serving `/api/scope-of-works`). After the API: `express.static(dist)` + SPA fallback
+  (skipped when `dist/` is absent, e.g. tests and `npm run dev` where Vite serves the frontend).
+- **`server/index.ts` + `server/env.ts`** — entry point; dotenv loads `.env` first,
+  `.vercel/.env.development.local` as a fallback (so a machine that previously ran `vercel dev`
+  works with zero setup). Env must load before `api/_lib/mongodb.ts` evaluates (it reads
+  `MONGODB_DB` at module scope) — guaranteed by ESM import order in `index.ts`.
+- **Scripts**: `npm run dev` = `concurrently` running `tsx watch server/index.ts` (API, port 3001)
+  + `vite --host` (port 3000, `/api` proxied to 3001 — see `vite.config.ts`). `npm start` = the
+  production process (API + `dist/`, one origin, no proxy). TypeScript runs via `tsx` in
+  production too — no separate server build step.
+- The local-dev DNS workaround in `api/_lib/mongodb.ts` now also excludes
+  `NODE_ENV=production` (overriding the resolver on a real host could itself break DNS).
+- Integration-tested over real HTTP in `tests/api/expressServer.test.ts` (routing, JSON bodies,
+  cookie round-trip, raw-pathname sub-resources, JSON 404/413).
+- **The 12-function Vercel Hobby cap does not apply to this runtime** — but it still applies to
+  the Vercel demo deployment for as long as that stays up, so keep the consolidated handler
+  layout until the demo is decommissioned ([SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md)
+  step H).
+- Install/operations guide (PM2/systemd, HTTPS, backups): [DEPLOYMENT.md](./DEPLOYMENT.md).
+
 ### TypeScript / build / lint split
 
 - Root `tsconfig.json` still covers only `src/` (unchanged, browser/DOM target).
-- New `tsconfig.api.json` covers `api/` (Node target; `jsx: "react-jsx"` set specifically so `tsc` can parse type-only imports from `quotes.tsx`; DOM lib included alongside Node types because `api/_lib` files transitively type-check browser-side lib files like `apiClient.ts` that reference `fetch`/`Response`).
+- New `tsconfig.api.json` covers `api/` (plus `server/` since 2026-08-06) (Node target; `jsx: "react-jsx"` set specifically so `tsc` can parse type-only imports from `quotes.tsx`; DOM lib included alongside Node types because `api/_lib` files transitively type-check browser-side lib files like `apiClient.ts` that reference `fetch`/`Response`).
 - `npm run build` now runs `tsc -b && tsc --noEmit -p tsconfig.api.json && vite build` — both TS projects must pass clean.
 - `eslint.config.js` has a second block scoped to `api/**/*.ts` with Node globals instead of browser globals.
 

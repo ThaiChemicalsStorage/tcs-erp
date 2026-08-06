@@ -4,7 +4,50 @@
 
 ---
 
-## Session — 2026-08-06 (absolute latest), New Service module (Phase 1) + same-day photo attachments and print
+## Session — 2026-08-06 (absolute latest), Vercel → standalone Express migration (step B of the server plan)
+
+### What was implemented
+The session began as local-dev troubleshooting — the user asked why `npm run dev` couldn't call the
+API (answer: plain Vite serves no `api/` functions; `vercel dev` was the previous full-stack way) —
+and escalated through "can this run standalone without Vercel?" and "how risky is that?" (a code
+scan showed: very low — handlers already parse raw URLs and read cookies from headers themselves)
+to an explicit go-ahead: **"ให้ย้ายจาก vercel มาเป็น express เดี่ยวๆเลย"**.
+
+Executed all 3 steps of the pre-agreed plan in [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md):
+`server/` (Express `createApp()` + entry + dotenv env loading with a `.vercel/.env.development.local`
+fallback), `.env.example`, and [DEPLOYMENT.md](./DEPLOYMENT.md). Zero changes to `api/` handler
+logic; one behavioral tweak in `api/_lib/mongodb.ts` (the dev-only DNS workaround now also excludes
+`NODE_ENV=production`). `npm run dev` now runs the full stack locally without any Vercel tooling;
+`npm start` is the production process. Full details: CHANGELOG.md 2026-08-06 (Express entry).
+
+### Decisions / gotchas worth remembering
+- **Routing had to be a plain middleware on `req.url`, not Express path mounts** — `app.use(path,
+  ...)` strips the prefix from `req.url`, which would silently break `getPathSegments()` and every
+  multi-resource handler's raw-pathname dispatch (`/api/scope-of-works` inside quotes.ts, etc.).
+- **Express 5's query parser was forced to `"simple"`** so `req.query` keeps the Vercel-era
+  `string | string[]` shape the handlers were written against.
+- The Vercel demo deployment is deliberately untouched (`vercel.json`, `api/` layout, 12-function
+  consolidation all kept) — both runtimes share one codebase until cutover/decommission (plan
+  step H). The 12-function cap no longer constrains the Express runtime, but keep the consolidated
+  layout while the demo lives.
+
+### Verification
+`tsc` (both configs), `lint`, `build`, `test` — all clean; 7 new real-HTTP integration tests
+(`tests/api/expressServer.test.ts`, 84 total) cover routing/body-parsing/cookie round-trip/
+sub-resource dispatch/JSON 404+413; plus a live boot smoke test of `server/index.ts` (`/api/quotes`
+→ 401 JSON, `/api/nope` → 404 JSON).
+
+### Next steps
+- Remaining migration work is hardware-blocked, not code-blocked: SERVER_MIGRATION_PLAN.md steps
+  A (domain + Resend sender) and C–H (machine, HTTPS, cutover checklist, manual regeneration).
+- Optional post-migration upgrades now unblocked on this runtime: SSE notification push (replace
+  45 s polling), raising the 2 MB attachment cap.
+- Worth a manual check next session: run `npm run dev` on the user's machine end-to-end (sign-in →
+  quotation list) — this session verified the API side live but not a full browser session.
+
+---
+
+## Session — 2026-08-06, New Service module (Phase 1) + same-day photo attachments and print
 
 ### What was implemented
 A large, explicitly-phased build: a brand-new "Service" module (field-service checklist + report,

@@ -4,8 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
+    "dev": "concurrently -k -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "tsx watch server/index.ts",
+    "dev:web": "vite --host",
     "build": "tsc -b && tsc --noEmit -p tsconfig.api.json && vite build",
+    "start": "tsx server/index.ts",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run"
@@ -13,24 +16,29 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cookie": "^2.0.1",
+    "dotenv": "^17.4.2",
     "driver.js": "^1.6.0",
+    "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "0.487.0",
     "mongodb": "^7.5.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "recharts": "2.15.2",
+    "tsx": "^4.23.9",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "4.1.12",
     "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@vercel/node": "^5.8.22",
     "@vitejs/plugin-react": "4.7.0",
+    "concurrently": "^10.0.4",
     "eslint": "^10.6.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
@@ -47,6 +55,7 @@
     "esbuild@0.25.12": true,
     "esbuild@0.27.0": true,
     "esbuild@0.27.7": true,
+    "esbuild@0.28.1": true,
     "mongodb-memory-server@11.2.0": true
   }
 }

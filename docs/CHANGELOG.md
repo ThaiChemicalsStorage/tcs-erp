@@ -4,7 +4,54 @@
 
 ---
 
-## 2026-08-06 (absolute latest) — Per-report checklist customization + print pagination fix + Service What's New entry
+## 2026-08-06 (absolute latest) — Standalone Express server: the app now runs without Vercel
+
+The owner gave the explicit go-ahead ("ให้ย้ายจาก vercel มาเป็น express เดี่ยวๆเลย") for the Express
+migration recorded in [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) — all 3 planned steps
+executed in this pass. **No `api/` handler logic changed**; the handlers were already written
+against a portable req/res surface (`VercelRequest`/`VercelResponse` are type-only, erased at
+runtime).
+
+- **`server/app.ts`** — `createApp()`: a routing table replicating `vercel.json`'s rewrites maps
+  the first path segment after `/api/` to its handler in a plain middleware (deliberately not
+  Express path mounts, which strip `req.url` and would break the handlers' raw-pathname dispatch);
+  `express.json({ limit: "25mb" })` (Service photos are ≤4 MB raw / ~5.5 MB base64);
+  query parser forced to `"simple"` (Vercel-shaped `string | string[]` values); `express.static`
+  over `dist/` + SPA fallback (skipped when `dist/` is absent); a JSON error backstop so
+  body-parser failures (413/400) return JSON, never Express's HTML error page.
+- **`server/index.ts` + `server/env.ts`** — entry point on `PORT` (default 3001); dotenv loads
+  `.env` first with `.vercel/.env.development.local` as a fallback, so a machine that previously
+  ran `vercel dev` works with zero setup. Env loads before `api/_lib/mongodb.ts` evaluates
+  (module-scope `MONGODB_DB` read) via ESM import order.
+- **Scripts**: `npm run dev` is now the full local stack — `concurrently` runs `tsx watch
+  server/index.ts` (API :3001) + `vite --host` (:3000, `/api` proxied — `vite.config.ts`). New
+  `npm start` runs the production process (API + built `dist/`, one origin). `vercel dev` is no
+  longer needed for local work (still functions; `vercel.json` + `api/` layout untouched, so the
+  Vercel demo keeps auto-deploying unchanged until cutover).
+- **`api/_lib/mongodb.ts`** — the local-dev DNS-resolver workaround now also excludes
+  `NODE_ENV=production` (on a real host, overriding the machine's resolver could itself break
+  name resolution; the gate previously only checked `VERCEL_ENV`).
+- **`.env.example`** (new) — every variable documented: `MONGODB_URI`, `MONGODB_DB`, `JWT_SECRET`,
+  `NODE_ENV`, `PORT`, `APP_URL`, `RESEND_API_KEY`, `EMAIL_FROM`.
+- **[DEPLOYMENT.md](./DEPLOYMENT.md)** (new) — real-server install guide: PM2/systemd, nginx/Caddy
+  + HTTPS (secure cookie ⇒ HTTPS mandatory), `X-Forwarded-For` requirement (login rate limiting
+  reads it), cwd-must-be-project-root note (template workbook + `dist/` resolve via
+  `process.cwd()`), Atlas vs self-hosted + backup guidance.
+- **`tests/api/expressServer.test.ts`** (new, +7 tests → 84 total) — real-HTTP integration tests
+  against `createApp()` + in-memory MongoDB: setup/login round-trip incl. session cookie,
+  authenticated `GET /api/quotes`, 401 guard, raw-pathname sub-resource routing
+  (`/api/scope-of-works` via the quotes handler), JSON 404 for unknown resources, JSON 413 for
+  oversized bodies.
+- **Build config**: `tsconfig.api.json` now includes `server/`; new deps `express` 5 + `dotenv` +
+  `tsx` (runtime) and `@types/express` + `concurrently` (dev).
+
+**Verified**: `tsc` (both configs)/`lint`/`build`/`test` (84/84) clean, plus a live boot of
+`server/index.ts` on :3001 — `/api/quotes` → 401 JSON (auth guard through real routing),
+`/api/nope` → 404 JSON.
+
+---
+
+## 2026-08-06 — Per-report checklist customization + print pagination fix + Service What's New entry
 
 Direct user request (with screenshot): (1) the printed report's "Abnormal Findings" heading was
 stranded at the bottom of one page while its first SERVICE ITEM block jumped to the next; (2) the

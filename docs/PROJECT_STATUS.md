@@ -10,10 +10,21 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Current Phase
 
-**Real full-stack app, deployed and live.** Vite + React frontend, Vercel Serverless Functions (Node.js) backend, MongoDB Atlas database. Live at https://tcs-erp-nine.vercel.app. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+**Real full-stack app, deployed and live.** Vite + React frontend, Node.js backend, MongoDB Atlas database. **As of 2026-08-06 the primary runtime is a standalone Express server (`server/`, `npm start`)** — Vercel-free, ready for the planned self-managed host; the Vercel deployment (https://tcs-erp-nine.vercel.app) stays up unchanged as the demo until cutover. See [ARCHITECTURE.md](./ARCHITECTURE.md) and [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## Completed Features
 
+- ✅ **[2026-08-06] Standalone Express server — the app now runs without Vercel.** On the owner's
+  explicit go-ahead, all 3 steps of [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md)'s plan
+  were executed: `server/` (Express `createApp()` mounting the **unchanged** `api/` handlers via a
+  routing table replicating `vercel.json`'s rewrites, 25 MB JSON limit, static `dist/` + SPA
+  fallback), `.env.example`, and [DEPLOYMENT.md](./DEPLOYMENT.md) (PM2/systemd, nginx/Caddy +
+  HTTPS, backups). `npm run dev` now runs the full stack locally (Express API :3001 + Vite :3000
+  with `/api` proxy — first time ever without `vercel dev`); new `npm start` is the production
+  process. +7 real-HTTP integration tests (`tests/api/expressServer.test.ts`, 84 total).
+  `tsc`/`lint`/`build`/`test` clean + live boot smoke-tested. The Vercel demo keeps deploying
+  unchanged; decommissioning it is [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) step H
+  at cutover time.
 - ✅ **[2026-08-06] New Service module (Phase 1) + same-day photo attachments and print.**
   Brand-new field-service checklist + report module ("บริการ"), created directly against a Customer
   (not derived from a Quotation, unlike every other document type). Explicitly phased with the

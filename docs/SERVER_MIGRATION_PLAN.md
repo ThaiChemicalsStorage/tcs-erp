@@ -2,8 +2,11 @@
 
 > **Recorded 2026-07-24 from a direct conversation with the owner** — written down at their request
 > ("จดและสร้างไฟล์สักอย่างในโปรเจคก์นี้ว่าเคยคุยเรื่องนี้ไว้ขี้เกียจมาบอกใหม่") so it never needs
-> re-explaining. **Status: NOT started — deferred until development is finished and the owner
-> explicitly says go.**
+> re-explaining. **Status update 2026-08-06: the owner gave the go-ahead ("ให้ย้ายจาก vercel มาเป็น
+> express เดี่ยวๆเลย") and step B — the portable Express server shell + `.env.example` +
+> [DEPLOYMENT.md](./DEPLOYMENT.md) — is BUILT.** The app now runs fully standalone (`npm run dev`
+> locally, `npm start` on a server); the Vercel demo keeps deploying unchanged until cutover.
+> Server-machine setup (step C) onward still waits for an actual machine.
 
 ## Key Facts (agreed with the owner)
 
@@ -35,7 +38,7 @@ and CHANGELOG.md 2026-07-24.
 | File attachments | ✅ | Stored in MongoDB (`scope_attachment_files`) — travel with the DB |
 | Email (Resend REST API) | ✅ | Plain `fetch` — just set `RESEND_API_KEY` on the new host |
 | Auth (bcrypt + JWT httpOnly cookie) | ✅ | Not Vercel-coupled (`secure` cookie requires HTTPS on the new host) |
-| **API layer — 12 function files in `api/handlers/` + `vercel.json` rewrites** | ⚠️ | The one Vercel-coupled piece: runs as Vercel Functions today; needs a thin Express wrapper (see plan) |
+| **API layer — 12 function files in `api/handlers/` + `vercel.json` rewrites** | ✅ (2026-08-06) | The thin Express wrapper exists: `server/app.ts` mounts the unchanged handlers on the same routing table. Both runtimes work from one codebase. |
 
 The good news: nearly all business logic lives in `api/_lib/` and is transport-agnostic, and the
 req/res surface the handlers use (`req.query`, `req.body`, `res.status().json()`,
@@ -43,20 +46,20 @@ req/res surface the handlers use (`req.query`, `req.body`, `res.status().json()`
 type-only imports, erased at runtime). **The API does not need a rewrite — only a thin new shell
 around the existing handlers.**
 
-## The Migration Plan (3 steps — execute ONLY when the owner says go)
+## The Migration Plan (3 steps — ✅ ALL DONE 2026-08-06, on the owner's go-ahead)
 
-1. **Add an Express server** (`server/index.ts`): mount the existing 12 handler entry points on
-   routes replicating `vercel.json`'s rewrites, add `express.json()` with a ~5 MB limit (the
-   attachment upload body), and serve the built frontend from `dist/` with an SPA fallback.
-   *Side benefit: the first-ever way to run the full stack locally — today the API can only be
-   tested by deploying.*
-2. **Add `.env.example`** documenting every required variable in one place: `MONGODB_URI`, the JWT
-   secret, `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`.
-3. **Write `docs/DEPLOYMENT.md`** — the real-server install guide:
-   - Node 20+ under PM2 or systemd (always running, auto-restart on crash)
-   - nginx reverse proxy + HTTPS (Let's Encrypt)
-   - Database decision: keep Atlas vs self-hosted MongoDB, plus a backup plan
-   - Copying env values from Vercel to the new host
+1. ✅ **Add an Express server** (`server/index.ts` + `server/app.ts` + `server/env.ts`): mounts the
+   existing 12 handler entry points via a routing table replicating `vercel.json`'s rewrites,
+   `express.json()` with a 25 MB limit (raised from the planned ~5 MB once the Service module's
+   4 MB photos shipped), and serves the built frontend from `dist/` with an SPA fallback.
+   The side benefit landed too: `npm run dev` now runs the full stack locally (Express API +
+   Vite with an `/api` proxy) — no `vercel dev` needed. Integration-tested over real HTTP in
+   `tests/api/expressServer.test.ts`. See [ARCHITECTURE.md](./ARCHITECTURE.md) "Standalone
+   Express server".
+2. ✅ **`.env.example`** — documents every variable: `MONGODB_URI`, `MONGODB_DB`, `JWT_SECRET`,
+   `NODE_ENV`, `PORT`, `APP_URL`, `RESEND_API_KEY`, `EMAIL_FROM`.
+3. ✅ **[DEPLOYMENT.md](./DEPLOYMENT.md)** — the real-server install guide (PM2/systemd,
+   nginx/Caddy + HTTPS, Atlas-vs-self-hosted + backups, copying env values from Vercel).
 
 Steps 1–2 are non-destructive to the Vercel demo (the same code keeps deploying to Vercel
 unchanged; the Express entry is an additional way to run it, not a replacement).
