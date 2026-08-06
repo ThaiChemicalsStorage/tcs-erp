@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.vercel
+.env
+.env.*
+.claude
+.playwright-mcp
+.vscode
+.idea
+docs
+tests
+nginx
+*.log
+*.tsbuildinfo
+Dockerfile
+docker-compose.yml

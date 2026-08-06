@@ -1,0 +1,4 @@
+# Real TLS certificates/private keys must never be committed — everything in this
+# folder is ignored except this file (which keeps the folder present in the repo).
+*
+!.gitignore

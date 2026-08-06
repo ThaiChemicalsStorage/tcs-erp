@@ -116,6 +116,81 @@ default; nginx needs the line above).
 git pull && npm install && npm run build && pm2 restart tcs-erp   # or systemctl restart tcs-erp
 ```
 
+## Docker (added 2026-08-06 — the fully self-contained option)
+
+An alternative to the PM2/nginx-on-the-host setup above: `docker compose up -d --build` runs the
+whole stack — the app image (committed `Dockerfile`, multi-stage: `npm ci` + `npm run build`, then
+a pruned runtime layer), **its own MongoDB** (named volume `mongo_data`, starts empty → Setup
+Wizard on first visit), and **nginx** for HTTPS termination.
+
+- **`docker-compose.yml` is deliberately NOT committed** (owner request) — the complete reference
+  copy is below; recreate it from here on a new machine.
+- **`nginx/` IS committed**: `nginx/conf.d/default.conf` (HTTP→HTTPS redirect, TLS, 30 MB body
+  limit, `X-Forwarded-For` for login rate limiting) and `nginx/certs/` (self-git-ignored — put
+  real `fullchain.pem` + `privkey.pem` there; the volume mounts it read-only at
+  `/etc/nginx/certs`). A self-signed pair for testing:
+  `openssl req -x509 -nodes -newkey rsa:2048 -days 365 -keyout nginx/certs/privkey.pem -out nginx/certs/fullchain.pem -subj "/CN=localhost"`
+- Env: compose interpolates from `.env` next to it — `JWT_SECRET` is required (hard error at `up`
+  if missing); `APP_URL`/`RESEND_API_KEY`/`EMAIL_FROM`/`MONGODB_DB` optional. `MONGODB_URI` is
+  pinned to the compose MongoDB regardless of `.env` (to target Atlas instead, drop the `mongodb`
+  service and set the URI in the `app` service's environment).
+- Verified 2026-08-06: full `up -d --build` on the dev machine — `GET /api/auth/session` →
+  `{"user":null,"needsSetup":true}` (app ↔ container MongoDB), frontend 200 via nginx HTTPS,
+  HTTP→HTTPS 301, `/api/quotes` → 401 JSON.
+
+Reference `docker-compose.yml` (keep in sync with the local untracked copy):
+
+```yaml
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_DB: ${MONGODB_DB:-tcs_erp}
+      JWT_SECRET: ${JWT_SECRET:?put JWT_SECRET in .env next to docker-compose.yml}
+      APP_URL: ${APP_URL:-https://localhost}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+  mongodb:
+    image: mongo:8
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    # ports:
+    #   - "27017:27017"   # uncomment to reach the DB from the host (Compass, mongodump, ...)
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  nginx:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - app
+
+volumes:
+  mongo_data:
+```
+
+Backups under Docker: `docker compose exec mongodb mongodump --archive > backup-$(date +%F).archive`
+(everything incl. attachments is in MongoDB), and copy the file off-machine.
+
 ## Relationship to the Vercel demo
 
 The Vercel deployment keeps working unchanged (`vercel.json` + the `api/` file layout are

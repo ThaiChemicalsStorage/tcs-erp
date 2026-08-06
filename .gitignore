@@ -27,4 +27,10 @@ yarn-error.log*
 .playwright-mcp/
 .claude/
 
-.env*
+# .env* above must not swallow the committed template
+!.env.example
+
+# Docker — docker-compose.yml is deliberately untracked (owner request, 2026-08-06);
+# a full reference copy lives in docs/DEPLOYMENT.md "Docker". Dockerfile and nginx/ ARE committed
+# (real certs under nginx/certs/ are ignored by that folder's own .gitignore).
+docker-compose.yml

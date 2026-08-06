@@ -14,6 +14,13 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-06] Docker stack (same session as the Express migration).** `docker compose up -d
+  --build` runs the whole system self-contained: the app image (committed `Dockerfile`), its own
+  MongoDB (named volume, fresh-DB Setup Wizard path), and nginx HTTPS termination (committed
+  `nginx/` config; certs folder mounted read-only and self-git-ignored). The compose file itself
+  is **deliberately untracked** per owner request — reference copy in
+  [DEPLOYMENT.md](./DEPLOYMENT.md) "Docker". Verified with a real boot on the dev machine. Also
+  fixed `.gitignore` swallowing `.env.example`.
 - ✅ **[2026-08-06] Standalone Express server — the app now runs without Vercel.** On the owner's
   explicit go-ahead, all 3 steps of [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md)'s plan
   were executed: `server/` (Express `createApp()` mounting the **unchanged** `api/` handlers via a

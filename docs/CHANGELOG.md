@@ -4,7 +4,43 @@
 
 ---
 
-## 2026-08-06 (absolute latest) — Standalone Express server: the app now runs without Vercel
+## 2026-08-06 (absolute latest) — Docker stack: app + MongoDB + nginx (HTTPS) in one `docker compose up`
+
+Follow-up user request to the Express migration below: a Docker Compose setup with MongoDB
+included, the compose file itself git-ignored, and an nginx service (committed) with
+`./nginx/certs:/etc/nginx/certs:ro` for certificate management on the server.
+
+- **`Dockerfile`** (committed) — multi-stage: `npm ci` (+`MONGOMS_DISABLE_POSTINSTALL=1` so the
+  test-only mongodb-memory-server doesn't download a mongod binary into the image) → `npm run
+  build` → `npm prune --omit=dev`; runtime layer copies `node_modules`/`dist`/`server`/`api`/
+  `src`/`public` (api value-imports src/lib helpers; the template workbook is read from `public/`
+  via cwd) and runs `tsx server/index.ts` as `NODE_ENV=production`.
+- **`docker-compose.yml`** (deliberately **untracked** — added to `.gitignore` per owner request;
+  full reference copy kept in [DEPLOYMENT.md](./DEPLOYMENT.md) "Docker") — 3 services: `app`
+  (built image, env interpolated from `.env`, `JWT_SECRET` required with a hard `:?` error,
+  `MONGODB_URI` pinned to the compose DB), `mongodb` (mongo:8, `mongo_data` named volume,
+  mongosh-ping healthcheck gating app start), `nginx` (stable-alpine, ports 80/443,
+  `./nginx/conf.d` + `./nginx/certs` mounted read-only).
+- **`nginx/`** (committed, per the same request): `conf.d/default.conf` — HTTP→HTTPS 301, TLS off
+  `certs/fullchain.pem` + `privkey.pem`, `client_max_body_size 30m` (must exceed the app's 25 MB
+  JSON limit), `X-Forwarded-For` forwarded (login rate limiting reads it). `nginx/certs/` carries
+  a self-ignoring `.gitignore` so the folder exists in the repo but real keys can never be
+  committed.
+- **`.dockerignore`** (committed) — keeps `node_modules`/`.git`/`.env*`/`nginx` etc. out of the
+  build context.
+- **`.gitignore` fix**: the pre-existing `.env*` pattern was silently swallowing `.env.example`
+  (meant to be committed since the Express migration) — added `!.env.example`; the template is now
+  actually tracked.
+- **Verified live**: `docker compose up -d --build` on the dev machine (self-signed cert pair) —
+  mongodb healthy → app up → `GET /api/auth/session` via nginx HTTPS returned
+  `{"user":null,"needsSetup":true}` (fresh container DB, Setup Wizard path per
+  [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) step E), frontend 200, HTTP→HTTPS 301,
+  `/api/quotes` → 401 JSON. Stack stopped after the test; data persists in the `mongo_data`
+  volume.
+
+---
+
+## 2026-08-06 — Standalone Express server: the app now runs without Vercel
 
 The owner gave the explicit go-ahead ("ให้ย้ายจาก vercel มาเป็น express เดี่ยวๆเลย") for the Express
 migration recorded in [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) — all 3 planned steps

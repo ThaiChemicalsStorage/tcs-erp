@@ -37,9 +37,23 @@ logic; one behavioral tweak in `api/_lib/mongodb.ts` (the dev-only DNS workaroun
 sub-resource dispatch/JSON 404+413; plus a live boot smoke test of `server/index.ts` (`/api/quotes`
 → 401 JSON, `/api/nope` → 404 JSON).
 
+### Addendum (same session): Docker stack
+A follow-up request added the fully self-contained Docker option: committed `Dockerfile` (multi-
+stage, tsx runtime) + `nginx/` (conf + self-git-ignored `certs/` folder mounted
+`./nginx/certs:/etc/nginx/certs:ro` per the owner's spec) + an **untracked-by-request**
+`docker-compose.yml` (app + mongo:8 with healthcheck-gated startup + nginx:stable-alpine; full
+reference copy preserved in DEPLOYMENT.md "Docker" since the live file is git-ignored). Also fixed
+`.gitignore`'s `.env*` silently swallowing `.env.example` (it never made it into the Express
+migration commit — now tracked). Verified with a real `docker compose up -d --build`: session
+endpoint through nginx HTTPS answered `needsSetup:true` off the fresh container MongoDB, frontend
+200, HTTP→HTTPS 301. One local-env note: a `.env` was created on this machine (JWT_SECRET copied
+from `.vercel/.env.development.local` so local sessions keep verifying; APP_URL=https://localhost)
+— compose interpolation requires it.
+
 ### Next steps
 - Remaining migration work is hardware-blocked, not code-blocked: SERVER_MIGRATION_PLAN.md steps
-  A (domain + Resend sender) and C–H (machine, HTTPS, cutover checklist, manual regeneration).
+  A (domain + Resend sender) and C–H (machine, HTTPS, cutover checklist, manual regeneration) —
+  step C now has two ready-made shapes: PM2/systemd on the host, or the Docker stack above.
 - Optional post-migration upgrades now unblocked on this runtime: SSE notification push (replace
   45 s polling), raising the 2 MB attachment cap.
 - Worth a manual check next session: run `npm run dev` on the user's machine end-to-end (sign-in →
