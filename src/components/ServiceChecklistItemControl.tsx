@@ -21,6 +21,7 @@ export function ServiceChecklistItemControl({
   onUploadPhoto,
   onDeletePhoto,
   photoUploadDisabledReason,
+  onRemove,
 }: {
   itemDef: ServiceChecklistItemDef;
   value: ServiceChecklistItemValue;
@@ -33,9 +34,14 @@ export function ServiceChecklistItemControl({
   // title — used for the "new report" preview, where the report (and thus a place to store photo
   // bytes) doesn't exist yet.
   photoUploadDisabledReason?: string;
+  // When set, the table gains a trailing remove-item column (per-report checklist customization —
+  // each job differs, see docs/MODULES/Service.md); the parent only passes this while the report
+  // is an editable Draft.
+  onRemove?: () => void;
 }) {
   const { t } = useI18n();
   const isAbnormal = value.status === "abnormal";
+  const totalCols = onRemove ? 4 : 3;
 
   return (
     <>
@@ -45,7 +51,7 @@ export function ServiceChecklistItemControl({
           {itemDef.kind === "measurement" && itemDef.unit && <span className="text-muted-foreground"> ({itemDef.unit})</span>}
         </td>
         {itemDef.kind === "measurement" ? (
-          <td colSpan={2} className="py-2 px-3 pr-5">
+          <td colSpan={2} className={`py-2 px-3 ${onRemove ? "" : "pr-5"}`}>
             <input
               type="text"
               value={value.measurementValue}
@@ -68,7 +74,7 @@ export function ServiceChecklistItemControl({
                 onClick={() => onChange({ ...value, status: value.status === "normal" ? "not_selected" : "normal" })}
               />
             </td>
-            <td className="py-2 px-2 pr-5 text-center align-middle w-20">
+            <td className={`py-2 px-2 ${onRemove ? "" : "pr-5"} text-center align-middle w-20`}>
               <CheckboxCell
                 variant="abnormal"
                 active={isAbnormal}
@@ -79,15 +85,28 @@ export function ServiceChecklistItemControl({
             </td>
           </>
         )}
+        {onRemove && (
+          <td className="py-2 px-2 pr-4 text-center align-middle w-10">
+            <button
+              type="button"
+              title={t("service.checklist.removeItem")}
+              aria-label={t("service.checklist.removeItem")}
+              onClick={onRemove}
+              className="inline-flex items-center justify-center w-6 h-6 rounded text-muted-foreground/50 hover:text-[#e05252] hover:bg-[#e05252]/10 transition-colors"
+            >
+              <X size={13} />
+            </button>
+          </td>
+        )}
       </tr>
       {error && (
         <tr>
-          <td colSpan={3} className="pl-5 pr-5 pb-1.5"><p className="text-[11px] text-[#e05252]">{error}</p></td>
+          <td colSpan={totalCols} className="pl-5 pr-5 pb-1.5"><p className="text-[11px] text-[#e05252]">{error}</p></td>
         </tr>
       )}
       {isAbnormal && (
         <tr>
-          <td colSpan={3} className="pl-5 pr-5 pb-3">
+          <td colSpan={totalCols} className="pl-5 pr-5 pb-3">
             <div className="pl-3 border-l-2 border-[#e05252]/40 space-y-2">
               <textarea
                 value={value.abnormalDetail}

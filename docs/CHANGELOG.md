@@ -4,7 +4,44 @@
 
 ---
 
-## 2026-08-06 (absolute latest) — Service print report checklist also converted to a table (editor-only fix was incomplete)
+## 2026-08-06 (absolute latest) — Per-report checklist customization + print pagination fix + Service What's New entry
+
+Direct user request (with screenshot): (1) the printed report's "Abnormal Findings" heading was
+stranded at the bottom of one page while its first SERVICE ITEM block jumped to the next; (2) the
+checklist must support adding/removing items and headings per report ("แต่ละงานที่ออกไปมันไม่เหมือนกัน"
+— every job differs), e.g. extra rows under the Blower heading.
+
+**Print pagination fix** (`ServiceReportPrintDocument.tsx`): the heading now renders inside the
+first abnormal item's `breakInside: avoid` cell instead of its own table row, so it can never be
+separated from the block it introduces.
+
+**Per-report checklist customization** (full stack):
+- New shared `sanitizeServiceTemplateSections()` (`src/lib/validation/serviceReportValidation.ts`,
+  +7 unit tests → 77 total): validates a client-proposed structure against the report's existing
+  snapshot — sections fixed (identity never taken from the payload), groups/items editable within
+  caps, malformed → null.
+- `PATCH /api/service-reports/:id` accepts `templateSections` (Draft-only, like everything else):
+  replaces the report's own `templateSnapshot.sections`, re-merges `checklist` against the new
+  structure, and hard-deletes photo Binary docs orphaned by removed items/groups. The master
+  template is never touched (`docs/API.md` updated).
+- Editor UI: per-item ✕ remove column, per-group "เพิ่มรายการ" row + header delete button,
+  per-section "เพิ่มหัวข้อ" row — all only on an editable existing Draft (`structureEditable`).
+  Names via the shared `PromptDialog`; removals confirm via `ConfirmDialog` only when recorded
+  data would be lost, instant otherwise. 18 new i18n keys (th/en).
+- Added the Service module's missing Thai What's New entry (`WHATS_NEW_ENTRIES`,
+  per the standing "user-facing features get announced" rule) covering the whole module as shipped
+  today: creation flow, checkbox table, abnormal photo rule, per-report customization, print.
+
+**Verified**: `tsc` (both configs)/`lint`/`build`/`test` (77/77) clean; live `vercel dev` browser
+session — added a custom item to Blower ("ตรวจสอบใบพัด Blower (รายการเพิ่มพิเศษ)") and a custom
+heading ("อุปกรณ์เสริมหน้างาน"), removed a data-less seeded item instantly (no dialog), saved
+(server accepted `templateSections`), hard-reloaded and confirmed all three structure changes
+persisted through the server sanitize/merge round-trip with the existing Abnormal item's detail +
+3 photos intact.
+
+---
+
+## 2026-08-06 — Service print report checklist also converted to a table (editor-only fix was incomplete)
 
 User caught that the printable Service Report (`ServiceReportPrintDocument.tsx`) still showed the
 old single-column checklist with round status glyphs after the editor's table conversion below —

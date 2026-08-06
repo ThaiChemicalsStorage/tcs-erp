@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Save, CheckCircle2, RotateCcw, Ban, Trash2, ChevronDown, ChevronRight, Wrench, Printer } from "lucide-react";
+import { ArrowLeft, Save, CheckCircle2, RotateCcw, Ban, Trash2, ChevronDown, ChevronRight, Wrench, Printer, Plus } from "lucide-react";
 import {
-  type ServiceReport, type ServiceReportDraft, type ServiceChecklistSectionValue, type ServiceReportStatus,
+  type ServiceReport, type ServiceReportDraft, type ServiceChecklistSectionValue, type ServiceChecklistItemValue,
+  type ServiceReportStatus,
   fetchServiceReport, createServiceReport, updateServiceReport, changeServiceReportStatus, deleteServiceReport,
   uploadServiceReportPhoto, deleteServiceReportPhoto, printServiceReport,
 } from "../../lib/serviceReports";
-import { type ServiceTemplateSummary, type ServiceTemplate, fetchServiceTemplates, fetchServiceTemplate } from "../../lib/serviceTemplates";
+import { type ServiceTemplateSummary, type ServiceTemplate, type ServiceChecklistSectionDef, fetchServiceTemplates, fetchServiceTemplate } from "../../lib/serviceTemplates";
 import { type Customer, fetchCustomers } from "../../lib/customers";
 import { type User, fetchUsers } from "../../lib/users";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
@@ -13,6 +14,7 @@ import { CustomerSelector } from "../quotation/CustomerSelector";
 import { ServiceChecklistItemControl } from "../../components/ServiceChecklistItemControl";
 import { ServiceReportPrintDocument } from "./ServiceReportPrintDocument";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { PromptDialog } from "../../components/PromptDialog";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 
@@ -103,6 +105,11 @@ export function ServiceReportEditor({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedTemplateFull, setSelectedTemplateFull] = useState<ServiceTemplate | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm(currentUserId));
+  // This report's own checklist structure — starts as the frozen templateSnapshot.sections and is
+  // per-report customizable (each job differs): groups/items can be added or removed while Draft,
+  // saved back via PATCH `templateSections`. The master template is never touched. Only meaningful
+  // for an existing report; the new-report preview derives read-only from selectedTemplateFull.
+  const [sections, setSections] = useState<ServiceChecklistSectionDef[]>([]);
   const [checklist, setChecklist] = useState<ServiceChecklistSectionValue[]>([]);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -111,6 +118,13 @@ export function ServiceReportEditor({
   const [completing, setCompleting] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"cancel" | "delete" | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [addItemTarget, setAddItemTarget] = useState<{ sectionKey: string; groupKey: string } | null>(null);
+  const [addGroupTarget, setAddGroupTarget] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<
+    | { type: "item"; sectionKey: string; groupKey: string; itemKey: string }
+    | { type: "group"; sectionKey: string; groupKey: string }
+    | null
+  >(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +141,7 @@ export function ServiceReportEditor({
           setReport(rpt);
           setForm(formFromReport(rpt));
           setChecklist(rpt.checklist);
+          setSections(rpt.templateSnapshot.sections);
         }
         setPhase("ready");
       })
@@ -192,14 +207,21 @@ export function ServiceReportEditor({
     }
   };
 
+  // Every server response carries the authoritative report — resync all three local mirrors
+  // (report, checklist values, checklist structure) so they can never drift from what was saved.
+  const applyServerReport = (updated: ServiceReport) => {
+    setReport(updated);
+    setChecklist(updated.checklist);
+    setSections(updated.templateSnapshot.sections);
+  };
+
   const handleSaveDraft = async () => {
     if (!report) return;
     setSaving(true);
     setFieldErrors({});
     try {
-      const updated = await updateServiceReport(report.id, draftBody());
-      setReport(updated);
-      setChecklist(updated.checklist);
+      const updated = await updateServiceReport(report.id, { ...draftBody(), templateSections: sections });
+      applyServerReport(updated);
       showToast(t("service.toast.saved"));
     } catch (err) {
       applyApiError(err, t("service.toast.saveFailed"));
@@ -214,10 +236,9 @@ export function ServiceReportEditor({
     setFieldErrors({});
     setChecklistErrors({});
     try {
-      const saved = await updateServiceReport(report.id, draftBody());
+      const saved = await updateServiceReport(report.id, { ...draftBody(), templateSections: sections });
       const updated = await changeServiceReportStatus(saved.id, "complete");
-      setReport(updated);
-      setChecklist(updated.checklist);
+      applyServerReport(updated);
       showToast(t("service.toast.completed"));
     } catch (err) {
       applyApiError(err, t("service.toast.completeFailed"));
@@ -234,8 +255,7 @@ export function ServiceReportEditor({
     setActionBusy(true);
     try {
       const updated = await changeServiceReportStatus(report.id, "reopen");
-      setReport(updated);
-      setChecklist(updated.checklist);
+      applyServerReport(updated);
       showToast(t("service.toast.reopened"));
     } catch (err) {
       applyApiError(err, t("service.toast.actionFailed"));
@@ -277,8 +297,7 @@ export function ServiceReportEditor({
     if (!report) return;
     try {
       const updated = await uploadServiceReportPhoto(report.id, { sectionKey, groupKey, itemKey }, file);
-      setReport(updated);
-      setChecklist(updated.checklist);
+      applyServerReport(updated);
     } catch (err) {
       applyApiError(err, t("service.toast.photoUploadFailed"));
     }
@@ -288,8 +307,7 @@ export function ServiceReportEditor({
     if (!report) return;
     try {
       const updated = await deleteServiceReportPhoto(report.id, photoId);
-      setReport(updated);
-      setChecklist(updated.checklist);
+      applyServerReport(updated);
     } catch (err) {
       applyApiError(err, t("service.toast.photoDeleteFailed"));
     }
@@ -314,19 +332,92 @@ export function ServiceReportEditor({
     });
   };
 
-  const sections = useMemo(
+  // ── Per-report checklist structure editing (add/remove items and headings) ──────────────────
+  // Only after the report exists (isNew previews the master template read-only, same rule as
+  // photos) and only while an editable Draft. Changes are local until Save, like item toggles.
+  const structureEditable = !isNew && isEditable;
+
+  const newStructureKey = () =>
+    `c-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10)}`;
+
+  const addChecklistItem = (sectionKey: string, groupKey: string, label: string) => {
+    const key = newStructureKey();
+    setSections((prev) => prev.map((s) => (s.key !== sectionKey ? s : {
+      ...s,
+      groups: s.groups.map((g) => (g.key !== groupKey ? g : {
+        ...g, items: [...g.items, { key, label, kind: "normalAbnormal" as const, sortOrder: g.items.length }],
+      })),
+    })));
+    setChecklist((prev) => prev.map((s) => (s.key !== sectionKey ? s : {
+      ...s,
+      groups: s.groups.map((g) => (g.key !== groupKey ? g : {
+        ...g, items: [...g.items, { key, status: "not_selected" as const, abnormalDetail: "", measurementValue: "", photos: [] }],
+      })),
+    })));
+  };
+
+  const addChecklistGroup = (sectionKey: string, title: string) => {
+    const key = newStructureKey();
+    setSections((prev) => prev.map((s) => (s.key !== sectionKey ? s : {
+      ...s, groups: [...s.groups, { key, title, items: [], sortOrder: s.groups.length }],
+    })));
+    setChecklist((prev) => prev.map((s) => (s.key !== sectionKey ? s : { ...s, groups: [...s.groups, { key, items: [] }] })));
+  };
+
+  const removeChecklistItem = (sectionKey: string, groupKey: string, itemKey: string) => {
+    setSections((prev) => prev.map((s) => (s.key !== sectionKey ? s : {
+      ...s, groups: s.groups.map((g) => (g.key !== groupKey ? g : { ...g, items: g.items.filter((it) => it.key !== itemKey) })),
+    })));
+    setChecklist((prev) => prev.map((s) => (s.key !== sectionKey ? s : {
+      ...s, groups: s.groups.map((g) => (g.key !== groupKey ? g : { ...g, items: g.items.filter((it) => it.key !== itemKey) })),
+    })));
+  };
+
+  const removeChecklistGroup = (sectionKey: string, groupKey: string) => {
+    setSections((prev) => prev.map((s) => (s.key !== sectionKey ? s : { ...s, groups: s.groups.filter((g) => g.key !== groupKey) })));
+    setChecklist((prev) => prev.map((s) => (s.key !== sectionKey ? s : { ...s, groups: s.groups.filter((g) => g.key !== groupKey) })));
+  };
+
+  const itemHasRecordedData = (v: ServiceChecklistItemValue | undefined): boolean =>
+    !!v && (v.status !== "not_selected" || v.abnormalDetail.trim() !== "" || v.measurementValue.trim() !== "" || (v.photos ?? []).length > 0);
+
+  // Deletes silently when the target holds no recorded data; asks first when data would be lost.
+  const requestRemoveItem = (sectionKey: string, groupKey: string, itemKey: string) => {
+    const value = checklist.find((s) => s.key === sectionKey)?.groups.find((g) => g.key === groupKey)?.items.find((it) => it.key === itemKey);
+    if (itemHasRecordedData(value)) setRemoveTarget({ type: "item", sectionKey, groupKey, itemKey });
+    else removeChecklistItem(sectionKey, groupKey, itemKey);
+  };
+
+  const requestRemoveGroup = (sectionKey: string, groupKey: string) => {
+    const groupValue = checklist.find((s) => s.key === sectionKey)?.groups.find((g) => g.key === groupKey);
+    const groupDef = sections.find((s) => s.key === sectionKey)?.groups.find((g) => g.key === groupKey);
+    const hasAnything = (groupDef?.items.length ?? 0) > 0 || (groupValue?.items ?? []).some(itemHasRecordedData);
+    if (hasAnything) setRemoveTarget({ type: "group", sectionKey, groupKey });
+    else removeChecklistGroup(sectionKey, groupKey);
+  };
+
+  const confirmRemove = () => {
+    if (!removeTarget) return;
+    if (removeTarget.type === "item") removeChecklistItem(removeTarget.sectionKey, removeTarget.groupKey, removeTarget.itemKey);
+    else removeChecklistGroup(removeTarget.sectionKey, removeTarget.groupKey);
+    setRemoveTarget(null);
+  };
+
+  // What the checklist area actually renders: the editable per-report structure for an existing
+  // report, or a read-only preview of the selected master template for a not-yet-created one.
+  const displaySections = useMemo<ServiceChecklistSectionDef[]>(
     () => (isNew
       ? (selectedTemplateFull && selectedTemplateFull.id === selectedTemplateId ? selectedTemplateFull.sections : [])
-      : (report?.templateSnapshot.sections ?? [])),
-    [isNew, selectedTemplateFull, selectedTemplateId, report],
+      : sections),
+    [isNew, selectedTemplateFull, selectedTemplateId, sections],
   );
   const previewChecklist = useMemo(() => {
     if (!isNew) return checklist;
-    return sections.map((s) => ({
+    return displaySections.map((s) => ({
       key: s.key, included: !s.isOptionalAddon,
       groups: s.groups.map((g) => ({ key: g.key, items: g.items.map((it) => ({ key: it.key, status: "not_selected" as const, abnormalDetail: "", measurementValue: "", photos: [] })) })),
     }));
-  }, [isNew, sections, checklist]);
+  }, [isNew, displaySections, checklist]);
 
   if (phase === "loading") {
     return (
@@ -359,7 +450,7 @@ export function ServiceReportEditor({
 
   let answeredCount = 0;
   let applicableCount = 0;
-  for (const sectionDef of sections) {
+  for (const sectionDef of displaySections) {
     const sectionValue = previewChecklist.find((s) => s.key === sectionDef.key);
     if (sectionDef.isOptionalAddon && !(sectionValue?.included ?? false)) continue;
     for (const groupDef of sectionDef.groups) {
@@ -385,6 +476,39 @@ export function ServiceReportEditor({
         busy={actionBusy}
         onConfirm={confirmAction === "delete" ? handleDelete : handleCancel}
         onCancel={() => setConfirmAction(null)}
+      />
+      <PromptDialog
+        open={addItemTarget !== null}
+        title={t("service.checklist.addItemTitle")}
+        label={t("service.checklist.addItemLabel")}
+        confirmLabel={t("service.checklist.addConfirm")}
+        requiredMessage={t("service.checklist.addItemRequired")}
+        onConfirm={(label) => {
+          if (addItemTarget) addChecklistItem(addItemTarget.sectionKey, addItemTarget.groupKey, label);
+          setAddItemTarget(null);
+        }}
+        onCancel={() => setAddItemTarget(null)}
+      />
+      <PromptDialog
+        open={addGroupTarget !== null}
+        title={t("service.checklist.addGroupTitle")}
+        label={t("service.checklist.addGroupLabel")}
+        confirmLabel={t("service.checklist.addConfirm")}
+        requiredMessage={t("service.checklist.addGroupRequired")}
+        onConfirm={(title) => {
+          if (addGroupTarget) addChecklistGroup(addGroupTarget, title);
+          setAddGroupTarget(null);
+        }}
+        onCancel={() => setAddGroupTarget(null)}
+      />
+      <ConfirmDialog
+        open={removeTarget !== null}
+        title={removeTarget?.type === "group" ? t("service.checklist.removeGroupTitle") : t("service.checklist.removeItemTitle")}
+        message={removeTarget?.type === "group" ? t("service.checklist.removeGroupMessage") : t("service.checklist.removeItemMessage")}
+        confirmLabel={t("service.checklist.removeConfirm")}
+        danger
+        onConfirm={confirmRemove}
+        onCancel={() => setRemoveTarget(null)}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -530,7 +654,7 @@ export function ServiceReportEditor({
         </div>
       </div>
 
-      {sections.length > 0 && (
+      {displaySections.length > 0 && (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <span className="flex items-center gap-2">
@@ -546,7 +670,7 @@ export function ServiceReportEditor({
           {isNew && (
             <p className="px-5 py-3 text-xs text-muted-foreground">{t("service.checklist.previewNote")}</p>
           )}
-          {sections.map((sectionDef) => {
+          {displaySections.map((sectionDef) => {
             const sectionValue = previewChecklist.find((s) => s.key === sectionDef.key);
             const collapsed = collapsedSections.has(sectionDef.key);
             return (
@@ -586,9 +710,10 @@ export function ServiceReportEditor({
                           <th className="text-center px-2 py-2 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider w-20">
                             {t("service.checklist.normal")}
                           </th>
-                          <th className="text-center px-2 pr-5 py-2 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider w-20">
+                          <th className={`text-center px-2 ${structureEditable ? "" : "pr-5"} py-2 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider w-20`}>
                             {t("service.checklist.abnormal")}
                           </th>
+                          {structureEditable && <th className="w-10 pr-4" />}
                         </tr>
                       </thead>
                       {sectionDef.groups.map((groupDef) => {
@@ -596,8 +721,21 @@ export function ServiceReportEditor({
                         return (
                           <tbody key={groupDef.key}>
                             <tr className="bg-secondary/30">
-                              <td colSpan={3} className="pl-5 pr-5 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                                {groupDef.title}
+                              <td colSpan={structureEditable ? 4 : 3} className="pl-5 pr-4 py-1.5">
+                                <span className="flex items-center justify-between gap-2">
+                                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{groupDef.title}</span>
+                                  {structureEditable && (
+                                    <button
+                                      type="button"
+                                      title={t("service.checklist.removeGroup")}
+                                      aria-label={t("service.checklist.removeGroup")}
+                                      onClick={() => requestRemoveGroup(sectionDef.key, groupDef.key)}
+                                      className="inline-flex items-center justify-center w-6 h-6 rounded text-muted-foreground/50 hover:text-[#e05252] hover:bg-[#e05252]/10 transition-colors"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  )}
+                                </span>
                               </td>
                             </tr>
                             {groupDef.items.map((itemDef) => {
@@ -616,12 +754,41 @@ export function ServiceReportEditor({
                                   })))}
                                   onUploadPhoto={isNew ? undefined : (file) => handleUploadPhoto(sectionDef.key, groupDef.key, itemDef.key, file)}
                                   onDeletePhoto={isNew ? undefined : (photoId) => handleDeletePhoto(photoId)}
+                                  onRemove={structureEditable ? () => requestRemoveItem(sectionDef.key, groupDef.key, itemDef.key) : undefined}
                                 />
                               );
                             })}
+                            {structureEditable && (
+                              <tr>
+                                <td colSpan={4} className="pl-5 pr-5 py-1.5 border-b border-border/40">
+                                  <button
+                                    type="button"
+                                    onClick={() => setAddItemTarget({ sectionKey: sectionDef.key, groupKey: groupDef.key })}
+                                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-[#c9a84c] transition-colors"
+                                  >
+                                    <Plus size={12} /> {t("service.checklist.addItem")}
+                                  </button>
+                                </td>
+                              </tr>
+                            )}
                           </tbody>
                         );
                       })}
+                      {structureEditable && (
+                        <tbody>
+                          <tr>
+                            <td colSpan={4} className="pl-5 pr-5 py-2">
+                              <button
+                                type="button"
+                                onClick={() => setAddGroupTarget(sectionDef.key)}
+                                className="flex items-center gap-1 text-xs font-medium text-[#c9a84c] hover:text-[#f0c040] transition-colors"
+                              >
+                                <Plus size={13} /> {t("service.checklist.addGroup")}
+                              </button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      )}
                     </table>
                   </div>
                 )}

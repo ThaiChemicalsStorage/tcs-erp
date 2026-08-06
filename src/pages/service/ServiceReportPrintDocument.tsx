@@ -197,14 +197,16 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
           })}
 
         <tbody>
-          {abnormalItems.length > 0 && (
-            <tr><td colSpan={2} className="pt-3 pb-0.5"><p className="text-[10.5px] font-bold">รายละเอียดรายการที่พบความผิดปกติ / Abnormal Findings</p></td></tr>
-          )}
           {abnormalItems.map((it) => {
             serviceItemNumber += 1;
             return (
               <tr key={`${it.sectionTitle}-${it.groupTitle}-${it.label}-${serviceItemNumber}`} style={{ breakInside: "avoid" }}>
                 <td colSpan={2} className="pb-3">
+                  {/* Heading lives inside the first item's cell (not its own row) so breakInside:avoid
+                      can never strand it alone at the bottom of a page while the item jumps to the next. */}
+                  {serviceItemNumber === 1 && (
+                    <p className="text-[10.5px] font-bold pt-3 pb-1.5">รายละเอียดรายการที่พบความผิดปกติ / Abnormal Findings</p>
+                  )}
                   <div className="bg-[#1a3a6b] text-white px-2 py-1 text-[10px] font-semibold">SERVICE ITEM {serviceItemNumber} / {it.label}</div>
                   <div className="border border-[#0b1d3a]/20 border-t-0 px-2 py-2 space-y-1.5">
                     <p className="text-[9.5px]"><span className="text-[#5a7299]">หมวด: </span>{it.sectionTitle} — {it.groupTitle}</p>

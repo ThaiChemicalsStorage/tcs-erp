@@ -12,7 +12,7 @@ import {
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
-import { validateServiceReportForCompletion, validateServiceChecklist } from "../../src/lib/validation/serviceReportValidation.js";
+import { validateServiceReportForCompletion, validateServiceChecklist, sanitizeServiceTemplateSections } from "../../src/lib/validation/serviceReportValidation.js";
 import type { ServiceChecklistSectionDef } from "../../src/lib/serviceTemplates.js";
 import type {
   ServiceReport, ServiceReportListItem, ServiceReportStatus, ServiceReportCustomerSnapshot,
@@ -415,7 +415,34 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("onSiteContactPhone" in body) update.onSiteContactPhone = sanitizeShortText(body.onSiteContactPhone, "เบอร์โทรผู้ติดต่อหน้างาน");
   if ("overallCustomerSummary" in body) update.overallCustomerSummary = sanitizeLongText(body.overallCustomerSummary, "สรุปภาพรวมสำหรับลูกค้า");
   if ("overallRemark" in body) update.overallRemark = sanitizeLongText(body.overallRemark, "หมายเหตุ");
-  if ("checklist" in body) update.checklist = mergeChecklist(doc.templateSnapshot, body.checklist, doc.checklist);
+
+  // Per-report checklist customization (added 2026-08-06): the client may add/remove groups and
+  // items inside this report's own frozen snapshot (each job differs from the paper form) — the
+  // sections themselves stay those the template defined, and the master template is never touched.
+  let effectiveSnapshot = doc.templateSnapshot;
+  if ("templateSections" in body) {
+    const sanitized = sanitizeServiceTemplateSections(body.templateSections, doc.templateSnapshot.sections);
+    if (!sanitized) throw new HttpError(400, "โครงสร้างรายการตรวจเช็คไม่ถูกต้อง");
+    effectiveSnapshot = { ...doc.templateSnapshot, sections: sanitized };
+    update.templateSnapshot = effectiveSnapshot;
+  }
+  // A structure change must also rebuild checklist values (pruning removed items, defaulting new
+  // ones), even if the payload carried no checklist of its own.
+  if ("checklist" in body || "templateSections" in body) {
+    update.checklist = mergeChecklist(effectiveSnapshot, "checklist" in body ? body.checklist : null, doc.checklist);
+  }
+  // Removing an item (or its whole group) drops its photo *metadata* with it — also delete the
+  // orphaned photo bytes so the files collection can't accumulate unreachable Binary blobs.
+  if (update.templateSnapshot && update.checklist) {
+    const collectPhotoIds = (checklist: ServiceChecklistSectionValue[]): Set<string> =>
+      new Set(checklist.flatMap((s) => s.groups.flatMap((g) => g.items.flatMap((it) => (it.photos ?? []).map((p) => p.id)))));
+    const survivingIds = collectPhotoIds(update.checklist);
+    const orphanedIds = [...collectPhotoIds(doc.checklist)].filter((pid) => !survivingIds.has(pid));
+    if (orphanedIds.length > 0) {
+      const files = await serviceChecklistPhotoFilesCollection();
+      await files.deleteMany({ serviceReportId: id, photoId: { $in: orphanedIds } });
+    }
+  }
 
   update.updatedAt = nowIso();
   update.updatedBy = ctx.user.id;
@@ -424,7 +451,11 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const updated = await serviceReports.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบรายงานบริการ");
 
-  await writeServiceAuditEntry(ctx, "Service Report Updated", `แก้ไขรายงานบริการ ${id}`, { serviceReportId: id });
+  await writeServiceAuditEntry(
+    ctx, "Service Report Updated",
+    `แก้ไขรายงานบริการ ${id}${update.templateSnapshot ? " (ปรับโครงสร้างรายการตรวจเช็ค)" : ""}`,
+    { serviceReportId: id },
+  );
   res.status(200).json({ serviceReport: withStringId(updated) satisfies ServiceReport });
 }
 

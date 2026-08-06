@@ -3,6 +3,7 @@ import type {
   ServiceChecklistSectionValue,
   ServiceReportTemplateSnapshot,
 } from "../serviceReports.js";
+import type { ServiceChecklistSectionDef, ServiceChecklistGroupDef, ServiceChecklistItemDef } from "../serviceTemplates.js";
 import { isValidIsoDateOrEmpty } from "./dateUtils.js";
 import type { ValidationResult } from "./types.js";
 
@@ -91,6 +92,74 @@ export function validateServiceChecklist(
   }
 
   return { valid: Object.keys(itemErrors).length === 0, itemErrors };
+}
+
+export const MAX_CHECKLIST_GROUPS_PER_SECTION = 30;
+export const MAX_CHECKLIST_ITEMS_PER_GROUP = 100;
+
+/**
+ * Sanitizes a client-proposed per-report checklist structure (added 2026-08-06 — each service job
+ * differs, so a report's own frozen `templateSnapshot.sections` may be customized: groups
+ * ("หัวข้อ", e.g. Blower) and items under them can be added/removed per report, without ever
+ * touching the master template). Sections themselves stay fixed — the client may only rearrange
+ * what's *inside* each section the template defined; section key/title/isOptionalAddon/sortOrder
+ * are always taken from the report's existing snapshot, never from the payload. Returns null on
+ * any malformed input (wrong shapes, missing/duplicate keys, blank or oversized labels, caps
+ * exceeded) — the server converts that to a 400, and a well-behaved client never triggers it.
+ */
+export function sanitizeServiceTemplateSections(
+  raw: unknown,
+  base: ServiceChecklistSectionDef[],
+): ServiceChecklistSectionDef[] | null {
+  if (!Array.isArray(raw)) return null;
+  const rawByKey = new Map<string, Record<string, unknown>>();
+  for (const s of raw) {
+    if (typeof s !== "object" || s === null) return null;
+    const sec = s as Record<string, unknown>;
+    if (typeof sec.key !== "string" || rawByKey.has(sec.key)) return null;
+    rawByKey.set(sec.key, sec);
+  }
+
+  const result: ServiceChecklistSectionDef[] = [];
+  for (const baseSection of base) {
+    const rawSection = rawByKey.get(baseSection.key);
+    if (!rawSection || !Array.isArray(rawSection.groups)) return null;
+    if (rawSection.groups.length > MAX_CHECKLIST_GROUPS_PER_SECTION) return null;
+
+    const groupKeys = new Set<string>();
+    const groups: ServiceChecklistGroupDef[] = [];
+    for (const [gi, g] of (rawSection.groups as unknown[]).entries()) {
+      if (typeof g !== "object" || g === null) return null;
+      const gr = g as Record<string, unknown>;
+      const gKey = typeof gr.key === "string" ? gr.key.trim() : "";
+      const gTitle = typeof gr.title === "string" ? gr.title.trim() : "";
+      if (!gKey || gKey.length > 80 || groupKeys.has(gKey)) return null;
+      if (!gTitle || gTitle.length > 200) return null;
+      if (!Array.isArray(gr.items) || gr.items.length > MAX_CHECKLIST_ITEMS_PER_GROUP) return null;
+      groupKeys.add(gKey);
+
+      const itemKeys = new Set<string>();
+      const items: ServiceChecklistItemDef[] = [];
+      for (const [ii, it] of (gr.items as unknown[]).entries()) {
+        if (typeof it !== "object" || it === null) return null;
+        const ir = it as Record<string, unknown>;
+        const iKey = typeof ir.key === "string" ? ir.key.trim() : "";
+        const label = typeof ir.label === "string" ? ir.label.trim() : "";
+        if (!iKey || iKey.length > 80 || itemKeys.has(iKey)) return null;
+        if (!label || label.length > 300) return null;
+        if (ir.kind !== "normalAbnormal" && ir.kind !== "measurement") return null;
+        itemKeys.add(iKey);
+        const unit = typeof ir.unit === "string" ? ir.unit.trim().slice(0, 40) : "";
+        items.push({ key: iKey, label, kind: ir.kind, ...(unit ? { unit } : {}), sortOrder: ii });
+      }
+      groups.push({ key: gKey, title: gTitle, items, sortOrder: gi });
+    }
+    result.push({
+      key: baseSection.key, title: baseSection.title, isOptionalAddon: baseSection.isOptionalAddon,
+      groups, sortOrder: baseSection.sortOrder,
+    });
+  }
+  return result;
 }
 
 export interface ServiceReportValidationInput {

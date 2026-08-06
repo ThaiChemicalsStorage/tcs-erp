@@ -145,6 +145,12 @@ export interface ServiceReportDraft {
 
 export type ServiceReportStatusAction = "complete" | "reopen" | "cancel";
 
+// Update payload — `templateSections` (added 2026-08-06) carries this report's own customized
+// checklist structure (groups/items added or removed per job, see docs/MODULES/Service.md
+// "Per-report checklist customization"); it edits only the report's frozen snapshot, never the
+// master template.
+export type ServiceReportUpdate = Partial<ServiceReportDraft> & { templateSections?: ServiceChecklistSectionDef[] };
+
 // ดึงรายการสรุปรายงานบริการทั้งหมด (กรองตามสิทธิ์ฝั่งเซิร์ฟเวอร์)
 // Fetches the summarized list of every Service Report (server-side ownership-filtered)
 export async function fetchAllServiceReports(): Promise<ServiceReportListItem[]> {
@@ -171,7 +177,7 @@ export async function createServiceReport(draft: ServiceReportDraft): Promise<Se
 
 // แก้ไขรายงานบริการที่ยังเป็นร่าง
 // Updates a Draft Service Report
-export async function updateServiceReport(id: string, fields: Partial<ServiceReportDraft>): Promise<ServiceReport> {
+export async function updateServiceReport(id: string, fields: ServiceReportUpdate): Promise<ServiceReport> {
   const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${id}`, {
     method: "PATCH",
     body: JSON.stringify(fields),

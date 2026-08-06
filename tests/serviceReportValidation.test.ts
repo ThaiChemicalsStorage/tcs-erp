@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   validateServiceReportForSave, validateServiceReportForCompletion, validateServiceChecklist,
+  sanitizeServiceTemplateSections, MAX_CHECKLIST_GROUPS_PER_SECTION,
   type ServiceReportValidationInput,
 } from "../src/lib/validation/serviceReportValidation";
 import type { ServiceReportTemplateSnapshot, ServiceChecklistSectionValue } from "../src/lib/serviceReports";
@@ -179,5 +180,73 @@ describe("Service Report field validation", () => {
     input.checklist[1].groups[0].items[0].status = "not_selected";
     const failing = validateServiceReportForCompletion(input);
     expect(failing.valid).toBe(false);
+  });
+});
+
+describe("sanitizeServiceTemplateSections (per-report checklist customization)", () => {
+  const base = () => testTemplateSnapshot().sections;
+
+  it("accepts the unchanged base structure round-trip", () => {
+    const result = sanitizeServiceTemplateSections(base(), base());
+    expect(result).not.toBeNull();
+    expect(result).toEqual(base());
+  });
+
+  it("accepts added groups and items, reassigning sortOrder by position", () => {
+    const proposed = base();
+    proposed[0].groups.push({ key: "c-new1", title: "Custom Heading", sortOrder: 99, items: [
+      { key: "c-item1", label: "  Custom Item  ", kind: "normalAbnormal", sortOrder: 42 },
+    ] });
+    const result = sanitizeServiceTemplateSections(proposed, base());
+    expect(result).not.toBeNull();
+    const added = result![0].groups[1];
+    expect(added.key).toBe("c-new1");
+    expect(added.sortOrder).toBe(1);
+    expect(added.items[0].label).toBe("Custom Item");
+    expect(added.items[0].sortOrder).toBe(0);
+  });
+
+  it("accepts removed groups and items", () => {
+    const proposed = base();
+    proposed[0].groups[0].items.splice(0, 1);
+    const result = sanitizeServiceTemplateSections(proposed, base());
+    expect(result).not.toBeNull();
+    expect(result![0].groups[0].items.map((it) => it.key)).toEqual(["flowRate"]);
+  });
+
+  it("keeps section identity from the base, never from the payload", () => {
+    const proposed = base().map((s) => ({ ...s, title: "HACKED", isOptionalAddon: !s.isOptionalAddon }));
+    const result = sanitizeServiceTemplateSections(proposed, base());
+    expect(result).not.toBeNull();
+    expect(result![0].title).toBe("Core");
+    expect(result![0].isOptionalAddon).toBe(false);
+    expect(result![1].isOptionalAddon).toBe(true);
+  });
+
+  it("rejects non-array input, a missing section, and a removed section", () => {
+    expect(sanitizeServiceTemplateSections("nope", base())).toBeNull();
+    expect(sanitizeServiceTemplateSections(base().slice(0, 1), base())).toBeNull();
+  });
+
+  it("rejects blank labels, duplicate keys, and unknown kinds", () => {
+    const blankLabel = base();
+    blankLabel[0].groups[0].items[0].label = "   ";
+    expect(sanitizeServiceTemplateSections(blankLabel, base())).toBeNull();
+
+    const dupKeys = base();
+    dupKeys[0].groups[0].items.push({ ...dupKeys[0].groups[0].items[0] });
+    expect(sanitizeServiceTemplateSections(dupKeys, base())).toBeNull();
+
+    const badKind = base() as unknown as Array<{ groups: Array<{ items: Array<{ kind: string }> }> }>;
+    badKind[0].groups[0].items[0].kind = "checkbox";
+    expect(sanitizeServiceTemplateSections(badKind, base())).toBeNull();
+  });
+
+  it("rejects payloads exceeding the group/item caps", () => {
+    const tooManyGroups = base();
+    tooManyGroups[0].groups = Array.from({ length: MAX_CHECKLIST_GROUPS_PER_SECTION + 1 }, (_, i) => ({
+      key: `g-${i}`, title: `G ${i}`, sortOrder: i, items: [],
+    }));
+    expect(sanitizeServiceTemplateSections(tooManyGroups, base())).toBeNull();
   });
 });

@@ -86,6 +86,30 @@ only ever toggle `status`/`abnormalDetail`/`measurementValue`/a section's `inclu
 item/section the server itself generated, never inject a new one (`photos` is separately excluded
 from this merge — see Photos below, it's managed only through its own dedicated routes).
 
+## Per-report checklist customization (added 2026-08-06, direct user request)
+
+Every service job differs from the paper form, so an existing Draft report's checklist structure is
+editable per report: each group gets an "เพิ่มรายการ" (add item) row, each section gets an
+"เพิ่มหัวข้อ" (add heading/group) row, every item row gets a trailing ✕ remove column, and every
+group header gets a delete button (`structureEditable = !isNew && isEditable` — a new-report
+preview stays read-only, same rule as photos). Names are entered via the shared `PromptDialog`;
+removal is instant when the target holds no recorded data and asks via `ConfirmDialog` when data
+(status/detail/photos, or a non-empty group) would be lost. Added items are always
+`normalAbnormal`-kind with a client-generated `c-…` key; changes are local until Save, like item
+toggles.
+
+This edits **only the report's own `templateSnapshot.sections`** (already a per-report frozen
+copy) — the master template is never touched, and other reports are unaffected. On save the client
+sends the whole proposed structure as PATCH `templateSections`;
+`sanitizeServiceTemplateSections()` (shared, `src/lib/validation/serviceReportValidation.ts`, unit
+tested) validates it against the existing snapshot: **sections are fixed** (key/title/
+isOptionalAddon always taken from the existing snapshot, never the payload), groups/items inside
+them are client-editable within caps (30 groups/section, 100 items/group, label length limits,
+duplicate-key rejection) — malformed input is a `400`. The server then re-merges `checklist`
+against the new structure (pruning removed items' values, defaulting new ones) and hard-deletes
+photo Binary docs orphaned by a removed item/group. Completion validation walks the snapshot, so
+custom items are required to be answered exactly like seeded ones.
+
 Validation (`src/lib/validation/serviceReportValidation.ts`, shared verbatim client+server):
 `validateServiceReportForSave()` (lenient — a Draft may be saved incomplete, only well-formed dates
 are enforced) and `validateServiceReportForCompletion()` (strict — every applicable field/checklist
@@ -150,7 +174,10 @@ Structure (page 1 → detail pages → signature, reconciling the two real refer
    both check columns with its value centered instead.
 4. One **"SERVICE ITEM n"** blue-bar detail block per Abnormal item (canonical layout from the Oil
    Mist Filter reference) — section/group context, the full `abnormalDetail` text, and a photo grid
-   (1 photo = full width, 2+ = two columns) pulling each photo's capability-URL directly.
+   (1 photo = full width, 2+ = two columns) pulling each photo's capability-URL directly. The
+   "Abnormal Findings" section heading renders *inside* the first item's `breakInside: avoid` cell
+   (not its own table row) so a page break can never strand the heading alone at the bottom of one
+   page while the block jumps to the next — a real pagination bug the user hit on 2026-08-06.
 5. Overall remark, then a two-column signature block: Service Engineer (typed name + saved
    `signatureDataUrl` if the assigned user has one, matching Scope of Work's signature-image
    convention) and Customer (blank lines — no signature capture exists yet, see Roadmap).
