@@ -576,34 +576,53 @@ export function ServiceReportEditor({
                   )}
                 </button>
                 {!collapsed && (!sectionDef.isOptionalAddon || sectionValue?.included) && (
-                  <div className="px-5 py-2 divide-y divide-border/60">
-                    {sectionDef.groups.map((groupDef) => (
-                      <div key={groupDef.key} className="py-2">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">{groupDef.title}</p>
-                        <div className="divide-y divide-border/40">
-                          {groupDef.items.map((itemDef) => {
-                            const groupValue = sectionValue?.groups.find((g) => g.key === groupDef.key);
-                            const itemValue = groupValue?.items.find((it) => it.key === itemDef.key) ?? { key: itemDef.key, status: "not_selected" as const, abnormalDetail: "", measurementValue: "", photos: [] };
-                            return (
-                              <ServiceChecklistItemControl
-                                key={itemDef.key}
-                                itemDef={itemDef}
-                                value={itemValue}
-                                disabled={!isEditable || isNew}
-                                error={checklistErrors[`${sectionDef.key}.${groupDef.key}.${itemDef.key}`]}
-                                photoUploadDisabledReason={isNew ? t("service.checklist.photosAfterCreate") : undefined}
-                                onChange={(next) => setChecklist((prev) => prev.map((s) => (s.key !== sectionDef.key ? s : {
-                                  ...s,
-                                  groups: s.groups.map((g) => (g.key !== groupDef.key ? g : { ...g, items: g.items.map((it) => (it.key === itemDef.key ? next : it)) })),
-                                })))}
-                                onUploadPhoto={isNew ? undefined : (file) => handleUploadPhoto(sectionDef.key, groupDef.key, itemDef.key, file)}
-                                onDeletePhoto={isNew ? undefined : (photoId) => handleDeletePhoto(photoId)}
-                              />
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="bg-muted/40 border-b border-border">
+                          <th className="text-left pl-5 pr-3 py-2 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">
+                            {t("service.checklist.col.item")}
+                          </th>
+                          <th className="text-center px-2 py-2 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider w-20">
+                            {t("service.checklist.normal")}
+                          </th>
+                          <th className="text-center px-2 pr-5 py-2 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider w-20">
+                            {t("service.checklist.abnormal")}
+                          </th>
+                        </tr>
+                      </thead>
+                      {sectionDef.groups.map((groupDef) => {
+                        const groupValue = sectionValue?.groups.find((g) => g.key === groupDef.key);
+                        return (
+                          <tbody key={groupDef.key}>
+                            <tr className="bg-secondary/30">
+                              <td colSpan={3} className="pl-5 pr-5 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                {groupDef.title}
+                              </td>
+                            </tr>
+                            {groupDef.items.map((itemDef) => {
+                              const itemValue = groupValue?.items.find((it) => it.key === itemDef.key) ?? { key: itemDef.key, status: "not_selected" as const, abnormalDetail: "", measurementValue: "", photos: [] };
+                              return (
+                                <ServiceChecklistItemControl
+                                  key={itemDef.key}
+                                  itemDef={itemDef}
+                                  value={itemValue}
+                                  disabled={!isEditable || isNew}
+                                  error={checklistErrors[`${sectionDef.key}.${groupDef.key}.${itemDef.key}`]}
+                                  photoUploadDisabledReason={isNew ? t("service.checklist.photosAfterCreate") : undefined}
+                                  onChange={(next) => setChecklist((prev) => prev.map((s) => (s.key !== sectionDef.key ? s : {
+                                    ...s,
+                                    groups: s.groups.map((g) => (g.key !== groupDef.key ? g : { ...g, items: g.items.map((it) => (it.key === itemDef.key ? next : it)) })),
+                                  })))}
+                                  onUploadPhoto={isNew ? undefined : (file) => handleUploadPhoto(sectionDef.key, groupDef.key, itemDef.key, file)}
+                                  onDeletePhoto={isNew ? undefined : (photoId) => handleDeletePhoto(photoId)}
+                                />
+                              );
+                            })}
+                          </tbody>
+                        );
+                      })}
+                    </table>
                   </div>
                 )}
               </div>

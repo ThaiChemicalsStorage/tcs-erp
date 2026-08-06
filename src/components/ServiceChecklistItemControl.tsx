@@ -1,14 +1,17 @@
 import { useRef, useState } from "react";
-import { AlertTriangle, Check, Circle, Camera, X, Loader2, ImageOff } from "lucide-react";
+import { Check, AlertTriangle, Camera, X, Loader2, ImageOff } from "lucide-react";
 import type { ServiceChecklistItemDef } from "../lib/serviceTemplates";
-import type { ServiceChecklistItemValue, ServiceChecklistItemStatus, ServiceChecklistItemPhoto } from "../lib/serviceReports";
+import type { ServiceChecklistItemValue, ServiceChecklistItemPhoto } from "../lib/serviceReports";
 import { useI18n } from "../lib/i18n";
 
-// ควบคุมรายการตรวจเช็คหนึ่งรายการ — สามตัวเลือก (ยังไม่ระบุ/ปกติ/ผิดปกติ) หรือช่องกรอกค่าที่วัดได้
-// Renders one checklist item's control — a 3-way Normal/Abnormal toggle, or a measurement input.
-// Selecting "Abnormal" immediately reveals a required detail field + photo attachment (never
-// silently cleared if the status is later changed back to Normal — the caller only clears it on an
-// explicit user action).
+// แถวหนึ่งของตารางรายการตรวจเช็ค (ใช้ภายใน <tbody>) — คอลัมน์ "รายการตรวจเช็ค / ปกติ / ผิดปกติ"
+// เหมือนแบบฟอร์ม SERVICE CHECK SHEET ต้นฉบับ หรือช่องกรอกค่าที่วัดได้แทนคอลัมน์ปกติ/ผิดปกติ
+// One row of the checklist table (used inside a <tbody>) — "Checklist Item / Normal / Abnormal"
+// columns matching the real SERVICE CHECK SHEET reference form, or a measurement input spanning
+// the two check columns for a measurement-kind item.
+// Selecting "Abnormal" immediately reveals a required detail field + photo attachments in a wide
+// row directly below (never silently cleared if the status is later changed back to Normal — the
+// caller only clears it on an explicit user action).
 export function ServiceChecklistItemControl({
   itemDef,
   value,
@@ -32,79 +35,110 @@ export function ServiceChecklistItemControl({
   photoUploadDisabledReason?: string;
 }) {
   const { t } = useI18n();
-
-  if (itemDef.kind === "measurement") {
-    return (
-      <div className="py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-        <label className="text-sm text-foreground flex-1 min-w-0">{itemDef.label}</label>
-        <div className="flex items-center gap-2 flex-shrink-0 sm:w-64">
-          <input
-            type="text"
-            value={value.measurementValue}
-            onChange={(e) => onChange({ ...value, measurementValue: e.target.value })}
-            disabled={disabled}
-            placeholder={itemDef.unit ? `${t("service.checklist.measurementPlaceholder")} (${itemDef.unit})` : t("service.checklist.measurementPlaceholder")}
-            className={`h-9 w-full px-3 text-sm bg-secondary border rounded-lg outline-none transition-colors disabled:opacity-60 ${
-              error ? "border-[#e05252]/60" : "border-border focus:border-[#c9a84c]/50"
-            }`}
-          />
-        </div>
-        {error && <p className="text-[11px] text-[#e05252] sm:hidden">{error}</p>}
-      </div>
-    );
-  }
-
-  const options: { key: ServiceChecklistItemStatus; label: string; icon: typeof Circle; activeClass: string }[] = [
-    { key: "normal", label: t("service.checklist.normal"), icon: Check, activeClass: "bg-[#2aa36b] text-white border-[#2aa36b]" },
-    { key: "abnormal", label: t("service.checklist.abnormal"), icon: AlertTriangle, activeClass: "bg-[#e05252] text-white border-[#e05252]" },
-  ];
+  const isAbnormal = value.status === "abnormal";
 
   return (
-    <div className="py-2.5">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-        <label className="text-sm text-foreground flex-1 min-w-0">{itemDef.label}</label>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {options.map((opt) => {
-            const active = value.status === opt.key;
-            const Icon = opt.icon;
-            return (
-              <button
-                key={opt.key}
-                type="button"
+    <>
+      <tr className="border-b border-border/40 last:border-b-0 hover:bg-secondary/20 transition-colors">
+        <td className="py-2.5 pl-5 pr-3 text-sm text-foreground align-middle">
+          {itemDef.label}
+          {itemDef.kind === "measurement" && itemDef.unit && <span className="text-muted-foreground"> ({itemDef.unit})</span>}
+        </td>
+        {itemDef.kind === "measurement" ? (
+          <td colSpan={2} className="py-2 px-3 pr-5">
+            <input
+              type="text"
+              value={value.measurementValue}
+              onChange={(e) => onChange({ ...value, measurementValue: e.target.value })}
+              disabled={disabled}
+              placeholder={t("service.checklist.measurementPlaceholder")}
+              className={`h-9 w-full px-3 text-sm bg-secondary border rounded-lg outline-none transition-colors disabled:opacity-60 ${
+                error ? "border-[#e05252]/60" : "border-border focus:border-[#c9a84c]/50"
+              }`}
+            />
+          </td>
+        ) : (
+          <>
+            <td className="py-2 px-2 text-center align-middle w-20">
+              <CheckboxCell
+                variant="normal"
+                active={value.status === "normal"}
                 disabled={disabled}
-                onClick={() => onChange({ ...value, status: active ? "not_selected" : opt.key })}
-                aria-pressed={active}
-                className={`min-h-9 flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-lg border transition-all disabled:opacity-60 ${
-                  active ? opt.activeClass : "bg-secondary text-muted-foreground border-border hover:text-foreground"
-                }`}
-              >
-                <Icon size={13} /> {opt.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      {error && <p className="text-[11px] text-[#e05252] mt-1">{error}</p>}
-      {value.status === "abnormal" && (
-        <div className="mt-2 pl-0 sm:pl-3 border-l-2 border-[#e05252]/40 space-y-2">
-          <textarea
-            value={value.abnormalDetail}
-            onChange={(e) => onChange({ ...value, abnormalDetail: e.target.value })}
-            disabled={disabled}
-            rows={2}
-            placeholder={t("service.checklist.abnormalDetailPlaceholder")}
-            className="w-full px-3 py-2 text-sm bg-[#e05252]/5 border border-[#e05252]/25 rounded-lg outline-none focus:border-[#e05252]/60 transition-colors disabled:opacity-60 resize-y"
-          />
-          <PhotoAttachments
-            photos={value.photos ?? []}
-            disabled={disabled}
-            disabledReason={photoUploadDisabledReason}
-            onUpload={onUploadPhoto}
-            onDelete={onDeletePhoto}
-          />
-        </div>
+                label={t("service.checklist.normal")}
+                onClick={() => onChange({ ...value, status: value.status === "normal" ? "not_selected" : "normal" })}
+              />
+            </td>
+            <td className="py-2 px-2 pr-5 text-center align-middle w-20">
+              <CheckboxCell
+                variant="abnormal"
+                active={isAbnormal}
+                disabled={disabled}
+                label={t("service.checklist.abnormal")}
+                onClick={() => onChange({ ...value, status: isAbnormal ? "not_selected" : "abnormal" })}
+              />
+            </td>
+          </>
+        )}
+      </tr>
+      {error && (
+        <tr>
+          <td colSpan={3} className="pl-5 pr-5 pb-1.5"><p className="text-[11px] text-[#e05252]">{error}</p></td>
+        </tr>
       )}
-    </div>
+      {isAbnormal && (
+        <tr>
+          <td colSpan={3} className="pl-5 pr-5 pb-3">
+            <div className="pl-3 border-l-2 border-[#e05252]/40 space-y-2">
+              <textarea
+                value={value.abnormalDetail}
+                onChange={(e) => onChange({ ...value, abnormalDetail: e.target.value })}
+                disabled={disabled}
+                rows={2}
+                placeholder={t("service.checklist.abnormalDetailPlaceholder")}
+                className="w-full px-3 py-2 text-sm bg-[#e05252]/5 border border-[#e05252]/25 rounded-lg outline-none focus:border-[#e05252]/60 transition-colors disabled:opacity-60 resize-y"
+              />
+              <PhotoAttachments
+                photos={value.photos ?? []}
+                disabled={disabled}
+                disabledReason={photoUploadDisabledReason}
+                onUpload={onUploadPhoto}
+                onDelete={onDeletePhoto}
+              />
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// ช่องกาเครื่องหมายทรงสี่เหลี่ยม เหมือนช่อง checkbox ในแบบฟอร์มกระดาษต้นฉบับ
+// A square checkbox-style toggle, matching the paper reference form's checkbox cells.
+function CheckboxCell({
+  variant, active, disabled, label, onClick,
+}: {
+  variant: "normal" | "abnormal";
+  active: boolean;
+  disabled: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  const Icon = variant === "normal" ? Check : AlertTriangle;
+  const activeClass = variant === "normal" ? "bg-[#2aa36b] border-[#2aa36b] text-white" : "bg-[#e05252] border-[#e05252] text-white";
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      className={`inline-flex items-center justify-center w-8 h-8 rounded-md border-2 transition-all disabled:opacity-50 ${
+        active ? activeClass : "bg-secondary border-border text-transparent hover:border-[#c9a84c]/50 hover:text-muted-foreground/40"
+      }`}
+    >
+      <Icon size={15} strokeWidth={2.5} />
+    </button>
   );
 }
 

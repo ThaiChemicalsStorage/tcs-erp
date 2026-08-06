@@ -65,7 +65,11 @@ auto-numbering removes the exact typo/duplicate-number friction manual entry wou
 
 `status` on a `normalAbnormal` item is a single field
 (`"not_selected" | "normal" | "abnormal"`), so Normal/Abnormal mutual exclusivity is structural — a
-3-way toggle, not two independent checkboxes (`ServiceChecklistItemControl.tsx`). Selecting
+3-way toggle, not two independent checkboxes (`ServiceChecklistItemControl.tsx`). Editor rendering
+is a real `<table>` per section (one `<thead>`, one `<tbody>` per group), each item a `<tr>` with the
+item label in the first cell and square ปกติ/ผิดปกติ checkbox cells (`CheckboxCell`) in the other
+two — matching the two-column checkbox layout of the paper reference form
+(`public/รายการตรวจเช็ค.pdf`), replacing an earlier flex/div card layout (2026-08-06). Selecting
 Abnormal reveals, inline:
 
 - A **required, non-blank `abnormalDetail`** field.

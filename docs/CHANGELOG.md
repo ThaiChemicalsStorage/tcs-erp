@@ -4,7 +4,29 @@
 
 ---
 
-## 2026-08-06 (absolute latest) — New Service module (Phase 1) + same-day photo attachments and print, pulled forward from the roadmap
+## 2026-08-06 (absolute latest) — Service checklist editor rebuilt as a real table, matching the paper reference form
+
+Direct user request ("อยากให้ทำเป็นตารางเหมือนในไฟล์" — "I want it made into a table like in the
+file"), clarified via `AskUserQuestion` to mean the checklist inside `ServiceReportEditor.tsx`,
+styled after `public/รายการตรวจเช็ค.pdf`'s real two-column checkbox table. Rewrote
+`ServiceChecklistItemControl.tsx` to render `<tr>`/`<td>` row fragments instead of flex/div cards —
+a new square `CheckboxCell` component replaces the previous pill-shaped Normal/Abnormal buttons, one
+cell per column. `ServiceReportEditor.tsx`'s checklist block now wraps each section in a real
+`<table>` (one `<thead>` with "อุปกรณ์ / รายการตรวจเช็ค" / "ปกติ" / "ผิดปกติ" columns, one `<tbody>`
+per group with its own header row), a measurement-kind item spans both check columns with a single
+input, and the error/Abnormal-detail/photo rows use `colSpan={3}` to stay full-width inside the new
+table structure. Added i18n key `service.checklist.col.item` (th/en).
+
+**Verified**: `tsc --noEmit`/`lint`/`build`/`test` (70/70) all clean. Manually verified live via
+`vercel dev` — opened an existing Draft report, confirmed the table renders with correct group
+header bars, column headers, checkbox cell sizing/spacing, an active (checked) Abnormal cell with
+its detail textarea and photo thumbnail still displaying correctly spanning the full row width, and
+no horizontal-scroll/layout regressions. See [MODULES/Service.md](./MODULES/Service.md) "Checklist
+status rules" for the updated description.
+
+---
+
+## 2026-08-06 — New Service module (Phase 1) + same-day photo attachments and print, pulled forward from the roadmap
 
 Direct user request for a field-service checklist + report module combining the company's paper
 "SERVICE CHECK SHEET" and its narrative Service Report into one digitized workflow, eventually
