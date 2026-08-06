@@ -4,7 +4,25 @@
 
 ---
 
-## 2026-08-06 (absolute latest) — Service checklist editor rebuilt as a real table, matching the paper reference form
+## 2026-08-06 (absolute latest) — Service print report checklist also converted to a table (editor-only fix was incomplete)
+
+User caught that the printable Service Report (`ServiceReportPrintDocument.tsx`) still showed the
+old single-column checklist with round status glyphs after the editor's table conversion below —
+the editor and the print document are two separate components, and only the editor had been
+updated. Fixed: `ServiceReportPrintDocument.tsx`'s checklist section now renders the same
+group-level nested `<table>` (item / ปกติ / ผิดปกติ columns) as the editor, with a new
+`PrintCheckboxCell` square glyph replacing the removed `StatusMark` circular mark; a
+measurement-kind item spans both check columns with its value centered. Verified live via
+`vercel dev` by temporarily revealing the `hidden print:table` element with a DOM script (avoids
+triggering the native browser print dialog, which would block further browser-automation calls) —
+confirmed the table renders correctly for both a checked Abnormal row and a spanning measurement
+row, and that the Abnormal Findings detail block/photo/signature sections below are unaffected.
+
+**Verified**: `tsc --noEmit`/`lint`/`build`/`test` (70/70) all clean.
+
+---
+
+## 2026-08-06 — Service checklist editor rebuilt as a real table, matching the paper reference form
 
 Direct user request ("อยากให้ทำเป็นตารางเหมือนในไฟล์" — "I want it made into a table like in the
 file"), clarified via `AskUserQuestion` to mean the checklist inside `ServiceReportEditor.tsx`,

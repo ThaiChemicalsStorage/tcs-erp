@@ -141,9 +141,13 @@ Structure (page 1 → detail pages → signature, reconciling the two real refer
    mapping as every other print document) + "SERVICE REPORT / รายงานสรุปงานบริการ" title + report
    info fields (reconciling both references' differing label sets into one canonical set).
 2. "สรุปภาพรวมสำหรับลูกค้า" (Overall Customer Summary) in a dark-blue bar, if filled.
-3. Full checklist summary, section → group → item, each item showing a print-safe status mark
-   (a filled/outline glyph, not color alone, so Normal vs. Abnormal survives a black-and-white
-   printer) or its measured value.
+3. Full checklist summary, section → group, each rendered as a nested table (item name / ปกติ /
+   ผิดปกติ columns) with a print-safe square checkbox per column (`PrintCheckboxCell`, a
+   filled/outline glyph rather than color alone so the distinction survives a black-and-white
+   printer) — matching the on-screen editor's table and the paper reference form's two-column
+   checkbox layout (2026-08-06, fixed the same day the editor was converted: the print view had
+   initially been left on its old single-column status-glyph list). A measurement-kind item spans
+   both check columns with its value centered instead.
 4. One **"SERVICE ITEM n"** blue-bar detail block per Abnormal item (canonical layout from the Oil
    Mist Filter reference) — section/group context, the full `abnormalDetail` text, and a photo grid
    (1 photo = full width, 2+ = two columns) pulling each photo's capability-URL directly.

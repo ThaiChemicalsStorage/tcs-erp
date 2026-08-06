@@ -1,4 +1,4 @@
-import type { ServiceReport, ServiceChecklistItemStatus } from "../../lib/serviceReports";
+import type { ServiceReport } from "../../lib/serviceReports";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import { formatQuoteDateThai as fmtThaiDate } from "../../lib/quotes";
@@ -29,20 +29,17 @@ function Field({ label, value, mono = false }: { label: string; value: string; m
   );
 }
 
-const STATUS_MARK: Record<ServiceChecklistItemStatus, string> = { normal: "✓", abnormal: "✕", not_selected: "—" };
-const STATUS_LABEL_TH: Record<ServiceChecklistItemStatus, string> = { normal: "ปกติ", abnormal: "ผิดปกติ", not_selected: "-" };
-
-/** Print-safe status mark — a filled/outline glyph rather than color alone, so the distinction
- * survives a black-and-white printer. */
-function StatusMark({ status }: { status: ServiceChecklistItemStatus }) {
+/** Print-safe checkbox cell — a filled/outline square rather than color alone, so the ปกติ/ผิดปกติ
+ * distinction survives a black-and-white printer. Two independent cells (not one combined mark),
+ * matching the paper reference form's (public/รายการตรวจเช็ค.pdf) two-column checkbox layout. */
+function PrintCheckboxCell({ active, variant }: { active: boolean; variant: "normal" | "abnormal" }) {
   return (
     <span
-      className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-full border text-[8px] font-bold leading-none flex-shrink-0 ${
-        status === "abnormal" ? "border-[#0b1d3a] bg-[#0b1d3a] text-white" : status === "normal" ? "border-[#0b1d3a]" : "border-[#0b1d3a]/30 text-[#0b1d3a]/40"
+      className={`inline-flex items-center justify-center w-3 h-3 border leading-none ${
+        active ? "border-[#0b1d3a] bg-[#0b1d3a] text-white" : "border-[#0b1d3a]/40 text-transparent"
       }`}
-      title={STATUS_LABEL_TH[status]}
     >
-      {STATUS_MARK[status]}
+      <span className="text-[7px] font-bold">{variant === "normal" ? "✓" : "✕"}</span>
     </span>
   );
 }
@@ -156,21 +153,41 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
                   return (
                     <tr key={group.key}>
                       <td colSpan={2} className="px-2 pb-1.5">
-                        <p className="text-[9.5px] font-semibold text-[#5a7299] mt-1">{group.title}</p>
-                        {group.items.map((item) => {
-                          const itemValue = groupValue?.items.find((it) => it.key === item.key);
-                          return (
-                            <div key={item.key} className="flex items-center gap-1.5 text-[9.5px] leading-[1.6]">
-                              {item.kind === "measurement" ? (
-                                <span className="w-3.5 h-3.5 flex-shrink-0" />
-                              ) : (
-                                <StatusMark status={itemValue?.status ?? "not_selected"} />
-                              )}
-                              <span className="flex-1">{item.label}</span>
-                              {item.kind === "measurement" && <span className="font-mono text-[#5a7299]">{itemValue?.measurementValue || "-"}</span>}
-                            </div>
-                          );
-                        })}
+                        <table className="w-full border-collapse mt-1">
+                          <colgroup>
+                            <col />
+                            <col style={{ width: "9mm" }} />
+                            <col style={{ width: "9mm" }} />
+                          </colgroup>
+                          <thead>
+                            <tr className="border-b border-[#0b1d3a]/30">
+                              <th className="text-left py-0.5 pr-2 text-[9.5px] font-semibold text-[#5a7299]">{group.title}</th>
+                              <th className="text-center py-0.5 text-[8px] font-semibold text-[#5a7299]">ปกติ</th>
+                              <th className="text-center py-0.5 text-[8px] font-semibold text-[#5a7299]">ผิดปกติ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {group.items.map((item) => {
+                              const itemValue = groupValue?.items.find((it) => it.key === item.key);
+                              return (
+                                <tr key={item.key} className="border-b border-[#0b1d3a]/10">
+                                  <td className="py-1 pr-2 text-[9.5px] leading-[1.4]">
+                                    {item.label}
+                                    {item.kind === "measurement" && item.unit && <span className="text-[#5a7299]"> ({item.unit})</span>}
+                                  </td>
+                                  {item.kind === "measurement" ? (
+                                    <td colSpan={2} className="py-1 text-[9.5px] font-mono text-center text-[#5a7299]">{itemValue?.measurementValue || "-"}</td>
+                                  ) : (
+                                    <>
+                                      <td className="py-1 text-center"><PrintCheckboxCell active={itemValue?.status === "normal"} variant="normal" /></td>
+                                      <td className="py-1 text-center"><PrintCheckboxCell active={itemValue?.status === "abnormal"} variant="abnormal" /></td>
+                                    </>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </td>
                     </tr>
                   );
