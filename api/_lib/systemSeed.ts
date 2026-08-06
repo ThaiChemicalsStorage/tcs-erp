@@ -85,6 +85,8 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   delivery_order_submitted: { label: "ใบส่งมอบสินค้ารออนุมัติ", module: "Delivery Order" },
   delivery_order_approved: { label: "ใบส่งมอบสินค้าได้รับอนุมัติ", module: "Delivery Order" },
   delivery_order_rejected: { label: "ใบส่งมอบสินค้าถูกตีกลับ", module: "Delivery Order" },
+  service_report_created: { label: "มีรายงานบริการใหม่", module: "บริการ" },
+  service_report_completed: { label: "รายงานบริการเสร็จสิ้นแล้ว", module: "บริการ" },
 };
 
 /** Idempotent. Mirrors the NotificationType union in src/lib/notifications.ts — scaffolding, not read by any live code path yet. */

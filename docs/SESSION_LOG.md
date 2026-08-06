@@ -4,7 +4,88 @@
 
 ---
 
-## Session — 2026-08-04 (absolute latest), Revision Note history + print header/footer removal + Website/Facebook/Line letterhead fields
+## Session — 2026-08-06 (absolute latest), New Service module (Phase 1) + same-day photo attachments and print
+
+### What was implemented
+A large, explicitly-phased build: a brand-new "Service" module (field-service checklist + report,
+combining the company's paper "SERVICE CHECK SHEET" and its narrative Service Report). The full
+target spec was huge (mobile/tablet UX, photo evidence, signature capture, PDF export, on-site +
+remote customer acceptance via LINE OA — 30+ acceptance criteria). Given `AskUserQuestion`
+confirmation from the owner, the work was phased: build Phase 1 solidly (data model, checklist
+templates seeded from real reference files, Service Report CRUD, a desktop-first editor, RBAC,
+navigation) and defer photo/signature/mobile/PDF/acceptance/LINE. See CHANGELOG.md 2026-08-06 for
+the full technical writeup and [MODULES/Service.md](./MODULES/Service.md) for the module doc.
+
+Four research passes preceded implementation: three parallel Explore agents (Scope of
+Work/Delivery Order architecture, RBAC/Customer/numbering/i18n cross-cutting patterns, and the
+actual content of the four real reference files — a PDF checklist, an Excel workbook, two sample
+report PDFs) plus one Plan agent that turned the research into a concrete Phase 1 blueprint (exact
+collection shapes, host-file choice for the Vercel function-cap constraint, numbering scheme,
+permission list). Two architecture-affecting decisions were surfaced to the owner via
+`AskUserQuestion` before building anything: (1) a future remote customer-acceptance link should
+reuse the existing capability-URL pattern but be time-boxed/single-purpose, explicitly not the
+always-live unauthenticated view the team had already built and removed once for Delivery Order;
+(2) phase the work rather than attempt the full spec in one pass.
+
+Immediately after Phase 1 shipped, the owner invoked `/impeccable design` with a follow-up request:
+"Service more user friendly and must be print and if pick abnormal should add picture and remark."
+This pulled two items forward from the Phase 2/3 roadmap the same day: photo attachments on
+Abnormal checklist items (a new `service_checklist_photo_files` Binary-in-Mongo collection, same
+capability-URL pattern as Scope of Work's document attachments) and a printable A4-portrait Service
+Report (browser-native `@media print` CSS — this app has no PDF library — reproducing the real Oil
+Mist Filter reference report's "SERVICE ITEM n" per-abnormal-item layout with photos).
+
+### Problems found and fixed
+- **UX gap found while implementing the pull-forward**: the server's completion-validation 422
+  response only ever returned a flat array of message strings, so a failed "Mark Complete" attempt
+  couldn't tell the client which specific checklist item was the problem — every error rendered as
+  a generic toast with no inline highlighting. Added an item-path-keyed `checklistItemErrors` field
+  to the error response and wired it through end-to-end so the exact failing control now highlights,
+  and any collapsed section containing an error auto-expands.
+- **Real bug caught during manual browser verification**: the print document's per-section
+  `<tbody>` elements were nested inside one outer `<tbody>` — invalid HTML, surfaced as a
+  `validateDOMNesting` React console error. Fixed by making every section's `<tbody>` a direct
+  `<table>` child (matching the sibling-tbody pattern every other print document in this app
+  already uses) — caught specifically *because* this pass did a real browser verification with
+  console-log inspection, not just a build check.
+
+### Verification
+`npx tsc --noEmit` (both tsconfigs)/`npm run lint` (0 errors, same 2 pre-existing unrelated
+`i18n.tsx` fast-refresh warnings as every prior session)/`npm run build`/`npm test` (70/70,
++14 new tests for the checklist/field validation module) all clean throughout, at every stage.
+**Verified live twice** via `vercel dev` + a real browser session (not just a build check, unlike
+several earlier sessions logged above whose live-verification was blocked by no network path to
+MongoDB Atlas — this session used a local MongoDB Atlas-compatible instance instead, confirmed
+running via `Test-NetConnection localhost:27017`): once right after Phase 1 (sidebar nav +
+permission gating, both seeded templates' section/item counts matching the reference taxonomy
+exactly, creating a report with a real Customer + Template snapshot freeze verified by editing the
+master template afterward, Abnormal reveal, a real 422 blocking an incomplete "Mark Complete"
+attempt, correct audit log entries, and correctly-suppressed self-notifications), and again after
+the pull-forward (uploaded a real 1×1 PNG to an Abnormal item via the actual file-input element —
+not simulated — confirmed the "at least 1 required" warning cleared and the thumbnail rendered from
+its live capability-URL download route, confirmed clicking Print/Export genuinely invoked the
+native OS print dialog, which is itself proof `window.print()` was reached without a render crash).
+
+### Recommendations / what's next
+- Cross-role RBAC verification (a non-Super-Admin test role hitting `service:*` routes directly to
+  confirm real 403s, not just UI-hidden buttons) was reasoned about via code-path equivalence with
+  the already-proven Scope of Work permission checks, not independently browser-tested this
+  session — worth a real check next time a second test user/role is set up.
+- No seeded role except Super Admin/Administrator can currently *create* a Service Report — before
+  real field engineers use this, a Super Admin needs to grant `service:create`/`edit`/`complete` to
+  whichever role they'll actually hold via Role Management (same standing manual-grant requirement
+  every prior module has needed on an already-provisioned deployment).
+- Next phases, in the order the roadmap in MODULES/Service.md lays out: signature capture (reusing
+  `ImageUploadField.tsx`'s existing base64-inline pattern), a real mobile/iPad UX pass (touch-card
+  checklist controls, camera-first capture — `PRODUCT.md` currently says this app is desktop-only,
+  worth updating once this pass actually happens), then customer acceptance (on-site now unblocked
+  by the signature-capture phase; remote needs the time-boxed capability-token link already agreed
+  with the owner), then LINE OA (blocked entirely on the owner registering a real company LINE
+  Official Account + LINE Developers Messaging API channel — not something buildable in code alone).
+
+---
+
+## Session — 2026-08-04, Revision Note history + print header/footer removal + Website/Facebook/Line letterhead fields
 
 ### What was implemented
 Direct user request (in Thai): the auto-generated Revision Note on a Quotation/Scope of Work rewrite

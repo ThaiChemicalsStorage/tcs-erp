@@ -45,7 +45,18 @@ export type Permission =
   | "deliveryOrder:edit"
   | "deliveryOrder:finalize"
   | "deliveryOrder:print"
-  | "deliveryOrder:delete";
+  | "deliveryOrder:delete"
+  | "service:view"
+  | "service:viewAll"
+  | "service:create"
+  | "service:edit"
+  | "service:delete"
+  | "service:complete"
+  | "service:print"
+  | "serviceTemplates:view"
+  | "serviceTemplates:create"
+  | "serviceTemplates:edit"
+  | "serviceTemplates:archive";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -93,6 +104,17 @@ export const ALL_PERMISSIONS: Permission[] = [
   "deliveryOrder:finalize",
   "deliveryOrder:print",
   "deliveryOrder:delete",
+  "service:view",
+  "service:viewAll",
+  "service:create",
+  "service:edit",
+  "service:delete",
+  "service:complete",
+  "service:print",
+  "serviceTemplates:view",
+  "serviceTemplates:create",
+  "serviceTemplates:edit",
+  "serviceTemplates:archive",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -141,6 +163,17 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "deliveryOrder:finalize": "ยืนยันสถานะ Final ของใบส่งมอบสินค้า",
   "deliveryOrder:print": "พิมพ์ / ส่งออกใบส่งมอบสินค้า",
   "deliveryOrder:delete": "ลบใบส่งมอบสินค้า",
+  "service:view": "ดูรายงานบริการ",
+  "service:viewAll": "ดูรายงานบริการของผู้อื่น",
+  "service:create": "สร้างรายงานบริการ",
+  "service:edit": "แก้ไขรายงานบริการ",
+  "service:delete": "ลบรายงานบริการ",
+  "service:complete": "ยืนยันสถานะเสร็จสิ้นของรายงานบริการ",
+  "service:print": "พิมพ์ / ส่งออกรายงานบริการ",
+  "serviceTemplates:view": "เข้าถึงหน้าจัดการ Template รายงานบริการ",
+  "serviceTemplates:create": "สร้าง Template รายงานบริการใหม่",
+  "serviceTemplates:edit": "แก้ไข Template รายงานบริการ",
+  "serviceTemplates:archive": "เก็บถาวร/กู้คืน Template รายงานบริการ",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -189,6 +222,17 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "deliveryOrder:finalize": "permission.deliveryOrderFinalize",
   "deliveryOrder:print": "permission.deliveryOrderPrint",
   "deliveryOrder:delete": "permission.deliveryOrderDelete",
+  "service:view": "permission.serviceView",
+  "service:viewAll": "permission.serviceViewAll",
+  "service:create": "permission.serviceCreate",
+  "service:edit": "permission.serviceEdit",
+  "service:delete": "permission.serviceDelete",
+  "service:complete": "permission.serviceComplete",
+  "service:print": "permission.servicePrint",
+  "serviceTemplates:view": "permission.serviceTemplatesView",
+  "serviceTemplates:create": "permission.serviceTemplatesCreate",
+  "serviceTemplates:edit": "permission.serviceTemplatesEdit",
+  "serviceTemplates:archive": "permission.serviceTemplatesArchive",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -239,6 +283,23 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
     label: "ลูกค้า",
     labelKey: "nav.customers",
     permissions: ["customers:view", "customers:create", "customers:edit", "customers:archive"],
+  },
+  {
+    label: "บริการ",
+    labelKey: "nav.service",
+    permissions: [
+      "service:view",
+      "service:viewAll",
+      "service:create",
+      "service:edit",
+      "service:delete",
+      "service:complete",
+      "service:print",
+      "serviceTemplates:view",
+      "serviceTemplates:create",
+      "serviceTemplates:edit",
+      "serviceTemplates:archive",
+    ],
   },
   {
     label: "ระบบ",

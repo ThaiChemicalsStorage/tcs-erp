@@ -18,6 +18,8 @@ export interface AuditLogEntry {
   relatedJobTypeCode?: string;
   relatedScopeId?: string;
   relatedScopeNumber?: string;
+  relatedServiceReportId?: string;
+  relatedServiceTemplateId?: string;
 }
 
 // ดึงรายการบันทึกการใช้งาน (audit log) ทั้งหมดจากเซิร์ฟเวอร์

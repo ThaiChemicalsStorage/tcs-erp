@@ -293,6 +293,48 @@ Audit logging: every action writes a server-side `AuditLogEntry` via `writeDeliv
 module `"Delivery Order"` — reuses the already-defined `relatedScopeId`/`relatedScopeNumber` fields
 to point back at the source Scope of Work rather than adding a new `relatedDeliveryOrderId` field.
 
+### Service (added 2026-08-06, Phase 1; `service:print` added same day alongside photo attachments/print, pulled forward from the original Phase 2/3 roadmap)
+
+11 permissions across two related-but-independent resources — a Service Report is created directly
+against a Customer (not derived from a Quotation), so unlike Scope of Work/Delivery Order it does
+**not** nest inside the "ใบเสนอราคา" (Quotations) `PERMISSION_GROUPS` entry; it gets its own
+standalone "บริการ" group in Role Management instead:
+
+| Permission | Gates |
+|---|---|
+| `service:view` | `GET /api/service-reports` (list — own-records-only without `:viewAll`) and `GET /api/service-reports/:id`. |
+| `service:viewAll` | Scopes the list to everyone's records instead of own-created-only — same `{$or:[{createdBy},{createdBy:""}]}` idiom as Quotation/Scope of Work/Delivery Order. Single-record `GET` is deliberately unfiltered, same carve-out as every other document type. |
+| `service:create` | `POST /api/service-reports`. |
+| `service:edit` | `PATCH /api/service-reports/:id` (Draft-only) — combined with an **ownership** check (`canEditServiceReport()`: own record, or holds `service:complete`), same shape as Scope of Work's `canEditScope()`. Also gates the `reopen` status action and the photo upload/delete routes. |
+| `service:delete` | `DELETE /api/service-reports/:id` (soft delete) — combined with the same ownership-or-`service:complete` check as edit. |
+| `service:complete` | The manager/supervisor authority: `POST /api/service-reports/:id/status` with `action: "complete"` or `"cancel"`. Also, independent of ownership, lets a holder edit or delete *any* Draft record (the `canEditServiceReport()` override), same idea as `scopeOfWork:finalize`. |
+| `service:print` | `POST /api/service-reports/:id/print` and gates the client's Print/Export button — no completeness gate, a Draft can be printed for review. |
+| `serviceTemplates:view` | `GET /api/service-templates` (incl. the lazy first-request seed) and `GET /api/service-templates/:id`. |
+| `serviceTemplates:create` | `POST /api/service-templates` and `POST /api/service-templates/:id/duplicate`. |
+| `serviceTemplates:edit` | `PATCH /api/service-templates/:id`. |
+| `serviceTemplates:archive` | `POST /api/service-templates/:id/archive`. |
+
+Default grants: **Super Admin**/**Administrator** get all 11; **Approver Level 1/2** get view-only
+plus **print** (`service:view/viewAll/print`, `serviceTemplates:view`) — Service Reports have **no
+approval workflow in Phase 1**, so these roles get oversight + the ability to print what they can
+see, not edit/complete rights; **Viewer** gets the same minus print (`service:view/viewAll`,
+`serviceTemplates:view` only, matching its identical no-print treatment of every other module);
+**Sales User** gets **none** — field-service maintenance is outside this seed role's defined duties.
+**Consequence worth flagging**: no seeded role except Super Admin/Administrator can *create* a
+Service Report — a real "Service Engineer" role doesn't exist yet in `defaultRoles`.
+
+**⚠️ Same deployment/rollout note as every other permission added to this app** — `defaultRoles`
+only seeds once, so an already-provisioned production deployment's existing role documents will
+**not** automatically gain these 11 permissions. A Super Admin must open Role Management and
+manually grant the appropriate Service permissions (most importantly `service:create`/`edit`/
+`complete` to whoever the real field engineers turn out to be) before or immediately after this
+deploys. Tracked in [TODO.md](./TODO.md).
+
+Audit logging: every action writes a server-side `AuditLogEntry` via `writeServiceAuditEntry()`,
+module `"บริการ"`, with `relatedServiceReportId`/`relatedServiceTemplateId` fields — `userId`/
+`userName`/`roleName` always come from the server's own `AuthContext`, never client input, same
+non-forgeable convention as every other module.
+
 ### Sidebar / Menu Visibility
 
 `App.tsx`'s `navItems` array carries an optional `permission` field per entry; `hasPermission(currentUser, roles, item.permission)` filters the rendered list — **items are fully removed from the DOM, not just disabled**, satisfying "hide inaccessible menus completely." A render-time `effectiveNav` guard (not a `useEffect`, to avoid a setState-in-effect cascade) falls back to the Dashboard if `activeNav` somehow points at a module the current user can't see. `Settings` is always visible (every signed-in user can edit their own profile); only its Company tab is conditionally rendered, gated by `company:manage`.

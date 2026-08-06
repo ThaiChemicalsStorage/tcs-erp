@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling } from "../_lib/http.js";
 import { handleCustomers } from "../_lib/customersHandler.js";
 import { handleSearch } from "../_lib/searchHandler.js";
+import { handleServiceTemplate } from "../_lib/serviceTemplateHandler.js";
+import { handleServiceReport } from "../_lib/serviceReportHandler.js";
 
 /**
  * Customer master data — see `api/_lib/customersHandler.ts` for the actual list/create/get/patch/
@@ -19,11 +21,20 @@ import { handleSearch } from "../_lib/searchHandler.js";
  * established pattern this file itself used to share with `company-profiles.ts`. The actual
  * search logic lives in `api/_lib/searchHandler.ts`, unrelated to and independent from
  * `customersHandler.ts` below; they just happen to share one Vercel function slot.
+ *
+ * **Service Reports + Service Templates (added 2026-08-06)** also share this function file, same
+ * cap-driven reasoning — mounted here rather than on `api/handlers/quotes.ts` (already the
+ * heaviest bundle) because a Service Report's one real relational anchor is `customerId`/
+ * `customerSnapshot`, the same entity this file already owns; a Service Report is created
+ * directly against a Customer, not derived from a quotation. Logic lives in
+ * `api/_lib/serviceTemplateHandler.ts`/`api/_lib/serviceReportHandler.ts`.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   await withErrorHandling(req, res, async () => {
     const pathname = (req.url ?? "").split("?")[0];
     if (pathname === "/api/search") return handleSearch(req, res);
+    if (pathname === "/api/service-templates" || pathname.startsWith("/api/service-templates/")) return handleServiceTemplate(req, res);
+    if (pathname === "/api/service-reports" || pathname.startsWith("/api/service-reports/")) return handleServiceReport(req, res);
     return handleCustomers(req, res);
   });
 }

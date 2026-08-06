@@ -18,7 +18,9 @@ export type NotificationType =
   | "scope_of_work_rejected"
   | "delivery_order_submitted"
   | "delivery_order_approved"
-  | "delivery_order_rejected";
+  | "delivery_order_rejected"
+  | "service_report_created"
+  | "service_report_completed";
 
 export interface Notification {
   id: string;
@@ -31,6 +33,7 @@ export interface Notification {
   relatedScopeId?: string;
   relatedScopeNumber?: string;
   relatedDeliveryOrderId?: string;
+  relatedServiceReportId?: string;
   createdAt: string;
   read: boolean;
 }

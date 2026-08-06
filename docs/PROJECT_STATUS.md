@@ -14,6 +14,26 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-06] New Service module (Phase 1) + same-day photo attachments and print.**
+  Brand-new field-service checklist + report module ("บริการ"), created directly against a Customer
+  (not derived from a Quotation, unlike every other document type). Explicitly phased with the
+  owner's agreement given the full target spec's size (30+ criteria incl. mobile UX, signature
+  capture, LINE OA) — Phase 1 shipped: data model, two checklist templates seeded from real
+  reference files (`public/รายการตรวจเช็ค.pdf`, `public/Service.xlsx`), atomic `SR-{year}-{seq}`
+  numbering, a desktop-first editor, RBAC (own standalone "บริการ" permission group), navigation.
+  The same day, per direct follow-up request via `/impeccable design`, two Phase 2/3 items were
+  pulled forward: photo attachments required on Abnormal checklist items (Binary-in-Mongo +
+  capability-URL, same pattern as Scope of Work's attachments) and a printable A4-portrait report
+  (browser-native print CSS — no PDF library exists in this app). A real invalid-`<tbody>`-nesting
+  bug and a checklist-error-highlighting UX gap were both found and fixed during this pass.
+  `tsc`/`lint`/`build`/`test` (70/70) all clean; **verified live twice** via `vercel dev` + a real
+  browser session (nav/permissions/template seeding/report creation/snapshot-freeze/validation/
+  audit-log after Phase 1; real file-input photo upload + native print-dialog invocation after the
+  pull-forward). Remaining phases (signature capture, mobile/iPad UX, customer acceptance, LINE OA)
+  are not yet built — see [MODULES/Service.md](./MODULES/Service.md) roadmap. No seeded role except
+  Super Admin/Administrator can create a report yet — a manual Role Management grant is needed on
+  an already-provisioned deployment, same standing requirement every prior module has had. See
+  CHANGELOG.md and SESSION_LOG.md for the full writeup.
 - ✅ **[2026-08-04] Website/Facebook/Line added to Company Settings + all 3 print letterheads.**
   Direct user question, prompted by comparing the printed Quotation header against the company's real
   letterhead graphic — investigation found `website` was hardcoded blank everywhere (no Settings field

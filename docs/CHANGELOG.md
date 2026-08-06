@@ -4,7 +4,90 @@
 
 ---
 
-## 2026-08-04 (absolute latest) — Website/Facebook/Line added to Company Settings + all 3 print letterheads
+## 2026-08-06 (absolute latest) — New Service module (Phase 1) + same-day photo attachments and print, pulled forward from the roadmap
+
+Direct user request for a field-service checklist + report module combining the company's paper
+"SERVICE CHECK SHEET" and its narrative Service Report into one digitized workflow, eventually
+targeting mobile/tablet/desktop use with photo evidence, signature capture, PDF export, and
+on-site/remote customer acceptance via LINE OA. Given the scope (30+ acceptance criteria across the
+original spec), the work was explicitly phased with the user's agreement: build a solid Phase 1
+now (data model, checklist templates seeded from the real reference files, Service Report CRUD, a
+desktop-first editor, RBAC, navigation), leave photo/signature/mobile/PDF/acceptance/LINE as later
+phases. Four research passes (three parallel codebase-exploration agents + one plan-design agent)
+mapped the Scope of Work/Delivery Order patterns to reuse before implementation began.
+
+**Phase 1, built and verified**:
+- **Data model**: `service_templates` (master checklist: sections → groups → items, each item
+  `"normalAbnormal" | "measurement"`, a section can be `isOptionalAddon`) and `service_reports`
+  (`id` = atomic `SR-{buddhistYear}-{seq}`, freezes the chosen template onto `templateSnapshot` +
+  an optional linked Customer's snapshot onto `customerSnapshot` at creation). Two checklist
+  templates seeded idempotently from the real `public/รายการตรวจเช็ค.pdf` and `public/Service.xlsx`
+  reference files (4 sections/30 items and 1 section/25 items respectively) — content-hash-gated,
+  never duplicates on re-run.
+- **Numbering**: atomic-counter auto-generated (unlike Scope of Work's deliberate 2026-07-29 move
+  to fully-manual numbers) — a Service Report is field-created with no pre-existing number to copy,
+  so auto-numbering removes the typo/duplicate-number friction manual entry would cause there.
+  Buddhist year computed dynamically, avoiding Quotes' hardcoded-year wart.
+- **Checklist rules**: Normal/Abnormal is structurally exclusive (one `status` field); selecting
+  Abnormal reveals a required detail field, never silently cleared on reverting to Normal. Server
+  rebuilds the whole checklist from the report's own frozen template on every save — a client can
+  never inject a new item/group/section.
+- **API**: mounted on `api/handlers/customers.ts` (not `quotes.ts`, already the heaviest bundle) —
+  Vercel Hobby's 12-function cap stayed fully used, and a Service Report's real relational anchor
+  (`customerId`) is the same entity that file already owns. Full CRUD + status transitions
+  (Draft → Completed/Cancelled, Completed → Draft reopen) in `api/_lib/serviceReportHandler.ts` /
+  `serviceTemplateHandler.ts`.
+- **RBAC**: 10 new permissions in their own standalone "บริการ" group (not nested into
+  "ใบเสนอราคา" — Service Reports aren't part of the quotation chain). Own-records-only-without-
+  `:viewAll` list filtering, same idiom as every other module.
+- **UI**: `src/pages/service/` (`ServicePage`/`ServiceList`/`ServiceReportEditor`/
+  `ServiceTemplateManagement`) + `ServiceChecklistItemControl.tsx`, following the established
+  navy/gold design system throughout. Sidebar gets a new standalone "บริการ" nav group.
+
+**Same-day pull-forward** (direct user request via `/impeccable design "Service more user friendly
+and must be print and if pick abnormal should add picture and remark"`, immediately after Phase 1
+shipped): photo attachments and a printable report — originally scoped as Phase 2/3 — were built
+the same day instead of deferred:
+- **Photo attachments**: a new `service_checklist_photo_files` collection (Binary-in-Mongo +
+  unauthenticated capability-URL download, same pattern as Scope of Work's `scope_attachment_files`
+  but sized for camera photos — 4 MB/photo, 6 photos/item). Marking a checklist item Abnormal now
+  also requires **at least one attached photo** before the report can be marked Completed (in
+  addition to the existing required detail text). New routes:
+  `POST/DELETE /api/service-reports/:id/photos[/:photoId]` and the unauthenticated
+  `GET .../photos/:photoId/download?key=`. Client UI: a thumbnail grid + camera-hinted file input
+  in `ServiceChecklistItemControl.tsx`, disabled with an explanatory reason until the report exists
+  (Draft, not "new").
+- **Print/PDF**: new `ServiceReportPrintDocument.tsx` (browser-native `@media print` CSS — this app
+  has no PDF library) reproducing the real Oil Mist Filter reference report's "SERVICE ITEM n"
+  blue-bar per-abnormal-item layout with a photo grid, reconciled against the Phayont Marine
+  reference's report-info field labels. New `service:print` permission and
+  `POST /api/service-reports/:id/print` (writes an audit entry, no completeness gate — a Draft can
+  be printed for review, matching Delivery Order's simpler no-gate precedent).
+- **UX fix found during this pass**: the server's completion-validation error response only ever
+  returned a flat array of message strings (`groupErrors.checklist`), so a failed "Mark Complete"
+  attempt had no way to highlight *which* checklist item was the problem. Added a
+  `checklistItemErrors` field (item-path-keyed, e.g. `"core.blower.vibration"`) to the `422`
+  response and wired it through `ApiError`/`ServiceReportEditor.tsx` so the exact failing control
+  now highlights inline, and any collapsed section containing an error auto-expands.
+- A real bug was also caught and fixed during manual verification: the print document's per-section
+  `<tbody>` elements were nested inside one outer `<tbody>` (invalid HTML,
+  `validateDOMNesting` console error) — restructured so every section's `<tbody>` is a direct
+  `<table>` child, matching `ScopeOfWorkPrintDocument.tsx`'s sibling-tbody pattern.
+
+**Verified**: `tsc --noEmit` (both tsconfigs)/`lint`/`build`/`test` (70/70) all clean throughout.
+Manually verified live via `vercel dev` + a real browser session, twice — once after Phase 1
+(navigation, permission gating, seeded templates matching the reference taxonomy exactly, creating
+a report with a real customer/template snapshot freeze, checklist Abnormal-reveal, server-side
+422-blocking an incomplete completion attempt, audit log entries, in-app notifications) and again
+after the photo/print pull-forward (uploaded a real photo to an Abnormal item via the file-input
+element, confirmed the required-photo warning cleared and the thumbnail rendered from its
+capability-URL, confirmed Print/Export successfully invoked the native browser print dialog with a
+clean console). See [MODULES/Service.md](./MODULES/Service.md) for the full writeup and the
+later-phase roadmap (signature capture, mobile/iPad UX, customer acceptance, LINE OA).
+
+---
+
+## 2026-08-04 — Website/Facebook/Line added to Company Settings + all 3 print letterheads
 
 Direct user question after seeing the app's printed Quotation header next to the company's real
 letterhead graphic (logo, name, address, TEL/E-mail, Facebook icon+page name, Line icon+ID, website):

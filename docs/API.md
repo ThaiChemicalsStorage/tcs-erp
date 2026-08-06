@@ -183,6 +183,54 @@ Client wrapper functions: `src/lib/scopeOfWork.ts`'s `fetchScopeOfWorksByQuotati
 `updateScopeOfWork(id, fields)`/`finalizeScopeOfWork(id)`/`duplicateScopeOfWork(id)`/
 `refreshScopeOfWorkFromQuotation(id)`/`deleteScopeOfWork(id)`/`logScopeOfWorkPrinted(id)`.
 
+## Service Templates + Service Reports (`api/_lib/serviceTemplateHandler.ts` + `api/_lib/serviceReportHandler.ts`, mounted at `/api/service-templates` and `/api/service-reports` via `api/handlers/customers.ts` — added 2026-08-06, Phase 1)
+
+Shares `api/handlers/customers.ts`'s function file (checked on the raw pathname, after `/api/search`
+and before falling through to the plain customers dispatch) — same 12-function-slot-sharing
+convention every other cap-driven mount in this app uses. Mounted on `customers.ts` rather than
+`quotes.ts` because a Service Report is created directly against a Customer, not derived from a
+quotation — see [MODULES/Service.md](./MODULES/Service.md) for the full feature writeup and the
+routing decision's reasoning. `vercel.json` rewrites: `/api/service-templates`,
+`/api/service-templates/:path*`, `/api/service-reports`, `/api/service-reports/:path*` →
+`/api/handlers/customers`.
+
+**Service Templates** (master checklist data, `service_templates` collection):
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/service-templates` | `serviceTemplates:view` | Summary list (`id`/`templateCode`/`templateName`/`version`/`sectionCount`/`itemCount`/`isActive`/`isDeleted`), sorted by `templateCode`. Lazily seeds the two real checklist templates (`upsertServiceTemplates()`) the first time the collection is empty — same "seed on first real request" idiom as `seedJobTypesIfEmpty()`/`seedQuotationTemplatesIfEmpty()`, needed because `ensureIndexes()` only ever runs from the one-time Setup Wizard. |
+| `GET /api/service-templates/:id` | `serviceTemplates:view` | Full document incl. `sections`. |
+| `POST /api/service-templates` | `serviceTemplates:create` | Body `{ templateName, description, sections }`. `templateCode` is server-generated (`SVC-CUSTOM-{random}`), never client-supplied. |
+| `PATCH /api/service-templates/:id` | `serviceTemplates:edit` | Partial `{ templateName?, description?, sections?, isActive? }`. `sourceHash`/`sourceType: "manual"` are recomputed automatically when content changes — never touches an already-created Service Report's frozen `templateSnapshot`. |
+| `POST /api/service-templates/:id/duplicate` | `serviceTemplates:create` | Body `{ templateName? }` (defaults to `"{source} (สำเนา)"`) — fresh `templateCode`, `sourceType: "manual"`. |
+| `POST /api/service-templates/:id/archive` | `serviceTemplates:archive` | Body `{ isDeleted }`. |
+
+**Service Reports** (`service_reports` collection, `id` = human doc number `SR-{buddhistYear}-{seq}`, stored directly as `_id` — same convention as `Quote`):
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/service-reports` | `service:view` | Own-records-only (`{$or:[{createdBy: caller},{createdBy:""}]}`) unless the caller also holds `service:viewAll` — same idiom as Quotation/Scope of Work. Row shape resolves `assignedServiceEngineerName` from `assignedServiceEngineerId` via one batched `users` lookup (not persisted). |
+| `GET /api/service-reports/:id` | `service:view` | Full document. Not scoped by `service:viewAll`, same reasoning as Scope of Work/Delivery Order's identical single-record `GET`. |
+| `POST /api/service-reports` | `service:create` | Body: `customerId` (or a manually-typed `customerSnapshot`), `templateId` (**required** — a report always starts from an active, non-deleted template), plus report-info fields. Resolves the customer link the same way `api/handlers/quotes.ts` does (`resolveCustomerIdAndSnapshot()` — a linked customer's snapshot is always server-derived, never trusted from the client), freezes the chosen template's `sections` onto `templateSnapshot` (edits to the master template afterward never retroactively change this report), reserves the next atomic `SR-{year}-{seq}` id, and builds a blank default `checklist` from the frozen structure (any `checklist` sent in the POST body is ignored). `assignedServiceEngineerId` defaults to the creating user if omitted. Notifies every active `service:viewAll` holder except the creator (`service_report_created`). |
+| `PATCH /api/service-reports/:id` | `service:edit` + (owner **or** `service:complete`) | **Draft-only** — `400` otherwise ("กรุณาเปิดใหม่ (Reopen) ก่อน"). Accepts partial report-info fields plus `checklist` — `checklist` is rebuilt server-side by walking the record's own `templateSnapshot` (`mergeChecklist()`), so a client can only ever toggle `status`/`abnormalDetail`/`measurementValue`/a section's `included` flag on an item/section the server itself generated, never inject a new one. |
+| `POST /api/service-reports/:id/status` | varies by action | Body `{ action: "complete" \| "reopen" \| "cancel" }`. **`complete`** needs `service:complete` + `status === "Draft"` + passes `validateServiceReportForCompletion()` (`422 DOCUMENT_INCOMPLETE` with `fieldErrors`/`groupErrors.checklist` otherwise) → `Completed`, notifies every active `service:viewAll` holder except the actor (`service_report_completed`). **`reopen`** needs the same owner-or-`service:complete` rule as `PATCH` + `status === "Completed"` → back to `Draft`. **`cancel`** needs `service:complete` + not already `Cancelled` → `Cancelled`. |
+| `DELETE /api/service-reports/:id` | `service:delete` + (owner **or** `service:complete`) | Soft delete (`isDeleted: true`). No restore endpoint yet, same as every other document type in this app. |
+| `POST /api/service-reports/:id/photos` | `service:edit` + owner-or-`:complete`, Draft-only | **Added same day, pulled forward from Phase 2** — body `{sectionKey, groupKey, itemKey, fileName, contentType, dataBase64}`. Attaches a photo to a checklist item (only meaningful while that item is `abnormal`); stores bytes in `service_checklist_photo_files` (Binary), pushes `ServiceChecklistItemPhoto` metadata onto that item. 4 MB/photo, 6 photos/item. |
+| `DELETE /api/service-reports/:id/photos/:photoId` | `service:edit` + owner-or-`:complete`, Draft-only | Removes one photo's metadata + deletes its Binary doc. |
+| `GET /api/service-reports/:id/photos/:photoId/download?key=` | **unauthenticated capability-URL** | Same random-`downloadKey` model as Scope of Work's attachment download; a wrong/missing key is an opaque 404. Only `image/png\|jpeg\|gif\|webp` serve inline; anything else forces `attachment` + `nosniff`. |
+| `POST /api/service-reports/:id/print` | `service:print` | **Added same day, pulled forward from Phase 3** — writes a `"Service Report Printed"` audit entry, no completeness gate (a Draft can be printed for review — matches Delivery Order's simpler no-gate print precedent, not Scope of Work's stricter one). Called by the client immediately before `window.print()`; printing still proceeds even if this call fails. |
+
+**Not built yet** (see [MODULES/Service.md](./MODULES/Service.md) roadmap): signature capture,
+mobile/iPad-specific UX, customer-acceptance routes (on-site or remote), LINE OA integration.
+
+Client wrapper functions: `src/lib/serviceTemplates.ts`'s `fetchServiceTemplates()`/
+`fetchServiceTemplate(id)`/`createServiceTemplate(draft)`/`updateServiceTemplate(id, fields)`/
+`duplicateServiceTemplate(id, name)`/`setServiceTemplateArchived(id, isDeleted)`; `src/lib/serviceReports.ts`'s
+`fetchAllServiceReports()`/`fetchServiceReport(id)`/`createServiceReport(draft)`/
+`updateServiceReport(id, fields)`/`changeServiceReportStatus(id, action)`/`deleteServiceReport(id)`/
+`uploadServiceReportPhoto(reportId, path, file)`/`deleteServiceReportPhoto(reportId, photoId)`/
+`printServiceReport(reportId)`.
+
 ## Company Profiles — REMOVED 2026-07-14
 
 Every route that used to live here (`GET/POST /api/company-profiles`, `GET/PATCH /api/company-profiles/:id`,

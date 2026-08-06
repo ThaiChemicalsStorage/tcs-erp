@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -44,6 +44,8 @@ const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then(
 const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateManagementPage").then((m) => ({ default: m.TemplateManagementPage })));
 const ScopeOfWorkPage = lazy(() => import("./pages/scopeOfWork/ScopeOfWorkPage").then((m) => ({ default: m.ScopeOfWorkPage })));
 const DeliveryOrderPage = lazy(() => import("./pages/deliveryOrder/DeliveryOrderPage").then((m) => ({ default: m.DeliveryOrderPage })));
+const ServicePage = lazy(() => import("./pages/service/ServicePage").then((m) => ({ default: m.ServicePage })));
+const ServiceTemplateManagement = lazy(() => import("./pages/service/ServiceTemplateManagement").then((m) => ({ default: m.ServiceTemplateManagement })));
 
 // แสดงสถานะกำลังโหลดหน้าย่อยระหว่างรอโหลดโค้ด (Suspense fallback) พร้อมข้อความสำหรับ screen reader
 // Loading placeholder shown as the Suspense fallback for every lazy-loaded page, with a screen-reader label
@@ -115,7 +117,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -150,6 +152,8 @@ const navItems: NavItem[] = [
   { key: "quotationTemplates", icon: Layers, labelKey: "nav.quotationTemplates", permission: "quotationTemplates:view" },
   { key: "scopeOfWork", icon: ClipboardList, labelKey: "nav.scopeOfWork", permission: "scopeOfWork:view" },
   { key: "deliveryOrder", icon: Truck, labelKey: "nav.deliveryOrder", permission: "deliveryOrder:view" },
+  { key: "service", icon: Wrench, labelKey: "nav.service", permission: "service:view" },
+  { key: "serviceTemplates", icon: Layers, labelKey: "nav.serviceTemplates", permission: "serviceTemplates:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -160,6 +164,7 @@ const navItems: NavItem[] = [
 const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
+  { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "auditLog"] },
 ];
@@ -170,6 +175,8 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   quotationTemplates: "nav.quotationTemplates",
   scopeOfWork: "nav.scopeOfWork",
   deliveryOrder: "nav.deliveryOrder",
+  service: "nav.service",
+  serviceTemplates: "nav.serviceTemplates",
   products: "nav.products",
   customers: "nav.customers",
   users: "nav.users",
@@ -243,6 +250,7 @@ export default function App() {
   const [scopeOfWorkDeepLink, setScopeOfWorkDeepLink] = useState<{ quotationId: string; scopeOfWorkId: string } | null>(null);
   const [scopeOfWorkDeepLinkId, setScopeOfWorkDeepLinkId] = useState<string | null>(null);
   const [deliveryOrderDeepLinkId, setDeliveryOrderDeepLinkId] = useState<string | null>(null);
+  const [serviceReportDeepLinkId, setServiceReportDeepLinkId] = useState<string | null>(null);
   const [templateCreateForJobType, setTemplateCreateForJobType] = useState<{ jobTypeCode: string; jobTypeName: string; seq: number } | null>(null);
   const templateCreateSeq = useRef(0);
   const [pageAction, setPageAction] = useState<{ nav: NavKey; action: "create" | "categories"; seq: number } | null>(null);
@@ -408,6 +416,10 @@ export default function App() {
     setDeliveryOrderDeepLinkId(deliveryOrderId);
     setActiveNav("deliveryOrder");
   };
+  const navigateToServiceReport = (serviceReportId: string) => {
+    setServiceReportDeepLinkId(serviceReportId);
+    setActiveNav("service");
+  };
   const navigateToCreateTemplateForJobType = (jobTypeCode: string, jobTypeName: string) => {
     templateCreateSeq.current += 1;
     setTemplateCreateForJobType({ jobTypeCode, jobTypeName, seq: templateCreateSeq.current });
@@ -548,6 +560,14 @@ export default function App() {
   const canFinalizeDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:finalize");
   const canPrintDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:print");
   const canDeleteDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:delete");
+  const canCreateService = hasPermission(currentUser, roles, "service:create");
+  const canEditService = hasPermission(currentUser, roles, "service:edit");
+  const canCompleteService = hasPermission(currentUser, roles, "service:complete");
+  const canDeleteService = hasPermission(currentUser, roles, "service:delete");
+  const canPrintService = hasPermission(currentUser, roles, "service:print");
+  const canCreateServiceTemplates = hasPermission(currentUser, roles, "serviceTemplates:create");
+  const canEditServiceTemplates = hasPermission(currentUser, roles, "serviceTemplates:edit");
+  const canArchiveServiceTemplates = hasPermission(currentUser, roles, "serviceTemplates:archive");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
   // ตรวจสิทธิ์ template โดยยอมรับสิทธิ์ระดับ manage แบบเก่า (superset) ควบคู่กับสิทธิ์ย่อยแบบใหม่
   // Checks a template permission, accepting the legacy superset "manage" permission alongside the granular one
@@ -673,7 +693,8 @@ export default function App() {
               onMarkAllRead={markAllNotificationsRead}
               onDelete={deleteNotification}
               onNavigate={(n) => {
-                if (n.relatedDeliveryOrderId) navigateToDeliveryOrder(n.relatedDeliveryOrderId);
+                if (n.relatedServiceReportId) navigateToServiceReport(n.relatedServiceReportId);
+                else if (n.relatedDeliveryOrderId) navigateToDeliveryOrder(n.relatedDeliveryOrderId);
                 else if (n.relatedScopeId) navigateToScopeOfWorkStandalone(n.relatedScopeId);
                 else if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId);
               }}
@@ -739,6 +760,10 @@ export default function App() {
               ? <ScopeOfWorkPage company={company} users={users} currentUserId={currentUser.id} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canChasePo={canChasePoScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
               : effectiveNav === "deliveryOrder"
               ? <DeliveryOrderPage company={company} currentUserId={currentUser.id} canEdit={canEditDeliveryOrder} canFinalize={canFinalizeDeliveryOrder} canPrint={canPrintDeliveryOrder} canDelete={canDeleteDeliveryOrder} canCreate={canCreateDeliveryOrder} initialDeliveryOrderId={deliveryOrderDeepLinkId} onDeliveryOrderIdConsumed={() => setDeliveryOrderDeepLinkId(null)} />
+              : effectiveNav === "service"
+              ? <ServicePage currentUserId={currentUser.id} company={company} canCreate={canCreateService} canEdit={canEditService} canComplete={canCompleteService} canDelete={canDeleteService} canPrint={canPrintService} initialServiceReportId={serviceReportDeepLinkId} onServiceReportIdConsumed={() => setServiceReportDeepLinkId(null)} />
+              : effectiveNav === "serviceTemplates"
+              ? <ServiceTemplateManagement canCreate={canCreateServiceTemplates} canEdit={canEditServiceTemplates} canArchive={canArchiveServiceTemplates} />
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"

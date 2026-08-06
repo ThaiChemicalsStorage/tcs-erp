@@ -51,7 +51,14 @@ tenant of its own: Global Search (`GET /api/search`, `api/_lib/searchHandler.ts`
 that same file on the raw pathname — still 12 of 12, no new file added. 2026-07-14, `jobtypes.ts`
 picked up a tenant too: Quotation Templates (`/api/quotation-templates*`,
 `api/_lib/quotationTemplatesHandler.ts`). 2026-07-15, `quotes.ts` picked up one: Scope of Work
-(`/api/scope-of-works*`, `api/_lib/scopeOfWorkHandler.ts`) — still 12 of 12, no new file added.)
+(`/api/scope-of-works*`, `api/_lib/scopeOfWorkHandler.ts`). 2026-07-23, `quotes.ts` picked up a
+second: Delivery Order (`/api/delivery-orders*`, `api/_lib/deliveryOrderHandler.ts`). 2026-08-06,
+`customers.ts` picked up two more for the new Service module: Service Templates
+(`/api/service-templates*`, `api/_lib/serviceTemplateHandler.ts`) and Service Reports
+(`/api/service-reports*`, `api/_lib/serviceReportHandler.ts`) — mounted on `customers.ts` rather
+than the already-heaviest `quotes.ts` bundle because a Service Report's real relational anchor is
+`customerId`, the same entity that file already owns. Still 12 of 12, no new file added at any
+step.)
 
 - **Plain single-route files** — `api/company/index.ts`, `api/audit-log/index.ts`, `api/dashboard/index.ts` (added 2026-07-09, GET only) — dispatch on `req.method` within one file.
 - **One file per resource, dispatching on path** — `api/handlers/{auth,users,roles,products,categories,notifications,quotes,jobtypes,customers}.ts` — each parses the URL's path segments after the resource prefix (via `getPathSegments(req, prefix)` in `api/_lib/http.ts`, which parses `req.url` directly) and branches on them (e.g. `parts.length === 2 && parts[1] === "workflow"` for `POST /api/quotes/:id/workflow`).

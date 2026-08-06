@@ -24,7 +24,11 @@
     { "source": "/api/scope-of-works", "destination": "/api/handlers/quotes" },
     { "source": "/api/scope-of-works/:path*", "destination": "/api/handlers/quotes" },
     { "source": "/api/delivery-orders", "destination": "/api/handlers/quotes" },
-    { "source": "/api/delivery-orders/:path*", "destination": "/api/handlers/quotes" }
+    { "source": "/api/delivery-orders/:path*", "destination": "/api/handlers/quotes" },
+    { "source": "/api/service-templates", "destination": "/api/handlers/customers" },
+    { "source": "/api/service-templates/:path*", "destination": "/api/handlers/customers" },
+    { "source": "/api/service-reports", "destination": "/api/handlers/customers" },
+    { "source": "/api/service-reports/:path*", "destination": "/api/handlers/customers" }
   ],
   "functions": {
     "api/handlers/jobtypes.ts": {

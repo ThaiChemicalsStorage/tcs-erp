@@ -11,6 +11,8 @@ import type { Quote } from "../../src/lib/quotes.js";
 import type { QuotationTemplate } from "../../src/lib/quotationTemplates.js";
 import type { ScopeOfWork } from "../../src/lib/scopeOfWork.js";
 import type { DeliveryOrder } from "../../src/lib/deliveryOrder.js";
+import type { ServiceTemplate } from "../../src/lib/serviceTemplates.js";
+import type { ServiceReport } from "../../src/lib/serviceReports.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits. */
 export type UserFields = Omit<User, "id"> & { passwordHash: string };
@@ -154,6 +156,49 @@ export type DeliveryOrderFields = Omit<DeliveryOrder, "id">;
 export async function deliveryOrdersCollection() {
   const db = await getDb();
   return db.collection<DeliveryOrderFields>("delivery_orders");
+}
+
+/**
+ * Service Checklist Template (added 2026-08-06) — see `src/lib/serviceTemplates.ts` for the full
+ * domain-shape doc comment. `templateCode` is the stable natural key (e.g. "SVC-AIRPOLLUTION-STD")
+ * used by the idempotent seed upsert (`api/_lib/serviceTemplateSeedData.ts`) — a handful of
+ * hand-curated master templates, not a high-volume collection.
+ */
+export type ServiceTemplateFields = Omit<ServiceTemplate, "id">;
+export async function serviceTemplatesCollection() {
+  const db = await getDb();
+  return db.collection<ServiceTemplateFields>("service_templates");
+}
+
+/**
+ * Service Report (added 2026-08-06) — see `src/lib/serviceReports.ts` for the full domain-shape
+ * doc comment. `id` is the human-readable business id (e.g. "SR-2569-0001") stored directly as
+ * `_id`, atomically reserved via `countersCollection()` — same convention as `QuoteFields`.
+ */
+export type ServiceReportFields = Omit<ServiceReport, "id">;
+export async function serviceReportsCollection() {
+  const db = await getDb();
+  return db.collection<ServiceReportFields & { _id: string }>("service_reports");
+}
+
+/** Service checklist item photo BYTES (added 2026-08-06) — same "keep bytes out of the parent
+ * document, serve via an unauthenticated capability-URL" pattern as `ScopeAttachmentFileFields`.
+ * One document per photo; `serviceReportId` + `photoId` locate it, `downloadKey` gates the download
+ * route. Photo *metadata* lives embedded on the matching checklist item inside `ServiceReport.checklist`
+ * (`ServiceChecklistItemPhoto`), never the bytes themselves. */
+export interface ServiceChecklistPhotoFileFields {
+  serviceReportId: string;
+  photoId: string;
+  downloadKey: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  data: import("mongodb").Binary;
+  createdAt: string;
+}
+export async function serviceChecklistPhotoFilesCollection() {
+  const db = await getDb();
+  return db.collection<ServiceChecklistPhotoFileFields>("service_checklist_photo_files");
 }
 
 // ─── Schema-prep collections (2026-07 production-readiness pass) ──────────
@@ -449,7 +494,7 @@ export async function ensureIndexes() {
     permissions, departments, positions, customers, customerContacts,
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
     notificationTypes, jobTypes, quotationTemplates, scopeOfWorks, deliveryOrders,
-    scopeAttachmentFiles,
+    scopeAttachmentFiles, serviceTemplates, serviceReports, serviceChecklistPhotoFiles,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -458,7 +503,8 @@ export async function ensureIndexes() {
     leadsCollection(), leadActivitiesCollection(), productTemplatesCollection(),
     quotationCommentsCollection(), quotationTagsCollection(), notificationTypesCollection(),
     jobTypesCollection(), quotationTemplatesCollection(), scopeOfWorksCollection(), deliveryOrdersCollection(),
-    scopeAttachmentFilesCollection(),
+    scopeAttachmentFilesCollection(), serviceTemplatesCollection(), serviceReportsCollection(),
+    serviceChecklistPhotoFilesCollection(),
   ]);
 
   await Promise.all([
@@ -517,6 +563,15 @@ export async function ensureIndexes() {
     // because this function only runs from the one-time Setup Wizard.
     scopeAttachmentFiles.createIndex({ attachmentId: 1 }, { unique: true }),
     scopeAttachmentFiles.createIndex({ scopeOfWorkId: 1 }),
+    serviceTemplates.createIndex({ templateCode: 1 }, { unique: true }),
+    serviceTemplates.createIndex({ isActive: 1 }),
+    serviceTemplates.createIndex({ isDeleted: 1 }),
+    serviceReports.createIndex({ customerId: 1 }),
+    serviceReports.createIndex({ status: 1 }),
+    serviceReports.createIndex({ createdBy: 1 }),
+    serviceReports.createIndex({ inspectionDate: 1 }),
+    serviceChecklistPhotoFiles.createIndex({ photoId: 1 }, { unique: true }),
+    serviceChecklistPhotoFiles.createIndex({ serviceReportId: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)
