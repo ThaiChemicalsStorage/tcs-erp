@@ -23,7 +23,10 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
   fixed `.gitignore` swallowing `.env.example`. Same-day follow-up: **MongoDB authentication** —
   root user from `.env` (`MONGO_USER`/`MONGO_PASS`), app URI carries the credentials, verified
   unauth-blocked + auth-ok on a fresh volume; cert filenames standardized to the owner's
-  `huma-erp.com.pem`/`.key` naming.
+  `huma-erp.com.pem`/`.key` naming. Second same-day follow-up (server prep): nginx config is now
+  **baked into a custom image** (`nginx/Dockerfile` COPYs `nginx/nginx.conf`; compose uses
+  `build: ./nginx`) — only the certs folder remains a volume mount, and `nginx/.dockerignore`
+  keeps keys out of the build context.
 - ✅ **[2026-08-06] Standalone Express server — the app now runs without Vercel.** On the owner's
   explicit go-ahead, all 3 steps of [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md)'s plan
   were executed: `server/` (Express `createApp()` mounting the **unchanged** `api/` handlers via a

@@ -62,6 +62,15 @@ nginx HTTPS. A random 24-char `MONGO_PASS` was generated into the local `.env` (
 used a .NET API missing on PS 5.1 and silently produced an all-"A" string — caught and replaced
 with a properly random value; worth remembering as a PowerShell 5.1 footgun).
 
+A third follow-up (prep for the real server): the nginx site config is now **baked into a custom
+image** — new `nginx/Dockerfile` (`FROM nginx:stable-alpine` + the owner-specified
+`COPY nginx.conf /etc/nginx/conf.d/default.conf`), the conf moved `nginx/conf.d/default.conf` →
+`nginx/nginx.conf` (git mv), and compose's nginx service switched to `build: ./nginx` with the
+conf volume mount removed. Certs deliberately stay a runtime volume mount (never baked into an
+image) and a new `nginx/.dockerignore` keeps `certs/` out of the build context entirely. Verified
+live: image builds, config confirmed inside the container, only the certs mount remains
+(`docker inspect`), HTTP→301, session endpoint over HTTPS OK.
+
 ### Next steps
 - Remaining migration work is hardware-blocked, not code-blocked: SERVER_MIGRATION_PLAN.md steps
   A (domain + Resend sender) and C–H (machine, HTTPS, cutover checklist, manual regeneration) —

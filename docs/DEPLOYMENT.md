@@ -125,11 +125,14 @@ Wizard on first visit), and **nginx** for HTTPS termination.
 
 - **`docker-compose.yml` is deliberately NOT committed** (owner request) — the complete reference
   copy is below; recreate it from here on a new machine.
-- **`nginx/` IS committed**: `nginx/conf.d/default.conf` (HTTP→HTTPS redirect, TLS, 30 MB body
-  limit, `X-Forwarded-For` for login rate limiting) and `nginx/certs/` (self-git-ignored — the
-  volume mounts it read-only at `/etc/nginx/certs`). Expected filenames (owner's naming,
-  2026-08-06): **`huma-erp.com.pem`** (certificate/fullchain) + **`huma-erp.com.key`** (private
-  key). A self-signed pair for testing:
+- **`nginx/` IS committed**: `nginx/nginx.conf` (HTTP→HTTPS redirect, TLS, 30 MB body limit,
+  `X-Forwarded-For` for login rate limiting) is **baked into a custom nginx image** at build time
+  (`nginx/Dockerfile`: `COPY nginx.conf /etc/nginx/conf.d/default.conf`; compose uses
+  `build: ./nginx` — owner request 2026-08-06, for the server deployment). After editing the conf,
+  `docker compose up -d --build`. Only `nginx/certs/` stays a volume mount (self-git-ignored, and
+  excluded from the image via `nginx/.dockerignore` — keys are never baked in; mounted read-only
+  at `/etc/nginx/certs`). Expected filenames (owner's naming, 2026-08-06): **`huma-erp.com.pem`**
+  (certificate/fullchain) + **`huma-erp.com.key`** (private key). A self-signed pair for testing:
   `openssl req -x509 -nodes -newkey rsa:2048 -days 365 -keyout nginx/certs/huma-erp.com.key -out nginx/certs/huma-erp.com.pem -subj "/CN=huma-erp.com"`
 - **MongoDB runs with authentication** (2026-08-06): the container initializes its root user from
   `MONGO_USER`/`MONGO_PASS` in `.env` (mapped to the mongo image's `MONGO_INITDB_ROOT_*` vars),
@@ -187,13 +190,12 @@ services:
       start_period: 20s
 
   nginx:
-    image: nginx:stable-alpine
+    build: ./nginx
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       - app

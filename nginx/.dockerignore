@@ -1,0 +1,4 @@
+# Keep certs/keys out of the nginx build context entirely — they're volume-mounted at runtime.
+certs
+Dockerfile
+.dockerignore

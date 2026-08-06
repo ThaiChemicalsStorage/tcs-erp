@@ -4,7 +4,29 @@
 
 ---
 
-## 2026-08-06 (absolute latest) — Docker MongoDB authentication from `.env` (`MONGO_USER`/`MONGO_PASS`)
+## 2026-08-06 (absolute latest) — nginx config baked into a custom image (`nginx/Dockerfile`)
+
+User request ahead of putting the stack on a real server: build the nginx site config into the
+image (`COPY nginx.conf /etc/nginx/conf.d/default.conf`) instead of volume-mounting it.
+
+- **`nginx/nginx.conf`** — moved (git mv) from `nginx/conf.d/default.conf`; content unchanged
+  except the header comment now documents the bake-in and that editing it requires
+  `docker compose up -d --build`.
+- **`nginx/Dockerfile`** (new) — `FROM nginx:stable-alpine` + the exact COPY line the owner
+  specified. **`nginx/.dockerignore`** (new) keeps `certs/` out of the build context entirely —
+  private keys must never enter an image; certs stay a read-only runtime volume mount
+  (`./nginx/certs:/etc/nginx/certs:ro`), unchanged.
+- **`docker-compose.yml`** (untracked; reference in [DEPLOYMENT.md](./DEPLOYMENT.md) synced):
+  the `nginx` service switched from `image: nginx:stable-alpine` + a `./nginx/conf.d` mount to
+  `build: ./nginx`; the conf mount is gone, the certs mount remains the only one.
+- **Verified live**: `docker compose up -d --build` → `erp-nginx` image built with the config
+  baked in (confirmed inside the container and via `docker inspect` — only the certs mount
+  remains), HTTP→HTTPS 301, `GET /api/auth/session` → `needsSetup:true` over HTTPS. Stack
+  stopped after the test.
+
+---
+
+## 2026-08-06 — Docker MongoDB authentication from `.env` (`MONGO_USER`/`MONGO_PASS`)
 
 Follow-up user request to the Docker stack below, with the exact wiring specified: the `app`
 service loads `.env` via `env_file: - .env`, the `mongodb` service gets its credentials from
