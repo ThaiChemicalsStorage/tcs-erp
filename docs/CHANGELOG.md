@@ -4,7 +4,33 @@
 
 ---
 
-## 2026-08-06 (absolute latest) — Docker stack: app + MongoDB + nginx (HTTPS) in one `docker compose up`
+## 2026-08-06 (absolute latest) — Docker MongoDB authentication from `.env` (`MONGO_USER`/`MONGO_PASS`)
+
+Follow-up user request to the Docker stack below, with the exact wiring specified: the `app`
+service loads `.env` via `env_file: - .env`, the `mongodb` service gets its credentials from
+`${MONGO_USER}`/`${MONGO_PASS}`, and `.env.example` documents both.
+
+- **`docker-compose.yml`** (untracked; reference copy in [DEPLOYMENT.md](./DEPLOYMENT.md) updated
+  to match): `mongodb` now initializes a root user from `.env` — the values are mapped to
+  `MONGO_INITDB_ROOT_USERNAME`/`MONGO_INITDB_ROOT_PASSWORD` (the only names the official mongo
+  image understands; a literal `MONGO_USER:` env would do nothing). The app's `MONGODB_URI` is
+  built from the same two values (`...@mongodb:27017/?authSource=admin`) and still overrides any
+  URI arriving via `env_file`. Both variables use `:?` interpolation so a missing value fails
+  loudly at `docker compose up` instead of silently booting an auth-less DB.
+- **`.env.example`**: new `MONGO_USER`/`MONGO_PASS` section — documents the fresh-volume-only
+  initialization rule (`docker compose down -v` to re-init) and the keep-it-URL-safe constraint
+  (the password is embedded in the connection string).
+- **`nginx/conf.d/default.conf`**: cert filenames changed by the owner to `huma-erp.com.pem` +
+  `huma-erp.com.key` (their real-domain naming) — file comments and
+  [DEPLOYMENT.md](./DEPLOYMENT.md) updated to match, incl. the self-signed test command.
+- **Verified live** on a fresh volume (`down -v` → `up -d`): unauthenticated `db.stats()` inside
+  the container → `Unauthorized`; root login with the `.env` credentials → `ping ok:1`; the app
+  connected through the authenticated URI (`GET /api/auth/session` → `needsSetup:true` via nginx
+  HTTPS with a self-signed pair under the new filenames). Stack stopped after the test.
+
+---
+
+## 2026-08-06 — Docker stack: app + MongoDB + nginx (HTTPS) in one `docker compose up`
 
 Follow-up user request to the Express migration below: a Docker Compose setup with MongoDB
 included, the compose file itself git-ignored, and an nginx service (committed) with

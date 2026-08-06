@@ -20,7 +20,10 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
   `nginx/` config; certs folder mounted read-only and self-git-ignored). The compose file itself
   is **deliberately untracked** per owner request — reference copy in
   [DEPLOYMENT.md](./DEPLOYMENT.md) "Docker". Verified with a real boot on the dev machine. Also
-  fixed `.gitignore` swallowing `.env.example`.
+  fixed `.gitignore` swallowing `.env.example`. Same-day follow-up: **MongoDB authentication** —
+  root user from `.env` (`MONGO_USER`/`MONGO_PASS`), app URI carries the credentials, verified
+  unauth-blocked + auth-ok on a fresh volume; cert filenames standardized to the owner's
+  `huma-erp.com.pem`/`.key` naming.
 - ✅ **[2026-08-06] Standalone Express server — the app now runs without Vercel.** On the owner's
   explicit go-ahead, all 3 steps of [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md)'s plan
   were executed: `server/` (Express `createApp()` mounting the **unchanged** `api/` handlers via a

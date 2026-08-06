@@ -50,6 +50,18 @@ endpoint through nginx HTTPS answered `needsSetup:true` off the fresh container 
 from `.vercel/.env.development.local` so local sessions keep verifying; APP_URL=https://localhost)
 — compose interpolation requires it.
 
+A second follow-up added **MongoDB authentication** with the owner's exact wiring (`env_file: -
+.env` on app; `${MONGO_USER}`/`${MONGO_PASS}` on mongodb — mapped to the mongo image's
+`MONGO_INITDB_ROOT_*` names, since the literal names do nothing): root user created on first boot
+of a fresh volume, app URI carries the credentials with `authSource=admin`, `:?` interpolation
+fails loudly if either value is missing. The owner also renamed the expected cert files to
+`huma-erp.com.pem`/`.key` (their real domain) — nginx comments + DEPLOYMENT.md updated, and a
+self-signed pair under those names generated locally. Verified on a wiped volume: unauth
+`db.stats()` → Unauthorized, `.env`-credential login → ok:1, app → `needsSetup:true` through
+nginx HTTPS. A random 24-char `MONGO_PASS` was generated into the local `.env` (first attempt
+used a .NET API missing on PS 5.1 and silently produced an all-"A" string — caught and replaced
+with a properly random value; worth remembering as a PowerShell 5.1 footgun).
+
 ### Next steps
 - Remaining migration work is hardware-blocked, not code-blocked: SERVER_MIGRATION_PLAN.md steps
   A (domain + Resend sender) and C–H (machine, HTTPS, cutover checklist, manual regeneration) —

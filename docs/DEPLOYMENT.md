@@ -126,17 +126,28 @@ Wizard on first visit), and **nginx** for HTTPS termination.
 - **`docker-compose.yml` is deliberately NOT committed** (owner request) — the complete reference
   copy is below; recreate it from here on a new machine.
 - **`nginx/` IS committed**: `nginx/conf.d/default.conf` (HTTP→HTTPS redirect, TLS, 30 MB body
-  limit, `X-Forwarded-For` for login rate limiting) and `nginx/certs/` (self-git-ignored — put
-  real `fullchain.pem` + `privkey.pem` there; the volume mounts it read-only at
-  `/etc/nginx/certs`). A self-signed pair for testing:
-  `openssl req -x509 -nodes -newkey rsa:2048 -days 365 -keyout nginx/certs/privkey.pem -out nginx/certs/fullchain.pem -subj "/CN=localhost"`
-- Env: compose interpolates from `.env` next to it — `JWT_SECRET` is required (hard error at `up`
-  if missing); `APP_URL`/`RESEND_API_KEY`/`EMAIL_FROM`/`MONGODB_DB` optional. `MONGODB_URI` is
-  pinned to the compose MongoDB regardless of `.env` (to target Atlas instead, drop the `mongodb`
-  service and set the URI in the `app` service's environment).
-- Verified 2026-08-06: full `up -d --build` on the dev machine — `GET /api/auth/session` →
-  `{"user":null,"needsSetup":true}` (app ↔ container MongoDB), frontend 200 via nginx HTTPS,
-  HTTP→HTTPS 301, `/api/quotes` → 401 JSON.
+  limit, `X-Forwarded-For` for login rate limiting) and `nginx/certs/` (self-git-ignored — the
+  volume mounts it read-only at `/etc/nginx/certs`). Expected filenames (owner's naming,
+  2026-08-06): **`huma-erp.com.pem`** (certificate/fullchain) + **`huma-erp.com.key`** (private
+  key). A self-signed pair for testing:
+  `openssl req -x509 -nodes -newkey rsa:2048 -days 365 -keyout nginx/certs/huma-erp.com.key -out nginx/certs/huma-erp.com.pem -subj "/CN=huma-erp.com"`
+- **MongoDB runs with authentication** (2026-08-06): the container initializes its root user from
+  `MONGO_USER`/`MONGO_PASS` in `.env` (mapped to the mongo image's `MONGO_INITDB_ROOT_*` vars),
+  and the app's connection string is built from the same values (`authSource=admin`).
+  ⚠️ The root user is only created on a **fresh volume** — changing the values later needs
+  `docker compose down -v` (wipes data) or a manual password change in mongosh. Keep `MONGO_PASS`
+  URL-safe (letters/digits) since it's embedded in the URI.
+- Env: the `app` service loads `.env` via `env_file` (JWT_SECRET, APP_URL, RESEND_API_KEY,
+  EMAIL_FROM pass straight through) and compose interpolation additionally requires
+  `JWT_SECRET`/`MONGO_USER`/`MONGO_PASS` (hard error at `up` if missing). `MONGODB_URI` in the
+  `environment` block always overrides any value from `.env` — inside compose the app talks to
+  the compose MongoDB (to target Atlas instead, drop the `mongodb` service and set the URI in
+  `environment`).
+- Verified 2026-08-06 (twice — before and after auth was added): full `up -d --build` on the dev
+  machine — `GET /api/auth/session` → `{"user":null,"needsSetup":true}` through nginx HTTPS,
+  frontend 200, HTTP→HTTPS 301, `/api/quotes` → 401 JSON; with auth on: unauthenticated
+  `db.stats()` inside the container → `Unauthorized`, root login with the `.env` credentials →
+  `ping ok:1`, app connects via the authenticated URI.
 
 Reference `docker-compose.yml` (keep in sync with the local untracked copy):
 
@@ -145,15 +156,15 @@ services:
   app:
     build: .
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       PORT: "3001"
-      MONGODB_URI: mongodb://mongodb:27017
+      MONGODB_URI: mongodb://${MONGO_USER:?put MONGO_USER in .env}:${MONGO_PASS:?put MONGO_PASS in .env}@mongodb:27017/?authSource=admin
       MONGODB_DB: ${MONGODB_DB:-tcs_erp}
       JWT_SECRET: ${JWT_SECRET:?put JWT_SECRET in .env next to docker-compose.yml}
       APP_URL: ${APP_URL:-https://localhost}
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      EMAIL_FROM: ${EMAIL_FROM:-}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -161,6 +172,9 @@ services:
   mongodb:
     image: mongo:8
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?put MONGO_USER in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS:?put MONGO_PASS in .env}
     volumes:
       - mongo_data:/data/db
     # ports:
@@ -188,7 +202,8 @@ volumes:
   mongo_data:
 ```
 
-Backups under Docker: `docker compose exec mongodb mongodump --archive > backup-$(date +%F).archive`
+Backups under Docker (authenticated):
+`docker compose exec mongodb sh -c 'mongodump -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --archive' > backup-$(date +%F).archive`
 (everything incl. attachments is in MongoDB), and copy the file off-machine.
 
 ## Relationship to the Vercel demo
