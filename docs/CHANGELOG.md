@@ -4,7 +4,30 @@
 
 ---
 
-## 2026-08-07 (absolute latest) — Scope of Work email is person-to-person from each sender's own Gmail (Resend removed) + "ผู้รับเพิ่มเติม" any-user recipients
+## 2026-08-07 (absolute latest) — User manual is now a web page (`public/manual.html`) replacing the PDF link
+
+Direct user request after seeing the standalone email-setup guide's document design ("อยากได้แบบนี้
+ไปไว้ในเว็บตรงที่เป็นคู่มือการใช้งาน ให้ปรับเปลี่ยนเป็นรูปแบบนี้เลย"); the "หน้าเว็บแทน PDF" option
+was confirmed via an explicit choice prompt.
+
+- **New `public/manual.html`** — the full manual as a single self-contained static page (system
+  Thai font stack, no external requests, light/dark via `prefers-color-scheme`, print-to-PDF
+  friendly, anchor TOC): all 13 chapters ported from `docs/manual/user-manual.html` and updated
+  (Service module in the sidebar table, rolling 7-day session wording, SOW recipient section),
+  **plus a new chapter 6 "การส่งอีเมลเอกสาร (Gmail)"** — the App Password setup steps,
+  send/verify flow (Sent-folder check, in-app bell fallback), troubleshooting table, and the
+  security note. Screenshots deliberately not carried over (kept the page light; text is primary).
+- **`src/App.tsx`** — the topbar's gold "คู่มือการใช้งาน" button now opens `/manual.html` instead
+  of the PDF. The PDF (`public/คู่มือการใช้งาน TCS ERP.pdf`) stays on disk but is no longer linked;
+  `docs/manual/user-manual.html` is marked SUPERSEDED in its header (update `public/manual.html`
+  going forward).
+- **What's New** — Thai entry `2026-08-07-web-manual`.
+- Standalone-page note: the manual intentionally uses its own document type scale / system Thai
+  font stack (matching the standalone guide the user approved), not the app's DESIGN.md ramp.
+
+---
+
+## 2026-08-07 — Scope of Work email is person-to-person from each sender's own Gmail (Resend removed) + "ผู้รับเพิ่มเติม" any-user recipients
 
 Direct user request: document-recipient emails must be sent person-to-person — "ใครส่งให้คนไหนก็คือ
 ใช้อีเมลของคนนั้น" (the sender's own registered email is the actual From, so recipients can reply

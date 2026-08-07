@@ -1,0 +1,542 @@
+<!doctype html>
+<!-- คู่มือการใช้งานระบบ TCS ERP — ฉบับหน้าเว็บ (แทนที่ PDF เดิม, 2026-08-07 per direct user request:
+     "อยากได้แบบนี้ไปไว้ในเว็บตรงที่เป็นคู่มือการใช้งาน").
+     Served statically from public/ at /manual.html — the topbar's gold "คู่มือการใช้งาน" button
+     (src/App.tsx) opens this page. Self-contained: system Thai font stack, no external requests,
+     light/dark via prefers-color-scheme, print-friendly (พิมพ์เป็น PDF ได้จากเบราว์เซอร์).
+     Content superseded docs/manual/user-manual.html (the old PDF source) — update THIS file going
+     forward. -->
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>คู่มือการใช้งานระบบ TCS ERP</title>
+<style>
+  :root {
+    --navy: #0b1d3a;
+    --gold: #b8933c;
+    --gold-soft: rgba(201, 168, 76, 0.14);
+    --ink: #232c3d;
+    --muted: #5d6a80;
+    --ground: #fdfcf9;
+    --card: #ffffff;
+    --line: #e3e1da;
+    --good: #1f7a50;
+    --warn: #9a5a1c;
+    --warn-bg: rgba(224, 138, 60, 0.10);
+    --danger: #b03434;
+    --danger-bg: rgba(224, 82, 82, 0.08);
+    --code-bg: #f1efe9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --navy: #dfe6f2; --gold: #d5ad55; --gold-soft: rgba(213,173,85,.12);
+      --ink: #dce2ec; --muted: #96a1b5; --ground: #10161f; --card: #171f2b;
+      --line: #2a3444; --good: #4fbe8a; --warn: #e0a35c; --warn-bg: rgba(224,163,92,.10);
+      --danger: #e07a7a; --danger-bg: rgba(224,122,122,.10); --code-bg: #202a38;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Leelawadee UI", "Segoe UI", "Noto Sans Thai", "Sarabun", sans-serif;
+    font-size: 16px;
+    line-height: 1.75;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  .eyebrow {
+    font-size: 12px; letter-spacing: 2.5px; text-transform: uppercase;
+    color: var(--gold); font-weight: 700; margin: 0 0 10px;
+  }
+  h1 {
+    font-size: 30px; line-height: 1.35; margin: 0 0 8px; color: var(--navy);
+    font-weight: 700; text-wrap: balance;
+  }
+  .sub { color: var(--muted); margin: 0 0 6px; }
+  .doc-meta { font-size: 13px; color: var(--muted); margin: 0 0 32px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+
+  h2 {
+    font-size: 21px; color: var(--navy); font-weight: 700;
+    margin: 56px 0 14px; padding-top: 8px; text-wrap: balance;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .ch-no {
+    flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+    background: var(--gold-soft); color: var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums;
+  }
+  h3 { font-size: 16.5px; color: var(--navy); font-weight: 700; margin: 26px 0 8px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 6px 0 14px; padding-left: 24px; }
+  li { margin-bottom: 6px; }
+  .note { color: var(--muted); font-size: 14.5px; }
+  b { font-weight: 700; }
+
+  /* TOC */
+  .toc {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 20px 24px; margin: 0 0 8px;
+  }
+  .toc p { margin: 0 0 10px; font-weight: 700; color: var(--navy); font-size: 15px; }
+  .toc ol { margin: 0; padding-left: 24px; columns: 2; column-gap: 32px; }
+  .toc li { margin-bottom: 5px; break-inside: avoid; }
+  .toc a { color: var(--ink); text-decoration: none; font-size: 14.5px; }
+  .toc a:hover { color: var(--gold); }
+  @media (max-width: 560px) { .toc ol { columns: 1; } }
+
+  .btn-ref {
+    display: inline-block; background: var(--gold-soft); border: 1px solid var(--line);
+    border-radius: 6px; padding: 0 8px; font-size: 0.88em; font-weight: 700;
+    color: var(--navy); white-space: nowrap;
+  }
+  code, .kbd {
+    font-family: Consolas, "Courier New", monospace; font-size: 0.92em;
+    background: var(--code-bg); border-radius: 4px; padding: 1.5px 7px;
+    white-space: nowrap;
+  }
+  .path { font-weight: 700; color: var(--navy); }
+
+  .callout {
+    border: 1px solid var(--line); background: var(--gold-soft);
+    border-radius: 8px; padding: 13px 18px; margin: 14px 0; font-size: 14.5px;
+  }
+  .callout > b:first-child { color: var(--warn); }
+  .callout.warn { background: var(--danger-bg); }
+  .callout.warn > b:first-child { color: var(--danger); }
+  .callout.ok > b:first-child { color: var(--gold); }
+  .check { color: var(--good); font-weight: 700; }
+
+  /* Step cards (ลำดับขั้นตอนจริง) */
+  .steps { display: flex; flex-direction: column; gap: 14px; margin: 16px 0; }
+  .step {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 18px 20px; display: flex; gap: 16px; align-items: flex-start;
+  }
+  .step-no {
+    flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+    background: var(--gold-soft); color: var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px; margin-top: 2px; font-variant-numeric: tabular-nums;
+  }
+  .step h4 { margin: 0 0 5px; font-size: 15.5px; color: var(--navy); font-weight: 700; }
+  .step p, .step li { font-size: 14.5px; }
+  .step p { margin: 0 0 6px; }
+  .step p:last-child, .step ul:last-child, .step ol:last-child { margin-bottom: 0; }
+  .step ul, .step ol { margin: 4px 0 6px; padding-left: 20px; }
+
+  /* Workflow pills */
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 16px; }
+  .flow span {
+    background: var(--card); border: 1px solid var(--line); color: var(--navy);
+    border-radius: 999px; padding: 3px 14px; font-size: 13.5px; font-weight: 600;
+  }
+  .flow .arr { border: none; background: none; color: var(--gold); font-weight: 700; padding: 0; }
+
+  /* Tables */
+  .tbl-scroll { overflow-x: auto; margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 14.5px; background: var(--card); }
+  th {
+    text-align: left; padding: 10px 16px; color: var(--muted);
+    font-size: 12.5px; letter-spacing: 0.6px; font-weight: 700;
+    border-bottom: 1px solid var(--line); background: var(--gold-soft);
+  }
+  td { padding: 11px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 600; color: var(--navy); }
+
+  .top-link { font-size: 13px; margin: 10px 0 0; }
+  .top-link a { color: var(--muted); text-decoration: none; }
+  .top-link a:hover { color: var(--gold); }
+
+  footer {
+    margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
+    font-size: 13px; color: var(--muted);
+  }
+
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  @media print {
+    body { background: #fff; }
+    .wrap { padding: 0; max-width: none; }
+    .step, table, .callout, .toc { break-inside: avoid; }
+    h2 { break-after: avoid; }
+    .top-link { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header id="top">
+    <p class="eyebrow">TCS ERP · Thai Chemicals Storage</p>
+    <h1>คู่มือการใช้งานระบบ TCS ERP</h1>
+    <p class="sub">สำหรับพนักงานทุกตำแหน่ง — ตั้งแต่การเข้าสู่ระบบ ใบเสนอราคา Scope of Work ใบส่งมอบสินค้า ไปจนถึงส่วนผู้ดูแลระบบ</p>
+    <p class="doc-meta">ฉบับวันที่ 7 สิงหาคม 2026 · สั่งพิมพ์เป็น PDF ได้จากเบราว์เซอร์ (Ctrl+P)</p>
+  </header>
+
+  <nav class="toc" aria-label="สารบัญ">
+    <p>สารบัญ</p>
+    <ol>
+      <li><a href="#ch1">การเข้าสู่ระบบ</a></li>
+      <li><a href="#ch2">ภาพรวมหน้าจอและเมนู</a></li>
+      <li><a href="#ch3">แดชบอร์ด</a></li>
+      <li><a href="#ch4">ใบเสนอราคา (Quotations)</a></li>
+      <li><a href="#ch5">Scope of Work</a></li>
+      <li><a href="#ch6">การส่งอีเมลเอกสาร (Gmail)</a></li>
+      <li><a href="#ch7">ใบส่งมอบสินค้า (Delivery Orders)</a></li>
+      <li><a href="#ch8">คลังสินค้า (Products)</a></li>
+      <li><a href="#ch9">ลูกค้า (Customers)</a></li>
+      <li><a href="#ch10">Template ใบเสนอราคา</a></li>
+      <li><a href="#ch11">ส่วนผู้ดูแลระบบ</a></li>
+      <li><a href="#ch12">ตั้งค่า (Settings)</a></li>
+      <li><a href="#ch13">การพิมพ์เอกสารเป็น PDF</a></li>
+      <li><a href="#ch14">คำถามพบบ่อย (FAQ)</a></li>
+    </ol>
+  </nav>
+  <div class="callout"><b>หมายเหตุ:</b> เมนูที่แต่ละคนมองเห็นขึ้นอยู่กับ <b>สิทธิ์ (Permission)</b> ของบทบาทที่ผู้ดูแลระบบกำหนดให้ หากไม่เห็นเมนูใดตามคู่มือ แปลว่าบัญชีของคุณไม่มีสิทธิ์ส่วนนั้น — ติดต่อผู้ดูแลระบบ</div>
+
+  <!-- ═══ 1 ═══ -->
+  <section id="ch1">
+    <h2><span class="ch-no">1</span>การเข้าสู่ระบบ</h2>
+    <ol>
+      <li>เปิดเว็บเบราว์เซอร์ (แนะนำ Google Chrome หรือ Microsoft Edge) แล้วไปที่เว็บไซต์ระบบของบริษัท</li>
+      <li>กรอก <b>ชื่อผู้ใช้หรืออีเมล</b> และ <b>รหัสผ่าน</b> ที่ได้รับจากผู้ดูแลระบบ</li>
+      <li>กดปุ่ม <span class="btn-ref">เข้าสู่ระบบ</span></li>
+    </ol>
+    <div class="callout"><b>ไม่มีการสมัครสมาชิกเอง:</b> บัญชีผู้ใช้ทุกบัญชีถูกสร้างโดยผู้ดูแลระบบเท่านั้น หากยังไม่มีบัญชีหรือลืมรหัสผ่าน ให้ติดต่อผู้ดูแลระบบ</div>
+    <div class="callout"><b>เซสชันหมดอายุ:</b> ระบบจดจำการเข้าสู่ระบบไว้ตราบใดที่ยังใช้งานอย่างน้อยครั้งหนึ่งในทุก 7 วัน — หากไม่ได้เข้าใช้เลยติดต่อกันครบ 7 วัน หรือบัญชีถูกปิดใช้งาน ระบบจะแจ้ง "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่"</div>
+    <div class="callout"><b>กรอกรหัสผ่านผิดหลายครั้ง:</b> หากผิดเกิน 5 ครั้งภายใน 15 นาที ระบบจะพักการเข้าสู่ระบบของบัญชีนั้นชั่วคราว พร้อมแจ้งว่าต้องรออีกกี่นาที — เข้าสู่ระบบสำเร็จเมื่อไหร่ ตัวนับเริ่มใหม่</div>
+    <h3>การออกจากระบบ</h3>
+    <p>คลิกรูปโปรไฟล์มุมขวาบน แล้วเลือก <span class="btn-ref">ออกจากระบบ</span></p>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 2 ═══ -->
+  <section id="ch2">
+    <h2><span class="ch-no">2</span>ภาพรวมหน้าจอและเมนู</h2>
+    <h3>แถบเมนูด้านซ้าย (Sidebar)</h3>
+    <div class="tbl-scroll"><table>
+      <tr><th style="width:26%">กลุ่มเมนู</th><th>เมนู</th></tr>
+      <tr><td>หลัก</td><td>แดชบอร์ด</td></tr>
+      <tr><td>งานขาย</td><td>ใบเสนอราคา · Scope of Work · ใบส่งมอบสินค้า · Template ใบเสนอราคา · ลูกค้า</td></tr>
+      <tr><td>คลังสินค้า</td><td>คลังสินค้า (สินค้าและหมวดหมู่)</td></tr>
+      <tr><td>บริการ</td><td>บริการ (รายงานตรวจเช็ค/บริการภาคสนาม)</td></tr>
+      <tr><td>การจัดการระบบ</td><td>จัดการผู้ใช้งาน · บทบาทและสิทธิ์ · บันทึกการใช้งาน</td></tr>
+      <tr><td>ล่างสุด</td><td>ตั้งค่า</td></tr>
+    </table></div>
+    <p>ปุ่มลูกศรด้านบนของแถบเมนูใช้ย่อ/ขยายแถบได้ บนมือถือให้กดปุ่มเมนู (☰) มุมซ้ายบน</p>
+    <h3>แถบด้านบน (Topbar)</h3>
+    <div class="tbl-scroll"><table>
+      <tr><th style="width:30%">ส่วนประกอบ</th><th>การใช้งาน</th></tr>
+      <tr><td>ช่องค้นหา</td><td>ค้นหาใบเสนอราคา ลูกค้า สินค้า Scope of Work ผู้ใช้ และหน้าต่างๆ ได้จากที่เดียว — กด <span class="kbd">Ctrl</span> + <span class="kbd">K</span> เพื่อเปิดค้นหาทันที</td></tr>
+      <tr><td>ปุ่ม "คู่มือการใช้งาน" (สีทอง)</td><td>เปิดคู่มือฉบับนี้</td></tr>
+      <tr><td>ไอคอน "มีอะไรใหม่" (✦)</td><td>ประกาศฟีเจอร์ใหม่ของระบบ — จุดสีทองแปลว่ามีประกาศที่ยังไม่ได้อ่าน</td></tr>
+      <tr><td>กระดิ่งแจ้งเตือน</td><td>เหตุการณ์ที่เกี่ยวกับคุณ เช่น ใบเสนอราคารออนุมัติ ผลอนุมัติ เอกสาร Scope of Work ที่ส่งถึงคุณ — คลิกรายการเพื่อเปิดเอกสารนั้นทันที</td></tr>
+      <tr><td>รูปโปรไฟล์</td><td>เมนูไปหน้าตั้งค่า และออกจากระบบ</td></tr>
+    </table></div>
+    <h3>ภาษา</h3>
+    <p>ระบบเป็นภาษาไทยโดยค่าเริ่มต้น เปลี่ยนเป็นภาษาอังกฤษได้ที่ <span class="path">ตั้งค่า → โปรไฟล์ → ภาษา</span> (เอกสารพิมพ์เช่นใบเสนอราคายังคงเป็นภาษาไทยเสมอ)</p>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 3 ═══ -->
+  <section id="ch3">
+    <h2><span class="ch-no">3</span>แดชบอร์ด</h2>
+    <p>หน้าแรกของระบบ สรุปภาพรวมงานขายทั้งบริษัทแบบเรียลไทม์จากข้อมูลจริง</p>
+    <ul>
+      <li><b>การ์ดสรุป 4 ใบ</b> — มูลค่ารวม จำนวนใบเสนอราคา อัตราชนะงาน และยอดคาดการณ์ (ทุกยอดเงินเป็นมูลค่า<b>ก่อนภาษี</b>)</li>
+      <li><b>สรุปสถานะใบเสนอราคา</b> — สัดส่วน Won / Lose / Active / Non-Active</li>
+      <li><b>สถิติกิจกรรมการขาย</b> — จำนวนการสร้าง/แก้ไข/เปลี่ยนสถานะ แยกรายสัปดาห์ เดือน ไตรมาส ปี และรายพนักงานขาย</li>
+      <li><b>รายละเอียดกิจกรรมล่าสุด</b> — เหตุการณ์ล่าสุดพร้อมลิงก์เปิดใบเสนอราคาที่เกี่ยวข้อง</li>
+      <li><b>ส่วนเสริมด้านล่าง</b> — อันดับพนักงานขาย งานที่ต้องติดตาม รายการรออนุมัติ จำนวนเอกสาร Scope of Work ฯลฯ</li>
+    </ul>
+    <h3>ตัวกรอง</h3>
+    <p>ด้านบนของหน้ามีตัวกรอง <b>ช่วงวันที่ / พนักงานขาย / แผนก</b> — ข้อมูลส่วนใหญ่เปลี่ยนตามตัวกรองทันที (การ์ดที่เป็นภาพรวมย้อนหลังจะระบุไว้ว่าไม่ใช้ตัวกรองบางตัว)</p>
+    <div class="callout"><b>เคล็ดลับ:</b> ใบเสนอราคาที่ถูกกด "แก้ไข (Rewrite)" หลายรอบ ระบบนับเป็นงานเดียว (ฉบับล่าสุด) ตัวเลขบนแดชบอร์ดจึงไม่นับซ้ำ</div>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 4 ═══ -->
+  <section id="ch4">
+    <h2><span class="ch-no">4</span>ใบเสนอราคา (Quotations)</h2>
+    <h3>การสร้างใบเสนอราคาใหม่</h3>
+    <ol>
+      <li>ไปที่เมนู <span class="btn-ref">ใบเสนอราคา</span> แล้วกด <span class="btn-ref">สร้างใบเสนอราคา</span></li>
+      <li><b>เลือกประเภทงาน (Job Type)</b> — เช่น Wet Scrubber, Bag Filter, FRP Tank ฯลฯ</li>
+      <li><b>เลือก Template</b> (ถ้ามีสำหรับประเภทงานนั้น) — ระบบเติมรายการสินค้า สเปค และเงื่อนไขมาตรฐานให้ล่วงหน้า หรือเริ่มจากแบบว่างก็ได้</li>
+      <li>ดูตัวอย่าง แล้วกดยืนยันเพื่อเข้าสู่ฟอร์มใบเสนอราคา</li>
+    </ol>
+    <h3>การกรอกฟอร์ม</h3>
+    <ul>
+      <li><b>ข้อมูลลูกค้า</b> — พิมพ์เอง หรือกด "เลือกลูกค้า" เพื่อดึงจากฐานลูกค้ามาเติมอัตโนมัติ</li>
+      <li><b>รายการสินค้า</b> — เพิ่มจากคลังสินค้า หรือพิมพ์เอง แต่ละรายการใส่สเปคย่อย/หมายเหตุได้ไม่จำกัด และเพิ่มบรรทัด "Section" คั่นหมวดได้</li>
+      <li><b>ส่วนลดและ VAT</b> — ระบบคำนวณยอดรวมและภาษีให้อัตโนมัติ</li>
+      <li>กด <span class="btn-ref">บันทึก</span> เพื่อเก็บเป็นฉบับร่าง (Draft)</li>
+    </ul>
+    <h3>ขั้นตอนการอนุมัติ (Workflow)</h3>
+    <div class="flow">
+      <span>ร่าง (Draft)</span><span class="arr">→</span>
+      <span>ส่งขออนุมัติ</span><span class="arr">→</span>
+      <span>อนุมัติ / ปฏิเสธ</span><span class="arr">→</span>
+      <span>ส่งให้ลูกค้า</span><span class="arr">→</span>
+      <span>ลูกค้าตอบรับ / ปฏิเสธ</span><span class="arr">→</span>
+      <span>Won / Lost</span>
+    </div>
+    <ul>
+      <li>ปุ่มที่กดได้ในแต่ละสถานะขึ้นอยู่กับสิทธิ์ของคุณ (เช่น เฉพาะผู้อนุมัติจึงเห็นปุ่มอนุมัติ)</li>
+      <li>การปฏิเสธ/ยกเลิก ระบบบังคับให้ระบุเหตุผลเสมอ และทุกการเปลี่ยนสถานะถูกบันทึกในประวัติของใบ</li>
+      <li>ผู้เกี่ยวข้องได้รับการแจ้งเตือนที่กระดิ่งอัตโนมัติทุกการเปลี่ยนสถานะ</li>
+    </ul>
+    <h3>การแก้ไขและทำสำเนา</h3>
+    <ul>
+      <li><span class="btn-ref">ทำสำเนา</span> — สร้างใบใหม่เลขที่ใหม่จากเนื้อหาใบเดิม</li>
+      <li><span class="btn-ref">แก้ไข (Rewrite)</span> — สร้าง "ฉบับแก้ไข" ต่อท้ายเลขเดิม เช่น QT-xxxx-R1, -R2 ใช้เมื่อต้องแก้ใบที่ส่งไปแล้ว ฉบับเดิมยังอยู่ครบเพื่อการตรวจสอบ</li>
+      <li>ฉบับแก้ไขมีการ์ด <b>หมายเหตุการแก้ไข (Revision Note)</b> พร้อมปุ่มให้ระบบสรุปอัตโนมัติว่าแก้อะไรไปบ้าง แล้วแก้ข้อความเองต่อได้</li>
+    </ul>
+    <div class="callout"><b>สิทธิ์การมองเห็น:</b> หากบัญชีของคุณไม่มีสิทธิ์ "ดูใบเสนอราคาของผู้อื่น" หน้ารายการจะแสดงเฉพาะใบที่คุณสร้างเองเท่านั้น</div>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 5 ═══ -->
+  <section id="ch5">
+    <h2><span class="ch-no">5</span>Scope of Work</h2>
+    <p>เอกสารขอบเขตงานที่สร้างต่อจากใบเสนอราคา ใช้ยืนยันรายละเอียดงานกับลูกค้าและแจ้งแผนกต่างๆ ภายใน (ไม่แสดงราคา)</p>
+    <h3>การสร้าง</h3>
+    <ol>
+      <li>เปิดใบเสนอราคาที่ต้องการ แล้วกดปุ่ม <span class="btn-ref">สร้าง Scope of Work</span> บนแถบเครื่องมือ</li>
+      <li><b>พิมพ์เลขที่เอกสารเอง</b> (บังคับกรอก) — กำหนดรูปแบบได้อิสระตามที่บริษัทใช้จริง (เช่น PQ202607-15-LI-SK) ระบบตรวจให้ทันทีว่าเลขไม่ซ้ำกับใบอื่น</li>
+      <li>ข้อมูลลูกค้าและรายการสินค้าถูกคัดลอกมาจากใบเสนอราคา — แก้ใน Scope of Work ได้โดยไม่กระทบใบเสนอราคาต้นทาง (ใบเสนอราคามีแก้ภายหลัง ใช้ปุ่ม <span class="btn-ref">อัปเดตข้อมูลจากใบเสนอราคา</span>)</li>
+    </ol>
+    <div class="callout"><b>เกี่ยวกับเลขที่เอกสาร:</b> แก้เลขได้เฉพาะตอนยังเป็นฉบับร่าง — เอกสารที่อนุมัติแล้วเลขถูกล็อกถาวร · กด <b>แก้ไข (Rewrite)</b> ระบบต่อท้าย -R1, -R2 ให้อัตโนมัติ · กด <b>ทำสำเนา</b> ระบบถามเลขใหม่</div>
+    <h3>ส่วนที่ต้องกรอก</h3>
+    <ul>
+      <li><b>รายการตรวจสอบ (Checklist)</b> — ติ๊กข้อกำหนดเอกสาร/การส่งมอบแต่ละกลุ่ม เช่น Test Report, การขนส่ง ฯลฯ</li>
+      <li><b>เงื่อนไขการชำระเงิน</b> — เพิ่มได้หลายงวด แต่ละงวดระบุ % ชื่องวด วิธีชำระ (Cash/Credit) และจำนวนวันเครดิต ระบบตรวจว่ารวมครบ 100%</li>
+      <li><b>ผู้รับเอกสาร</b> — ติ๊กเลือกพนักงานผู้รับเป็นรายคน แล้วส่งอีเมลแจ้งได้ — <a href="#ch6"><b>ดูรายละเอียดในบทที่ 6</b></a></li>
+      <li><b>ผู้ลงนาม / วันส่งมอบ / ข้อมูลจัดส่ง-วางบิล</b> — กรอกตามจริง</li>
+    </ul>
+    <h3>การขออนุมัติ สถานะ และการพิมพ์</h3>
+    <ul>
+      <li>บันทึกเป็น <b>Draft</b> ได้เรื่อยๆ เมื่อข้อมูลครบจึงกด <span class="btn-ref">ส่งขออนุมัติ</span> — เข้าสถานะ <b>รออนุมัติ</b> (ล็อกชั่วคราว ถอนคำขอกลับมาแก้ได้)</li>
+      <li>ผู้มีสิทธิ์อนุมัติกด <span class="btn-ref">อนุมัติ</span> (เป็น <b>Final</b> ชื่อผู้อนุมัติบันทึกอัตโนมัติ) หรือ <span class="btn-ref">ปฏิเสธ</span> พร้อมเหตุผล (ตีกลับเป็นร่าง) — มีแจ้งเตือนทุกขั้น</li>
+      <li>เอกสาร Final แก้ไม่ได้อีก — ต้อง <span class="btn-ref">แก้ไข (Rewrite)</span> สร้างฉบับใหม่ <b>ยกเว้น</b> เลข PO, ผู้รับเอกสาร, ข้อความถึงผู้รับ และไฟล์แนบ ที่บันทึกเพิ่มได้เสมอ</li>
+      <li>พิมพ์/บันทึก PDF ได้จากปุ่มพิมพ์ — เอกสารไม่แสดงราคาใดๆ</li>
+    </ul>
+    <h3>การติดตามเลข PO (ทวง PO)</h3>
+    <ul>
+      <li>หน้ารายการมีป้ายส้ม <b>"ยังไม่มี PO"</b> พร้อมปุ่มกรอง <span class="btn-ref">เฉพาะที่ยังไม่มี PO</span> และการ์ดสรุปจำนวน</li>
+      <li>ปุ่ม <span class="btn-ref">ทวงเลข PO</span> ในหน้าเอกสาร — ส่งแจ้งเตือนกระดิ่งถึงพนักงานขายของงานนั้นทันที กดซ้ำได้ถ้ายังเงียบ</li>
+      <li>ได้เลข PO เมื่อไหร่ กรอกในช่อง "เอกสารใบสั่งซื้อเลขที่ (PO)" แล้วบันทึกได้เลย แม้เอกสาร Final แล้ว</li>
+    </ul>
+    <p>เมนู <span class="btn-ref">Scope of Work</span> ในแถบซ้ายใช้เปิดดูรายการทั้งหมด (การสร้างยังทำจากหน้าใบเสนอราคาเท่านั้น)</p>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 6 (ใหม่) ═══ -->
+  <section id="ch6">
+    <h2><span class="ch-no">6</span>การส่งอีเมลเอกสาร (Gmail)</h2>
+    <p>อีเมลแจ้งผู้รับเอกสาร Scope of Work จะส่งออกจาก <b>Gmail ส่วนตัวของคนที่กดส่ง</b> — ผู้รับเห็นชื่อคุณเป็นผู้ส่ง และตอบกลับถึงคุณได้โดยตรง ต้องตั้งค่าครั้งเดียวก่อนใช้ (ประมาณ 5 นาที)</p>
+
+    <h3>ตั้งค่าครั้งแรก (ทำครั้งเดียว)</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-no">1</div>
+        <div>
+          <h4>เปิดการยืนยันแบบ 2 ขั้นตอน (2-Step Verification) ในบัญชี Google</h4>
+          <p>Google บังคับว่าต้องเปิดก่อน จึงจะสร้าง App Password ได้ (ถ้าเปิดอยู่แล้ว ข้ามไปข้อ 2)</p>
+          <ol>
+            <li>เข้า <code>myaccount.google.com/security</code> (ล็อกอินด้วย Gmail ที่ลงทะเบียนในระบบ)</li>
+            <li>หัวข้อ <b>"การยืนยันแบบ 2 ขั้นตอน"</b> → กด <b>เปิดใช้งาน</b> แล้วทำตามที่ Google ถาม</li>
+          </ol>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">2</div>
+        <div>
+          <h4>สร้าง App Password</h4>
+          <ol>
+            <li>เข้า <code>myaccount.google.com/apppasswords</code></li>
+            <li>ช่องชื่อแอป พิมพ์ <code>TCS ERP</code> → กด <b>สร้าง</b></li>
+            <li>Google แสดง<b>รหัส 16 ตัวอักษร</b> เช่น <code>abcd efgh ijkl mnop</code> — คัดลอกเก็บทันที</li>
+          </ol>
+          <p class="note"><b>สำคัญ:</b> รหัสแสดงครั้งเดียวเท่านั้น (หายก็สร้างใหม่ได้) และ<b>ไม่ใช่</b>รหัสผ่าน Gmail ปกติ — ห้ามเอารหัสผ่านหลักมากรอกในระบบ</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">3</div>
+        <div>
+          <h4>บันทึกรหัสลงในระบบ</h4>
+          <p>ไปที่ <span class="path">ตั้งค่า → ความปลอดภัย → การ์ด "การส่งอีเมล (Gmail App Password)"</span> → วางรหัส (วางทั้งเว้นวรรคได้) → กด <b>บันทึก App Password</b> — ป้ายสถานะเปลี่ยนเป็น <span class="check">✓ ตั้งค่าแล้ว</span></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-no">4</div>
+        <div>
+          <h4>ยืนยันด้วยอีเมลทดสอบ</h4>
+          <p>กดปุ่ม <b>ส่งอีเมลทดสอบถึงตัวเอง</b> แล้วเปิดกล่อง Gmail ของคุณ — ควรได้รับหัวข้อ <code>[TCS ERP] ทดสอบการส่งอีเมล</code> ภายในไม่กี่วินาที (ไม่เจอให้ดูโฟลเดอร์จดหมายขยะ)</p>
+          <p><b>ได้รับอีเมลทดสอบ = พร้อมส่งเอกสารจริง</b> ไม่ต้องทำซ้ำอีก</p>
+        </div>
+      </div>
+    </div>
+
+    <h3>การส่งเอกสารและการยืนยันว่าถึงผู้รับ</h3>
+    <ul>
+      <li>ที่การ์ด <span class="path">ผู้รับเอกสาร</span> ในหน้า Scope of Work ต้อง<b>ติ๊กเลือกชื่อพนักงานรายคน</b> — ติ๊กแผนกใน "เอกสารส่งถึง" อย่างเดียวยังไม่ได้เลือกผู้รับ</li>
+      <li><b>ผู้รับเพิ่มเติม:</b> เลือกพนักงานคนไหนก็ได้จากทุกแผนก (มีช่องค้นหา) — กลุ่มนี้ได้รับอีเมลเสมอ ไม่ขึ้นกับแผนกที่ติ๊ก</li>
+      <li>กด <span class="btn-ref">ส่งอีเมลแจ้งผู้รับเอกสาร</span> — ระบบแจ้งจำนวนที่ส่งสำเร็จ ส่งซ้ำเอกสารเดิมอีเมลจะต่อกระทู้เดียวกัน (Re:)</li>
+      <li>เช็คว่าออกจริง: เปิด Gmail ตัวเอง → โฟลเดอร์ <b>ส่งแล้ว (Sent)</b> — อีเมลที่ระบบส่งปรากฏที่นั่นเหมือนเราส่งเอง</li>
+      <li>ผู้รับได้<b>แจ้งเตือนกระดิ่งในระบบ</b>ควบคู่กับอีเมลเสมอ — แม้อีเมลตกไปในจดหมายขยะก็ยังเห็นแจ้งเตือน</li>
+    </ul>
+
+    <h3>แก้ปัญหาที่พบบ่อย</h3>
+    <div class="tbl-scroll"><table>
+      <tr><th>อาการ / ข้อความที่ขึ้น</th><th>วิธีแก้</th></tr>
+      <tr><td>"รูปแบบ App Password ไม่ถูกต้อง"</td><td>รหัสไม่ครบ 16 ตัวอักษร — สร้างใหม่ที่ Google แล้ววางทั้งชุด</td></tr>
+      <tr><td>"Gmail ปฏิเสธ App Password นี้"</td><td>ตรวจว่าเปิด 2-Step Verification แล้ว → สร้าง App Password ใหม่ → บันทึกทับ (เกิดได้เมื่อเปลี่ยนรหัสผ่าน Google — รหัสเก่าถูกเพิกถอนอัตโนมัติ)</td></tr>
+      <tr><td>"คุณยังไม่ได้ตั้งค่า Gmail App Password"</td><td>ทำตามขั้นตอนตั้งค่า 1–4 ด้านบน</td></tr>
+      <tr><td>"ระบบยังไม่ได้ตั้งค่าการเข้ารหัสอีเมล (EMAIL_CRED_SECRET)"</td><td>ปัญหาฝั่งเซิร์ฟเวอร์ — แจ้งผู้ดูแลระบบ</td></tr>
+      <tr><td>ส่งสำเร็จ แต่ผู้รับไม่เห็นอีเมล</td><td>ให้ผู้รับดูโฟลเดอร์ <b>จดหมายขยะ (Spam)</b> → กด <b>"ไม่ใช่จดหมายขยะ"</b> และเพิ่มผู้ส่งเข้ารายชื่อติดต่อ — ฉบับต่อไปจะเข้ากล่องปกติ</td></tr>
+      <tr><td>ปุ่มส่งกดไม่ได้ (จาง)</td><td>ยังไม่ได้ติ๊กผู้รับรายคน หรือยังไม่ตั้ง App Password (มีคำเตือนเหนือปุ่ม)</td></tr>
+      <tr><td>ลืมรหัสที่เคยบันทึก / อยากเปลี่ยน</td><td>ดูย้อนหลังไม่ได้ (เก็บเข้ารหัส) — สร้างรหัสใหม่จาก Google แล้วบันทึกทับได้เลย</td></tr>
+    </table></div>
+    <div class="callout"><b>ความปลอดภัย:</b> ระบบไม่เคยรู้รหัสผ่านหลักของบัญชี Google — App Password ใช้ส่งอีเมลได้อย่างเดียว เก็บแบบเข้ารหัส และเพิกถอนเองได้ทุกเมื่อที่ Google · Gmail จำกัดการส่งประมาณ 500 ฉบับ/วัน ต่อบัญชี</div>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 7 ═══ -->
+  <section id="ch7">
+    <h2><span class="ch-no">7</span>ใบส่งมอบสินค้า (Delivery Orders)</h2>
+    <p>เอกสาร "ใบส่งมอบสินค้าและบริการ" (ฟอร์มบริษัท FM-SL-05) สร้างต่อจาก Scope of Work ใช้ส่งมอบสินค้า/งานบริการเป็นรายงวดตามเงื่อนไขการชำระเงิน</p>
+    <h3>การสร้างและกรอกข้อมูล</h3>
+    <ol>
+      <li>เปิด Scope of Work ที่ต้องการ แล้วกด <span class="btn-ref">สร้างใบส่งมอบสินค้า</span> (ถ้ามีอยู่แล้วปุ่มเปลี่ยนเป็น "เปิดใบส่งมอบสินค้า")</li>
+      <li>ระบบสร้าง <b>การ์ดหนึ่งใบต่อหนึ่งงวดชำระเงิน</b> อัตโนมัติ — งวดมัดจำ (Down Payment / เงินมัดจำ) ไม่มีการ์ด เพราะเป็นเงินจ่ายล่วงหน้า ไม่ใช่การส่งมอบ</li>
+      <li>แต่ละงวด: <b>ติ๊กเลือกสินค้า</b>ที่ส่งมอบในงวดนั้น กรอก <b>เลขที่</b> <b>วันที่</b> และแก้ <b>Remark</b> ได้อิสระ (แต่ละงวดแยกข้อมูลกัน)</li>
+      <li>กด <span class="btn-ref">บันทึกร่าง</span> เมื่อกรอกเสร็จ</li>
+    </ol>
+    <h3>การพิมพ์ — แยกใบต่องวด</h3>
+    <ul>
+      <li>แต่ละการ์ดงวดมีปุ่ม <span class="btn-ref">พิมพ์ใบส่งมอบงวดนี้</span> ของตัวเอง — เอกสารที่ได้มีเฉพาะข้อมูลงวดนั้น</li>
+      <li>ต้องติ๊กสินค้าอย่างน้อย 1 รายการในงวดนั้นก่อน จึงพิมพ์ได้</li>
+    </ul>
+    <h3>อื่นๆ</h3>
+    <ul>
+      <li><span class="btn-ref">อัปเดตข้อมูลจาก Scope of Work</span> — ดึงรายการ/งวดล่าสุดมาใหม่ โดยคงสิ่งที่ติ๊ก/กรอกไว้ของงวดเดิม</li>
+      <li>ขั้นตอนขออนุมัติ → อนุมัติ (Final) / ปฏิเสธพร้อมเหตุผล — เหมือน Scope of Work</li>
+      <li>เมนู <span class="btn-ref">ใบส่งมอบสินค้า</span> ในแถบซ้ายใช้เปิดดูรายการทั้งหมด</li>
+    </ul>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 8 ═══ -->
+  <section id="ch8">
+    <h2><span class="ch-no">8</span>คลังสินค้า (Products)</h2>
+    <ul>
+      <li><b>เพิ่มสินค้า</b> — กด <span class="btn-ref">เพิ่มสินค้า</span> กรอกชื่อ รหัส หมวดหมู่ หน่วย ราคา รายละเอียด</li>
+      <li><b>หมวดหมู่</b> — จัดการได้จากปุ่มจัดการหมวดหมู่ในหน้าเดียวกัน</li>
+      <li><b>ค้นหา/กรอง/เรียง</b> — ค้นจากชื่อหรือรหัส กรองตามหมวดหมู่ เรียงตามคอลัมน์ได้</li>
+      <li><b>ทำสำเนา</b> — สร้างสินค้าใหม่จากตัวเดิมเพื่อแก้เล็กน้อย</li>
+      <li><b>เก็บเข้าคลัง (Archive)</b> — สินค้าเลิกใช้ให้เก็บเข้าคลังแทนการลบ ข้อมูลเดิมในใบเสนอราคาที่เคยใช้ไม่หาย</li>
+    </ul>
+    <div class="callout"><b>เชื่อมกับใบเสนอราคา:</b> ข้อมูลที่ดึงไปใช้เป็น "สำเนา ณ ตอนนั้น" — แก้สินค้าในคลังภายหลังไม่กระทบใบเสนอราคาที่ออกไปแล้ว</div>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 9 ═══ -->
+  <section id="ch9">
+    <h2><span class="ch-no">9</span>ลูกค้า (Customers)</h2>
+    <ul>
+      <li>เก็บข้อมูลลูกค้า: ชื่อบริษัท ผู้ติดต่อ โทรศัพท์ อีเมล ที่อยู่ เลขผู้เสียภาษี ข้อมูลการจัดส่ง/โครงการ</li>
+      <li>กด <span class="btn-ref">เพิ่มลูกค้า</span> เพื่อสร้าง คลิกรายการเพื่อแก้ไข ลูกค้าเลิกติดต่อใช้ Archive</li>
+      <li>ในฟอร์มใบเสนอราคา ใช้ช่อง "เลือกลูกค้า" ดึงข้อมูลจากหน้านี้มาเติมอัตโนมัติ</li>
+    </ul>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 10 ═══ -->
+  <section id="ch10">
+    <h2><span class="ch-no">10</span>Template ใบเสนอราคา</h2>
+    <ul>
+      <li>เก็บ "แม่แบบ" รายการสินค้า/สเปค/เงื่อนไขมาตรฐานของงานแต่ละประเภท ใช้ตอนสร้างใบเสนอราคาผ่าน Wizard</li>
+      <li>ผู้มีสิทธิ์สามารถ สร้าง แก้ไข ทำสำเนา เปิด-ปิดใช้งาน (เฉพาะ Template ที่ "ใช้งาน" จึงปรากฏใน Wizard)</li>
+      <li>การแก้ Template ไม่กระทบใบเสนอราคาที่สร้างไปแล้ว (ระบบคัดลอกเนื้อหา ณ ตอนสร้าง)</li>
+    </ul>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 11 ═══ -->
+  <section id="ch11">
+    <h2><span class="ch-no">11</span>ส่วนผู้ดูแลระบบ</h2>
+    <h3>จัดการผู้ใช้งาน</h3>
+    <ul>
+      <li><span class="btn-ref">เพิ่มผู้ใช้</span> — กรอกชื่อ อีเมล ชื่อผู้ใช้ รหัสผ่านเริ่มต้น เลือก <b>บทบาท</b> <b>แผนก</b> (Purchase / Project / Factory / Technic / Service / Accounting) และตำแหน่ง</li>
+      <li>แก้ไขข้อมูล รีเซ็ตรหัสผ่าน และ <b>ปิดใช้งาน</b> บัญชีพนักงานที่พ้นสภาพ (ปิดแล้วถูกล็อกออกทันทีในการใช้งานถัดไป)</li>
+      <li>แผนกของผู้ใช้ถูกใช้เป็นรายชื่อผู้รับใน "เอกสารส่งถึง" ของ Scope of Work — เลือกแผนกให้ถูกต้อง</li>
+      <li><b>อีเมลของผู้ใช้ควรเป็น Gmail จริงของพนักงาน</b> — ใช้เป็นทั้งที่อยู่รับเอกสารและบัญชีผู้ส่งอีเมล (ดูบทที่ 6)</li>
+    </ul>
+    <h3>บทบาทและสิทธิ์ (เฉพาะ Super Admin)</h3>
+    <ul>
+      <li>ระบบมีบทบาทมาตรฐาน เช่น Super Admin, Administrator, Approver, Sales User, Viewer</li>
+      <li>สร้างบทบาทใหม่และกำหนดสิทธิ์รายข้อได้จากตารางสิทธิ์ (ดู/สร้าง/แก้ไข/อนุมัติ/พิมพ์ ของแต่ละโมดูล)</li>
+      <li>สิทธิ์สำคัญ: "ดู...ของผู้อื่น (viewAll)" — ถ้าไม่ติ๊ก ผู้ใช้เห็นเฉพาะเอกสารที่ตัวเองสร้าง</li>
+    </ul>
+    <div class="callout warn"><b>ข้อควรระวัง:</b> เมื่อระบบอัปเดตและมี "สิทธิ์ตัวใหม่" เพิ่มเข้ามา บทบาทที่มีอยู่แล้วจะยังไม่ได้สิทธิ์นั้นโดยอัตโนมัติ — Super Admin ต้องเข้าไปติ๊กเพิ่มในหน้าบทบาทและสิทธิ์เอง มิฉะนั้นผู้ใช้จะไม่เห็นเมนู/ปุ่มใหม่</div>
+    <h3>บันทึกการใช้งาน (Audit Log)</h3>
+    <p>บันทึกเหตุการณ์สำคัญทั้งหมด (ใครทำอะไรเมื่อไร) แบบอ่านอย่างเดียว แก้ไขหรือลบไม่ได้ — ใช้ตรวจสอบย้อนหลัง เช่น ใครแก้ใบเสนอราคา ใครอนุมัติ ใครส่งอีเมลเอกสาร</p>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 12 ═══ -->
+  <section id="ch12">
+    <h2><span class="ch-no">12</span>ตั้งค่า (Settings)</h2>
+    <div class="tbl-scroll"><table>
+      <tr><th style="width:26%">แท็บ</th><th>ใช้ทำอะไร</th></tr>
+      <tr><td>โปรไฟล์</td><td>แก้ชื่อ อัปโหลดรูปโปรไฟล์ และ <b>รูปลายเซ็น</b> (แสดงบนเอกสาร เช่น ใบเสนอราคา/Scope of Work) รวมถึงเปลี่ยนภาษาไทย/อังกฤษ</td></tr>
+      <tr><td>ข้อมูลบริษัท</td><td>(เฉพาะ Super Admin) ชื่อ ที่อยู่ โลโก้ ตราประทับ เลขผู้เสียภาษี บัญชีธนาคาร เงื่อนไขท้ายเอกสาร — ปรากฏบนหัวเอกสารทุกใบ</td></tr>
+      <tr><td>ความปลอดภัย</td><td>เปลี่ยนรหัสผ่านของตนเอง และตั้งค่า <b>การส่งอีเมล (Gmail App Password)</b> สำหรับส่งเอกสารในนามตัวเอง — ดูบทที่ 6</td></tr>
+      <tr><td>การแจ้งเตือน</td><td>เปิด/ปิดชนิดการแจ้งเตือนที่ต้องการรับ</td></tr>
+    </table></div>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 13 ═══ -->
+  <section id="ch13">
+    <h2><span class="ch-no">13</span>การพิมพ์เอกสารเป็น PDF</h2>
+    <ol>
+      <li>เปิดเอกสารที่ต้องการ แล้วกดปุ่ม <span class="btn-ref">พิมพ์ / PDF</span> (ใบส่งมอบสินค้า: กดปุ่มพิมพ์ของงวดที่ต้องการ)</li>
+      <li>ในหน้าต่างพิมพ์ของเบราว์เซอร์ เลือกเครื่องพิมพ์จริง หรือ <b>"Save as PDF"</b> เพื่อบันทึกเป็นไฟล์</li>
+      <li>ตรวจว่า กระดาษ = A4, แนวตั้ง, Margins = Default</li>
+    </ol>
+    <div class="callout"><b>ลิงก์เว็บ/วันที่ที่ขอบกระดาษ:</b> สำหรับ<b>ใบเสนอราคาและ Scope of Work</b> หากพบข้อความ URL ที่ขอบล่าง ให้ปิดตัวเลือก "Headers and footers" ในหน้าต่างพิมพ์ก่อน — ส่วน<b>ใบส่งมอบสินค้า</b>ระบบจัดการให้อัตโนมัติแล้ว</div>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 14 ═══ -->
+  <section id="ch14">
+    <h2><span class="ch-no">14</span>คำถามพบบ่อย (FAQ)</h2>
+    <div class="tbl-scroll"><table>
+      <tr><th style="width:40%">อาการ / คำถาม</th><th>วิธีแก้</th></tr>
+      <tr><td>เข้าสู่ระบบไม่ได้ / ลืมรหัสผ่าน</td><td>ติดต่อผู้ดูแลระบบเพื่อรีเซ็ตรหัสผ่าน — ระบบไม่มีปุ่มลืมรหัสผ่านด้วยตนเอง</td></tr>
+      <tr><td>ขึ้นว่า "เซสชันหมดอายุ"</td><td>เกิดเมื่อไม่ได้เข้าใช้งานเลยติดต่อกันครบ 7 วัน — เข้าสู่ระบบใหม่อีกครั้ง</td></tr>
+      <tr><td>ไม่เห็นเมนู/ปุ่มที่คู่มือบอก</td><td>บัญชีของคุณไม่มีสิทธิ์ส่วนนั้น — แจ้งผู้ดูแลระบบตรวจบทบาทและสิทธิ์ (โดยเฉพาะหลังอัปเดตใหญ่ อาจต้องติ๊กสิทธิ์ใหม่เพิ่ม)</td></tr>
+      <tr><td>แก้ไขเอกสารไม่ได้ ปุ่มจาง</td><td>เอกสารอยู่ในสถานะล็อก (Final หรือรออนุมัติ) หรือคุณไม่ใช่เจ้าของและไม่มีสิทธิ์แก้ของผู้อื่น</td></tr>
+      <tr><td>ส่งอีเมลเอกสารไม่ได้ / ผู้รับไม่ได้รับ</td><td>ดูบทที่ 6 "การส่งอีเมลเอกสาร" — ตารางแก้ปัญหาครบทุกกรณี</td></tr>
+      <tr><td>พิมพ์ใบส่งมอบสินค้าแล้วไม่มีรายการสินค้า</td><td>ยังไม่ได้ติ๊กสินค้าในงวดนั้น — ติ๊กอย่างน้อย 1 รายการ บันทึกร่าง แล้วพิมพ์ใหม่</td></tr>
+      <tr><td>ใบส่งมอบสินค้าไม่มีงวด Down Payment</td><td>ตั้งใจไว้เช่นนั้น — เงินมัดจำเป็นการชำระล่วงหน้า ไม่ใช่การส่งมอบสินค้า</td></tr>
+      <tr><td>แก้ใบเสนอราคาแล้ว Scope of Work / ใบส่งมอบไม่เปลี่ยนตาม</td><td>เอกสารปลายทางเก็บสำเนาของตัวเอง — เปิดเอกสารนั้นแล้วกด "อัปเดตข้อมูลจาก..." เพื่อดึงข้อมูลล่าสุด</td></tr>
+      <tr><td>ตัวเลขแดชบอร์ดไม่ตรงกับยอดรวมในใบเสนอราคา</td><td>แดชบอร์ดแสดงมูลค่า "ก่อนภาษี" ส่วนใบเสนอราคาแสดงยอดสุทธิ (รวม VAT)</td></tr>
+      <tr><td>อยากรู้ว่าระบบอัปเดตอะไรใหม่บ้าง</td><td>คลิกไอคอน ✦ "มีอะไรใหม่" ที่แถบด้านบน</td></tr>
+    </table></div>
+    <div class="callout"><b>ติดปัญหาอื่น:</b> ติดต่อผู้ดูแลระบบ พร้อมแจ้งหน้าจอ/เมนูที่ใช้อยู่ และข้อความแจ้งเตือนที่เห็น (ถ้ามี) เพื่อให้ช่วยตรวจสอบได้เร็วขึ้น</div>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <footer>คู่มือการใช้งานระบบ TCS ERP · ฉบับวันที่ 7 สิงหาคม 2026 — เปิดจากปุ่ม "คู่มือการใช้งาน" บนแถบด้านบนของระบบได้ตลอดเวลา</footer>
+</div>
+</body>
+</html>

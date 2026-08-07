@@ -672,8 +672,12 @@ export default function App() {
             onNavigateToTemplate={navigateToTemplate}
             onNavigateToScopeOfWork={navigateToScopeOfWork}
           />
+          {/* 2026-08-07: opens the web manual page (public/manual.html) — replaced the PDF
+              (public/คู่มือการใช้งาน TCS ERP.pdf, kept on disk but no longer linked) per direct
+              user request for the new document-style manual. Update public/manual.html directly;
+              docs/manual/user-manual.html (the old PDF source) is superseded. */}
           <a
-            href={encodeURI("/คู่มือการใช้งาน TCS ERP.pdf")}
+            href="/manual.html"
             target="_blank"
             rel="noreferrer"
             aria-label={t("topbar.manual")}

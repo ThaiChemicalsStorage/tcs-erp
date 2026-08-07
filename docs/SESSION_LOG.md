@@ -34,6 +34,20 @@ CHANGELOG.md 2026-08-07.
 - App Password writes are **self-only even for `users:manage` admins** (it's a personal Gmail
   credential), and the field is write-only end-to-end.
 
+### Addendum (same session): web manual + deploy troubleshooting + working-agreement corrections
+- **User manual became a web page** (`public/manual.html`, topbar button now opens it instead of
+  the PDF) in the document style the user approved from the standalone email-setup guide, with a
+  new "การส่งอีเมลเอกสาร (Gmail)" chapter — see CHANGELOG.md 2026-08-07 (web manual entry).
+- **Deploy debugging**: "pushed to Docker but nothing changed" → the compose file referenced old
+  image names (`janahee/tcs-erp-app` + bare `nginx:latest`) while the fresh builds were
+  `thaics/tcserp-app|web`; DEPLOYMENT.md's reference compose was synced to the registry-image flow
+  + mandatory `EMAIL_CRED_SECRET`. First live send test also confirmed Gmail accepts the mail
+  (audit "1/1 สำเร็จ") — the recipient found it in Spam (localhost links from dev + first-time
+  sender; expected to resolve on a real APP_URL).
+- **Working agreements recorded to memory** (after editing docker-compose.yml uninvited):
+  docker-compose.yml is owner-managed — NEVER edit it, give instructions instead; and do only
+  what's explicitly asked, ask before any side action.
+
 ### Verification
 `build` (tsc strict + vite), `lint`, `npm test` all clean — 21 new tests (105 total, 12 files):
 crypto round-trip/tamper/rotation, settings API leak-checks + 403s, and the full send flow with a
