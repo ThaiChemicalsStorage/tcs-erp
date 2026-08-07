@@ -385,9 +385,17 @@
           <h4>เปิดการยืนยันแบบ 2 ขั้นตอน (2-Step Verification) ในบัญชี Google</h4>
           <p>Google บังคับว่าต้องเปิดก่อน จึงจะสร้าง App Password ได้ (ถ้าเปิดอยู่แล้ว ข้ามไปข้อ 2)</p>
           <ol>
-            <li>เข้า <code>myaccount.google.com/security</code> (ล็อกอินด้วย Gmail ที่ลงทะเบียนในระบบ)</li>
-            <li>หัวข้อ <b>"การยืนยันแบบ 2 ขั้นตอน"</b> → กด <b>เปิดใช้งาน</b> แล้วทำตามที่ Google ถาม</li>
+            <li>ล็อกอิน Gmail ที่ลงทะเบียนในระบบ → คลิกรูปโปรไฟล์มุมขวาบน → กด <b>จัดการบัญชี Google</b> (หรือเข้า <code>myaccount.google.com/security</code> ตรงๆ)</li>
+            <li>เลือกเมนู <b>ความปลอดภัยและการลงชื่อเข้าใช้</b> → หัวข้อ <b>"การยืนยันแบบ 2 ขั้นตอน"</b> → กด <b>เปิดใช้งาน</b> แล้วทำตามที่ Google ถาม (ยืนยันเบอร์โทรด้วยรหัส SMS)</li>
           </ol>
+          <figure>
+            <img src="/manual-images/g1-google-account.png" alt="เมนูบัญชี Google" loading="lazy" />
+            <figcaption>คลิกรูปโปรไฟล์มุมขวาบนของ Google แล้วกด "จัดการบัญชี Google"</figcaption>
+          </figure>
+          <figure>
+            <img src="/manual-images/g2-2fa-security.png" alt="หน้าความปลอดภัยของบัญชี Google" loading="lazy" />
+            <figcaption>เมนู "ความปลอดภัยและการลงชื่อเข้าใช้" — หัวข้อ "การยืนยันแบบ 2 ขั้นตอน" (ในภาพเปิดใช้แล้ว จะขึ้นป้ายเขียว)</figcaption>
+          </figure>
         </div>
       </div>
       <div class="step">
@@ -400,13 +408,25 @@
             <li>Google แสดง<b>รหัส 16 ตัวอักษร</b> เช่น <code>abcd efgh ijkl mnop</code> — คัดลอกเก็บทันที</li>
           </ol>
           <p class="note"><b>สำคัญ:</b> รหัสแสดงครั้งเดียวเท่านั้น (หายก็สร้างใหม่ได้) และ<b>ไม่ใช่</b>รหัสผ่าน Gmail ปกติ — ห้ามเอารหัสผ่านหลักมากรอกในระบบ</p>
+          <figure>
+            <img src="/manual-images/g3-apppassword-create.png" alt="หน้ารหัสผ่านสำหรับแอป" loading="lazy" />
+            <figcaption>หน้า "รหัสผ่านสำหรับแอป" — พิมพ์ชื่อแอปในช่องด้านล่าง แล้วกด "สร้าง"</figcaption>
+          </figure>
+          <figure>
+            <img src="/manual-images/g4-apppassword-code.png" alt="รหัสผ่านของแอปที่สร้างขึ้น" loading="lazy" />
+            <figcaption>Google แสดงรหัส 16 ตัวอักษรในกรอบดำ (ในภาพขีดปิดไว้) — คัดลอกทันที เพราะจะไม่แสดงซ้ำอีก</figcaption>
+          </figure>
         </div>
       </div>
       <div class="step">
         <div class="step-no">3</div>
         <div>
           <h4>บันทึกรหัสลงในระบบ</h4>
-          <p>ไปที่ <span class="path">ตั้งค่า → ความปลอดภัย → การ์ด "การส่งอีเมล (Gmail App Password)"</span> → วางรหัส (วางทั้งเว้นวรรคได้) → กด <b>บันทึก App Password</b> — ป้ายสถานะเปลี่ยนเป็น <span class="check">✓ ตั้งค่าแล้ว</span></p>
+          <p>ไปที่ <span class="path">ตั้งค่า → ความปลอดภัย → การ์ด "การส่งอีเมล (Gmail App Password)"</span> → วางรหัสที่คัดลอกมา <b>แล้วลบเว้นวรรคออกให้เหลือตัวอักษร 16 ตัวติดกัน</b> (เช่น <code>abcd efgh ijkl mnop</code> → <code>abcdefghijklmnop</code>) → กด <b>บันทึก App Password</b> — ป้ายสถานะเปลี่ยนเป็น <span class="check">✓ ตั้งค่าแล้ว</span></p>
+          <figure>
+            <img src="/manual-images/g5-erp-email-card.png" alt="การ์ดการส่งอีเมลในหน้าตั้งค่า" loading="lazy" />
+            <figcaption>การ์ด "การส่งอีเมล (Gmail App Password)" ในหน้าตั้งค่า → ความปลอดภัย — วางรหัสแล้วกดบันทึก เมื่อสำเร็จป้ายจะขึ้น "ตั้งค่าแล้ว" สีเขียว</figcaption>
+          </figure>
         </div>
       </div>
       <div class="step">
