@@ -122,21 +122,33 @@ git pull && npm install && npm run build && pm2 restart tcs-erp   # or systemctl
 
 ## Docker (added 2026-08-06 — the fully self-contained option)
 
-An alternative to the PM2/nginx-on-the-host setup above: `docker compose up -d --build` runs the
-whole stack — the app image (committed `Dockerfile`, multi-stage: `npm ci` + `npm run build`, then
-a pruned runtime layer), **its own MongoDB** (named volume `mongo_data`, starts empty → Setup
-Wizard on first visit), and **nginx** for HTTPS termination.
+An alternative to the PM2/nginx-on-the-host setup above: the stack is **two images from one
+committed `Dockerfile` (2026-08-07: two targets)** plus MongoDB —
+
+- target **`app`** → the Express API (`npm ci` + `npm run build`, pruned runtime layer)
+- target **`web`** → nginx with `nginx/nginx.conf` AND the built frontend (`dist/`) baked in;
+  nginx serves the SPA directly (immutable `/assets/` caching, no-cache `index.html`, gzip) and
+  proxies only `/api/` to the app container
+- **MongoDB** (named volume `mongo_data`, starts empty → Setup Wizard on first visit)
+
+**Build & push happen on the dev machine; the server only pulls** (registry: Docker Hub
+`thaics/tcserp-app` + `thaics/tcserp-web` — ⚠️ the compose file must reference the SAME names you
+push, or `docker compose pull` silently keeps running the old images and "nothing changes"):
+
+```bash
+docker build --target app -t thaics/tcserp-app:latest .
+docker build --target web -t thaics/tcserp-web:latest .
+docker push thaics/tcserp-app:latest && docker push thaics/tcserp-web:latest
+# then on the server:
+docker compose pull && docker compose up -d
+```
 
 - **`docker-compose.yml` is deliberately NOT committed** (owner request) — the complete reference
   copy is below; recreate it from here on a new machine.
-- **`nginx/` IS committed**: `nginx/nginx.conf` (HTTP→HTTPS redirect, TLS, 30 MB body limit,
-  `X-Forwarded-For` for login rate limiting) is **baked into a custom nginx image** at build time
-  (`nginx/Dockerfile`: `COPY nginx.conf /etc/nginx/conf.d/default.conf`; compose uses
-  `build: ./nginx` — owner request 2026-08-06, for the server deployment). After editing the conf,
-  `docker compose up -d --build`. Only `nginx/certs/` stays a volume mount (self-git-ignored, and
-  excluded from the image via `nginx/.dockerignore` — keys are never baked in; mounted read-only
-  at `/etc/nginx/certs`). Expected filenames (owner's naming, 2026-08-06): **`huma-erp.com.pem`**
-  (certificate/fullchain) + **`huma-erp.com.key`** (private key). A self-signed pair for testing:
+- Only `nginx/certs/` is a volume mount (self-git-ignored, and excluded from the build context via
+  `.dockerignore` — keys are never baked in; mounted read-only at `/etc/nginx/certs`). Expected
+  filenames (owner's naming, 2026-08-06): **`huma-erp.com.pem`** (certificate/fullchain) +
+  **`huma-erp.com.key`** (private key). A self-signed pair for testing:
   `openssl req -x509 -nodes -newkey rsa:2048 -days 365 -keyout nginx/certs/huma-erp.com.key -out nginx/certs/huma-erp.com.pem -subj "/CN=huma-erp.com"`
 - **MongoDB runs with authentication** (2026-08-06): the container initializes its root user from
   `MONGO_USER`/`MONGO_PASS` in `.env` (mapped to the mongo image's `MONGO_INITDB_ROOT_*` vars),
@@ -161,7 +173,7 @@ Reference `docker-compose.yml` (keep in sync with the local untracked copy):
 ```yaml
 services:
   app:
-    build: .
+    image: thaics/tcserp-app:latest
     restart: unless-stopped
     env_file:
       - .env
@@ -172,6 +184,7 @@ services:
       MONGODB_DB: ${MONGODB_DB:-tcs_erp}
       JWT_SECRET: ${JWT_SECRET:?put JWT_SECRET in .env next to docker-compose.yml}
       APP_URL: ${APP_URL:-https://localhost}
+      EMAIL_CRED_SECRET: ${EMAIL_CRED_SECRET:?put EMAIL_CRED_SECRET in .env next to docker-compose.yml}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -194,7 +207,7 @@ services:
       start_period: 20s
 
   nginx:
-    build: ./nginx
+    image: thaics/tcserp-web:latest
     restart: unless-stopped
     ports:
       - "80:80"
