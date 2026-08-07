@@ -435,6 +435,22 @@ export async function systemSettingsCollection() {
   return db.collection<SystemSettingsFields>("system_settings");
 }
 
+/**
+ * One row per applied RBAC migration (`_id` = the migration's id in RBAC_MIGRATIONS,
+ * api/_lib/rbacSeed.ts). Presence means "already applied, never apply again" — that's what keeps a
+ * permission an admin later revokes in Role Management from silently coming back. `_id`-keyed, so
+ * it needs no entry in ensureIndexes().
+ */
+export interface RbacMigrationFields {
+  _id: string;
+  appliedAt: string;
+  appliedRoleKeys: string[];
+}
+export async function rbacMigrationsCollection() {
+  const db = await getDb();
+  return db.collection<RbacMigrationFields>("rbac_migrations");
+}
+
 /** Nothing writes to this yet — every current upload (logo/stamp/profile picture/signature) is inline base64 on its parent document. Forward-looking scaffolding for real blob storage. */
 export interface UploadFields {
   fileName: string;

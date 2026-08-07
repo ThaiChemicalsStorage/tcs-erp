@@ -97,6 +97,14 @@ export interface ServiceReport {
   overallCustomerSummary: string;
   overallRemark: string;
 
+  // On-site customer sign-off (added 2026-08-07). Deliberately independent of the completion
+  // checklist — a report can be completed unsigned when the customer isn't on site. The engineer's
+  // own signature is not stored here: it's pulled live from their profile `signatureDataUrl`, the
+  // same convention Scope of Work's print view uses. `customerSignedAt` is server-stamped.
+  customerSignatureDataUrl: string; // base64 PNG data URL, "" when unsigned
+  customerSignedName: string;
+  customerSignedAt: string | null;
+
   status: ServiceReportStatus;
   isDeleted: boolean;
 
@@ -141,6 +149,10 @@ export interface ServiceReportDraft {
   onSiteContactPhone: string;
   overallCustomerSummary: string;
   overallRemark: string;
+  // `customerSignedAt` is absent on purpose — the server stamps it whenever the signature changes,
+  // so a client can never backdate a sign-off.
+  customerSignatureDataUrl: string;
+  customerSignedName: string;
 }
 
 export type ServiceReportStatusAction = "complete" | "reopen" | "cancel";
@@ -150,6 +162,46 @@ export type ServiceReportStatusAction = "complete" | "reopen" | "cancel";
 // "Per-report checklist customization"); it edits only the report's frozen snapshot, never the
 // master template.
 export type ServiceReportUpdate = Partial<ServiceReportDraft> & { templateSections?: ServiceChecklistSectionDef[] };
+
+// รวมเฉพาะข้อมูลรูปภาพจากเซิร์ฟเวอร์เข้ากับ checklist ในเครื่อง โดยไม่ทับการแก้ไขที่ยังไม่ได้บันทึก
+/**
+ * Merges **only** the photo metadata from a server checklist into the local one, matched by
+ * section/group/item key. Every other field on a local item (`status`, `abnormalDetail`,
+ * `measurementValue`, a section's `included` flag) is kept exactly as-is.
+ *
+ * Photos are the one part of a checklist item the server owns outright — they change solely through
+ * the dedicated photo routes, and the server's `mergeChecklist()` deliberately refuses to accept
+ * them from a `PATCH`. Everything else is local-first and may be holding unsaved edits, which is
+ * why the photo upload/delete responses must not be applied wholesale: doing that (the behavior
+ * until 2026-08-07) reverted every unsaved change the moment an upload finished — an item just
+ * flipped to Abnormal would snap back to Normal while its photo attached fine.
+ *
+ * Items/groups/sections that exist only locally (added to this report but not yet saved) have no
+ * server counterpart and are returned untouched.
+ */
+export function mergeServerPhotosIntoChecklist(
+  local: ServiceChecklistSectionValue[],
+  server: ServiceChecklistSectionValue[],
+): ServiceChecklistSectionValue[] {
+  return local.map((section) => {
+    const serverSection = server.find((s) => s.key === section.key);
+    if (!serverSection) return section;
+    return {
+      ...section,
+      groups: section.groups.map((group) => {
+        const serverGroup = serverSection.groups.find((g) => g.key === group.key);
+        if (!serverGroup) return group;
+        return {
+          ...group,
+          items: group.items.map((item) => {
+            const serverItem = serverGroup.items.find((it) => it.key === item.key);
+            return serverItem ? { ...item, photos: serverItem.photos ?? [] } : item;
+          }),
+        };
+      }),
+    };
+  });
+}
 
 // ดึงรายการสรุปรายงานบริการทั้งหมด (กรองตามสิทธิ์ฝั่งเซิร์ฟเวอร์)
 // Fetches the summarized list of every Service Report (server-side ownership-filtered)

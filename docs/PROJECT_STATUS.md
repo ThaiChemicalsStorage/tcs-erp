@@ -14,6 +14,7 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+<<<<<<< HEAD
 - ✅ **[2026-08-07] Document-recipient delivery is in-app-notification-only — email sending removed
   entirely (supersedes the same-day Gmail entry below).** Direct user request
   ("ตัดการส่งอีเมลออกไปเลยเหลือไว้แค่ส่งในระบบพอ") after the per-user Gmail App Password setup
@@ -36,6 +37,102 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
   verification task) is gone entirely. 21 new tests (105 total). **Real SMTP delivery not yet
   live-verified** (no Gmail credential exists in the sandbox — nodemailer mocked in tests; tracked
   in TODO.md). See CHANGELOG.md 2026-08-07.
+=======
+- ✅ **[2026-08-07] Page tours mark "seen" on automatic appearance, not on dismissal.** A user who
+  let the tour sit and navigated away produced no completion event (the unmount path suppresses
+  one), so it auto-played again. `useModuleTour`'s auto-fire now marks the moment the tour renders;
+  `start()` returns a boolean so a tour whose anchors aren't in the DOM is never marked unseen-but-
+  suppressed. The manual replay now writes nothing at all — a real behaviour change, since it
+  previously marked on dismissal and could cost a user their automatic first play.
+  `useDriverTour`'s dismissal tracking and the main first-login tour are untouched.
+- ✅ **[2026-08-07] Fixed: guided tours re-auto-played on every visit (StrictMode ref latch).**
+  Reported as a Service regression; actually a one-line effect lifecycle fault in `useDriverTour`
+  affecting **every page tour since 2026-07-29**, and **only in development builds** (React
+  StrictMode's mount→cleanup→mount double-invoke is dev-only, so production was never affected).
+  `unmountingRef` was set `true` on cleanup and never reset on setup, so it latched after
+  StrictMode's simulated unmount — `onFinish` never fired, `markPageTourCompleted()` never wrote,
+  and the auto-start effect re-armed on every mount. The storage layer, the `autoStart` gating, and
+  the localStorage write were all checked and cleared. +7 tests (142 total) pinning the storage half.
+  The regression itself remains uncovered — no DOM test environment exists; recorded in TODO.md.
+- ✅ **[2026-08-07] Guided-tour audit + the Service module's missing tours.** Investigated a user
+  report of a help icon that "disappeared". Both suspected causes were clean: the main tour's replay
+  lives permanently in the user menu, and `hasPageTourCompleted()` gates only the auto-fire, never
+  any render path (verified across all 11 pages). The real gap was that the **Service module had no
+  tour at all** — built after the tour system, and `docs/CLAUDE.md` wrongly described
+  `TourReplayButton` as living inside `GuidedTour.tsx`, so its author found no such export. Added
+  tours + always-visible replay buttons to ServiceList, ServiceReportEditor, and
+  ServiceTemplateManagement (+32 i18n keys), and corrected the doc entry that caused the omission.
+- ✅ **[2026-08-07] Reverted: Dashboard is visible again in the Service Engineer's sidebar.** The
+  "engineers see only บริการ" requirement rested on unclear internal communication. One line —
+  `ROLE_HIDDEN_NAV_KEYS.service_engineer` drops `"dashboard"`, keeps `"customers"` — reverts the
+  sidebar item, the Global Search shortcut, and the landing page together. No RBAC change either
+  way, since the original was visibility-only and `dashboard:view` was never revoked. The role lands
+  on the Dashboard at sign-in again, following automatically from `homeNav`.
+- ✅ **[2026-08-07] Service Engineer's sidebar trimmed (Customers only, after the Dashboard revert above).** Visibility
+  change, **not** a permission removal — `customers:view` stays granted because the Service Report
+  editor's `CustomerSelector` needs it. `ROLE_HIDDEN_NAV_KEYS` + `isNavHiddenForRole()`
+  (`src/lib/roles.ts`), applied in the sidebar, the landing page, and Global Search's page results.
+  The landing-page part mattered: `activeNav` defaulted to `"dashboard"` and the role still holds
+  `dashboard:view`, so hiding the nav item alone would have left it signing in onto a page with no
+  way back. Scoped to the one role by key, per the owner's call. +6 tests (135 total), including a
+  guard that the underlying grants are still held.
+- ✅ **[2026-08-07] Rename a checklist item/heading in place while filling out a Service Report.**
+  Per-report customization could add and remove but not reword, so fixing wording meant delete +
+  re-add — which minted a new key and discarded that item's recorded status/detail/photos. New
+  shared `src/components/InlineEditableLabel.tsx`: double-click (mouse) / tap (touch) / Enter-Space
+  (keyboard), commit on Enter or blur, Escape cancels, blank reverts. No visible icon by request, so
+  the trigger is a real focusable button with an `aria-label` and the gesture is stated once above
+  the checklist. **No server change was needed** — `sanitizeServiceTemplateSections()` already keyed
+  off `key` and took labels from the payload. A rename keeps the key, so recorded values survive
+  untouched. +6 tests (129 total).
+- ✅ **[2026-08-07] Service Report customer signature capture (on-site).** First item off the
+  Service module's Phase 2 roadmap. New `src/components/SignaturePad.tsx` — canvas capture on
+  pointer events (one code path for mouse/finger/stylus), `touch-action: none`, devicePixelRatio
+  scaling, and a locked preview after confirm so an accidental swipe can't alter a signature already
+  given. Three new `service_reports` fields wired through the existing `PATCH` route with the shared
+  `validateImageDataUrl()`; **`customerSignedAt` is server-stamped, never client-supplied**, and
+  re-stamped only when the image itself changes. Signing neither gates nor is gated by completion —
+  a customer often isn't on site. The printed report's customer column now mirrors the engineer
+  column. +8 tests (123 total). Remote signing via LINE remains a later phase, with a deliberately
+  inert placeholder button in the UI.
+- ✅ **[2026-08-07] Fixed: uploading a checklist photo reverted every unsaved Service Report edit.**
+  User-reported. The photo routes return the whole report, and the editor applied it through the
+  same helper the Save path uses — so the server's last-saved item statuses overwrote everything
+  changed since the last Save (an item just marked Abnormal snapping back to Normal as its upload
+  finished; the photo itself always attached fine). Now `mergeServerPhotosIntoChecklist()`
+  (`src/lib/serviceReports.ts`) copies back photo metadata only, matching the server's own rule that
+  photos change solely through the dedicated routes. `templateSnapshot.sections` is left alone too,
+  or unsaved locally-added groups/items would vanish the same way. No API change — the response
+  already carried the new photo. +6 tests (115 total), leading with the reported scenario verbatim.
+- ✅ **[2026-08-07] Permission dependencies — a declared, enforced guard against half-granted
+  permission sets.** Generalizes a finding from the pass below: `serviceTemplates:view` isn't a
+  sensible companion to the Service grants, it's *required* (the report editor's boot fetch calls
+  `fetchServiceTemplates()` for viewing as much as creating, so a role without it gets a dead screen,
+  not a missing button). `PERMISSION_DEPENDENCIES` + `withPermissionDependencies()`
+  (`src/lib/permissions.ts`) declare the coupling; `sanitizeRolePermissions()` (`src/lib/roles.ts`)
+  is shared by `POST`/`PATCH /api/roles` and the Role Management matrix so the server and UI can't
+  drift. The matrix ticks dependencies as you tick the parent and **pins** them (disabled + lock +
+  a title naming what requires them) while anything still needs them — otherwise an admin could
+  untick, save, and have the server silently put it back. The map is deliberately narrow: only
+  hard-failing boot fetches, not merely-unreachable buttons. +14 tests (109 total), incl. 6 that
+  create real custom roles through the API — the gap a defaultRoles-only assertion left open.
+- ✅ **[2026-08-07] Service Engineer role + automatic RBAC catch-up for provisioned databases.**
+  Closed the ⚠️ ACTION REQUIRED item the Service module opened, and with it a pattern every module
+  since Scope of Work had inherited: because `seedDefaultRolesIfEmpty()` only fires on an *empty*
+  `roles` collection, each new permission set needed a Super Admin to hand-click it into production
+  via Role Management. Now `bootstrapRbac()` (`api/_lib/rbacSeed.ts`, called from `GET /api/roles`
+  and the Setup Wizard) inserts any later-added default role (`syncDefaultRoles()`, additive only —
+  existing roles are never rewritten) and applies **once-only, recorded** permission backfills
+  (`RBAC_MIGRATIONS` → the new `rbac_migrations` collection), so a permission an admin deliberately
+  revokes stays revoked — the failure mode a naive re-sync-on-boot would have introduced. Ships
+  with the 7th default role, **Service Engineer** (own reports only:
+  `service:view/create/edit/complete/print` + `serviceTemplates:view` + `customers:view` +
+  `dashboard:view`) — before this, only Super Admin/Administrator could create a Service Report, so
+  real field use was blocked. +11 tests (95 total), incl. a 9-test in-memory-MongoDB suite that
+  reproduces the actual production scenario. `tsc` (both configs)/`lint`/`build`/`test` clean.
+  Still a human call: which employees get the role. See CHANGELOG.md 2026-08-07 and
+  [RBAC.md](./RBAC.md) "Rollout".
+>>>>>>> cc49a6c (add service module for erp)
 - ✅ **[2026-08-06] Docker stack (same session as the Express migration).** `docker compose up -d
   --build` runs the whole system self-contained: the app image (committed `Dockerfile`), its own
   MongoDB (named volume, fresh-DB Setup Wizard path), and nginx HTTPS termination (committed

@@ -10,7 +10,7 @@ import { type JobType, fetchJobTypes } from "./lib/jobTypes";
 import { type Customer, fetchCustomers } from "./lib/customers";
 import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes";
 import { type User, fetchUsers, initials } from "./lib/users";
-import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
+import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor, isNavHiddenForUser } from "./lib/roles";
 import type { Permission } from "./lib/permissions";
 import { fetchSession, setupSuperAdmin, login, logout } from "./lib/session";
 import { ApiError } from "./lib/apiClient";
@@ -223,15 +223,6 @@ export default function App() {
   const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
   const [activeNav, setActiveNav] = useState<NavKey>(() => navFromHash() ?? "dashboard");
 
-  useEffect(() => {
-    const target = `#${activeNav}`;
-    if (window.location.hash === target) return;
-    if (window.location.hash === "") {
-      window.history.replaceState(null, "", target);
-    } else {
-      window.location.hash = target;
-    }
-  }, [activeNav]);
   useEffect(() => {
     const onHashChange = () => {
       const nav = navFromHash();
@@ -512,10 +503,34 @@ export default function App() {
     setActiveNav("dashboard");
   };
 
-  const visibleNavItems = navItems.filter((item) => !item.permission || hasPermission(currentUser, roles, item.permission));
+  // Two independent filters: permission (can this user reach the page at all) and per-role nav
+  // hiding (should this role be *offered* it — see isNavHiddenForRole, presentation only).
+  const visibleNavItems = navItems.filter((item) =>
+    (!item.permission || hasPermission(currentUser, roles, item.permission))
+    && !isNavHiddenForUser(currentUser, roles, item.key));
+  // Whichever nav item this role actually sees first — the landing page and the fallback both use
+  // it instead of a hardcoded "dashboard", so a role without Dashboard in its sidebar can never end
+  // up sitting on a page it has no way to navigate back to.
+  const homeNav: NavKey = visibleNavItems[0]?.key ?? "settings";
   const activeNavItem = navItems.find((n) => n.key === activeNav);
-  const activeNavAllowed = activeNav === "settings" || !activeNavItem?.permission || hasPermission(currentUser, roles, activeNavItem.permission);
-  const effectiveNav = activeNavAllowed ? activeNav : "dashboard";
+  const activeNavAllowed = activeNav === "settings"
+    || ((!activeNavItem?.permission || hasPermission(currentUser, roles, activeNavItem.permission))
+      && !isNavHiddenForUser(currentUser, roles, activeNav));
+  const effectiveNav = activeNavAllowed ? activeNav : homeNav;
+
+  // Mirrors the *rendered* page into the hash, not the requested one — so a role landing on (or
+  // deep-linking to) a nav item hidden from it ends up with a URL matching what it's actually
+  // looking at, and a refresh keeps it there. Declared after effectiveNav because the dependency
+  // array is evaluated during render.
+  useEffect(() => {
+    const target = `#${effectiveNav}`;
+    if (window.location.hash === target) return;
+    if (window.location.hash === "") {
+      window.history.replaceState(null, "", target);
+    } else {
+      window.location.hash = target;
+    }
+  }, [effectiveNav]);
   const requiredResources = NAV_RESOURCES[effectiveNav] ?? [];
   const pageDataLoading = requiredResources.some((k) => resourceStatus[k] === "loading");
   const pageDataError = requiredResources.some((k) => resourceStatus[k] === "error");
@@ -767,7 +782,7 @@ export default function App() {
               : effectiveNav === "service"
               ? <ServicePage currentUserId={currentUser.id} company={company} canCreate={canCreateService} canEdit={canEditService} canComplete={canCompleteService} canDelete={canDeleteService} canPrint={canPrintService} initialServiceReportId={serviceReportDeepLinkId} onServiceReportIdConsumed={() => setServiceReportDeepLinkId(null)} />
               : effectiveNav === "serviceTemplates"
-              ? <ServiceTemplateManagement canCreate={canCreateServiceTemplates} canEdit={canEditServiceTemplates} canArchive={canArchiveServiceTemplates} />
+              ? <ServiceTemplateManagement currentUserId={currentUser.id} canCreate={canCreateServiceTemplates} canEdit={canEditServiceTemplates} canArchive={canArchiveServiceTemplates} />
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"

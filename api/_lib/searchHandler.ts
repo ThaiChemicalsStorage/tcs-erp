@@ -5,7 +5,7 @@ import {
   quotesCollection, customersCollection, productsCollection, categoriesCollection,
   usersCollection, rolesCollection, quotationTemplatesCollection, scopeOfWorksCollection, withStringId, type QuoteFields,
 } from "./collections.js";
-import { roleHasPermission } from "../../src/lib/roles.js";
+import { roleHasPermission, isNavHiddenForRole } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
 import { computeQuoteAmountBeforeVat } from "./quoteAmounts.js";
 import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
@@ -384,6 +384,11 @@ function searchPages(query: string, ctx: AuthContext): SearchPageResult[] {
   const q = query.toLowerCase();
   return SEARCHABLE_PAGES
     .filter((p) => p.permission === null || roleHasPermission(ctx.role, p.permission))
+    // Same per-role nav hiding the sidebar applies (2026-08-07) — offering a page here that the
+    // role has no sidebar entry for would immediately undo the hiding. Presentation only: this
+    // filters *menu shortcuts*, never business results, and the underlying permission is untouched
+    // (a Service Engineer still reads customers through the report editor's CustomerSelector).
+    .filter((p) => !isNavHiddenForRole(ctx.role, p.navKey))
     .filter((p) => p.aliases.some((a) => a.toLowerCase().includes(q)))
     .slice(0, RESULT_LIMIT)
     .map(({ id, titleTh, titleEn, navKey, action }) => ({ id, titleTh, titleEn, navKey, action }));

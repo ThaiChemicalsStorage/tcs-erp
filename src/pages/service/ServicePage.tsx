@@ -119,7 +119,7 @@ export function ServicePage({
 
   return (
     <>
-      <ServiceList serviceReports={serviceReports} canCreate={canCreate} onOpen={openReport} onCreate={createNew} />
+      <ServiceList serviceReports={serviceReports} currentUserId={currentUserId} canCreate={canCreate} onOpen={openReport} onCreate={createNew} />
       <Toast message={toast.message} />
     </>
   );

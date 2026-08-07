@@ -6,6 +6,9 @@ import {
   fetchServiceTemplates, fetchServiceTemplate, createServiceTemplate, updateServiceTemplate,
   duplicateServiceTemplate, setServiceTemplateArchived,
 } from "../../lib/serviceTemplates";
+import type { DriveStep } from "driver.js";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { EmptyState } from "../../components/EmptyState";
 import { useToast } from "../../hooks/useToast";
 import { Toast } from "../../components/Toast";
@@ -28,16 +31,23 @@ function newLocalKey(prefix: string): string {
 // จัดการ Template รายการตรวจเช็คสำหรับโมดูลบริการ — รายการ + ฟอร์มแก้ไขหมวด/กลุ่ม/รายการตรวจเช็ค
 // Service Checklist Template management — list + a sections/groups/items editor.
 export function ServiceTemplateManagement({
+  currentUserId,
   canCreate,
   canEdit,
   canArchive,
 }: {
+  currentUserId: string;
   canCreate: boolean;
   canEdit: boolean;
   canArchive: boolean;
 }) {
   const { t } = useI18n();
   const toast = useToast();
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="servicetpl-list"]', popover: { title: t("tour.serviceTpl.list.title"), description: t("tour.serviceTpl.list.desc"), side: "top" } },
+    { element: '[data-tour="servicetpl-archived"]', popover: { title: t("tour.serviceTpl.archived.title"), description: t("tour.serviceTpl.archived.desc"), side: "bottom" } },
+  ];
+  const tour = useModuleTour("serviceTemplates", currentUserId, tourSteps);
   const [templates, setTemplates] = useState<ServiceTemplateSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
@@ -77,7 +87,9 @@ export function ServiceTemplateManagement({
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("serviceTemplates.pageSubtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
+          <TourReplayButton onClick={tour.start} />
           <button
+            data-tour="servicetpl-archived"
             onClick={() => setShowArchived((v) => !v)}
             className={`h-9 px-3 text-xs rounded-lg font-medium border transition-all ${showArchived ? "bg-[#c9a84c]/10 text-[#866d28] border-[#c9a84c]/40" : "bg-secondary text-muted-foreground border-border hover:text-foreground"}`}
           >
@@ -91,7 +103,7 @@ export function ServiceTemplateManagement({
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="servicetpl-list" className="bg-card border border-border rounded-xl overflow-hidden">
         {loading ? (
           <div className="p-8 flex justify-center"><div className="h-10 w-10 rounded-full border-2 border-[#c9a84c] border-t-transparent animate-spin" /></div>
         ) : visible.length === 0 ? (

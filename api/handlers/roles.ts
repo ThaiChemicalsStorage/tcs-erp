@@ -3,8 +3,8 @@ import { ObjectId } from "mongodb";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser, requirePermission } from "../_lib/auth.js";
 import { rolesCollection, usersCollection } from "../_lib/collections.js";
-import { seedDefaultRolesIfEmpty } from "../_lib/rbacSeed.js";
-import { isPermissionLockedToSuperAdmin } from "../../src/lib/roles.js";
+import { seedDefaultRolesIfEmpty, bootstrapRbac } from "../_lib/rbacSeed.js";
+import { sanitizeRolePermissions } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
 
 function escapeRegExp(s: string): string {
@@ -20,6 +20,9 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     // privacy tradeoff here, only an architectural one the app already depends on; not restricted.
     await requireUser(req);
     await seedDefaultRolesIfEmpty();
+    // The one path that actually reaches an already-provisioned production database (every
+    // authenticated client fetches /api/roles on boot) — see bootstrapRbac()'s own doc comment.
+    await bootstrapRbac();
     const roles = await rolesCollection();
     const list = await roles.find({}).sort({ isSuperAdmin: -1, name: 1 }).toArray();
     res.status(200).json({ roles: list });
@@ -39,7 +42,10 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     if (nameTaken) throw new HttpError(409, "มีบทบาทชื่อนี้อยู่แล้ว");
 
     const key = `role_${new ObjectId().toString()}`;
-    const cleanPermissions = permissions.filter((p) => !isPermissionLockedToSuperAdmin(p));
+    // Silently adjusts rather than 400s — same contract the Super-Admin-only filter has always had.
+    // Auto-including dependencies here (not just in the UI) means a role created by a direct API
+    // call can't end up with a permission whose screen fails to load. See sanitizeRolePermissions().
+    const cleanPermissions = sanitizeRolePermissions(permissions);
     await roles.insertOne({ key, name, description, permissions: cleanPermissions, isSuperAdmin: false, isSystem: false });
     const created = await roles.findOne({ key });
     res.status(201).json({ role: created });
@@ -71,7 +77,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, key: string) {
     }
     if (typeof body.description === "string") update.description = body.description.trim();
     if (Array.isArray(body.permissions)) {
-      update.permissions = (body.permissions as Permission[]).filter((p) => !isPermissionLockedToSuperAdmin(p));
+      update.permissions = sanitizeRolePermissions(body.permissions as Permission[]);
     }
 
     if (Object.keys(update).length > 0) {

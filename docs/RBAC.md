@@ -20,13 +20,14 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **Users** (`src/lib/users.ts`): a `User` is both the employee record and the account — `employeeId`, `fullName`, `username`, `email`, `passwordHash`, `phone`, `department`, `position`, `roleKey`, `status` (`active`/`inactive`), `profilePictureDataUrl`, `signatureDataUrl`. `employeeId`/`username`/`email` are enforced unique. **Position and Role are deliberately separate fields** — Position is a free-text job title (with suggestions: CEO, Director, General Manager, Sales Manager, Sales Executive, Engineer, HR, Accounting, Purchasing, Warehouse) with no bearing on permissions; Role is the RBAC role, assigned independently by an admin.
 
-**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 37-key `Permission` union — `dashboard:view`; `quotations:view/viewAll/create/edit/delete/approve/reject/export` (`:viewAll` added 2026-07-22, see "Quotation Own-Quotes-Only Viewing" below); `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below); `scopeOfWork:view/viewAll/create/edit/finalize/print/delete` (`:viewAll` added 2026-07-23, see "Scope of Work Own-Records-Only Viewing" below; the other 6 added 2026-07-15, see "Scope of Work" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) Six default `Role`s ship out of the box:
+**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 37-key `Permission` union — `dashboard:view`; `quotations:view/viewAll/create/edit/delete/approve/reject/export` (`:viewAll` added 2026-07-22, see "Quotation Own-Quotes-Only Viewing" below); `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below); `scopeOfWork:view/viewAll/create/edit/finalize/print/delete` (`:viewAll` added 2026-07-23, see "Scope of Work Own-Records-Only Viewing" below; the other 6 added 2026-07-15, see "Scope of Work" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) **Seven** default `Role`s ship out of the box (six until 2026-08-07, when `service_engineer` was added — see "Service" below):
 
 | Role | `isSuperAdmin` | `isSystem` | Summary |
 |---|---|---|---|
 | Super Admin | ✅ | ✅ (undeletable) | Every permission, always — `roleHasPermission()` short-circuits to `true` regardless of the stored list |
 | Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15) + full Scope of Work access (all 7 `scopeOfWork:*` permissions, incl. `:viewAll` added 2026-07-23). No `roles:manage`/`company:manage`. |
 | Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Also `scopeOfWork:view/create/edit/print` — can create/edit a Scope of Work from a quotation they can access and print it, but not finalize or delete one. **Does not hold `quotations:viewAll` or `scopeOfWork:viewAll`** — only sees quotations/Scope of Work records it created itself (see the two "Own-Records-Only Viewing" sections below). Maps to the request's "Sales Executive." |
+| Service Engineer | — | — | Added 2026-08-07. Runs a field-service job end to end: `service:view/create/edit/complete/print` + `serviceTemplates:view` (required — the report editor's boot fetch needs it) + `customers:view` + `dashboard:view`. **No `service:viewAll`** — own reports only, mirroring Sales User. No quotation/product/user access at all. See "Service" below. |
 | Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Also `scopeOfWork:view/viewAll/edit/finalize/print` (no `:create`/`:delete` — edits/finalizes Sales' drafts rather than starting new ones; `scopeOfWork:viewAll` added 2026-07-23, alongside the pre-existing `quotations:viewAll` — an Approver must be able to see everyone's records to act on them). Maps to "Sales Manager." |
 | Approver Level 2 | — | — | Same rights as Level 1 in this build, including the same Scope of Work grants (see Known Simplifications below). Maps to "CEO." |
 | Viewer | — | — | `*:view` only (incl. `customers:view`, `scopeOfWork:view`), plus `quotations:viewAll`/`scopeOfWork:viewAll` — a read-only role that can't act on anything still needs to be able to *see* everything to be useful as a viewer. |
@@ -320,15 +321,135 @@ approval workflow in Phase 1**, so these roles get oversight + the ability to pr
 see, not edit/complete rights; **Viewer** gets the same minus print (`service:view/viewAll`,
 `serviceTemplates:view` only, matching its identical no-print treatment of every other module);
 **Sales User** gets **none** — field-service maintenance is outside this seed role's defined duties.
-**Consequence worth flagging**: no seeded role except Super Admin/Administrator can *create* a
-Service Report — a real "Service Engineer" role doesn't exist yet in `defaultRoles`.
+**Service Engineer** (added 2026-08-07, see below) is the role that actually runs a service job.
 
-**⚠️ Same deployment/rollout note as every other permission added to this app** — `defaultRoles`
-only seeds once, so an already-provisioned production deployment's existing role documents will
-**not** automatically gain these 11 permissions. A Super Admin must open Role Management and
-manually grant the appropriate Service permissions (most importantly `service:create`/`edit`/
-`complete` to whoever the real field engineers turn out to be) before or immediately after this
-deploys. Tracked in [TODO.md](./TODO.md).
+#### Service Engineer (added 2026-08-07)
+
+The 7th default role, and the first one added after the initial seed set. 8 permissions:
+`dashboard:view`, `customers:view`, `serviceTemplates:view`, and
+`service:view/create/edit/complete/print`.
+
+- **No `service:viewAll`** — an engineer sees only reports they created, deliberately mirroring
+  Sales User's own-quotes-only model. Change it in Role Management if the business wants engineers
+  covering each other's jobs.
+- **No `service:delete`** and **no `serviceTemplates:create/edit/archive`** — an engineer reads the
+  master checklist templates but never edits them. (Per-report checklist customization is a
+  different thing entirely: it edits that report's own frozen `templateSnapshot`, gated by
+  `service:edit`.)
+- **`serviceTemplates:view` is mandatory, not a nicety** — `ServiceReportEditor.tsx`'s boot
+  `Promise.all` calls `fetchServiceTemplates()`, so a role with `service:create` but without it gets
+  an editor that fails to load at all rather than one missing a template picker. `tests/
+  permissions.test.ts` asserts this invariant across every default role.
+- `isSystem: false`, so an admin can rename, re-scope or delete it (same as Sales User/Approver/
+  Viewer; only Super Admin and Administrator are `isSystem`).
+
+**Trimmed navigation (added 2026-08-07).** The standalone **Customers** admin page is hidden from a
+field engineer's sidebar — managing customer master data isn't part of the job. This is
+**presentation, not authorization**: `customers:view` remains granted and every server check is
+unchanged. That permission is load-bearing — `ServiceReportEditor.tsx` fetches the customer list
+through `CustomerSelector`, so revoking it would break report creation for exactly the role this
+targets.
+
+**Dashboard was hidden here too when this shipped, and was restored the same day (2026-08-07)** —
+the "engineers should only see บริการ" instruction turned out to rest on unclear internal
+communication. `dashboard:view` was granted throughout and never changed in either direction, so
+the revert was a one-line nav-visibility change with no RBAC impact. Because the landing page is
+derived from the first *visible* nav item, a Service Engineer now lands on the Dashboard again
+rather than on "บริการ".
+
+`ROLE_HIDDEN_NAV_KEYS` + `isNavHiddenForRole()`/`isNavHiddenForUser()` (`src/lib/roles.ts`) hold the
+rule, applied in three places so the hiding is consistent rather than cosmetic:
+
+1. **Sidebar** — `App.tsx`'s `visibleNavItems` filters on permission *and* hiding.
+2. **Landing page** — `App.tsx` derives `homeNav` from the first visible nav item instead of a
+   hardcoded `"dashboard"`, and `effectiveNav` falls back to it, so a role can never sit on a page
+   it has no sidebar item to navigate back from. (This mattered while Dashboard was hidden; it's
+   kept because it's the correct general rule, not a workaround for that one case — any future
+   hidden entry gets it for free.) The URL hash mirrors `effectiveNav`, so a deep link to a hidden
+   nav key resolves to the role's home instead.
+3. **Global Search** — `searchHandler.ts` drops hidden entries from the `pages` category. This
+   filters *menu shortcuts* only; business results (customers, quotations…) are untouched and still
+   governed purely by permissions.
+
+Scoped to `service_engineer` by key, deliberately — there's no second use case, and a rule inferred
+from permissions ("any role with `service:create`") would silently reshape any future role that
+happened to match. Consequences worth knowing: a role **cloned** from Service Engineer, or a custom
+role built to be equivalent, does **not** inherit the hiding; renaming the role in Role Management
+is safe (the `key` never changes); and deleting it simply makes the entry inert.
+
+#### Permission dependencies (added 2026-08-07)
+
+`serviceTemplates:view` isn't just a sensible companion to the Service grants — it is **required**
+for them to work. `ServiceReportEditor.tsx`'s boot `Promise.all` calls `fetchServiceTemplates()`
+unconditionally, for opening an existing report as much as for creating one
+(`ServicePage.openReport()` mounts the same component), so a role holding `service:view`,
+`service:create` or `service:edit` *without* it gets an editor stuck in a permanent error state —
+not a missing button, a dead screen.
+
+Rather than rely on every future role being written correctly by hand, that coupling is now
+declared and enforced:
+
+- **`PERMISSION_DEPENDENCIES`** (`src/lib/permissions.ts`) — `permission → permissions it can't work
+  without`, plus `withPermissionDependencies()` (transitive expansion, stable order) and
+  `permissionsRequiring()` (the inverse: what breaks if this is removed).
+- **`sanitizeRolePermissions()`** (`src/lib/roles.ts`) — drops Super-Admin-only permissions, then
+  auto-includes dependencies. Shared by the server and the UI so they cannot drift.
+- **Server**: `POST /api/roles` and `PATCH /api/roles/:key` both run every submitted permission list
+  through it. A direct API call that grants `service:create` alone comes back holding
+  `serviceTemplates:view` too. Auto-include rather than `400`, matching the contract
+  `isPermissionLockedToSuperAdmin()` has always had — the server silently normalizes submitted
+  permission lists rather than rejecting them.
+- **UI**: Role Management's matrix ticks the dependency the moment the parent is ticked, and pins
+  it (disabled, lock icon, `title` naming what requires it) while any dependent is still held — so
+  an admin can't make a change that the server would silently undo on save.
+
+**The map is deliberately narrow.** It covers only "this screen's own boot fetch is gated by a
+different permission and hard-fails". It is *not* a list of sensible pairings: `service:print`
+without `service:view` is a merely-unreachable button, and folding cases like that in would start
+silently overriding deliberate admin choices. Two nearby cases are correctly absent for concrete
+reasons — `QuoteDocument`'s Scope of Work lookup and `ScopeOfWorkDocument`'s Delivery Order lookup
+are client-gated *and* `.catch()` into a safe fallback; `GET /api/quotation-templates` accepts
+`quotations:create` **or** `quotationTemplates:view` server-side, so the Create Quotation wizard
+can't hit this failure mode at all.
+
+**Known side effect, accepted**: `serviceTemplates:view` also gates the "Template รายงานบริการ"
+sidebar item, so a role granted any Service permission will see that page (read-only — the
+create/edit/archive actions have their own permissions). That was already true of every default
+role holding `service:view`; the dependency map makes it true of custom roles too. The alternative
+— making the editor tolerate a 403 on templates — is a deeper fix to `ServiceReportEditor.tsx`, not
+a permissions-model change.
+
+Covered by `tests/api/roleDependencies.test.ts` (creates real custom roles through the API) and the
+dependency block in `tests/permissions.test.ts` (including a guard that no declared dependency is
+itself Super-Admin-locked, which `sanitizeRolePermissions()` would filter straight back out).
+
+#### Rollout: automatic now, not a manual Role Management pass (2026-08-07)
+
+Every prior module (`scopeOfWork:*`, `deliveryOrder:*`, and initially `service:*`) shipped with a
+"⚠️ a Super Admin must manually grant these on production" note, because
+`seedDefaultRolesIfEmpty()` only ever fires on an *empty* `roles` collection — a provisioned
+database's role documents are frozen at whatever existed on first run. That is now handled in code
+(`api/_lib/rbacSeed.ts`), and this is the standing mechanism for every future permission:
+
+- **`syncDefaultRoles()`** — inserts any `defaultRoles` entry whose `key` is missing (this is how
+  `service_engineer` reaches an existing deployment). Purely additive; an existing role's
+  permissions are never rewritten, so admin edits survive.
+- **`applyRbacMigrations()`** — an append-only `RBAC_MIGRATIONS` list, each entry naming
+  `roleKey → permissions to add`. Applied with `$addToSet`, **at most once per database ever**,
+  recorded in the `rbac_migrations` collection (`_id` = migration id). The once-only property is
+  the point: a permission an admin deliberately revokes in Role Management stays revoked, which a
+  naive "re-sync defaults on every boot" would silently undo.
+- **`bootstrapRbac()`** — runs both, guarded by a module-scoped flag so it costs one check per warm
+  serverless instance / long-lived Express process. Called from `GET /api/roles` (the path every
+  authenticated client hits on boot, and the only one that actually reaches a provisioned
+  production database) and from the Setup Wizard, where it records the migrations as already-applied
+  because freshly-seeded roles are current by definition.
+
+The first migration, `service-permissions-2026-08-06`, grants exactly the Service sets listed above
+to Administrator/Approver 1/Approver 2/Viewer, so a migrated database ends up identical to a freshly
+seeded one. Covered by `tests/api/rbacMigrations.test.ts` (in-memory MongoDB), including the
+"revoked stays revoked" property. **What is still a human decision**: which real employees get
+assigned the Service Engineer role.
 
 Audit logging: every action writes a server-side `AuditLogEntry` via `writeServiceAuditEntry()`,
 module `"บริการ"`, with `relatedServiceReportId`/`relatedServiceTemplateId` fields — `userId`/

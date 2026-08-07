@@ -1,4 +1,4 @@
-import { ALL_PERMISSIONS, type Permission, SUPER_ADMIN_ONLY_PERMISSIONS } from "./permissions.js";
+import { ALL_PERMISSIONS, type Permission, SUPER_ADMIN_ONLY_PERMISSIONS, withPermissionDependencies } from "./permissions.js";
 import type { User } from "./users";
 import { apiFetch } from "./apiClient.js";
 
@@ -95,6 +95,21 @@ export const defaultRoles: Role[] = [
     isSystem: false,
   },
   {
+    key: "service_engineer",
+    name: "Service Engineer",
+    description: "ช่างบริการภาคสนาม — สร้าง แก้ไข และปิดงานรายงานบริการของตนเอง (เห็นเฉพาะรายงานของตนเอง)",
+    permissions: [
+      "dashboard:view",
+      "customers:view",
+      // serviceTemplates:view is required, not optional: ServiceReportEditor's boot Promise.all
+      // calls fetchServiceTemplates(), so without it the editor fails to load at all.
+      "serviceTemplates:view",
+      "service:view", "service:create", "service:edit", "service:complete", "service:print",
+    ],
+    isSuperAdmin: false,
+    isSystem: false,
+  },
+  {
     key: "approver_1",
     name: "Approver Level 1",
     description: "ตรวจสอบและอนุมัติ/ปฏิเสธใบเสนอราคา (เช่น ผู้จัดการฝ่ายขาย)",
@@ -164,6 +179,59 @@ export function roleHasPermission(role: Role | undefined, permission: Permission
 // Checks whether a permission is locked to the Super Admin role only
 export function isPermissionLockedToSuperAdmin(permission: Permission): boolean {
   return (SUPER_ADMIN_ONLY_PERMISSIONS as Permission[]).includes(permission);
+}
+
+/**
+ * Nav destinations hidden from a role's own navigation **even though it holds the permission**
+ * (added 2026-08-07). This is presentation, not authorization: the permission stays granted and
+ * every server-side check is unaffected.
+ *
+ * `service_engineer` is the only entry, deliberately. The role keeps `customers:view` — it's
+ * load-bearing, `ServiceReportEditor.tsx` fetches the customer list through `CustomerSelector` when
+ * creating or opening a report, so revoking it would break report creation outright — but the
+ * standalone Customers admin page isn't part of a field engineer's job, so the nav item is hidden.
+ *
+ * Dashboard was hidden here too when this was added, then **restored 2026-08-07** — the original
+ * "engineers should only see บริการ" instruction turned out to rest on unclear internal
+ * communication. Nothing about the permission changed in either direction; `dashboard:view` was
+ * granted throughout, so this was only ever about what the sidebar offers.
+ *
+ * Scoped to the one concrete role rather than a behavioural rule (e.g. "any role with
+ * service:create") — there's no second case yet, and a rule inferred from permissions would
+ * silently reshape any future role that happened to match. **Consequences worth knowing**: a role
+ * cloned from Service Engineer, or a custom role built to be equivalent, does NOT inherit this; and
+ * because `service_engineer` is `isSystem: false` it can be deleted, after which this entry is
+ * simply inert. Renaming it in Role Management is safe — the `key` never changes.
+ */
+const ROLE_HIDDEN_NAV_KEYS: Record<string, readonly string[]> = {
+  service_engineer: ["customers"],
+};
+
+/** True when this role is not meant to see `navKey` in its own navigation. Never a security check. */
+export function isNavHiddenForRole(role: Role | undefined | null, navKey: string): boolean {
+  if (!role) return false;
+  return (ROLE_HIDDEN_NAV_KEYS[role.key] ?? []).includes(navKey);
+}
+
+/** As above, resolved from a user rather than a role — the shape most client call sites have. */
+export function isNavHiddenForUser(user: User | null | undefined, roles: Role[], navKey: string): boolean {
+  if (!user) return false;
+  return isNavHiddenForRole(findRole(roles, user.roleKey), navKey);
+}
+
+// ปรับรายการสิทธิ์ที่ส่งเข้ามาให้ถูกต้อง — ตัดสิทธิ์เฉพาะ Super Admin ออก และเติมสิทธิ์ที่จำเป็นให้อัตโนมัติ
+/**
+ * Normalizes a submitted permission list: drops Super-Admin-only permissions, then auto-includes
+ * every dependency (`PERMISSION_DEPENDENCIES`). Shared by `POST`/`PATCH /api/roles` and the Role
+ * Management matrix so the server and the UI can never disagree about what a saved role holds.
+ *
+ * Locked permissions are filtered on both sides of the expansion: once so a locked permission can't
+ * drag dependencies in behind it, and once more in case a dependency is itself locked — the
+ * Super-Admin lock always wins over auto-inclusion.
+ */
+export function sanitizeRolePermissions(permissions: Permission[]): Permission[] {
+  const allowed = permissions.filter((p) => !isPermissionLockedToSuperAdmin(p));
+  return withPermissionDependencies(allowed).filter((p) => !isPermissionLockedToSuperAdmin(p));
 }
 
 // ตรวจสอบว่าผู้ใช้ที่กำหนดมีสิทธิ์นี้หรือไม่ ตามบทบาทของผู้ใช้

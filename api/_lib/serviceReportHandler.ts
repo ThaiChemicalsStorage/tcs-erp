@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+﻿import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Binary } from "mongodb";
 import { randomUUID, randomBytes } from "node:crypto";
 import { HttpError, getPathSegments } from "./http.js";
@@ -12,6 +12,7 @@ import {
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
+import { validateImageDataUrl } from "./uploadValidation.js";
 import { validateServiceReportForCompletion, validateServiceChecklist, sanitizeServiceTemplateSections } from "../../src/lib/validation/serviceReportValidation.js";
 import type { ServiceChecklistSectionDef } from "../../src/lib/serviceTemplates.js";
 import type {
@@ -244,6 +245,22 @@ async function ensureServiceReportIndexes(): Promise<void> {
   indexesEnsured = true;
 }
 
+/**
+ * The single response shape for a full Service Report. Defaults the customer sign-off fields
+ * (added 2026-08-07) so a report created before they existed comes back well-formed rather than
+ * with three `undefined`s — a client checking `customerSignatureDataUrl !== ""` would otherwise
+ * read an unsigned legacy report as signed and render a broken `<img>`.
+ */
+function toServiceReport(doc: ServiceReportFields & { _id: string }): ServiceReport {
+  const full = withStringId(doc);
+  return {
+    ...full,
+    customerSignatureDataUrl: full.customerSignatureDataUrl ?? "",
+    customerSignedName: full.customerSignedName ?? "",
+    customerSignedAt: full.customerSignedAt ?? null,
+  };
+}
+
 async function toListItem(doc: ServiceReportFields & { _id: string }, engineerNameById: Map<string, string>): Promise<ServiceReportListItem> {
   const full = withStringId(doc);
   return {
@@ -292,7 +309,7 @@ async function loadReportOrThrow(id: string): Promise<ServiceReportFields & { _i
 async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
   await requirePermission(req, "service:view");
   const doc = await loadReportOrThrow(id);
-  res.status(200).json({ serviceReport: withStringId(doc) satisfies ServiceReport });
+  res.status(200).json({ serviceReport: toServiceReport(doc) });
 }
 
 const MAX_ADDITIONAL_INSPECTORS = 20;
@@ -365,6 +382,11 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     onSiteContactPhone: sanitizeShortText(body.onSiteContactPhone, "เบอร์โทรผู้ติดต่อหน้างาน"),
     overallCustomerSummary: sanitizeLongText(body.overallCustomerSummary, "สรุปภาพรวมสำหรับลูกค้า"),
     overallRemark: sanitizeLongText(body.overallRemark, "หมายเหตุ"),
+    // A brand-new report is never pre-signed — signing happens on site, after the checklist is
+    // filled in, through PATCH.
+    customerSignatureDataUrl: "",
+    customerSignedName: "",
+    customerSignedAt: null,
     status: "Draft",
     isDeleted: false,
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
@@ -378,7 +400,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     `${ctx.user.fullName} สร้างรายงานบริการ ${id} (${doc.customerSnapshot.companyName || "ไม่ระบุลูกค้า"})`,
     id,
   );
-  res.status(201).json({ serviceReport: withStringId({ ...doc, _id: id }) satisfies ServiceReport });
+  res.status(201).json({ serviceReport: toServiceReport({ ...doc, _id: id }) });
 }
 
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
@@ -416,6 +438,23 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("overallCustomerSummary" in body) update.overallCustomerSummary = sanitizeLongText(body.overallCustomerSummary, "สรุปภาพรวมสำหรับลูกค้า");
   if ("overallRemark" in body) update.overallRemark = sanitizeLongText(body.overallRemark, "หมายเหตุ");
 
+  // Customer sign-off (added 2026-08-07) — an ordinary editable field group, not a workflow step:
+  // it neither gates nor is gated by completion, since a customer often isn't on site to sign.
+  // `customerSignedAt` is stamped here, never accepted from the client, so a sign-off can't be
+  // backdated; it's re-stamped only when the signature image itself changes, so editing just the
+  // signer's name doesn't silently move the recorded signing time.
+  if ("customerSignatureDataUrl" in body) {
+    const nextSignature = validateImageDataUrl(body.customerSignatureDataUrl, "ลายเซ็นลูกค้า");
+    update.customerSignatureDataUrl = nextSignature;
+    if (nextSignature !== (doc.customerSignatureDataUrl ?? "")) {
+      update.customerSignedAt = nextSignature ? nowIso() : null;
+    }
+    if (!nextSignature) update.customerSignedName = "";
+  }
+  if ("customerSignedName" in body && update.customerSignedName === undefined) {
+    update.customerSignedName = sanitizeShortText(body.customerSignedName, "ชื่อผู้ลงนามของลูกค้า");
+  }
+
   // Per-report checklist customization (added 2026-08-06): the client may add/remove groups and
   // items inside this report's own frozen snapshot (each job differs from the paper form) — the
   // sections themselves stay those the template defined, and the master template is never touched.
@@ -451,12 +490,17 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const updated = await serviceReports.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบรายงานบริการ");
 
+  // A signature is an evidentiary artifact, so capturing or clearing one is called out in the audit
+  // trail rather than folded silently into a generic "updated" entry.
+  const signatureNote = update.customerSignedAt === undefined ? ""
+    : update.customerSignedAt ? ` (ลูกค้าเซ็นรับงาน: ${update.customerSignedName || doc.customerSignedName || "ไม่ระบุชื่อ"})`
+    : " (ลบลายเซ็นลูกค้า)";
   await writeServiceAuditEntry(
     ctx, "Service Report Updated",
-    `แก้ไขรายงานบริการ ${id}${update.templateSnapshot ? " (ปรับโครงสร้างรายการตรวจเช็ค)" : ""}`,
+    `แก้ไขรายงานบริการ ${id}${update.templateSnapshot ? " (ปรับโครงสร้างรายการตรวจเช็ค)" : ""}${signatureNote}`,
     { serviceReportId: id },
   );
-  res.status(200).json({ serviceReport: withStringId(updated) satisfies ServiceReport });
+  res.status(200).json({ serviceReport: toServiceReport(updated) });
 }
 
 function throwIfIncomplete(
@@ -534,7 +578,7 @@ async function handleStatusChange(req: VercelRequest, res: VercelResponse, id: s
       id,
     );
   }
-  res.status(200).json({ serviceReport: withStringId(updated) satisfies ServiceReport });
+  res.status(200).json({ serviceReport: toServiceReport(updated) });
 }
 
 // ─── Checklist item photos (added 2026-08-06, pulled forward from the Phase 2 roadmap) ──────────
@@ -634,7 +678,7 @@ async function handlePhotoUpload(req: VercelRequest, res: VercelResponse, id: st
   const updated = await serviceReports.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบรายงานบริการ");
   await writeServiceAuditEntry(ctx, "Service Report Photo Added", `แนบรูปภาพ "${fileName}" กับรายงานบริการ ${id}`, { serviceReportId: id });
-  res.status(200).json({ serviceReport: withStringId(updated) satisfies ServiceReport });
+  res.status(200).json({ serviceReport: toServiceReport(updated) });
 }
 
 async function handlePhotoDelete(req: VercelRequest, res: VercelResponse, id: string, photoId: string) {
@@ -665,7 +709,7 @@ async function handlePhotoDelete(req: VercelRequest, res: VercelResponse, id: st
   const updated = await serviceReports.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบรายงานบริการ");
   await writeServiceAuditEntry(ctx, "Service Report Photo Removed", `ลบรูปภาพออกจากรายงานบริการ ${id}`, { serviceReportId: id });
-  res.status(200).json({ serviceReport: withStringId(updated) satisfies ServiceReport });
+  res.status(200).json({ serviceReport: toServiceReport(updated) });
 }
 
 const INLINE_SAFE_PHOTO_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -700,7 +744,7 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
   const ctx = await requirePermission(req, "service:print");
   const doc = await loadReportOrThrow(id);
   await writeServiceAuditEntry(ctx, "Service Report Printed", `พิมพ์ / ส่งออกรายงานบริการ ${id}`, { serviceReportId: id });
-  res.status(200).json({ ok: true, serviceReport: withStringId(doc) satisfies ServiceReport });
+  res.status(200).json({ ok: true, serviceReport: toServiceReport(doc) });
 }
 
 async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {

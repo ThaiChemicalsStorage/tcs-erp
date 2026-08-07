@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { usersCollection, loginAttemptsCollection, ensureIndexes, toPublicUser } from "../_lib/collections.js";
 import { hashPassword, verifyPassword, issueSessionCookie, clearSessionCookie, getAuthContext } from "../_lib/auth.js";
-import { seedDefaultRolesIfEmpty } from "../_lib/rbacSeed.js";
+import { seedDefaultRolesIfEmpty, bootstrapRbac } from "../_lib/rbacSeed.js";
 import { seedSystemDataIfEmpty } from "../_lib/systemSeed.js";
 import { defaultRoles } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
@@ -38,6 +38,9 @@ async function handleSetup(req: VercelRequest, res: VercelResponse) {
 
   await ensureIndexes();
   await seedDefaultRolesIfEmpty();
+  // Records every RBAC migration as already-applied on a fresh database — the roles just seeded
+  // from defaultRoles are current by definition, so a later boot must never "backfill" them.
+  await bootstrapRbac();
   await seedSystemDataIfEmpty();
   const superAdminRole = defaultRoles.find((r) => r.isSuperAdmin) ?? defaultRoles[0];
 

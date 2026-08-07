@@ -96,6 +96,11 @@ export function validateServiceChecklist(
 
 export const MAX_CHECKLIST_GROUPS_PER_SECTION = 30;
 export const MAX_CHECKLIST_ITEMS_PER_GROUP = 100;
+// Exported so the in-place rename inputs (InlineEditableLabel, 2026-08-07) clamp to the exact
+// lengths the sanitizer below enforces — a client `maxLength` that disagreed would turn a typo into
+// an opaque 400.
+export const MAX_CHECKLIST_ITEM_LABEL_LENGTH = 300;
+export const MAX_CHECKLIST_GROUP_TITLE_LENGTH = 200;
 
 /**
  * Sanitizes a client-proposed per-report checklist structure (added 2026-08-06 — each service job
@@ -134,7 +139,7 @@ export function sanitizeServiceTemplateSections(
       const gKey = typeof gr.key === "string" ? gr.key.trim() : "";
       const gTitle = typeof gr.title === "string" ? gr.title.trim() : "";
       if (!gKey || gKey.length > 80 || groupKeys.has(gKey)) return null;
-      if (!gTitle || gTitle.length > 200) return null;
+      if (!gTitle || gTitle.length > MAX_CHECKLIST_GROUP_TITLE_LENGTH) return null;
       if (!Array.isArray(gr.items) || gr.items.length > MAX_CHECKLIST_ITEMS_PER_GROUP) return null;
       groupKeys.add(gKey);
 
@@ -146,7 +151,7 @@ export function sanitizeServiceTemplateSections(
         const iKey = typeof ir.key === "string" ? ir.key.trim() : "";
         const label = typeof ir.label === "string" ? ir.label.trim() : "";
         if (!iKey || iKey.length > 80 || itemKeys.has(iKey)) return null;
-        if (!label || label.length > 300) return null;
+        if (!label || label.length > MAX_CHECKLIST_ITEM_LABEL_LENGTH) return null;
         if (ir.kind !== "normalAbnormal" && ir.kind !== "measurement") return null;
         itemKeys.add(iKey);
         const unit = typeof ir.unit === "string" ? ir.unit.trim().slice(0, 40) : "";

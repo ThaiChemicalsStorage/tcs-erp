@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Save, CheckCircle2, RotateCcw, Ban, Trash2, ChevronDown, ChevronRight, Wrench, Printer, Plus } from "lucide-react";
+import type { DriveStep } from "driver.js";
+import { ArrowLeft, Save, CheckCircle2, RotateCcw, Ban, Trash2, ChevronDown, ChevronRight, Wrench, Printer, Plus, Send } from "lucide-react";
 import {
   type ServiceReport, type ServiceReportDraft, type ServiceChecklistSectionValue, type ServiceChecklistItemValue,
   type ServiceReportStatus,
   fetchServiceReport, createServiceReport, updateServiceReport, changeServiceReportStatus, deleteServiceReport,
-  uploadServiceReportPhoto, deleteServiceReportPhoto, printServiceReport,
+  uploadServiceReportPhoto, deleteServiceReportPhoto, printServiceReport, mergeServerPhotosIntoChecklist,
 } from "../../lib/serviceReports";
 import { type ServiceTemplateSummary, type ServiceTemplate, type ServiceChecklistSectionDef, fetchServiceTemplates, fetchServiceTemplate } from "../../lib/serviceTemplates";
 import { type Customer, fetchCustomers } from "../../lib/customers";
@@ -12,6 +13,11 @@ import { type User, fetchUsers } from "../../lib/users";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { CustomerSelector } from "../quotation/CustomerSelector";
 import { ServiceChecklistItemControl } from "../../components/ServiceChecklistItemControl";
+import { SignaturePad } from "../../components/SignaturePad";
+import { InlineEditableLabel } from "../../components/InlineEditableLabel";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
+import { MAX_CHECKLIST_GROUP_TITLE_LENGTH } from "../../lib/validation/serviceReportValidation";
 import { ServiceReportPrintDocument } from "./ServiceReportPrintDocument";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
@@ -36,6 +42,11 @@ interface FormState {
   onSiteContactPhone: string;
   overallCustomerSummary: string;
   overallRemark: string;
+  customerSignatureDataUrl: string;
+  customerSignedName: string;
+  // Optimistic only, for the locked preview between confirming a signature and saving — the server
+  // stamps the authoritative value and sends it back, so this is never part of the payload.
+  customerSignedAt: string | null;
 }
 
 function emptyForm(currentUserId: string): FormState {
@@ -45,6 +56,7 @@ function emptyForm(currentUserId: string): FormState {
     inspectionDate: new Date().toISOString().slice(0, 10), reportDate: new Date().toISOString().slice(0, 10), nextPmDate: "",
     assignedServiceEngineerId: currentUserId, additionalInspectorNamesText: "",
     onSiteContactName: "", onSiteContactPhone: "", overallCustomerSummary: "", overallRemark: "",
+    customerSignatureDataUrl: "", customerSignedName: "", customerSignedAt: null,
   };
 }
 
@@ -58,6 +70,11 @@ function formFromReport(report: ServiceReport): FormState {
     additionalInspectorNamesText: report.additionalInspectorNames.join(", "),
     onSiteContactName: report.onSiteContactName, onSiteContactPhone: report.onSiteContactPhone,
     overallCustomerSummary: report.overallCustomerSummary, overallRemark: report.overallRemark,
+    // ?? "" for reports created before sign-off existed (2026-08-07) — the server normalizes these
+    // too, this is belt-and-braces so a stale cached response can't render a broken <img>.
+    customerSignatureDataUrl: report.customerSignatureDataUrl ?? "",
+    customerSignedName: report.customerSignedName ?? "",
+    customerSignedAt: report.customerSignedAt ?? null,
   };
 }
 
@@ -157,7 +174,20 @@ export function ServiceReportEditor({
   }, [isNew, selectedTemplateId]);
 
   const selectedCustomer = customers.find((c) => c.id === form.customerId);
+  // Follows the form, not the saved report, so reassigning the engineer updates the sign-off panel
+  // immediately rather than only after a save.
+  const engineerUser = users.find((u) => u.id === form.assignedServiceEngineerId);
   const isEditable = isNew || (canEdit && report?.status === "Draft");
+
+  const docTourSteps: DriveStep[] = [
+    { element: '[data-tour="servicedoc-actions"]', popover: { title: t("tour.servicedoc.actions.title"), description: t("tour.servicedoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="servicedoc-checklist"]', popover: { title: t("tour.servicedoc.checklist.title"), description: t("tour.servicedoc.checklist.desc"), side: "top" } },
+    { element: '[data-tour="servicedoc-signature"]', popover: { title: t("tour.servicedoc.signature.title"), description: t("tour.servicedoc.signature.desc"), side: "top" } },
+  ];
+  // Waits for the record: the steps describe controls that only exist once the report is loaded
+  // (and the sign-off card renders only for a saved report) — same autoStart gating as
+  // ScopeOfWorkDocument/DeliveryOrderDocument, which had this exact race.
+  const docTour = useModuleTour("serviceDoc", currentUserId, docTourSteps, { autoStart: !isNew && !!report });
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -177,6 +207,8 @@ export function ServiceReportEditor({
     onSiteContactPhone: form.onSiteContactPhone,
     overallCustomerSummary: form.overallCustomerSummary,
     overallRemark: form.overallRemark,
+    customerSignatureDataUrl: form.customerSignatureDataUrl,
+    customerSignedName: form.customerSignedName,
     checklist,
   });
 
@@ -293,11 +325,25 @@ export function ServiceReportEditor({
     }
   };
 
+  // นำเข้าเฉพาะข้อมูลรูปภาพจากเซิร์ฟเวอร์ โดยไม่แตะการแก้ไขที่ยังไม่ได้บันทึก
+  /**
+   * Photo upload/delete responses are applied **photos-only** — never through applyServerReport(),
+   * which is what this used to do (fixed 2026-08-07): replacing the whole checklist with the
+   * last-saved state silently reverted every unsaved edit, so an item just flipped to Abnormal
+   * snapped back to Normal the moment its photo finished uploading. `sections` is left alone for
+   * the same reason — the server's templateSnapshot is the last-saved structure, so resyncing it
+   * would drop locally-added groups/items. See mergeServerPhotosIntoChecklist().
+   */
+  const applyServerPhotos = (updated: ServiceReport) => {
+    setReport(updated);
+    setChecklist((prev) => mergeServerPhotosIntoChecklist(prev, updated.checklist));
+  };
+
   const handleUploadPhoto = async (sectionKey: string, groupKey: string, itemKey: string, file: File) => {
     if (!report) return;
     try {
       const updated = await uploadServiceReportPhoto(report.id, { sectionKey, groupKey, itemKey }, file);
-      applyServerReport(updated);
+      applyServerPhotos(updated);
     } catch (err) {
       applyApiError(err, t("service.toast.photoUploadFailed"));
     }
@@ -307,7 +353,7 @@ export function ServiceReportEditor({
     if (!report) return;
     try {
       const updated = await deleteServiceReportPhoto(report.id, photoId);
-      applyServerReport(updated);
+      applyServerPhotos(updated);
     } catch (err) {
       applyApiError(err, t("service.toast.photoDeleteFailed"));
     }
@@ -362,6 +408,31 @@ export function ServiceReportEditor({
       ...s, groups: [...s.groups, { key, title, items: [], sortOrder: s.groups.length }],
     })));
     setChecklist((prev) => prev.map((s) => (s.key !== sectionKey ? s : { ...s, groups: [...s.groups, { key, items: [] }] })));
+  };
+
+  // เปลี่ยนชื่อรายการ/หัวข้อโดยคง key เดิม ข้อมูลที่บันทึกไว้แล้วจึงไม่หาย
+  /**
+   * Rename is an edit, not a replace: the key stays, so `checklist` (which is keyed) keeps this
+   * item's recorded status/abnormalDetail/photos untouched — no `setChecklist` needed here at all.
+   * Delete-and-re-add, the only way to reword an item before this, lost all of that.
+   *
+   * Edits this report's own frozen `templateSnapshot.sections` only; the master `service_templates`
+   * document is never touched, so other reports on the same template are unaffected. Saved via the
+   * existing PATCH `templateSections` path and re-validated by `sanitizeServiceTemplateSections()`.
+   */
+  const renameChecklistItem = (sectionKey: string, groupKey: string, itemKey: string, label: string) => {
+    setSections((prev) => prev.map((s) => (s.key !== sectionKey ? s : {
+      ...s,
+      groups: s.groups.map((g) => (g.key !== groupKey ? g : {
+        ...g, items: g.items.map((it) => (it.key === itemKey ? { ...it, label } : it)),
+      })),
+    })));
+  };
+
+  const renameChecklistGroup = (sectionKey: string, groupKey: string, title: string) => {
+    setSections((prev) => prev.map((s) => (s.key !== sectionKey ? s : {
+      ...s, groups: s.groups.map((g) => (g.key === groupKey ? { ...g, title } : g)),
+    })));
   };
 
   const removeChecklistItem = (sectionKey: string, groupKey: string, itemKey: string) => {
@@ -528,7 +599,11 @@ export function ServiceReportEditor({
             <p className="text-xs text-muted-foreground mt-0.5 font-mono">{t("service.pageSubtitle")}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap print:hidden">
+        <div data-tour="servicedoc-actions" className="flex items-center gap-2 flex-wrap print:hidden">
+          {/* Unconditional, and first in the toolbar — every other button here is gated by status
+              or permission, so anchoring the tour to one of those could leave a user with no way
+              to replay it. */}
+          <TourReplayButton onClick={docTour.start} />
           {!isNew && report && canPrint && (
             <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
               <Printer size={14} /> {t("service.print")}
@@ -655,7 +730,7 @@ export function ServiceReportEditor({
       </div>
 
       {displaySections.length > 0 && (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div data-tour="servicedoc-checklist" className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-2">
             <span className="flex items-center gap-2">
               <Wrench size={14} className="text-[#c9a84c]" />
@@ -669,6 +744,12 @@ export function ServiceReportEditor({
           </div>
           {isNew && (
             <p className="px-5 py-3 text-xs text-muted-foreground">{t("service.checklist.previewNote")}</p>
+          )}
+          {/* Renaming has no icon of its own by design (the row already carries ✕, and a second
+              control per row would crowd it), so the gesture is stated once here — otherwise it's
+              undiscoverable. Text, not a button: it competes with nothing. */}
+          {structureEditable && (
+            <p className="px-5 pt-3 text-[11px] text-muted-foreground">{t("service.checklist.renameHint")}</p>
           )}
           {displaySections.map((sectionDef) => {
             const sectionValue = previewChecklist.find((s) => s.key === sectionDef.key);
@@ -723,7 +804,18 @@ export function ServiceReportEditor({
                             <tr className="bg-secondary/30">
                               <td colSpan={structureEditable ? 4 : 3} className="pl-5 pr-4 py-1.5">
                                 <span className="flex items-center justify-between gap-2">
-                                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{groupDef.title}</span>
+                                  {structureEditable ? (
+                                    <InlineEditableLabel
+                                      value={groupDef.title}
+                                      onCommit={(title) => renameChecklistGroup(sectionDef.key, groupDef.key, title)}
+                                      maxLength={MAX_CHECKLIST_GROUP_TITLE_LENGTH}
+                                      editHint={t("service.checklist.renameGroup")}
+                                      className="text-xs font-semibold text-muted-foreground uppercase tracking-wide"
+                                      inputClassName="text-xs font-semibold uppercase tracking-wide w-full max-w-sm"
+                                    />
+                                  ) : (
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{groupDef.title}</span>
+                                  )}
                                   {structureEditable && (
                                     <button
                                       type="button"
@@ -755,6 +847,7 @@ export function ServiceReportEditor({
                                   onUploadPhoto={isNew ? undefined : (file) => handleUploadPhoto(sectionDef.key, groupDef.key, itemDef.key, file)}
                                   onDeletePhoto={isNew ? undefined : (photoId) => handleDeletePhoto(photoId)}
                                   onRemove={structureEditable ? () => requestRemoveItem(sectionDef.key, groupDef.key, itemDef.key) : undefined}
+                                  onRename={structureEditable ? (label) => renameChecklistItem(sectionDef.key, groupDef.key, itemDef.key, label) : undefined}
                                 />
                               );
                             })}
@@ -795,6 +888,77 @@ export function ServiceReportEditor({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {!isNew && report && (
+        <div data-tour="servicedoc-signature" className="bg-card border border-border rounded-xl p-6 print:hidden">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+            {t("service.signature.sectionTitle")}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div>
+              <span className={labelClass}>{t("service.signature.engineer")}</span>
+              {/* Read-only by design: the engineer's signature is their saved profile image, so it
+                  can't be drawn on someone else's behalf here. */}
+              <div className="border border-border rounded-lg bg-secondary/40 p-3">
+                <div className="bg-white border border-border rounded-lg h-[110px] flex items-center justify-center overflow-hidden">
+                  {engineerUser?.signatureDataUrl ? (
+                    <img src={engineerUser.signatureDataUrl} alt="" className="max-h-full max-w-full object-contain" />
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground px-3 text-center">
+                      {engineerUser ? t("service.signature.noProfileSignature") : t("service.signature.noEngineerAssigned")}
+                    </p>
+                  )}
+                </div>
+                <div className="mt-2.5">
+                  <p className="text-sm text-foreground truncate">{engineerUser?.fullName || t("common.dash")}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {engineerUser && !engineerUser.signatureDataUrl
+                      ? t("service.signature.goToSettings")
+                      : t("service.signature.engineerFromProfile")}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <span className={labelClass}>{t("service.signature.customer")}</span>
+              <SignaturePad
+                dataUrl={form.customerSignatureDataUrl}
+                signerName={form.customerSignedName}
+                signedAt={form.customerSignedAt}
+                disabled={!isEditable}
+                onConfirm={({ dataUrl, name }) => setForm((f) => ({
+                  ...f,
+                  customerSignatureDataUrl: dataUrl,
+                  customerSignedName: name,
+                  customerSignedAt: new Date().toISOString(),
+                }))}
+                onClear={() => setForm((f) => ({
+                  ...f, customerSignatureDataUrl: "", customerSignedName: "", customerSignedAt: null,
+                }))}
+              />
+              {isEditable && form.customerSignatureDataUrl && (
+                <p className="text-[10px] text-muted-foreground mt-1.5">{t("service.signature.saveHint")}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-border">
+            <p className="text-[11px] text-muted-foreground">{t("service.signature.optionalNote")}</p>
+            {/* Visible placeholder for the LINE remote-signing phase — inert on purpose. Shown
+                rather than hidden so the on-site flow reads as one of two eventual options, not the
+                only one; wiring it needs a real LINE OA channel (see docs/MODULES/Service.md). */}
+            <button
+              type="button"
+              disabled
+              title={t("service.signature.comingSoon")}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground opacity-50 cursor-not-allowed"
+            >
+              <Send size={12} /> {t("service.signature.remoteLink")}
+            </button>
+          </div>
         </div>
       )}
     </div>

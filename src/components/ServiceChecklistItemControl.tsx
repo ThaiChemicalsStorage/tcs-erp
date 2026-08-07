@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { Check, AlertTriangle, Camera, X, Loader2, ImageOff } from "lucide-react";
 import type { ServiceChecklistItemDef } from "../lib/serviceTemplates";
 import type { ServiceChecklistItemValue, ServiceChecklistItemPhoto } from "../lib/serviceReports";
+import { MAX_CHECKLIST_ITEM_LABEL_LENGTH } from "../lib/validation/serviceReportValidation";
+import { InlineEditableLabel } from "./InlineEditableLabel";
 import { useI18n } from "../lib/i18n";
 
 // แถวหนึ่งของตารางรายการตรวจเช็ค (ใช้ภายใน <tbody>) — คอลัมน์ "รายการตรวจเช็ค / ปกติ / ผิดปกติ"
@@ -22,6 +24,7 @@ export function ServiceChecklistItemControl({
   onDeletePhoto,
   photoUploadDisabledReason,
   onRemove,
+  onRename,
 }: {
   itemDef: ServiceChecklistItemDef;
   value: ServiceChecklistItemValue;
@@ -38,6 +41,10 @@ export function ServiceChecklistItemControl({
   // each job differs, see docs/MODULES/Service.md); the parent only passes this while the report
   // is an editable Draft.
   onRemove?: () => void;
+  // When set, the label becomes editable in place (double-click / tap / Enter). Gated by the same
+  // `structureEditable` rule as onRemove. A rename keeps the item's key, so any recorded
+  // status/abnormalDetail/photos survive it — see docs/MODULES/Service.md.
+  onRename?: (label: string) => void;
 }) {
   const { t } = useI18n();
   const isAbnormal = value.status === "abnormal";
@@ -47,7 +54,21 @@ export function ServiceChecklistItemControl({
     <>
       <tr className="border-b border-border/40 last:border-b-0 hover:bg-secondary/20 transition-colors">
         <td className="py-2.5 pl-5 pr-3 text-sm text-foreground align-middle">
-          {itemDef.label}
+          {/* Display-only bullet. Deliberately NOT stored in the label data: rendering it here
+              applies it to every seeded item and every "+ เพิ่มรายการ" addition with no migration
+              and no way to double-dash, and keeps print/export/validation reading a clean label. */}
+          <span className="text-muted-foreground mr-1.5" aria-hidden="true">-</span>
+          {onRename ? (
+            <InlineEditableLabel
+              value={itemDef.label}
+              onCommit={onRename}
+              maxLength={MAX_CHECKLIST_ITEM_LABEL_LENGTH}
+              editHint={t("service.checklist.renameItem")}
+              inputClassName="text-sm w-full max-w-md"
+            />
+          ) : (
+            itemDef.label
+          )}
           {itemDef.kind === "measurement" && itemDef.unit && <span className="text-muted-foreground"> ({itemDef.unit})</span>}
         </td>
         {itemDef.kind === "measurement" ? (

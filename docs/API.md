@@ -41,7 +41,7 @@ Routes are consolidated into 12 function files (`api/handlers/jobtypes.ts` added
 
 | Method & Path | Auth | Notes |
 |---|---|---|
-| `GET /api/roles` | Any authenticated user | Every client-side `hasPermission()` call needs the full role list, so this is intentionally open to any signed-in user, not gated by `roles:manage`. Seeds default roles into MongoDB first if the collection is empty. |
+| `GET /api/roles` | Any authenticated user | Every client-side `hasPermission()` call needs the full role list, so this is intentionally open to any signed-in user, not gated by `roles:manage`. Seeds default roles into MongoDB first if the collection is empty. **Since 2026-08-07** it also runs `bootstrapRbac()` (once per warm instance/process): inserts any default role a provisioned database is missing (e.g. `service_engineer`) and applies pending, once-only permission backfills — this is the path that actually reaches production, since every authenticated client fetches this route on boot. See [RBAC.md](./RBAC.md) "Rollout". |
 | `POST /api/roles` | `roles:manage` | Creates a custom role (`key: "role_<ObjectId>"`). `409` on duplicate name (case-insensitive). Strips any `roles:manage`/`company:manage` permission from the submitted list server-side (`isPermissionLockedToSuperAdmin()`) — cannot be granted to a custom role via the API even if the client sends it. |
 | `PATCH /api/roles/:key` | `roles:manage` | `400` if the target role is `isSystem` (Super Admin/Administrator — undeletable, unmodifiable). Same permission-stripping as create. |
 | `DELETE /api/roles/:key` | `roles:manage` | `400` if `isSystem`. `409` if any user currently holds this role. |

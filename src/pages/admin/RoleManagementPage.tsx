@@ -4,7 +4,7 @@ import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
 import type { Role } from "../../lib/roles";
 import { isPermissionLockedToSuperAdmin, createRole, updateRole, deleteRole } from "../../lib/roles";
-import { PERMISSION_GROUPS, PERMISSION_LABEL_KEY, type Permission } from "../../lib/permissions";
+import { PERMISSION_GROUPS, PERMISSION_LABEL_KEY, permissionsRequiring, withPermissionDependencies, type Permission } from "../../lib/permissions";
 import type { User } from "../../lib/users";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -70,9 +70,21 @@ export function RoleManagementPage({
     setView(r.isSuperAdmin ? "view" : "edit");
   };
 
+  // สิทธิ์อื่นที่ติ๊กอยู่และจำเป็นต้องใช้สิทธิ์นี้ร่วมด้วย
+  // Currently-ticked permissions that would break if `p` were removed (see PERMISSION_DEPENDENCIES).
+  const requiredBy = (p: Permission) => permissionsRequiring(p, form.permissions);
+
   const togglePermission = (p: Permission) => {
     if (isPermissionLockedToSuperAdmin(p)) return;
-    setForm((f) => ({ ...f, permissions: f.permissions.includes(p) ? f.permissions.filter((x) => x !== p) : [...f.permissions, p] }));
+    setForm((f) => {
+      if (!f.permissions.includes(p)) {
+        // Ticking pulls in whatever that permission needs, so the admin sees it happen here rather
+        // than discovering the server added it on save.
+        return { ...f, permissions: withPermissionDependencies([...f.permissions, p]) };
+      }
+      if (permissionsRequiring(p, f.permissions).length > 0) return f;
+      return { ...f, permissions: f.permissions.filter((x) => x !== p) };
+    });
   };
 
   // บันทึกฟอร์มบทบาท ตรวจสอบชื่อซ้ำก่อนสร้างหรืออัปเดตบทบาท
@@ -163,17 +175,27 @@ export function RoleManagementPage({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {group.permissions.map((p) => {
                         const locked = isPermissionLockedToSuperAdmin(p);
+                        const dependents = requiredBy(p);
+                        const pinned = dependents.length > 0;
+                        const pinnedTitle = pinned
+                          ? t("roles.permissionRequiredBy").replace("{names}", dependents.map((d) => t(PERMISSION_LABEL_KEY[d])).join(", "))
+                          : undefined;
                         return (
-                          <label key={p} className={`flex items-center gap-2 text-xs ${locked || readOnly ? "opacity-50" : "cursor-pointer"}`}>
+                          <label
+                            key={p}
+                            title={pinnedTitle}
+                            className={`flex items-center gap-2 text-xs ${locked || readOnly || pinned ? "opacity-50" : "cursor-pointer"}`}
+                          >
                             <input
                               type="checkbox"
                               checked={form.permissions.includes(p)}
-                              disabled={locked || readOnly}
+                              disabled={locked || readOnly || pinned}
                               onChange={() => togglePermission(p)}
                               className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c]"
                             />
                             <span className="text-foreground">{t(PERMISSION_LABEL_KEY[p])}</span>
                             {locked && <Lock size={10} className="text-muted-foreground" />}
+                            {!locked && pinned && <Lock size={10} className="text-muted-foreground" aria-label={pinnedTitle} />}
                           </label>
                         );
                       })}
@@ -184,6 +206,7 @@ export function RoleManagementPage({
               <p className="text-[10px] text-muted-foreground mt-2">
                 {t("roles.permissionsLockHintPrefix")} <Lock size={9} className="inline" /> {t("roles.permissionsLockHint")}
               </p>
+              <p className="text-[10px] text-muted-foreground mt-1">{t("roles.permissionDependencyHint")}</p>
             </div>
 
             {error && <p className="text-xs text-[#e05252]">{error}</p>}

@@ -98,6 +98,29 @@ removal is instant when the target holds no recorded data and asks via `ConfirmD
 `normalAbnormal`-kind with a client-generated `c-…` key; changes are local until Save, like item
 toggles.
 
+**Renaming in place (added 2026-08-07).** An item's label and a group's heading can also be
+**reworded** without deleting and re-adding — the old workaround, which minted a new key and so
+threw away that item's recorded status/abnormalDetail/photos. A rename is an edit, not a replace:
+the key is preserved, so `checklist` (which is keyed) passes through untouched.
+
+The interaction is deliberately affordance-free — the row already carries a ✕ remove button, and a
+second per-row control would crowd it — so `src/components/InlineEditableLabel.tsx` turns the text
+into an input on **double-click** (mouse), a **single tap** (touch/pen), or **Enter/Space** when
+focused; Enter or blur commits, Escape cancels, and a blank value reverts rather than producing a
+`400`. The mouse/touch split comes from `pointerType` inside one handler rather than separate mouse
+and touch paths that could drift, with a 10 px tap-slop check so finger-scrolling a long checklist
+can't open an editor. Because there is no visible icon, the trigger is a real focusable `button`
+with an explanatory `aria-label`/`title`, and the gesture is stated once above the checklist — a
+mouse-only gesture with zero affordance would be both undiscoverable and inaccessible.
+
+Gated by the same `structureEditable = !isNew && isEditable` rule as add/remove, so it needs
+`service:edit` on a Draft — Administrator and Service Engineer alike. It **required no server change
+at all**: `sanitizeServiceTemplateSections()` already keys off `key` and takes `title`/`label` from
+the payload, so a same-key rename was valid input to the existing PATCH path from day one.
+`MAX_CHECKLIST_ITEM_LABEL_LENGTH`/`MAX_CHECKLIST_GROUP_TITLE_LENGTH` are now exported from that
+module so the rename inputs clamp to exactly what the sanitizer enforces, instead of a duplicated
+literal drifting into an opaque 400.
+
 This edits **only the report's own `templateSnapshot.sections`** (already a per-report frozen
 copy) — the master template is never touched, and other reports are unaffected. On save the client
 sends the whole proposed structure as PATCH `templateSections`;
@@ -139,6 +162,18 @@ sized for camera photos rather than documents: **4 MB/photo, 6 photos/item** (vs
   24-random-byte `downloadKey` capability token; a wrong/missing key is an opaque 404. Only
   `image/png|jpeg|gif|webp` serve `Content-Disposition: inline`; anything else forces `attachment`
   with `nosniff` (same XSS-hardening as the Scope of Work download route).
+
+**Photo responses are applied photos-only (fixed 2026-08-07).** Both photo routes return the whole
+`serviceReport`, and the editor originally fed that to the same `applyServerReport()` helper the
+Save/Complete paths use — which replaces the entire local checklist. The result was a real
+user-reported bug: any unsaved edit reverted to the last-saved state the moment an upload finished,
+so an item just marked Abnormal flipped back to Normal while its photo attached correctly. The
+handlers now use `mergeServerPhotosIntoChecklist()` (`src/lib/serviceReports.ts`), which copies back
+only photo metadata by section/group/item key and leaves `status`/`abnormalDetail`/
+`measurementValue`/`included` as the user left them. This mirrors the server's own ownership rule —
+photos change *only* through these routes, and `mergeChecklist()` refuses them from a `PATCH` — so
+the two halves of the checklist have exactly one authority each. `templateSnapshot.sections` is
+deliberately not resynced either, or locally-added groups/items would vanish the same way.
 
 Client UI: `ServiceChecklistItemControl.tsx`'s `PhotoAttachments` — a thumbnail grid (each photo an
 `<img>` pointed at its capability-URL) with a hover-revealed delete button, plus an "Add photo" tile
@@ -189,6 +224,52 @@ review, matching Delivery Order's simpler "print doesn't require a document-comp
 precedent. If the audit-log call itself fails, printing still proceeds (client-side fallback), same
 philosophy as Delivery Order's "100% client-side print" note in `RBAC.md`.
 
+## Customer sign-off (added 2026-08-07)
+
+On-site, in-app signature capture — the first item off the Phase 2 roadmap. Remote signing (a
+time-boxed capability link, delivered via LINE OA) is still a later phase; see Roadmap.
+
+Three fields on `service_reports`: `customerSignatureDataUrl` (base64 PNG, `""` when unsigned),
+`customerSignedName`, `customerSignedAt` (ISO string or `null`). The **engineer's** signature is
+deliberately *not* stored on the report — it's read live from the assigned user's profile
+`signatureDataUrl`, the same convention Scope of Work's print view already uses, so it can't be
+drawn on someone else's behalf.
+
+- **`src/components/SignaturePad.tsx`** — canvas capture on pointer events throughout, so mouse,
+  finger and stylus take one code path rather than parallel mouse/touch handlers that could drift.
+  `touch-action: none` stops a stroke from scrolling the page on a tablet; the backing store is
+  scaled to `devicePixelRatio` so strokes aren't soft on a HiDPI screen; pointer capture keeps a
+  stroke that wanders off-canvas from leaving the pad stuck mid-draw. A required signer-name input
+  sits above the pad, Clear is disabled until there's a stroke, Confirm until there's both. Once
+  confirmed it locks into a preview (image + name + formatted timestamp + a "แก้ไข" link) so an
+  accidental swipe can't alter a signature someone already gave — clearing is explicit.
+  A sibling of `ImageUploadField.tsx` in styling and in handing a data URL to its parent, but not an
+  extension of it: there's no file to pick, a name to capture alongside, and a lock state.
+- **Server** (`api/_lib/serviceReportHandler.ts`) — an ordinary editable field group on the existing
+  `PATCH` route, no new endpoint. The image goes through the shared `validateImageDataUrl()`
+  (`api/_lib/uploadValidation.ts`, PNG already in its accepted list, 2 MB cap). **`customerSignedAt`
+  is stamped by the server and never accepted from the client**, so a sign-off can't be backdated;
+  it is re-stamped only when the image itself changes, so correcting a typo in the signer's name
+  doesn't silently move the recorded signing time. Clearing the signature also clears the name (a
+  name with no signature attached is meaningless). Capturing or clearing a signature is called out
+  in the audit entry rather than folded into a generic "updated".
+- **Not gated by, and does not gate, completion.** Signing is optional — a customer often isn't on
+  site — so `validateServiceReportForCompletion()` is untouched and a report completes unsigned.
+  It does inherit the route's existing **Draft-only** rule, like every other editable field: sign
+  before marking Complete, or Reopen first. That is the normal on-site order (fill checklist → sign
+  → complete), not a special case.
+- **Legacy reports** (created before these fields existed) are normalized on read by
+  `toServiceReport()` — without it, a client checking `customerSignatureDataUrl !== ""` would read
+  `undefined` as *signed* and render a broken `<img>`.
+- **Print** — `ServiceReportPrintDocument.tsx`'s customer column now mirrors the engineer column
+  exactly (signature image, name, date). An unsigned report still prints the blank ruled lines it
+  always did, so it stays usable as a paper sign-off sheet.
+- **UI** — a "การเซ็นรับงาน" Section card after the checklist: engineer (read-only, with a prompt to
+  Settings → Profile when they have no signature saved) on the left, the pad on the right. A footer
+  states the optionality, next to a deliberately **inert, disabled** "ส่งลิงก์ให้เซ็นภายหลัง"
+  button (`title="เร็ว ๆ นี้"`) — shown rather than hidden so the on-site flow reads as one of two
+  eventual options. Wiring it needs a real LINE OA channel; see Roadmap.
+
 ## Routes
 
 See [API.md](../API.md) "Service Templates + Service Reports" for the full method/auth/route table
@@ -201,10 +282,19 @@ the same entity `customers.ts` already owns.
 
 11 permissions — see [RBAC.md](../RBAC.md) "Service" for the full table and default-role grants.
 Own standalone "บริการ" permission group in Role Management (not nested into "ใบเสนอราคา" —
-Service Reports aren't part of the quotation→scope→delivery chain). **No seeded role except Super
-Admin/Administrator can currently create a report** — there's no seeded "Service Engineer" role; a
-manual Role Management step is required post-deploy, same standing pattern every prior module has
-needed.
+Service Reports aren't part of the quotation→scope→delivery chain).
+
+**Service Engineer role (added 2026-08-07)** — the role a real field engineer holds:
+`service:view/create/edit/complete/print` + `serviceTemplates:view` + `customers:view` +
+`dashboard:view`. Own reports only (no `service:viewAll`), never edits the master templates.
+`serviceTemplates:view` is load-bearing: `ServiceReportEditor.tsx`'s boot `Promise.all` calls
+`fetchServiceTemplates()`, so without it the editor doesn't render at all.
+
+This also closed Phase 1's rollout caveat. The manual "a Super Admin must grant these 11 permissions
+in Role Management post-deploy" step is **no longer required** — `bootstrapRbac()`
+(`api/_lib/rbacSeed.ts`) adds later-added default roles and applies a once-only, recorded permission
+backfill to an already-provisioned database. See [RBAC.md](../RBAC.md) "Rollout". The one remaining
+human decision is which employees get assigned the role.
 
 ## UI
 
@@ -225,12 +315,27 @@ needed.
 - `src/pages/service/ServiceReportPrintDocument.tsx` — the print view (see Print above).
 
 Sidebar nav: two items under a standalone "บริการ" group — "บริการ" (Service, the report
-list/editor) and "Template รายงานบริการ" (Service Templates).
+list/editor) and "Template รายงานบริการ" (Service Templates). **The Service Engineer role has the
+standalone Customers page hidden from its sidebar** (presentation only; `customers:view` stays
+granted — the report editor's `CustomerSelector` needs it — see [RBAC.md](../RBAC.md) "Trimmed
+navigation"). Dashboard was briefly hidden for this role too and was restored the same day.
+
+**Guided tours (added 2026-08-07).** Phase 1 shipped without any — the module was built after the
+tour system and a stale doc note sent its author looking for `TourReplayButton` in the wrong file,
+so all three surfaces had no walkthrough and no question-mark icon while every other page had one.
+Now: `"service"` on the list (summary tiles → search/filter → table), `"serviceDoc"` on the report
+editor (actions → checklist → sign-off, `autoStart` gated on the record having loaded), and
+`"serviceTemplates"` on template management (list → show-archived). Each uses the shared
+`TourReplayButton`, rendered **unconditionally** — outside `canCreate` on the list, first in the
+editor's otherwise status-gated toolbar — so the replay is always reachable no matter the user's
+role, the report's status, or whether the tour has already auto-played once.
 
 ## Roadmap (not yet built)
 
-- **Signature capture** — reuse `ImageUploadField.tsx`'s base64-inline pattern for the Service
-  Engineer + Customer signatures (small enough to stay inline, unlike photos).
+- ~~**Signature capture**~~ — **done 2026-08-07**, see "Customer sign-off" above. Landed as a
+  purpose-built canvas `SignaturePad.tsx` rather than reuse of `ImageUploadField.tsx` (there's no
+  file to pick when you draw), though it keeps that component's base64-inline storage and styling.
+  The engineer side needed no new storage at all — it reads their profile signature live.
 - **Mobile/iPad UX pass** — touch-card treatment of the checklist controls, camera-first capture
   flow — built on top of the same `ServiceChecklistItemStatus`/photo model already shipped, not a
   replacement. `PRODUCT.md` currently states "desktop/laptop only... not a real mobile/tablet usage

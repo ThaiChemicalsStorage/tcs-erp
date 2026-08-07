@@ -309,3 +309,54 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
 ];
 
 export const SUPER_ADMIN_ONLY_PERMISSIONS: Permission[] = ["roles:manage", "company:manage"];
+
+/**
+ * Permissions that cannot work alone: granting the key without its listed dependencies produces a
+ * screen that **hard-fails**, not one that merely hides a button.
+ *
+ * Deliberately narrow. This map is only for cases where a page/editor's own boot fetch is gated by
+ * a *different* permission than the one that unlocks it, so the whole view errors out for a role
+ * that holds one but not the other. It is NOT a list of "sensible pairings" (e.g. `service:print`
+ * without `service:view`) — those degrade gracefully into an unreachable button, and folding them
+ * in here would quietly override deliberate admin choices.
+ *
+ * Every entry below is `ServiceReportEditor.tsx`: its boot `Promise.all` calls
+ * `fetchServiceTemplates()` unconditionally, for viewing an existing report as much as for creating
+ * one (`ServicePage.openReport()` mounts the same component), so any role that can reach that
+ * editor also needs `serviceTemplates:view` or gets a permanent error state.
+ *
+ * Cross-module fetches that already `.catch()` into a safe fallback — `QuoteDocument`'s Scope of
+ * Work lookup, `ScopeOfWorkDocument`'s Delivery Order lookup — are correctly absent: they're
+ * client-gated *and* fail soft. `GET /api/quotation-templates` is absent for a different reason:
+ * it accepts `quotations:create` OR `quotationTemplates:view` server-side, so the wizard can't hit
+ * this failure mode at all.
+ */
+export const PERMISSION_DEPENDENCIES: Partial<Record<Permission, Permission[]>> = {
+  "service:view": ["serviceTemplates:view"],
+  "service:create": ["serviceTemplates:view"],
+  "service:edit": ["serviceTemplates:view"],
+};
+
+/**
+ * Expands a permission list with everything PERMISSION_DEPENDENCIES says it needs, transitively.
+ * Input order is preserved and additions are appended, so the result is stable and diffable.
+ * Unknown strings pass through untouched — this normalizes, it doesn't validate.
+ */
+export function withPermissionDependencies(permissions: Permission[]): Permission[] {
+  const result: Permission[] = [];
+  const seen = new Set<Permission>();
+  const queue = [...permissions];
+  while (queue.length > 0) {
+    const permission = queue.shift() as Permission;
+    if (seen.has(permission)) continue;
+    seen.add(permission);
+    result.push(permission);
+    queue.push(...(PERMISSION_DEPENDENCIES[permission] ?? []));
+  }
+  return result;
+}
+
+/** The permissions in `permissions` that depend on `permission` — i.e. what breaks if it's removed. */
+export function permissionsRequiring(permission: Permission, permissions: Permission[]): Permission[] {
+  return permissions.filter((p) => p !== permission && withPermissionDependencies([p]).includes(permission));
+}

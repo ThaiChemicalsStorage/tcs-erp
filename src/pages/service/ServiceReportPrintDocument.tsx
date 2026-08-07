@@ -172,6 +172,12 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
                               return (
                                 <tr key={item.key} className="border-b border-[#0b1d3a]/10">
                                   <td className="py-1 pr-2 text-[9.5px] leading-[1.4]">
+                                    {/* Same display-only dash as the on-screen checklist
+                                        (ServiceChecklistItemControl.tsx) — never stored in the
+                                        label. Uses this document's own literal ink color and a
+                                        tighter margin rather than the app's design tokens, per the
+                                        print-document convention. */}
+                                    <span className="text-[#5a7299] mr-1" aria-hidden="true">-</span>
                                     {item.label}
                                     {item.kind === "measurement" && item.unit && <span className="text-[#5a7299]"> ({item.unit})</span>}
                                   </td>
@@ -254,10 +260,17 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
                       </div>
                     </td>
                     <td className="px-3 py-2 align-bottom h-20 relative">
-                      <div className="h-10" />
+                      {/* Mirrors the engineer column exactly. An unsigned report still prints the
+                          blank ruled lines it always did, so it stays usable as a paper sign-off
+                          sheet when the customer wasn't on site (signing is optional by design). */}
+                      <div className="h-10 flex items-end justify-center">
+                        {r.customerSignatureDataUrl && <img src={r.customerSignatureDataUrl} alt="" className="max-h-9 max-w-[80%] object-contain" />}
+                      </div>
                       <div className="border-t border-[#0b1d3a]/30 mt-1 pt-1 text-center">
-                        <p className="text-[10px]">&nbsp;</p>
-                        <p className="text-[9px] text-[#5a7299]">..... / ..... / .....</p>
+                        <p className="text-[10px]">{r.customerSignedName || " "}</p>
+                        <p className="text-[9px] text-[#5a7299]">
+                          {(r.customerSignedAt && fmtThaiDate(r.customerSignedAt.slice(0, 10))) || "..... / ..... / ....."}
+                        </p>
                       </div>
                     </td>
                   </tr>
