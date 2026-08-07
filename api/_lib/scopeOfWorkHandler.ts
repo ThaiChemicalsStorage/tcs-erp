@@ -17,10 +17,11 @@ import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty, sanitizeBo
 import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeChecklistGroups } from "./documentRequirements.js";
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint } from "../../src/lib/validation/scopeOfWorkValidation.js";
 import { getRevisionRoot } from "./quoteRevisions.js";
-import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/lib/documentRequirements.js";
+import { ADDITIONAL_RECIPIENT_KEY, ALL_RECIPIENT_KEYS, DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/lib/documentRequirements.js";
 import { normalizePaymentConditions, normalizeDocumentRecipients } from "../../src/lib/scopeOfWork.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
-import { sendEmail, isEmailConfigured } from "./email.js";
+import { createGmailTransport, sendEmailAs, GmailAuthError } from "./email.js";
+import { decryptAppPassword, isEmailCredSecretConfigured } from "./emailCredentials.js";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE, formatFileSize } from "../../src/lib/scopeOfWork.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
@@ -331,15 +332,16 @@ function sanitizePaymentConditions(raw: unknown): ScopeOfWorkPaymentConditions {
 }
 
 const MAX_RECIPIENTS_PER_DEPARTMENT = 20;
-const VALID_RECIPIENT_DEPARTMENT_KEYS = new Set(DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => d.key));
+const VALID_RECIPIENT_DEPARTMENT_KEYS = new Set(ALL_RECIPIENT_KEYS);
 
-/** `documentRecipients` maps a `documentsToSend` checklist option key to the `User.id`s picked as
- * that department's actual recipients — added 2026-07-23, see `ScopeOfWork.documentRecipients`'s
- * doc comment. Unknown keys (not one of `DOCUMENT_RECIPIENT_DEPARTMENTS` — e.g. a stale `"other"`
+/** `documentRecipients` maps a `documentsToSend` checklist option key — or the free-pick
+ * `ADDITIONAL_RECIPIENT_KEY` ("ผู้รับเพิ่มเติม", added 2026-08-07, not tied to any checklist
+ * checkbox) — to the `User.id`s picked as recipients. Added 2026-07-23, see
+ * `ScopeOfWork.documentRecipients`'s doc comment. Unknown keys (e.g. a stale checklist `"other"`
  * or a garbage key) are silently dropped rather than rejected, same defensive-clamp philosophy as
  * `sanitizeChecklistGroups()`'s single-selection clamp — a client can never route to something that
- * isn't a real department. Every referenced user id is verified to actually exist via one batched
- * query rather than N individual ones. */
+ * isn't a real routing target. Every referenced user id is verified to actually exist via one
+ * batched query rather than N individual ones. */
 async function sanitizeDocumentRecipients(raw: unknown): Promise<Record<string, string[]>> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new HttpError(400, "รูปแบบผู้รับเอกสารไม่ถูกต้อง");
   const entries = Object.entries(raw as Record<string, unknown>).filter(([key]) => VALID_RECIPIENT_DEPARTMENT_KEYS.has(key));
@@ -468,7 +470,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     // exist for THIS quotation, which the caller can already see via quotations:view"), not a browse
     // view, and hiding a colleague's already-created record there would risk the caller creating a
     // duplicate one instead of opening the existing one.
-    const recipientMatch = DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => ({ [`documentRecipients.${d.key}`]: ctx.user.id }));
+    const recipientMatch = ALL_RECIPIENT_KEYS.map((key) => ({ [`documentRecipients.${key}`]: ctx.user.id }));
     const ownershipMatch = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
       ? {}
       : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }, ...recipientMatch] };
@@ -1236,7 +1238,7 @@ function nl2br(escaped: string): string {
  * note directly above the auto-generated summary — added the same pass, per the same user request,
  * for a way to attach ad-hoc context (e.g. a deadline) the auto-generated fields alone can't say.
  */
-function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl: string): string {
+function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl: string, senderFullName: string): string {
   const rows: [string, string][] = [
     ["ลูกค้า", doc.customerSnapshot.companyName],
     ["ใบเสนอราคา", doc.quotationNumber],
@@ -1294,7 +1296,7 @@ function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl:
           </div>
         </div>
       </div>
-      <p style="margin:16px 0 0;font-size:11px;color:#999;text-align:center;">อีเมลนี้ถูกส่งโดยอัตโนมัติจากระบบ TCS ERP กรุณาอย่าตอบกลับอีเมลฉบับนี้</p>
+      <p style="margin:16px 0 0;font-size:11px;color:#999;text-align:center;">อีเมลนี้ส่งโดย ${escapeHtml(senderFullName)} ผ่านระบบ TCS ERP — ตอบกลับอีเมลฉบับนี้เพื่อติดต่อผู้ส่งได้โดยตรง</p>
     </div>`;
 }
 
@@ -1305,7 +1307,11 @@ function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl:
  * currently checked in the checklist AND have at least one picked recipient are emailed — a
  * department with recipients picked earlier but since unchecked is skipped (the picks themselves
  * are preserved for convenience if re-checked later, but the send action only acts on what's
- * currently marked "needs to go here"). Gated by `scopeOfWork:edit` — originally `scopeOfWork:print`
+ * currently marked "needs to go here"). `ADDITIONAL_RECIPIENT_KEY` picks ("ผู้รับเพิ่มเติม",
+ * 2026-08-07) are the exception: chosen freely from the whole staff directory and always included,
+ * no checklist gate. Since 2026-08-07 the email goes out person-to-person from the acting user's
+ * OWN Gmail (their stored App Password — no central Resend account anymore), so replies reach the
+ * sender directly. Gated by `scopeOfWork:edit` — originally `scopeOfWork:print`
  * (reasoning: a distribution action like Print), changed 2026-07-24 on direct user report: a
  * view/print-only role could fire the send while being unable to pick or change recipients, so
  * sending now requires the same permission that controls the recipient picker itself. Still no
@@ -1327,14 +1333,27 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
     if (!checkedKeys.has(dept.key)) continue;
     for (const userId of recipients[dept.key] ?? []) recipientUserIds.add(userId);
   }
+  // "ผู้รับเพิ่มเติม" (2026-08-07) is independent of the checklist — always included in a send.
+  for (const userId of recipients[ADDITIONAL_RECIPIENT_KEY] ?? []) recipientUserIds.add(userId);
   if (recipientUserIds.size === 0) {
-    throw new HttpError(400, 'กรุณาเลือกผู้รับเอกสารอย่างน้อย 1 คน สำหรับแผนกที่เลือกไว้ใน "เอกสารส่งถึง"');
-  }
-  if (!isEmailConfigured()) {
-    throw new HttpError(500, "ระบบยังไม่ได้ตั้งค่าการส่งอีเมล (RESEND_API_KEY) กรุณาติดต่อผู้ดูแลระบบ");
+    throw new HttpError(400, 'กรุณาเลือกผู้รับเอกสารอย่างน้อย 1 คน — จากแผนกที่เลือกไว้ใน "เอกสารส่งถึง" หรือจาก "ผู้รับเพิ่มเติม"');
   }
 
+  // Person-to-person sending (2026-08-07, replacing central Resend): the email goes out from the
+  // acting user's OWN Gmail via their stored App Password — see api/_lib/email.ts.
+  if (!isEmailCredSecretConfigured()) {
+    throw new HttpError(500, "ระบบยังไม่ได้ตั้งค่าการเข้ารหัสอีเมล (EMAIL_CRED_SECRET) กรุณาติดต่อผู้ดูแลระบบ");
+  }
   const users = await usersCollection();
+  const senderDoc = await users.findOne(
+    { _id: toObjectId(ctx.user.id) },
+    { projection: { email: 1, fullName: 1, emailAppPasswordEnc: 1 } },
+  );
+  const senderAppPassword = typeof senderDoc?.emailAppPasswordEnc === "string" ? decryptAppPassword(senderDoc.emailAppPasswordEnc) : null;
+  if (!senderDoc || !senderAppPassword) {
+    throw new HttpError(400, "คุณยังไม่ได้ตั้งค่า Gmail App Password สำหรับส่งอีเมล — ตั้งค่าได้ที่ ตั้งค่า → ความปลอดภัย → การส่งอีเมล (Gmail)");
+  }
+
   const userDocs = await users.find(
     { _id: { $in: [...recipientUserIds].map((uid) => toObjectId(uid)) } },
     { projection: { email: 1, fullName: 1 } },
@@ -1360,27 +1379,49 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
   let threadId = typeof doc.emailThreadId === "string" ? doc.emailThreadId : "";
   const isFollowUp = threadId !== "";
   let subject = baseSubject;
-  let headers: Record<string, string>;
+  let messageId: string | undefined;
+  let inReplyTo: string | undefined;
   if (isFollowUp) {
-    headers = { "In-Reply-To": threadId, References: threadId };
+    inReplyTo = threadId;
     subject = `Re: ${baseSubject}`;
   } else {
     const host = (() => { try { return new URL(appUrl).hostname; } catch { return "tcs-erp"; } })();
     threadId = `<sow-${id}-${randomBytes(9).toString("hex")}@${host}>`;
-    headers = { "Message-ID": threadId, References: threadId };
+    messageId = threadId;
     const scopeOfWorks = await scopeOfWorksCollection();
     // Deliberately no updatedAt/updatedBy bump — this is send bookkeeping, not a content edit.
     await scopeOfWorks.updateOne({ _id: doc._id }, { $set: { emailThreadId: threadId } });
   }
 
-  const html = buildDocumentRecipientEmailHtml(doc, appUrl);
+  const html = buildDocumentRecipientEmailHtml(doc, appUrl, ctx.user.fullName);
 
-  const results = await Promise.allSettled(userDocs.map((u) => sendEmail({ to: u.email, subject, html, headers })));
+  // One pooled SMTP session for the whole fan-out — each recipient still gets their own email.
+  const transport = createGmailTransport(senderDoc.email, senderAppPassword);
+  let results: PromiseSettledResult<void>[];
+  try {
+    results = await Promise.allSettled(userDocs.map((u) => sendEmailAs(transport, {
+      fromName: senderDoc.fullName,
+      fromEmail: senderDoc.email,
+      to: u.email,
+      subject,
+      html,
+      messageId,
+      inReplyTo,
+      references: threadId,
+    })));
+  } finally {
+    transport.close();
+  }
   const sentCount = results.filter((r) => r.status === "fulfilled").length;
   results.forEach((r, i) => {
     if (r.status === "rejected") console.error(`[scope-of-works] failed to email recipient ${userDocs[i]?.email}`, r.reason);
   });
   const failedCount = results.length - sentCount;
+  // Every send failing with a Gmail auth rejection means the stored App Password itself is bad —
+  // surface that as a clear 400 instead of a deceptive `{ok:true, sentCount:0}`.
+  if (sentCount === 0 && results.some((r) => r.status === "rejected" && r.reason instanceof GmailAuthError)) {
+    throw new HttpError(400, "Gmail ปฏิเสธ App Password ของคุณ — ตรวจสอบที่ ตั้งค่า → ความปลอดภัย → การส่งอีเมล (Gmail) แล้วบันทึกใหม่อีกครั้ง");
+  }
 
   // In-app notification (bell) alongside the email — added 2026-07-23, per direct user request
   // ("อยากให้ขึ้นแจ้งเตือนในระบบด้วย"). Fired for every resolved recipient regardless of that

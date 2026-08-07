@@ -1,7 +1,9 @@
-import { useRef } from "react";
-import { Check, Paperclip, Trash2, Loader2, FileText } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, Paperclip, Trash2, Loader2, FileText, Search } from "lucide-react";
 import type { User } from "../../lib/users";
-import { DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../lib/documentRequirements";
+import {
+  ADDITIONAL_RECIPIENT_KEY, ADDITIONAL_RECIPIENT_LABEL, DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup,
+} from "../../lib/documentRequirements";
 import {
   type ScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE, formatFileSize,
 } from "../../lib/scopeOfWork";
@@ -34,10 +36,23 @@ export function DocumentRecipientsPicker({
   onDeleteAttachment: (attachmentId: string) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [additionalSearch, setAdditionalSearch] = useState("");
   if (!documentsToSendGroup) return null;
   const checkedByKey = new Map(documentsToSendGroup.options.map((o) => [o.key, o.checked]));
   const checkedDepartments = DOCUMENT_RECIPIENT_DEPARTMENTS.filter((d) => checkedByKey.get(d.key));
-  if (checkedDepartments.length === 0) return null;
+
+  // "ผู้รับเพิ่มเติม" — เลือกพนักงานคนใดก็ได้จากทั้งบริษัท ไม่ผูกกับแผนกในเช็คลิสต์ (2026-08-07)
+  // "Additional recipients" — any employee, independent of the checklist departments
+  const additionalSelected = value[ADDITIONAL_RECIPIENT_KEY] ?? [];
+  const needle = additionalSearch.trim().toLowerCase();
+  const matchesSearch = (u: User) =>
+    !needle || u.fullName.toLowerCase().includes(needle) || u.department.toLowerCase().includes(needle) || u.email.toLowerCase().includes(needle);
+  // คนที่เลือกไว้แล้วแสดงก่อนเสมอ (แม้ไม่ตรงคำค้น) เพื่อไม่ให้ตัวเลือกที่ติ๊กไว้หายไปจากสายตา
+  const additionalCandidates = [
+    ...users.filter((u) => additionalSelected.includes(u.id)),
+    ...users.filter((u) => !additionalSelected.includes(u.id) && matchesSearch(u)),
+  ];
+  const additionalSelectedCount = additionalSelected.filter((id) => users.some((u) => u.id === id)).length;
 
   // สลับสถานะเลือก/ไม่เลือกผู้รับคนหนึ่งในแผนกที่ระบุ
   // Toggles a single recipient's selection within a given department
@@ -54,7 +69,8 @@ export function DocumentRecipientsPicker({
         ผู้รับเอกสาร
       </h2>
       <p className="text-[11px] text-muted-foreground mb-3">
-        ติ๊กเลือกพนักงานในแต่ละแผนกที่เลือกไว้ใน "เอกสารส่งถึง" ด้านบน — เมื่อกดปุ่ม "ส่งอีเมลแจ้งผู้รับเอกสาร" ระบบจะส่งอีเมลไปยังพนักงานที่ติ๊กเลือกไว้เท่านั้น
+        ติ๊กเลือกพนักงานในแต่ละแผนกที่เลือกไว้ใน "เอกสารส่งถึง" ด้านบน หรือเลือกพนักงานคนใดก็ได้ใน "{ADDITIONAL_RECIPIENT_LABEL}" ด้านล่าง —
+        เมื่อกดปุ่ม "ส่งอีเมลแจ้งผู้รับเอกสาร" อีเมลจะถูกส่งจาก Gmail ของคุณเอง (ตามที่ตั้งค่า App Password ไว้ในหน้าตั้งค่า) ถึงพนักงานที่ติ๊กเลือกไว้เป็นรายคน
       </p>
       <div className="space-y-4">
         {checkedDepartments.map((dept) => {
@@ -105,6 +121,63 @@ export function DocumentRecipientsPicker({
             </div>
           );
         })}
+
+        <div className="border border-border/70 rounded-lg p-3 bg-secondary/30">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-xs font-semibold text-foreground">{ADDITIONAL_RECIPIENT_LABEL}</p>
+            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${additionalSelectedCount > 0 ? "bg-[#2aa36b]/15 text-[#2aa36b]" : "bg-muted text-muted-foreground"}`}>
+              {additionalSelectedCount > 0 ? (
+                <span className="inline-flex items-center gap-0.5"><Check size={10} /> เลือกแล้ว {additionalSelectedCount} คน</span>
+              ) : (
+                "ไม่บังคับ"
+              )}
+            </span>
+          </div>
+          <p className="text-[11px] text-muted-foreground mb-2">
+            เลือกพนักงานคนใดก็ได้จากทุกแผนก — ผู้รับในส่วนนี้จะได้รับอีเมลเสมอ ไม่ขึ้นกับแผนกที่ติ๊กไว้ใน "เอกสารส่งถึง"
+          </p>
+          {!disabled && (
+            <div className="relative mb-2">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={additionalSearch}
+                onChange={(e) => setAdditionalSearch(e.target.value)}
+                placeholder="ค้นหาชื่อ แผนก หรืออีเมล..."
+                aria-label={`ค้นหาพนักงานสำหรับ ${ADDITIONAL_RECIPIENT_LABEL}`}
+                className="w-full text-xs border border-border rounded-lg pl-7 pr-3 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-[#c9a84c]/50"
+              />
+            </div>
+          )}
+          {additionalCandidates.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground italic">ไม่พบพนักงานที่ตรงกับคำค้นหา</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+              {additionalCandidates.map((u) => {
+                const isSelected = additionalSelected.includes(u.id);
+                return (
+                  <label
+                    key={u.id}
+                    title={u.email}
+                    className={`flex items-center gap-2 text-xs text-foreground select-none rounded-md px-1.5 py-1 -mx-1.5 transition-colors ${disabled ? "" : "cursor-pointer hover:bg-secondary/60"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={disabled}
+                      onChange={() => toggleRecipient(ADDITIONAL_RECIPIENT_KEY, u.id)}
+                      className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c] disabled:opacity-60 flex-shrink-0"
+                    />
+                    <span className={`truncate ${isSelected ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+                      {u.fullName}
+                      {u.department.trim() && <span className="text-muted-foreground font-normal"> · {u.department.trim()}</span>}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
       <div className="mt-4 pt-4 border-t border-border/70">
         <div className="flex items-center justify-between gap-2 mb-1">

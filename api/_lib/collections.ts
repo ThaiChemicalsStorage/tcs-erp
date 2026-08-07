@@ -14,8 +14,9 @@ import type { DeliveryOrder } from "../../src/lib/deliveryOrder.js";
 import type { ServiceTemplate } from "../../src/lib/serviceTemplates.js";
 import type { ServiceReport } from "../../src/lib/serviceReports.js";
 
-/** DB storage schema — includes passwordHash, which the client-side User type deliberately omits. */
-export type UserFields = Omit<User, "id"> & { passwordHash: string };
+/** DB storage schema — includes passwordHash and the encrypted Gmail App Password, both of which
+ * the client-side User type deliberately omits (`hasEmailAppPassword` is derived, never stored). */
+export type UserFields = Omit<User, "id" | "hasEmailAppPassword"> & { passwordHash: string; emailAppPasswordEnc?: string };
 export type PublicUser = User;
 type ProductFields = Omit<Product, "id">;
 type CategoryFields = Omit<ProductCategory, "id">;
@@ -598,8 +599,11 @@ export function toObjectId(id: string): ObjectId {
 }
 
 export function toPublicUser(doc: WithId<UserFields>): PublicUser {
-  const { _id, passwordHash: _passwordHash, ...rest } = doc;
-  return { id: _id.toString(), ...rest };
+  // `emailAppPasswordEnc` MUST be destructured out here — this function feeds every user-facing
+  // response including the full GET /api/users directory; leaking the ciphertext would hand every
+  // signed-in client material to attack offline.
+  const { _id, passwordHash: _passwordHash, emailAppPasswordEnc, ...rest } = doc;
+  return { id: _id.toString(), ...rest, hasEmailAppPassword: typeof emailAppPasswordEnc === "string" && emailAppPasswordEnc.length > 0 };
 }
 
 /** Maps a Mongo _id (ObjectId, or a string business id like a quote number) to the client-side `id` field used across every domain type. */

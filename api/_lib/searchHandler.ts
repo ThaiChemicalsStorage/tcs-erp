@@ -8,7 +8,7 @@ import {
 import { roleHasPermission } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
 import { computeQuoteAmountBeforeVat } from "./quoteAmounts.js";
-import { DOCUMENT_RECIPIENT_DEPARTMENTS } from "../../src/lib/documentRequirements.js";
+import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 
 /**
  * Global Search (added 2026-07-14) — powers the top navigation search box. Entry point:
@@ -329,7 +329,7 @@ async function searchScopeOfWorks(query: string, ctx: AuthContext): Promise<Sear
   // through Global Search, which would otherwise bypass the list page's restriction entirely.
   // **Same-day second pass**: also matches when the caller is a picked document recipient (see
   // "Document Recipients"), mirroring the identical addition to the list page's own query.
-  const recipientMatch = DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => ({ [`documentRecipients.${d.key}`]: ctx.user.id }));
+  const recipientMatch = ALL_RECIPIENT_KEYS.map((key) => ({ [`documentRecipients.${key}`]: ctx.user.id }));
   const ownershipMatch = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
     ? {}
     : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }, ...recipientMatch] };

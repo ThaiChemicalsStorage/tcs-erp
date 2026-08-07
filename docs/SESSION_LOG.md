@@ -4,7 +4,47 @@
 
 ---
 
-## Session — 2026-08-06 (absolute latest), Vercel → standalone Express migration (step B of the server plan)
+## Session — 2026-08-07 (absolute latest), person-to-person Gmail email + any-user recipients
+
+### What was implemented
+The user asked (Thai) for the Scope of Work document-email flow to become "1 to many" person-to-
+person: the email must come from the **personal email of whoever clicks send** (the one they
+registered with), Resend dropped ("จะไม่ได้ใช้ resend แล้ว... มัน fix อีเมล"), and — clarified via
+AskUserQuestion — recipients pickable from any employee, sending from each person's real Gmail.
+Shipped exactly that: nodemailer + Gmail SMTP as the sender's own account (per-user Gmail App
+Passwords, AES-256-GCM at rest via the new `EMAIL_CRED_SECRET`; self-service card + test-send in
+ตั้งค่า → ความปลอดภัย), a new checklist-independent "ผู้รับเพิ่มเติม" (`additional`) recipient key
+with a searchable any-user picker, and the reply-to-the-sender email footer. Full details:
+CHANGELOG.md 2026-08-07.
+
+### Decisions / gotchas worth remembering
+- **`toPublicUser()` strips by destructure-and-spread** — any new server-only `users` field MUST be
+  explicitly destructured out there or it leaks to every client via `GET /api/users`. This was
+  called out as the #1 hazard in the plan and is now asserted by tests (no `emailAppPasswordEnc`
+  anywhere in any response body).
+- **`EMAIL_CRED_SECRET` is deliberately NOT `JWT_SECRET`** — JWT rotation is documented as safe
+  ("logs everyone out"); coupling would silently destroy every stored App Password. Decrypt
+  failures always degrade to null → 400 "ตั้งค่าใหม่", never a 500.
+- **The new recipient key is `additional`, not `other`** — `other` already exists as a
+  `documentsToSend` checklist option with note-required validation (`OTHER_OPTION_KEYS`).
+- **Recipient visibility had to move in lockstep**: three separate `$or` filters (scope list,
+  Global Search, dashboard counts) were hardcoded to the 6 department keys — all three now build
+  from the new `ALL_RECIPIENT_KEYS`, otherwise an additional-only recipient gets the email but can
+  never find the record in-app.
+- App Password writes are **self-only even for `users:manage` admins** (it's a personal Gmail
+  credential), and the field is write-only end-to-end.
+
+### Verification
+`build` (tsc strict + vite), `lint`, `npm test` all clean — 21 new tests (105 total, 12 files):
+crypto round-trip/tamper/rotation, settings API leak-checks + 403s, and the full send flow with a
+mocked nodemailer (per-recipient fan-out From the sender, additional-only sends, `Re:`/In-Reply-To
+threading persistence, all-EAUTH → 400). **Not verified: a real SMTP send** — no Gmail App
+Password exists in this sandbox; the first human-in-the-loop test (Settings → save App Password →
+ส่งอีเมลทดสอบ → real SOW send) is tracked in TODO.md.
+
+---
+
+## Session — 2026-08-06, Vercel → standalone Express migration (step B of the server plan)
 
 ### What was implemented
 The session began as local-dev troubleshooting — the user asked why `npm run dev` couldn't call the

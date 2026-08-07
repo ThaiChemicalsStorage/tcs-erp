@@ -14,6 +14,19 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-07] Scope of Work email is person-to-person from each sender's own Gmail (Resend
+  removed) + "ผู้รับเพิ่มเติม" any-user recipients.** Direct user request: "ใครส่งให้คนไหนก็คือใช้
+  อีเมลของคนนั้น" — the "ส่งอีเมลแจ้งผู้รับเอกสาร" email now goes out from the clicking user's OWN
+  Gmail (nodemailer + Gmail SMTP; per-user App Passwords stored AES-256-GCM-encrypted in
+  `users.emailAppPasswordEnc`, keyed by the new `EMAIL_CRED_SECRET` env var; self-service setup +
+  test-send in ตั้งค่า → ความปลอดภัย, strictly self-only even for admins), so recipients can reply
+  to the sender directly. Recipients are no longer department-limited: a new checklist-independent
+  "ผู้รับเพิ่มเติม" (`additional`) key lets any employee be picked (searchable box in the picker),
+  and the recipient-visibility filters (list/search/dashboard) were extended so those recipients
+  can find the record. Resend (`RESEND_API_KEY`/`EMAIL_FROM`, incl. the pending sender-domain
+  verification task) is gone entirely. 21 new tests (105 total). **Real SMTP delivery not yet
+  live-verified** (no Gmail credential exists in the sandbox — nodemailer mocked in tests; tracked
+  in TODO.md). See CHANGELOG.md 2026-08-07.
 - ✅ **[2026-08-06] Docker stack (same session as the Express migration).** `docker compose up -d
   --build` runs the whole system self-contained: the app image (committed `Dockerfile`), its own
   MongoDB (named volume, fresh-DB Setup Wizard path), and nginx HTTPS termination (committed

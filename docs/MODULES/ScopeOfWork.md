@@ -301,7 +301,14 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   `documentsToSend` option key (e.g. `"purchase"`) to the `User.id`s picked as that department's
   actual recipients. Independent of the option's `checked` state — unchecking a department doesn't
   clear its picked recipients, so re-checking it later remembers the previous picks. Never includes
-  the `"other"` key (free text, no real department to resolve candidates against).
+  the `"other"` key (free text, no real department to resolve candidates against). **2026-08-07:
+  one more key, `"additional"`** (`ADDITIONAL_RECIPIENT_KEY` in `src/lib/documentRequirements.ts` —
+  deliberately not `"other"`, which is already a checklist option with note-required validation):
+  "ผู้รับเพิ่มเติม", picked freely from the whole staff directory with no department/checklist tie,
+  **always included in a send** regardless of what's checked. The full valid-key list is
+  `ALL_RECIPIENT_KEYS` (6 departments + `additional`) — the server-side sanitizer, the
+  recipient-visibility filters (scope list / Global Search / dashboard counts), and
+  `diffDocumentRecipients()` all build from it.
 - **`DocumentRecipientsPicker.tsx`** (new component, rendered in `ScopeOfWorkDocument.tsx` right
   below the checklist card) shows one row per currently-checked department, listing every `User`
   whose `department` exactly matches that department's label — picking/unpicking updates
@@ -312,34 +319,55 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   `ChecklistGroupCard.tsx`'s already-established checkbox convention immediately above this card,
   inside its own bordered per-department box with a "เลือกแล้ว N คน"/"ยังไม่ได้เลือกผู้รับ" badge
   next to the department title so it's obvious at a glance which departments still need a pick.
-- **"ส่งอีเมลแจ้งผู้รับเอกสาร"** button (below the picker, visible once ≥1 department is checked
-  **and the caller holds `scopeOfWork:edit`** — see the gate note below): saves the record first
-  (the server reads recipients from the persisted document, not unsaved client state), then calls
-  `POST /api/scope-of-works/:id/send-documents`
+  **2026-08-07**: a permanent "ผู้รับเพิ่มเติม" box now follows the department boxes — every user in
+  the company (searchable by name/department/email; picked users always render first so a filter
+  never hides an active selection), backing the `additional` key above. The card no longer
+  disappears when zero departments are checked, since additional recipients are checklist-independent.
+- **"ส่งอีเมลแจ้งผู้รับเอกสาร"** button (below the picker, visible whenever the checklist exists
+  **and the caller holds `scopeOfWork:edit`** — the old ≥1-checked-department visibility condition
+  was dropped 2026-08-07 because `additional` recipients need no checked department): saves the
+  record first (the server reads recipients from the persisted document, not unsaved client state),
+  then calls `POST /api/scope-of-works/:id/send-documents`
   (`handleSendDocumentNotifications()`, `api/_lib/scopeOfWorkHandler.ts`). Only departments that are
-  BOTH currently checked AND have ≥1 picked recipient are actually emailed; recipients are deduped
-  across departments so a person picked under two checked options gets one email/notification, not
-  two. **Gated by `scopeOfWork:edit` (changed 2026-07-24 from the original `scopeOfWork:print`,
-  direct user report)**: a view/print-only role could fire the send while being unable to pick or
-  change recipients — sending now requires the same permission that controls the picker, both
-  server-side and for the button's visibility. Like Print it still has no ownership check and works
-  on a `"Final"` record too (it distributes the document, it doesn't change it — content edits stay
-  Draft-only). Sends via `api/_lib/email.ts`'s `sendEmail()` (Resend REST API, see
-  [ARCHITECTURE.md](../ARCHITECTURE.md)) in parallel per recipient (`Promise.allSettled`, so one bad
-  address doesn't block the others), writes a `"Scope of Work Document Notification Sent"` audit
-  entry, and returns `{ sentCount, failedCount, recipientCount }` for the UI toast.
+  BOTH currently checked AND have ≥1 picked recipient are actually emailed — plus every `additional`
+  recipient, always; recipients are deduped across keys so a person picked twice gets one
+  email/notification, not two. **Gated by `scopeOfWork:edit` (changed 2026-07-24 from the original
+  `scopeOfWork:print`, direct user report)**: a view/print-only role could fire the send while being
+  unable to pick or change recipients — sending now requires the same permission that controls the
+  picker, both server-side and for the button's visibility. Like Print it still has no ownership
+  check and works on a `"Final"` record too (it distributes the document, it doesn't change it —
+  content edits stay Draft-only).
+  **Person-to-person sending (2026-08-07, replaces Resend entirely — direct user request)**: the
+  email goes out **from the acting user's own Gmail** via `api/_lib/email.ts` (nodemailer, Gmail
+  SMTP `smtp.gmail.com:465`, one pooled transport per send action), authenticated with that user's
+  own Gmail **App Password** stored AES-256-GCM-encrypted in `users.emailAppPasswordEnc`
+  (`api/_lib/emailCredentials.ts`, keyed by the `EMAIL_CRED_SECRET` env var). From is
+  `"ชื่อผู้ส่ง" <อีเมลผู้ส่ง>`, so recipients can reply to the sender directly (the email footer says
+  exactly that now, instead of "อย่าตอบกลับ"). A sender with no stored/decryptable App Password gets
+  a 400 pointing at ตั้งค่า → ความปลอดภัย → การส่งอีเมล (the UI also disables the button up front
+  via `User.hasEmailAppPassword`); if **every** send in the fan-out fails with a Gmail auth
+  rejection (`EAUTH`/535 → `GmailAuthError`), the endpoint returns a 400 naming the App Password as
+  the culprit rather than a deceptive `{ok:true, sentCount:0}`. Still parallel per recipient
+  (`Promise.allSettled`, so one bad address doesn't block the others), still writes a
+  `"Scope of Work Document Notification Sent"` audit entry, and returns
+  `{ sentCount, failedCount, recipientCount }` for the UI toast. Gmail constraints (in the Settings
+  help copy): App Passwords require 2-Step Verification on the Google account; personal Gmail is
+  limited to ~500 outgoing recipients/day.
 - **Email threading (added 2026-07-24, direct user request)**: repeat sends of the *same* record
   land in the recipients' existing email conversation, like a reply — the first send mints a
   synthetic thread anchor (`<sow-{id}-{rand}@{APP_URL host}>`), persists it as server-only
   `ScopeOfWork.emailThreadId` (no updatedAt bump), and **every send — the first included — carries
   it in `References`** (follow-ups add `In-Reply-To` + a `Re:` subject). Anchoring the first send
-  too is a same-day live-test fix: Resend replaces a custom `Message-ID` with its own, so the
+  too is a same-day live-test fix: Resend replaced a custom `Message-ID` with its own, so the
   original follow-up referenced a nonexistent ID and Gmail kept it separate — clients group
   messages whose `References` chains share an ID regardless of whether that root exists, which
-  removes the provider dependency entirely. Strictly per-record (two Scope of Works never share a
-  thread); Duplicate/Rewrite explicitly reset the field (both build the new record by spreading
-  the source, so without the reset a copy would reply into the source's thread). Records whose
-  first send predates the fix start grouping from their next send onward.
+  removes the provider dependency entirely. (The 2026-08-07 Gmail-SMTP rewrite kept this scheme
+  unchanged — Gmail SMTP actually *preserves* a caller-supplied `Message-ID`, so first-send
+  threading only got more reliable, and threads started in the Resend era continue working.)
+  Strictly per-record (two Scope of Works never share a thread); Duplicate/Rewrite explicitly
+  reset the field (both build the new record by spreading the source, so without the reset a copy
+  would reply into the source's thread). Records whose first send predates the fix start grouping
+  from their next send onward.
 - **Approval workflow (added 2026-07-24, direct user request)**: the direct "ยืนยัน Final" button
   is replaced by **Draft → ส่งขออนุมัติ → รออนุมัติ (`PendingApproval`) → อนุมัติ → Final**, with
   ปฏิเสธ (finalize holder, comment required — lands in the audit entry + creator's notification)
@@ -400,11 +428,16 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   document-delivery replacement for print. No required-field validation was added either — picking
   recipients is optional, layered on top of the existing "at least one department checked" rule,
   which is unchanged.
-- **⚠️ Requires manual setup before this feature actually works**: `RESEND_API_KEY` must be added
-  to Vercel's environment variables — the send button returns a clear `500` ("ระบบยังไม่ได้ตั้งค่า
-  การส่งอีเมล") instead of silently failing when it's missing, but nothing in this codebase can set
-  the key itself (a human must sign up at resend.com). See [ARCHITECTURE.md](../ARCHITECTURE.md) and
-  [TODO.md](../TODO.md).
+- **⚠️ Requires setup before this feature actually works (changed 2026-08-07)**: two pieces, both
+  with clear errors instead of silent failure —
+  (1) the **`EMAIL_CRED_SECRET` env var** must be set on the host (encrypts stored App Passwords;
+  missing → a clear 500 "ระบบยังไม่ได้ตั้งค่าการเข้ารหัสอีเมล"); rotating/losing it doesn't break
+  login but every user must re-enter their App Password (decrypt degrades to null → 400, never 500).
+  (2) **each sender must store their own Gmail App Password once** in ตั้งค่า → ความปลอดภัย →
+  การส่งอีเมล (self-only — even `users:manage` admins can't set someone else's; requires Google
+  2-Step Verification; a "ส่งอีเมลทดสอบถึงตัวเอง" button verifies it end-to-end via
+  `POST /api/users/:id/email-test`). No sending domain, no Resend account, no central provider
+  key anymore. See [DEPLOYMENT.md](../DEPLOYMENT.md).
 
 ## Attachments (added 2026-07-24, reworked to MongoDB storage the same day)
 
@@ -822,8 +855,13 @@ gain a *value* import that transitively pulls in JSX/React.
 - `src/pages/quotation/ChecklistGroupCard.tsx` — one checklist group card (renamed 2026-07-16 from
   `ScopeOfWorkChecklistGroup.tsx`; this file's own name was left stale in this list until now).
 - `src/pages/quotation/DocumentRecipientsPicker.tsx` (**added 2026-07-23**) — the per-department
-  recipient toggle-chip picker under the checklist card, see "Document Recipients" above.
-- `api/_lib/email.ts` (**added 2026-07-23**) — `sendEmail()`, the shared Resend REST API wrapper.
+  recipient checkbox picker + the searchable "ผู้รับเพิ่มเติม" any-user box (2026-08-07) under the
+  checklist card, see "Document Recipients" above.
+- `api/_lib/email.ts` (**added 2026-07-23, rewritten 2026-08-07**) — `createGmailTransport()` +
+  `sendEmailAs()` + `GmailAuthError`, the shared nodemailer/Gmail-SMTP sender (was the Resend REST
+  wrapper until the person-to-person rewrite).
+- `api/_lib/emailCredentials.ts` (**added 2026-08-07**) — AES-256-GCM encrypt/decrypt +
+  `normalizeAppPassword()` for the per-user Gmail App Passwords (`EMAIL_CRED_SECRET` env var).
 - `src/pages/quotation/ScopeOfWorkPrintDocument.tsx` — the print/PDF layout.
 - `src/pages/quotation/QuoteDocument.tsx` — the "สร้าง Scope of Work"/"เปิด / แก้ไข Scope of Work"
   toolbar button (fetches whether one already exists per quotation).

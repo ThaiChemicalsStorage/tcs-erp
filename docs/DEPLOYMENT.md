@@ -39,9 +39,13 @@ npm start                   # verify it boots, then put it under a process manag
 
 Required env values (full explanations in [.env.example](../.env.example)): `MONGODB_URI`,
 `JWT_SECRET`, `NODE_ENV=production`, `APP_URL` (emailed links + attachment capability-URLs are
-built from it), and — for email — `RESEND_API_KEY` + `EMAIL_FROM`. When migrating from the Vercel
-demo, copy the values out of the Vercel project settings; keeping the same `JWT_SECRET` preserves
-live sessions, changing it just logs everyone out once.
+built from it), and — for email — `EMAIL_CRED_SECRET` (**2026-08-07**, encrypts users' stored Gmail
+App Passwords; replaces the removed `RESEND_API_KEY`/`EMAIL_FROM` — email now sends from each
+user's own Gmail, see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients").
+When migrating from the Vercel demo, copy the values out of the Vercel project settings; keeping
+the same `JWT_SECRET` preserves live sessions, changing it just logs everyone out once. Rotating
+`EMAIL_CRED_SECRET` never breaks login, but every user must re-enter their App Password. The host
+must allow **outbound TCP 465** (Gmail SMTP).
 
 The process must run with the **project root as working directory** — the Quotation Templates
 import reads `public/Scope of work new template for air pollution control_Technic.xlsx` via
@@ -140,8 +144,8 @@ Wizard on first visit), and **nginx** for HTTPS termination.
   ⚠️ The root user is only created on a **fresh volume** — changing the values later needs
   `docker compose down -v` (wipes data) or a manual password change in mongosh. Keep `MONGO_PASS`
   URL-safe (letters/digits) since it's embedded in the URI.
-- Env: the `app` service loads `.env` via `env_file` (JWT_SECRET, APP_URL, RESEND_API_KEY,
-  EMAIL_FROM pass straight through) and compose interpolation additionally requires
+- Env: the `app` service loads `.env` via `env_file` (JWT_SECRET, APP_URL, EMAIL_CRED_SECRET
+  pass straight through) and compose interpolation additionally requires
   `JWT_SECRET`/`MONGO_USER`/`MONGO_PASS` (hard error at `up` if missing). `MONGODB_URI` in the
   `environment` block always overrides any value from `.env` — inside compose the app talks to
   the compose MongoDB (to target Atlas instead, drop the `mongodb` service and set the URI in

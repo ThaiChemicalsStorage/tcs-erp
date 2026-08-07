@@ -4,6 +4,13 @@ export interface ChecklistOption {
   checked: boolean;
 }
 
+/** Extra `documentRecipients` key for recipients picked freely from the whole staff directory,
+ * independent of the `documentsToSend` checklist departments (added 2026-08-07 — "ผู้รับเพิ่มเติม").
+ * Deliberately NOT `"other"`: that key already exists as a `documentsToSend` checklist option with
+ * its own note-required validation (see OTHER_OPTION_KEYS), and the two must stay orthogonal. */
+export const ADDITIONAL_RECIPIENT_KEY = "additional";
+export const ADDITIONAL_RECIPIENT_LABEL = "ผู้รับเพิ่มเติม";
+
 export const DOCUMENT_RECIPIENT_DEPARTMENTS: { key: string; label: string }[] = [
   { key: "purchase", label: "Purchase" },
   { key: "project", label: "Project" },
@@ -12,6 +19,12 @@ export const DOCUMENT_RECIPIENT_DEPARTMENTS: { key: string; label: string }[] = 
   { key: "service", label: "Service" },
   { key: "accounting", label: "Accounting" },
 ];
+
+/** Every key `documentRecipients` may carry — the 6 department keys + the free-pick `additional`
+ * key. The server-side recipient-visibility filters (scope list, Global Search, dashboard counts)
+ * must build their `$or` from THIS list, or a person picked only under "ผู้รับเพิ่มเติม" could
+ * receive the email yet be unable to find the record in the app. */
+export const ALL_RECIPIENT_KEYS: string[] = [...DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => d.key), ADDITIONAL_RECIPIENT_KEY];
 
 export interface ChecklistGroup {
   key: string;

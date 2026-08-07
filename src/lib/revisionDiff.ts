@@ -2,7 +2,7 @@ import type { Quote, QuoteLine } from "./quotes";
 import type { ScopeOfWork, ScopeOfWorkItem, ScopeOfWorkPaymentConditions } from "./scopeOfWork";
 import { formatPaymentMethod } from "./scopeOfWork";
 import type { ChecklistGroup } from "./documentRequirements";
-import { DOCUMENT_RECIPIENT_DEPARTMENTS } from "./documentRequirements";
+import { ADDITIONAL_RECIPIENT_KEY, ADDITIONAL_RECIPIENT_LABEL, DOCUMENT_RECIPIENT_DEPARTMENTS } from "./documentRequirements";
 import type { User } from "./users";
 
 // ตัดส่วนท้าย -R<เลข> ของรหัสเอกสารออก เพื่อหารหัสต้นฉบับ
@@ -205,6 +205,13 @@ function diffDocumentRecipients(oldRec: Record<string, string[]>, newRec: Record
     if (added.length > 0) out.push(`ผู้รับเอกสารแผนก ${dept.label}: เพิ่ม "${added.map(nameOf).join(", ")}"`);
     if (removed.length > 0) out.push(`ผู้รับเอกสารแผนก ${dept.label}: ลบ "${removed.map(nameOf).join(", ")}"`);
   }
+  // "ผู้รับเพิ่มเติม" is not a department — phrased without the แผนก prefix
+  const oldExtra = new Set(oldRec[ADDITIONAL_RECIPIENT_KEY] ?? []);
+  const newExtra = new Set(newRec[ADDITIONAL_RECIPIENT_KEY] ?? []);
+  const addedExtra = [...newExtra].filter((id) => !oldExtra.has(id));
+  const removedExtra = [...oldExtra].filter((id) => !newExtra.has(id));
+  if (addedExtra.length > 0) out.push(`${ADDITIONAL_RECIPIENT_LABEL}: เพิ่ม "${addedExtra.map(nameOf).join(", ")}"`);
+  if (removedExtra.length > 0) out.push(`${ADDITIONAL_RECIPIENT_LABEL}: ลบ "${removedExtra.map(nameOf).join(", ")}"`);
   return out;
 }
 

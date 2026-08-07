@@ -36,7 +36,7 @@ and CHANGELOG.md 2026-07-24.
 | Frontend (React/Vite) | ✅ | Builds to static files — servable by nginx or any static host |
 | Database (MongoDB Atlas) | ✅ | Keep Atlas, or move to self-hosted MongoDB via dump/restore |
 | File attachments | ✅ | Stored in MongoDB (`scope_attachment_files`) — travel with the DB |
-| Email (Resend REST API) | ✅ | Plain `fetch` — just set `RESEND_API_KEY` on the new host |
+| Email (per-user Gmail SMTP via nodemailer — **2026-08-07**, Resend removed) | ✅ | Just set `EMAIL_CRED_SECRET` on the new host; the host must allow outbound TCP 465. Users' encrypted App Passwords live in MongoDB and travel with the DB |
 | Auth (bcrypt + JWT httpOnly cookie) | ✅ | Not Vercel-coupled (`secure` cookie requires HTTPS on the new host) |
 | **API layer — 12 function files in `api/handlers/` + `vercel.json` rewrites** | ✅ (2026-08-06) | The thin Express wrapper exists: `server/app.ts` mounts the unchanged handlers on the same routing table. Both runtimes work from one codebase. |
 
@@ -57,7 +57,8 @@ around the existing handlers.**
    `tests/api/expressServer.test.ts`. See [ARCHITECTURE.md](./ARCHITECTURE.md) "Standalone
    Express server".
 2. ✅ **`.env.example`** — documents every variable: `MONGODB_URI`, `MONGODB_DB`, `JWT_SECRET`,
-   `NODE_ENV`, `PORT`, `APP_URL`, `RESEND_API_KEY`, `EMAIL_FROM`.
+   `NODE_ENV`, `PORT`, `APP_URL`, and (since 2026-08-07, replacing `RESEND_API_KEY`/`EMAIL_FROM`)
+   `EMAIL_CRED_SECRET`.
 3. ✅ **[DEPLOYMENT.md](./DEPLOYMENT.md)** — the real-server install guide (PM2/systemd,
    nginx/Caddy + HTTPS, Atlas-vs-self-hosted + backups, copying env values from Vercel).
 
@@ -72,19 +73,21 @@ unchanged; the Express entry is an additional way to run it, not a replacement).
 > **Don't skip step G** — the owner explicitly asked to be reminded that the user manual must be
 > updated as the final pre-launch step.
 
-### A. Domain + email sender (can do now — also fixes email on the demo)
+### A. Domain + email sender — ⚠️ OBSOLETE as of 2026-08-07 (kept for history)
 
-1. **Get a company domain** (e.g. `thaichemicals.co.th`) — buy one (~300–500 THB/yr) or use one
-   the company already owns. The free `*.vercel.app` URL can never be used as an email sender
-   domain (we don't own `vercel.app`).
-2. **Verify the domain with Resend** (dashboard → Domains → Add Domain → add the ~3 DNS records
-   (SPF/DKIM) at the domain registrar → wait a few minutes). Free tier: 1 domain, 3,000
-   emails/month — plenty for this internal system.
-3. **Set `EMAIL_FROM`** env var to e.g. `TCS ERP <erp@thaichemicals.co.th>`. No code change needed
-   (`api/_lib/email.ts` already reads it). **Until this is done, email sending only reaches the
-   Resend account owner's own address** — the sandbox sender `onboarding@resend.dev` cannot
-   deliver to arbitrary employee addresses (discovered/discussed 2026-07-24). This step is
-   host-independent: done once, it keeps working after the migration.
+> The Resend-based plan below is superseded: email now sends **person-to-person from each user's
+> own Gmail** (nodemailer + Gmail SMTP, per-user App Passwords stored encrypted — see
+> [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients"). No sender domain,
+> DNS records, or Resend account are needed anymore. What replaces this step: set the
+> `EMAIL_CRED_SECRET` env var on the host, make sure outbound TCP 465 is open, and have each
+> user store their Gmail App Password once in ตั้งค่า → ความปลอดภัย (requires Google 2-Step
+> Verification). A company domain is still nice-to-have for the app URL itself (step C), just no
+> longer email-related.
+
+1. ~~**Get a company domain** — the free `*.vercel.app` URL can never be an email sender domain.~~
+2. ~~**Verify the domain with Resend** (SPF/DKIM DNS records).~~
+3. ~~**Set `EMAIL_FROM`** — until done, sending only reaches the Resend account owner's own
+   address (sandbox sender `onboarding@resend.dev`, discovered 2026-07-24).~~
 
 ### B. Build the portable server shell (the 3-step plan above)
 
@@ -101,8 +104,8 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
   - `MONGODB_URI` — same Atlas URI, or the new self-hosted one
   - `JWT_SECRET` (the session-signing secret — keep the SAME value if migrating live sessions,
     or accept that everyone re-logs-in once)
-  - `RESEND_API_KEY`
-  - `EMAIL_FROM` (from step A)
+  - `EMAIL_CRED_SECRET` (2026-08-07 — encrypts users' stored Gmail App Passwords; rotating it
+    forces everyone to re-enter theirs, login unaffected)
   - `APP_URL` — set to the real URL (e.g. `https://erp.thaichemicals.co.th`). **Important**: email
     links AND attachment capability-URLs are built from this; left unset it falls back to the
     Vercel demo URL and every emailed link points at the wrong site.
@@ -129,13 +132,15 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
   `quotations:viewAll`, `scopeOfWork:viewAll`, and the 7 `deliveryOrder:*` permissions for
   existing roles (`defaultRoles` only seeds on first-run setup, never re-applies).
 - **Budget note (2026-07-24)**: no paid services at all for now — everything in this plan must
-  stay on free tiers until the owner says otherwise (Atlas free tier, Resend free tier; the
-  domain in step A is the one unavoidable purchase and waits until go-live approaches).
+  stay on free tiers until the owner says otherwise (Atlas free tier; email is free since
+  2026-08-07 — users' own Gmail accounts, no provider; a domain for the app URL is the one
+  unavoidable purchase and waits until go-live approaches).
 
 ### F. Verify after cutover (each of these exercises a different subsystem)
 
 1. Sign in over HTTPS (JWT cookie) + sign out.
-2. Send "ส่งอีเมลแจ้งผู้รับเอกสาร" to a REAL employee address (proves the verified domain).
+2. Send "ส่งอีเมลแจ้งผู้รับเอกสาร" to a REAL employee address (2026-08-07: proves
+   `EMAIL_CRED_SECRET` is set, outbound TCP 465 is open, and the sender's Gmail App Password works).
 3. Upload an attachment, then open its capability URL from a logged-out browser (proves
    `APP_URL` + unauthenticated download route).
 4. Print a per-milestone Delivery Order (print CSS is host-independent, but verify once).

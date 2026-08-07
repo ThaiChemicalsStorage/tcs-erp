@@ -29,7 +29,7 @@ import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
 import { FieldError } from "../../components/FieldError";
 import { ValidationSummary } from "../../components/ValidationSummary";
 import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
-import { validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS } from "../../lib/documentRequirements";
+import { validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS, ADDITIONAL_RECIPIENT_KEY } from "../../lib/documentRequirements";
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint, scopeOfWorkRequiredFields } from "../../lib/validation/scopeOfWorkValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
 
@@ -617,9 +617,12 @@ export function ScopeOfWorkDocument({
   const noSourceItems = scope.items.length === 0;
   const documentsToSendGroup = scope.checklistGroups.find((g) => g.key === "documentsToSend");
   const checkedDocumentsToSendKeys = new Set((documentsToSendGroup?.options ?? []).filter((o) => o.checked).map((o) => o.key));
+  // "ผู้รับเพิ่มเติม" นับเป็นผู้รับเสมอ ไม่ต้องรอติ๊กแผนกใน "เอกสารส่งถึง" (2026-08-07)
   const hasDocumentRecipientsToSend = Object.entries(scope.documentRecipients).some(
-    ([key, ids]) => checkedDocumentsToSendKeys.has(key) && ids.length > 0,
+    ([key, ids]) => (checkedDocumentsToSendKeys.has(key) || key === ADDITIONAL_RECIPIENT_KEY) && ids.length > 0,
   );
+  // อีเมลส่งออกจาก Gmail ของผู้ใช้ที่กดส่งเอง — ต้องตั้งค่า App Password ก่อน (ตั้งค่า → ความปลอดภัย)
+  const senderMissingAppPassword = users.some((u) => u.id === currentUserId && !u.hasEmailAppPassword);
 
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
@@ -862,13 +865,16 @@ export function ScopeOfWorkDocument({
           onUploadAttachment={handleUploadAttachment}
           onDeleteAttachment={handleDeleteAttachment}
         />
-        {canEdit && documentsToSendGroup && checkedDocumentsToSendKeys.size > 0 && (
-          <div className="flex justify-end print:hidden -mt-2">
+        {canEdit && documentsToSendGroup && (
+          <div className="flex flex-col items-end gap-1.5 print:hidden -mt-2">
+            {senderMissingAppPassword && (
+              <p className="text-[11px] text-[#a75d1a]">{t("scopeOfWorkDoc.sendNeedsAppPassword")}</p>
+            )}
             <button
               onClick={handleSendDocuments}
-              disabled={!hasDocumentRecipientsToSend || sendingDocs}
-              title={!hasDocumentRecipientsToSend ? t("scopeOfWorkDoc.sendDocumentsNeedRecipient") : undefined}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!hasDocumentRecipientsToSend || sendingDocs ? "opacity-40 cursor-not-allowed" : ""}`}
+              disabled={!hasDocumentRecipientsToSend || sendingDocs || senderMissingAppPassword}
+              title={senderMissingAppPassword ? t("scopeOfWorkDoc.sendNeedsAppPassword") : !hasDocumentRecipientsToSend ? t("scopeOfWorkDoc.sendDocumentsNeedRecipient") : undefined}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!hasDocumentRecipientsToSend || sendingDocs || senderMissingAppPassword ? "opacity-40 cursor-not-allowed" : ""}`}
             >
               {sendingDocs ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} {t("scopeOfWorkDoc.sendDocuments")}
             </button>

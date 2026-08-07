@@ -4,7 +4,74 @@
 
 ---
 
-## 2026-08-06 (absolute latest) — nginx config baked into a custom image (`nginx/Dockerfile`)
+## 2026-08-07 (absolute latest) — Scope of Work email is person-to-person from each sender's own Gmail (Resend removed) + "ผู้รับเพิ่มเติม" any-user recipients
+
+Direct user request: document-recipient emails must be sent person-to-person — "ใครส่งให้คนไหนก็คือ
+ใช้อีเมลของคนนั้น" (the sender's own registered email is the actual From, so recipients can reply
+directly), Resend dropped entirely, and recipients selectable from ANY employee, not only the
+checked checklist departments. Confirmed approach: each user stores their own **Gmail App
+Password** once; sending goes through Gmail SMTP as that user.
+
+- **New `api/_lib/emailCredentials.ts`** — AES-256-GCM for the stored App Passwords
+  (`v1:<iv>:<tag>:<ct>` base64url; key = scrypt of the new **`EMAIL_CRED_SECRET`** env var,
+  deliberately separate from `JWT_SECRET` so a session-secret rotation can't destroy stored email
+  credentials). `decryptAppPassword()` returns `null` on any failure (tamper/rotation/garbage) so
+  callers degrade to a 400 "ตั้งค่าใหม่", never a 500. `normalizeAppPassword()` strips the spaces
+  Gmail displays and enforces the 16-letter format.
+- **`api/_lib/email.ts` rewritten** — Resend `fetch` → **nodemailer + Gmail SMTP**
+  (`smtp.gmail.com:465`, pooled transport per send action): `createGmailTransport()`,
+  `sendEmailAs()` (From = `"ชื่อผู้ส่ง" <อีเมลผู้ส่ง>`, native messageId/inReplyTo/references
+  threading options), `GmailAuthError` (`EAUTH`/535). `isEmailConfigured()`/
+  `EmailNotConfiguredError`/`RESEND_API_KEY`/`EMAIL_FROM` are gone.
+- **`users` schema** — new server-only `emailAppPasswordEnc?: string`; `toPublicUser()` now strips
+  it (alongside `passwordHash`) and exposes a derived **`hasEmailAppPassword: boolean`** — the
+  strip is load-bearing, `GET /api/users` returns every user to every authenticated client.
+- **`PATCH /api/users/:id`** accepts `emailAppPassword` — **strictly self-only (403 even for
+  `users:manage` admins**; it's a personal Gmail credential); `""` clears via `$unset`. New
+  **`POST /api/users/:id/email-test`** (self-only) sends a test email to the caller's own address.
+- **`handleSendDocumentNotifications()`** — resolves the acting user's credential (clear Thai 400
+  pointing at ตั้งค่า → ความปลอดภัย when missing/undecryptable; 500 only for a missing
+  `EMAIL_CRED_SECRET`); fan-out through one pooled transport; an **all-`GmailAuthError` fan-out is
+  now a 400** instead of a deceptive `{ok:true, sentCount:0}`; email footer changed from
+  "อย่าตอบกลับ" to "ตอบกลับ...ได้โดยตรง" + names the sender. Threading scheme unchanged (Gmail SMTP
+  preserves custom `Message-ID`s, so Resend-era threads keep working).
+- **"ผู้รับเพิ่มเติม" (`ADDITIONAL_RECIPIENT_KEY = "additional"`)** — new `documentRecipients` key
+  (deliberately not `"other"`, which is a checklist option with note-required validation): any
+  employee, searchable picker box in `DocumentRecipientsPicker.tsx` (selected users pinned above
+  search results), **always included in a send** regardless of checked departments. New
+  `ALL_RECIPIENT_KEYS` (6 departments + `additional`) now drives the sanitizer whitelist AND all
+  three recipient-visibility `$or` filters (scope list / Global Search / dashboard counts) — without
+  that, an additional-only recipient could get the email yet never find the record in the app.
+  `diffDocumentRecipients()` diffs the new key too ("ผู้รับเพิ่มเติม: เพิ่ม/ลบ ...", no แผนก prefix).
+- **UI** — `ScopeOfWorkDocument.tsx`: send button no longer requires a checked department, and is
+  disabled with a warning line when the current user has no App Password (`hasEmailAppPassword`).
+  `SettingsPage.tsx` (ความปลอดภัย tab): new "การส่งอีเมล (Gmail App Password)" card — status pill,
+  4-step Thai help copy (2-Step Verification prerequisite, apppasswords URL, stored-encrypted note,
+  ~500/day limit), save/clear (ConfirmDialog)/test-email actions. New `settings.emailSending.*` +
+  `scopeOfWorkDoc.sendNeedsAppPassword` i18n keys (th+en).
+- **Env** — `.env.example`: Resend block replaced by `EMAIL_CRED_SECRET` (rotation consequence
+  documented: login unaffected, everyone re-enters their App Password). Host must allow outbound
+  TCP 465.
+- **Deps** — `nodemailer` + `@types/nodemailer`.
+- **Tests (12 files, 105 pass)** — new `tests/emailCredentials.test.ts` (round-trip, tamper→null,
+  rotation→null, format), `tests/api/emailSettings.test.ts` (self-only 403s, no-leak assertions on
+  PATCH + the full directory, clear, email-test 403/400/EAUTH→400; nodemailer mocked), and
+  `tests/api/sendDocumentNotifications.test.ts` (unconfigured-sender 400, per-recipient fan-out
+  with the sender's own From, additional-only send with zero checked departments, `Re:`/In-Reply-To
+  threading on the second send, all-EAUTH→400, unchecked-department-only → 400).
+- **What's New** — Thai entry `2026-08-07-gmail-personal-sending`.
+- Docs: this file, [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md),
+  [MODULES/Settings.md](./MODULES/Settings.md), [API.md](./API.md), [DATABASE.md](./DATABASE.md),
+  [ARCHITECTURE.md](./ARCHITECTURE.md), [DEPLOYMENT.md](./DEPLOYMENT.md),
+  [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) (step A obsolete),
+  [TODO.md](./TODO.md), [CLAUDE.md](./CLAUDE.md).
+- **Not live-verified**: real SMTP delivery (no Gmail App Password exists in this sandbox) — the
+  transport layer is mocked in tests; first real send needs a human with a configured account
+  (tracked in TODO.md).
+
+---
+
+## 2026-08-06 — nginx config baked into a custom image (`nginx/Dockerfile`)
 
 User request ahead of putting the stack on a real server: build the nginx site config into the
 image (`COPY nginx.conf /etc/nginx/conf.d/default.conf`) instead of volume-mounting it.

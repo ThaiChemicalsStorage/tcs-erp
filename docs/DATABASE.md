@@ -10,7 +10,7 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 
 | Collection | `_id` | Shape | Notes |
 |---|---|---|---|
-| `users` | MongoDB `ObjectId` | server-only `UserFields` (see below) | Includes `passwordHash` — never sent to the client. `toPublicUser()` (`api/_lib/collections.ts`) strips it before any response. |
+| `users` | MongoDB `ObjectId` | server-only `UserFields` (see below) | Includes `passwordHash` and (2026-08-07) the encrypted Gmail App Password `emailAppPasswordEnc` — never sent to the client. `toPublicUser()` (`api/_lib/collections.ts`) strips both before any response (exposing only the derived `hasEmailAppPassword` boolean). |
 | `roles` | `key: string` (e.g. `"super_admin"`, or `"role_<ObjectId>"` for custom roles) | `Role` (unchanged shape from the old client-side type) | Seeded from `defaultRoles` (`src/lib/roles.ts`) via `api/_lib/rbacSeed.ts` on first run (`seedDefaultRolesIfEmpty()`), called from the Setup Wizard and from `GET /api/roles`. |
 | `company` | fixed string `"singleton"` | `Company` (unchanged shape) | Always exactly one document; `GET /api/company` falls back to `defaultCompany` merged with the stored doc if it doesn't exist yet. |
 | `products` | MongoDB `ObjectId` | `Product` minus `id` (Mongo `_id` takes its place) | `withStringId()` maps `_id` → `id: string` for the client response. |
@@ -114,12 +114,21 @@ interface User {
   status: UserStatus;
   profilePictureDataUrl: string;
   signatureDataUrl: string;    // rendered on quotations this user prepared/approved
+  hasEmailAppPassword: boolean; // 2026-08-07 — derived server-side from emailAppPasswordEnc (below),
+                                // never stored on the client type itself: true when this user can
+                                // send Scope of Work document emails from their own Gmail
   createdAt: string;
   updatedAt: string;
 }
 
-// Server-only DB storage schema — api/_lib/collections.ts. UserFields = Omit<User, "id"> & { passwordHash: string }.
-// toPublicUser() strips passwordHash and maps _id -> id before any response reaches the client.
+// Server-only DB storage schema — api/_lib/collections.ts.
+// UserFields = Omit<User, "id" | "hasEmailAppPassword"> & { passwordHash: string; emailAppPasswordEnc?: string }.
+// toPublicUser() strips passwordHash AND emailAppPasswordEnc (adds the derived hasEmailAppPassword)
+// and maps _id -> id before any response reaches the client.
+// emailAppPasswordEnc (2026-08-07) = the user's Gmail App Password, AES-256-GCM-encrypted
+// ("v1:<iv>:<tag>:<ct>" base64url, api/_lib/emailCredentials.ts, keyed by the EMAIL_CRED_SECRET
+// env var) — set/cleared only by the user themselves via PATCH /api/users/:id { emailAppPassword },
+// used by Scope of Work's person-to-person "ส่งอีเมลแจ้งผู้รับเอกสาร" and POST /api/users/:id/email-test.
 ```
 `passwordHash` is a **real bcrypt hash** (`bcryptjs`, cost 10) — the old client-side `hashPassword()` non-cryptographic checksum function is gone entirely, deleted, not just deprecated. `User[]` (a MongoDB collection now, not a `localStorage` array) is real multi-account support. The "current user" is real React state in `App.tsx` (`currentUser`), populated on boot from `GET /api/auth/session` and kept in sync via `updateUsers`/`updateCurrentUser` — no longer derived via `.find()` against a separately-tracked session id.
 
@@ -460,8 +469,9 @@ interface ScopeOfWork {
   shippingContact: string; shippingPhone: string; billingContact: string; billingPhone: string;
   checklistGroups: ChecklistGroup[]; items: ScopeOfWorkItem[];
   paymentConditions: ScopeOfWorkPaymentConditions;
-  // documentRecipients added 2026-07-23: documentsToSend option key -> picked User.id[]. See
-  // MODULES/ScopeOfWork.md "Document Recipients".
+  // documentRecipients added 2026-07-23: documentsToSend option key -> picked User.id[]. Since
+  // 2026-08-07 the checklist-independent "additional" key ("ผู้รับเพิ่มเติม", any user, always sent)
+  // is also valid — full key list is ALL_RECIPIENT_KEYS. See MODULES/ScopeOfWork.md "Document Recipients".
   documentRecipients: Record<string, string[]>;
   // documentRecipientMessage added 2026-07-23 (same-day third pass): free text, rendered above the
   // auto-generated summary in the "ส่งอีเมลแจ้งผู้รับเอกสาร" email. Unlike revisionNote below, this
@@ -789,8 +799,8 @@ list per category. Key data-model notes:
   category here. **2026-07-23**: also scoped by `scopeOfWork:viewAll` — a caller without it only
   matches against records it created itself (`createdBy === ctx.user.id`, plus ownerless legacy
   records) **or that named it as a document recipient** (same-day second pass — a `$or` of
-  `{ "documentRecipients.<key>": ctx.user.id }` for each of the 6 real department keys in
-  `DOCUMENT_RECIPIENT_DEPARTMENTS`, dot-path querying into specific known object keys rather than
+  `{ "documentRecipients.<key>": ctx.user.id }` for each key in `ALL_RECIPIENT_KEYS` (the 6
+  department keys + `additional` since 2026-08-07), dot-path querying into specific known object keys rather than
   a generic "any array value under this object" query, which Mongo has no native operator for
   without `$expr`/`$objectToArray`). Same clause added to `GET /api/scope-of-works`'s list-everything
   mode. See [RBAC.md](./RBAC.md) "Scope of Work Own-Records-Only Viewing" and

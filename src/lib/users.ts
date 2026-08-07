@@ -15,6 +15,9 @@ export interface User {
   status: UserStatus;
   profilePictureDataUrl: string;
   signatureDataUrl: string;
+  /** Derived server-side from the encrypted Gmail App Password (never sent to the client) —
+   * true when this user can send Scope of Work document emails from their own Gmail. */
+  hasEmailAppPassword: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -92,6 +95,9 @@ export interface UpdateUserFields {
   signatureDataUrl?: string;
   password?: string;
   currentPassword?: string;
+  /** Gmail App Password for sending document emails as oneself — self-only (403 for anyone else,
+   * admins included). `""` clears the stored credential. Write-only: responses never echo it. */
+  emailAppPassword?: string;
 }
 
 // ดึงรายชื่อผู้ใช้ทั้งหมดจากเซิร์ฟเวอร์
@@ -116,4 +122,9 @@ export async function updateUser(id: string, fields: UpdateUserFields): Promise<
 // Deletes a user.
 export async function deleteUser(id: string): Promise<void> {
   await apiFetch<void>(`/users/${id}`, { method: "DELETE" });
+}
+// ส่งอีเมลทดสอบถึงตัวเอง เพื่อยืนยันว่า Gmail App Password ที่ตั้งไว้ใช้งานได้จริง
+// Sends a test email to oneself to verify the stored Gmail App Password actually works.
+export async function sendTestEmail(id: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/users/${id}/email-test`, { method: "POST" });
 }

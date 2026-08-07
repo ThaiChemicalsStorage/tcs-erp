@@ -7,6 +7,8 @@ import { findRole, roleHasPermission } from "../../src/lib/roles.js";
 import type { Role } from "../../src/lib/roles.js";
 import { nowIso } from "../../src/lib/products.js";
 import { validateImageDataUrl } from "../_lib/uploadValidation.js";
+import { decryptAppPassword, encryptAppPassword, isEmailCredSecretConfigured, normalizeAppPassword } from "../_lib/emailCredentials.js";
+import { createGmailTransport, sendEmailAs, GmailAuthError } from "../_lib/email.js";
 
 async function activeSuperAdminCount(users: Collection<UserFields>, roleList: Role[]): Promise<number> {
   const superAdminKeys = roleList.filter((r) => r.isSuperAdmin).map((r) => r.key);
@@ -119,6 +121,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method === "PATCH") {
     const body = req.body ?? {};
     const update: Record<string, unknown> = {};
+    let unsetEmailAppPassword = false;
 
     if (typeof body.fullName === "string" && body.fullName.trim()) update.fullName = body.fullName.trim();
     if (typeof body.phone === "string") update.phone = body.phone.trim();
@@ -137,6 +140,18 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
         throw new HttpError(403, "Forbidden");
       }
       update.passwordHash = await hashPassword(body.password);
+    }
+
+    // Gmail App Password for person-to-person document emails (2026-08-07). Strictly self-only —
+    // even `users:manage` admins may not set someone else's personal Gmail credential. `""`
+    // clears it; anything else is validated + encrypted at rest (see api/_lib/emailCredentials.ts).
+    if (typeof body.emailAppPassword === "string") {
+      if (!isSelf) throw new HttpError(403, "ตั้งค่า Gmail App Password ได้เฉพาะบัญชีของตนเองเท่านั้น");
+      if (body.emailAppPassword === "") {
+        unsetEmailAppPassword = true;
+      } else {
+        update.emailAppPasswordEnc = encryptAppPassword(normalizeAppPassword(body.emailAppPassword));
+      }
     }
 
     if (canManage) {
@@ -177,12 +192,15 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
       }
     }
 
-    if (Object.keys(update).length === 0) {
+    if (Object.keys(update).length === 0 && !unsetEmailAppPassword) {
       res.status(200).json({ user: toPublicUser(target) });
       return;
     }
     update.updatedAt = nowIso();
-    await users.updateOne({ _id: objectId }, { $set: update });
+    await users.updateOne({ _id: objectId }, {
+      $set: update,
+      ...(unsetEmailAppPassword ? { $unset: { emailAppPasswordEnc: "" } } : {}),
+    });
     const updated = await users.findOne({ _id: objectId });
     if (!updated) throw new HttpError(404, "ไม่พบผู้ใช้งาน");
     res.status(200).json({ user: toPublicUser(updated) });
@@ -206,12 +224,55 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
+/** POST /api/users/:id/email-test — sends a test email to the user's OWN address through their
+ * stored Gmail App Password, so they can verify the credential right after saving it in Settings.
+ * Self-only, like the credential itself. */
+async function handleEmailTest(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  if (ctx.user.id !== id) throw new HttpError(403, "ส่งอีเมลทดสอบได้เฉพาะบัญชีของตนเองเท่านั้น");
+  if (!isEmailCredSecretConfigured()) {
+    throw new HttpError(500, "ระบบยังไม่ได้ตั้งค่าการเข้ารหัสอีเมล (EMAIL_CRED_SECRET) กรุณาติดต่อผู้ดูแลระบบ");
+  }
+
+  const users = await usersCollection();
+  const target = await users.findOne({ _id: toObjectId(id) }, { projection: { email: 1, fullName: 1, emailAppPasswordEnc: 1 } });
+  if (!target) throw new HttpError(404, "ไม่พบผู้ใช้งาน");
+  const appPassword = typeof target.emailAppPasswordEnc === "string" ? decryptAppPassword(target.emailAppPasswordEnc) : null;
+  if (!appPassword) {
+    throw new HttpError(400, "ยังไม่ได้ตั้งค่า Gmail App Password หรือค่าที่บันทึกไว้ใช้ไม่ได้ กรุณาบันทึกใหม่อีกครั้ง");
+  }
+
+  const transport = createGmailTransport(target.email, appPassword);
+  try {
+    await sendEmailAs(transport, {
+      fromName: target.fullName,
+      fromEmail: target.email,
+      to: target.email,
+      subject: "[TCS ERP] ทดสอบการส่งอีเมล",
+      html: `<p style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-size:14px;color:#1a1a1a;">
+        อีเมลฉบับนี้คือการทดสอบจากระบบ TCS ERP — Gmail App Password ของคุณใช้งานได้ถูกต้อง
+        และการส่งอีเมลแจ้งผู้รับเอกสาร Scope of Work จะส่งออกจากที่อยู่ ${target.email} นี้</p>`,
+    });
+  } catch (err) {
+    if (err instanceof GmailAuthError) {
+      throw new HttpError(400, "Gmail ปฏิเสธ App Password นี้ — ตรวจสอบว่าคัดลอกมาถูกต้อง ยังไม่ถูกเพิกถอน และบัญชี Google เปิดการยืนยันแบบ 2 ขั้นตอนแล้ว");
+    }
+    console.error(`[users] test email to ${target.email} failed`, err);
+    throw new HttpError(502, "ส่งอีเมลทดสอบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+  } finally {
+    transport.close();
+  }
+  res.status(200).json({ ok: true });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   await withErrorHandling(req, res, async () => {
     const parts = getPathSegments(req, "/api/users");
 
     if (parts.length === 0) return handleList(req, res);
     if (parts.length === 1) return handleOne(req, res, parts[0]);
+    if (parts.length === 2 && parts[1] === "email-test") return handleEmailTest(req, res, parts[0]);
     throw new HttpError(404, "Not found");
   });
 }

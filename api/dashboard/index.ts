@@ -8,7 +8,7 @@ import {
   withStringId, type QuoteFields,
 } from "../_lib/collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
-import { DOCUMENT_RECIPIENT_DEPARTMENTS } from "../../src/lib/documentRequirements.js";
+import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
 import { computeQuoteAmountBeforeVat } from "../_lib/quoteAmounts.js";
 import { dedupeQuotesByRevisionChain } from "../_lib/quoteRevisions.js";
@@ -930,7 +930,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // them — same predicates as `handleList` in scopeOfWorkHandler.ts / deliveryOrderHandler.ts
     // (own `createdBy`, ownerless legacy records, and — for Scope of Work only — records naming
     // the caller as a document recipient).
-    const scopeRecipientMatch = DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => ({ [`documentRecipients.${d.key}`]: ctx.user.id }));
+    const scopeRecipientMatch = ALL_RECIPIENT_KEYS.map((key) => ({ [`documentRecipients.${key}`]: ctx.user.id }));
     const ownScopeClause = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
       ? {}
       : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }, ...scopeRecipientMatch] };
