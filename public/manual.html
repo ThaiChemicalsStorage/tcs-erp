@@ -161,6 +161,36 @@
   .top-link a { color: var(--muted); text-decoration: none; }
   .top-link a:hover { color: var(--gold); }
 
+  /* สารบัญด้านข้าง — แสดงเฉพาะจอกว้าง (จอแคบ/มือถือใช้สารบัญด้านบนตามเดิม) */
+  .side-nav { display: none; }
+  @media (min-width: 1140px) {
+    body { padding-left: 264px; }
+    .side-nav {
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; left: 0; bottom: 0; width: 264px;
+      overflow-y: auto; padding: 30px 16px 24px 20px;
+      background: var(--card); border-right: 1px solid var(--line);
+    }
+    .side-nav .nav-title {
+      font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--gold); font-weight: 700; margin: 0 0 12px; padding-left: 10px;
+    }
+    .side-nav a {
+      display: flex; gap: 9px; align-items: baseline;
+      color: var(--muted); text-decoration: none;
+      font-size: 13.5px; line-height: 1.45;
+      padding: 6px 10px; border-radius: 6px; margin-bottom: 1px;
+    }
+    .side-nav a:hover { color: var(--navy); background: var(--gold-soft); }
+    .side-nav a.active { color: var(--navy); background: var(--gold-soft); font-weight: 700; }
+    .side-nav a .no {
+      flex-shrink: 0; width: 18px; text-align: right;
+      font-variant-numeric: tabular-nums; color: var(--gold);
+      font-weight: 700; font-size: 12px;
+    }
+    .side-nav .nav-top { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
+  }
+
   footer {
     margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
     font-size: 13px; color: var(--muted);
@@ -169,15 +199,33 @@
   a:focus-visible, button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   @media print {
-    body { background: #fff; }
+    body { background: #fff; padding-left: 0 !important; }
     .wrap { padding: 0; max-width: none; }
     .step, table, .callout, .toc { break-inside: avoid; }
     h2 { break-after: avoid; }
-    .top-link { display: none; }
+    .top-link, .side-nav { display: none !important; }
   }
 </style>
 </head>
 <body>
+<nav class="side-nav" aria-label="สารบัญด้านข้าง">
+  <p class="nav-title">สารบัญ</p>
+  <a href="#ch1"><span class="no">1</span>การเข้าสู่ระบบ</a>
+  <a href="#ch2"><span class="no">2</span>ภาพรวมหน้าจอและเมนู</a>
+  <a href="#ch3"><span class="no">3</span>แดชบอร์ด</a>
+  <a href="#ch4"><span class="no">4</span>ใบเสนอราคา</a>
+  <a href="#ch5"><span class="no">5</span>Scope of Work</a>
+  <a href="#ch6"><span class="no">6</span>การส่งอีเมลเอกสาร (Gmail)</a>
+  <a href="#ch7"><span class="no">7</span>ใบส่งมอบสินค้า</a>
+  <a href="#ch8"><span class="no">8</span>คลังสินค้า</a>
+  <a href="#ch9"><span class="no">9</span>ลูกค้า</a>
+  <a href="#ch10"><span class="no">10</span>Template ใบเสนอราคา</a>
+  <a href="#ch11"><span class="no">11</span>ส่วนผู้ดูแลระบบ</a>
+  <a href="#ch12"><span class="no">12</span>ตั้งค่า (Settings)</a>
+  <a href="#ch13"><span class="no">13</span>การพิมพ์เอกสารเป็น PDF</a>
+  <a href="#ch14"><span class="no">14</span>คำถามพบบ่อย (FAQ)</a>
+  <div class="nav-top"><a href="#top">↑ ขึ้นบนสุด</a></div>
+</nav>
 <div class="wrap">
   <header id="top">
     <p class="eyebrow">TCS ERP · Thai Chemicals Storage</p>
@@ -621,5 +669,24 @@
 
   <footer>คู่มือการใช้งานระบบ TCS ERP · ฉบับวันที่ 7 สิงหาคม 2026 — เปิดจากปุ่ม "คู่มือการใช้งาน" บนแถบด้านบนของระบบได้ตลอดเวลา</footer>
 </div>
+<script>
+  // ไฮไลต์บทที่กำลังอ่านอยู่ในสารบัญด้านข้าง
+  (function () {
+    var links = document.querySelectorAll(".side-nav a[href^='#ch']");
+    if (!links.length || !("IntersectionObserver" in window)) return;
+    var byId = {};
+    links.forEach(function (a) { byId[a.getAttribute("href").slice(1)] = a; });
+    var current = null;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        if (current) current.classList.remove("active");
+        current = byId[e.target.id];
+        if (current) current.classList.add("active");
+      });
+    }, { rootMargin: "-15% 0px -70% 0px" });
+    document.querySelectorAll("section[id^='ch']").forEach(function (s) { io.observe(s); });
+  })();
+</script>
 </body>
 </html>

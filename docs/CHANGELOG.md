@@ -4,7 +4,19 @@
 
 ---
 
-## 2026-08-07 (absolute latest) — User manual is now a web page (`public/manual.html`) replacing the PDF link
+## 2026-08-07 (absolute latest) — Web manual: sticky sidebar chapter navigation
+
+Direct user request ("อยากให้ในหน้าคู่มือให้ด้านข้างสามารถกดไปตามแต่ละหัวข้อได้ จะได้ไม่ต้องเลื่อนมากดด้านบนบ่อยๆ").
+
+- **`public/manual.html`** — added a fixed left sidebar TOC (`.side-nav`, all 14 chapters + "↑ ขึ้นบนสุด")
+  shown only at ≥1140px viewport width; narrower screens keep the existing in-page top TOC unchanged.
+  A small `IntersectionObserver` scroll-spy highlights the chapter currently being read (gold-soft
+  pill, no side-border accent). Hidden in print (`@media print`), body padding reset. Verified via
+  Playwright at 1440px (sidebar + active highlight correct) and 820px (hidden, no horizontal scroll).
+
+---
+
+## 2026-08-07 — User manual is now a web page (`public/manual.html`) replacing the PDF link
 
 Direct user request after seeing the standalone email-setup guide's document design ("อยากได้แบบนี้
 ไปไว้ในเว็บตรงที่เป็นคู่มือการใช้งาน ให้ปรับเปลี่ยนเป็นรูปแบบนี้เลย"); the "หน้าเว็บแทน PDF" option
