@@ -20,9 +20,7 @@ import { getRevisionRoot } from "./quoteRevisions.js";
 import { ADDITIONAL_RECIPIENT_KEY, ALL_RECIPIENT_KEYS, DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/lib/documentRequirements.js";
 import { normalizePaymentConditions, normalizeDocumentRecipients } from "../../src/lib/scopeOfWork.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
-import { createGmailTransport, sendEmailAs, GmailAuthError } from "./email.js";
-import { decryptAppPassword, isEmailCredSecretConfigured } from "./emailCredentials.js";
-import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE, formatFileSize } from "../../src/lib/scopeOfWork.js";
+import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE } from "../../src/lib/scopeOfWork.js";
 import type {
   ScopeOfWork, ScopeOfWorkSummary, ScopeOfWorkListItem, ScopeOfWorkStatus,
   ScopeOfWorkItem, ScopeOfWorkSpecLine, ScopeOfWorkPaymentConditions, ScopeOfWorkPaymentInstallment,
@@ -876,9 +874,6 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
     // deleting an attachment from one record would break the other's link. See
     // `ScopeOfWork.attachments`'s doc comment (src/lib/scopeOfWork.ts).
     attachments: [],
-    // Never inherited (2026-07-24) — a new document starts its own email conversation; carrying
-    // the source's thread would make this record's sends reply into the source's thread.
-    emailThreadId: "",
   };
   let created: ScopeOfWorkFields & { _id: ObjectId };
   try {
@@ -948,9 +943,6 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
       // deleting an attachment from one record would break the other's link. See
       // `ScopeOfWork.attachments`'s doc comment (src/lib/scopeOfWork.ts).
       attachments: [],
-      // Never inherited (2026-07-24) — a revision starts its own email conversation; see the
-      // matching reset in handleDuplicate() above.
-      emailThreadId: "",
     };
     try {
       const result = await scopeOfWorks.insertOne(doc);
@@ -1222,101 +1214,26 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
   res.status(200).json({ ok: true });
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
-}
-function nl2br(escaped: string): string {
-  return escaped.replace(/\n/g, "<br>");
-}
-
 /**
- * Builds the "ส่งอีเมลแจ้งผู้รับเอกสาร" email body — a formal, inline-styled layout (navy/gold, same
- * palette as the app itself) added 2026-07-23 replacing the original bare `<p>`/`<ul>` markup, per
- * direct user request that the auto-generated content "ดูทางการมากขึ้น" (look more official). Every
- * rule is inline (`style="..."`) because most email clients strip `<style>` tags/external
- * stylesheets. `doc.documentRecipientMessage`, if non-empty, renders as a distinctly highlighted
- * note directly above the auto-generated summary — added the same pass, per the same user request,
- * for a way to attach ad-hoc context (e.g. a deadline) the auto-generated fields alone can't say.
- */
-function buildDocumentRecipientEmailHtml(doc: WithId<ScopeOfWorkFields>, appUrl: string, senderFullName: string): string {
-  const rows: [string, string][] = [
-    ["ลูกค้า", doc.customerSnapshot.companyName],
-    ["ใบเสนอราคา", doc.quotationNumber],
-    ["ประเภทงาน", `${doc.jobTypeCode} ${doc.jobTypeName}`.trim()],
-    ["วันที่ส่งของ/ส่งแบบอนุมัติ", doc.deliveryDate || "-"],
-  ];
-  const messageBlock = doc.documentRecipientMessage.trim()
-    ? `<div style="background:#f7f1e3;border-left:3px solid #c9a84c;border-radius:4px;padding:12px 16px;margin:0 0 20px;">
-         <p style="margin:0;font-size:13px;line-height:1.6;color:#4a3f22;">${nl2br(escapeHtml(doc.documentRecipientMessage.trim()))}</p>
-       </div>`
-    : "";
-  const rowsHtml = rows
-    .map(
-      ([label, value], i) => `
-      <tr>
-        <td style="padding:8px 0;font-size:13px;color:#767676;white-space:nowrap;vertical-align:top;${i > 0 ? "border-top:1px solid #eee;" : ""}">${escapeHtml(label)}</td>
-        <td style="padding:8px 0 8px 16px;font-size:13px;color:#1a1a1a;font-weight:600;${i > 0 ? "border-top:1px solid #eee;" : ""}">${escapeHtml(value)}</td>
-      </tr>`,
-    )
-    .join("");
-
-  // Attached files (2026-07-24) — capability-URL links (random key, no app session needed),
-  // openable straight from any mail client. `url` is stored app-relative; prefix the app origin
-  // for the email context.
-  const attachments = Array.isArray(doc.attachments) ? doc.attachments : [];
-  const attachmentsBlock = attachments.length > 0
-    ? `<div style="margin-top:22px;border-top:1px solid #eee;padding-top:16px;">
-         <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#767676;letter-spacing:.5px;">ไฟล์แนบ (${attachments.length})</p>
-         ${attachments
-           .map((a) => {
-             const href = a.url.startsWith("http") ? a.url : `${appUrl}${a.url}`;
-             return `<p style="margin:0 0 6px;font-size:13px;">📎 <a href="${href}" style="color:#0b1d3a;font-weight:600;">${escapeHtml(a.fileName)}</a>
-               <span style="color:#999;font-size:11px;">(${formatFileSize(a.size)})</span></p>`;
-           })
-           .join("")}
-       </div>`
-    : "";
-
-  return `
-    <div style="font-family:'Segoe UI',Tahoma,Arial,sans-serif;max-width:560px;margin:0 auto;background:#f4f4f4;padding:24px 16px;">
-      <div style="background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e4e4e4;">
-        <div style="background:#0b1d3a;padding:22px 28px;">
-          <p style="margin:0;color:#c9a84c;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">TCS ERP</p>
-          <p style="margin:6px 0 0;color:#ffffff;font-size:17px;font-weight:600;">แจ้งเตือนเอกสาร Scope of Work</p>
-        </div>
-        <div style="padding:26px 28px;">
-          ${messageBlock}
-          <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#1a1a1a;">
-            Scope of Work <strong style="color:#0b1d3a;">${escapeHtml(doc.scopeNumber)}</strong> มีเอกสารที่ต้องการให้ตรวจสอบ/ดำเนินการ
-          </p>
-          <table style="width:100%;border-collapse:collapse;">${rowsHtml}</table>
-          ${attachmentsBlock}
-          <div style="margin-top:26px;text-align:center;">
-            <a href="${appUrl}" style="display:inline-block;background:#c9a84c;color:#0b1d3a;text-decoration:none;font-weight:700;font-size:13px;padding:11px 28px;border-radius:6px;">เปิดดูใน TCS ERP</a>
-          </div>
-        </div>
-      </div>
-      <p style="margin:16px 0 0;font-size:11px;color:#999;text-align:center;">อีเมลนี้ส่งโดย ${escapeHtml(senderFullName)} ผ่านระบบ TCS ERP — ตอบกลับอีเมลฉบับนี้เพื่อติดต่อผู้ส่งได้โดยตรง</p>
-    </div>`;
-}
-
-/**
- * "ส่งอีเมลแจ้งผู้รับเอกสาร" — added 2026-07-23, per direct user request to actually route the
- * `documentsToSend` checklist to real people by email (see `ScopeOfWork.documentRecipients`'s doc
- * comment and docs/MODULES/ScopeOfWork.md "Document Recipients"). Only departments that are BOTH
- * currently checked in the checklist AND have at least one picked recipient are emailed — a
- * department with recipients picked earlier but since unchecked is skipped (the picks themselves
- * are preserved for convenience if re-checked later, but the send action only acts on what's
- * currently marked "needs to go here"). `ADDITIONAL_RECIPIENT_KEY` picks ("ผู้รับเพิ่มเติม",
- * 2026-08-07) are the exception: chosen freely from the whole staff directory and always included,
- * no checklist gate. Since 2026-08-07 the email goes out person-to-person from the acting user's
- * OWN Gmail (their stored App Password — no central Resend account anymore), so replies reach the
- * sender directly. Gated by `scopeOfWork:edit` — originally `scopeOfWork:print`
- * (reasoning: a distribution action like Print), changed 2026-07-24 on direct user report: a
- * view/print-only role could fire the send while being unable to pick or change recipients, so
- * sending now requires the same permission that controls the recipient picker itself. Still no
- * ownership check, and still works on a `"Final"` record (unlike content edits, which are
- * Draft-only) — it distributes the document, it doesn't change it.
+ * "ส่งแจ้งเตือนผู้รับเอกสาร" — added 2026-07-23 (as an email send), per direct user request to
+ * actually route the `documentsToSend` checklist to real people (see
+ * `ScopeOfWork.documentRecipients`'s doc comment and docs/MODULES/ScopeOfWork.md "Document
+ * Recipients"). **Since 2026-08-07 (second pass, same day) this is in-app-notification-only** —
+ * the user cut email delivery entirely ("ตัดการส่งอีเมลออกไปเลยเหลือไว้แค่ส่งในระบบพอ") after the
+ * Gmail App Password flow proved too hard for staff to set up; the earlier same-day
+ * person-to-person Gmail rewrite (and the original central Resend before it) are both gone.
+ * Recipients get the bell notification and the record becomes visible to them — no email leaves
+ * the system. Only departments that are BOTH currently checked in the checklist AND have at least
+ * one picked recipient are notified — a department with recipients picked earlier but since
+ * unchecked is skipped (the picks themselves are preserved for convenience if re-checked later).
+ * `ADDITIONAL_RECIPIENT_KEY` picks ("ผู้รับเพิ่มเติม", 2026-08-07) are the exception: chosen freely
+ * from the whole staff directory and always included, no checklist gate. Gated by
+ * `scopeOfWork:edit` — originally `scopeOfWork:print` (reasoning: a distribution action like
+ * Print), changed 2026-07-24 on direct user report: a view/print-only role could fire the send
+ * while being unable to pick or change recipients, so sending now requires the same permission
+ * that controls the recipient picker itself. Still no ownership check, and still works on a
+ * `"Final"` record (unlike content edits, which are Draft-only) — it distributes the document,
+ * it doesn't change it.
  */
 async function handleSendDocumentNotifications(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
@@ -1339,95 +1256,15 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
     throw new HttpError(400, 'กรุณาเลือกผู้รับเอกสารอย่างน้อย 1 คน — จากแผนกที่เลือกไว้ใน "เอกสารส่งถึง" หรือจาก "ผู้รับเพิ่มเติม"');
   }
 
-  // Person-to-person sending (2026-08-07, replacing central Resend): the email goes out from the
-  // acting user's OWN Gmail via their stored App Password — see api/_lib/email.ts.
-  if (!isEmailCredSecretConfigured()) {
-    throw new HttpError(500, "ระบบยังไม่ได้ตั้งค่าการเข้ารหัสอีเมล (EMAIL_CRED_SECRET) กรุณาติดต่อผู้ดูแลระบบ");
-  }
   const users = await usersCollection();
-  const senderDoc = await users.findOne(
-    { _id: toObjectId(ctx.user.id) },
-    { projection: { email: 1, fullName: 1, emailAppPasswordEnc: 1 } },
-  );
-  const senderAppPassword = typeof senderDoc?.emailAppPasswordEnc === "string" ? decryptAppPassword(senderDoc.emailAppPasswordEnc) : null;
-  if (!senderDoc || !senderAppPassword) {
-    throw new HttpError(400, "คุณยังไม่ได้ตั้งค่า Gmail App Password สำหรับส่งอีเมล — ตั้งค่าได้ที่ ตั้งค่า → ความปลอดภัย → การส่งอีเมล (Gmail)");
-  }
-
   const userDocs = await users.find(
     { _id: { $in: [...recipientUserIds].map((uid) => toObjectId(uid)) } },
     { projection: { email: 1, fullName: 1 } },
   ).toArray();
 
-  const appUrl = process.env.APP_URL || "https://tcs-erp-nine.vercel.app";
-  const baseSubject = `[Scope of Work] ${doc.scopeNumber} — ${doc.customerSnapshot.companyName}`;
-
-  // ── Email threading (2026-07-24, direct user request: "ส่งไฟล์ตามหลัง...ให้มันอยู่ในแบบเหมือน
-  // ตอบกลับตัวเองในอีเมล") — every send of the SAME record shares one synthetic thread anchor in
-  // its `References` header (follow-ups add `In-Reply-To` + a "Re:" subject), so repeat sends
-  // (e.g. after attaching another file) collapse into the recipient's existing conversation.
-  // Per-record, so two different Scope of Works never share a thread.
-  //
-  // **Why the FIRST send also carries `References` (fix, same day)**: the original implementation
-  // set the anchor as the first email's own `Message-ID` and had follow-ups reference that — but
-  // Resend replaces a custom `Message-ID` with its own, so the follow-up referenced an ID that
-  // never existed and Gmail kept it as a separate conversation (live-verified: the "Re:" arrived
-  // unthreaded). Anchoring EVERY send — first included — to the same synthetic `References` value
-  // removes the dependency on the provider preserving anything: mail clients group messages whose
-  // `References` chains share an ID, whether or not that root message exists. (`Message-ID` is
-  // still attempted on the first send — harmless if honored, harmless if replaced.)
-  let threadId = typeof doc.emailThreadId === "string" ? doc.emailThreadId : "";
-  const isFollowUp = threadId !== "";
-  let subject = baseSubject;
-  let messageId: string | undefined;
-  let inReplyTo: string | undefined;
-  if (isFollowUp) {
-    inReplyTo = threadId;
-    subject = `Re: ${baseSubject}`;
-  } else {
-    const host = (() => { try { return new URL(appUrl).hostname; } catch { return "tcs-erp"; } })();
-    threadId = `<sow-${id}-${randomBytes(9).toString("hex")}@${host}>`;
-    messageId = threadId;
-    const scopeOfWorks = await scopeOfWorksCollection();
-    // Deliberately no updatedAt/updatedBy bump — this is send bookkeeping, not a content edit.
-    await scopeOfWorks.updateOne({ _id: doc._id }, { $set: { emailThreadId: threadId } });
-  }
-
-  const html = buildDocumentRecipientEmailHtml(doc, appUrl, ctx.user.fullName);
-
-  // One pooled SMTP session for the whole fan-out — each recipient still gets their own email.
-  const transport = createGmailTransport(senderDoc.email, senderAppPassword);
-  let results: PromiseSettledResult<void>[];
-  try {
-    results = await Promise.allSettled(userDocs.map((u) => sendEmailAs(transport, {
-      fromName: senderDoc.fullName,
-      fromEmail: senderDoc.email,
-      to: u.email,
-      subject,
-      html,
-      messageId,
-      inReplyTo,
-      references: threadId,
-    })));
-  } finally {
-    transport.close();
-  }
-  const sentCount = results.filter((r) => r.status === "fulfilled").length;
-  results.forEach((r, i) => {
-    if (r.status === "rejected") console.error(`[scope-of-works] failed to email recipient ${userDocs[i]?.email}`, r.reason);
-  });
-  const failedCount = results.length - sentCount;
-  // Every send failing with a Gmail auth rejection means the stored App Password itself is bad —
-  // surface that as a clear 400 instead of a deceptive `{ok:true, sentCount:0}`.
-  if (sentCount === 0 && results.some((r) => r.status === "rejected" && r.reason instanceof GmailAuthError)) {
-    throw new HttpError(400, "Gmail ปฏิเสธ App Password ของคุณ — ตรวจสอบที่ ตั้งค่า → ความปลอดภัย → การส่งอีเมล (Gmail) แล้วบันทึกใหม่อีกครั้ง");
-  }
-
-  // In-app notification (bell) alongside the email — added 2026-07-23, per direct user request
-  // ("อยากให้ขึ้นแจ้งเตือนในระบบด้วย"). Fired for every resolved recipient regardless of that
-  // individual's own email send outcome above (a bounced/rejected address shouldn't also silently
-  // suppress the in-app signal — the two channels are independent). Hand-rolled here rather than
-  // calling `notifyScopeOfWorkDocumentSent()` (src/lib/notifications.ts), same convention
+  // In-app notification (bell) — the only delivery channel since 2026-08-07 (email removed, see
+  // the function doc comment). Hand-rolled here rather than calling
+  // `notifyScopeOfWorkDocumentSent()` (src/lib/notifications.ts), same convention
   // `api/handlers/quotes.ts`'s workflow-notification writer already follows for the quotation
   // builders — that function's synthetic `id` is redundant with Mongo's own generated `_id`.
   type NotifDoc = {
@@ -1453,11 +1290,13 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
 
   await writeScopeAuditEntry(
     ctx, "Scope of Work Document Notification Sent",
-    `ส่งอีเมลแจ้งผู้รับเอกสารของ Scope of Work ${doc.scopeNumber} (${sentCount}/${userDocs.length} สำเร็จ)`,
+    `ส่งแจ้งเตือนผู้รับเอกสารของ Scope of Work ${doc.scopeNumber} (${userDocs.length} คน)`,
     { scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId },
   );
 
-  res.status(200).json({ ok: true, sentCount, failedCount, recipientCount: userDocs.length });
+  // `sentCount` kept in the shape (now = notified recipients) so the client's success toast
+  // logic keeps working unchanged.
+  res.status(200).json({ ok: true, sentCount: userDocs.length, failedCount: 0, recipientCount: userDocs.length });
 }
 
 /**

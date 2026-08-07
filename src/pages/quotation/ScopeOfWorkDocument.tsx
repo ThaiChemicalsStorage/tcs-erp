@@ -381,8 +381,8 @@ export function ScopeOfWorkDocument({
     }
   };
 
-  // บันทึกข้อมูลก่อน แล้วจึงส่งอีเมลแจ้งผู้รับเอกสารที่เลือกไว้
-  // Saves first, then sends the document-notification emails to the selected recipients
+  // บันทึกข้อมูลก่อน แล้วจึงส่งแจ้งเตือนในระบบถึงผู้รับเอกสารที่เลือกไว้ (ไม่มีอีเมลแล้ว — 2026-08-07)
+  // Saves first, then sends the in-app notifications to the selected recipients (email removed 2026-08-07)
   const handleSendDocuments = async () => {
     if (!scope || sendingDocs) return;
     setSendingDocs(true);
@@ -390,13 +390,9 @@ export function ScopeOfWorkDocument({
       const saved = await updateScopeOfWork(scope.id, isDraft ? toUpdateFields(scope) : toFollowUpFields(scope));
       setScope(saved);
       const result = await sendScopeOfWorkDocumentNotifications(scope.id);
-      showToast(
-        result.failedCount > 0
-          ? `ส่งอีเมลสำเร็จ ${result.sentCount}/${result.recipientCount} คน (มีบางรายการล้มเหลว)`
-          : `ส่งอีเมลแจ้งผู้รับเอกสารแล้ว (${result.sentCount} คน)`,
-      );
+      showToast(`ส่งแจ้งเตือนผู้รับเอกสารแล้ว (${result.sentCount} คน)`);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ส่งอีเมลไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : "ส่งแจ้งเตือนไม่สำเร็จ");
     } finally {
       setSendingDocs(false);
     }
@@ -621,8 +617,6 @@ export function ScopeOfWorkDocument({
   const hasDocumentRecipientsToSend = Object.entries(scope.documentRecipients).some(
     ([key, ids]) => (checkedDocumentsToSendKeys.has(key) || key === ADDITIONAL_RECIPIENT_KEY) && ids.length > 0,
   );
-  // อีเมลส่งออกจาก Gmail ของผู้ใช้ที่กดส่งเอง — ต้องตั้งค่า App Password ก่อน (ตั้งค่า → ความปลอดภัย)
-  const senderMissingAppPassword = users.some((u) => u.id === currentUserId && !u.hasEmailAppPassword);
 
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
@@ -867,14 +861,11 @@ export function ScopeOfWorkDocument({
         />
         {canEdit && documentsToSendGroup && (
           <div className="flex flex-col items-end gap-1.5 print:hidden -mt-2">
-            {senderMissingAppPassword && (
-              <p className="text-[11px] text-[#a75d1a]">{t("scopeOfWorkDoc.sendNeedsAppPassword")}</p>
-            )}
             <button
               onClick={handleSendDocuments}
-              disabled={!hasDocumentRecipientsToSend || sendingDocs || senderMissingAppPassword}
-              title={senderMissingAppPassword ? t("scopeOfWorkDoc.sendNeedsAppPassword") : !hasDocumentRecipientsToSend ? t("scopeOfWorkDoc.sendDocumentsNeedRecipient") : undefined}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!hasDocumentRecipientsToSend || sendingDocs || senderMissingAppPassword ? "opacity-40 cursor-not-allowed" : ""}`}
+              disabled={!hasDocumentRecipientsToSend || sendingDocs}
+              title={!hasDocumentRecipientsToSend ? t("scopeOfWorkDoc.sendDocumentsNeedRecipient") : undefined}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ${!hasDocumentRecipientsToSend || sendingDocs ? "opacity-40 cursor-not-allowed" : ""}`}
             >
               {sendingDocs ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />} {t("scopeOfWorkDoc.sendDocuments")}
             </button>

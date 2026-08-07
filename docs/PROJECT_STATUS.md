@@ -14,7 +14,16 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
-- ✅ **[2026-08-07] Scope of Work email is person-to-person from each sender's own Gmail (Resend
+- ✅ **[2026-08-07] Document-recipient delivery is in-app-notification-only — email sending removed
+  entirely (supersedes the same-day Gmail entry below).** Direct user request
+  ("ตัดการส่งอีเมลออกไปเลยเหลือไว้แค่ส่งในระบบพอ") after the per-user Gmail App Password setup
+  proved too hard for staff. The send button ("ส่งแจ้งเตือนผู้รับเอกสาร") now only writes bell
+  notifications + the audit entry and makes the record visible to recipients. Deleted:
+  `api/_lib/email.ts`, `api/_lib/emailCredentials.ts`, `EMAIL_CRED_SECRET`, the Settings App
+  Password card, `POST /api/users/:id/email-test`, `hasEmailAppPassword`, email threading, the
+  nodemailer dependency. "ผู้รับเพิ่มเติม" any-user recipients kept. Manual ch.6 rewritten. See
+  CHANGELOG.md 2026-08-07.
+- ✅ **[2026-08-07, superseded the same day — see the entry above] Scope of Work email is person-to-person from each sender's own Gmail (Resend
   removed) + "ผู้รับเพิ่มเติม" any-user recipients.** Direct user request: "ใครส่งให้คนไหนก็คือใช้
   อีเมลของคนนั้น" — the "ส่งอีเมลแจ้งผู้รับเอกสาร" email now goes out from the clicking user's OWN
   Gmail (nodemailer + Gmail SMTP; per-user App Passwords stored AES-256-GCM-encrypted in

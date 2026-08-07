@@ -8,8 +8,8 @@ import {
   type ScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE, formatFileSize,
 } from "../../lib/scopeOfWork";
 
-// เลือกพนักงานที่จะรับอีเมลเอกสารตามแผนกที่ติ๊กไว้ พร้อมจัดการไฟล์แนบและข้อความเพิ่มเติม
-// Picks which employees receive the document email per checked department, plus attachments and an extra message
+// เลือกพนักงานที่จะรับแจ้งเตือนเอกสารในระบบตามแผนกที่ติ๊กไว้ พร้อมจัดการไฟล์แนบและข้อความเพิ่มเติม
+// Picks which employees receive the in-app document notification per checked department, plus attachments and an extra message
 export function DocumentRecipientsPicker({
   documentsToSendGroup,
   users,
@@ -70,7 +70,7 @@ export function DocumentRecipientsPicker({
       </h2>
       <p className="text-[11px] text-muted-foreground mb-3">
         ติ๊กเลือกพนักงานในแต่ละแผนกที่เลือกไว้ใน "เอกสารส่งถึง" ด้านบน หรือเลือกพนักงานคนใดก็ได้ใน "{ADDITIONAL_RECIPIENT_LABEL}" ด้านล่าง —
-        เมื่อกดปุ่ม "ส่งอีเมลแจ้งผู้รับเอกสาร" อีเมลจะถูกส่งจาก Gmail ของคุณเอง (ตามที่ตั้งค่า App Password ไว้ในหน้าตั้งค่า) ถึงพนักงานที่ติ๊กเลือกไว้เป็นรายคน
+        เมื่อกดปุ่ม "ส่งแจ้งเตือนผู้รับเอกสาร" พนักงานที่ติ๊กเลือกไว้จะได้รับแจ้งเตือนที่กระดิ่งในระบบเป็นรายคน และเปิดดูเอกสารนี้ได้ทันที
       </p>
       <div className="space-y-4">
         {checkedDepartments.map((dept) => {
@@ -134,7 +134,7 @@ export function DocumentRecipientsPicker({
             </span>
           </div>
           <p className="text-[11px] text-muted-foreground mb-2">
-            เลือกพนักงานคนใดก็ได้จากทุกแผนก — ผู้รับในส่วนนี้จะได้รับอีเมลเสมอ ไม่ขึ้นกับแผนกที่ติ๊กไว้ใน "เอกสารส่งถึง"
+            เลือกพนักงานคนใดก็ได้จากทุกแผนก — ผู้รับในส่วนนี้จะได้รับแจ้งเตือนเสมอ ไม่ขึ้นกับแผนกที่ติ๊กไว้ใน "เอกสารส่งถึง"
           </p>
           {!disabled && (
             <div className="relative mb-2">
@@ -206,7 +206,7 @@ export function DocumentRecipientsPicker({
           />
         </div>
         <p className="text-[11px] text-muted-foreground mb-2">
-          ไฟล์ที่แนบจะถูกส่งเป็นลิงก์ในอีเมลถึงผู้รับเอกสารด้วย — ระบบจำกัดขนาดและจำนวนไฟล์ไว้เพื่อประหยัดพื้นที่จัดเก็บ
+          ผู้รับเอกสารเปิดดูไฟล์ที่แนบได้จากหน้าเอกสารนี้ — ระบบจำกัดขนาดและจำนวนไฟล์ไว้เพื่อประหยัดพื้นที่จัดเก็บ
         </p>
         {attachments.length === 0 ? (
           <p className="text-[11px] text-muted-foreground italic">ยังไม่มีไฟล์แนบ</p>
@@ -246,7 +246,7 @@ export function DocumentRecipientsPicker({
           ข้อความเพิ่มเติมถึงผู้รับ <span className="font-normal text-muted-foreground">(ไม่บังคับ)</span>
         </label>
         <p className="text-[11px] text-muted-foreground mb-2">
-          ข้อความนี้จะแสดงด้านบนเนื้อหาอัตโนมัติในอีเมล เช่น ระบุกำหนดเวลา หรือคำแนะนำเพิ่มเติมสำหรับผู้รับ
+          ข้อความนี้จะบันทึกไว้กับเอกสารให้ผู้รับเห็นเมื่อเปิดดู เช่น ระบุกำหนดเวลา หรือคำแนะนำเพิ่มเติมสำหรับผู้รับ
         </p>
         <textarea
           id="recipientMessage"

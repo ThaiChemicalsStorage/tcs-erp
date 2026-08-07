@@ -1,6 +1,6 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23, Attachments (Vercel Blob file storage) added 2026-07-24, Revision Note made an accumulating per-revision (R1/R2/...) history added 2026-08-04, browser print date/URL header-footer suppressed 2026-08-04
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23, Attachments (Vercel Blob file storage) added 2026-07-24, Revision Note made an accumulating per-revision (R1/R2/...) history added 2026-08-04, browser print date/URL header-footer suppressed 2026-08-04, **document-recipient delivery changed to in-app-notification-only 2026-08-07 (email sending removed entirely — see "Document Recipients")**
 
 **2026-07-23, Own-Records-Only Viewing** (per direct user request, "หน้า scope of work อยากให้ทำสิทธิ์
 เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — mirroring Quotation's `quotations:viewAll`): new
@@ -323,51 +323,33 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   the company (searchable by name/department/email; picked users always render first so a filter
   never hides an active selection), backing the `additional` key above. The card no longer
   disappears when zero departments are checked, since additional recipients are checklist-independent.
-- **"ส่งอีเมลแจ้งผู้รับเอกสาร"** button (below the picker, visible whenever the checklist exists
+- **"ส่งแจ้งเตือนผู้รับเอกสาร"** button (below the picker, visible whenever the checklist exists
   **and the caller holds `scopeOfWork:edit`** — the old ≥1-checked-department visibility condition
   was dropped 2026-08-07 because `additional` recipients need no checked department): saves the
   record first (the server reads recipients from the persisted document, not unsaved client state),
   then calls `POST /api/scope-of-works/:id/send-documents`
   (`handleSendDocumentNotifications()`, `api/_lib/scopeOfWorkHandler.ts`). Only departments that are
-  BOTH currently checked AND have ≥1 picked recipient are actually emailed — plus every `additional`
+  BOTH currently checked AND have ≥1 picked recipient are actually notified — plus every `additional`
   recipient, always; recipients are deduped across keys so a person picked twice gets one
-  email/notification, not two. **Gated by `scopeOfWork:edit` (changed 2026-07-24 from the original
+  notification, not two. **Gated by `scopeOfWork:edit` (changed 2026-07-24 from the original
   `scopeOfWork:print`, direct user report)**: a view/print-only role could fire the send while being
   unable to pick or change recipients — sending now requires the same permission that controls the
   picker, both server-side and for the button's visibility. Like Print it still has no ownership
   check and works on a `"Final"` record too (it distributes the document, it doesn't change it —
   content edits stay Draft-only).
-  **Person-to-person sending (2026-08-07, replaces Resend entirely — direct user request)**: the
-  email goes out **from the acting user's own Gmail** via `api/_lib/email.ts` (nodemailer, Gmail
-  SMTP `smtp.gmail.com:465`, one pooled transport per send action), authenticated with that user's
-  own Gmail **App Password** stored AES-256-GCM-encrypted in `users.emailAppPasswordEnc`
-  (`api/_lib/emailCredentials.ts`, keyed by the `EMAIL_CRED_SECRET` env var). From is
-  `"ชื่อผู้ส่ง" <อีเมลผู้ส่ง>`, so recipients can reply to the sender directly (the email footer says
-  exactly that now, instead of "อย่าตอบกลับ"). A sender with no stored/decryptable App Password gets
-  a 400 pointing at ตั้งค่า → ความปลอดภัย → การส่งอีเมล (the UI also disables the button up front
-  via `User.hasEmailAppPassword`); if **every** send in the fan-out fails with a Gmail auth
-  rejection (`EAUTH`/535 → `GmailAuthError`), the endpoint returns a 400 naming the App Password as
-  the culprit rather than a deceptive `{ok:true, sentCount:0}`. Still parallel per recipient
-  (`Promise.allSettled`, so one bad address doesn't block the others), still writes a
-  `"Scope of Work Document Notification Sent"` audit entry, and returns
-  `{ sentCount, failedCount, recipientCount }` for the UI toast. Gmail constraints (in the Settings
-  help copy): App Passwords require 2-Step Verification on the Google account; personal Gmail is
-  limited to ~500 outgoing recipients/day.
-- **Email threading (added 2026-07-24, direct user request)**: repeat sends of the *same* record
-  land in the recipients' existing email conversation, like a reply — the first send mints a
-  synthetic thread anchor (`<sow-{id}-{rand}@{APP_URL host}>`), persists it as server-only
-  `ScopeOfWork.emailThreadId` (no updatedAt bump), and **every send — the first included — carries
-  it in `References`** (follow-ups add `In-Reply-To` + a `Re:` subject). Anchoring the first send
-  too is a same-day live-test fix: Resend replaced a custom `Message-ID` with its own, so the
-  original follow-up referenced a nonexistent ID and Gmail kept it separate — clients group
-  messages whose `References` chains share an ID regardless of whether that root exists, which
-  removes the provider dependency entirely. (The 2026-08-07 Gmail-SMTP rewrite kept this scheme
-  unchanged — Gmail SMTP actually *preserves* a caller-supplied `Message-ID`, so first-send
-  threading only got more reliable, and threads started in the Resend era continue working.)
-  Strictly per-record (two Scope of Works never share a thread); Duplicate/Rewrite explicitly
-  reset the field (both build the new record by spreading the source, so without the reset a copy
-  would reply into the source's thread). Records whose first send predates the fix start grouping
-  from their next send onward.
+  **In-app-notification-only (2026-08-07, second pass same day — direct user request
+  "ตัดการส่งอีเมลออกไปเลยเหลือไว้แค่ส่งในระบบพอ")**: email delivery was removed entirely. The
+  feature's email history, in order: central Resend (2026-07-23) → person-to-person from each
+  sender's own Gmail via nodemailer + per-user encrypted App Passwords (2026-08-07 morning) →
+  **no email at all** (same day, after the App Password setup proved too hard for staff). The
+  send action now only writes the bell notifications + audit entry and makes the record visible
+  to recipients. Deleted with the email path: `api/_lib/email.ts`, `api/_lib/emailCredentials.ts`,
+  the `EMAIL_CRED_SECRET` env var, `users.emailAppPasswordEnc` / `User.hasEmailAppPassword`, the
+  self-only `emailAppPassword` PATCH field + `POST /api/users/:id/email-test`, the Settings
+  "การส่งอีเมล (Gmail App Password)" card, the nodemailer dependency, the email-HTML builder, and
+  email threading (`ScopeOfWork.emailThreadId` — no longer written; stale values in old documents
+  are ignored). The endpoint still returns `{ sentCount, failedCount: 0, recipientCount }`
+  (sentCount = notified recipients) so the client toast logic is unchanged.
 - **Approval workflow (added 2026-07-24, direct user request)**: the direct "ยืนยัน Final" button
   is replaced by **Draft → ส่งขออนุมัติ → รออนุมัติ (`PendingApproval`) → อนุมัติ → Final**, with
   ปฏิเสธ (finalize holder, comment required — lands in the audit entry + creator's notification)
@@ -385,9 +367,10 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   with the email threading. See CHANGELOG.md 2026-07-24.
 - **In-app notification + recipient list visibility** (added 2026-07-23, same-day second pass, per
   direct user follow-up — "อยากรู้ว่าทำยังไงถึงให้มันไปโผล่ในหน้า scope of work ของเราเวลาที่มีคนอื่น
-  ส่งมา... อยากให้ขึ้นแจ้งเตือนในระบบด้วย"): sending now does two more things besides the email —
+  ส่งมา... อยากให้ขึ้นแจ้งเตือนในระบบด้วย"): originally two extras alongside the email — since
+  2026-08-07 (email removed) these ARE the whole delivery mechanism —
   (1) writes one in-app `Notification` (`type: "scope_of_work_document_sent"`, bell icon `Mail`) per
-  resolved recipient, regardless of that individual's own email outcome — see
+  resolved recipient — see
   [Notifications.md](./Notifications.md). Clicking it deep-links straight to the record on the
   standalone Scope of Work page (`relatedScopeId` → `App.tsx`'s `scopeOfWorkDeepLinkId` →
   `ScopeOfWorkPage.tsx`'s `initialScopeOfWorkId` prop, same "adjust state during rendering" pattern
@@ -397,47 +380,18 @@ checklist is now backed by real people, not just a printed-form checkbox list:
   create the record — a `$or` of `{ "documentRecipients.<key>": ctx.user.id }` for each of the 6 real
   department keys, added to the existing own-records-only filter (see
   [RBAC.md](../RBAC.md) "Scope of Work Own-Records-Only Viewing"). Without this, a recipient who
-  never clicks the notification/email link (or whose email bounced) would have had literally no way
-  to find the document again through the app's own UI.
-- **Custom message + formal email restyle (added 2026-07-23, third same-day pass)**: direct user
-  request, with a screenshot of the plain original email — a "ข้อความเพิ่มเติมถึงผู้รับ (ไม่บังคับ)"
-  textarea now sits at the bottom of `DocumentRecipientsPicker.tsx`, saved as
-  `ScopeOfWork.documentRecipientMessage: string`. Non-empty text renders as a distinctly highlighted
-  note (`#f7f1e3` background, gold left border) directly **above** the auto-generated
-  "Scope of Work {scopeNumber} มีเอกสารที่ต้องการให้ตรวจสอบ/ดำเนินการ" line in the email — exactly
-  the placement asked for. Blank means the email is unchanged from before this field existed. Unlike
-  `revisionNote`, this field IS carried over on Duplicate/Rewrite (via the same `...rest` spread
-  `documentRecipients` itself already relies on) — a recurring instruction for the same job is more
-  often still relevant on the next revision than not, and it's trivially editable/clearable before
-  the next send either way. The email body itself (`buildDocumentRecipientEmailHtml()`,
-  `api/_lib/scopeOfWorkHandler.ts`) was also fully restyled the same pass, per the same request that
-  it "ดูทางการมากขึ้น" (look more official) — a navy header band with the "TCS ERP" wordmark, the
-  field list rendered as a two-column label/value table instead of a bullet list, a gold call-to-
-  action button instead of a plain text link, and a footer disclaimer, all inline-styled (`style="..."`
-  on every element — most email clients strip `<style>` tags/external stylesheets) rather than the
-  original bare `<p>`/`<ul>` markup.
-- **Known limitation, not fixed this pass**: the "เปิดดูใน TCS ERP" link inside the *email* itself
-  still only opens the app's homepage, not the specific record — this app has no URL-based router
-  (see [ARCHITECTURE.md](../ARCHITECTURE.md)), so a plain link from an external email genuinely
-  cannot restore in-memory navigation state on page load the way the in-app notification click
-  above does. The reliable way to jump straight to a specific record today is the in-app
-  notification bell, not the email link.
-- **Not built this pass**: attaching the actual printed document (PDF) to the email — this app has
-  no server-side PDF generation (Print/PDF export is entirely browser-native, `window.print()`); the
-  email is a plain HTML notification with the job's key fields and a link back into the app, not a
-  document-delivery replacement for print. No required-field validation was added either — picking
-  recipients is optional, layered on top of the existing "at least one department checked" rule,
-  which is unchanged.
-- **⚠️ Requires setup before this feature actually works (changed 2026-08-07)**: two pieces, both
-  with clear errors instead of silent failure —
-  (1) the **`EMAIL_CRED_SECRET` env var** must be set on the host (encrypts stored App Passwords;
-  missing → a clear 500 "ระบบยังไม่ได้ตั้งค่าการเข้ารหัสอีเมล"); rotating/losing it doesn't break
-  login but every user must re-enter their App Password (decrypt degrades to null → 400, never 500).
-  (2) **each sender must store their own Gmail App Password once** in ตั้งค่า → ความปลอดภัย →
-  การส่งอีเมล (self-only — even `users:manage` admins can't set someone else's; requires Google
-  2-Step Verification; a "ส่งอีเมลทดสอบถึงตัวเอง" button verifies it end-to-end via
-  `POST /api/users/:id/email-test`). No sending domain, no Resend account, no central provider
-  key anymore. See [DEPLOYMENT.md](../DEPLOYMENT.md).
+  never clicks the notification would have had literally no way to find the document again through
+  the app's own UI.
+- **Custom message (added 2026-07-23 for the email era, kept after the 2026-08-07 email removal)**:
+  a "ข้อความเพิ่มเติมถึงผู้รับ (ไม่บังคับ)" textarea sits at the bottom of
+  `DocumentRecipientsPicker.tsx`, saved as `ScopeOfWork.documentRecipientMessage: string` — now a
+  note stored on the record for recipients to read when they open it (the email body it used to
+  render inside no longer exists). Unlike `revisionNote`, this field IS carried over on
+  Duplicate/Rewrite (via the same `...rest` spread `documentRecipients` itself already relies on) —
+  a recurring instruction for the same job is more often still relevant on the next revision than
+  not, and it's trivially editable/clearable before the next send either way.
+- **No setup required (2026-08-07)**: with email gone there is nothing to configure — no env var,
+  no per-user credential. Anyone holding `scopeOfWork:edit` can send immediately.
 
 ## Attachments (added 2026-07-24, reworked to MongoDB storage the same day)
 
@@ -462,12 +416,12 @@ drawings, etc.) can be attached in the "ผู้รับเอกสาร" ca
   the JSON-base64 upload body under Vercel's ~4.5 MB serverless request limit.
 - **Downloads are capability URLs, no session needed**: each file gets a random 24-byte
   `downloadKey`; `GET /api/scope-of-works/:id/attachments/:attachmentId/download?key=...` serves
-  the bytes to anyone presenting the key (deliberately NO session auth — links go into recipient
-  emails, and mail clients have no app session; wrong/missing key is an opaque 404). Same
-  unguessable-URL security model the public Blob URLs would have had. `ScopeOfWorkAttachment.url`
-  stores the app-relative path; the email builder prefixes the app origin.
-- **Email integration**: the "ส่งอีเมลแจ้งผู้รับเอกสาร" email lists every attachment as a direct
-  clickable link.
+  the bytes to anyone presenting the key (originally because links went into recipient emails,
+  where mail clients have no app session — email is gone since 2026-08-07 but the capability-URL
+  model is kept; wrong/missing key is an opaque 404). Same unguessable-URL security model the
+  public Blob URLs would have had. `ScopeOfWorkAttachment.url` stores the app-relative path.
+- **Recipient access**: recipients open attachments from the record itself (visible to them via
+  the recipient-visibility filter above).
 - **Lifecycle**: upload/delete are immediate API actions on the dedicated routes (see
   [API.md](../API.md)) — `attachments` is deliberately NOT PATCHable, so a stale client can't wipe
   the array. Edit-gated (owner-or-finalize, Draft only), audit-logged both ways. Deleting an
@@ -857,11 +811,9 @@ gain a *value* import that transitively pulls in JSX/React.
 - `src/pages/quotation/DocumentRecipientsPicker.tsx` (**added 2026-07-23**) — the per-department
   recipient checkbox picker + the searchable "ผู้รับเพิ่มเติม" any-user box (2026-08-07) under the
   checklist card, see "Document Recipients" above.
-- `api/_lib/email.ts` (**added 2026-07-23, rewritten 2026-08-07**) — `createGmailTransport()` +
-  `sendEmailAs()` + `GmailAuthError`, the shared nodemailer/Gmail-SMTP sender (was the Resend REST
-  wrapper until the person-to-person rewrite).
-- `api/_lib/emailCredentials.ts` (**added 2026-08-07**) — AES-256-GCM encrypt/decrypt +
-  `normalizeAppPassword()` for the per-user Gmail App Passwords (`EMAIL_CRED_SECRET` env var).
+- ~~`api/_lib/email.ts` / `api/_lib/emailCredentials.ts`~~ (**deleted 2026-08-07**) — the
+  nodemailer/Gmail-SMTP sender and App Password encryption existed for a few hours between the
+  person-to-person rewrite and the same-day email removal; see "Document Recipients" above.
 - `src/pages/quotation/ScopeOfWorkPrintDocument.tsx` — the print/PDF layout.
 - `src/pages/quotation/QuoteDocument.tsx` — the "สร้าง Scope of Work"/"เปิด / แก้ไข Scope of Work"
   toolbar button (fetches whether one already exists per quotation).

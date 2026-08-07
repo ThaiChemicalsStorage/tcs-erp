@@ -10,7 +10,7 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 
 | Collection | `_id` | Shape | Notes |
 |---|---|---|---|
-| `users` | MongoDB `ObjectId` | server-only `UserFields` (see below) | Includes `passwordHash` and (2026-08-07) the encrypted Gmail App Password `emailAppPasswordEnc` — never sent to the client. `toPublicUser()` (`api/_lib/collections.ts`) strips both before any response (exposing only the derived `hasEmailAppPassword` boolean). |
+| `users` | MongoDB `ObjectId` | server-only `UserFields` (see below) | Includes `passwordHash` — never sent to the client; `toPublicUser()` (`api/_lib/collections.ts`) strips it (plus the legacy 2026-08-07 `emailAppPasswordEnc`, whose feature was removed the same day) before any response. |
 | `roles` | `key: string` (e.g. `"super_admin"`, or `"role_<ObjectId>"` for custom roles) | `Role` (unchanged shape from the old client-side type) | Seeded from `defaultRoles` (`src/lib/roles.ts`) via `api/_lib/rbacSeed.ts` on first run (`seedDefaultRolesIfEmpty()`), called from the Setup Wizard and from `GET /api/roles`. |
 | `company` | fixed string `"singleton"` | `Company` (unchanged shape) | Always exactly one document; `GET /api/company` falls back to `defaultCompany` merged with the stored doc if it doesn't exist yet. |
 | `products` | MongoDB `ObjectId` | `Product` minus `id` (Mongo `_id` takes its place) | `withStringId()` maps `_id` → `id: string` for the client response. |
@@ -114,21 +114,16 @@ interface User {
   status: UserStatus;
   profilePictureDataUrl: string;
   signatureDataUrl: string;    // rendered on quotations this user prepared/approved
-  hasEmailAppPassword: boolean; // 2026-08-07 — derived server-side from emailAppPasswordEnc (below),
-                                // never stored on the client type itself: true when this user can
-                                // send Scope of Work document emails from their own Gmail
   createdAt: string;
   updatedAt: string;
 }
 
 // Server-only DB storage schema — api/_lib/collections.ts.
-// UserFields = Omit<User, "id" | "hasEmailAppPassword"> & { passwordHash: string; emailAppPasswordEnc?: string }.
-// toPublicUser() strips passwordHash AND emailAppPasswordEnc (adds the derived hasEmailAppPassword)
-// and maps _id -> id before any response reaches the client.
-// emailAppPasswordEnc (2026-08-07) = the user's Gmail App Password, AES-256-GCM-encrypted
-// ("v1:<iv>:<tag>:<ct>" base64url, api/_lib/emailCredentials.ts, keyed by the EMAIL_CRED_SECRET
-// env var) — set/cleared only by the user themselves via PATCH /api/users/:id { emailAppPassword },
-// used by Scope of Work's person-to-person "ส่งอีเมลแจ้งผู้รับเอกสาร" and POST /api/users/:id/email-test.
+// UserFields = Omit<User, "id"> & { passwordHash: string; emailAppPasswordEnc?: string }.
+// toPublicUser() strips passwordHash and maps _id -> id before any response reaches the client.
+// emailAppPasswordEnc is LEGACY (2026-08-07, existed for a few hours): the per-user encrypted
+// Gmail App Password for the same-day-removed email-sending feature. No code writes or reads it
+// anymore; toPublicUser() still strips it defensively from old documents. Safe to $unset en masse.
 ```
 `passwordHash` is a **real bcrypt hash** (`bcryptjs`, cost 10) — the old client-side `hashPassword()` non-cryptographic checksum function is gone entirely, deleted, not just deprecated. `User[]` (a MongoDB collection now, not a `localStorage` array) is real multi-account support. The "current user" is real React state in `App.tsx` (`currentUser`), populated on boot from `GET /api/auth/session` and kept in sync via `updateUsers`/`updateCurrentUser` — no longer derived via `.find()` against a separately-tracked session id.
 

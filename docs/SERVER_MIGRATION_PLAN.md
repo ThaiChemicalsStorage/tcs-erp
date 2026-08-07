@@ -36,7 +36,7 @@ and CHANGELOG.md 2026-07-24.
 | Frontend (React/Vite) | ✅ | Builds to static files — servable by nginx or any static host |
 | Database (MongoDB Atlas) | ✅ | Keep Atlas, or move to self-hosted MongoDB via dump/restore |
 | File attachments | ✅ | Stored in MongoDB (`scope_attachment_files`) — travel with the DB |
-| Email (per-user Gmail SMTP via nodemailer — **2026-08-07**, Resend removed) | ✅ | Just set `EMAIL_CRED_SECRET` on the new host; the host must allow outbound TCP 465. Users' encrypted App Passwords live in MongoDB and travel with the DB |
+| Email | ✅ (nothing to migrate) | **Removed entirely 2026-08-07** — document recipients get in-app notifications only; no email env var, no SMTP port, no provider. (Resend and the brief same-day per-user Gmail SMTP are both gone) |
 | Auth (bcrypt + JWT httpOnly cookie) | ✅ | Not Vercel-coupled (`secure` cookie requires HTTPS on the new host) |
 | **API layer — 12 function files in `api/handlers/` + `vercel.json` rewrites** | ✅ (2026-08-06) | The thin Express wrapper exists: `server/app.ts` mounts the unchanged handlers on the same routing table. Both runtimes work from one codebase. |
 
@@ -57,8 +57,8 @@ around the existing handlers.**
    `tests/api/expressServer.test.ts`. See [ARCHITECTURE.md](./ARCHITECTURE.md) "Standalone
    Express server".
 2. ✅ **`.env.example`** — documents every variable: `MONGODB_URI`, `MONGODB_DB`, `JWT_SECRET`,
-   `NODE_ENV`, `PORT`, `APP_URL`, and (since 2026-08-07, replacing `RESEND_API_KEY`/`EMAIL_FROM`)
-   `EMAIL_CRED_SECRET`.
+   `NODE_ENV`, `PORT`, `APP_URL`. (No email var — `RESEND_API_KEY`/`EMAIL_FROM` and their brief
+   2026-08-07 replacement `EMAIL_CRED_SECRET` are all gone; email sending was removed.)
 3. ✅ **[DEPLOYMENT.md](./DEPLOYMENT.md)** — the real-server install guide (PM2/systemd,
    nginx/Caddy + HTTPS, Atlas-vs-self-hosted + backups, copying env values from Vercel).
 
@@ -75,14 +75,12 @@ unchanged; the Express entry is an additional way to run it, not a replacement).
 
 ### A. Domain + email sender — ⚠️ OBSOLETE as of 2026-08-07 (kept for history)
 
-> The Resend-based plan below is superseded: email now sends **person-to-person from each user's
-> own Gmail** (nodemailer + Gmail SMTP, per-user App Passwords stored encrypted — see
-> [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients"). No sender domain,
-> DNS records, or Resend account are needed anymore. What replaces this step: set the
-> `EMAIL_CRED_SECRET` env var on the host, make sure outbound TCP 465 is open, and have each
-> user store their Gmail App Password once in ตั้งค่า → ความปลอดภัย (requires Google 2-Step
-> Verification). A company domain is still nice-to-have for the app URL itself (step C), just no
-> longer email-related.
+> The Resend-based plan below is superseded twice over: email briefly became person-to-person
+> Gmail on 2026-08-07, then **later the same day email sending was removed entirely** — document
+> recipients get in-app bell notifications only (see
+> [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients"). Nothing replaces
+> this step: no sender domain, DNS records, provider account, env var, or SMTP port is needed.
+> A company domain is still nice-to-have for the app URL itself (step C), just not email-related.
 
 1. ~~**Get a company domain** — the free `*.vercel.app` URL can never be an email sender domain.~~
 2. ~~**Verify the domain with Resend** (SPF/DKIM DNS records).~~
@@ -104,11 +102,9 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
   - `MONGODB_URI` — same Atlas URI, or the new self-hosted one
   - `JWT_SECRET` (the session-signing secret — keep the SAME value if migrating live sessions,
     or accept that everyone re-logs-in once)
-  - `EMAIL_CRED_SECRET` (2026-08-07 — encrypts users' stored Gmail App Passwords; rotating it
-    forces everyone to re-enter theirs, login unaffected)
-  - `APP_URL` — set to the real URL (e.g. `https://erp.thaichemicals.co.th`). **Important**: email
-    links AND attachment capability-URLs are built from this; left unset it falls back to the
-    Vercel demo URL and every emailed link points at the wrong site.
+  - `APP_URL` — set to the real URL (e.g. `https://erp.thaichemicals.co.th`). **Important**:
+    attachment capability-URLs are built from this; left unset it falls back to the Vercel demo
+    URL. (No email env var exists — email sending was removed 2026-08-07.)
 
 ### D. Database
 
@@ -132,15 +128,16 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
   `quotations:viewAll`, `scopeOfWork:viewAll`, and the 7 `deliveryOrder:*` permissions for
   existing roles (`defaultRoles` only seeds on first-run setup, never re-applies).
 - **Budget note (2026-07-24)**: no paid services at all for now — everything in this plan must
-  stay on free tiers until the owner says otherwise (Atlas free tier; email is free since
-  2026-08-07 — users' own Gmail accounts, no provider; a domain for the app URL is the one
-  unavoidable purchase and waits until go-live approaches).
+  stay on free tiers until the owner says otherwise (Atlas free tier; email is a non-issue since
+  2026-08-07 — the app sends none; a domain for the app URL is the one unavoidable purchase and
+  waits until go-live approaches).
 
 ### F. Verify after cutover (each of these exercises a different subsystem)
 
 1. Sign in over HTTPS (JWT cookie) + sign out.
-2. Send "ส่งอีเมลแจ้งผู้รับเอกสาร" to a REAL employee address (2026-08-07: proves
-   `EMAIL_CRED_SECRET` is set, outbound TCP 465 is open, and the sender's Gmail App Password works).
+2. Press "ส่งแจ้งเตือนผู้รับเอกสาร" on a Scope of Work with a picked recipient, and confirm the
+   recipient account sees the bell notification + the record in their list (2026-08-07: email was
+   removed — this now verifies the in-app notification path only).
 3. Upload an attachment, then open its capability URL from a logged-out browser (proves
    `APP_URL` + unauthenticated download route).
 4. Print a per-milestone Delivery Order (print CSS is host-independent, but verify once).

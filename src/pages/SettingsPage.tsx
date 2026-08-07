@@ -8,12 +8,11 @@ import { useModuleTour } from "../components/GuidedTour";
 import type { Company } from "../lib/storage";
 import { saveCompany as saveCompanyApi } from "../lib/storage";
 import type { User } from "../lib/users";
-import { initials, updateUser, sendTestEmail } from "../lib/users";
+import { initials, updateUser } from "../lib/users";
 import { ApiError } from "../lib/apiClient";
 import type { Role } from "../lib/roles";
 import { useI18n, type Lang } from "../lib/i18n";
 import { ImageUploadField } from "../components/ImageUploadField";
-import { ConfirmDialog } from "../components/ConfirmDialog";
 
 // ช่องเลือกภาษาของระบบ (ไทย/อังกฤษ)
 // Field for switching the system language (Thai/English).
@@ -146,13 +145,6 @@ export function SettingsPage({
   const [pwSaved, flashPwSaved] = useSavedFlash();
   const [pwSaving, setPwSaving] = useState(false);
 
-  const [appPasswordDraft, setAppPasswordDraft] = useState("");
-  const [appPwError, setAppPwError] = useState("");
-  const [appPwSaved, flashAppPwSaved] = useSavedFlash();
-  const [appPwSaving, setAppPwSaving] = useState(false);
-  const [confirmClearAppPw, setConfirmClearAppPw] = useState(false);
-  const [testEmailStatus, setTestEmailStatus] = useState<"idle" | "sending" | "sent">("idle");
-
   const [notifPrefs, setNotifPrefs] = useState({
     quoteApproved: true,
     lowStock: true,
@@ -183,8 +175,6 @@ export function SettingsPage({
   const currentPwId = useId();
   const newPwId = useId();
   const confirmPwId = useId();
-  const appPasswordId = useId();
-  const emailSendingHeadingId = useId();
   const profileHeadingId = useId();
   const companyHeadingId = useId();
   const securityHeadingId = useId();
@@ -260,38 +250,6 @@ export function SettingsPage({
       setPwError(err instanceof ApiError ? err.message : t("settings.security.errorGeneric"));
     } finally {
       setPwSaving(false);
-    }
-  };
-
-  // บันทึก (หรือล้าง เมื่อ next เป็น "") Gmail App Password สำหรับส่งอีเมลเอกสารในนามตนเอง
-  // Saves (or clears, when next is "") the Gmail App Password used to send document emails as oneself.
-  const saveAppPassword = async (next: string) => {
-    setAppPwSaving(true);
-    try {
-      const updated = await updateUser(currentUser.id, { emailAppPassword: next });
-      setAppPwError("");
-      setAppPasswordDraft("");
-      onUserChange(updated);
-      onAudit("Email App Password Updated", `${currentUser.fullName} ${next === "" ? "ล้าง" : "ตั้งค่า"} Gmail App Password ของตนเอง`);
-      flashAppPwSaved();
-    } catch (err) {
-      setAppPwError(err instanceof ApiError ? err.message : t("settings.emailSending.errorGeneric"));
-    } finally {
-      setAppPwSaving(false);
-    }
-  };
-
-  // ส่งอีเมลทดสอบถึงอีเมลของตนเอง เพื่อยืนยันว่า App Password ที่บันทึกไว้ใช้งานได้
-  // Sends a test email to one's own address to verify the stored App Password works.
-  const handleTestEmail = async () => {
-    setTestEmailStatus("sending");
-    try {
-      await sendTestEmail(currentUser.id);
-      setAppPwError("");
-      setTestEmailStatus("sent");
-    } catch (err) {
-      setAppPwError(err instanceof ApiError ? err.message : t("settings.emailSending.errorGeneric"));
-      setTestEmailStatus("idle");
     }
   };
 
@@ -522,88 +480,6 @@ export function SettingsPage({
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-6 max-w-2xl space-y-4">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h2 id={emailSendingHeadingId} className="text-xs font-semibold text-foreground flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
-              <Mail size={13} className="text-[#c9a84c]" /> {t("settings.emailSending.title")}
-            </h2>
-            <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${currentUser.hasEmailAppPassword ? "bg-[#2aa36b]/15 text-[#2aa36b]" : "bg-[#e08a3c]/15 text-[#e08a3c]"}`}>
-              {currentUser.hasEmailAppPassword ? (
-                <span className="inline-flex items-center gap-0.5"><CheckCircle2 size={10} /> {t("settings.emailSending.statusConfigured")}</span>
-              ) : (
-                t("settings.emailSending.statusNotConfigured")
-              )}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            {t("settings.emailSending.intro")} <span className="font-mono text-foreground">{currentUser.email}</span>
-          </p>
-          <ol className="text-[11px] text-muted-foreground leading-relaxed list-decimal pl-4 space-y-1">
-            <li>{t("settings.emailSending.help1")}</li>
-            <li>{t("settings.emailSending.help2")}</li>
-            <li>{t("settings.emailSending.help3")}</li>
-            <li>{t("settings.emailSending.help4")}</li>
-          </ol>
-          <div>
-            <label htmlFor={appPasswordId} className={labelCls}>{t("settings.emailSending.inputLabel")}</label>
-            <input
-              id={appPasswordId}
-              type="password"
-              autoComplete="off"
-              placeholder="xxxx xxxx xxxx xxxx"
-              className={`${inputCls} font-mono max-w-xs`}
-              value={appPasswordDraft}
-              onChange={(e) => setAppPasswordDraft(e.target.value)}
-            />
-          </div>
-          {appPwError && <p role="alert" className="text-xs text-[#e05252]">{appPwError}</p>}
-          <div className="flex items-center gap-3 pt-1 flex-wrap">
-            <button
-              onClick={() => saveAppPassword(appPasswordDraft)}
-              disabled={appPwSaving || appPasswordDraft.trim() === ""}
-              className="px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {t("settings.emailSending.save")}
-            </button>
-            {currentUser.hasEmailAppPassword && (
-              <>
-                <button
-                  onClick={handleTestEmail}
-                  disabled={testEmailStatus === "sending"}
-                  className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60"
-                >
-                  {testEmailStatus === "sending" ? "กำลังส่ง..." : t("settings.emailSending.test")}
-                </button>
-                <button
-                  onClick={() => setConfirmClearAppPw(true)}
-                  disabled={appPwSaving}
-                  className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-[#e05252] hover:border-[#e05252]/40 transition-all disabled:opacity-60"
-                >
-                  {t("settings.emailSending.clear")}
-                </button>
-              </>
-            )}
-            <SavedNote show={appPwSaved} />
-            {testEmailStatus === "sent" && (
-              <span className="flex items-center gap-1.5 text-xs text-[#2aa36b]">
-                <CheckCircle2 size={13} /> {t("settings.emailSending.testSuccess")}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <ConfirmDialog
-          open={confirmClearAppPw}
-          title={t("settings.emailSending.clear")}
-          message={t("settings.emailSending.clearConfirm")}
-          danger
-          busy={appPwSaving}
-          onConfirm={async () => {
-            await saveAppPassword("");
-            setConfirmClearAppPw(false);
-          }}
-          onCancel={() => setConfirmClearAppPw(false)}
-        />
         </>
       )}
 

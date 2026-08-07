@@ -38,14 +38,13 @@ npm start                   # verify it boots, then put it under a process manag
 ```
 
 Required env values (full explanations in [.env.example](../.env.example)): `MONGODB_URI`,
-`JWT_SECRET`, `NODE_ENV=production`, `APP_URL` (emailed links + attachment capability-URLs are
-built from it), and — for email — `EMAIL_CRED_SECRET` (**2026-08-07**, encrypts users' stored Gmail
-App Passwords; replaces the removed `RESEND_API_KEY`/`EMAIL_FROM` — email now sends from each
-user's own Gmail, see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients").
+`JWT_SECRET`, `NODE_ENV=production`, `APP_URL` (attachment capability-URLs are built from it).
+**2026-08-07 (second pass, same day)**: email sending was removed entirely — document recipients
+get in-app bell notifications only, so no email env var exists anymore (`EMAIL_CRED_SECRET`,
+which briefly replaced `RESEND_API_KEY`/`EMAIL_FROM` that morning, is gone too; a leftover value
+in `.env` is harmless and simply ignored). No outbound SMTP port is needed.
 When migrating from the Vercel demo, copy the values out of the Vercel project settings; keeping
-the same `JWT_SECRET` preserves live sessions, changing it just logs everyone out once. Rotating
-`EMAIL_CRED_SECRET` never breaks login, but every user must re-enter their App Password. The host
-must allow **outbound TCP 465** (Gmail SMTP).
+the same `JWT_SECRET` preserves live sessions, changing it just logs everyone out once.
 
 The process must run with the **project root as working directory** — the Quotation Templates
 import reads `public/Scope of work new template for air pollution control_Technic.xlsx` via
@@ -156,7 +155,7 @@ docker compose pull && docker compose up -d
   ⚠️ The root user is only created on a **fresh volume** — changing the values later needs
   `docker compose down -v` (wipes data) or a manual password change in mongosh. Keep `MONGO_PASS`
   URL-safe (letters/digits) since it's embedded in the URI.
-- Env: the `app` service loads `.env` via `env_file` (JWT_SECRET, APP_URL, EMAIL_CRED_SECRET
+- Env: the `app` service loads `.env` via `env_file` (JWT_SECRET, APP_URL
   pass straight through) and compose interpolation additionally requires
   `JWT_SECRET`/`MONGO_USER`/`MONGO_PASS` (hard error at `up` if missing). `MONGODB_URI` in the
   `environment` block always overrides any value from `.env` — inside compose the app talks to
@@ -184,7 +183,6 @@ services:
       MONGODB_DB: ${MONGODB_DB:-tcs_erp}
       JWT_SECRET: ${JWT_SECRET:?put JWT_SECRET in .env next to docker-compose.yml}
       APP_URL: ${APP_URL:-https://localhost}
-      EMAIL_CRED_SECRET: ${EMAIL_CRED_SECRET:?put EMAIL_CRED_SECRET in .env next to docker-compose.yml}
     depends_on:
       mongodb:
         condition: service_healthy

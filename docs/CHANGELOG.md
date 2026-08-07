@@ -4,7 +4,44 @@
 
 ---
 
-## 2026-08-07 (absolute latest, follow-up) — Web manual: dark-mode override removed (always cream)
+## 2026-08-07 (absolute latest) — Email sending removed entirely: document recipients are in-app-notification-only
+
+Direct user request ("ตัดการส่งอีเมลออกไปเลยเหลือไว้แค่ส่งในระบบพอ") — the same-day person-to-person
+Gmail rewrite (below) proved too hard for staff to set up (2FA + App Password), so the email channel
+was cut altogether. "ส่งแจ้งเตือนผู้รับเอกสาร" (renamed from "ส่งอีเมลแจ้งผู้รับเอกสาร") now only
+writes the bell notifications + audit entry and makes the record visible to recipients.
+"ผู้รับเพิ่มเติม" any-user recipients and all recipient-resolution rules are unchanged.
+
+- **Deleted**: `api/_lib/email.ts`, `api/_lib/emailCredentials.ts`, `tests/emailCredentials.test.ts`,
+  `tests/api/emailSettings.test.ts`, the `nodemailer`/`@types/nodemailer` dependencies, the
+  `EMAIL_CRED_SECRET` env var (`.env.example`), the Settings "การส่งอีเมล (Gmail App Password)"
+  card + its i18n keys, `POST /api/users/:id/email-test`, the self-only `emailAppPassword` PATCH
+  field, `User.hasEmailAppPassword` / `sendTestEmail()` (`src/lib/users.ts`), the email HTML
+  builder + threading (`ScopeOfWork.emailThreadId` — no longer typed or written; stale values in
+  old documents are ignored), and the 5 Gmail walkthrough screenshots
+  (`public/manual-images/g1..g5`).
+- **`api/_lib/scopeOfWorkHandler.ts`** — `handleSendDocumentNotifications()` reduced to recipient
+  resolution → bell notifications → audit entry; response shape kept
+  (`{ok, sentCount, failedCount: 0, recipientCount}`, `sentCount` = notified) so the client toast
+  logic is unchanged. `users.emailAppPasswordEnc` remains only as a defensively-stripped legacy
+  field in `toPublicUser()`.
+- **UI**: send button renamed "ส่งแจ้งเตือนผู้รับเอกสาร" (en: "Notify document recipients"); the
+  missing-App-Password warning/disable is gone; `DocumentRecipientsPicker` copy now describes the
+  bell notification (attachments/message are stored on the record for recipients to open).
+- **Manual** (`public/manual.html`) — chapter 6 rewritten as "การส่งเอกสารถึงผู้รับ" (no-setup,
+  4 steps, recipient-side view, new troubleshooting table); TOCs/ch5/ch11/ch12/FAQ references
+  updated.
+- **What's New** — the same-day Gmail announcement entry was removed (feature never survived the
+  day) and replaced by `2026-08-07-in-app-document-notify`.
+- **Tests**: `tests/api/sendDocumentNotifications.test.ts` rewritten for notification-only
+  behavior (87 tests total pass — down from 105 with the two email test files gone). Docs synced:
+  API.md, DATABASE.md, ARCHITECTURE.md,
+  DEPLOYMENT.md, SERVER_MIGRATION_PLAN.md, TODO.md, MODULES/ScopeOfWork.md, MODULES/Settings.md,
+  docs/CLAUDE.md, PROJECT_STATUS.md.
+
+---
+
+## 2026-08-07 — Web manual: dark-mode override removed (always cream)
 
 User reported "ไม่เห็นเปลี่ยนเลย" with a dark-palette screenshot — their OS is in dark mode, so the
 manual's `prefers-color-scheme: dark` block was silently overriding the new cream palette. Since the

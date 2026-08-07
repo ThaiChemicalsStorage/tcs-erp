@@ -174,7 +174,6 @@ export interface ScopeOfWork {
   seller: ScopeOfWorkSignatory;
   approver: ScopeOfWorkSignatory;
   attachments: ScopeOfWorkAttachment[];
-  emailThreadId?: string;
   status: ScopeOfWorkStatus;
   version: number;
   createdAt: string;
@@ -353,8 +352,8 @@ export async function logScopeOfWorkPrinted(id: string): Promise<void> {
   await apiFetch<void>(`/scope-of-works/${id}/print`, { method: "POST" });
 }
 
-// ส่งอีเมลเอกสารไปยังผู้รับทุกคนที่เลือกไว้ใน documentRecipients
-// Emails the document to every recipient selected in documentRecipients
+// ส่งแจ้งเตือนในระบบถึงผู้รับทุกคนที่เลือกไว้ใน documentRecipients (อีเมลถูกถอดออก 2026-08-07)
+// Sends the in-app notification to every recipient selected in documentRecipients (email removed 2026-08-07)
 export async function sendScopeOfWorkDocumentNotifications(id: string): Promise<{ sentCount: number; failedCount: number; recipientCount: number }> {
   return apiFetch<{ sentCount: number; failedCount: number; recipientCount: number }>(`/scope-of-works/${id}/send-documents`, { method: "POST" });
 }
