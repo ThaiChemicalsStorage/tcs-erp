@@ -3,7 +3,8 @@
      "อยากได้แบบนี้ไปไว้ในเว็บตรงที่เป็นคู่มือการใช้งาน").
      Served statically from public/ at /manual.html — the topbar's gold "คู่มือการใช้งาน" button
      (src/App.tsx) opens this page. Self-contained: system Thai font stack, no external requests,
-     light/dark via prefers-color-scheme, print-friendly (พิมพ์เป็น PDF ได้จากเบราว์เซอร์).
+     always the cream light theme matching the app (dark-mode override removed 2026-08-07),
+     print-friendly (พิมพ์เป็น PDF ได้จากเบราว์เซอร์).
      Content superseded docs/manual/user-manual.html (the old PDF source) — update THIS file going
      forward. -->
 <html lang="th">
@@ -33,14 +34,9 @@
     --danger-bg: rgba(224, 82, 82, 0.08);
     --code-bg: #f1ede1;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --navy: #dfe6f2; --gold: #d5ad55; --gold-ink: #d5ad55; --gold-soft: rgba(213,173,85,.12);
-      --ink: #dce2ec; --muted: #96a1b5; --ground: #10161f; --card: #171f2b;
-      --line: #2a3444; --good: #4fbe8a; --warn: #e0a35c; --warn-bg: rgba(224,163,92,.10);
-      --danger: #e07a7a; --danger-bg: rgba(224,122,122,.10); --code-bg: #202a38;
-    }
-  }
+  /* No dark-mode override, deliberately: the ERP app itself is always the cream light theme,
+     and the manual must match it exactly (user request 2026-08-07) — an OS in dark mode was
+     silently swapping the manual to a dark palette while the app stayed cream. */
 
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }

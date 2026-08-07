@@ -4,7 +4,16 @@
 
 ---
 
-## 2026-08-07 (absolute latest) — Web manual palette synced to the app's theme tokens
+## 2026-08-07 (absolute latest, follow-up) — Web manual: dark-mode override removed (always cream)
+
+User reported "ไม่เห็นเปลี่ยนเลย" with a dark-palette screenshot — their OS is in dark mode, so the
+manual's `prefers-color-scheme: dark` block was silently overriding the new cream palette. Since the
+ERP app itself has no dark mode (always cream), the manual's dark block was removed entirely so the
+page matches the app for everyone regardless of OS theme. Header comment updated accordingly.
+
+---
+
+## 2026-08-07 — Web manual palette synced to the app's theme tokens
 
 Follow-up to the cream theme below, per direct user request ("เปลี่ยนคู่มือด้วย" — make the manual
 match the app exactly).
