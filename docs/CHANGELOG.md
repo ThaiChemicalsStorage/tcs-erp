@@ -4,7 +4,30 @@
 
 ---
 
-## 2026-08-07 (absolute latest) — Web manual: sticky sidebar chapter navigation
+## 2026-08-07 (absolute latest) — App-wide cream theme: neutral surfaces shifted from cool blue-grey to warm cream
+
+Direct user request after seeing the web manual's paper tone ("ทำเว็บเป็นสีธีมครีมแบบที่ลองเทสได้ไหมสวยดี").
+
+- **`src/styles/theme.css`** — the neutral token family only: `--background` `#f4f6fb`→`#f7f4ec`,
+  `--secondary` `#e8edf7`→`#ebe6d8`, `--muted`/`--input`/`--input-background` `#eef1f8`→`#f1ede1`,
+  `--switch-background` `#c5d0e4`→`#d6cfbd`, `--border` navy `rgba(11,29,58,.1)`→warm ink
+  `rgba(93,80,48,.16)` (same "ink hairline" concept, re-inked so borders sit naturally on cream).
+  **Unchanged**: navy ink, gold/hover-gold, the navy sidebar block, all 9 status hexes + their
+  darkened text variants, chart palette, danger red. Since every page consumes these via
+  `bg-background`/`bg-muted`/etc. token utilities (verified: the old hexes appeared nowhere else
+  in `src/`), the single-file change re-themes the whole app; hardcoded hexes in components are
+  all semantic (gold/red/status) and deliberately untouched.
+- **`DESIGN.md`** — palette renamed/updated to match: `paper-blue`→`paper-cream`,
+  `muted-mist`→`muted-linen`, `border-navy`→`border-ink`, plus all prose references
+  ("navy ledger, gold seal, cream paper"). **`docs/UI_GUIDELINES.md`** token table updated with
+  was/now values.
+- **What's New** — Thai entry `2026-08-07-cream-theme`.
+- Muted-text contrast on the new cream ground is ≈4.4:1 — parity with the old blue ground
+  (≈4.5:1), no regression; muted text on white cards stays ≈4.9:1.
+
+---
+
+## 2026-08-07 — Web manual: sticky sidebar chapter navigation
 
 Direct user request ("อยากให้ในหน้าคู่มือให้ด้านข้างสามารถกดไปตามแต่ละหัวข้อได้ จะได้ไม่ต้องเลื่อนมากดด้านบนบ่อยๆ").
 

@@ -10,7 +10,11 @@
      utility (no --font-mono override existed) — every "font-mono" numbers/codes/dates span in
      the app was silently rendering in the browser's generic system monospace font instead. */
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --background: #f4f6fb;
+  /* 2026-08-07: neutral family shifted from cool blue-greys to warm cream (matching the
+     web manual's paper tone, per direct user request) — navy ink, gold, status hexes, and
+     the navy sidebar are unchanged. The border is the same "ink at low opacity" concept,
+     re-inked warm so hairlines sit naturally on cream instead of reading blue. */
+  --background: #f7f4ec;
   --foreground: #0b1d3a;
   --card: #ffffff;
   --card-foreground: #0b1d3a;
@@ -18,18 +22,18 @@
   --popover-foreground: #0b1d3a;
   --primary: #c9a84c;
   --primary-foreground: #ffffff;
-  --secondary: #e8edf7;
+  --secondary: #ebe6d8;
   --secondary-foreground: #1a3a6b;
-  --muted: #eef1f8;
+  --muted: #f1ede1;
   --muted-foreground: #5a7299;
   --accent: #f0c040;
   --accent-foreground: #0b1d3a;
   --destructive: #e05252;
   --destructive-foreground: #ffffff;
-  --border: rgba(11, 29, 58, 0.1);
-  --input: #eef1f8;
-  --input-background: #eef1f8;
-  --switch-background: #c5d0e4;
+  --border: rgba(93, 80, 48, 0.16);
+  --input: #f1ede1;
+  --input-background: #f1ede1;
+  --switch-background: #d6cfbd;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --ring: #c9a84c;
