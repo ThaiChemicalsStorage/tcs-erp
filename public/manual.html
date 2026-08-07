@@ -150,6 +150,13 @@
   tr:last-child td { border-bottom: none; }
   td:first-child { font-weight: 600; color: var(--navy); }
 
+  figure { margin: 16px 0 20px; }
+  figure img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  figcaption { text-align: center; font-size: 13px; color: var(--muted); margin-top: 7px; }
+
   .top-link { font-size: 13px; margin: 10px 0 0; }
   .top-link a { color: var(--muted); text-decoration: none; }
   .top-link a:hover { color: var(--gold); }
@@ -213,6 +220,10 @@
     <div class="callout"><b>กรอกรหัสผ่านผิดหลายครั้ง:</b> หากผิดเกิน 5 ครั้งภายใน 15 นาที ระบบจะพักการเข้าสู่ระบบของบัญชีนั้นชั่วคราว พร้อมแจ้งว่าต้องรออีกกี่นาที — เข้าสู่ระบบสำเร็จเมื่อไหร่ ตัวนับเริ่มใหม่</div>
     <h3>การออกจากระบบ</h3>
     <p>คลิกรูปโปรไฟล์มุมขวาบน แล้วเลือก <span class="btn-ref">ออกจากระบบ</span></p>
+    <figure>
+      <img src="/manual-images/01-signin.jpg" alt="หน้าเข้าสู่ระบบ" loading="lazy" />
+      <figcaption>หน้าเข้าสู่ระบบของ TCS ERP</figcaption>
+    </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
@@ -231,6 +242,10 @@
     </table></div>
     <p>ปุ่มลูกศรด้านบนของแถบเมนูใช้ย่อ/ขยายแถบได้ บนมือถือให้กดปุ่มเมนู (☰) มุมซ้ายบน</p>
     <h3>แถบด้านบน (Topbar)</h3>
+    <figure>
+      <img src="/manual-images/topbar.png" alt="แถบด้านบน" loading="lazy" />
+      <figcaption>แถบด้านบน: ช่องค้นหา · ปุ่มคู่มือการใช้งาน (สีทอง) · มีอะไรใหม่ · กระดิ่งแจ้งเตือน · เมนูผู้ใช้</figcaption>
+    </figure>
     <div class="tbl-scroll"><table>
       <tr><th style="width:30%">ส่วนประกอบ</th><th>การใช้งาน</th></tr>
       <tr><td>ช่องค้นหา</td><td>ค้นหาใบเสนอราคา ลูกค้า สินค้า Scope of Work ผู้ใช้ และหน้าต่างๆ ได้จากที่เดียว — กด <span class="kbd">Ctrl</span> + <span class="kbd">K</span> เพื่อเปิดค้นหาทันที</td></tr>
@@ -248,6 +263,10 @@
   <section id="ch3">
     <h2><span class="ch-no">3</span>แดชบอร์ด</h2>
     <p>หน้าแรกของระบบ สรุปภาพรวมงานขายทั้งบริษัทแบบเรียลไทม์จากข้อมูลจริง</p>
+    <figure>
+      <img src="/manual-images/02-dashboard.jpg" alt="หน้าแดชบอร์ด" loading="lazy" />
+      <figcaption>หน้าแดชบอร์ด — การ์ดสรุป ตัวกรอง และสถิติสถานะใบเสนอราคา</figcaption>
+    </figure>
     <ul>
       <li><b>การ์ดสรุป 4 ใบ</b> — มูลค่ารวม จำนวนใบเสนอราคา อัตราชนะงาน และยอดคาดการณ์ (ทุกยอดเงินเป็นมูลค่า<b>ก่อนภาษี</b>)</li>
       <li><b>สรุปสถานะใบเสนอราคา</b> — สัดส่วน Won / Lose / Active / Non-Active</li>
@@ -299,6 +318,14 @@
       <li>ฉบับแก้ไขมีการ์ด <b>หมายเหตุการแก้ไข (Revision Note)</b> พร้อมปุ่มให้ระบบสรุปอัตโนมัติว่าแก้อะไรไปบ้าง แล้วแก้ข้อความเองต่อได้</li>
     </ul>
     <div class="callout"><b>สิทธิ์การมองเห็น:</b> หากบัญชีของคุณไม่มีสิทธิ์ "ดูใบเสนอราคาของผู้อื่น" หน้ารายการจะแสดงเฉพาะใบที่คุณสร้างเองเท่านั้น</div>
+    <figure>
+      <img src="/manual-images/03-quotations.jpg" alt="หน้ารายการใบเสนอราคา" loading="lazy" />
+      <figcaption>หน้ารายการใบเสนอราคา — การ์ดสรุป ตัวกรองสถานะ และปุ่มสร้างใบเสนอราคา (มุมขวาบน)</figcaption>
+    </figure>
+    <figure>
+      <img src="/manual-images/11-quotation-detail.jpg" alt="หน้ารายละเอียดใบเสนอราคา" loading="lazy" />
+      <figcaption>หน้ารายละเอียดใบเสนอราคา — ข้อมูลลูกค้า รายละเอียดเอกสาร และแถบเครื่องมือด้านบน (พิมพ์ / คัดลอก / แก้ไข / สร้าง Scope of Work / บันทึก)</figcaption>
+    </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
@@ -334,6 +361,14 @@
       <li>ได้เลข PO เมื่อไหร่ กรอกในช่อง "เอกสารใบสั่งซื้อเลขที่ (PO)" แล้วบันทึกได้เลย แม้เอกสาร Final แล้ว</li>
     </ul>
     <p>เมนู <span class="btn-ref">Scope of Work</span> ในแถบซ้ายใช้เปิดดูรายการทั้งหมด (การสร้างยังทำจากหน้าใบเสนอราคาเท่านั้น)</p>
+    <figure>
+      <img src="/manual-images/04-scope-of-work.jpg" alt="หน้ารายการ Scope of Work" loading="lazy" />
+      <figcaption>หน้ารายการ Scope of Work</figcaption>
+    </figure>
+    <figure>
+      <img src="/manual-images/12-sow-detail.jpg" alt="หน้ารายละเอียด Scope of Work" loading="lazy" />
+      <figcaption>หน้ารายละเอียด Scope of Work — ข้อมูลงาน/ลูกค้า และแถบเครื่องมือ (พิมพ์ / ทำสำเนา / แก้ไข / ทวงเลข PO / เปิดใบส่งมอบสินค้า / อัปเดตข้อมูลจากใบเสนอราคา / ส่งขออนุมัติ)</figcaption>
+    </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
@@ -430,6 +465,14 @@
       <li>ขั้นตอนขออนุมัติ → อนุมัติ (Final) / ปฏิเสธพร้อมเหตุผล — เหมือน Scope of Work</li>
       <li>เมนู <span class="btn-ref">ใบส่งมอบสินค้า</span> ในแถบซ้ายใช้เปิดดูรายการทั้งหมด</li>
     </ul>
+    <figure>
+      <img src="/manual-images/05-delivery-order.jpg" alt="หน้ารายการใบส่งมอบสินค้า" loading="lazy" />
+      <figcaption>หน้ารายการใบส่งมอบสินค้า</figcaption>
+    </figure>
+    <figure>
+      <img src="/manual-images/13-do-detail.jpg" alt="หน้ารายละเอียดใบส่งมอบสินค้า" loading="lazy" />
+      <figcaption>หน้ารายละเอียดใบส่งมอบสินค้า — การ์ดแยกตามงวดชำระเงิน แต่ละงวดมีช่องติ๊กรายการสินค้า เลขที่/วันที่/Remark และปุ่ม "พิมพ์ใบส่งมอบงวดนี้" ของตัวเอง</figcaption>
+    </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
@@ -444,6 +487,10 @@
       <li><b>เก็บเข้าคลัง (Archive)</b> — สินค้าเลิกใช้ให้เก็บเข้าคลังแทนการลบ ข้อมูลเดิมในใบเสนอราคาที่เคยใช้ไม่หาย</li>
     </ul>
     <div class="callout"><b>เชื่อมกับใบเสนอราคา:</b> ข้อมูลที่ดึงไปใช้เป็น "สำเนา ณ ตอนนั้น" — แก้สินค้าในคลังภายหลังไม่กระทบใบเสนอราคาที่ออกไปแล้ว</div>
+    <figure>
+      <img src="/manual-images/08-products.jpg" alt="หน้าคลังสินค้า" loading="lazy" />
+      <figcaption>หน้าคลังสินค้า — รายการสินค้า ค้นหา/กรอง และปุ่มจัดการหมวดหมู่</figcaption>
+    </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
@@ -455,6 +502,10 @@
       <li>กด <span class="btn-ref">เพิ่มลูกค้า</span> เพื่อสร้าง คลิกรายการเพื่อแก้ไข ลูกค้าเลิกติดต่อใช้ Archive</li>
       <li>ในฟอร์มใบเสนอราคา ใช้ช่อง "เลือกลูกค้า" ดึงข้อมูลจากหน้านี้มาเติมอัตโนมัติ</li>
     </ul>
+    <figure>
+      <img src="/manual-images/07-customers.jpg" alt="หน้าลูกค้า" loading="lazy" />
+      <figcaption>หน้าจัดการข้อมูลลูกค้า</figcaption>
+    </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
@@ -466,6 +517,10 @@
       <li>ผู้มีสิทธิ์สามารถ สร้าง แก้ไข ทำสำเนา เปิด-ปิดใช้งาน (เฉพาะ Template ที่ "ใช้งาน" จึงปรากฏใน Wizard)</li>
       <li>การแก้ Template ไม่กระทบใบเสนอราคาที่สร้างไปแล้ว (ระบบคัดลอกเนื้อหา ณ ตอนสร้าง)</li>
     </ul>
+    <figure>
+      <img src="/manual-images/06-templates.jpg" alt="หน้า Template ใบเสนอราคา" loading="lazy" />
+      <figcaption>หน้าจัดการ Template ใบเสนอราคา</figcaption>
+    </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
@@ -488,6 +543,10 @@
     <div class="callout warn"><b>ข้อควรระวัง:</b> เมื่อระบบอัปเดตและมี "สิทธิ์ตัวใหม่" เพิ่มเข้ามา บทบาทที่มีอยู่แล้วจะยังไม่ได้สิทธิ์นั้นโดยอัตโนมัติ — Super Admin ต้องเข้าไปติ๊กเพิ่มในหน้าบทบาทและสิทธิ์เอง มิฉะนั้นผู้ใช้จะไม่เห็นเมนู/ปุ่มใหม่</div>
     <h3>บันทึกการใช้งาน (Audit Log)</h3>
     <p>บันทึกเหตุการณ์สำคัญทั้งหมด (ใครทำอะไรเมื่อไร) แบบอ่านอย่างเดียว แก้ไขหรือลบไม่ได้ — ใช้ตรวจสอบย้อนหลัง เช่น ใครแก้ใบเสนอราคา ใครอนุมัติ ใครส่งอีเมลเอกสาร</p>
+    <figure>
+      <img src="/manual-images/09-users.jpg" alt="หน้าจัดการผู้ใช้งาน" loading="lazy" />
+      <figcaption>หน้าจัดการผู้ใช้งาน</figcaption>
+    </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
@@ -501,6 +560,10 @@
       <tr><td>ความปลอดภัย</td><td>เปลี่ยนรหัสผ่านของตนเอง และตั้งค่า <b>การส่งอีเมล (Gmail App Password)</b> สำหรับส่งเอกสารในนามตัวเอง — ดูบทที่ 6</td></tr>
       <tr><td>การแจ้งเตือน</td><td>เปิด/ปิดชนิดการแจ้งเตือนที่ต้องการรับ</td></tr>
     </table></div>
+    <figure>
+      <img src="/manual-images/10-settings.jpg" alt="หน้าตั้งค่า" loading="lazy" />
+      <figcaption>หน้าตั้งค่า</figcaption>
+    </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
