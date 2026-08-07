@@ -1,5 +1,6 @@
-# TCS ERP — production image: one Node process (server/index.ts) serving the API + built frontend.
-# Used by docker-compose.yml (untracked — reference copy in docs/DEPLOYMENT.md "Docker").
+# TCS ERP — one Dockerfile, two targets (see docker-compose.yml):
+#   target: app    → Node process serving the API (server/index.ts)
+#   target: web    → nginx serving the built frontend + proxying /api to app:3001
 
 FROM node:22-alpine AS build
 WORKDIR /app
@@ -8,14 +9,15 @@ ENV MONGOMS_DISABLE_POSTINSTALL=1
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build && npm prune --omit=dev
+RUN npm run build
 
-FROM node:22-alpine
+# ---- API ----
+FROM node:22-alpine AS app
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
-COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+RUN npm prune --omit=dev
 COPY --from=build /app/server ./server
 COPY --from=build /app/api ./api
 # api/ value-imports shared pure helpers from src/lib (see docs/ARCHITECTURE.md), and the
@@ -24,3 +26,11 @@ COPY --from=build /app/src ./src
 COPY --from=build /app/public ./public
 EXPOSE 3001
 CMD ["node_modules/.bin/tsx", "server/index.ts"]
+
+# ---- nginx ----
+FROM nginx:alpine AS web
+# Certs are NOT baked in — mounted at runtime from ./nginx/certs (see docker-compose.yml)
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+EXPOSE 443

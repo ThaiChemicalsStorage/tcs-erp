@@ -10,7 +10,7 @@ dist
 .idea
 docs
 tests
-nginx
+nginx/certs/
 *.log
 *.tsbuildinfo
 Dockerfile
