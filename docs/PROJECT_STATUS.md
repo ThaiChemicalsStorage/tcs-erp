@@ -14,7 +14,6 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
-<<<<<<< HEAD
 - ✅ **[2026-08-07] Document-recipient delivery is in-app-notification-only — email sending removed
   entirely (supersedes the same-day Gmail entry below).** Direct user request
   ("ตัดการส่งอีเมลออกไปเลยเหลือไว้แค่ส่งในระบบพอ") after the per-user Gmail App Password setup
@@ -37,7 +36,6 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
   verification task) is gone entirely. 21 new tests (105 total). **Real SMTP delivery not yet
   live-verified** (no Gmail credential exists in the sandbox — nodemailer mocked in tests; tracked
   in TODO.md). See CHANGELOG.md 2026-08-07.
-=======
 - ✅ **[2026-08-07] Page tours mark "seen" on automatic appearance, not on dismissal.** A user who
   let the tour sit and navigated away produced no completion event (the unmount path suppresses
   one), so it auto-played again. `useModuleTour`'s auto-fire now marks the moment the tour renders;
@@ -132,7 +130,6 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
   reproduces the actual production scenario. `tsc` (both configs)/`lint`/`build`/`test` clean.
   Still a human call: which employees get the role. See CHANGELOG.md 2026-08-07 and
   [RBAC.md](./RBAC.md) "Rollout".
->>>>>>> cc49a6c (add service module for erp)
 - ✅ **[2026-08-06] Docker stack (same session as the Express migration).** `docker compose up -d
   --build` runs the whole system self-contained: the app image (committed `Dockerfile`), its own
   MongoDB (named volume, fresh-DB Setup Wizard path), and nginx HTTPS termination (committed

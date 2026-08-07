@@ -10,13 +10,10 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 
 | Collection | `_id` | Shape | Notes |
 |---|---|---|---|
-<<<<<<< HEAD
 | `users` | MongoDB `ObjectId` | server-only `UserFields` (see below) | Includes `passwordHash` — never sent to the client; `toPublicUser()` (`api/_lib/collections.ts`) strips it (plus the legacy 2026-08-07 `emailAppPasswordEnc`, whose feature was removed the same day) before any response. |
 | `roles` | `key: string` (e.g. `"super_admin"`, or `"role_<ObjectId>"` for custom roles) | `Role` (unchanged shape from the old client-side type) | Seeded from `defaultRoles` (`src/lib/roles.ts`) via `api/_lib/rbacSeed.ts` on first run (`seedDefaultRolesIfEmpty()`), called from the Setup Wizard and from `GET /api/roles`. |
-=======
 | `users` | MongoDB `ObjectId` | server-only `UserFields` (see below) | Includes `passwordHash` — never sent to the client. `toPublicUser()` (`api/_lib/collections.ts`) strips it before any response. |
 | `roles` | `key: string` (e.g. `"super_admin"`, or `"role_<ObjectId>"` for custom roles) | `Role` (unchanged shape from the old client-side type) | Seeded from `defaultRoles` (`src/lib/roles.ts`) via `api/_lib/rbacSeed.ts` on first run (`seedDefaultRolesIfEmpty()`), called from the Setup Wizard and from `GET /api/roles`. **Since 2026-08-07** those same two call sites also run `bootstrapRbac()`, which inserts any *later-added* default role a provisioned database is missing (`syncDefaultRoles()` — additive only, never rewrites an existing role's permissions) and applies pending permission backfills — see `rbac_migrations` below. |
->>>>>>> cc49a6c (add service module for erp)
 | `company` | fixed string `"singleton"` | `Company` (unchanged shape) | Always exactly one document; `GET /api/company` falls back to `defaultCompany` merged with the stored doc if it doesn't exist yet. |
 | `products` | MongoDB `ObjectId` | `Product` minus `id` (Mongo `_id` takes its place) | `withStringId()` maps `_id` → `id: string` for the client response. |
 | `categories` | MongoDB `ObjectId` | `ProductCategory` minus `id` | Same `withStringId()` mapping. |

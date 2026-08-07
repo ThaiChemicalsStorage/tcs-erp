@@ -4,7 +4,6 @@
 
 ---
 
-<<<<<<< HEAD
 ## Session — 2026-08-07 (absolute latest), person-to-person Gmail email + any-user recipients
 
 ### What was implemented
@@ -56,7 +55,6 @@ mocked nodemailer (per-recipient fan-out From the sender, additional-only sends,
 threading persistence, all-EAUTH → 400). **Not verified: a real SMTP send** — no Gmail App
 Password exists in this sandbox; the first human-in-the-loop test (Settings → save App Password →
 ส่งอีเมลทดสอบ → real SOW send) is tracked in TODO.md.
-=======
 ## Session — 2026-08-07 (absolute latest, tenth pass), Dashboard un-hidden for Service Engineer
 
 ### What was implemented
@@ -482,7 +480,6 @@ behind a one-per-process guard), wired into `GET /api/roles` and the Setup Wizar
 Unchanged (~40% of the long-term vision; ~98% within currently-scoped modules) — this is a
 correctness/operability fix on shipped scope, not new module surface. Its real value is forward:
 every future permission set now reaches production on its own.
->>>>>>> cc49a6c (add service module for erp)
 
 ---
 

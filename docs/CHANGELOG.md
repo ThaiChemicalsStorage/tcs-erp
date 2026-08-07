@@ -4,7 +4,6 @@
 
 ---
 
-<<<<<<< HEAD
 ## 2026-08-07 (absolute latest) — Email sending removed entirely: document recipients are in-app-notification-only
 
 Direct user request ("ตัดการส่งอีเมลออกไปเลยเหลือไว้แค่ส่งในระบบพอ") — the same-day person-to-person
@@ -213,7 +212,6 @@ image (`COPY nginx.conf /etc/nginx/conf.d/default.conf`) instead of volume-mount
   stopped after the test.
 
 ---
-=======
 ## 2026-08-07 (absolute latest) — Fix: sign-off columns didn't line up once a customer signature existed
 
 Reported with a screenshot. `SignaturePad`'s signed state rendered its own "ลายเซ็นที่บันทึกไว้" /
@@ -651,7 +649,6 @@ permissions existed on its first run. Every module since Scope of Work has there
   [DATABASE.md](./DATABASE.md) (`rbac_migrations` row, `roles` row, 6→7 roles),
   [MODULES/Service.md](./MODULES/Service.md), [API.md](./API.md), [CLAUDE.md](./CLAUDE.md),
   [TODO.md](./TODO.md), [PROJECT_STATUS.md](./PROJECT_STATUS.md), [SESSION_LOG.md](./SESSION_LOG.md).
->>>>>>> cc49a6c (add service module for erp)
 
 ## 2026-08-06 — Docker MongoDB authentication from `.env` (`MONGO_USER`/`MONGO_PASS`)
 
