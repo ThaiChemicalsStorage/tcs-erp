@@ -4,7 +4,23 @@
 
 ---
 
-## 2026-08-07 (absolute latest) — App-wide cream theme: neutral surfaces shifted from cool blue-grey to warm cream
+## 2026-08-07 (absolute latest) — Web manual palette synced to the app's theme tokens
+
+Follow-up to the cream theme below, per direct user request ("เปลี่ยนคู่มือด้วย" — make the manual
+match the app exactly).
+
+- **`public/manual.html`** — light-mode tokens now equal `src/styles/theme.css`: ground `#f7f4ec`,
+  line `rgba(93,80,48,.16)`, gold `#c9a84c`, ink/muted `#0b1d3a`/`#5a7299`, code-bg `#f1ede1`,
+  good/warn/danger switched to the app's darkened text-grade variants (`#207e52`/`#a75d1a`/`#d22626`).
+  New `--gold-ink` (`#866d28`, the app's Pending-Approval pill text) replaces raw gold on all
+  small gold text (eyebrow, chapter/step numbers, sidebar TOC numbers/title, hovers, flow arrows) —
+  raw `#c9a84c` is ~2:1 on cream, unreadable as text; `#866d28` clears 4.5:1. Focus ring keeps
+  `#c9a84c` (equals the app's `--ring`). Dark-mode block unchanged apart from `--gold-ink` alias.
+  Verified via Playwright at 1440px.
+
+---
+
+## 2026-08-07 — App-wide cream theme: neutral surfaces shifted from cool blue-grey to warm cream
 
 Direct user request after seeing the web manual's paper tone ("ทำเว็บเป็นสีธีมครีมแบบที่ลองเทสได้ไหมสวยดี").
 

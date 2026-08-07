@@ -12,25 +12,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>คู่มือการใช้งานระบบ TCS ERP</title>
 <style>
+  /* 2026-08-07: palette synced to the app's own theme.css tokens (per user request that the
+     manual match the app exactly): same cream ground, warm-ink hairline, app gold, navy text.
+     --gold-ink is the app's darkened text-grade gold (#866d28, its Pending-Approval pill text) —
+     used wherever gold is small text, since raw #c9a84c is a surface/accent hue, not readable text. */
   :root {
     --navy: #0b1d3a;
-    --gold: #b8933c;
+    --gold: #c9a84c;
+    --gold-ink: #866d28;
     --gold-soft: rgba(201, 168, 76, 0.14);
-    --ink: #232c3d;
-    --muted: #5d6a80;
-    --ground: #fdfcf9;
+    --ink: #0b1d3a;
+    --muted: #5a7299;
+    --ground: #f7f4ec;
     --card: #ffffff;
-    --line: #e3e1da;
-    --good: #1f7a50;
-    --warn: #9a5a1c;
+    --line: rgba(93, 80, 48, 0.16);
+    --good: #207e52;
+    --warn: #a75d1a;
     --warn-bg: rgba(224, 138, 60, 0.10);
-    --danger: #b03434;
+    --danger: #d22626;
     --danger-bg: rgba(224, 82, 82, 0.08);
-    --code-bg: #f1efe9;
+    --code-bg: #f1ede1;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --navy: #dfe6f2; --gold: #d5ad55; --gold-soft: rgba(213,173,85,.12);
+      --navy: #dfe6f2; --gold: #d5ad55; --gold-ink: #d5ad55; --gold-soft: rgba(213,173,85,.12);
       --ink: #dce2ec; --muted: #96a1b5; --ground: #10161f; --card: #171f2b;
       --line: #2a3444; --good: #4fbe8a; --warn: #e0a35c; --warn-bg: rgba(224,163,92,.10);
       --danger: #e07a7a; --danger-bg: rgba(224,122,122,.10); --code-bg: #202a38;
@@ -51,7 +56,7 @@
 
   .eyebrow {
     font-size: 12px; letter-spacing: 2.5px; text-transform: uppercase;
-    color: var(--gold); font-weight: 700; margin: 0 0 10px;
+    color: var(--gold-ink); font-weight: 700; margin: 0 0 10px;
   }
   h1 {
     font-size: 30px; line-height: 1.35; margin: 0 0 8px; color: var(--navy);
@@ -67,7 +72,7 @@
   }
   .ch-no {
     flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
-    background: var(--gold-soft); color: var(--gold);
+    background: var(--gold-soft); color: var(--gold-ink);
     display: flex; align-items: center; justify-content: center;
     font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums;
   }
@@ -87,7 +92,7 @@
   .toc ol { margin: 0; padding-left: 24px; columns: 2; column-gap: 32px; }
   .toc li { margin-bottom: 5px; break-inside: avoid; }
   .toc a { color: var(--ink); text-decoration: none; font-size: 14.5px; }
-  .toc a:hover { color: var(--gold); }
+  .toc a:hover { color: var(--gold-ink); }
   @media (max-width: 560px) { .toc ol { columns: 1; } }
 
   .btn-ref {
@@ -109,7 +114,7 @@
   .callout > b:first-child { color: var(--warn); }
   .callout.warn { background: var(--danger-bg); }
   .callout.warn > b:first-child { color: var(--danger); }
-  .callout.ok > b:first-child { color: var(--gold); }
+  .callout.ok > b:first-child { color: var(--gold-ink); }
   .check { color: var(--good); font-weight: 700; }
 
   /* Step cards (ลำดับขั้นตอนจริง) */
@@ -120,7 +125,7 @@
   }
   .step-no {
     flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
-    background: var(--gold-soft); color: var(--gold);
+    background: var(--gold-soft); color: var(--gold-ink);
     display: flex; align-items: center; justify-content: center;
     font-weight: 700; font-size: 16px; margin-top: 2px; font-variant-numeric: tabular-nums;
   }
@@ -136,7 +141,7 @@
     background: var(--card); border: 1px solid var(--line); color: var(--navy);
     border-radius: 999px; padding: 3px 14px; font-size: 13.5px; font-weight: 600;
   }
-  .flow .arr { border: none; background: none; color: var(--gold); font-weight: 700; padding: 0; }
+  .flow .arr { border: none; background: none; color: var(--gold-ink); font-weight: 700; padding: 0; }
 
   /* Tables */
   .tbl-scroll { overflow-x: auto; margin: 14px 0 18px; border: 1px solid var(--line); border-radius: 8px; }
@@ -159,7 +164,7 @@
 
   .top-link { font-size: 13px; margin: 10px 0 0; }
   .top-link a { color: var(--muted); text-decoration: none; }
-  .top-link a:hover { color: var(--gold); }
+  .top-link a:hover { color: var(--gold-ink); }
 
   /* สารบัญด้านข้าง — แสดงเฉพาะจอกว้าง (จอแคบ/มือถือใช้สารบัญด้านบนตามเดิม) */
   .side-nav { display: none; }
@@ -173,7 +178,7 @@
     }
     .side-nav .nav-title {
       font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
-      color: var(--gold); font-weight: 700; margin: 0 0 12px; padding-left: 10px;
+      color: var(--gold-ink); font-weight: 700; margin: 0 0 12px; padding-left: 10px;
     }
     .side-nav a {
       display: flex; gap: 9px; align-items: baseline;
@@ -185,7 +190,7 @@
     .side-nav a.active { color: var(--navy); background: var(--gold-soft); font-weight: 700; }
     .side-nav a .no {
       flex-shrink: 0; width: 18px; text-align: right;
-      font-variant-numeric: tabular-nums; color: var(--gold);
+      font-variant-numeric: tabular-nums; color: var(--gold-ink);
       font-weight: 700; font-size: 12px;
     }
     .side-nav .nav-top { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line); }
