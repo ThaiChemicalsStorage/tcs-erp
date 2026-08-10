@@ -3,8 +3,8 @@
      "อยากได้แบบนี้ไปไว้ในเว็บตรงที่เป็นคู่มือการใช้งาน").
      Served statically from public/ at /manual.html — the topbar's gold "คู่มือการใช้งาน" button
      (src/App.tsx) opens this page. Self-contained: system Thai font stack, no external requests,
-     always the cream light theme matching the app (dark-mode override removed 2026-08-07),
-     print-friendly (พิมพ์เป็น PDF ได้จากเบราว์เซอร์).
+     always the DARK theme (2026-08-10, direct user request — not tied to the OS color scheme),
+     print-friendly (พิมพ์เป็น PDF ได้จากเบราว์เซอร์ — printing overrides back to light).
      Content superseded docs/manual/user-manual.html (the old PDF source) — update THIS file going
      forward. -->
 <html lang="th">
@@ -13,31 +13,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>คู่มือการใช้งานระบบ TCS ERP</title>
 <style>
-  /* 2026-08-07: palette synced to the app's own theme.css tokens (per user request that the
-     manual match the app exactly) — same near-white ground, navy hairline, app gold, navy text
-     (the brief same-day cream palette was reverted with the app's own revert).
-     --gold-ink is the app's darkened text-grade gold (#866d28, its Pending-Approval pill text) —
-     used wherever gold is small text, since raw #c9a84c is a surface/accent hue, not readable text. */
+  /* 2026-08-10: always the DARK palette, per direct user request ("แก้หน้าคู่มือให้หน่อยเป็น
+     ธีมมืดเหมือนเดิม") — these are the same dark values the page's old prefers-color-scheme
+     block used, now unconditional so every reader sees the same thing regardless of OS theme
+     (the mode-dependent swap confused users before). The app itself stays light; the manual is
+     deliberately its own dark reading surface. Printing overrides back to light — see @media
+     print below. */
   :root {
-    --navy: #0b1d3a;
-    --gold: #c9a84c;
-    --gold-ink: #866d28;
-    --gold-soft: rgba(201, 168, 76, 0.14);
-    --ink: #0b1d3a;
-    --muted: #5a7299;
-    --ground: #f4f6fb;
-    --card: #ffffff;
-    --line: rgba(11, 29, 58, 0.1);
-    --good: #207e52;
-    --warn: #a75d1a;
-    --warn-bg: rgba(224, 138, 60, 0.10);
-    --danger: #d22626;
-    --danger-bg: rgba(224, 82, 82, 0.08);
-    --code-bg: #eef1f8;
+    --navy: #dfe6f2;
+    --gold: #d5ad55;
+    --gold-ink: #d5ad55;
+    --gold-soft: rgba(213, 173, 85, 0.12);
+    --ink: #dce2ec;
+    --muted: #96a1b5;
+    --ground: #10161f;
+    --card: #171f2b;
+    --line: #2a3444;
+    --good: #4fbe8a;
+    --warn: #e0a35c;
+    --warn-bg: rgba(224, 163, 92, 0.10);
+    --danger: #e07a7a;
+    --danger-bg: rgba(224, 122, 122, 0.10);
+    --code-bg: #202a38;
   }
-  /* No dark-mode override, deliberately: the ERP app itself is always the cream light theme,
-     and the manual must match it exactly (user request 2026-08-07) — an OS in dark mode was
-     silently swapping the manual to a dark palette while the app stayed cream. */
 
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -201,6 +199,14 @@
   a:focus-visible, button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   @media print {
+    /* พิมพ์เป็นขาวเสมอ — หน้าจอเป็นธีมมืด แต่พิมพ์พื้นดำจะเปลืองหมึก/อ่านยาก */
+    :root {
+      --navy: #0b1d3a; --gold: #c9a84c; --gold-ink: #866d28;
+      --gold-soft: rgba(201, 168, 76, 0.14); --ink: #0b1d3a; --muted: #5a7299;
+      --ground: #ffffff; --card: #ffffff; --line: rgba(11, 29, 58, 0.2);
+      --good: #207e52; --warn: #a75d1a; --warn-bg: rgba(224, 138, 60, 0.10);
+      --danger: #d22626; --danger-bg: rgba(224, 82, 82, 0.08); --code-bg: #eef1f8;
+    }
     body { background: #fff; padding-left: 0 !important; }
     .wrap { padding: 0; max-width: none; }
     .step, table, .callout, .toc { break-inside: avoid; }

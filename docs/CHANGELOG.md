@@ -4,7 +4,19 @@
 
 ---
 
-## 2026-08-07 (absolute latest) — Cream theme reverted: back to the original white/blue-grey neutrals
+## 2026-08-10 (absolute latest) — Web manual: always dark
+
+Direct user request ("แก้หน้าคู่มือให้หน่อยเป็นธีมมืดเหมือนเดิม") — the manual now renders the dark
+palette unconditionally (the same values its old `prefers-color-scheme: dark` block used, which is
+the look the user always saw on their dark-mode machine). Deliberately NOT tied to the OS color
+scheme — the mode-dependent swap confused users before ("ไม่เห็นเปลี่ยนเลย"). The app itself stays
+light; the manual is its own dark reading surface. `@media print` overrides the tokens back to a
+light palette so print-to-PDF stays white-paper readable. Verified via computed styles in a real
+browser (ground `#10161f`, ink `#dce2ec`, card `#171f2b`).
+
+---
+
+## 2026-08-07 — Cream theme reverted: back to the original white/blue-grey neutrals
 
 Direct user request ("ทำกลับไปธีมขาวเหมือนเดิม") — the warm-cream neutral family from earlier today
 lasted a few hours. `src/styles/theme.css` restored to the original values (`--background #f4f6fb`,
