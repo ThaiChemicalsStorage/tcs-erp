@@ -4,7 +4,20 @@
 
 ---
 
-## 2026-08-07 (absolute latest) — Email sending removed entirely: document recipients are in-app-notification-only
+## 2026-08-07 (absolute latest) — Cream theme reverted: back to the original white/blue-grey neutrals
+
+Direct user request ("ทำกลับไปธีมขาวเหมือนเดิม") — the warm-cream neutral family from earlier today
+lasted a few hours. `src/styles/theme.css` restored to the original values (`--background #f4f6fb`,
+`--secondary #e8edf7`, `--muted`/`--input` `#eef1f8`, `--switch-background #c5d0e4`, `--border`
+navy `rgba(11,29,58,.1)`); `public/manual.html`'s palette re-synced to match (ground/line/code-bg —
+it keeps `--gold-ink #866d28` for small gold text and stays always-light, no dark-mode block);
+DESIGN.md palette names/prose restored (`paper-blue`/`muted-mist`/`border-navy`, "navy ledger, gold
+seal"); UI_GUIDELINES token table restored; the `2026-08-07-cream-theme` What's New entry removed
+(reverted before users meaningfully saw it — same precedent as the removed Gmail entry).
+
+---
+
+## 2026-08-07 — Email sending removed entirely: document recipients are in-app-notification-only
 
 Direct user request ("ตัดการส่งอีเมลออกไปเลยเหลือไว้แค่ส่งในระบบพอ") — the same-day person-to-person
 Gmail rewrite (below) proved too hard for staff to set up (2FA + App Password), so the email channel

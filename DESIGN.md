@@ -5,14 +5,14 @@ colors:
   navy-ink: "#0b1d3a"
   gilded-gold: "#c9a84c"
   hover-gold: "#f0c040"
-  paper-cream: "#f7f4ec"
+  paper-blue: "#f4f6fb"
   ledger-white: "#ffffff"
-  pale-surface: "#ebe6d8"
+  pale-surface: "#e8edf7"
   surface-blue-ink: "#1a3a6b"
-  muted-linen: "#f1ede1"
+  muted-mist: "#eef1f8"
   muted-slate: "#5a7299"
   danger-red: "#e05252"
-  border-ink: "rgba(93, 80, 48, 0.16)"
+  border-navy: "rgba(11, 29, 58, 0.1)"
   sidebar-foreground: "#a8bed8"
   sidebar-hover: "#132540"
   sidebar-border: "rgba(201, 168, 76, 0.15)"
@@ -79,7 +79,7 @@ components:
     rounded: "{rounded.xl}"
     padding: "24px"
   input:
-    backgroundColor: "{colors.muted-linen}"
+    backgroundColor: "{colors.muted-mist}"
     rounded: "{rounded.lg}"
     padding: "8px 12px"
   stat-tile:
@@ -104,7 +104,7 @@ The system is formal and trustworthy by necessity (it carries a server-enforced 
 
 Many day-to-day users (Sales, Technical staff, Admins) are genuinely **first-time users of any business system like this** — professional and compact must not tip into dense or cryptic. Every screen should be learnable without training: clear labels in the established Thai terminology (never invent new phrasing for an existing term), predictable placement of primary actions, and a layout compact enough to scan quickly without feeling cramped. This is a working tool used many times a day, not a marketing surface — clarity and speed of comprehension outrank visual flourish every time they compete.
 
-The system is deliberately flat and quiet at rest — surfaces are separated by a hairline ink border, not a shadow — and reserves motion/elevation for the moment something is genuinely floating above the page (a dropdown, a modal). This keeps the "ledger" feeling calm and paper-like rather than app-glossy.
+The system is deliberately flat and quiet at rest — surfaces are separated by a hairline navy border, not a shadow — and reserves motion/elevation for the moment something is genuinely floating above the page (a dropdown, a modal). This keeps the "ledger" feeling calm and paper-like rather than app-glossy.
 
 **Key Characteristics:**
 - Navy-and-gold, editorial-serif headings over a clean sans-serif body — formal without being cold.
@@ -115,7 +115,7 @@ The system is deliberately flat and quiet at rest — surfaces are separated by 
 
 ## Colors
 
-The palette reads as "navy ledger, gold seal, cream paper": one deep authoritative ink color, one rare metallic accent, and a warm, deliberately desaturated family of cream/parchment neutrals for every surface in between (shifted from the original cool blue-greys on 2026-08-07, per direct user request, to match the web manual's paper tone — navy, gold, and every status hex unchanged).
+The palette reads as "navy ledger, gold seal": one deep authoritative ink color, one rare metallic accent, and a wide, deliberately desaturated family of blue-greys for every surface in between. (A warm-cream neutral family existed for a few hours on 2026-08-07 and was reverted the same day per direct user request — "ทำกลับไปธีมขาวเหมือนเดิม".)
 
 ### Primary
 - **Gilded Gold** (`#c9a84c`): the one accent color. Primary buttons, active sidebar nav item, focus rings, the "รออนุมัติ/Pending Approval" status pill, chart series #1. Also the color of the Thai subtitle under the logo and the topbar breadcrumb.
@@ -124,12 +124,12 @@ The palette reads as "navy ledger, gold seal, cream paper": one deep authoritati
 ### Neutral
 - **Navy Ink** (`#0b1d3a`): primary text color everywhere, and the sidebar's own background (inverted role — on the sidebar, navy is the surface and a pale blue is the text).
 - **Ledger White** (`#ffffff`): card, popover, and dropdown-panel backgrounds.
-- **Paper Cream** (`#f7f4ec`): the page background beneath every card — warm cream, never stark white, so cards read as paper sitting on a desk rather than panels floating on a void.
-- **Pale Surface** (`#ebe6d8`) / **Muted Linen** (`#f1ede1`): secondary surfaces — input backgrounds, muted panel fills, table header-row tints.
+- **Paper Blue** (`#f4f6fb`): the page background beneath every card — just barely blue, never stark white, so cards read as paper sitting on a desk rather than panels floating on a void.
+- **Pale Surface** (`#e8edf7`) / **Muted Mist** (`#eef1f8`): secondary surfaces — input backgrounds, muted panel fills, table header-row tints.
 - **Muted Slate** (`#5a7299`): secondary/muted text — captions, helper text, placeholder-weight copy, secondary-button text.
 - **Sidebar Foreground** (`#a8bed8`): the pale ink used for inactive sidebar labels against the navy sidebar background.
 - **Sidebar Hover** (`#132540`): a slightly lighter navy used only for sidebar item hover, never for text.
-- **Border Ink** (`rgba(93, 80, 48, 0.16)`): the one border color used everywhere — cards, tables, dividers, inputs. Always this warm-ink-at-low-opacity (the same "ink hairline" concept as the original navy-at-10%, re-inked warm so hairlines sit naturally on cream), never a flat grey.
+- **Border Navy** (`rgba(11, 29, 58, 0.1)`): the one border color used everywhere — cards, tables, dividers, inputs. Always this navy-at-10%-opacity, never a flat grey.
 
 ### Semantic
 - **Danger Red** (`#e05252`): destructive actions (delete, reject), the "เสียโอกาส/Lost" status pill, form error text and error borders. Its hover-state twin is `#c94444`.
@@ -174,7 +174,7 @@ Per PRODUCT.md, the real usage scene is desktop/laptop office work — the respo
 
 ## Elevation & Depth
 
-Flat by default. Cards, panels, and tables are separated from the page and each other by a single hairline ink border (`border-border`, `rgba(93, 80, 48, 0.16)`) — never a resting-state shadow. Depth is reserved entirely for things that are genuinely floating above the flat page: dropdown panels (notifications, What's New, Global Search, user menu) and modal dialogs all share one `shadow-xl` treatment. This is the one thing that indicates "this surface is temporary and overlays the page," so it must never be used on a permanent, in-flow card — doing so would erase the one visual cue the system has for "floating vs. anchored."
+Flat by default. Cards, panels, and tables are separated from the page and each other by a single hairline navy border (`border-border`, `rgba(11, 29, 58, 0.1)`) — never a resting-state shadow. Depth is reserved entirely for things that are genuinely floating above the flat page: dropdown panels (notifications, What's New, Global Search, user menu) and modal dialogs all share one `shadow-xl` treatment. This is the one thing that indicates "this surface is temporary and overlays the page," so it must never be used on a permanent, in-flow card — doing so would erase the one visual cue the system has for "floating vs. anchored."
 
 ### Named Rules
 **The Flat-Ledger Rule.** Surfaces are flat at rest, separated by a border, not a shadow. Shadow (`shadow-xl`) is reserved exclusively for content that overlays the page — dropdowns and modals — never for an in-flow card or panel.
@@ -199,20 +199,20 @@ The tinted-pill formula (see Named Rules, Colors) is this system's signature rec
 The compact KPI tile — `ExecutiveSummaryCards.tsx`'s `SummaryCard`, `ActivityFollowUpSummary.tsx`'s `ActionItem`, `ApprovalDashboard.tsx`'s summary tiles — is a second recurring signature pattern alongside Status Pills: an icon in an Icon Chip Tint square, a large `text-2xl font-bold font-mono` (or `text-lg`/`text-xl` in denser variants) value, a muted-foreground title/label, and (where the number needs one-line context) a `text-[10px]` helper caption underneath. Reuse this shape for any new at-a-glance number rather than inventing a new card format — never a bare number with no label, and never more than one accent color's worth of visual weight per tile.
 
 ### Chart Section & Tooltip
-`ChartCard.tsx` is the shared wrapper for every Dashboard chart/table section: a Playfair Display `title`, an optional mono `sub` caption, an optional `actions` slot (top-right, e.g. a grouping toggle), then `children`. Every chart section uses this wrapper rather than a bare `Cards / Containers` div, so chart sections are visually identical regardless of what's inside. Chart tooltips (Recharts `<Tooltip content={...}>`) share one pattern (`SimpleTooltip` in `DashboardCharts.tsx`): white background, a gold-tinted border (`border-[#c9a84c]/30`, distinct from the standard hairline ink border), `shadow-xl` (a chart tooltip is a floating element, consistent with the Flat-Ledger Rule), and mono-font label/value lines colored to match their series.
+`ChartCard.tsx` is the shared wrapper for every Dashboard chart/table section: a Playfair Display `title`, an optional mono `sub` caption, an optional `actions` slot (top-right, e.g. a grouping toggle), then `children`. Every chart section uses this wrapper rather than a bare `Cards / Containers` div, so chart sections are visually identical regardless of what's inside. Chart tooltips (Recharts `<Tooltip content={...}>`) share one pattern (`SimpleTooltip` in `DashboardCharts.tsx`): white background, a gold-tinted border (`border-[#c9a84c]/30`, distinct from the standard hairline navy border), `shadow-xl` (a chart tooltip is a floating element, consistent with the Flat-Ledger Rule), and mono-font label/value lines colored to match their series.
 
 ### Cards / Containers
 - **Corner style:** `rounded-xl` (12px).
-- **Background:** white (`#ffffff`) on the paper-cream page background.
-- **Border:** hairline ink (`rgba(93,80,48,0.16)`), always — see Elevation & Depth.
+- **Background:** white (`#ffffff`) on the paper-blue page background.
+- **Border:** hairline navy (`rgba(11,29,58,0.1)`), always — see Elevation & Depth.
 - **Hover** (interactive cards only): border shifts toward gold at low opacity (`hover:border-[#c9a84c]/30`), never a shadow.
 - **Internal padding:** `p-4`–`p-6`.
 
 ### Inputs / Fields
-- **Style:** muted-linen background (`#f1ede1`), hairline ink border, `rounded-lg`.
+- **Style:** muted-mist background (`#eef1f8`), hairline navy border, `rounded-lg`.
 - **Focus:** border shifts to gold at 50% opacity (`focus:border-[#c9a84c]/50`), no glow/ring.
 - **Error:** red (`#e05252`) helper text below the field, `text-xs`.
-- **In-table inline editing:** a distinct, lighter-weight variant — transparent background by default, only gaining the muted-linen background on focus — used for spreadsheet-style editable table cells (e.g. quotation line items) instead of the full bordered field style.
+- **In-table inline editing:** a distinct, lighter-weight variant — transparent background by default, only gaining the muted-mist background on focus — used for spreadsheet-style editable table cells (e.g. quotation line items) instead of the full bordered field style.
 
 ### Navigation (Sidebar)
 Navy rail; inactive items are pale-blue text (`#a8bed8`) on navy, hover shifts to white with a navy-accent background (`#132540`); the active item gets the tinted-pill treatment (`bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25`) — the sidebar's active state is a direct application of the same pill formula the status system uses elsewhere. Nav items are grouped under small uppercase eyebrow labels (Main/Sales/Inventory/Administration) that hide when the sidebar is collapsed to icon-only.

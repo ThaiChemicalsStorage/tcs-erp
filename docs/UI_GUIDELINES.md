@@ -8,15 +8,15 @@ CSS custom properties, exposed to Tailwind via `@theme inline` (so `bg-backgroun
 
 | Token | Value | Use |
 |---|---|---|
-| `--background` | `#f7f4ec` (warm cream — was `#f4f6fb` cool blue-grey until 2026-08-07) | Page background |
+| `--background` | `#f4f6fb` | Page background (a warm-cream variant existed for a few hours on 2026-08-07, reverted the same day per user request) |
 | `--foreground` | `#0b1d3a` (navy) | Primary text |
 | `--card` | `#ffffff` | Card/panel background |
 | `--primary` | `#c9a84c` (gold) | Primary actions, active states |
-| `--secondary` | `#ebe6d8` (was `#e8edf7`) | Secondary surfaces (input backgrounds) |
-| `--muted` | `#f1ede1` (was `#eef1f8`) | Muted backgrounds (tab bars, table header rows) |
+| `--secondary` | `#e8edf7` | Secondary surfaces (input backgrounds) |
+| `--muted` | `#eef1f8` | Muted backgrounds (tab bars, table header rows) |
 | `--muted-foreground` | `#5a7299` | Secondary text |
 | `--destructive` | `#e05252` | Danger actions, error text |
-| `--border` | `rgba(93,80,48,0.16)` (warm ink hairline — was navy `rgba(11,29,58,0.1)`) | Borders |
+| `--border` | `rgba(11,29,58,0.1)` | Borders |
 | `--sidebar` | `#0b1d3a` (navy) | Sidebar background |
 | `--sidebar-foreground` | `#a8bed8` | Sidebar text |
 | `--sidebar-accent` | `#132540` | Sidebar hover |
