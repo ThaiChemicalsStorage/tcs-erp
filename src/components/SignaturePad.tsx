@@ -169,18 +169,11 @@ export function SignaturePad({
   }
 
   return (
-    <div>
-      <label htmlFor={nameId} className={labelCls}>
-        <span className="flex items-center gap-1"><PenLine size={10} /> {t("signaturePad.signerName")}</span>
-      </label>
-      <input
-        id={nameId}
-        value={name}
-        disabled={disabled}
-        onChange={(e) => setName(e.target.value)}
-        placeholder={t("signaturePad.signerNamePlaceholder")}
-        className="h-9 w-full px-3 text-sm bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
-      />
+    // Same border/bg/p-3 card as the engineer's read-only box and the signed-state preview below,
+    // with the canvas as the card's first element — so the actual signing box's top edge lines up
+    // with the engineer box beside it. The signer-name field sits under the canvas instead of above
+    // it for the same reason: above it used to push this whole card lower than the engineer's.
+    <div className="border border-border rounded-lg bg-secondary/40 p-3">
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
@@ -189,9 +182,22 @@ export function SignaturePad({
         onPointerLeave={endStroke}
         onPointerCancel={endStroke}
         aria-label={t("signaturePad.canvasLabel")}
-        className={`w-full mt-2 bg-white border border-border rounded-lg ${disabled ? "opacity-60" : "cursor-crosshair"}`}
+        className={`w-full bg-white border border-border rounded-lg ${disabled ? "opacity-60" : "cursor-crosshair"}`}
         style={{ height: PAD_HEIGHT, touchAction: "none" }}
       />
+      <div className="mt-2.5">
+        <label htmlFor={nameId} className={labelCls}>
+          <span className="flex items-center gap-1"><PenLine size={10} /> {t("signaturePad.signerName")}</span>
+        </label>
+        <input
+          id={nameId}
+          value={name}
+          disabled={disabled}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={t("signaturePad.signerNamePlaceholder")}
+          className="h-9 w-full px-3 text-sm bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+        />
+      </div>
       <div className="flex items-center justify-between gap-2 mt-2">
         <p className="text-[10px] text-muted-foreground">{t("signaturePad.hint")}</p>
         <div className="flex items-center gap-2">
