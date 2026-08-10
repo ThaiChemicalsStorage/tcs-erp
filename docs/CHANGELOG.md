@@ -4,7 +4,41 @@
 
 ---
 
-## 2026-08-10 (absolute latest) — Web manual: always dark
+## 2026-08-10 (absolute latest) — Service Report: customer approval via time-boxed link + LINE OA
+
+Direct user request ("จะทำตรงหน้า Service เพื่อที่จะส่งใบไปให้ลูกค้า approve ใน Line OA") — the
+customer (no ERP account) reviews and approves/rejects a Service Report from their phone.
+
+- **Approval link**: `POST /api/service-reports/:id/send-approval` (`service:edit`) mints a
+  single-purpose 7-day capability link (`/approve?report=…&key=…`; only the token's SHA-256 is
+  stored as `customerApproval.tokenHash`, stripped from every authenticated response). Public
+  `GET …/approval?key=` + `POST …/approval/respond` — approve requires a signature (written into
+  the existing on-site `customerSignatureDataUrl`/`SignedName`/`SignedAt` fields, so the printed
+  report shows it identically), reject requires a reason; one response per link; expired = 410.
+  Audit entries (customer actor) + new `service_report_customer_approved`/`_rejected` bell
+  notifications to sender/creator/engineer.
+- **LINE OA (new `api/_lib/lineHandler.ts`)**: one-time pairing —
+  `POST /api/customers/:id/line-pairing` (24-h `TCS-XXXXX` code; `customers:edit` or
+  `service:edit`) + the signed webhook `POST /api/line/webhook` (HMAC over the raw body;
+  `server/app.ts` now captures `req.rawBody` and routes `line:`; Express-only, no vercel.json
+  change) stores `customers.lineUserId` (public) / `linePairing` (server-only, stripped by the
+  new `toPublicCustomer()`). Sending then best-effort pushes a navy/gold Flex bubble with the
+  link; unlinked/unconfigured degrades to copy-the-link. Env (optional):
+  `LINE_CHANNEL_ACCESS_TOKEN`/`LINE_CHANNEL_SECRET` (`.env.example`).
+- **UI**: `ServiceReportEditor.tsx` — the inert 2026-08-07 "remote link" placeholder button is
+  now the real "ส่งให้ลูกค้าอนุมัติ (ลิงก์/LINE)" (saves first; result dialog with copy-link,
+  LINE status, and pairing-code issuance) + approval status lines. New session-free public page
+  `src/pages/approval/CustomerApprovalPage.tsx` (Thai-only, mobile-first; `src/main.tsx` branches
+  on `/approve` before the auth gate; reuses `SignaturePad`).
+- **Tests**: new `tests/api/serviceApproval.test.ts` (6) — link mint + no-hash-leak, opaque-404
+  key check, approve/reject validation + once-only, expiry 410, pairing + signed webhook (bad
+  signature 403) + no-`linePairing`-leak. What's New entry `2026-08-10-service-customer-approval`.
+  Docs synced: Service.md, API.md, DATABASE.md, ARCHITECTURE.md, TODO.md (owner setup item),
+  docs/CLAUDE.md.
+
+---
+
+## 2026-08-10 — Web manual: always dark
 
 Direct user request ("แก้หน้าคู่มือให้หน่อยเป็นธีมมืดเหมือนเดิม") — the manual now renders the dark
 palette unconditionally (the same values its old `prefers-color-scheme: dark` block used, which is

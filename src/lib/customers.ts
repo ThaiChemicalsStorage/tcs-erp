@@ -17,6 +17,8 @@ export interface Customer {
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
+  /** LINE userId ของแชทลูกค้าที่ผูกไว้ (2026-08-10) — "" คือยังไม่เคยผูก; ผูกครั้งเดียวผ่านรหัสจับคู่ */
+  lineUserId: string;
 }
 
 export interface CustomerDraft {
@@ -81,4 +83,10 @@ export async function setCustomerArchived(id: string, isDeleted: boolean): Promi
     body: JSON.stringify({ isDeleted }),
   });
   return customer;
+}
+
+// ออกรหัสจับคู่ LINE อายุ 24 ชม. — เจ้าหน้าที่บอกรหัสให้ลูกค้าพิมพ์ในแชท LINE OA ของบริษัท
+// Issues a 24-hour LINE pairing code — staff tell the customer to type it in the company OA chat
+export async function createLinePairingCode(customerId: string): Promise<{ code: string; expiresAt: string }> {
+  return apiFetch(`/customers/${customerId}/line-pairing`, { method: "POST" });
 }

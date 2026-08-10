@@ -4,6 +4,7 @@ import { handleCustomers } from "../_lib/customersHandler.js";
 import { handleSearch } from "../_lib/searchHandler.js";
 import { handleServiceTemplate } from "../_lib/serviceTemplateHandler.js";
 import { handleServiceReport } from "../_lib/serviceReportHandler.js";
+import { handleLineWebhook } from "../_lib/lineHandler.js";
 
 /**
  * Customer master data — see `api/_lib/customersHandler.ts` for the actual list/create/get/patch/
@@ -35,6 +36,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (pathname === "/api/search") return handleSearch(req, res);
     if (pathname === "/api/service-templates" || pathname.startsWith("/api/service-templates/")) return handleServiceTemplate(req, res);
     if (pathname === "/api/service-reports" || pathname.startsWith("/api/service-reports/")) return handleServiceReport(req, res);
+    // LINE OA webhook (2026-08-10) — Express runtime only: server/app.ts routes /api/line/* here
+    // and captures the raw body its signature check needs; vercel.json deliberately has no
+    // /api/line rewrite (the demo can't verify signatures — see api/_lib/lineHandler.ts).
+    if (pathname === "/api/line/webhook") return handleLineWebhook(req, res);
     return handleCustomers(req, res);
   });
 }

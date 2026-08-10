@@ -270,6 +270,45 @@ drawn on someone else's behalf.
   button (`title="เร็ว ๆ นี้"`) — shown rather than hidden so the on-site flow reads as one of two
   eventual options. Wiring it needs a real LINE OA channel; see Roadmap.
 
+## Customer Approval via LINE / time-boxed link (added 2026-08-10)
+
+The remote half of customer acceptance, per direct user request ("ส่งใบไปให้ลูกค้า approve ใน
+Line OA") — the customer has no ERP account, so authorization is a **single-purpose capability
+link with a 7-day expiry** (the owner's recorded preference against always-live public views):
+
+- **Send** — "ส่งให้ลูกค้าอนุมัติ" in `ServiceReportEditor.tsx` (replaces the inert 2026-08-07
+  placeholder button) saves the draft, then `POST /api/service-reports/:id/send-approval`
+  (`service:edit`, no ownership check — distribution, like Scope of Work's send; blocked only on
+  Cancelled or already-approved). The server mints a 24-byte token, stores **only its SHA-256
+  hash** (`customerApproval.tokenHash`, stripped from every authenticated response), and returns
+  `approvalUrl` = `${APP_URL}/approve?report=…&key=…`. Re-sending replaces the outstanding link.
+- **LINE push (best-effort)** — if the report's customer has a linked `lineUserId` AND
+  `LINE_CHANNEL_ACCESS_TOKEN` is set, the link goes out as a navy/gold Flex bubble
+  (`api/_lib/lineHandler.ts`) with an "เปิดดูและอนุมัติ" button; any failure degrades to
+  copy-the-link (`sentViaLine: false` + `lineError`). The send dialog offers link-copy always.
+- **Pairing (once per customer)** — `POST /api/customers/:id/line-pairing` (`customers:edit` OR
+  `service:edit`) issues a 24-hour `TCS-XXXXX` code (unambiguous alphabet); the customer adds the
+  company OA and types it in chat; the signed webhook (`POST /api/line/webhook`,
+  HMAC-SHA256 over the RAW body — Express-only, `server/app.ts` captures `req.rawBody`; the
+  Vercel demo has no `/api/line` route) matches it and stores `customers.lineUserId` permanently
+  (`linePairing` is server-only, stripped by `toPublicCustomer()`).
+- **The public page** — `/approve` renders `src/pages/approval/CustomerApprovalPage.tsx` with NO
+  app shell or session (`src/main.tsx` branches before the auth gate). Thai-only, mobile-first:
+  report summary, full checklist read-out (incl. abnormal details + photos via their existing
+  capability URLs), then SignaturePad + อนุมัติ, or ไม่อนุมัติ + **required reason**. GET/respond
+  use the key (wrong key = opaque 404; expired = shown as expired, respond = 410; one response
+  per link).
+- **On approve**: writes the same `customerSignatureDataUrl`/`customerSignedName`/
+  `customerSignedAt` fields the on-site SignaturePad uses — the printed report shows the customer
+  signature identically regardless of which path captured it. On reject: `rejectReason` stored on
+  `customerApproval`. Either way: an audit entry (actor "ลูกค้า (...)", empty userId) + bell
+  notifications (`service_report_customer_approved`/`_rejected`) to the sender, creator, and
+  assigned engineer.
+- **Setup** (owner): `LINE_CHANNEL_ACCESS_TOKEN` + `LINE_CHANNEL_SECRET` in `.env` (optional —
+  without them everything except the push/webhook still works), OA webhook URL →
+  `${APP_URL}/api/line/webhook`, and a real HTTPS `APP_URL` (LINE refuses non-HTTPS URIs in
+  buttons). Tested in `tests/api/serviceApproval.test.ts` (6 tests, incl. webhook signature).
+
 ## Routes
 
 See [API.md](../API.md) "Service Templates + Service Reports" for the full method/auth/route table

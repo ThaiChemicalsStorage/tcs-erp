@@ -6,9 +6,10 @@ import {
   type ServiceReportStatus,
   fetchServiceReport, createServiceReport, updateServiceReport, changeServiceReportStatus, deleteServiceReport,
   uploadServiceReportPhoto, deleteServiceReportPhoto, printServiceReport, mergeServerPhotosIntoChecklist,
+  sendServiceReportCustomerApproval,
 } from "../../lib/serviceReports";
 import { type ServiceTemplateSummary, type ServiceTemplate, type ServiceChecklistSectionDef, fetchServiceTemplates, fetchServiceTemplate } from "../../lib/serviceTemplates";
-import { type Customer, fetchCustomers } from "../../lib/customers";
+import { type Customer, fetchCustomers, createLinePairingCode } from "../../lib/customers";
 import { type User, fetchUsers } from "../../lib/users";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { CustomerSelector } from "../quotation/CustomerSelector";
@@ -142,6 +143,12 @@ export function ServiceReportEditor({
     | { type: "group"; sectionKey: string; groupKey: string }
     | null
   >(null);
+  // การส่งให้ลูกค้าอนุมัติผ่านลิงก์/LINE (2026-08-10)
+  const [sendingApproval, setSendingApproval] = useState(false);
+  const [approvalResult, setApprovalResult] = useState<{ url: string; sentViaLine: boolean; lineError?: string } | null>(null);
+  const [approvalLinkCopied, setApprovalLinkCopied] = useState(false);
+  const [pairing, setPairing] = useState<{ code: string; expiresAt: string } | null>(null);
+  const [pairingBusy, setPairingBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,6 +266,43 @@ export function ServiceReportEditor({
       applyApiError(err, t("service.toast.saveFailed"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // บันทึกก่อนเสมอ (ถ้ายังแก้ได้) แล้วสร้างลิงก์อนุมัติอายุ 7 วัน — ส่งเข้า LINE ลูกค้าอัตโนมัติถ้าผูกไว้
+  // Saves first (when still editable), then creates the 7-day approval link, LINE-pushing it when linked
+  const handleSendApproval = async () => {
+    if (!report || sendingApproval) return;
+    setSendingApproval(true);
+    try {
+      if (isEditable) {
+        const saved = await updateServiceReport(report.id, { ...draftBody(), templateSections: sections });
+        applyServerReport(saved);
+      }
+      const result = await sendServiceReportCustomerApproval(report.id);
+      applyServerReport(result.serviceReport);
+      setApprovalLinkCopied(false);
+      setPairing(null);
+      setApprovalResult({ url: result.approvalUrl, sentViaLine: result.sentViaLine, lineError: result.lineError });
+    } catch (err) {
+      applyApiError(err, "ส่งให้ลูกค้าอนุมัติไม่สำเร็จ");
+    } finally {
+      setSendingApproval(false);
+    }
+  };
+
+  // ออกรหัสจับคู่ LINE ของลูกค้ารายนี้ (อายุ 24 ชม.) เพื่อให้ลูกค้าพิมพ์ในแชท LINE OA ของบริษัท
+  // Issues this customer's 24-hour LINE pairing code, typed by the customer into the company OA chat
+  const handleCreatePairing = async () => {
+    const customerId = report?.customerId || form.customerId;
+    if (!customerId || pairingBusy) return;
+    setPairingBusy(true);
+    try {
+      setPairing(await createLinePairingCode(customerId));
+    } catch (err) {
+      applyApiError(err, "ออกรหัสจับคู่ LINE ไม่สำเร็จ");
+    } finally {
+      setPairingBusy(false);
     }
   };
 
@@ -945,23 +989,103 @@ export function ServiceReportEditor({
             </div>
           </div>
 
+          {/* การอนุมัติจากลูกค้าทางไกล (2026-08-10) — แทนที่ปุ่ม placeholder เดิมของเฟส LINE:
+              ส่งลิงก์อนุมัติอายุ 7 วัน (เข้า LINE ลูกค้าอัตโนมัติถ้าผูกบัญชีแล้ว) ลูกค้าเปิดดู
+              รายงาน เซ็นชื่อ และกดอนุมัติ/ไม่อนุมัติจากมือถือได้เอง */}
           <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-border">
-            <p className="text-[11px] text-muted-foreground">{t("service.signature.optionalNote")}</p>
-            {/* Visible placeholder for the LINE remote-signing phase — inert on purpose. Shown
-                rather than hidden so the on-site flow reads as one of two eventual options, not the
-                only one; wiring it needs a real LINE OA channel (see docs/MODULES/Service.md). */}
-            <button
-              type="button"
-              disabled
-              title={t("service.signature.comingSoon")}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground opacity-50 cursor-not-allowed"
-            >
-              <Send size={12} /> {t("service.signature.remoteLink")}
-            </button>
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground">{t("service.signature.optionalNote")}</p>
+              {report?.customerApproval?.status === "pending" && (
+                <p className="text-[11px] text-[#866d28] mt-0.5">
+                  ส่งให้ลูกค้าอนุมัติแล้ว{report.customerApproval.sentViaLine ? " (ผ่าน LINE)" : ""} — รอคำตอบ ลิงก์หมดอายุ {report.customerApproval.expiresAt.slice(0, 10)}
+                </p>
+              )}
+              {report?.customerApproval?.status === "approved" && (
+                <p className="text-[11px] text-[#207e52] mt-0.5">
+                  ลูกค้าอนุมัติแล้ว{report.customerApproval.signedName ? ` โดย ${report.customerApproval.signedName}` : ""} ({(report.customerApproval.respondedAt ?? "").slice(0, 10)})
+                </p>
+              )}
+              {report?.customerApproval?.status === "rejected" && (
+                <p className="text-[11px] text-[#d22626] mt-0.5">
+                  ลูกค้าไม่อนุมัติ — เหตุผล: {report.customerApproval.rejectReason || "-"}
+                </p>
+              )}
+            </div>
+            {!isNew && report && report.customerApproval?.status !== "approved" && (
+              <button
+                type="button"
+                onClick={handleSendApproval}
+                disabled={sendingApproval || saving}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send size={12} /> {sendingApproval ? "กำลังส่ง..." : report.customerApproval ? "ส่งให้ลูกค้าอนุมัติอีกครั้ง" : "ส่งให้ลูกค้าอนุมัติ (ลิงก์/LINE)"}
+              </button>
+            )}
           </div>
         </div>
       )}
     </div>
+    {/* ผลการส่งให้ลูกค้าอนุมัติ: ลิงก์สำหรับคัดลอก + สถานะ LINE + รหัสจับคู่ (2026-08-10) */}
+    {approvalResult && (
+      <div className="fixed inset-0 z-50 bg-[#0b1d3a]/40 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="ส่งให้ลูกค้าอนุมัติแล้ว">
+        <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md p-5 space-y-4">
+          <div className="flex items-start gap-2.5">
+            <CheckCircle2 size={18} className="text-[#207e52] flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">สร้างลิงก์อนุมัติแล้ว (ใช้ได้ 7 วัน)</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {approvalResult.sentViaLine
+                  ? "ส่งเข้า LINE ของลูกค้าเรียบร้อยแล้ว — คัดลอกลิงก์ด้านล่างส่งช่องทางอื่นเพิ่มได้"
+                  : "ลูกค้ายังไม่ได้ผูก LINE — คัดลอกลิงก์ด้านล่างส่งให้ลูกค้าทางช่องทางที่สะดวก"}
+              </p>
+              {approvalResult.lineError && <p className="text-xs text-[#a75d1a] mt-1">{approvalResult.lineError}</p>}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input readOnly value={approvalResult.url} onFocus={(e) => e.target.select()} aria-label="ลิงก์อนุมัติ"
+              className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground min-w-0" />
+            <button
+              type="button"
+              onClick={() => { navigator.clipboard.writeText(approvalResult.url).then(() => setApprovalLinkCopied(true)).catch(() => showToast("คัดลอกไม่สำเร็จ")); }}
+              className="px-3 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors whitespace-nowrap"
+            >
+              {approvalLinkCopied ? "คัดลอกแล้ว ✓" : "คัดลอกลิงก์"}
+            </button>
+          </div>
+
+          {!approvalResult.sentViaLine && (report?.customerId || form.customerId) && (
+            <div className="border-t border-border pt-3 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                อยากให้ครั้งหน้าส่งเข้า LINE ลูกค้าอัตโนมัติ? ออกรหัสจับคู่ แล้วให้ลูกค้าแอด LINE บริษัทและพิมพ์รหัสนี้ในแชท (ทำครั้งเดียว)
+              </p>
+              {pairing ? (
+                <p className="text-sm">
+                  รหัสจับคู่: <span className="font-mono font-bold text-[#0b1d3a] bg-[#c9a84c]/15 border border-[#c9a84c]/25 rounded px-2 py-0.5">{pairing.code}</span>
+                  <span className="text-xs text-muted-foreground"> (ใช้ได้ถึง {pairing.expiresAt.slice(0, 10)})</span>
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleCreatePairing}
+                  disabled={pairingBusy}
+                  className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
+                >
+                  {pairingBusy ? "กำลังออกรหัส..." : "ออกรหัสจับคู่ LINE"}
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button type="button" onClick={() => setApprovalResult(null)}
+              className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+              ปิด
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     {!isNew && report && (
       <ServiceReportPrintDocument
         serviceReport={report}

@@ -36,6 +36,15 @@ src/
 - **MongoDB collections**: `users` (server-only `passwordHash` field, excluded from the client-facing `PublicUser`/`User` type), `roles` (seeded from the same `defaultRoles` array the client used to use, via `api/_lib/rbacSeed.ts` on first run), `company` (singleton doc, fixed `_id: "singleton"`), `products`, `categories`, `notifications`, `audit_log`, `quotes` (keyed by the human-readable business ID, e.g. `"QT-2567-0041"`, as the actual MongoDB `_id` — not an `ObjectId`). Full shapes: [DATABASE.md](./DATABASE.md).
 - **MongoDB connection**: a singleton client per warm serverless instance (`api/_lib/mongodb.ts`) — reused across invocations on that instance (not a single process-wide connection across all instances), the correct shape for serverless.
 - **MongoDB Atlas free-tier M0 cluster**; `MONGODB_URI` and `JWT_SECRET` live only in Vercel env vars (production/preview/development), never committed to the repo.
+- **LINE OA integration (added 2026-08-10)**: `api/_lib/lineHandler.ts` — the Service Report
+  customer-approval push (Messaging API Flex message to a customer's paired `lineUserId`) and the
+  pairing webhook (`POST /api/line/webhook`, HMAC-SHA256 over the raw body). Env:
+  `LINE_CHANNEL_ACCESS_TOKEN`/`LINE_CHANNEL_SECRET`, both optional — unconfigured, the approval
+  flow degrades to a copy-the-link workflow. **Express runtime only**: `server/app.ts` captures
+  `req.rawBody` for the signature check and routes `line:` to the customers handler; vercel.json
+  deliberately has no `/api/line` rewrite (see [MODULES/Service.md](./MODULES/Service.md)
+  "Customer Approval"). The public `/approve` page is served by the SPA fallback and rendered
+  session-free (`src/main.tsx` branches before the auth gate).
 - **Outbound email: none (removed 2026-08-07)**. The app sends no email at all — Scope of Work's document-recipient feature is in-app-notification-only (bell + record visibility). History, all within 2026-07-23 → 2026-08-07: central Resend (`RESEND_API_KEY`/`EMAIL_FROM`) → person-to-person nodemailer/Gmail-SMTP with per-user encrypted App Passwords (`api/_lib/email.ts` + `api/_lib/emailCredentials.ts`, `EMAIL_CRED_SECRET` env var; a few hours, same day) → removed entirely on direct user request after the App Password setup proved too hard for staff. Both `_lib` files, the env var, and the nodemailer dependency are deleted (see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Document Recipients").
 
 ### API layout: 12 function files (the Vercel Hobby cap), two dispatch patterns

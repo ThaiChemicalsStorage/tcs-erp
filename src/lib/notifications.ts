@@ -20,7 +20,9 @@ export type NotificationType =
   | "delivery_order_approved"
   | "delivery_order_rejected"
   | "service_report_created"
-  | "service_report_completed";
+  | "service_report_completed"
+  | "service_report_customer_approved"
+  | "service_report_customer_rejected";
 
 export interface Notification {
   id: string;

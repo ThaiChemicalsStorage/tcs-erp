@@ -23,6 +23,8 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   delivery_order_rejected: <XCircle size={14} />,
   service_report_created: <Wrench size={14} />,
   service_report_completed: <CheckCircle2 size={14} />,
+  service_report_customer_approved: <CheckCheck size={14} />,
+  service_report_customer_rejected: <Ban size={14} />,
 };
 
 // แปลงเวลาเป็นข้อความ "เมื่อกี้ / ผ่านมากี่นาที/ชั่วโมง/วัน"

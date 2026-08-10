@@ -41,6 +41,7 @@ const API_ROUTES: Record<string, ApiHandler> = {
   search: customersHandler,
   "service-templates": customersHandler,
   "service-reports": customersHandler,
+  line: customersHandler,
   company: companyHandler,
   "audit-log": auditLogHandler,
   dashboard: dashboardHandler,
@@ -58,7 +59,12 @@ export function createApp(): Express {
   // "simple" gives string | string[] query values, same shape Vercel's runtime produced —
   // Express 5's default "extended" parser can produce nested objects the handlers never expect.
   app.set("query parser", "simple");
-  app.use(express.json({ limit: JSON_BODY_LIMIT }));
+  // `verify` stashes the raw bytes for the LINE webhook's HMAC signature check
+  // (api/_lib/lineHandler.ts) — the parsed body alone can't reproduce LINE's exact byte stream.
+  app.use(express.json({
+    limit: JSON_BODY_LIMIT,
+    verify: (req, _res, buf) => { (req as Request & { rawBody?: Buffer }).rawBody = buf; },
+  }));
 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const pathname = req.url.split("?")[0];

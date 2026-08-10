@@ -1,6 +1,6 @@
 ﻿import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Binary } from "mongodb";
-import { randomUUID, randomBytes } from "node:crypto";
+import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import {
@@ -21,6 +21,8 @@ import type {
   ServiceChecklistItemPhoto,
 } from "../../src/lib/serviceReports.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
+import { companyCollection } from "./collections.js";
+import { isLinePushConfigured, pushLineMessage, buildApprovalFlexMessage } from "./lineHandler.js";
 
 /**
  * Service Report API (added 2026-08-06, Phase 1; photo attachments + print added the same day,
@@ -253,11 +255,19 @@ async function ensureServiceReportIndexes(): Promise<void> {
  */
 function toServiceReport(doc: ServiceReportFields & { _id: string }): ServiceReport {
   const full = withStringId(doc);
+  // `tokenHash` is the approval link's only secret — strip it here so no user-facing response
+  // (list/get/update) can leak material to forge the customer's approval URL.
+  let customerApproval: ServiceReport["customerApproval"] = null;
+  if (full.customerApproval) {
+    const { tokenHash: _tokenHash, ...publicApproval } = full.customerApproval;
+    customerApproval = publicApproval;
+  }
   return {
     ...full,
     customerSignatureDataUrl: full.customerSignatureDataUrl ?? "",
     customerSignedName: full.customerSignedName ?? "",
     customerSignedAt: full.customerSignedAt ?? null,
+    customerApproval,
   };
 }
 
@@ -739,6 +749,223 @@ async function handlePhotoDownload(req: VercelRequest, res: VercelResponse, id: 
   res.status(200).send(buffer);
 }
 
+// ─── Customer approval via time-boxed link / LINE OA (added 2026-08-10) ────────────────────────
+// The remote half of customer acceptance (docs/MODULES/Service.md "Customer Approval via LINE"):
+// staff generate a single-purpose capability link (7-day expiry, SHA-256-hashed token — the same
+// "unguessable URL, no session" model as photo downloads but deliberately TIME-BOXED, per the
+// owner's recorded preference against always-live public views); the customer opens it (directly
+// or from the LINE OA push), reviews the report read-only, and signs+approves or rejects with a
+// reason. Approving writes the same `customerSignatureDataUrl`/`customerSignedName`/
+// `customerSignedAt` fields the on-site SignaturePad uses, so the printed report shows the
+// signature identically regardless of which path captured it.
+
+const APPROVAL_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function hashApprovalToken(token: string): string {
+  return createHash("sha256").update(token).digest("base64url");
+}
+
+function approvalUrlFor(id: string, token: string): string {
+  const appUrl = (process.env.APP_URL || "https://tcs-erp-nine.vercel.app").replace(/\/+$/, "");
+  return `${appUrl}/approve?report=${encodeURIComponent(id)}&key=${encodeURIComponent(token)}`;
+}
+
+/** POST /api/service-reports/:id/send-approval — `service:edit` (like Scope of Work's send, this
+ * distributes the document rather than changing it, so no ownership check and no Draft-only
+ * lock; only Cancelled is blocked). Re-sending replaces the outstanding link (old token dies). */
+async function handleSendApproval(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "service:edit");
+  const doc = await loadReportOrThrow(id);
+  if (doc.status === "Cancelled") throw new HttpError(400, "รายงานนี้ถูกยกเลิกแล้ว ส่งให้ลูกค้าอนุมัติไม่ได้");
+  if (doc.customerApproval?.status === "approved") {
+    throw new HttpError(400, "ลูกค้าอนุมัติรายงานนี้ไปแล้ว ไม่จำเป็นต้องส่งซ้ำ");
+  }
+
+  const token = randomBytes(24).toString("base64url");
+  const now = nowIso();
+  const approval: NonNullable<ServiceReportFields["customerApproval"]> = {
+    status: "pending",
+    tokenHash: hashApprovalToken(token),
+    sentAt: now,
+    sentBy: ctx.user.id,
+    sentByName: ctx.user.fullName,
+    expiresAt: new Date(Date.now() + APPROVAL_TOKEN_TTL_MS).toISOString(),
+    sentViaLine: false,
+    respondedAt: null,
+    rejectReason: "",
+    signedName: "",
+  };
+  const approvalUrl = approvalUrlFor(id, token);
+
+  // LINE push is best-effort: a linked customer + configured channel sends automatically; any
+  // failure (unlinked, unconfigured, quota, non-HTTPS APP_URL) degrades to copy-the-link.
+  let lineError: string | undefined;
+  if (doc.customerId && isLinePushConfigured()) {
+    const customers = await customersCollection();
+    const customer = await customers.findOne({ _id: toObjectId(doc.customerId) }, { projection: { lineUserId: 1, companyName: 1 } });
+    if (customer?.lineUserId) {
+      try {
+        const company = await (await companyCollection()).findOne({});
+        await pushLineMessage(customer.lineUserId, [buildApprovalFlexMessage({
+          reportId: id,
+          companyName: company?.name ?? "TCS ERP",
+          customerName: doc.customerSnapshot.companyName,
+          serviceSystemName: doc.serviceSystemName,
+          inspectionDate: doc.inspectionDate,
+          approvalUrl,
+          expiresAt: approval.expiresAt,
+        })]);
+        approval.sentViaLine = true;
+      } catch (err) {
+        console.error(`[service-reports] LINE push for ${id} failed`, err);
+        lineError = "ส่งเข้า LINE ไม่สำเร็จ — คัดลอกลิงก์ส่งเองได้ตามปกติ";
+      }
+    }
+  }
+
+  const serviceReports = await serviceReportsCollection();
+  await serviceReports.updateOne({ _id: doc._id }, { $set: { customerApproval: approval, updatedAt: now, updatedBy: ctx.user.id } });
+  const updated = await serviceReports.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบรายงานบริการ");
+
+  await writeServiceAuditEntry(
+    ctx, "Service Report Approval Link Sent",
+    `ส่งรายงานบริการ ${id} ให้ลูกค้าอนุมัติ (${approval.sentViaLine ? "ผ่าน LINE" : "ลิงก์สำหรับส่งเอง"} หมดอายุ ${approval.expiresAt.slice(0, 10)})`,
+    { serviceReportId: id },
+  );
+  res.status(200).json({ serviceReport: toServiceReport(updated), approvalUrl, sentViaLine: approval.sentViaLine, ...(lineError ? { lineError } : {}) });
+}
+
+/** Validates the capability key against the stored hash. Wrong/missing anything → opaque 404
+ * (never reveal whether the report exists); a correct key whose link expired is reported as
+ * `expired` so the page can say so. */
+async function loadReportForApprovalKey(id: string, key: string): Promise<{ doc: ServiceReportFields & { _id: string }; approval: NonNullable<ServiceReportFields["customerApproval"]>; expired: boolean }> {
+  if (!key) throw new HttpError(404, "ไม่พบลิงก์อนุมัติ");
+  const serviceReports = await serviceReportsCollection();
+  const doc = await serviceReports.findOne({ _id: id });
+  if (!doc || doc.isDeleted || !doc.customerApproval) throw new HttpError(404, "ไม่พบลิงก์อนุมัติ");
+  if (doc.customerApproval.tokenHash !== hashApprovalToken(key)) throw new HttpError(404, "ไม่พบลิงก์อนุมัติ");
+  const expired = doc.customerApproval.status === "pending" && doc.customerApproval.expiresAt <= nowIso();
+  return { doc, approval: doc.customerApproval, expired };
+}
+
+/** Only the fields a customer may see — internal user ids resolved to a display name. */
+async function buildApprovalPublicPayload(doc: ServiceReportFields & { _id: string }, approval: NonNullable<ServiceReportFields["customerApproval"]>, expired: boolean) {
+  const [company, users] = await Promise.all([(await companyCollection()).findOne({}), usersCollection()]);
+  let engineerName = "";
+  if (doc.assignedServiceEngineerId) {
+    const engineer = await users.findOne({ _id: toObjectId(doc.assignedServiceEngineerId) }, { projection: { fullName: 1 } });
+    engineerName = engineer?.fullName ?? "";
+  }
+  return {
+    report: {
+      id: doc._id,
+      customerSnapshot: doc.customerSnapshot,
+      serviceLocation: doc.serviceLocation,
+      projectOrJobCode: doc.projectOrJobCode,
+      serviceSystemName: doc.serviceSystemName,
+      serviceType: doc.serviceType,
+      inspectionDate: doc.inspectionDate,
+      reportDate: doc.reportDate,
+      nextPmDate: doc.nextPmDate,
+      engineerName,
+      additionalInspectorNames: doc.additionalInspectorNames ?? [],
+      onSiteContactName: doc.onSiteContactName,
+      onSiteContactPhone: doc.onSiteContactPhone,
+      overallCustomerSummary: doc.overallCustomerSummary,
+      overallRemark: doc.overallRemark,
+      templateSnapshot: doc.templateSnapshot,
+      checklist: doc.checklist,
+      customerSignatureDataUrl: doc.customerSignatureDataUrl ?? "",
+      customerSignedName: doc.customerSignedName ?? "",
+    },
+    companyName: company?.name ?? "",
+    companyLogoDataUrl: company?.logoDataUrl ?? "",
+    approval: {
+      status: approval.status,
+      expired,
+      expiresAt: approval.expiresAt,
+      respondedAt: approval.respondedAt,
+      rejectReason: approval.rejectReason,
+      signedName: approval.signedName,
+    },
+  };
+}
+
+/** GET /api/service-reports/:id/approval?key= — public (capability key IS the auth). */
+async function handleApprovalGet(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  const key = typeof req.query.key === "string" ? req.query.key : "";
+  const { doc, approval, expired } = await loadReportForApprovalKey(id, key);
+  res.status(200).json(await buildApprovalPublicPayload(doc, approval, expired));
+}
+
+/** POST /api/service-reports/:id/approval/respond — public. Approve requires a signature (written
+ * into the same on-site sign-off fields); reject requires a reason. One response per link. */
+async function handleApprovalRespond(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const key = typeof body.key === "string" ? body.key : "";
+  const { doc, approval, expired } = await loadReportForApprovalKey(id, key);
+  if (approval.status !== "pending") throw new HttpError(400, "รายงานนี้ได้รับคำตอบไปแล้ว");
+  if (expired) throw new HttpError(410, "ลิงก์อนุมัตินี้หมดอายุแล้ว กรุณาติดต่อเจ้าหน้าที่เพื่อขอลิงก์ใหม่");
+
+  const decision = body.decision === "approved" || body.decision === "rejected" ? body.decision : null;
+  if (!decision) throw new HttpError(400, "คำตอบไม่ถูกต้อง");
+  const signedName = sanitizeShortText(body.signedName, "ชื่อผู้ตอบ");
+  const now = nowIso();
+  const update: Partial<ServiceReportFields> = { updatedAt: now };
+  const nextApproval = { ...approval, respondedAt: now, signedName };
+
+  if (decision === "approved") {
+    const signature = validateImageDataUrl(body.signatureDataUrl, "ลายเซ็นลูกค้า");
+    if (!signature) throw new HttpError(400, "กรุณาลงลายเซ็นก่อนกดอนุมัติ");
+    nextApproval.status = "approved";
+    update.customerSignatureDataUrl = signature;
+    update.customerSignedName = signedName || doc.customerSnapshot.contactName;
+    update.customerSignedAt = now;
+  } else {
+    const rejectReason = sanitizeLongText(body.rejectReason, "เหตุผลที่ไม่อนุมัติ");
+    if (!rejectReason.trim()) throw new HttpError(400, "กรุณาระบุเหตุผลที่ไม่อนุมัติ");
+    nextApproval.status = "rejected";
+    nextApproval.rejectReason = rejectReason;
+  }
+  update.customerApproval = nextApproval;
+
+  const serviceReports = await serviceReportsCollection();
+  await serviceReports.updateOne({ _id: doc._id }, { $set: update });
+  const updated = await serviceReports.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบรายงานบริการ");
+
+  // The actor is the customer, not an ERP user — recorded with an empty userId, same shape the
+  // LINE webhook's pairing entry uses.
+  const auditLog = await auditLogCollection();
+  await auditLog.insertOne({
+    userId: "",
+    userName: `ลูกค้า (${signedName || doc.customerSnapshot.companyName})`,
+    roleName: "ลูกค้า",
+    module: "บริการ",
+    action: decision === "approved" ? "Service Report Customer Approved" : "Service Report Customer Rejected",
+    details: decision === "approved"
+      ? `ลูกค้าอนุมัติรายงานบริการ ${id} ผ่านลิงก์อนุมัติ`
+      : `ลูกค้าไม่อนุมัติรายงานบริการ ${id}: ${nextApproval.rejectReason}`,
+    createdAt: now,
+    relatedServiceReportId: id,
+  });
+  await notifyServiceEvent(
+    [approval.sentBy, updated.createdBy, updated.assignedServiceEngineerId],
+    decision === "approved" ? "service_report_customer_approved" : "service_report_customer_rejected",
+    decision === "approved" ? "ลูกค้าอนุมัติรายงานบริการแล้ว" : "ลูกค้าไม่อนุมัติรายงานบริการ",
+    decision === "approved"
+      ? `ลูกค้า${signedName ? ` (${signedName})` : ""} อนุมัติรายงานบริการ ${id} (${doc.customerSnapshot.companyName})`
+      : `ลูกค้าไม่อนุมัติรายงานบริการ ${id} (${doc.customerSnapshot.companyName}) — เหตุผล: ${nextApproval.rejectReason}`,
+    id,
+  );
+
+  res.status(200).json(await buildApprovalPublicPayload(updated, nextApproval, false));
+}
+
 async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "service:print");
@@ -774,6 +1001,9 @@ export async function handleServiceReport(req: VercelRequest, res: VercelRespons
   }
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "status") return handleStatusChange(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "send-approval") return handleSendApproval(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "approval") return handleApprovalGet(req, res, parts[0]);
+  if (parts.length === 3 && parts[1] === "approval" && parts[2] === "respond") return handleApprovalRespond(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "photos") return handlePhotoUpload(req, res, parts[0]);
   if (parts.length === 3 && parts[1] === "photos") return handlePhotoDelete(req, res, parts[0], parts[2]);

@@ -177,7 +177,12 @@ export async function serviceTemplatesCollection() {
  * doc comment. `id` is the human-readable business id (e.g. "SR-2569-0001") stored directly as
  * `_id`, atomically reserved via `countersCollection()` — same convention as `QuoteFields`.
  */
-export type ServiceReportFields = Omit<ServiceReport, "id">;
+/** `customerApproval.tokenHash` (SHA-256 of the approval-link token, 2026-08-10) is server-only —
+ * `toServiceReport()` (serviceReportHandler.ts) strips it before any response; leaking it would
+ * let any signed-in user forge the customer-approval link. */
+export type ServiceReportFields = Omit<ServiceReport, "id" | "customerApproval"> & {
+  customerApproval?: (NonNullable<ServiceReport["customerApproval"]> & { tokenHash: string }) | null;
+};
 export async function serviceReportsCollection() {
   const db = await getDb();
   return db.collection<ServiceReportFields & { _id: string }>("service_reports");
@@ -291,6 +296,12 @@ export interface CustomerFields {
   updatedAt: string;
   createdBy: string;
   updatedBy: string;
+  /** LINE userId of the customer's approver chat, set once by the pairing webhook (2026-08-10 —
+   * see api/_lib/lineHandler.ts). "" / absent = not linked yet. */
+  lineUserId?: string;
+  /** Outstanding pairing code (server-only — stripped by toPublicCustomer() in
+   * customersHandler.ts). Cleared the moment the webhook matches it. */
+  linePairing?: { code: string; expiresAt: string } | null;
 }
 export async function customersCollection() {
   const db = await getDb();

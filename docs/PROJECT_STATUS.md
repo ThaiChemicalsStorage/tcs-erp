@@ -14,6 +14,14 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-10] Service Report customer approval via time-boxed link + LINE OA.** "ส่งให้ลูกค้า
+  อนุมัติ" mints a 7-day capability link; the customer reviews/signs/approves (or rejects with a
+  required reason) on the session-free `/approve` page from their phone; paired customers get the
+  link pushed into LINE automatically (one-time `TCS-XXXXX` pairing code + signed webhook,
+  Express-only). Approve writes the existing on-site sign-off fields, so the printed report shows
+  the signature either way. 6 new integration tests (`tests/api/serviceApproval.test.ts`).
+  **Owner setup + live LINE round-trip still pending** — see TODO.md High Priority.
+
 - ✅ **[2026-08-07] Document-recipient delivery is in-app-notification-only — email sending removed
   entirely (supersedes the same-day Gmail entry below).** Direct user request
   ("ตัดการส่งอีเมลออกไปเลยเหลือไว้แค่ส่งในระบบพอ") after the per-user Gmail App Password setup

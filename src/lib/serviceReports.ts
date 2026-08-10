@@ -70,6 +70,23 @@ export interface ServiceReportCustomerSnapshot {
 
 export type ServiceReportStatus = "Draft" | "Completed" | "Cancelled";
 
+export type ServiceReportCustomerApprovalStatus = "pending" | "approved" | "rejected";
+
+/** Remote customer approval (added 2026-08-10) — created by "ส่งให้ลูกค้าอนุมัติ", answered by the
+ * customer through a time-boxed capability link (opened directly or from the LINE OA push).
+ * The link token itself is never stored or echoed — the server keeps only its SHA-256 hash. */
+export interface ServiceReportCustomerApproval {
+  status: ServiceReportCustomerApprovalStatus;
+  sentAt: string;
+  sentBy: string;
+  sentByName: string;
+  expiresAt: string;
+  sentViaLine: boolean;
+  respondedAt: string | null;
+  rejectReason: string;
+  signedName: string;
+}
+
 export interface ServiceReport {
   id: string; // human doc number IS the id, e.g. "SR-2569-0001"
   customerId: string; // "" if unlinked (manually entered, same convention as Quote.customerId)
@@ -104,6 +121,9 @@ export interface ServiceReport {
   customerSignatureDataUrl: string; // base64 PNG data URL, "" when unsigned
   customerSignedName: string;
   customerSignedAt: string | null;
+
+  // Remote approval state (2026-08-10) — null until "ส่งให้ลูกค้าอนุมัติ" is first pressed.
+  customerApproval: ServiceReportCustomerApproval | null;
 
   status: ServiceReportStatus;
   isDeleted: boolean;
@@ -292,4 +312,76 @@ export async function deleteServiceReportPhoto(reportId: string, photoId: string
 // Logs the print on the server (audit trail) before the caller opens the browser print dialog
 export async function printServiceReport(reportId: string): Promise<void> {
   await apiFetch<{ ok: true }>(`/service-reports/${reportId}/print`, { method: "POST" });
+}
+
+// ─── Customer approval via time-boxed link / LINE OA (added 2026-08-10) ────────────────────────
+
+// สร้างลิงก์อนุมัติอายุ 7 วัน แล้วส่งเข้า LINE ของลูกค้าอัตโนมัติถ้าผูกบัญชีไว้แล้ว
+// Creates the 7-day approval link; also pushes it to the customer's linked LINE, if any
+export async function sendServiceReportCustomerApproval(id: string): Promise<{
+  serviceReport: ServiceReport;
+  approvalUrl: string;
+  sentViaLine: boolean;
+  lineError?: string;
+}> {
+  return apiFetch(`/service-reports/${id}/send-approval`, { method: "POST" });
+}
+
+/** The read-only subset the public approval page renders — everything a customer may see, nothing
+ * more (no internal user ids; the engineer arrives pre-resolved as a display name). */
+export interface CustomerApprovalReportView {
+  id: string;
+  customerSnapshot: ServiceReportCustomerSnapshot;
+  serviceLocation: string;
+  projectOrJobCode: string;
+  serviceSystemName: string;
+  serviceType: string;
+  inspectionDate: string;
+  reportDate: string;
+  nextPmDate: string;
+  engineerName: string;
+  additionalInspectorNames: string[];
+  onSiteContactName: string;
+  onSiteContactPhone: string;
+  overallCustomerSummary: string;
+  overallRemark: string;
+  templateSnapshot: ServiceReportTemplateSnapshot;
+  checklist: ServiceChecklistSectionValue[];
+  customerSignatureDataUrl: string;
+  customerSignedName: string;
+}
+
+export interface CustomerApprovalPublicData {
+  report: CustomerApprovalReportView;
+  companyName: string;
+  companyLogoDataUrl: string;
+  approval: {
+    status: ServiceReportCustomerApprovalStatus;
+    expired: boolean;
+    expiresAt: string;
+    respondedAt: string | null;
+    rejectReason: string;
+    signedName: string;
+  };
+}
+
+// โหลดข้อมูลสำหรับหน้าอนุมัติของลูกค้า (ไม่ต้องล็อกอิน — ใช้ key จากลิงก์)
+// Loads the public approval page's data (no session — authorized by the link's key)
+export async function fetchCustomerApprovalPublic(reportId: string, key: string): Promise<CustomerApprovalPublicData> {
+  return apiFetch(`/service-reports/${encodeURIComponent(reportId)}/approval?key=${encodeURIComponent(key)}`);
+}
+
+// ส่งคำตอบของลูกค้า (อนุมัติต้องมีลายเซ็น / ไม่อนุมัติต้องมีเหตุผล)
+// Submits the customer's decision (approve requires a signature; reject requires a reason)
+export async function respondCustomerApprovalPublic(
+  reportId: string,
+  key: string,
+  payload:
+    | { decision: "approved"; signatureDataUrl: string; signedName: string }
+    | { decision: "rejected"; rejectReason: string; signedName: string },
+): Promise<CustomerApprovalPublicData> {
+  return apiFetch(`/service-reports/${encodeURIComponent(reportId)}/approval/respond`, {
+    method: "POST",
+    body: JSON.stringify({ ...payload, key }),
+  });
 }
