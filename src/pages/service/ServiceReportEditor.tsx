@@ -219,6 +219,37 @@ export function ServiceReportEditor({
     checklist,
   });
 
+  const copyApprovalLink = async (url: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(url);
+        setApprovalLinkCopied(true);
+        return;
+      }
+      throw new Error("clipboard API unavailable");
+    } catch {
+      // Fallback for non-secure origins (plain HTTP on LAN) or browsers that block
+      // navigator.clipboard — navigator.clipboard is undefined there, and calling
+      // .writeText on it throws synchronously instead of rejecting into .catch().
+      const textarea = document.createElement("textarea");
+      textarea.value = url;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      try {
+        const ok = document.execCommand("copy");
+        if (ok) setApprovalLinkCopied(true);
+        else showToast("คัดลอกไม่สำเร็จ กรุณาคัดลอกลิงก์ด้วยตนเอง");
+      } catch {
+        showToast("คัดลอกไม่สำเร็จ กรุณาคัดลอกลิงก์ด้วยตนเอง");
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+  };
+
   const applyApiError = (err: unknown, fallback: string) => {
     if (err instanceof ApiError) {
       if (err.fieldErrors) setFieldErrors(err.fieldErrors);
@@ -1047,7 +1078,7 @@ export function ServiceReportEditor({
               className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-xs font-mono text-foreground min-w-0" />
             <button
               type="button"
-              onClick={() => { navigator.clipboard.writeText(approvalResult.url).then(() => setApprovalLinkCopied(true)).catch(() => showToast("คัดลอกไม่สำเร็จ")); }}
+              onClick={() => { void copyApprovalLink(approvalResult.url); }}
               className="px-3 py-2 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors whitespace-nowrap"
             >
               {approvalLinkCopied ? "คัดลอกแล้ว ✓" : "คัดลอกลิงก์"}

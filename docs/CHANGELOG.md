@@ -4,7 +4,19 @@
 
 ---
 
-## 2026-08-10 (absolute latest) — Service Report: customer approval via time-boxed link + LINE OA
+## 2026-08-11 (absolute latest) — fix: approval-link copy button silently failed on plain HTTP
+
+User-reported: the "คัดลอกลิงก์" button on the Service Report customer-approval dialog
+(`ServiceReportEditor.tsx`, added 2026-08-10) did nothing when clicked. Root cause:
+`navigator.clipboard` only exists in secure contexts (HTTPS or `localhost`) — over plain HTTP on
+a LAN IP (how the standalone Express server is commonly reached locally) it's `undefined`, so
+`.writeText()` threw synchronously instead of rejecting into the `.catch()` that was there to
+handle it. New `copyApprovalLink()` checks `window.isSecureContext` first and falls back to a
+hidden `<textarea>` + `document.execCommand("copy")` when the Clipboard API isn't usable.
+
+---
+
+## 2026-08-10 — Service Report: customer approval via time-boxed link + LINE OA
 
 Direct user request ("จะทำตรงหน้า Service เพื่อที่จะส่งใบไปให้ลูกค้า approve ใน Line OA") — the
 customer (no ERP account) reviews and approves/rejects a Service Report from their phone.
