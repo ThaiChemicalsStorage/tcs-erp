@@ -347,12 +347,18 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   await ensureServiceReportIndexes();
 
   const body = (req.body ?? {}) as Record<string, unknown>;
+  // Template is optional (2026-08-14, direct business request: "ไม่ต้องเลือกเทมเพลตก็สามารถสร้าง
+  // ออกมาได้") — a blank templateId starts the report from a single empty section instead of a
+  // real template's frozen structure; the engineer builds the whole checklist per-report via the
+  // existing "+เพิ่มหัวข้อ"/"+เพิ่มรายการ" structure-editing controls (unchanged, already worked
+  // per-report regardless of where the base section came from).
   const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
-  if (!templateId) throw new HttpError(400, "กรุณาเลือก Template รายงานบริการ");
-
-  const serviceTemplates = await serviceTemplatesCollection();
-  const template = await serviceTemplates.findOne({ _id: toObjectId(templateId) });
-  if (!template || template.isDeleted || !template.isActive) throw new HttpError(400, "Template ที่เลือกไม่พร้อมใช้งาน กรุณาเลือก Template อื่น");
+  const template = templateId
+    ? await (await serviceTemplatesCollection()).findOne({ _id: toObjectId(templateId) })
+    : null;
+  if (templateId && (!template || template.isDeleted || !template.isActive)) {
+    throw new HttpError(400, "Template ที่เลือกไม่พร้อมใช้งาน กรุณาเลือก Template อื่น");
+  }
 
   const { customerId, customerSnapshot } = await resolveCustomerIdAndSnapshot(body);
 
@@ -364,11 +370,21 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   if (rawEngineerId) await assertUserExists(rawEngineerId, "ผู้เข้าตรวจสอบหลัก");
   const assignedServiceEngineerId = rawEngineerId || ctx.user.id;
 
-  const templateSnapshot: ServiceReportTemplateSnapshot = {
-    templateId: template._id.toString(), templateCode: template.templateCode, templateName: template.templateName,
-    version: template.version, sections: cloneTemplateSections(template.sections), sourceHash: template.sourceHash,
-    capturedAt: nowIso(),
-  };
+  // No template: a single empty section ("general") is seeded as the one fixed base section —
+  // `sanitizeServiceTemplateSections()` (src/lib/validation/serviceReportValidation.ts) only ever
+  // lets a report rearrange what's *inside* its base sections, never add a wholly new one, so at
+  // least one base section must exist for "+เพิ่มหัวข้อ"/"+เพิ่มรายการ" to have anywhere to add into.
+  const templateSnapshot: ServiceReportTemplateSnapshot = template
+    ? {
+        templateId: template._id.toString(), templateCode: template.templateCode, templateName: template.templateName,
+        version: template.version, sections: cloneTemplateSections(template.sections), sourceHash: template.sourceHash,
+        capturedAt: nowIso(),
+      }
+    : {
+        templateId: "", templateCode: "", templateName: "", version: "",
+        sections: [{ key: "general", title: "รายการตรวจเช็ค", isOptionalAddon: false, groups: [], sortOrder: 0 }],
+        sourceHash: "", capturedAt: nowIso(),
+      };
 
   const [counters, serviceReports] = await Promise.all([countersCollection(), serviceReportsCollection()]);
   const id = await nextServiceReportId(counters);
@@ -378,9 +394,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     customerId, customerSnapshot,
     serviceLocation: sanitizeShortText(body.serviceLocation, "สถานที่ให้บริการ"),
     projectOrJobCode: sanitizeShortText(body.projectOrJobCode, "อ้างอิงโปรเจกต์/รหัสงาน"),
-    serviceSystemName: sanitizeShortText(body.serviceSystemName, "ระบบที่ให้บริการ") || template.templateName,
+    serviceSystemName: sanitizeShortText(body.serviceSystemName, "ระบบที่ให้บริการ") || (template ? template.templateName : ""),
     serviceType: sanitizeShortText(body.serviceType, "ประเภทบริการ"),
-    templateId: template._id.toString(),
+    templateId: template ? template._id.toString() : "",
     templateSnapshot,
     checklist: buildDefaultChecklist(templateSnapshot.sections),
     inspectionDate: validateIsoDateOrEmpty(body.inspectionDate, "วันที่เข้าบริการ"),

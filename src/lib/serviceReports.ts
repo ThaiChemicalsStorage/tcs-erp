@@ -98,7 +98,9 @@ export interface ServiceReport {
   serviceSystemName: string; // free text — the specific installed system, finer-grained than templateCode
   serviceType: string; // free text in Phase 1 (e.g. "PM", "Breakdown")
 
-  templateId: string; // required — every report starts from a template
+  // Empty when created without a template (2026-08-14) — the report then starts from a single
+  // empty "general" section built entirely per-report via the structure-editing controls.
+  templateId: string;
   templateSnapshot: ServiceReportTemplateSnapshot;
   checklist: ServiceChecklistSectionValue[];
 

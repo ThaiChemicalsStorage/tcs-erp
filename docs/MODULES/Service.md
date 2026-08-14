@@ -27,6 +27,21 @@ Two collections (`api/_lib/collections.ts`):
   `sections` onto `templateSnapshot` at creation time (editing the master template afterward never
   retroactively changes an already-created report's checklist) and, if a `Customer` was linked,
   freezes a 7-field `customerSnapshot`.
+
+  **Template is optional (2026-08-14, direct business request: "ทำให้แบบไม่ต้องเลือกเทมเพลตก็
+  สามารถสร้างออกมาได้").** `POST /api/service-reports` (`handleCreate()`,
+  `api/_lib/serviceReportHandler.ts`) no longer requires `templateId` — when blank, the report is
+  seeded with a single fixed base section (`key: "general"`, empty title-only, no groups/items) as
+  its `templateSnapshot`, and `templateId`/`templateCode`/`templateName`/`version`/`sourceHash` are
+  all empty strings. The engineer then builds the entire checklist per-report from scratch using
+  the existing "+เพิ่มหัวข้อ"/"+เพิ่มรายการ" structure-editing controls (see "Structure editing"
+  below) — unchanged, since they already worked per-report regardless of where the base section
+  came from. `sanitizeServiceTemplateSections()` only ever lets a report rearrange what's *inside*
+  its fixed base sections, never add a wholly new section — hence seeding exactly one base section
+  rather than zero. Client UI: the "เลือก Template" dropdown gained an explicit
+  "ไม่ใช้ Template (เริ่มจากรายการว่าง)" option (`ServiceReportEditor.tsx`'s `NO_TEMPLATE_VALUE`
+  sentinel, distinct from the unselected `""` placeholder — Create still stays blocked until the
+  user makes *some* explicit choice, blank or a real template).
 - **`service_checklist_photo_files`** (added same day as photo attachments) — Binary-in-Mongo file
   bytes, same "keep bytes out of the parent document, serve via an unauthenticated capability-URL"
   pattern as `scope_attachment_files`. Photo *metadata* (`ServiceChecklistItemPhoto`) is embedded on
@@ -77,12 +92,20 @@ Abnormal reveals, inline:
   red "*at least 1 required" hint until one exists.
 
 **2026-08-14, direct business request: photos are no longer Abnormal-only.** Selecting **Normal**
-now also reveals the same photo-attachment grid (no `abnormalDetail` field, and no "at least 1
-required" hint — attaching a photo to a Normal item is always optional, only Abnormal enforces the
-≥1-photo rule). Neither the detail text nor any attached photo is silently cleared if the status is
-later changed (Normal↔Abnormal↔unselected) — only an explicit user action (retyping the field,
-deleting a photo) removes them. A `measurement`-kind item renders a single text input instead, with
-completion requiring it non-blank (no photo attachment on measurement-kind items).
+now also reveals the same photo-attachment grid — no "at least 1 required" hint, attaching a photo
+to a Normal item is always optional, only Abnormal enforces the ≥1-photo rule. Neither the detail
+text nor any attached photo is silently cleared if the status is later changed
+(Normal↔Abnormal↔unselected) — only an explicit user action (retyping the field, deleting a photo)
+removes them. A `measurement`-kind item renders a single text input instead, with completion
+requiring it non-blank (no photo attachment on measurement-kind items).
+
+**Same-day follow-up: the detail field is no longer Abnormal-only either.** `abnormalDetail`
+renders for **both** Normal and Abnormal now (only its placeholder/styling differ — the alarming
+red styling and "describe the abnormality" wording stay Abnormal-only; Normal gets a neutral style
+and a generic "additional details (optional)" placeholder). It's still only *required* — non-blank,
+per `validateServiceChecklist()` — when the item is Abnormal; on Normal it's always optional, same
+relationship the photo rule above already has. The underlying field name (`abnormalDetail`) is
+unchanged for schema stability — only its UI treatment became status-generic.
 
 **Per-report kind switch (2026-08-14, same request).** A small toggle next to the item label
 (`ToggleLeft`/`Ruler` icon, gated by the same `structureEditable` rule as rename/remove — see

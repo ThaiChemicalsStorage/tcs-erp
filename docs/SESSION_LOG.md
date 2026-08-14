@@ -4,6 +4,47 @@
 
 ---
 
+## Session — 2026-08-14h (absolute latest), Service: create without a template + detail field for Normal items
+
+### What was implemented
+Two more direct requests on top of 2026-08-14h's photo/kind-switch pass, in the same conversation:
+(1) let a Service Report be created without selecting a checklist template at all, building the
+whole checklist per-report from an empty starting point; (2) extend the Abnormal-only detail text
+field to Normal items too (mirroring the photo change from the immediately preceding request).
+Investigated the create flow end-to-end first (client `handleCreate`, server `handleCreate()`,
+`ServiceReportTemplateSnapshot` shape, and critically `sanitizeServiceTemplateSections()`'s "sections
+stay fixed, only groups/items inside them are report-editable" constraint) before writing anything —
+that constraint is why a truly empty template snapshot (zero sections) wouldn't actually let the
+user add anything afterward, and shaped the final design: seed exactly one fixed "general" section
+with zero groups/items, not zero sections.
+
+### Decisions / gotchas worth remembering
+- **A validator's structural constraint can silently determine what a "blank" state must look
+  like.** The naive version of this feature (empty `sections: []` when no template) would have
+  compiled, saved, and looked fine on creation — but then every subsequent "+เพิ่มหัวข้อ" attempt
+  would have failed, because `sanitizeServiceTemplateSections()` iterates the *base* section list
+  and can never add a section not already present in it. Reading that validator before designing
+  the "no template" path (rather than after hitting a mysterious save failure) avoided building the
+  wrong shape entirely.
+- **A sentinel dropdown value beats overloading the empty-string placeholder** — using `""` for
+  both "user hasn't picked anything" and "user explicitly wants no template" would have collapsed
+  two different states into one, breaking the existing required-selection guard (`if
+  (!selectedTemplateId) { block }`). A distinct `NO_TEMPLATE_VALUE` sentinel kept both states
+  meaningfully different with almost no extra code.
+- **Checked whether a route's doc comment matched its actual behavior before extending it** — found
+  `API.md`'s photo-upload row claiming the route was "only meaningful while abnormal," which was
+  already inaccurate before this session's changes (the server never enforced that; only the old UI
+  did). Fixed the doc wording while touching the area, rather than letting the inaccuracy compound.
+
+### Recommendations for next session
+- Not yet verified against a live browser/database — see PROJECT_STATUS.md "Known Risks" for the
+  specific untested scenarios (blank-template creation → add-section-via-group flow, print output
+  for a template-less report).
+- The backlog of `master` commits not yet deployed to `huma-erp.com` keeps growing this session —
+  worth raising with the owner directly about deploy cadence.
+
+---
+
 ## Session — 2026-08-14g (absolute latest), User manual: catch up on quote numbering + Service checklist changes
 
 ### What was implemented

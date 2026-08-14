@@ -4,7 +4,43 @@
 
 ---
 
-## 2026-08-14i (absolute latest) — User manual: document the new quote numbering + Service checklist changes
+## 2026-08-14j (absolute latest) — Service: create a report without a template + detail field for Normal items too
+
+Direct business request, two more Service checklist/creation changes, both same-session follow-ups
+to 2026-08-14h.
+
+- **Create without a template.** `POST /api/service-reports` no longer requires `templateId`
+  (`api/_lib/serviceReportHandler.ts`'s `handleCreate()`) — when blank, the report is seeded with a
+  single fixed base section (`key: "general"`, no groups/items yet, `isOptionalAddon: false`) as its
+  `templateSnapshot`, with `templateId`/`templateCode`/`templateName`/`version`/`sourceHash` all
+  empty strings. The engineer builds the whole checklist per-report from there using the existing
+  "+เพิ่มหัวข้อ"/"+เพิ่มรายการ" structure-editing controls — unchanged, since they already worked
+  per-report regardless of where the base section came from. `sanitizeServiceTemplateSections()`
+  only ever lets a report rearrange what's *inside* its fixed base sections, never add a wholly new
+  one, hence seeding exactly one base section rather than zero. Client: the "เลือก Template"
+  dropdown gained an explicit `NO_TEMPLATE_VALUE` sentinel option
+  ("ไม่ใช้ Template (เริ่มจากรายการว่าง)"), distinct from the unselected `""` placeholder — Create
+  still stays blocked until the user makes *some* explicit choice.
+- **Detail field is no longer Abnormal-only either** (extends 2026-08-14h's photo change to the
+  `abnormalDetail` textarea): it now renders for both Normal and Abnormal — only the placeholder
+  text and red-alarm styling stay Abnormal-specific (Normal gets a neutral style + generic
+  "รายละเอียดเพิ่มเติม (ถ้ามี)" placeholder). Still only *required* (non-blank) when Abnormal, same
+  relationship the photo requirement already has. New i18n key
+  `service.checklist.detailPlaceholder` (TH+EN); `service.form.noTemplate` (TH+EN) for the dropdown
+  option.
+- **Zero validation-logic changes** — `sanitizeServiceTemplateSections()` and
+  `validateServiceChecklist()` were already unconditional about `kind`/detail-required-only-on-
+  abnormal; this pass only touched `handleCreate()`'s template-lookup branch and frontend rendering.
+- See [MODULES/Service.md](./MODULES/Service.md) "Data model" and "Checklist status rules" for full
+  detail; [API.md](./API.md) `POST /api/service-reports` and `POST /api/service-reports/:id/photos`
+  rows corrected (the photos row's old wording implied a server-side abnormal-only restriction that
+  never actually existed — only the UI enforced it).
+- Verified via `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (152/152, unchanged —
+  no test exercises this UI/create-flow). No live-browser check this session.
+
+---
+
+## 2026-08-14i — User manual: document the new quote numbering + Service checklist changes
 
 Direct follow-up request to catch the in-app manual (`public/manual.html`) up with the same-day
 2026-08-14g (Quotation numbering) and 2026-08-14h (Service checklist photos/kind-switch) code

@@ -27,6 +27,13 @@ import { useI18n } from "../../lib/i18n";
 
 const emptyCustomerSnapshot = { companyName: "", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" };
 
+// ค่าพิเศษใน dropdown เลือก Template แทน "ไม่ใช้ Template" — คนละความหมายกับค่าว่าง "" ซึ่งแปลว่า
+// ยังไม่ได้เลือกอะไรเลย (ปุ่มสร้างรายงานยังกดไม่ได้) ส่วนค่านี้คือการเลือกอย่างตั้งใจว่าจะเริ่มจากว่าง
+// A sentinel option value for "no template" in the dropdown — distinct from "" (nothing chosen
+// yet, Create stays blocked). Choosing this is an intentional decision to start blank, not an
+// unselected placeholder. Never collides with a real MongoDB ObjectId string.
+const NO_TEMPLATE_VALUE = "__no_template__";
+
 interface FormState {
   customerId: string;
   customerSnapshot: typeof emptyCustomerSnapshot;
@@ -174,7 +181,7 @@ export function ServiceReportEditor({
   }, [serviceReportId, isNew]);
 
   useEffect(() => {
-    if (!isNew || !selectedTemplateId) return;
+    if (!isNew || !selectedTemplateId || selectedTemplateId === NO_TEMPLATE_VALUE) return;
     let cancelled = false;
     fetchServiceTemplate(selectedTemplateId).then((tpl) => { if (!cancelled) setSelectedTemplateFull(tpl); }).catch(() => {});
     return () => { cancelled = true; };
@@ -267,7 +274,8 @@ export function ServiceReportEditor({
     setSaving(true);
     setFieldErrors({});
     try {
-      const created = await createServiceReport({ ...draftBody(), templateId: selectedTemplateId } as ServiceReportDraft);
+      const templateId = selectedTemplateId === NO_TEMPLATE_VALUE ? "" : selectedTemplateId;
+      const created = await createServiceReport({ ...draftBody(), templateId } as ServiceReportDraft);
       showToast(t("service.toast.created"));
       onCreated(created.id);
     } catch (err) {
@@ -739,6 +747,7 @@ export function ServiceReportEditor({
           <label className={labelClass}>{t("service.form.template")}</label>
           <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)} className={inputClass}>
             <option value="">{t("service.form.selectTemplate")}</option>
+            <option value={NO_TEMPLATE_VALUE}>{t("service.form.noTemplate")}</option>
             {templates.map((tp) => <option key={tp.id} value={tp.id}>{tp.templateName}</option>)}
           </select>
         </div>

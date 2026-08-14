@@ -148,16 +148,18 @@ export function ServiceChecklistItemControl({
         <tr>
           <td colSpan={totalCols} className="pl-5 pr-5 pb-3">
             <div className={`pl-3 border-l-2 space-y-2 ${isAbnormal ? "border-[#e05252]/40" : "border-border"}`}>
-              {isAbnormal && (
-                <textarea
-                  value={value.abnormalDetail}
-                  onChange={(e) => onChange({ ...value, abnormalDetail: e.target.value })}
-                  disabled={disabled}
-                  rows={2}
-                  placeholder={t("service.checklist.abnormalDetailPlaceholder")}
-                  className="w-full px-3 py-2 text-sm bg-[#e05252]/5 border border-[#e05252]/25 rounded-lg outline-none focus:border-[#e05252]/60 transition-colors disabled:opacity-60 resize-y"
-                />
-              )}
+              <textarea
+                value={value.abnormalDetail}
+                onChange={(e) => onChange({ ...value, abnormalDetail: e.target.value })}
+                disabled={disabled}
+                rows={2}
+                placeholder={t(isAbnormal ? "service.checklist.abnormalDetailPlaceholder" : "service.checklist.detailPlaceholder")}
+                className={`w-full px-3 py-2 text-sm rounded-lg outline-none transition-colors disabled:opacity-60 resize-y ${
+                  isAbnormal
+                    ? "bg-[#e05252]/5 border border-[#e05252]/25 focus:border-[#e05252]/60"
+                    : "bg-secondary border border-border focus:border-[#c9a84c]/50"
+                }`}
+              />
               <PhotoAttachments
                 photos={value.photos ?? []}
                 disabled={disabled}
