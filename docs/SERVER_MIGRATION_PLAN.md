@@ -7,7 +7,7 @@
 > [DEPLOYMENT.md](./DEPLOYMENT.md) — is BUILT.**
 >
 > **✅ Migration COMPLETE as of ~2026-08-07** (confirmed by the owner 2026-08-14, live for about a
-> week by then): the app runs on a **self-hosted VPS with its own domain and HTTPS**, database is
+> week by then): the app runs on a **self-hosted VPS at https://www.huma-erp.com/ (HTTPS)**, database is
 > **self-hosted MongoDB** (Option 2 in step D below, not Atlas), and the **Vercel demo is no longer
 > used**. Steps C–H below are marked done accordingly. Exact per-step confirmation detail (which
 > process manager, whether the demo database data was kept or a fresh Setup Wizard run) was not

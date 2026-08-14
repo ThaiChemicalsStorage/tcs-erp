@@ -7,7 +7,7 @@
 **TCS ERP** (Thai Chemicals Storage ERP) is a Thai-language, internal business web app for a single chemical storage/distribution company (not a multi-tenant SaaS product). It's being built incrementally toward a full multi-module ERP (per the long-term vision in [PROJECT_STATUS.md](./PROJECT_STATUS.md)), starting with **Quotation management** and a **Product library**, plus the supporting shell (auth, settings, dashboard) and — as of 2026-07-08 — a full **RBAC / user management / quotation approval workflow / notifications / audit log** system. As of 2026-07-09 this system is **real, server-enforced** (Vercel Serverless Functions + MongoDB Atlas), not a client-side simulation — see [RBAC.md](./RBAC.md) for exactly what's enforced where.
 
 - **Repo**: https://github.com/Wisarutbuasumlee/tcs-erp (private)
-- **Live**: self-hosted VPS (own domain, HTTPS), the real production deployment since ~2026-08-07 — see [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md). The Vercel demo (`tcs-erp-nine.vercel.app`) is decommissioned/no longer used.
+- **Live**: **https://www.huma-erp.com/** — self-hosted VPS, HTTPS, the real production deployment since ~2026-08-07 — see [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md). The Vercel demo (`tcs-erp-nine.vercel.app`) is decommissioned/no longer used.
 - **Language**: Thai UI throughout, English code/comments
 - **Branding**: navy (`#0b1d3a`) + gold (`#c9a84c`), serif headings (Playfair Display), sans body (Inter), mono numbers (JetBrains Mono)
 

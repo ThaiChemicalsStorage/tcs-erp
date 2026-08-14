@@ -4,6 +4,56 @@
 
 ---
 
+## Session — 2026-08-14c (absolute latest), User manual: Service chapter added, live-verified against production
+
+### What was implemented
+Direct follow-on from the 2026-08-14b docs-sync session below, same day. User asked to update the
+user manual for content missing from it. First mistake avoided: nearly edited
+`docs/manual/user-manual.html` (the old PDF-generation source) before its own header comment and
+`src/App.tsx`'s comment revealed the real live file is `public/manual.html`. Logged into the real
+production site (`https://www.huma-erp.com/` — domain given directly by the owner, who logged in
+themselves; the assistant never touched credentials) to (a) verify which recent features are
+actually deployed before documenting them as available, and (b) capture real screenshots. Added a
+new chapter 8 "งานบริการ (Service)" covering report creation, the checklist UI, the
+abnormal-requires-detail-and-photo rule, and the per-report add/remove-items feature; renumbered
+chapters 9–15 and every cross-reference; added two FAQ rows and one Admin-chapter bullet about the
+new permission group; bumped the doc date. Also nudged a handful of "current state" docs
+(`CLAUDE.md` root+docs, `SERVER_MIGRATION_PLAN.md`) to name the confirmed real domain instead of
+generic "self-hosted VPS" phrasing, and added a note to the `server-migration-complete` memory that
+production deploys are manual, not automatic.
+
+### Decisions / gotchas worth remembering
+- **The file a feature comment points at beats the file that looks right by name.** Both
+  `docs/manual/user-manual.html` and `public/manual.html` are plausible "the user manual," and the
+  wrong one was about to get a large edit — caught only by reading `src/App.tsx`'s comment at the
+  actual link/button before writing anything. When two files could plausibly be "the real one,"
+  find the call site that proves which one actually ships.
+- **A merged commit is not a deployed feature — verify against the live site before documenting
+  it as available.** Signature draw/upload (2026-08-13), LINE OA customer approval (2026-08-10),
+  and this session's own earlier Dashboard/compression work (2026-08-14a) are all in `master` but
+  were confirmed absent from production on direct inspection — deploys are a manual step per
+  `docs/DEPLOYMENT.md`, not automatic like the old Vercel setup. Scoped the new manual chapter to
+  only what was actually confirmed live (Service Phase 1), rather than documenting from the
+  codebase/docs alone.
+- **Don't create real records while probing production for screenshots.** Explored the Service
+  create form (selected a template, ticked an "ผิดปกติ" checkbox to see the icon change) but never
+  clicked the final save button, and navigated away each time — [[no-budget-demo-data-disposable]]
+  (superseded) now means production data is real, not throwaway, so this matters more than it used
+  to.
+- Screenshots were captured via `mcp__claude-in-chrome__form_input` (setting the template
+  `<select>` by ref) after plain coordinate-click selection proved unreliable on that dropdown —
+  worth defaulting to `read_page` + `form_input` for `<select>` elements generally rather than
+  clicking blind coordinates twice and hoping.
+
+### Recommendations for next session
+- Once the 2026-08-13 signature draw/upload, 2026-08-10 LINE OA approval, and 2026-08-14a
+  Dashboard/Service-card/compression work are actually deployed to `huma-erp.com`, the manual needs
+  a follow-up pass to document them (currently deliberately omitted, see CHANGELOG.md 2026-08-14e).
+- Consider asking the owner directly when they plan to redeploy, since several sessions' worth of
+  shipped-but-undeployed work is now accumulating on `master`.
+
+---
+
 ## Session — 2026-08-14b (absolute latest), Docs sync: real production cutover confirmed
 
 ### What was implemented

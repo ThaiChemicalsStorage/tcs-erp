@@ -4,7 +4,45 @@
 
 ---
 
-## 2026-08-14d (absolute latest) — Docs: sync to real production cutover (self-hosted VPS, no more Vercel demo)
+## 2026-08-14e (absolute latest) — User manual: add the missing Service module chapter
+
+Direct user request ("อัปเดตคู่มือให้หน่อยที่ยังไม่มีในระบบ") to fill gaps in the in-app user
+manual (`public/manual.html`, served at `/manual.html` — **not**
+`docs/manual/user-manual.html`, which is explicitly superseded per that file's own header
+comment and was nearly edited by mistake before catching the real target via `src/App.tsx`'s
+comment pointing at the live file).
+
+- **New chapter 8 "งานบริการ (Service)"** — the Service module (live since 2026-08-06) had zero
+  manual coverage until now. Covers: creating a report (template → customer/job details → auto
+  `SR-year-seq` numbering), the checklist UI (ปกติ/ผิดปกติ two-column ticking, some items are
+  measured-value inputs instead), the required-detail-and-photo rule on any item marked
+  ผิดปกติ, per-report add/remove checklist items (template-safe), status/print, and an admin
+  callout that the "บริการ" permission group must be granted before a role sees the menu — the
+  same pattern every prior new module has needed. Screenshots captured live against production
+  (`huma-erp.com`, logged in by the owner, not by the assistant — see the memory note on this)
+  and saved to `public/manual-images/14-service.jpg` (list), `15-service-create.jpg` (create
+  form with a template selected), `16-service-checklist.jpg` (the ปกติ/ผิดปกติ checklist,
+  confirmed live by actually selecting a template and expanding it — no draft was saved, so no
+  real Service Report record was created in production).
+- **Chapters 9–15 renumbered** (Products/Customers/Templates/Admin/Settings/Print/FAQ each
+  shifted by one) — side-nav, top TOC, and every in-page chapter cross-reference
+  (`href="#chN"`/"บทที่ N" text) updated to match; verified `<section>`/`<figure>` tag counts
+  balance (15/15, 16/16) after the edit.
+- **Admin chapter** gained one bullet noting the new "บริการ" permission group. **FAQ** gained two
+  rows: "บันทึกรายงานบริการเป็นฉบับสมบูรณ์ไม่ได้" (the abnormal-needs-detail-and-photo rule) and
+  "ไม่เห็นเมนู 'บริการ'" (missing permission grant).
+- **Deliberately NOT documented**, because live verification on production showed they are not
+  yet deployed there (production lags `master` — deploys are a manual `git pull && npm run build
+  && pm2 restart` per `docs/DEPLOYMENT.md`, not automatic): the 2026-08-13 signature draw/upload
+  unification (Settings still showed upload-only, no draw canvas, on inspection), the 2026-08-10
+  LINE OA customer-approval flow, and today's (2026-08-14a/b) Dashboard VAT toggle/Service
+  summary card/image compression work — none of these were added to the manual this pass, to
+  avoid documenting features staff can't actually use yet. Revisit once those are deployed.
+- Bumped the manual's `doc-meta`/footer date from "7 สิงหาคม 2026" to "14 สิงหาคม 2026".
+
+---
+
+## 2026-08-14d — Docs: sync to real production cutover (self-hosted VPS, no more Vercel demo)
 
 The owner confirmed in conversation that the server migration recorded in
 [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) actually happened ~2026-08-07 and has been
