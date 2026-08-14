@@ -1,18 +1,19 @@
-import type { DashboardKpis } from "../../lib/dashboard";
+import type { DashboardKpis, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 import { fmtShort, fmtPercent, fmtDaysOrDash } from "./format";
 
 // แสดงตัวชี้วัดประสิทธิภาพการขาย (อัตราชนะ/แพ้/ปิดการขาย ฯลฯ) เป็นตารางกริดกะทัดรัด
 // Renders sales efficiency metrics (win/lose/conversion rates, etc.) as a compact grid
-export function SalesPerformancePanel({ kpis }: { kpis: DashboardKpis }) {
+export function SalesPerformancePanel({ kpis, vatMode }: { kpis: DashboardKpis; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
   const days = t("dashboard.unit.days");
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
   const metrics: { label: string; value: string }[] = [
     { label: t("dashboard.kpi.winRate"), value: fmtPercent(kpis.winRate) },
     { label: t("dashboard.kpi.loseRate"), value: fmtPercent(kpis.loseRate) },
     { label: t("dashboard.kpi.conversionRate"), value: fmtPercent(kpis.conversionRate) },
-    { label: t("dashboard.kpi.averageDealSize"), value: fmtShort(kpis.averageDealSize) },
+    { label: `${t("dashboard.kpi.averageDealSize")} ${vatSuffix}`, value: fmtShort(kpis.averageDealSize) },
     { label: t("dashboard.kpi.averageApprovalTime"), value: fmtDaysOrDash(kpis.averageApprovalTime, days) },
     { label: t("dashboard.kpi.averageClosingTime"), value: fmtDaysOrDash(kpis.averageClosingTime, days) },
     { label: t("dashboard.kpi.activeQuotations"), value: kpis.activeQuotations.toLocaleString("th-TH") },

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowUpDown } from "lucide-react";
-import type { SalesPerformanceEntry } from "../../lib/dashboard";
+import type { SalesPerformanceEntry, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { fmtShort, fmtPercent, fmtDaysOrDash } from "./format";
 
@@ -8,10 +8,11 @@ type SortKey = "totalValue" | "revenue" | "quotationCount" | "won" | "lost" | "p
 
 // ตารางผลงานพนักงานขาย ใช้ได้ทั้งแบบรายการเต็มและแบบจัดอันดับ Top N พร้อมการเรียงลำดับคอลัมน์
 // Sales performance table, usable both as a full list and a top-N ranking, with sortable columns
-export function SalesPerformanceTable({ title, sub, entries, limit }: { title: string; sub: string; entries: SalesPerformanceEntry[]; limit?: number }) {
+export function SalesPerformanceTable({ title, sub, entries, limit, vatMode }: { title: string; sub: string; entries: SalesPerformanceEntry[]; limit?: number; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const days = t("dashboard.unit.days");
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
 
   const sorted = [...entries].sort((a, b) => (b[sortKey] ?? -1) - (a[sortKey] ?? -1));
   const rows = limit ? sorted.slice(0, limit) : sorted;
@@ -19,9 +20,9 @@ export function SalesPerformanceTable({ title, sub, entries, limit }: { title: s
   const columns: { key: SortKey | null; label: string }[] = [
     { key: null, label: t("dashboard.ranking.col.salesperson") },
     { key: "quotationCount", label: t("dashboard.ranking.col.jobs") },
-    { key: "totalValue", label: t("dashboard.ranking.col.totalValue") },
-    { key: "revenue", label: t("dashboard.ranking.col.revenue") },
-    { key: "expectedRevenue", label: t("dashboard.ranking.col.expectedRevenue") },
+    { key: "totalValue", label: `${t("dashboard.ranking.col.totalValue")} ${vatSuffix}` },
+    { key: "revenue", label: `${t("dashboard.ranking.col.revenue")} ${vatSuffix}` },
+    { key: "expectedRevenue", label: `${t("dashboard.ranking.col.expectedRevenue")} ${vatSuffix}` },
     { key: "won", label: t("dashboard.ranking.col.won") },
     { key: "lost", label: t("dashboard.ranking.col.lost") },
     { key: "pending", label: t("dashboard.ranking.col.pending") },

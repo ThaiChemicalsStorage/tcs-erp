@@ -1,5 +1,5 @@
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
-import type { DashboardKpis } from "../../lib/dashboard";
+import type { DashboardKpis, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 import { EmptyState } from "../../components/EmptyState";
@@ -8,8 +8,10 @@ import { fmtShort, fmtPercent } from "./format";
 
 // สรุปผลใบเสนอราคา 4 กลุ่ม (ชนะ/แพ้/ยังดำเนินการ/ไม่ได้ดำเนินการ) พร้อมจำนวน มูลค่า และเปอร์เซ็นต์ที่รวมกันได้ 100%
 // Summarizes quotations into 4 outcome groups (won/lost/active/non-active) with count, value, and percentages that sum to 100%
-export function QuotationStatusSummary({ kpis }: { kpis: DashboardKpis }) {
+export function QuotationStatusSummary({ kpis, vatMode }: { kpis: DashboardKpis; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
+  const statusSummarySub = `${t("dashboard.statusSummary.sub")} ${vatSuffix}`;
 
   const rows = [
     { key: "won", label: t("dashboard.kpi.wonDeals"), count: kpis.wonDeals, value: kpis.closedSales, color: "#157347" },
@@ -22,9 +24,9 @@ export function QuotationStatusSummary({ kpis }: { kpis: DashboardKpis }) {
   const totalCount = rows.reduce((s, r) => s + r.count, 0);
 
   return (
-    <ChartCard title={t("dashboard.statusSummary.title")} sub={t("dashboard.statusSummary.sub")}>
+    <ChartCard title={t("dashboard.statusSummary.title")} sub={statusSummarySub}>
       {!hasData ? (
-        <EmptyState icon={PieChartIcon} title={t("dashboard.noData")} description={t("dashboard.statusSummary.sub")} compact />
+        <EmptyState icon={PieChartIcon} title={t("dashboard.noData")} description={statusSummarySub} compact />
       ) : (
         <div className="flex flex-col sm:flex-row items-center gap-5">
           <div className="w-[140px] h-[140px] flex-shrink-0">
@@ -42,7 +44,7 @@ export function QuotationStatusSummary({ kpis }: { kpis: DashboardKpis }) {
                 <tr className="border-b border-border">
                   <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.statusSummary.col.status")}</th>
                   <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.statusSummary.col.count")}</th>
-                  <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.statusSummary.col.value")}</th>
+                  <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{`${t("dashboard.statusSummary.col.value")} ${vatSuffix}`}</th>
                   <th className="px-2 py-1.5 text-right text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.statusSummary.col.percentage")}</th>
                 </tr>
               </thead>

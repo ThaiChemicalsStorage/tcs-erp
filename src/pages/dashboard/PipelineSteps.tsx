@@ -1,5 +1,5 @@
 import { ChevronRight, GitBranch } from "lucide-react";
-import type { PipelineStage } from "../../lib/dashboard";
+import type { PipelineStage, DashboardVatMode } from "../../lib/dashboard";
 import { type QuoteStatus, statusLabelKey, statusStyle } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
@@ -35,17 +35,19 @@ function StageCard({ stage, onStageClick }: { stage: PipelineStage; onStageClick
 
 // แสดงไปป์ไลน์ใบเสนอราคาเป็นการ์ดขั้นตอนแนวนอนที่เชื่อมต่อกัน แยกแถวสำหรับสถานะที่ออกจากไปป์ไลน์
 // Renders the quotation pipeline as connected horizontal step cards, with off-ramp statuses in a separate row
-export function PipelineSteps({ pipeline, onStageClick }: { pipeline: PipelineStage[]; onStageClick: (stage: QuoteStatus) => void }) {
+export function PipelineSteps({ pipeline, onStageClick, vatMode }: { pipeline: PipelineStage[]; onStageClick: (stage: QuoteStatus) => void; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
   const hasData = pipeline.some((p) => p.count > 0);
   const byStage = new Map(pipeline.map((p) => [p.stage, p]));
   const mainStages = MAIN_FLOW.map((s) => byStage.get(s)).filter((s): s is PipelineStage => !!s);
   const offRampStages = OFF_RAMP.map((s) => byStage.get(s)).filter((s): s is PipelineStage => !!s);
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
+  const pipelineSub = `${t("dashboard.pipeline.sub")} ${vatSuffix}`;
 
   return (
-    <ChartCard title={t("dashboard.pipeline.title")} sub={t("dashboard.pipeline.sub")}>
+    <ChartCard title={t("dashboard.pipeline.title")} sub={pipelineSub}>
       {!hasData ? (
-        <EmptyState icon={GitBranch} title={t("dashboard.noData")} description={t("dashboard.pipeline.sub")} compact />
+        <EmptyState icon={GitBranch} title={t("dashboard.noData")} description={pipelineSub} compact />
       ) : (
         <div className="space-y-4">
           <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1">

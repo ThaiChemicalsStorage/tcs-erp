@@ -1,6 +1,6 @@
 # Module: Scope of Work
 
-## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23, Attachments (Vercel Blob file storage) added 2026-07-24, Revision Note made an accumulating per-revision (R1/R2/...) history added 2026-08-04, browser print date/URL header-footer suppressed 2026-08-04, **document-recipient delivery changed to in-app-notification-only 2026-08-07 (email sending removed entirely — see "Document Recipients")**
+## Status: ✅ Built (2026-07-15), fixed against an independent Codex review the same day, standalone management page added 2026-07-22, Rewrite + Salesperson filter added 2026-07-22, Own-Records-Only Viewing added 2026-07-23, Document Recipients (real email routing) added 2026-07-23, Revision Note (auto-generated diff summary) added 2026-07-23, Document Recipients custom message + formal email restyle added 2026-07-23, Attachments (Vercel Blob file storage) added 2026-07-24, Revision Note made an accumulating per-revision (R1/R2/...) history added 2026-08-04, browser print date/URL header-footer suppressed 2026-08-04, **document-recipient delivery changed to in-app-notification-only 2026-08-07 (email sending removed entirely — see "Document Recipients")**, image attachments compressed to WebP client-side before upload 2026-08-14
 
 **2026-07-23, Own-Records-Only Viewing** (per direct user request, "หน้า scope of work อยากให้ทำสิทธิ์
 เพิ่มมาเหมือนของใบเสนอราคาที่เป็นดูของผู้อื่นได้" — mirroring Quotation's `quotations:viewAll`): new
@@ -414,6 +414,15 @@ drawings, etc.) can be attached in the "ผู้รับเอกสาร" ca
   enforced server-side, mirrored in the UI) — free Atlas (512 MB) fits ~50 fully-loaded records,
   plenty for a trial; raise the caps later if the future host has room. The 2 MB cap also keeps
   the JSON-base64 upload body under Vercel's ~4.5 MB serverless request limit.
+- **Image attachments are compressed to WebP client-side before upload (added 2026-08-14)** —
+  `handleUploadAttachment()` (`ScopeOfWorkDocument.tsx`) runs the file through the shared
+  `compressImageFile()` (`src/lib/imageCompression.ts`, see [ARCHITECTURE.md](../ARCHITECTURE.md)
+  "Client-side image compression") only when `isCompressibleImage(file)` is true; a non-image
+  attachment (PDF, etc. — this is the one attachment site in the app that accepts mixed file
+  types) passes through completely unchanged. The `MAX_ATTACHMENT_BYTES` cap is checked against
+  the possibly-compressed size, so compression can only help a file fit under the cap, never hurt
+  it — an image that used to exceed 2 MB may now fit without the user needing to shrink it by
+  hand first.
 - **Downloads are capability URLs, no session needed**: each file gets a random 24-byte
   `downloadKey`; `GET /api/scope-of-works/:id/attachments/:attachmentId/download?key=...` serves
   the bytes to anyone presenting the key (originally because links went into recipient emails,

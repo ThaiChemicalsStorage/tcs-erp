@@ -4,6 +4,54 @@
 
 ---
 
+## Session — 2026-08-14 (absolute latest), Dashboard VAT toggle + Service summary card + browser-side image compression
+
+### What was implemented
+Three independent features in one session, all already implemented and passing `npx tsc --noEmit`,
+`npm run lint`, `npm run build`, `npm test` (152/152) clean before this documentation pass began:
+(1) the Dashboard's 2026-07-14 "always pre-tax" rule became a user-selectable pre-tax/post-tax
+toggle (`?vat=pre|post` on `GET /api/dashboard`, a shared `Toggle.tsx` component, and coverage of
+the CSV/Excel exports too — still a single global 7% `VAT_RATE`, never per-company); (2) a new
+`serviceSummary` Dashboard card for the Service module, the only document module that previously
+had zero Dashboard presence, matching the existing Scope of Work/Delivery Order card pattern
+exactly (own-data-only scoping, unfiltered by date/salesperson/department, gated on
+`service:view`); (3) a new shared `src/lib/imageCompression.ts` (WebP re-encode via Canvas API, no
+new dependency) applied at all 4 image-upload sites in the app (profile/logo/stamp,
+signature-upload mode + a PNG→WebP switch in draw mode, Service checklist photos, Scope of Work's
+one mixed-type attachment site). This session's own scope was documentation only — no source code
+under `src/`/`api/`/`server/` was touched (`src/lib/whatsNew.ts` was the one exception, per the
+standing rule that user-facing features need a What's New entry).
+
+### Decisions / gotchas worth remembering
+- **Ground-truth-verify before writing docs, don't trust a feature summary as final.** Read the
+  actual `api/dashboard/index.ts`/`api/_lib/quoteAmounts.ts` diff (the `quoteAmount()` dispatcher,
+  the 3 call sites, the `filters.vatMode` echo) rather than documenting from the task description
+  alone — confirmed the exact query param name, default, and that `VAT_RATE` itself is unchanged
+  before writing "VAT Toggle" into Dashboard.md.
+- **A component doc's "why" belongs next to its "what."** The VAT toggle rewrite in Dashboard.md
+  replaced (not appended to) the old "Pre-Tax Amount Rule" section, since the old section's framing
+  ("always pre-tax") was no longer true — appending a correction below a now-inaccurate rule would
+  have left two contradictory sections for a future reader to reconcile.
+- **`imageCompression.ts` landed in UI_GUIDELINES.md, not ARCHITECTURE.md** — it's most useful
+  documented next to the existing "Image Upload Fields" component-pattern section (same file,
+  immediately above it) so a future upload feature finds both the component convention and the
+  compression utility together, rather than split across two files.
+- **CHANGELOG.md's `(absolute latest)` tag is never retroactively removed from an older entry** —
+  confirmed by grepping the file: many historical entries still carry the tag from when they were
+  the newest. Appending a new top entry with a fresh `(absolute latest)` tag and leaving the
+  previous one's tag untouched is the established convention, not an oversight to fix.
+
+### Recommendations for next session
+- Same standing sandboxed-session limitation as every prior Dashboard/Service pass: no live
+  MongoDB/browser click-through was possible this session (code-level verification only). A
+  follow-up pass should toggle the VAT switch against real quotation data and spot-check one known
+  quote's pre-tax vs. post-tax figures by hand, and confirm the Service summary card's counts match
+  the standalone Service list page for a real account.
+- The user separately flagged "byte caps could be tightened now that compression is cheap" as a
+  low-priority follow-up idea (not implemented this session) — added to TODO.md.
+
+---
+
 ## Session — 2026-08-13b (absolute latest), correction: Service sign-off should stay draw-only
 
 ### What was implemented

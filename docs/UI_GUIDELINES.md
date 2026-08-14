@@ -253,6 +253,37 @@ When a field/button should only be interactive for users with the right permissi
 ### Image Upload Fields
 `src/components/ImageUploadField.tsx` (extracted 2026-07-13 from what was previously inlined only inside `SettingsPage.tsx`): a labeled preview box (`w-16 h-16` square or `w-28 h-16` wide, via the `aspect` prop) + Upload/Remove buttons + a size hint, client-side MIME/size pre-check (1MB) with inline error text, converts to a base64 data URL via `FileReader`. Use this for any new logo/stamp/signature-style upload field instead of re-inlining a copy — it currently backs Company Settings' logo/stamp fields (its Company Profiles counterpart was removed 2026-07-14 along with that module, see [MODULES/CompanyProfiles.md](../MODULES/CompanyProfiles.md)). The authoritative validation is still server-side (`validateImageDataUrl()` in `api/_lib/uploadValidation.ts`, 2MB cap) — this component's client-side check is fail-fast UX only, not the security boundary.
 
+### Client-Side Image Compression (`src/lib/imageCompression.ts`, added 2026-08-14)
+Every image-upload site in the app now runs the picked file through this shared utility before
+storing/uploading it — pure Canvas API, no new npm dependency, no server-side change. Two exports:
+`isCompressibleImage(file)` (a plain `file.type.startsWith("image/")` check, for a call site that
+accepts mixed file types and needs to branch) and `compressImageFile(file, {maxDimension = 1920,
+quality = 0.8})` — rejects a raw file over ~20MB before decoding (so a huge input can't hang the
+tab), decodes via `createImageBitmap`, downscales only if either dimension exceeds `maxDimension`
+(**never upscales** an already-smaller image), draws to an off-screen canvas, and encodes to WebP
+via `canvas.toBlob()`. Returns `{ dataUrl, blob }` — the data URL for immediate preview/inline
+storage (this app's existing base64-in-document convention, see [DATABASE.md](./DATABASE.md)) and
+the raw `Blob` for a caller that needs its byte size (a post-compression cap check) or an
+`ArrayBuffer`/base64 re-encode for a JSON upload body.
+
+**Current call sites**: `ImageUploadField.tsx` (profile picture/company logo/stamp — compresses
+then checks its byte cap against the *compressed* size, not the original); `SignaturePad.tsx`'s
+Upload mode (same treatment against its own cap; Draw mode instead switches
+`canvas.toDataURL("image/webp", 0.92)` directly — no resize needed for an already-small signature
+canvas); `src/lib/serviceReports.ts`'s `uploadServiceReportPhoto()` (Service checklist Abnormal-item
+photos — always compresses, since that `<input accept="image/*">` guarantees every file is an
+image); `ScopeOfWorkDocument.tsx`'s `handleUploadAttachment()` (the one mixed-file-type site in the
+app — only compresses when `isCompressibleImage(file)` is true; a PDF or other non-image
+attachment passes through completely unchanged). Every cap check (`MAX_IMAGE_BYTES`/
+`MAX_UPLOAD_BYTES`/`MAX_ATTACHMENT_BYTES`) is checked against the post-compression size, so
+compression can only help a file fit under its cap, never hurt it. Every server-side
+`validateImageDataUrl()` (`api/_lib/uploadValidation.ts`) already accepted `image/webp` before this
+pass, so no server change was needed anywhere.
+
+**Reuse this for any future image-upload field** instead of storing a raw picked file inline — the
+whole point is smaller MongoDB documents and faster uploads for every existing and future
+base64-in-document image field in the app.
+
 ### Sectioned Master-Data Forms — pattern reference removed 2026-07-14
 The reference example for this pattern (group fields with more than fit one flat card into labeled
 `Section` cards, `bg-card border border-border rounded-xl p-6 space-y-4` with an uppercase-tracking-wide
@@ -422,17 +453,30 @@ Page containers: `p-6 space-y-5`/`space-y-6`. Card internal padding: `p-4`–`p-
 
 **2026-07-14, second same-day pass — `SalesActivityAnalytics` is no longer a filter-honesty exception; it's a filter-honesty *example*.** A follow-up Codex review flagged that this section's "rolling trend, not limited by filter's start date" claim was more than an honestly-labeled exception — the underlying query genuinely never applied `from`/`to` at all, so selecting a narrow date range like "Today" still silently showed a full rolling trend built from all-time data, which fails the "filters must affect all Dashboard sections" requirement outright (this is the *required* Sales Activity Analytics section, not an optional supporting widget like `RevenueTrendChart`). Fixed by bounding the query's `createdAt` by the selected `from`/`to` (`bangkokDayBoundsUtc`, same as `activityTimeline` already did) whenever either is set. `SalesActivityAnalytics.tsx` now takes a `dateFiltered: boolean` prop (`DashboardPage.tsx` passes `!!stats.filters.from`) that switches its caption between the original "rolling trend" copy (no filter selected — same rationale as `RevenueTrendChart`, a real trailing window is needed to be readable) and a new "กรองตามช่วงวันที่ที่เลือก" / "filtered to the selected date range" copy (a filter is selected — the section is now genuinely scoped, not just labeled as an exception). **Lesson for future Dashboard widgets with a similar "rolling trend by default" design**: if the widget is one of the P'Keng/P'Kee-*required* sections, prefer making it genuinely filter-bound (with a rolling-trend fallback only when no filter is active) over merely labeling an always-on exception — reserve the label-only "Filter Honesty" pattern above for truly optional/supporting widgets where an unconditional rolling trend is the better UX tradeoff.
 
-**Pre-Tax Amount Labeling (added 2026-07-14)**: every Dashboard monetary value (KPI cards, Status
-Summary, rankings, job-type/customer analytics, forecast, revenue trend, CSV export) is pre-tax
-(before VAT) — `Quote.amount` (the VAT-included grand total) is never shown directly anywhere on
-the Dashboard. Every label touching a money value must say so explicitly: Thai labels append
-"ก่อนภาษี" (the 4 KPI card titles/helpers and the Status Summary's "มูลค่ารวมก่อนภาษี" column use
-the exact P'Keng/P'Kee-specified wording; supporting-detail tables/charts/CSV headers use a
-"(ก่อนภาษี)" suffix), English labels append "(Before VAT)". If a future widget ever needs to show
-a VAT-*included* figure instead, it must be labeled "รวม VAT" / "incl. VAT" explicitly rather than
-left ambiguous — the default assumption for any unlabeled Dashboard amount is pre-tax, so an
-exception has to be loud, not silent. See [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Pre-Tax
-Amount Rule" for how the value itself is computed.
+**Pre-Tax Amount Labeling (added 2026-07-14, made a user-selectable toggle 2026-08-14)**: every
+Dashboard monetary value (KPI cards, Status Summary, rankings, job-type/customer analytics,
+forecast, revenue trend, CSV/Excel export) is computed in one of two modes, switched by a toggle in
+`DashboardFilterBar.tsx` — **pre-tax (before VAT)**, the default, or **post-tax (including VAT)**,
+added 2026-08-14 per direct user request. `Quote.amount` (the VAT-included grand total) is still
+never read directly anywhere on the Dashboard in either mode — both figures are independently
+recomputed from `lines`/`discount`, see [MODULES/Dashboard.md](./MODULES/Dashboard.md) "VAT
+Toggle." Every label touching a money value must say so explicitly, and now dynamically, via the
+`dashboard.vatSuffix.pre`/`.post` i18n keys: pre-tax renders "ก่อนภาษี" (the 4 KPI card titles/
+helpers and the Status Summary's "มูลค่ารวมก่อนภาษี" column use the exact P'Keng/P'Kee-specified
+wording; supporting-detail tables/charts/CSV/Excel headers use a "(ก่อนภาษี)" suffix; English
+labels append "(Before VAT)"), post-tax renders "รวม VAT 7%" / "(incl. VAT 7%)". Every affected
+component takes a `vatMode: DashboardVatMode` prop (`"pre" | "post"`, `src/lib/dashboard.ts`) fed
+from the server-echoed `stats.filters.vatMode` — never local UI state — so a label can never
+disagree with the value it's attached to. If a future widget ever needs to show a fixed-mode
+figure regardless of the toggle, it must still be labeled loudly (e.g. "รวม VAT" / "incl. VAT")
+rather than left ambiguous — the default assumption for any unlabeled Dashboard amount is
+whichever mode the toggle is currently set to, never silently one or the other.
+
+**Shared `Toggle` component (added 2026-08-14)**: `src/components/Toggle.tsx` — a small on/off
+switch button (`role="switch"`, `aria-checked`, `aria-labelledby`), extracted out of
+`SettingsPage.tsx` (which previously defined an identical control inline; it now imports this
+component instead). Used by the Dashboard's VAT toggle above. Reuse this for any future on/off
+switch instead of re-inlining the markup.
 
 **Win/Lose/Active/Non-Active definition (reconfirmed 2026-07-13, seventh pass)**: only formally-closed `ปิดการขายสำเร็จ` (Won) / `เสียโอกาส` (Lost) statuses count toward Win/Lose anywhere on the Dashboard (Win Rate, Closed Sales, Average Deal Size, Revenue Trend, `QuotationStatusSummary`). `ลูกค้ายอมรับ` (Customer Accepted) and `ลูกค้าปฏิเสธ` (Customer Rejected) stay Active/Non-Active respectively, **not** Win/Lose — a business-stakeholder spec this pass proposed the opposite mapping, but the user explicitly chose to keep today's definition everywhere rather than fork the calculation. Do not change this mapping without an equally explicit decision, since it's cross-cutting (touches every KPI/chart that mentions Win/Lose). **2026-07-13, eighth pass fix**: the 4 `QuotationStatusSummary` rows (Won/Lost/Active/Non-Active) are now a true partition — `NON_ACTIVE_OUTCOME_STATUSES` no longer includes Lost, since Lost already has its own row; previously a Lost quote counted in both rows, so the Percentage column summed to more than 100%. If a new outcome bucket is ever added to this table, make sure its predicate doesn't overlap any existing row's predicate — every quote should land in exactly one row.
 

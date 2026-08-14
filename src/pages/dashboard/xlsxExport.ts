@@ -1,16 +1,16 @@
-import type { DashboardStats } from "../../lib/dashboard";
+import type { DashboardStats, DashboardVatMode } from "../../lib/dashboard";
 
 type Cell = string | number;
 
 // สร้างแถวข้อมูล KPI สำหรับชีตสรุปในไฟล์ Excel
 // Builds the KPI rows for the summary sheet
-function kpiRows(stats: DashboardStats): Cell[][] {
+function kpiRows(stats: DashboardStats, vatLabel: string): Cell[][] {
   const k = stats.kpis;
   return [
     ["Total Quotations", k.totalQuotations],
-    ["Total Quotation Value (Before VAT)", k.totalQuotationValue],
-    ["Closed Sales (Before VAT)", k.closedSales],
-    ["Expected Sales (Before VAT)", k.expectedSales],
+    [`Total Quotation Value (${vatLabel})`, k.totalQuotationValue],
+    [`Closed Sales (${vatLabel})`, k.closedSales],
+    [`Expected Sales (${vatLabel})`, k.expectedSales],
     ["Won Jobs", k.wonDeals],
     ["Lost Jobs", k.lostDeals],
     ["Active Jobs", k.activeQuotations],
@@ -19,7 +19,7 @@ function kpiRows(stats: DashboardStats): Cell[][] {
     ["Win Rate (%)", k.winRate],
     ["Lose Rate (%)", k.loseRate],
     ["Conversion Rate (%)", k.conversionRate],
-    ["Average Deal Size (Before VAT)", k.averageDealSize],
+    [`Average Deal Size (${vatLabel})`, k.averageDealSize],
     ["Average Closing Time (days)", k.averageClosingTime ?? ""],
     ["Average Approval Time (days)", k.averageApprovalTime ?? ""],
     ["Total Customers", k.totalCustomers],
@@ -35,10 +35,12 @@ function kpiRows(stats: DashboardStats): Cell[][] {
 // Exports the dashboard report as a multi-sheet Excel workbook (summary, sales performance, customers, job types, pipeline, monthly trend)
 export async function exportDashboardXlsx(
   stats: DashboardStats,
-  filters: { from: string; to: string; salesperson: string; department: string },
+  filters: { from: string; to: string; salesperson: string; department: string; vatMode: DashboardVatMode },
   filename: string,
 ): Promise<void> {
   const XLSX = await import("xlsx");
+  const vatLabel = filters.vatMode === "post" ? "incl. VAT 7%" : "Before VAT";
+  const vatNote = filters.vatMode === "post" ? "post-tax / incl. VAT 7%" : "pre-tax / before VAT";
 
   const summary: Cell[][] = [
     ["Thai Chemicals Storage ERP — Dashboard Report"],
@@ -49,32 +51,32 @@ export async function exportDashboardXlsx(
     ["Department filter", filters.department],
     ...(stats.ownDataOnly ? [["Scope", "Own data only (caller lacks viewAll)"] as Cell[]] : []),
     [],
-    ["KPIs (all monetary values are pre-tax / before VAT)"],
-    ...kpiRows(stats),
+    [`KPIs (all monetary values are ${vatNote})`],
+    ...kpiRows(stats, vatLabel),
   ];
 
   const salesPerformance: Cell[][] = [
-    ["Salesperson", "Jobs", "Total Value (Before VAT)", "Closed Sales (Before VAT)", "Expected Revenue (Before VAT)", "Won", "Lost", "Pending", "Conversion Rate (%)", "Avg. Deal Size (Before VAT)", "Avg. Closing Time (days)"],
+    ["Salesperson", "Jobs", `Total Value (${vatLabel})`, `Closed Sales (${vatLabel})`, `Expected Revenue (${vatLabel})`, "Won", "Lost", "Pending", "Conversion Rate (%)", `Avg. Deal Size (${vatLabel})`, "Avg. Closing Time (days)"],
     ...stats.salesPerformance.map((s): Cell[] => [s.salesperson, s.quotationCount, s.totalValue, s.revenue, s.expectedRevenue, s.won, s.lost, s.pending, s.conversionRate, s.avgDealSize, s.avgClosingTime ?? ""]),
   ];
 
   const topCustomers: Cell[][] = [
-    ["Customer", "Quotations", "Total Value (Before VAT)", "Won Value (Before VAT)", "Last Quotation Date"],
+    ["Customer", "Quotations", `Total Value (${vatLabel})`, `Won Value (${vatLabel})`, "Last Quotation Date"],
     ...stats.customerAnalytics.topByRevenue.map((c): Cell[] => [c.client, c.quotationCount, c.totalValue, c.revenue, c.lastQuotationDate || ""]),
   ];
 
   const jobTypes: Cell[][] = [
-    ["Code", "Job Type", "Jobs", "Total Value (Before VAT)", "Won Value (Before VAT)", "Win Rate (%)", "Avg. Deal Size (Before VAT)"],
+    ["Code", "Job Type", "Jobs", `Total Value (${vatLabel})`, `Won Value (${vatLabel})`, "Win Rate (%)", `Avg. Deal Size (${vatLabel})`],
     ...stats.jobTypeAnalytics.map((j): Cell[] => [j.jobTypeCode, j.jobTypeName, j.count, j.totalValue, j.revenue, j.winRate, j.avgDealSize]),
   ];
 
   const pipeline: Cell[][] = [
-    ["Stage", "Count", "Total Value (Before VAT)", "Conversion From Previous (%)"],
+    ["Stage", "Count", `Total Value (${vatLabel})`, "Conversion From Previous (%)"],
     ...stats.pipeline.map((p): Cell[] => [p.stage, p.count, p.totalValue, p.conversionFromPrevious ?? ""]),
   ];
 
   const monthlyTrend: Cell[][] = [
-    ["Month", "Revenue (Before VAT)", "Win Rate (%)"],
+    ["Month", `Revenue (${vatLabel})`, "Win Rate (%)"],
     ...stats.revenueTrend.monthly.map((m): Cell[] => {
       const closing = stats.monthlyClosingRate.find((c) => c.month === m.period);
       return [m.period, m.revenue, closing?.winRate ?? ""];

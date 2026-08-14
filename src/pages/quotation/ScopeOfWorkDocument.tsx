@@ -14,6 +14,7 @@ import {
 } from "../../lib/scopeOfWork";
 import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOrderFromScope } from "../../lib/deliveryOrder";
 import { getRevisionPredecessorId, getRevisionNumber, generateScopeOfWorkRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
+import { compressImageFile, isCompressibleImage } from "../../lib/imageCompression";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
@@ -398,17 +399,24 @@ export function ScopeOfWorkDocument({
     }
   };
 
-  // อัปโหลดไฟล์แนบทันที (ไม่ต้องรอกดบันทึก) โดยแปลงเป็น base64 ก่อนส่งขึ้นเซิร์ฟเวอร์
-  // Uploads an attachment immediately (not part of the unsaved draft), converting it to base64 first
+  // อัปโหลดไฟล์แนบทันที (ไม่ต้องรอกดบันทึก) — ถ้าเป็นรูปภาพจะบีบอัดเป็น WebP ก่อน (ไฟล์อื่น เช่น PDF ผ่านเส้นทางเดิม)
+  // แล้วแปลงเป็น base64 ก่อนส่งขึ้นเซิร์ฟเวอร์ ตรวจขนาดไฟล์หลังบีบอัดแล้ว (ไม่ใช่ก่อนบีบอัด) เพื่อให้รูปที่เคยเกิน
+  // ขนาดมีโอกาสผ่านได้ง่ายขึ้น
+  // Uploads an attachment immediately (not part of the unsaved draft) — images are compressed to
+  // WebP first (non-images, e.g. PDFs, keep the original raw path unchanged), then converted to
+  // base64. The size cap is checked against the *compressed* output, not the original file, so
+  // compression can only help a file fit under the cap, never hurt it.
   const handleUploadAttachment = async (file: File) => {
     if (!scope || uploadingAttachment) return;
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      showToast(`ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
-      return;
-    }
     setUploadingAttachment(true);
     try {
-      const buffer = await file.arrayBuffer();
+      const isImage = isCompressibleImage(file);
+      const payloadBlob: Blob = isImage ? (await compressImageFile(file)).blob : file;
+      if (payloadBlob.size > MAX_ATTACHMENT_BYTES) {
+        showToast(`ไฟล์ต้องมีขนาดไม่เกิน ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)} MB`);
+        return;
+      }
+      const buffer = await payloadBlob.arrayBuffer();
       let binary = "";
       const bytes = new Uint8Array(buffer);
       for (let i = 0; i < bytes.length; i += 0x8000) {
@@ -416,7 +424,7 @@ export function ScopeOfWorkDocument({
       }
       const updated = await uploadScopeOfWorkAttachment(scope.id, {
         fileName: file.name,
-        contentType: file.type || "application/octet-stream",
+        contentType: isImage ? "image/webp" : (file.type || "application/octet-stream"),
         dataBase64: btoa(binary),
       });
       setScope((prev) => (prev ? { ...prev, attachments: updated.attachments ?? [] } : prev));

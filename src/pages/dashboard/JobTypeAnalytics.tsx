@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowUpDown } from "lucide-react";
-import type { JobTypeStat } from "../../lib/dashboard";
+import type { JobTypeStat, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { fmtShort, fmtPercent } from "./format";
 
@@ -8,26 +8,27 @@ type SortKey = "totalValue" | "revenue" | "count" | "winRate" | "avgDealSize";
 
 // ตารางวิเคราะห์ประเภทงาน เรียงลำดับได้ตามมูลค่า/จำนวน/อัตราชนะ/ขนาดดีลเฉลี่ย
 // Sortable table of job-type analytics — total value, count, win rate, and average deal size.
-export function JobTypeAnalytics({ jobTypeAnalytics }: { jobTypeAnalytics: JobTypeStat[] }) {
+export function JobTypeAnalytics({ jobTypeAnalytics, vatMode }: { jobTypeAnalytics: JobTypeStat[]; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
   const [sortKey, setSortKey] = useState<SortKey>("totalValue");
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
 
   const sorted = [...jobTypeAnalytics].sort((a, b) => b[sortKey] - a[sortKey]);
 
   const columns: { key: SortKey | null; label: string }[] = [
     { key: null, label: t("dashboard.jobType.col.name") },
     { key: "count", label: t("dashboard.jobType.col.count") },
-    { key: "totalValue", label: t("dashboard.jobType.col.totalValue") },
-    { key: "revenue", label: t("dashboard.jobType.col.wonValue") },
+    { key: "totalValue", label: `${t("dashboard.jobType.col.totalValue")} ${vatSuffix}` },
+    { key: "revenue", label: `${t("dashboard.jobType.col.wonValue")} ${vatSuffix}` },
     { key: "winRate", label: t("dashboard.jobType.col.winRate") },
-    { key: "avgDealSize", label: t("dashboard.jobType.col.avgDealSize") },
+    { key: "avgDealSize", label: `${t("dashboard.jobType.col.avgDealSize")} ${vatSuffix}` },
   ];
 
   return (
     <div className="bg-card border border-border rounded-xl p-5">
       <div className="mb-4">
         <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.jobType.title")}</h2>
-        <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("dashboard.jobType.sub")}</p>
+        <p className="text-xs text-muted-foreground font-mono mt-0.5">{`${t("dashboard.jobType.sub")} ${vatSuffix}`}</p>
       </div>
       {sorted.length === 0 ? (
         <p className="text-xs text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>

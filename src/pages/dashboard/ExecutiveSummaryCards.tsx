@@ -1,5 +1,5 @@
 import { FileText, Wallet, TrendingUp, Target, type LucideIcon } from "lucide-react";
-import type { DashboardKpis } from "../../lib/dashboard";
+import type { DashboardKpis, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { fmtShort } from "./format";
@@ -26,13 +26,14 @@ function SummaryCard({ title, value, icon: Icon, accent, help, helper }: { title
 
 // การ์ด KPI หลัก 4 ใบที่ผู้ใช้ต้องเห็นก่อนสิ่งอื่น: จำนวน/มูลค่าใบเสนอราคา ยอดขายที่ปิดแล้ว และยอดขายที่คาดว่าจะได้
 // The 4 executive KPI cards a user needs first: quotation count/value, closed sales, expected sales.
-export function ExecutiveSummaryCards({ kpis }: { kpis: DashboardKpis }) {
+export function ExecutiveSummaryCards({ kpis, vatMode }: { kpis: DashboardKpis; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
   const cards: { title: string; value: string; icon: LucideIcon; accent: string; help?: string; helper: string }[] = [
     { title: t("dashboard.kpi.totalQuotations"), value: kpis.totalQuotations.toLocaleString("th-TH"), icon: FileText, accent: "#1a5fb4", helper: t("dashboard.kpi.helper.totalQuotations") },
-    { title: t("dashboard.kpi.totalQuotationValue"), value: fmtShort(kpis.totalQuotationValue), icon: Wallet, accent: "#5a7299", helper: t("dashboard.kpi.helper.totalQuotationValue") },
-    { title: t("dashboard.kpi.closedSales"), value: fmtShort(kpis.closedSales), icon: TrendingUp, accent: "#157347", helper: t("dashboard.kpi.helper.closedSales") },
-    { title: t("dashboard.kpi.expectedSales"), value: fmtShort(kpis.expectedSales), icon: Target, accent: "#c9a84c", help: t("dashboard.kpi.help.expectedSales"), helper: t("dashboard.kpi.helper.expectedSales") },
+    { title: `${t("dashboard.kpi.totalQuotationValue")} ${vatSuffix}`, value: fmtShort(kpis.totalQuotationValue), icon: Wallet, accent: "#5a7299", helper: `${t("dashboard.kpi.helper.totalQuotationValue")} ${vatSuffix}` },
+    { title: `${t("dashboard.kpi.closedSales")} ${vatSuffix}`, value: fmtShort(kpis.closedSales), icon: TrendingUp, accent: "#157347", helper: `${t("dashboard.kpi.helper.closedSales")} ${vatSuffix}` },
+    { title: `${t("dashboard.kpi.expectedSales")} ${vatSuffix}`, value: fmtShort(kpis.expectedSales), icon: Target, accent: "#c9a84c", help: `${t("dashboard.kpi.help.expectedSales")} ${vatSuffix}`, helper: t("dashboard.kpi.helper.expectedSales") },
   ];
   return (
     <div>

@@ -1,5 +1,6 @@
 import { apiFetch } from "./apiClient.js";
 import type { ServiceChecklistSectionDef } from "./serviceTemplates.js";
+import { compressImageFile, isCompressibleImage } from "./imageCompression.js";
 
 // Service Report — the field-usable record combining the Service Checklist and the detailed
 // Service Report (added 2026-08-06, Phase 1). Created directly against a Customer (not derived
@@ -273,9 +274,9 @@ export async function deleteServiceReport(id: string): Promise<void> {
   await apiFetch<void>(`/service-reports/${id}`, { method: "DELETE" });
 }
 
-// อ่านไฟล์รูปภาพเป็น base64 (ตัดส่วนหัว data URL ออก) สำหรับแนบกับรายการตรวจเช็คที่ผิดปกติ
-// Reads an image File as base64 (data-URL prefix stripped) for attaching to an Abnormal checklist item
-function fileToBase64(file: File): Promise<string> {
+// อ่านไฟล์เป็น base64 (ตัดส่วนหัว data URL ออก)
+// Reads a File as base64 (data-URL prefix stripped)
+function fileToBase64(file: File | Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
@@ -284,17 +285,23 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-// อัปโหลดรูปภาพประกอบรายการตรวจเช็คที่ผิดปกติ
-// Uploads a photo attached to an Abnormal checklist item
+// อัปโหลดรูปภาพประกอบรายการตรวจเช็คที่ผิดปกติ — บีบอัดเป็น WebP ก่อนแปลงเป็น base64 เสมอ
+// (ช่องอัปโหลดนี้กำหนด accept="image/*" ไว้แล้ว จึงไม่ต้องแยกสาขาไฟล์ที่ไม่ใช่รูปภาพ)
+// Uploads a photo attached to an Abnormal checklist item — always compresses to WebP before
+// base64-encoding (the underlying <input> is accept="image/*"-only, so no non-image branch needed).
 export async function uploadServiceReportPhoto(
   reportId: string,
   path: { sectionKey: string; groupKey: string; itemKey: string },
   file: File,
 ): Promise<ServiceReport> {
-  const dataBase64 = await fileToBase64(file);
+  const isImage = isCompressibleImage(file);
+  const { blob, fileName, contentType } = isImage
+    ? { blob: (await compressImageFile(file)).blob, fileName: file.name, contentType: "image/webp" }
+    : { blob: file, fileName: file.name, contentType: file.type };
+  const dataBase64 = await fileToBase64(blob);
   const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${reportId}/photos`, {
     method: "POST",
-    body: JSON.stringify({ ...path, fileName: file.name, contentType: file.type, dataBase64 }),
+    body: JSON.stringify({ ...path, fileName, contentType, dataBase64 }),
   });
   return serviceReport;
 }

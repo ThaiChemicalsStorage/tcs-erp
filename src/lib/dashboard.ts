@@ -178,6 +178,16 @@ export interface DeliveryOrderSummary {
   final: number;
 }
 
+export interface ServiceSummary {
+  total: number;
+  draft: number;
+  completed: number;
+  cancelled: number;
+  thisMonth: number;
+}
+
+export type DashboardVatMode = "pre" | "post";
+
 export interface InterestBreakdown {
   interested: number;
   notInterested: number;
@@ -203,11 +213,12 @@ export interface DashboardStats {
   approvalDashboard: ApprovalDashboard | null;
   scopeOfWork: ScopeOfWorkSummary | null;
   deliveryOrder: DeliveryOrderSummary | null;
+  serviceSummary: ServiceSummary | null;
   ownDataOnly: boolean;
   notificationSummary: NotificationSummary;
   availableSalespeople: string[];
   availableDepartments: string[];
-  filters: { from: string; to: string; salesperson: string; department: string };
+  filters: { from: string; to: string; salesperson: string; department: string; vatMode: DashboardVatMode };
 }
 
 export interface DashboardFilters {
@@ -215,16 +226,18 @@ export interface DashboardFilters {
   to?: string;
   salesperson?: string;
   department?: string;
+  vatMode?: DashboardVatMode;
 }
 
-// ดึงข้อมูลสถิติแดชบอร์ดจากเซิร์ฟเวอร์ ตามตัวกรองวันที่/พนักงานขาย/แผนกที่ระบุ
-// Fetches dashboard stats from the server, filtered by date range/salesperson/department
+// ดึงข้อมูลสถิติแดชบอร์ดจากเซิร์ฟเวอร์ ตามตัวกรองวันที่/พนักงานขาย/แผนก/โหมดภาษีมูลค่าเพิ่มที่ระบุ
+// Fetches dashboard stats from the server, filtered by date range/salesperson/department/VAT mode
 export async function fetchDashboardStats(filters?: DashboardFilters): Promise<DashboardStats> {
   const params = new URLSearchParams();
   if (filters?.from) params.set("from", filters.from);
   if (filters?.to) params.set("to", filters.to);
   if (filters?.salesperson && filters.salesperson !== "all") params.set("salesperson", filters.salesperson);
   if (filters?.department && filters.department !== "all") params.set("department", filters.department);
+  if (filters?.vatMode === "post") params.set("vat", "post");
   const qs = params.toString();
   return apiFetch<DashboardStats>(`/dashboard${qs ? `?${qs}` : ""}`);
 }

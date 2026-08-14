@@ -14,6 +14,7 @@ import type { Role } from "../lib/roles";
 import { useI18n, type Lang } from "../lib/i18n";
 import { ImageUploadField } from "../components/ImageUploadField";
 import { SignaturePad } from "../components/SignaturePad";
+import { Toggle } from "../components/Toggle";
 
 // ช่องเลือกภาษาของระบบ (ไทย/อังกฤษ)
 // Field for switching the system language (Thai/English).
@@ -69,25 +70,6 @@ function useSavedFlash() {
     return () => clearTimeout(timer);
   }, [saved]);
   return [saved, () => setSaved(true)] as const;
-}
-
-// แสดงสวิตช์เปิด/ปิดแบบ toggle
-// Renders an on/off toggle switch button.
-function Toggle({ checked, onChange, labelledBy }: { checked: boolean; onChange: (v: boolean) => void; labelledBy: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-labelledby={labelledBy}
-      onClick={() => onChange(!checked)}
-      className={`w-[40px] h-[22px] rounded-full border transition-colors relative flex-shrink-0 ${checked ? "bg-[#c9a84c] border-transparent" : "bg-muted border-border"}`}
-    >
-      <span
-        className={`absolute left-0 top-[3px] w-[16px] h-[16px] rounded-full bg-white shadow transition-transform ${checked ? "translate-x-[21px]" : "translate-x-[3px]"}`}
-      />
-    </button>
-  );
 }
 
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";

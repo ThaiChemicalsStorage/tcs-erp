@@ -14,6 +14,23 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-14] Dashboard VAT toggle + Service summary card + browser-side image compression
+  across every upload site.** Three features. (1) The 2026-07-14 "always pre-tax" Dashboard rule
+  became a user-selectable pre-tax/post-tax toggle (`?vat=pre|post` on `GET /api/dashboard`, a new
+  shared `Toggle.tsx` component, coverage extended to the CSV/Excel exports) — still a single
+  global 7% `VAT_RATE`, never per-company. (2) Service — previously the only document module with
+  zero Dashboard presence — gained a `serviceSummary` card (Total/Draft/Completed/Cancelled/
+  This-Month), same own-data-only-scoped, unfiltered-by-date pattern as the existing Scope of
+  Work/Delivery Order cards. (3) New shared `src/lib/imageCompression.ts` (WebP re-encode via
+  Canvas API, no new npm dependency) applied at all 4 image-upload sites: profile/logo/stamp
+  (`ImageUploadField.tsx`), signature upload mode + a PNG→WebP switch in `SignaturePad.tsx`'s draw
+  mode, Service checklist Abnormal-item photos (`serviceReports.ts`), and Scope of Work's one
+  mixed-file-type attachment site (only compresses when the file is an image). See
+  [MODULES/Dashboard.md](./MODULES/Dashboard.md) "VAT Toggle", [MODULES/Service.md](./MODULES/Service.md)
+  "Dashboard visibility"/"Photos", [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Attachments",
+  and [UI_GUIDELINES.md](./UI_GUIDELINES.md) "Client-Side Image Compression". `tsc`/`lint`/`build`/
+  `test` (152/152) all pass clean. See CHANGELOG.md.
+
 - ✅ **[2026-08-13] Signature capture: Settings gets draw-or-upload; Service customer sign-off stays draw-only.**
   Direct user request — Settings → Profile's "Personal Signature" was upload-only while the
   Service module's customer sign-off was draw-only; the user wanted `src/components/

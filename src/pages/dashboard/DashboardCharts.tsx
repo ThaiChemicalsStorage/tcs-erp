@@ -3,7 +3,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import type { JobTypeStat, Forecast, RevenueTrend } from "../../lib/dashboard";
+import type { JobTypeStat, Forecast, RevenueTrend, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { ChartCard } from "./ChartCard";
 import { fmtShort, periodLabel, fmtDateShort } from "./format";
@@ -32,9 +32,10 @@ const TREND_GROUPINGS: TrendGrouping[] = ["weekly", "monthly", "quarterly", "yea
 
 // กราฟแนวโน้มรายได้ เลือกดูแบบรายสัปดาห์/เดือน/ไตรมาส/ปีได้
 // Area chart of revenue trend, switchable between weekly/monthly/quarterly/yearly grouping.
-export function RevenueTrendChart({ trend, anchorDate }: { trend: RevenueTrend; anchorDate: string }) {
+export function RevenueTrendChart({ trend, anchorDate, vatMode }: { trend: RevenueTrend; anchorDate: string; vatMode: DashboardVatMode }) {
   const { t, lang } = useI18n();
   const [grouping, setGrouping] = useState<TrendGrouping>("monthly");
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
   const groupingLabel: Record<TrendGrouping, string> = {
     weekly: t("dashboard.chart.revenue.grouping.week"),
     monthly: t("dashboard.chart.revenue.grouping.month"),
@@ -45,7 +46,7 @@ export function RevenueTrendChart({ trend, anchorDate }: { trend: RevenueTrend; 
   const hasData = data.some((d) => d.revenue > 0);
   return (
     <ChartCard
-      title={t("dashboard.chart.revenue.title")}
+      title={`${t("dashboard.chart.revenue.title")} ${vatSuffix}`}
       sub={`${t("dashboard.chart.revenue.sub")} — ${t("dashboard.trend.endingOn")} ${fmtDateShort(anchorDate, lang)}`}
       className="xl:col-span-2"
       actions={
@@ -71,7 +72,7 @@ export function RevenueTrendChart({ trend, anchorDate }: { trend: RevenueTrend; 
             <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} minTickGap={24} />
             <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
-            <Area type="monotone" dataKey="revenue" name={t("dashboard.kpi.closedSales")} stroke="#c9a84c" strokeWidth={2} fill="url(#revGrad)" dot={false} activeDot={{ r: 4, fill: "#c9a84c" }} />
+            <Area type="monotone" dataKey="revenue" name={`${t("dashboard.kpi.closedSales")} ${vatSuffix}`} stroke="#c9a84c" strokeWidth={2} fill="url(#revGrad)" dot={false} activeDot={{ r: 4, fill: "#c9a84c" }} />
           </AreaChart>
         </ResponsiveContainer>
       )}
@@ -81,12 +82,13 @@ export function RevenueTrendChart({ trend, anchorDate }: { trend: RevenueTrend; 
 
 // กราฟแท่งแสดงมูลค่ารวมและมูลค่าที่ชนะ แยกตามประเภทงาน (แสดงทุกประเภท ไม่ใช่แค่ top-N)
 // Bar chart of total vs. won value per job type; shows all active job types, not just top-N.
-export function RevenueByJobTypeChart({ jobTypeAnalytics }: { jobTypeAnalytics: JobTypeStat[] }) {
+export function RevenueByJobTypeChart({ jobTypeAnalytics, vatMode }: { jobTypeAnalytics: JobTypeStat[]; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
   const data = jobTypeAnalytics;
   const hasData = data.some((d) => d.totalValue > 0);
   return (
-    <ChartCard title={t("dashboard.chart.revenueByJobType.title")} sub={t("dashboard.chart.revenueByJobType.sub")}>
+    <ChartCard title={`${t("dashboard.chart.revenueByJobType.title")} ${vatSuffix}`} sub={`${t("dashboard.chart.revenueByJobType.sub")} ${vatSuffix}`}>
       {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
@@ -95,8 +97,8 @@ export function RevenueByJobTypeChart({ jobTypeAnalytics }: { jobTypeAnalytics: 
             <YAxis type="category" dataKey="jobTypeCode" width={60} tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="totalValue" name={t("dashboard.chart.revenueByJobType.totalValue")} fill="#5a7299" radius={[0, 4, 4, 0]} />
-            <Bar dataKey="revenue" name={t("dashboard.chart.revenueByJobType.wonValue")} fill="#c9a84c" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="totalValue" name={`${t("dashboard.chart.revenueByJobType.totalValue")} ${vatSuffix}`} fill="#5a7299" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="revenue" name={`${t("dashboard.chart.revenueByJobType.wonValue")} ${vatSuffix}`} fill="#c9a84c" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       )}
@@ -140,8 +142,9 @@ export function JobTypeDistributionChart({ jobTypeAnalytics }: { jobTypeAnalytic
 
 // กราฟคาดการณ์ยอดขายที่คาดว่าจะได้ในเดือนนี้/ไตรมาสนี้/ปีนี้
 // Area chart of expected sales forecast for this month/quarter/year.
-export function ExpectedSalesForecastChart({ forecast }: { forecast: Forecast }) {
+export function ExpectedSalesForecastChart({ forecast, vatMode }: { forecast: Forecast; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
   const data = [
     { label: t("dashboard.forecast.thisMonth"), value: forecast.thisMonth },
     { label: t("dashboard.forecast.thisQuarter"), value: forecast.thisQuarter },
@@ -149,7 +152,7 @@ export function ExpectedSalesForecastChart({ forecast }: { forecast: Forecast })
   ];
   const hasData = data.some((d) => d.value > 0);
   return (
-    <ChartCard title={t("dashboard.chart.expectedSales.title")} sub={`${t("dashboard.chart.expectedSales.sub")} · ${t("dashboard.forecast.basedOn")} ${forecast.historicalWinRate}%`}>
+    <ChartCard title={`${t("dashboard.chart.expectedSales.title")} ${vatSuffix}`} sub={`${t("dashboard.chart.expectedSales.sub")} ${vatSuffix} · ${t("dashboard.forecast.basedOn")} ${forecast.historicalWinRate}%`}>
       {!hasData ? <EmptyNote>{t("dashboard.noData")}</EmptyNote> : (
         <ResponsiveContainer width="100%" height={180}>
           <AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
@@ -162,7 +165,7 @@ export function ExpectedSalesForecastChart({ forecast }: { forecast: Forecast })
             <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
-            <Area type="monotone" dataKey="value" name={t("dashboard.kpi.expectedSales")} stroke="#1a5fb4" strokeWidth={2} fill="url(#fcGrad)" />
+            <Area type="monotone" dataKey="value" name={`${t("dashboard.kpi.expectedSales")} ${vatSuffix}`} stroke="#1a5fb4" strokeWidth={2} fill="url(#fcGrad)" />
           </AreaChart>
         </ResponsiveContainer>
       )}

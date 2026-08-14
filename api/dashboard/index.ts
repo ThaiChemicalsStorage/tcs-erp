@@ -4,13 +4,13 @@ import { requirePermission } from "../_lib/auth.js";
 import {
   customersCollection, leadsCollection, quotesCollection, productsCollection, categoriesCollection,
   auditLogCollection, notificationsCollection, usersCollection, jobTypesCollection, scopeOfWorksCollection,
-  deliveryOrdersCollection,
+  deliveryOrdersCollection, serviceReportsCollection,
   withStringId, type QuoteFields,
 } from "../_lib/collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
-import { computeQuoteAmountBeforeVat } from "../_lib/quoteAmounts.js";
+import { computeQuoteAmountBeforeVat, computeQuoteAmountWithVat } from "../_lib/quoteAmounts.js";
 import { dedupeQuotesByRevisionChain } from "../_lib/quoteRevisions.js";
 
 const WON_STATUS = "ปิดการขายสำเร็จ";
@@ -73,15 +73,20 @@ const TOP_N = 10;
 const ACTIVITY_LIMIT = 30;
 
 /**
- * P'Keng/P'Kee business requirement (2026-07-14), reworked the same day per a follow-up
- * requirement to compute from an authoritative source rather than back-deriving from the persisted
- * VAT-included total: every Dashboard monetary total must be reported pre-tax. `Quote` has no
- * stored pre-tax/subtotal field — only `amount` (VAT-included) is persisted — so the before-VAT
- * figure is recomputed directly from each quote's own `lines`/`discount` via the shared
- * `computeQuoteAmountBeforeVat()` (`api/_lib/quoteAmounts.ts`, also used by `quoteValidation.ts` to
- * derive the persisted `amount` on create/edit) rather than dividing `amount` back down by a fixed
- * VAT rate. Every quote has carried real `lines`/`discount` data since the 2026-07-08 rewrite (see
- * CHANGELOG.md), so this is always computable — an empty `lines` array correctly yields `0`.
+ * P'Keng/P'Kee business requirement (2026-07-14): every Dashboard monetary total is recomputed
+ * directly from each quote's own `lines`/`discount` — never back-derived by dividing the persisted
+ * VAT-included `Quote.amount` down by a fixed rate — via the shared `computeQuoteAmountBeforeVat()`/
+ * `computeQuoteAmountWithVat()` pair (`api/_lib/quoteAmounts.ts`, the former also used by
+ * `quoteValidation.ts` to derive the persisted `amount` on create/edit). Every quote has carried real
+ * `lines`/`discount` data since the 2026-07-08 rewrite (see CHANGELOG.md), so this is always
+ * computable — an empty `lines` array correctly yields `0`.
+ *
+ * 2026-08-14: the "pre-tax only" half of the original rule became caller-selectable — a `?vat=pre|post`
+ * query param (default `pre`, matching the original business rule) picks which of the two helpers is
+ * used at every money-computing call site via the local `quoteAmount()` dispatcher below. `VAT_RATE`
+ * itself stays a single hardcoded 7% constant (no per-company/per-quote rate) — deliberately out of
+ * scope. The selected mode is echoed back in the response's `filters.vatMode` so the frontend never
+ * has to trust its own pre-fetch UI state for labeling or CSV/Excel export.
  */
 
 /**
@@ -267,6 +272,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const to = queryString(req, "to");
     const salespersonFilter = queryString(req, "salesperson");
     const departmentFilter = queryString(req, "department");
+    const vatMode: "pre" | "post" = queryString(req, "vat") === "post" ? "post" : "pre";
+    const quoteAmount = (lines: QuoteFields["lines"] | undefined, discountPct: number): number =>
+      vatMode === "post" ? computeQuoteAmountWithVat(lines ?? [], discountPct) : computeQuoteAmountBeforeVat(lines ?? [], discountPct);
     const today = todayIsoDate();
 
     const [customers, leads, quotes, products, categories, users, jobTypes, auditLog] = await Promise.all([
@@ -460,7 +468,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // consistently, using each chain's LATEST revision (never the superseded original, never a sum
     // across revisions), per explicit 2026-07-22 business decision.
     const docs = dedupeQuotesByRevisionChain(
-      (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0) })),
+      (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: quoteAmount(q.lines, q.discount ?? 0) })),
     );
 
     // Data-quality telemetry (2026-07-14, Codex review Medium finding): a doc with `lines` entirely
@@ -697,7 +705,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const followUpDocs = dedupeQuotesByRevisionChain(followUpDocsRaw as Array<Pick<QuoteFields, "status" | "client" | "salesperson" | "followUpDate" | "lines" | "discount"> & { _id: string }>)
       .filter((q) => q.followUpDate && !TERMINAL_STATUSES.has(q.status));
     const toFollowUpSummary = (q: (typeof followUpDocs)[number]) => ({
-      id: q._id, client: q.client, salesperson: q.salesperson, followUpDate: q.followUpDate, amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0),
+      id: q._id, client: q.client, salesperson: q.salesperson, followUpDate: q.followUpDate, amount: quoteAmount(q.lines, q.discount ?? 0),
     });
     const followUps = {
       today: followUpDocs.filter((q) => q.followUpDate === today).map(toFollowUpSummary),
@@ -981,6 +989,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // ── Service summary — same shape/rules as Scope of Work/Delivery Order above (2026-08-14,
+    // direct user request to bring the Service module onto the Dashboard). Company-wide, all-time,
+    // deliberately unfiltered by date-range/salesperson/department: a Service report has no
+    // salesperson of its own (it uses `assignedServiceEngineerId` instead), so there's no dimension
+    // to filter by — same conclusion already reached for Scope of Work/Delivery Order. Own-data-only
+    // clause replicates `handleList`'s exact ownership predicate in api/_lib/serviceReportHandler.ts
+    // (own `createdBy` + ownerless legacy records, no document-recipients concept unlike Scope of Work). ──
+    const ownServiceClause = roleHasPermission(ctx.role, "service:viewAll")
+      ? {}
+      : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }] };
+    let serviceSummary: { total: number; draft: number; completed: number; cancelled: number; thisMonth: number } | null = null;
+    if (roleHasPermission(ctx.role, "service:view")) {
+      try {
+        const serviceReports = await serviceReportsCollection();
+        const thisMonthPrefix = today.slice(0, 7);
+        const [total, draft, completed, cancelled, thisMonth] = await Promise.all([
+          serviceReports.countDocuments({ isDeleted: false, ...ownServiceClause }),
+          serviceReports.countDocuments({ isDeleted: false, status: "Draft", ...ownServiceClause }),
+          serviceReports.countDocuments({ isDeleted: false, status: "Completed", ...ownServiceClause }),
+          serviceReports.countDocuments({ isDeleted: false, status: "Cancelled", ...ownServiceClause }),
+          serviceReports.countDocuments({ isDeleted: false, inspectionDate: { $regex: `^${thisMonthPrefix}` }, ...ownServiceClause }),
+        ]);
+        serviceSummary = { total, draft, completed, cancelled, thisMonth };
+      } catch (err) {
+        console.error("[dashboard] serviceSummary query failed", err);
+        serviceSummary = null;
+      }
+    }
+
     // ── Notification summary — per-caller, same scoping as GET /api/notifications ──
     // Deliberately unfiltered by date-range/salesperson/department, same conclusion as Total
     // Customers/Products above: this is a personal, always-current operational widget ("my own
@@ -1048,7 +1085,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const wk = isoWeekKey(date);
       const monthKey = r.issueDate.slice(0, 7);
       const qk = quarterKey(y, m - 1);
-      const amt = computeQuoteAmountBeforeVat(r.lines ?? [], r.discount ?? 0);
+      const amt = quoteAmount(r.lines, r.discount ?? 0);
       revenueByWeekMap.set(wk, (revenueByWeekMap.get(wk) ?? 0) + amt);
       revenueByMonthMap.set(monthKey, (revenueByMonthMap.get(monthKey) ?? 0) + amt);
       revenueByQuarterMap.set(qk, (revenueByQuarterMap.get(qk) ?? 0) + amt);
@@ -1102,11 +1139,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       approvalDashboard,
       scopeOfWork,
       deliveryOrder,
+      serviceSummary,
       ownDataOnly,
       notificationSummary,
       availableSalespeople,
       availableDepartments,
-      filters: { from, to, salesperson: salespersonFilter || "all", department: departmentFilter || "all" },
+      filters: { from, to, salesperson: salespersonFilter || "all", department: departmentFilter || "all", vatMode },
     });
   });
 }

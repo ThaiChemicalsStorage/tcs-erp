@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Check, Eraser, PenLine, Upload } from "lucide-react";
 import { useI18n } from "../lib/i18n";
+import { compressImageFile } from "../lib/imageCompression";
 
 const STROKE_COLOR = "#0b1d3a";
 const STROKE_WIDTH = 2.4;
@@ -166,21 +167,23 @@ export function SignaturePad({
     setMode(next);
   };
 
-  const handleFile = (file: File | undefined) => {
+  const handleFile = async (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) { setUploadError(t("settings.image.onlyImages")); return; }
-    if (file.size > MAX_UPLOAD_BYTES) { setUploadError(t("settings.image.tooLarge")); return; }
-    setUploadError("");
-    const reader = new FileReader();
-    reader.onload = () => setUploadedDataUrl(reader.result as string);
-    reader.onerror = () => setUploadError(t("settings.image.readError"));
-    reader.readAsDataURL(file);
+    try {
+      const { dataUrl, blob } = await compressImageFile(file);
+      if (blob.size > MAX_UPLOAD_BYTES) { setUploadError(t("settings.image.tooLarge")); return; }
+      setUploadError("");
+      setUploadedDataUrl(dataUrl);
+    } catch {
+      setUploadError(t("settings.image.readError"));
+    }
   };
 
   const clear = () => (mode === "draw" ? clearPad() : clearUpload());
 
   const confirm = () => {
-    const finalDataUrl = mode === "draw" ? (hasStroke ? canvasRef.current?.toDataURL("image/png") ?? "" : "") : uploadedDataUrl;
+    const finalDataUrl = mode === "draw" ? (hasStroke ? canvasRef.current?.toDataURL("image/webp", 0.92) ?? "" : "") : uploadedDataUrl;
     if (!finalDataUrl || (requireName && !name.trim())) return;
     onConfirm({ dataUrl: finalDataUrl, name: requireName ? name.trim() : signerName });
   };
@@ -296,7 +299,7 @@ export function SignaturePad({
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={(e) => handleFile(e.target.files?.[0])}
+            onChange={(e) => { void handleFile(e.target.files?.[0]); }}
           />
           {uploadError && <p role="alert" className="text-xs text-[#e05252] mt-1.5">{uploadError}</p>}
         </div>

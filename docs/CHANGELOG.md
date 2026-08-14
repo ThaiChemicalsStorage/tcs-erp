@@ -4,6 +4,110 @@
 
 ---
 
+## 2026-08-14c (absolute latest) — Fix: Service summary card layout regression
+
+Direct user report, with a screenshot, that the new Scope of Work/Delivery Order/Service summary
+cards on the Dashboard (2026-08-14a below) were unreadable — every tile's label was truncated down
+to a single character. Root cause: 2026-08-14a's own layout change widened the row from 2 cards
+(`lg:grid-cols-2`) to 3 (`xl:grid-cols-3`) to fit the new Service card in, which left each card only
+a third of the row's width — too narrow for `ScopeOfWorkSummary`/`ServiceSummary`'s inner 5-tile
+grid (`xl:grid-cols-5`), squeezing every label down to 1-2 characters even though each already had
+a `truncate` + tooltip fallback for genuinely long labels.
+
+**Fix** (`src/pages/dashboard/DashboardPage.tsx`): reverted the Scope of Work/Delivery Order row
+back to its original `lg:grid-cols-2` (their card width is unchanged from before 2026-08-14a) and
+moved `ServiceSummary` out to its own full-width row below, rather than squeezing a 3rd card into
+the same row — it gets more room this way than a shared row ever could, not just back to parity.
+
+Verified via `npx tsc --noEmit` (clean). No live-browser re-check was possible this session (see
+PROJECT_STATUS.md "Known Risks") — the user's own screenshot was the original repro; a follow-up
+session should confirm visually.
+
+---
+
+## 2026-08-14b — Browser-side image compression to WebP across every upload site
+
+Direct user request to cut MongoDB storage/bandwidth for image uploads — every image-upload site
+in the app (profile picture, company logo/stamp, personal signature, Service checklist photos,
+Scope of Work attachments) now compresses the picked file to WebP client-side before storing it,
+with no new npm dependency and no server-side change.
+
+- New **`src/lib/imageCompression.ts`**: `isCompressibleImage(file)` (plain MIME-type check) and
+  `compressImageFile(file, {maxDimension = 1920, quality = 0.8})` — rejects a raw file over ~20MB
+  before decoding, decodes via `createImageBitmap`, downscales only if a dimension exceeds
+  `maxDimension` (never upscales an already-smaller image), draws to an off-screen canvas, encodes
+  to WebP via `canvas.toBlob()`. Returns `{ dataUrl, blob }` — the data URL for this app's existing
+  base64-inline storage convention, the raw `Blob` for a caller that needs its byte size or a
+  base64 re-encode for a JSON upload body.
+- **`src/components/ImageUploadField.tsx`** (profile picture/company logo/stamp) and
+  **`src/components/SignaturePad.tsx`**'s Upload mode both now compress before checking their
+  respective byte caps (`MAX_IMAGE_BYTES`/`MAX_UPLOAD_BYTES`) against the *compressed* size, not
+  the original — a file that used to exceed the cap may now fit without the user resizing it by
+  hand. `SignaturePad`'s Draw mode separately switched `canvas.toDataURL()` from PNG to WebP
+  (quality 0.92) — no resize needed for an already-small signature canvas.
+- **`src/lib/serviceReports.ts`**'s `uploadServiceReportPhoto()` (Service checklist Abnormal-item
+  photos) always compresses, since that upload's `<input accept="image/*">` guarantees every file
+  is an image.
+- **`src/pages/quotation/ScopeOfWorkDocument.tsx`**'s `handleUploadAttachment()` — the one
+  mixed-file-type upload site in the app — only compresses when `isCompressibleImage(file)` is
+  true; a PDF or other non-image attachment passes through completely unchanged. `MAX_ATTACHMENT_BYTES`
+  is checked against the possibly-compressed size, same pattern as the other two sites.
+- No server-side change: every `validateImageDataUrl()` (`api/_lib/uploadValidation.ts`) already
+  accepted `image/webp` before this pass.
+- See [UI_GUIDELINES.md](./UI_GUIDELINES.md) "Client-Side Image Compression" for the reusable
+  pattern, [MODULES/Service.md](./MODULES/Service.md) "Photos"/"Customer sign-off", and
+  [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "Attachments" for the per-module notes.
+- Verified via `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (152/152) — all
+  clean. No live-browser upload/compression-ratio check was run this session (standing sandboxed-
+  session limitation, see PROJECT_STATUS.md "Known Risks").
+
+---
+
+## 2026-08-14a — Dashboard: pre-tax/post-tax (VAT) toggle + Service summary card
+
+Two direct user requests landed together in the same pass.
+
+**VAT toggle** (supersedes the 2026-07-14 "always pre-tax" hard rule): `GET /api/dashboard` gains
+a `?vat=pre|post` query param (default `pre`, preserving the original behavior for any caller that
+doesn't pass it). A local `quoteAmount()` dispatcher in `api/dashboard/index.ts` picks
+`computeQuoteAmountBeforeVat()` or the new `computeQuoteAmountWithVat()` (both in
+`api/_lib/quoteAmounts.ts`) at the 3 places the route computes money from raw `lines`/`discount`.
+`VAT_RATE` stays a single hardcoded 7% constant — no per-company/per-quote rate, deliberately out
+of scope. The resolved mode is echoed back as `filters.vatMode`. `DashboardFilterBar.tsx` renders
+a toggle (new shared `src/components/Toggle.tsx`, extracted out of `SettingsPage.tsx`'s previously
+inline copy) defaulting to pre-tax/unchecked; every affected component (`ExecutiveSummaryCards`,
+`QuotationStatusSummary`, `SalesPerformancePanel`, `ExpectedSalesForecastChart`,
+`RevenueTrendChart`, `RevenueByJobTypeChart`, `PipelineSteps`, both `SalesPerformanceTable` uses,
+`CustomerAnalytics`, `JobTypeAnalytics`, `ApprovalDashboard`, `FollowUpReminders`) now takes a
+`vatMode` prop sourced from the server-echoed `stats.filters.vatMode`. Two new i18n keys,
+`dashboard.vatSuffix.pre`/`.post`, replace ~32 previously-hardcoded "ก่อนภาษี"/"Before VAT"
+dictionary entries with a suffix appended dynamically at render time. Per direct user request, the
+toggle also covers `csvExport.ts` and `xlsxExport.ts` — every exported header now derives its
+`vatLabel`/`vatNote` from `filters.vatMode` too, so switching the toggle changes what gets
+exported, not just what's on screen.
+
+**Service summary card**: Service was the only document module (Quotation/Scope of Work/Delivery
+Order all already had one) with zero presence on the Executive Dashboard. `GET /api/dashboard`
+gains a `serviceSummary: { total, draft, completed, cancelled, thisMonth } | null` field, gated on
+`service:view`, own-records-only without `service:viewAll` (mirroring
+`api/_lib/serviceReportHandler.ts`'s `handleList()` ownership predicate exactly), isolated in its
+own try/catch like every other optional Dashboard section. Deliberately **not** filtered by the
+date-range/salesperson/department filter — a Service Report has no `salesperson` field of its own
+(`assignedServiceEngineerId` instead) and no comparable filterable date dimension, same reasoning
+already documented for the Scope of Work/Delivery Order summary cards. New
+`src/pages/dashboard/ServiceSummary.tsx` (copied the `ScopeOfWorkSummary.tsx` 5-tile pattern),
+rendered in `DashboardPage.tsx`'s supporting-detail section beside the SOW/DO cards (grid widened
+from `xl:grid-cols-2` to `xl:grid-cols-3`, each card still independently null-hides per permission).
+
+See [MODULES/Dashboard.md](./MODULES/Dashboard.md) "VAT Toggle" and "Pages / Components",
+[MODULES/Service.md](./MODULES/Service.md) "Dashboard visibility", [API.md](./API.md), and
+[UI_GUIDELINES.md](./UI_GUIDELINES.md) "Pre-Tax Amount Labeling". Verified via
+`npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (152/152) — all clean. Same
+standing sandboxed-session limitation as every prior Dashboard pass — no live-database click-through
+this session (see PROJECT_STATUS.md "Known Risks").
+
+---
+
 ## 2026-08-13b (absolute latest) — fix: Service customer sign-off should stay draw-only, not draw-or-upload
 
 Direct user correction to the same-day entry below: that pass gave the Service module's customer

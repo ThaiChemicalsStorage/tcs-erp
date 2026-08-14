@@ -27,6 +27,7 @@ import { ApprovalDashboard } from "./ApprovalDashboard";
 import { NotificationSummary } from "./NotificationSummary";
 import { ScopeOfWorkSummary } from "./ScopeOfWorkSummary";
 import { DeliveryOrderSummary } from "./DeliveryOrderSummary";
+import { ServiceSummary } from "./ServiceSummary";
 import {
   RevenueTrendChart, RevenueByJobTypeChart, JobTypeDistributionChart,
   ExpectedSalesForecastChart, ProductsByCategoryChart,
@@ -136,7 +137,7 @@ export function DashboardPage({ currentUserId, onNavigateToQuotations, onOpenQuo
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
-  const [filters, setFilters] = useState<DashboardFilterState>({ from: "", to: "", salesperson: "all", department: "all" });
+  const [filters, setFilters] = useState<DashboardFilterState>({ from: "", to: "", salesperson: "all", department: "all", vatMode: "pre" });
   const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
@@ -254,7 +255,7 @@ function DashboardContent({
   const {
     hasAnyData, kpis, interestBreakdown, revenueTrend, categoryBreakdown, pipeline, salesPerformance,
     customerAnalytics, jobTypeAnalytics, forecast, followUps, activityTimeline, salesActivity,
-    approvalDashboard, notificationSummary, scopeOfWork, deliveryOrder,
+    approvalDashboard, notificationSummary, scopeOfWork, deliveryOrder, serviceSummary,
   } = stats;
   const interestTotal = interestBreakdown.interested + interestBreakdown.notInterested + interestBreakdown.notEvaluated;
   const trendAnchorDate = stats.filters.to || todayIsoBangkok();
@@ -272,11 +273,11 @@ function DashboardContent({
       )}
 
       <div data-tour="dashboard-kpis">
-        <ExecutiveSummaryCards kpis={kpis} />
+        <ExecutiveSummaryCards kpis={kpis} vatMode={stats.filters.vatMode} />
       </div>
 
       <div data-tour="dashboard-status">
-        <QuotationStatusSummary kpis={kpis} />
+        <QuotationStatusSummary kpis={kpis} vatMode={stats.filters.vatMode} />
       </div>
 
       {salesActivity && (
@@ -289,8 +290,8 @@ function DashboardContent({
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.section.detail")}</p>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <SalesPerformancePanel kpis={kpis} />
-          <ExpectedSalesForecastChart forecast={forecast} />
+          <SalesPerformancePanel kpis={kpis} vatMode={stats.filters.vatMode} />
+          <ExpectedSalesForecastChart forecast={forecast} vatMode={stats.filters.vatMode} />
         </div>
 
         <ActivityFollowUpSummary kpis={kpis} onPendingApprovalsClick={() => onNavigateToQuotations({ status: "รออนุมัติ" })} />
@@ -300,29 +301,30 @@ function DashboardContent({
             {deliveryOrder && <DeliveryOrderSummary data={deliveryOrder} />}
           </div>
         )}
+        {serviceSummary && <ServiceSummary data={serviceSummary} />}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-          <RevenueTrendChart trend={revenueTrend} anchorDate={trendAnchorDate} />
+          <RevenueTrendChart trend={revenueTrend} anchorDate={trendAnchorDate} vatMode={stats.filters.vatMode} />
           <ProductsByCategoryChart categoryBreakdown={categoryBreakdown} />
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <RevenueByJobTypeChart jobTypeAnalytics={jobTypeAnalytics} />
+          <RevenueByJobTypeChart jobTypeAnalytics={jobTypeAnalytics} vatMode={stats.filters.vatMode} />
           <JobTypeDistributionChart jobTypeAnalytics={jobTypeAnalytics} />
         </div>
 
-        <PipelineSteps pipeline={pipeline} onStageClick={(status) => onNavigateToQuotations({ status })} />
+        <PipelineSteps pipeline={pipeline} onStageClick={(status) => onNavigateToQuotations({ status })} vatMode={stats.filters.vatMode} />
 
-        <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} />
-        <SalesPerformanceTable title={t("dashboard.salesPerformance.title")} sub={t("dashboard.salesPerformance.sub")} entries={salesPerformance} />
+        <SalesPerformanceTable title={t("dashboard.ranking.title")} sub={t("dashboard.ranking.sub")} entries={salesPerformance} limit={10} vatMode={stats.filters.vatMode} />
+        <SalesPerformanceTable title={t("dashboard.salesPerformance.title")} sub={t("dashboard.salesPerformance.sub")} entries={salesPerformance} vatMode={stats.filters.vatMode} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <CustomerAnalytics data={customerAnalytics} />
-          <JobTypeAnalytics jobTypeAnalytics={jobTypeAnalytics} />
+          <CustomerAnalytics data={customerAnalytics} vatMode={stats.filters.vatMode} />
+          <JobTypeAnalytics jobTypeAnalytics={jobTypeAnalytics} vatMode={stats.filters.vatMode} />
         </div>
 
-        {approvalDashboard && <ApprovalDashboard data={approvalDashboard} onRefresh={refreshAfterAction} />}
+        {approvalDashboard && <ApprovalDashboard data={approvalDashboard} onRefresh={refreshAfterAction} vatMode={stats.filters.vatMode} />}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <FollowUpReminders followUps={followUps} onOpenClient={(client) => onNavigateToQuotations({ client })} />
+          <FollowUpReminders followUps={followUps} onOpenClient={(client) => onNavigateToQuotations({ client })} vatMode={stats.filters.vatMode} />
           <NotificationSummary summary={notificationSummary} />
         </div>
 

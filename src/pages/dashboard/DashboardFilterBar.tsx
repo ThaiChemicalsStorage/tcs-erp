@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { CalendarRange } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
+import { Toggle } from "../../components/Toggle";
 import { type DateRangePreset, rangeForPreset } from "./dateRanges";
+import type { DashboardVatMode } from "../../lib/dashboard";
 
 export interface DashboardFilterState {
   from: string;
   to: string;
   salesperson: string;
   department: string;
+  vatMode: DashboardVatMode;
 }
 
 const PRESETS: DateRangePreset[] = ["all", "today", "yesterday", "last7", "last14", "thisMonth", "lastMonth", "thisQuarter", "thisYear", "custom"];
@@ -25,6 +28,7 @@ export function DashboardFilterBar({
 }) {
   const { t } = useI18n();
   const [preset, setPreset] = useState<DateRangePreset>("all");
+  const vatLabelId = useId();
 
   const presetLabel: Record<DateRangePreset, string> = {
     all: t("dashboard.filter.range.all"),
@@ -90,6 +94,17 @@ export function DashboardFilterBar({
           {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>}
+
+      <div className="flex items-center gap-2 sm:ml-auto">
+        <span id={vatLabelId} className="text-xs text-muted-foreground whitespace-nowrap">
+          {t(filters.vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre")}
+        </span>
+        <Toggle
+          checked={filters.vatMode === "post"}
+          onChange={(checked) => onChange({ ...filters, vatMode: checked ? "post" : "pre" })}
+          labelledBy={vatLabelId}
+        />
+      </div>
     </div>
   );
 }

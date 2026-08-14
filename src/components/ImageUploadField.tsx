@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { Upload, X, AlertTriangle, type LucideIcon } from "lucide-react";
 import { useI18n } from "../lib/i18n";
+import { compressImageFile } from "../lib/imageCompression";
 
 const MAX_IMAGE_BYTES = 1_000_000;
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
@@ -27,23 +28,27 @@ export function ImageUploadField({
   const [error, setError] = useState("");
   const inputId = useId();
 
-  // ตรวจสอบไฟล์ที่เลือก (ต้องเป็นรูปภาพและไม่เกินขนาดที่กำหนด) แล้วอ่านเป็น data URL
-  // Validates the selected file (must be an image, within the size limit) then reads it as a data URL
-  const handleFile = (file: File | undefined) => {
+  // ตรวจสอบไฟล์ที่เลือก (ต้องเป็นรูปภาพ) บีบอัดเป็น WebP แล้วตรวจขนาดไฟล์ที่บีบอัดแล้วไม่เกินที่กำหนด
+  // Validates the selected file (must be an image), compresses it to WebP, then checks the
+  // *compressed* size against the limit — compression should make it easier to fit under the cap,
+  // not harder.
+  const handleFile = async (file: File | undefined) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError(t("settings.image.onlyImages"));
       return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setError(t("settings.image.tooLarge"));
-      return;
+    try {
+      const { dataUrl, blob } = await compressImageFile(file);
+      if (blob.size > MAX_IMAGE_BYTES) {
+        setError(t("settings.image.tooLarge"));
+        return;
+      }
+      setError("");
+      onChange(dataUrl);
+    } catch {
+      setError(t("settings.image.readError"));
     }
-    setError("");
-    const reader = new FileReader();
-    reader.onload = () => onChange(reader.result as string);
-    reader.onerror = () => setError(t("settings.image.readError"));
-    reader.readAsDataURL(file);
   };
 
   return (
@@ -78,7 +83,7 @@ export function ImageUploadField({
           </div>
           <p className="text-[10px] text-muted-foreground">{t("settings.image.sizeHint")}</p>
         </div>
-        <input ref={inputRef} id={inputId} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+        <input ref={inputRef} id={inputId} type="file" accept="image/*" className="hidden" onChange={(e) => { void handleFile(e.target.files?.[0]); }} />
       </div>
       {error && <p role="alert" className="text-xs text-[#e05252] mt-1.5 flex items-center gap-1"><AlertTriangle size={11} /> {error}</p>}
     </div>

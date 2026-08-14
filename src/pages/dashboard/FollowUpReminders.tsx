@@ -1,5 +1,5 @@
 import { CalendarClock } from "lucide-react";
-import type { FollowUps, FollowUpSummary } from "../../lib/dashboard";
+import type { FollowUps, FollowUpSummary, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 
 // แถวรายการติดตามงานหนึ่งรายการ กดแล้วเปิดรายชื่อใบเสนอราคาของลูกค้ารายนั้น
@@ -18,8 +18,9 @@ function Row({ f, onClick }: { f: FollowUpSummary; onClick: (client: string) => 
 
 // แสดงรายการติดตามงานที่เกินกำหนด/วันนี้/กำลังจะถึง แบ่งเป็นกลุ่ม
 // Shows follow-up reminders grouped into overdue, today, and upcoming sections.
-export function FollowUpReminders({ followUps, onOpenClient }: { followUps: FollowUps; onOpenClient: (client: string) => void }) {
+export function FollowUpReminders({ followUps, onOpenClient, vatMode }: { followUps: FollowUps; onOpenClient: (client: string) => void; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
   const sections: { key: keyof FollowUps; label: string; accent: string }[] = [
     { key: "overdue", label: t("dashboard.followUps.overdue"), accent: "#e05252" },
     { key: "today", label: t("dashboard.followUps.today"), accent: "#c9a84c" },
@@ -32,7 +33,7 @@ export function FollowUpReminders({ followUps, onOpenClient }: { followUps: Foll
       <h2 className="text-base font-semibold text-foreground mb-1 flex items-center gap-1.5" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
         <CalendarClock size={15} /> {t("dashboard.followUps.title")}
       </h2>
-      <p className="text-[10px] text-muted-foreground mb-3">{t("dashboard.followUps.amountNote")}</p>
+      <p className="text-[10px] text-muted-foreground mb-3">{`${t("dashboard.followUps.amountNote")} ${vatSuffix}`}</p>
       {total === 0 ? (
         <p className="text-xs text-muted-foreground text-center py-10">{t("dashboard.noData")}</p>
       ) : (

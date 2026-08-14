@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { ClipboardCheck, ThumbsUp, ThumbsDown } from "lucide-react";
-import type { ApprovalDashboard as ApprovalDashboardData, PendingApprovalItem } from "../../lib/dashboard";
+import type { ApprovalDashboard as ApprovalDashboardData, PendingApprovalItem, DashboardVatMode } from "../../lib/dashboard";
 import { performWorkflowAction } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { useToast } from "../../hooks/useToast";
@@ -106,8 +106,9 @@ function PendingRow({ item, canReject, onDone }: { item: PendingApprovalItem; ca
 
 // แดชบอร์ดสรุปการอนุมัติ แสดงตัวเลขภาพรวมและรายการรออนุมัติ
 // Approval dashboard — summary tiles plus the list of pending approvals
-export function ApprovalDashboard({ data, onRefresh }: { data: ApprovalDashboardData; onRefresh: () => void }) {
+export function ApprovalDashboard({ data, onRefresh, vatMode }: { data: ApprovalDashboardData; onRefresh: () => void; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
   const toast = useToast();
   const items = [
     { label: t("dashboard.approval.pending"), value: data.pendingApprovals.toLocaleString("th-TH"), accent: "#886f29" },
@@ -146,7 +147,7 @@ export function ApprovalDashboard({ data, onRefresh }: { data: ApprovalDashboard
                 <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.approval.col.id")}</th>
                 <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.approval.col.client")}</th>
                 <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.approval.col.salesperson")}</th>
-                <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.approval.col.amount")}</th>
+                <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{`${t("dashboard.approval.col.amount")} ${vatSuffix}`}</th>
                 <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.approval.col.submittedDate")}</th>
                 <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider"></th>
               </tr>

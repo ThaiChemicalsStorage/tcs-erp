@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { CustomerAnalytics as CustomerAnalyticsData, CustomerStat } from "../../lib/dashboard";
+import type { CustomerAnalytics as CustomerAnalyticsData, CustomerStat, DashboardVatMode } from "../../lib/dashboard";
 import { useI18n } from "../../lib/i18n";
 import { fmtShort, fmtPercent } from "./format";
 
@@ -7,9 +7,10 @@ type Tab = "revenue" | "quotationCount" | "wonCount" | "repeat";
 
 // แสดงตารางลูกค้าแยกตามแท็บ (รายได้/จำนวนใบเสนอราคา/จำนวนที่ชนะ/ลูกค้าประจำ)
 // Shows a tabbed table of top customers by revenue, quotation count, won count, or repeat rate.
-export function CustomerAnalytics({ data }: { data: CustomerAnalyticsData }) {
+export function CustomerAnalytics({ data, vatMode }: { data: CustomerAnalyticsData; vatMode: DashboardVatMode }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("revenue");
+  const vatSuffix = t(vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre");
 
   const tabs: { key: Tab; label: string; rows: CustomerStat[] }[] = [
     { key: "revenue", label: t("dashboard.customer.tab.revenue"), rows: data.topByRevenue },
@@ -24,7 +25,7 @@ export function CustomerAnalytics({ data }: { data: CustomerAnalyticsData }) {
       <div className="flex items-start justify-between mb-4 flex-wrap gap-2">
         <div>
           <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("dashboard.customer.title")}</h2>
-          <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("dashboard.customer.sub")} · {t("dashboard.customer.repeatRate")}: {fmtPercent(data.repeatCustomerPercentage)}</p>
+          <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("dashboard.customer.sub")} {vatSuffix} · {t("dashboard.customer.repeatRate")}: {fmtPercent(data.repeatCustomerPercentage)}</p>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-lg p-1 flex-wrap">
           {tabs.map((tb) => (
@@ -44,8 +45,8 @@ export function CustomerAnalytics({ data }: { data: CustomerAnalyticsData }) {
               <tr className="border-b border-border">
                 <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.customer.col.customer")}</th>
                 <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.customer.col.quotations")}</th>
-                <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.customer.col.totalValue")}</th>
-                <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.customer.col.wonValue")}</th>
+                <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{`${t("dashboard.customer.col.totalValue")} ${vatSuffix}`}</th>
+                <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{`${t("dashboard.customer.col.wonValue")} ${vatSuffix}`}</th>
                 <th className="px-3 py-2 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.customer.col.lastQuotationDate")}</th>
               </tr>
             </thead>

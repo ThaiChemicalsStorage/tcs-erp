@@ -64,6 +64,13 @@ fixed, plus a folded-in Medium fix (Expected Sales now uses strict `isPotentialO
 true`). See "Pages / Components," "APIs," and "Permissions" below for the specifics, and
 CODEX_REVIEW_REPORT.md's "Claude Fix Status" section for the complete fixed/remaining breakdown.
 
+**2026-08-14 — VAT toggle + Service summary card.** Two direct user requests landed together: (1)
+the 2026-07-14 "always pre-tax" rule became a user-selectable pre-tax/post-tax toggle (still a
+single global 7% rate, now covering the CSV/Excel exports too — see "VAT Toggle" below); (2)
+Service, the only document module with zero Dashboard visibility, gained a summary card
+(`ServiceSummary.tsx`) matching the existing Scope of Work/Delivery Order cards' pattern — see
+"Pages / Components" below.
+
 ## Business Flow
 
 1. User signs in → lands on Dashboard by default (`activeNav` initial state in `App.tsx`).
@@ -133,49 +140,74 @@ documented rather than silently assumed:
   prediction — open `isPotentialOpportunity` quote value in each period × the trailing-12-month
   win rate, recomputed on every request. No ML, no `forecast` collection.
 
-## Pre-Tax Amount Rule (2026-07-14)
+## VAT Toggle (Pre-Tax / Post-Tax Amount), originally shipped 2026-07-14 as pre-tax-only, made a toggle 2026-08-14
 
-Every monetary total the Dashboard displays or exports is **pre-tax (before VAT)** —
-`totalQuotationValue`, `closedSales`, `expectedSales`, the Win/Lose/Active/Non-Active status
-values, `pipeline[].totalValue`, `salesPerformance` (revenue/totalValue/expectedRevenue/
-avgDealSize), `customerAnalytics` (revenue/totalValue), `jobTypeAnalytics` (revenue/totalValue/
-avgDealSize), `forecast` (thisMonth/thisQuarter/thisYear), `revenueTrend`/`revenueByMonth`,
-`followUps[].amount`, and `approvalDashboard.pendingList[].amount`. Every value in the CSV export
-(`csvExport.ts`) inherits this since it's built from the same already-fetched response. The Excel
-export (`xlsxExport.ts`, added 2026-07-24 — multi-sheet: Summary+KPIs / Sales Performance / Top
-Customers / Job Types / Pipeline / Monthly Trend; `xlsx` package dynamic-imported on first click)
-inherits it identically, and doubles as the monthly report: the เดือนนี้/เดือนที่แล้ว filter preset +
-export puts the period in the filename and Summary-sheet header.
+Every monetary total the Dashboard displays or exports is computed in one of two selectable
+modes — **pre-tax (before VAT)**, the long-standing default, or **post-tax (including VAT)**,
+added 2026-08-14 per direct user request. This applies to `totalQuotationValue`, `closedSales`,
+`expectedSales`, the Win/Lose/Active/Non-Active status values, `pipeline[].totalValue`,
+`salesPerformance` (revenue/totalValue/expectedRevenue/avgDealSize), `customerAnalytics`
+(revenue/totalValue), `jobTypeAnalytics` (revenue/totalValue/avgDealSize), `forecast`
+(thisMonth/thisQuarter/thisYear), `revenueTrend`/`revenueByMonth`, `followUps[].amount`, and
+`approvalDashboard.pendingList[].amount`. Every value in the CSV export (`csvExport.ts`) and the
+Excel export (`xlsxExport.ts`, added 2026-07-24 — multi-sheet: Summary+KPIs / Sales Performance /
+Top Customers / Job Types / Pipeline / Monthly Trend; `xlsx` package dynamic-imported on first
+click) inherits whichever mode is currently selected on screen, since both are built from the
+same already-fetched response — the exports were a direct part of this pass's scope, per explicit
+user request that switching the toggle should also change what gets exported, not just what's on
+screen.
 
-**Why this is exact, not an approximation**: `Quote` has no persisted pre-tax/subtotal field —
-`amount` is always the VAT-included grand total
+**Still a single global 7% rate.** The toggle only changes *which* of the two already-existing
+values is shown — it does **not** introduce a per-company/per-quote VAT rate. `VAT_RATE` in
+`api/_lib/quoteAmounts.ts` stays a single hardcoded `7` constant, unchanged by this pass and
+deliberately out of scope.
+
+**Why this is exact, not an approximation, in either mode**: `Quote` has no persisted pre-tax/
+subtotal field — `amount` is always the VAT-included grand total
 (`afterDiscount * (1 + VAT_RATE/100)`, see `computeQuoteAmount()` in
 `api/_lib/quoteValidation.ts`), computed with no intermediate rounding. Rather than reverse the
 VAT out of `amount` (which would round-trip a division by a fixed rate that has never varied but
-is fragile if it ever does), the Dashboard recomputes the pre-tax figure the same way the server
-computed it going forward: directly from each quote's own `lines`/`discount` via the shared
-`computeQuoteAmountBeforeVat(lines, discountPct)` helper (`api/_lib/quoteAmounts.ts`) — the exact
-same per-line reduction (`qty × unitPrice × (1 − itemDiscount/100)`, summed, then less the
-quote-level `discount`) that `computeQuoteAmount()` itself starts from before adding VAT. This
-keeps the Dashboard and the Quotation create/edit path mathematically unable to drift apart, and
-sidesteps the (small) precision loss of dividing a VAT-included total back down.
+is fragile if it ever does), the Dashboard recomputes whichever figure is requested the same way
+the server computed it going forward: directly from each quote's own `lines`/`discount` via the
+shared `computeQuoteAmountBeforeVat(lines, discountPct)` / `computeQuoteAmountWithVat(lines,
+discountPct)` pair (`api/_lib/quoteAmounts.ts`) — the same per-line reduction (`qty × unitPrice ×
+(1 − itemDiscount/100)`, summed, then less the quote-level `discount`) that `computeQuoteAmount()`
+itself starts from before adding VAT, with `computeQuoteAmountWithVat()` simply adding VAT on top
+of that shared subtotal. This keeps the Dashboard and the Quotation create/edit path mathematically
+unable to drift apart in either mode, and sidesteps the (small) precision loss of dividing a
+VAT-included total back down.
 
-**Implementation**: `docs[]` (the per-quote array every KPI/ranking/analytics computation in
-`api/dashboard/index.ts` derives from) has its pre-tax value computed exactly once, right after
-the filtered `quotes.find()` fetch, via `computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ??
-0)` — every downstream `.reduce()`/`.filter()` across KPIs, pipeline, salesPerformance,
-customerAnalytics, jobTypeAnalytics, forecast, and `approvalDashboard.pendingList` (which derives
-from `docs`) inherits it automatically, so no individual call site can accidentally sum the
-VAT-included figure. The projection for `docs` (and the two separate queries below) fetches
-`lines`/`discount` instead of `amount` so the helper always has its real inputs. The two
-aggregations that read from separate queries instead of `docs` (`revenueTrend`'s won-quote scan,
-`followUps`) call `computeQuoteAmountBeforeVat()` explicitly at their own read sites, on their own
-`lines`/`discount` projections.
+**Implementation**: `GET /api/dashboard` accepts a new `?vat=pre|post` query param (default `pre`,
+preserving the original pre-tax-only behavior for any caller that doesn't pass it). A local
+`quoteAmount(lines, discountPct)` dispatcher in `api/dashboard/index.ts` picks
+`computeQuoteAmountBeforeVat()` or `computeQuoteAmountWithVat()` based on the resolved `vatMode` at
+the 3 places that compute money from raw `lines`/`discount`: the shared `docs[]` array (the
+per-quote array every KPI/ranking/analytics computation derives from — computed exactly once,
+right after the filtered `quotes.find()` fetch, so every downstream `.reduce()`/`.filter()` across
+KPIs, pipeline, salesPerformance, customerAnalytics, jobTypeAnalytics, forecast, and
+`approvalDashboard.pendingList` inherits the selected mode automatically), `followUps` (its own
+separate query, same `lines`/`discount` projection), and `revenueTrend`'s won-quote scan. The
+projection for all three fetches `lines`/`discount` instead of `amount` so the dispatcher always
+has its real inputs. The selected mode is echoed back verbatim as `filters.vatMode` in the
+response, so the frontend labels/exports what the server actually computed rather than trusting
+its own pre-fetch UI state (e.g. a stale toggle position after a slow request).
 
-**UI labels**: every affected Thai label says "ก่อนภาษี" explicitly (the 4 KPI card titles/
-helpers, the Status Summary's "มูลค่ารวมก่อนภาษี" column, and "(ก่อนภาษี)" suffixes on the
-ranking/job-type/customer/pipeline/approval tables and CSV headers) — see
-[UI_GUIDELINES.md](../UI_GUIDELINES.md) "Pre-Tax Amount Labeling."
+**UI**: `DashboardFilterBar.tsx` renders a labeled toggle (the new shared `src/components/
+Toggle.tsx`, extracted out of `SettingsPage.tsx` which now imports it instead of defining its own
+copy) next to the other filters, unchecked (pre-tax) by default — `DashboardPage.tsx` seeds
+`filters.vatMode: "pre"` in its initial state and re-fetches whenever it changes, same as every
+other filter. Every affected component receives a `vatMode` prop threaded down from
+`stats.filters.vatMode` (the server-echoed value, not local state): `ExecutiveSummaryCards`,
+`QuotationStatusSummary`, `SalesPerformancePanel`, `ExpectedSalesForecastChart`,
+`RevenueTrendChart`, `RevenueByJobTypeChart`, `PipelineSteps`, both `SalesPerformanceTable` uses,
+`CustomerAnalytics`, `JobTypeAnalytics`, `ApprovalDashboard`, and `FollowUpReminders`.
+
+**UI labels**: every affected Thai label appends the mode via two new i18n keys,
+`dashboard.vatSuffix.pre` ("ก่อนภาษี") / `dashboard.vatSuffix.post` ("รวม VAT 7%") — every
+previously-hardcoded "ก่อนภาษี"/"Before VAT" literal across ~32 dictionary keys was stripped and
+now gets the correct suffix appended dynamically at render time based on the active mode, instead
+of a label baked permanently to one mode. See [UI_GUIDELINES.md](../UI_GUIDELINES.md) "Pre-Tax
+Amount Labeling."
 
 **Data-quality fallback for missing line data** (2026-07-14, Codex review Medium finding — a prior
 draft of this doc/`DATABASE.md` over-claimed this case "cannot occur"): `computeQuoteAmountBeforeVat(q.lines
@@ -358,6 +390,17 @@ other pass in this project (see PROJECT_STATUS.md "Known Risks").
   to any role that hasn't been granted the permission yet). `DashboardPage.tsx` renders the SOW +
   DO cards side-by-side in an `xl:grid-cols-2` grid; each falls back to full width alone when the
   caller can only see one of the two.
+- `ServiceSummary.tsx` (added 2026-08-14, per direct user request — Service was the only document
+  module with zero Dashboard visibility before this) — Total/Draft/Completed/Cancelled/This-Month
+  as a compact 5-tile row inside one `ChartCard` (`grid-cols-2 sm:grid-cols-3 xl:grid-cols-5`),
+  copied from `ScopeOfWorkSummary.tsx`'s tile pattern. Gated on `service:view`, `null`-hides like
+  its siblings. **Deliberately NOT filtered by the date-range/salesperson/department filter** —
+  same reasoning already documented for the Scope of Work/Delivery Order cards above: a Service
+  Report has no `salesperson` field of its own (it uses `assignedServiceEngineerId` instead) and
+  no `issueDate` in the same sense a quotation does, so there's no dimension to filter by.
+  `DashboardPage.tsx` now renders SOW/DO/Service side-by-side in an `xl:grid-cols-3` grid (widened
+  from `xl:grid-cols-2`); each card still independently null-hides per its own permission, so the
+  grid gracefully narrows for a caller who can only see one or two of the three.
 
   **KPI presentation history**: originally a single flat `KpiGrid.tsx` (22 uniform cards). 2026-07-10
   (UI/UX redesign) split it into two tiers — `PrimaryKpiCards.tsx` (6 hero cards) +
@@ -491,6 +534,17 @@ None owned by this page — it's a read-only aggregation over `customers`, `lead
   salesperson/department filter, same reasoning as Total Customers/Products (see "Data-model
   caveats" above) — a Scope of Work document has no `issueDate`/`salesperson` of its own to filter
   by. Backs the new `ScopeOfWorkSummary.tsx` component, see "Pages / Components" below.
+- **2026-08-14**: new `?vat=pre|post` query param (default `pre`) selects which of
+  `computeQuoteAmountBeforeVat()`/`computeQuoteAmountWithVat()` (`api/_lib/quoteAmounts.ts`)
+  computes every monetary field in the response, via a local `quoteAmount()` dispatcher at the 3
+  places `api/dashboard/index.ts` derives money from raw `lines`/`discount`. The resolved mode is
+  echoed back as the new `filters.vatMode: "pre" | "post"` field. See "VAT Toggle" above.
+- **2026-08-14**: response gained a `serviceSummary: { total, draft, completed, cancelled,
+  thisMonth } | null` field — same shape/gating/unfiltered-by-design pattern as `scopeOfWork`/
+  `deliveryOrder` above, gated by `service:view`, own-records-only without `service:viewAll`
+  (mirroring `handleList()`'s exact ownership predicate in `api/_lib/serviceReportHandler.ts`),
+  isolated in its own try/catch. Backs the new `ServiceSummary.tsx` component, see
+  "Pages / Components" below.
 
 ## Permissions
 
@@ -546,6 +600,13 @@ pass — see [RBAC.md](../RBAC.md).
   own empty state. (Quotation Trend/Sales by Employee/Quotation Status/Win-Lose/Monthly Closing
   Rate charts were retired in the 2026-07-10 redesign — see "Pages / Components" above for where
   each one's data lives now.)
+- **VAT toggle** (added 2026-08-14) — a pre-tax/post-tax switch in `DashboardFilterBar.tsx`
+  (defaults to pre-tax) that re-derives every monetary value on the page, and in the CSV/Excel
+  exports, from the same shared `computeQuoteAmountBeforeVat()`/`computeQuoteAmountWithVat()` pair
+  — see "VAT Toggle" above.
+- **Service summary card** (`ServiceSummary.tsx`, added 2026-08-14) — Total/Draft/Completed/
+  Cancelled/This-Month tile row, alongside the Scope of Work/Delivery Order cards, gated on
+  `service:view`.
 - Full page-level empty state when there's no quotation or product data at all, via the shared
   `EmptyState.tsx` component
 - Shared `PageHeader.tsx` for the page title/description/actions row

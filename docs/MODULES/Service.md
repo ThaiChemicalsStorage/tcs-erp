@@ -144,12 +144,32 @@ can highlight the exact failing control rather than only show a flat message lis
 `ApiError.checklistItemErrors` (`src/lib/apiClient.ts`) and `ServiceReportEditor.tsx`'s
 `applyApiError()`.
 
+## Dashboard visibility (added 2026-08-14)
+
+Per direct user request, Service was the only document module (Quotation/Scope of Work/Delivery
+Order all already had one) with zero presence on the Executive Dashboard. `GET /api/dashboard` now
+returns a `serviceSummary: { total, draft, completed, cancelled, thisMonth } | null` field, gated
+by `service:view`, own-records-only without `service:viewAll` (mirroring `handleList()`'s exact
+ownership predicate below — own `createdBy` plus ownerless legacy records). Rendered by the new
+`src/pages/dashboard/ServiceSummary.tsx` — a 5-tile count row, same visual pattern as Scope of
+Work/Delivery Order's own Dashboard cards. **Deliberately not filtered by the date-range/
+salesperson/department filter bar** — same reasoning already documented for those two cards: a
+Service Report has no `salesperson` field of its own (`assignedServiceEngineerId` instead) and no
+comparable filterable date dimension, so there's no meaningful way to scope it by those filters.
+See [Dashboard.md](./Dashboard.md) "Pages / Components" and "APIs" for the full field/component
+detail.
+
 ## Photos (added 2026-08-06, pulled forward from the Phase 2 roadmap)
 
 Attached per checklist item, only while `status === "abnormal"` and the report is `Draft`. Same
 Binary-in-Mongo + unauthenticated capability-URL pattern as Scope of Work's document attachments,
 sized for camera photos rather than documents: **4 MB/photo, 6 photos/item** (vs. Scope of Work's
-2 MB/5-files-per-record). Routes on `serviceReportHandler.ts`:
+2 MB/5-files-per-record). **Compressed to WebP client-side before upload (added 2026-08-14)** —
+`uploadServiceReportPhoto()` (`src/lib/serviceReports.ts`) always runs the picked file through the
+shared `compressImageFile()` (`src/lib/imageCompression.ts`, see [ARCHITECTURE.md](../ARCHITECTURE.md)
+"Client-side image compression") before base64-encoding it, since this upload's `<input>` is
+`accept="image/*"`-only so every file here is guaranteed compressible — no non-image branch is
+needed, unlike Scope of Work's mixed-type attachments below. Routes on `serviceReportHandler.ts`:
 
 - `POST /api/service-reports/:id/photos` — body `{sectionKey, groupKey, itemKey, fileName,
   contentType, dataBase64}`; validates `image/*` content type, base64 charset + size caps before
@@ -247,6 +267,12 @@ drawn on someone else's behalf.
   the pad, letting a signer pick an existing image instead of drawing one (same file-type/≤1 MB
   client-side check as `ImageUploadField.tsx`, still funneled through the same server-side
   `validateImageDataUrl()` either way), gated by a new `allowUpload` prop (default `true`).
+  **2026-08-14**: draw-mode capture switched from `canvas.toDataURL("image/png")` to
+  `toDataURL("image/webp", 0.92)` — a smaller stored image with no resize needed (a signature
+  canvas is already small), validated server-side by the same `validateImageDataUrl()` (WebP was
+  already in its accepted MIME list). Upload mode (where offered) continues to go through the
+  shared `compressImageFile()` — see [ARCHITECTURE.md](../ARCHITECTURE.md) "Client-side image
+  compression".
   **Customer sign-off here is deliberately kept `allowUpload={false}`** (same for the remote
   LINE-approval page below) — a direct user correction after an initial pass briefly gave the
   customer the toggle too: a customer signs in front of the engineer or on their own device, not
