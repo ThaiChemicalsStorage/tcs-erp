@@ -4,7 +4,28 @@
 
 ---
 
-## 2026-08-14h (absolute latest) — Service checklist: photos on Normal items too + per-report kind switch
+## 2026-08-14i (absolute latest) — User manual: document the new quote numbering + Service checklist changes
+
+Direct follow-up request to catch the in-app manual (`public/manual.html`) up with the same-day
+2026-08-14g (Quotation numbering) and 2026-08-14h (Service checklist photos/kind-switch) code
+changes — both had already landed in `master` but weren't reflected in the manual yet.
+
+- **Chapter 4 (Quotations)**: new callout under "การสร้างใบเสนอราคาใหม่" explaining the
+  `Q#YYMMDD-NNNN` format; the Rewrite bullet's example id updated from the old `QT-xxxx-R1` to
+  `Q#260814-0001-R1`.
+- **Chapter 8 (Service)**: two new bullets under "รายการตรวจเช็ค (Checklist)" — photos are no
+  longer Abnormal-only (Normal items can attach optionally), and the per-item kind-switch toggle
+  (with the "no data lost when switching back and forth" reassurance carried over from
+  MODULES/Service.md).
+- Unlike the 2026-08-14c manual pass, this update does **not** re-apply the "only document
+  confirmed-live features" caution that pass established — the user asked directly, immediately
+  after both features shipped in the same session, so both are documented even though (per the
+  standing production-lag note, see [SESSION_LOG.md](./SESSION_LOG.md) 2026-08-14) neither is
+  confirmed deployed to `huma-erp.com` yet. Worth a follow-up manual re-check once a deploy lands.
+
+---
+
+## 2026-08-14h — Service checklist: photos on Normal items too + per-report kind switch
 
 Direct business request: two Service checklist changes, both frontend-only (server-side validation
 already permitted both — see below).

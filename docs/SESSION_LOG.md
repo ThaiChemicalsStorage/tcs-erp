@@ -4,6 +4,31 @@
 
 ---
 
+## Session — 2026-08-14g (absolute latest), User manual: catch up on quote numbering + Service checklist changes
+
+### What was implemented
+Small direct follow-up: user asked to update `public/manual.html` for the two features that just
+shipped in the same session (Quotation numbering format, Service checklist photo/kind-switch).
+Added a callout explaining `Q#YYMMDD-NNNN` in the Quotations chapter and fixed the Rewrite
+example's id to match; added two bullets to the Service chapter's checklist section.
+
+### Decisions / gotchas worth remembering
+- **Deliberately did not re-apply the "only document confirmed-live features" caution** from the
+  2026-08-14c manual pass — that was this assistant's own proactive judgment call when no one had
+  asked about these specific features yet; here the user asked directly, immediately after both
+  landed, so both got documented despite neither being confirmed deployed to `huma-erp.com`. The
+  underlying caution (don't guess what's live, verify before documenting) still applies when
+  *not* explicitly asked — this wasn't a reversal of the principle, just a case where direct
+  instruction overrides the default caution.
+
+### Recommendations for next session
+- The manual now describes 4 features (this session's 2, plus 2026-08-13/08-10's signature
+  draw/upload and LINE OA approval, still deliberately undocumented) that need a live-manual
+  re-check once `huma-erp.com` actually gets redeployed — worth one pass through the whole manual
+  against a fresh deploy rather than piecemeal per-feature checks.
+
+---
+
 ## Session — 2026-08-14f (absolute latest), Service checklist: photos for Normal too + per-report kind switch
 
 ### What was implemented
