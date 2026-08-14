@@ -4,7 +4,23 @@
 
 ---
 
-## 2026-08-14e (absolute latest) — User manual: add the missing Service module chapter
+## 2026-08-14f (absolute latest) — Fix: department/salesperson filters floating mid-row on Dashboard
+
+Direct user report with a screenshot: the department/salesperson dropdowns appeared floating in
+the middle of the filter bar instead of flush right. Root cause: 2026-08-14a's own VAT toggle
+addition (`DashboardFilterBar.tsx`) put the toggle in a sibling `<div>` that *also* had
+`sm:ml-auto`, alongside the pre-existing department/salesperson group's `sm:ml-auto` — two
+flex siblings both using `margin-left: auto` split the leftover row space between them instead of
+both hugging the right edge, pushing the first group toward the middle.
+
+**Fix**: department/salesperson and the VAT toggle now live inside one shared container with a
+single `sm:ml-auto`, so the whole group sits flush right as one unit again. Verified via
+`npx tsc --noEmit` (clean); not yet re-checked in a live browser (see PROJECT_STATUS.md "Known
+Risks") — the user's screenshot was the repro, a follow-up visual check is still worth doing.
+
+---
+
+## 2026-08-14e — User manual: add the missing Service module chapter
 
 Direct user request ("อัปเดตคู่มือให้หน่อยที่ยังไม่มีในระบบ") to fill gaps in the in-app user
 manual (`public/manual.html`, served at `/manual.html` — **not**

@@ -73,37 +73,41 @@ export function DashboardFilterBar({
         </div>
       )}
 
-      {!hidePeopleFilters && <div className="flex items-center gap-2.5 flex-wrap sm:ml-auto">
-        <select
-          value={filters.department}
-          onChange={(e) => onChange({ ...filters, department: e.target.value })}
-          aria-label={t("dashboard.filter.department.label")}
-          className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
-        >
-          <option value="all">{t("dashboard.filter.department.all")}</option>
-          {availableDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
-        </select>
+      <div className="flex items-center gap-2.5 flex-wrap sm:ml-auto">
+        {!hidePeopleFilters && (
+          <>
+            <select
+              value={filters.department}
+              onChange={(e) => onChange({ ...filters, department: e.target.value })}
+              aria-label={t("dashboard.filter.department.label")}
+              className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+            >
+              <option value="all">{t("dashboard.filter.department.all")}</option>
+              {availableDepartments.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
 
-        <select
-          value={filters.salesperson}
-          onChange={(e) => onChange({ ...filters, salesperson: e.target.value })}
-          aria-label={t("dashboard.filter.salesperson.label")}
-          className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
-        >
-          <option value="all">{t("dashboard.filter.salesperson.all")}</option>
-          {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </div>}
+            <select
+              value={filters.salesperson}
+              onChange={(e) => onChange({ ...filters, salesperson: e.target.value })}
+              aria-label={t("dashboard.filter.salesperson.label")}
+              className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
+            >
+              <option value="all">{t("dashboard.filter.salesperson.all")}</option>
+              {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </>
+        )}
 
-      <div className="flex items-center gap-2 sm:ml-auto">
-        <span id={vatLabelId} className="text-xs text-muted-foreground whitespace-nowrap">
-          {t(filters.vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre")}
-        </span>
-        <Toggle
-          checked={filters.vatMode === "post"}
-          onChange={(checked) => onChange({ ...filters, vatMode: checked ? "post" : "pre" })}
-          labelledBy={vatLabelId}
-        />
+        <div className="flex items-center gap-2">
+          <span id={vatLabelId} className="text-xs text-muted-foreground whitespace-nowrap">
+            {t(filters.vatMode === "post" ? "dashboard.vatSuffix.post" : "dashboard.vatSuffix.pre")}
+          </span>
+          <Toggle
+            checked={filters.vatMode === "post"}
+            onChange={(checked) => onChange({ ...filters, vatMode: checked ? "post" : "pre" })}
+            labelledBy={vatLabelId}
+          />
+        </div>
       </div>
     </div>
   );
