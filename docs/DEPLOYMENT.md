@@ -225,8 +225,8 @@ Backups under Docker (authenticated):
 
 ## Relationship to the Vercel demo
 
-The Vercel deployment keeps working unchanged (`vercel.json` + the `api/` file layout are
-untouched; `server/` is an additional runtime, not a replacement) — it can stay up as a staging
-environment during the transition and be decommissioned per
-[SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) step H afterwards. Remember both
-deployments share whatever database their `MONGODB_URI` points at.
+**Decommissioned as of the ~2026-08-07 cutover** — the Vercel deployment is no longer used
+(`vercel.json` + the `api/` file layout are left untouched, only as a fallback deploy target if
+ever needed again). Production runs solely on the standalone Express server described in this
+file, on a self-hosted VPS with a self-hosted MongoDB instance (not the old Atlas cluster the
+Vercel demo used). See [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) step H.

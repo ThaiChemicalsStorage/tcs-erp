@@ -4,6 +4,50 @@
 
 ---
 
+## Session — 2026-08-14b (absolute latest), Docs sync: real production cutover confirmed
+
+### What was implemented
+Documentation-only pass, no code changed. While answering a routine "check TODO" request, the
+assistant surfaced the Server Migration checklist as still-pending per every doc's framing. The
+user corrected this: the migration actually happened (~2026-08-07) and has been live ~1 week — VPS
+with its own domain, self-hosted MongoDB (not Atlas), Vercel demo no longer used, user manual
+already updated. Updated every "current state" doc that still described Vercel as live/the
+migration as pending: root `CLAUDE.md`, `docs/CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/API.md`,
+`docs/RBAC.md`, `docs/PROJECT_STATUS.md`, `docs/DEPLOYMENT.md`, `docs/TODO.md` (checked off the
+migration item; also fixed an unrelated stale item — a 2026-07-30 MongoDB DNS fix TODO claimed to
+be uncommitted, but `git diff` showed it's already in the file with nothing pending), and rewrote
+`docs/SERVER_MIGRATION_PLAN.md`'s status banner + Go-Live Checklist steps C–H as done. Also updated
+two stale memory files (`vercel-deployment-is-a-trial.md`, `no-budget-demo-data-disposable.md`) and
+added a new one (`server-migration-complete.md`) so future sessions don't repeat the same stale
+assumption.
+
+### Decisions / gotchas worth remembering
+- **Don't blanket-claim full verification when the user only confirmed the outcome.** The owner's
+  message confirmed VPS+domain+local-DB+no-Vercel+manual-updated as facts, but didn't walk through
+  each Go-Live Checklist sub-item (process manager choice, fresh-vs-carried-over DB, the 6-point
+  post-cutover verification list). `SERVER_MIGRATION_PLAN.md` marks the outcome done while
+  explicitly noting which sub-details weren't individually re-confirmed, rather than overclaiming.
+- **A stale "current state" doc is an active liability, not a harmless historical artifact** — this
+  session's own assistant turn nearly walked the user through a "still pending, needs your go-ahead"
+  explanation of a migration that had already shipped a week earlier, purely because every doc still
+  described the pre-migration state in present tense. Caught only because the user pushed back.
+- **CHANGELOG/SESSION_LOG entries about past states stay untouched** — only present-tense "current
+  state" framing in reference docs (CLAUDE.md, ARCHITECTURE.md, API.md, RBAC.md, PROJECT_STATUS.md,
+  DEPLOYMENT.md, SERVER_MIGRATION_PLAN.md, TODO.md) needed correcting; historical logs correctly
+  describe what was true when they were written.
+
+### Recommendations for next session
+- The exact domain name and VPS provider were never stated — not written into any doc (docs use
+  generic "self-hosted VPS with its own domain" phrasing throughout). Fine as-is unless a future
+  task specifically needs the real hostname.
+- Budget status post-migration is unconfirmed (a VPS + domain cost money, contradicting the old
+  "no budget" memory) — don't assume either way, ask before recommending a paid service.
+- Worth eventually walking `SERVER_MIGRATION_PLAN.md` step F's 6-point verification checklist for
+  real, and confirming step E's fresh-vs-kept-data question, next time there's live access to ask
+  about it directly.
+
+---
+
 ## Session — 2026-08-14 (absolute latest), Dashboard VAT toggle + Service summary card + browser-side image compression
 
 ### What was implemented

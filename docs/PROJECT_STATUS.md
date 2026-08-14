@@ -10,7 +10,7 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Current Phase
 
-**Real full-stack app, deployed and live.** Vite + React frontend, Node.js backend, MongoDB Atlas database. **As of 2026-08-06 the primary runtime is a standalone Express server (`server/`, `npm start`)** — Vercel-free, ready for the planned self-managed host; the Vercel deployment (https://tcs-erp-nine.vercel.app) stays up unchanged as the demo until cutover. See [ARCHITECTURE.md](./ARCHITECTURE.md) and [DEPLOYMENT.md](./DEPLOYMENT.md).
+**Real full-stack app, deployed and live in production.** Vite + React frontend, Node.js backend, self-hosted MongoDB database. **Since the ~2026-08-07 cutover, the primary and only runtime is a standalone Express server (`server/`, `npm start`) on a self-hosted VPS** with its own domain + HTTPS — the earlier Vercel Serverless Functions deployment (https://tcs-erp-nine.vercel.app) that served as the pre-cutover demo is decommissioned. See [ARCHITECTURE.md](./ARCHITECTURE.md), [DEPLOYMENT.md](./DEPLOYMENT.md), and [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md).
 
 ## Completed Features
 

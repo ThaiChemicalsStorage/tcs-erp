@@ -1,8 +1,8 @@
 # API
 
-## Current State: Real REST API (Vercel Serverless Functions)
+## Current State: Real REST API (standalone Express server, self-hosted)
 
-As of 2026-07-09 this project has a **real HTTP API**: Vercel Serverless Functions (Node.js) backed by MongoDB Atlas, served from the same domain as the frontend (https://tcs-erp-nine.vercel.app/api/...). The frontend calls it via `apiFetch<T>()` (`src/lib/apiClient.ts`) — a thin wrapper around `fetch` with `credentials: "include"` (so the session cookie is sent), JSON request/response handling, and an `ApiError` class thrown for any non-2xx response. Every domain lib file (`users.ts`, `roles.ts`, `session.ts`, `storage.ts`, `products.ts`, `notifications.ts`, `auditLog.ts`, `quotes.tsx`) exposes `fetchX()`/`createX()`/`updateX()`/etc. functions that call this API — the old `loadX()`/`saveX()` `localStorage` functions are gone.
+As of 2026-07-09 this project has a **real HTTP API** — originally Vercel Serverless Functions backed by MongoDB Atlas. **As of the ~2026-08-07 cutover**, the same `api/` handlers run under a standalone Express server (`server/`) on a self-hosted VPS with a real domain + HTTPS, backed by self-hosted MongoDB — the Vercel deployment is decommissioned. Served from the same domain as the frontend either way. The frontend calls it via `apiFetch<T>()` (`src/lib/apiClient.ts`) — a thin wrapper around `fetch` with `credentials: "include"` (so the session cookie is sent), JSON request/response handling, and an `ApiError` class thrown for any non-2xx response. Every domain lib file (`users.ts`, `roles.ts`, `session.ts`, `storage.ts`, `products.ts`, `notifications.ts`, `auditLog.ts`, `quotes.tsx`) exposes `fetchX()`/`createX()`/`updateX()`/etc. functions that call this API — the old `loadX()`/`saveX()` `localStorage` functions are gone.
 
 This supersedes the pre-2026-07-09 "no backend, plain function calls" state and the never-built "proposed future Next.js/Server Actions" design further down this file's history — see [ARCHITECTURE.md](./ARCHITECTURE.md) for why the actual stack (Vercel Functions + MongoDB) differs from that old proposal.
 

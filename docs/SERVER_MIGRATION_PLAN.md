@@ -4,19 +4,24 @@
 > ("จดและสร้างไฟล์สักอย่างในโปรเจคก์นี้ว่าเคยคุยเรื่องนี้ไว้ขี้เกียจมาบอกใหม่") so it never needs
 > re-explaining. **Status update 2026-08-06: the owner gave the go-ahead ("ให้ย้ายจาก vercel มาเป็น
 > express เดี่ยวๆเลย") and step B — the portable Express server shell + `.env.example` +
-> [DEPLOYMENT.md](./DEPLOYMENT.md) — is BUILT.** The app now runs fully standalone (`npm run dev`
-> locally, `npm start` on a server); the Vercel demo keeps deploying unchanged until cutover.
-> Server-machine setup (step C) onward still waits for an actual machine.
+> [DEPLOYMENT.md](./DEPLOYMENT.md) — is BUILT.**
+>
+> **✅ Migration COMPLETE as of ~2026-08-07** (confirmed by the owner 2026-08-14, live for about a
+> week by then): the app runs on a **self-hosted VPS with its own domain and HTTPS**, database is
+> **self-hosted MongoDB** (Option 2 in step D below, not Atlas), and the **Vercel demo is no longer
+> used**. Steps C–H below are marked done accordingly. Exact per-step confirmation detail (which
+> process manager, whether the demo database data was kept or a fresh Setup Wizard run) was not
+> individually re-verified line-by-line — the owner confirmed the outcome (live ~1 week, VPS +
+> domain + local DB + manual updated), not each checklist box individually.
 
 ## Key Facts (agreed with the owner)
 
-- **The current Vercel deployment (https://tcs-erp-nine.vercel.app) is a demo/trial only** — the
-  owner's words: "ที่จริงระบบนี้ไม่ได้จะขึ้น vercel นะ...แค่อยากลองระบบเฉยๆ" and "จริงๆแล้วไม่ได้
-  deploy ขึ้น vercel จริงๆ มันแค่ demo". Real production hosting will be a self-managed server
-  (where/how not yet decided).
-- Development is **not finished** — keep building features on the Vercel demo for now.
-- The owner explicitly declined starting migration prep early ("งานยังไม่เสร็จนะแล้วก็ยังไม่ได้ขึ้น
-  Server ตอนนี้") — **do NOT begin any of the migration steps below until asked.**
+- **The Vercel deployment (https://tcs-erp-nine.vercel.app) was a demo/trial only** — the owner's
+  words: "ที่จริงระบบนี้ไม่ได้จะขึ้น vercel นะ...แค่อยากลองระบบเฉยๆ" and "จริงๆแล้วไม่ได้ deploy
+  ขึ้น vercel จริงๆ มันแค่ demo". **Real production hosting is now a self-hosted VPS** with its own
+  domain + HTTPS + self-hosted MongoDB, live since ~2026-08-07 — the Vercel demo is decommissioned.
+- Development now targets the real production host directly (local dev via `npm run dev` still
+  works the same way regardless of where the deployed instance runs).
 - **Standing rule from 2026-07-24 onward:** every new feature must use portable building blocks
   only (MongoDB, plain Node logic, standard REST). **Never couple new work to Vercel-specific
   services** (Blob, KV, Edge Config, Cron, etc.) unless explicitly agreed case-by-case first.
@@ -34,7 +39,7 @@ and CHANGELOG.md 2026-07-24.
 | Subsystem | Portable as-is? | Notes |
 |---|---|---|
 | Frontend (React/Vite) | ✅ | Builds to static files — servable by nginx or any static host |
-| Database (MongoDB Atlas) | ✅ | Keep Atlas, or move to self-hosted MongoDB via dump/restore |
+| Database (MongoDB) | ✅ | Was Atlas pre-cutover; **now self-hosted MongoDB** on the production VPS (confirmed 2026-08-14) |
 | File attachments | ✅ | Stored in MongoDB (`scope_attachment_files`) — travel with the DB |
 | Email | ✅ (nothing to migrate) | **Removed entirely 2026-08-07** — document recipients get in-app notifications only; no email env var, no SMTP port, no provider. (Resend and the brief same-day per-user Gmail SMTP are both gone) |
 | Auth (bcrypt + JWT httpOnly cookie) | ✅ | Not Vercel-coupled (`secure` cookie requires HTTPS on the new host) |
@@ -68,10 +73,9 @@ unchanged; the Express entry is an additional way to run it, not a replacement).
 ## Go-Live Checklist — EVERYTHING to do when moving to the real server
 
 > Recorded 2026-07-24 at the owner's request ("อยากให้จดทั้งหมดที่ต้องทำไว้ตอนที่จะขึ้น Server") —
-> the single complete list, so nothing has to be rediscovered at migration time. Ordered; items
-> marked **(can do now)** don't need the server and work on the Vercel demo too.
-> **Don't skip step G** — the owner explicitly asked to be reminded that the user manual must be
-> updated as the final pre-launch step.
+> the single complete list, so nothing has to be rediscovered at migration time.
+> **✅ ALL STEPS BELOW ARE DONE — the migration is complete as of ~2026-08-07.** Kept in full as a
+> historical record and as the reference checklist if the server ever needs rebuilding from scratch.
 
 ### A. Domain + email sender — ⚠️ OBSOLETE as of 2026-08-07 (kept for history)
 
@@ -92,52 +96,42 @@ unchanged; the Express entry is an additional way to run it, not a replacement).
 Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — see
 "The Migration Plan" section. Non-destructive to the Vercel demo.
 
-### C. Server machine setup
+### C. Server machine setup — ✅ DONE
 
-- Node 20+ under **PM2 or systemd** (always running, auto-restart on crash).
-- **nginx reverse proxy + HTTPS (Let's Encrypt)** — HTTPS is NOT optional: the session cookie is
-  `secure`, so login breaks entirely on plain HTTP.
-- Point the app's own domain/subdomain (e.g. `erp.thaichemicals.co.th`) at the server.
-- **Environment variables** (copy values out of the Vercel project settings):
-  - `MONGODB_URI` — same Atlas URI, or the new self-hosted one
-  - `JWT_SECRET` (the session-signing secret — keep the SAME value if migrating live sessions,
-    or accept that everyone re-logs-in once)
-  - `APP_URL` — set to the real URL (e.g. `https://erp.thaichemicals.co.th`). **Important**:
-    attachment capability-URLs are built from this; left unset it falls back to the Vercel demo
-    URL. (No email env var exists — email sending was removed 2026-08-07.)
+- Node 20+ under a process manager (always running, auto-restart on crash).
+- **nginx reverse proxy + HTTPS** — done; HTTPS is NOT optional, the session cookie is `secure`.
+- The app's own domain is pointed at the server.
+- Environment variables set on the server (`MONGODB_URI`, `JWT_SECRET`, `APP_URL` pointing at the
+  real domain — attachment capability-URLs depend on this being correct).
 
-### D. Database
+### D. Database — ✅ DONE (Option 2: self-hosted MongoDB)
 
-- **Option 1 — keep MongoDB Atlas** (simplest): nothing moves; just allow the new server's IP in
-  Atlas Network Access and reuse the URI.
-- **Option 2 — self-hosted MongoDB**: `mongodump` from Atlas → `mongorestore` on the server.
-  Attachments travel automatically (they live in the `scope_attachment_files` collection);
-  indexes are preserved by dump/restore.
-- Either way: **set up a backup plan** (Atlas has automatic backups on paid tiers; self-hosted
-  needs a scheduled `mongodump` + off-machine copy).
+- The owner chose **self-hosted MongoDB** (not Atlas) — confirmed 2026-08-14 ("ฐานข้อมูล Local
+  ตั้งหมดแล้ว"). Indexes/attachments travel with it the same as any MongoDB instance.
+- Backup plan for a self-hosted instance: a scheduled `mongodump` + off-machine copy — confirm
+  this is actually scheduled on the server (not independently re-verified in this doc pass).
 
-### E. Data/roles on first boot
+### E. Data/roles on first boot — done (exact path not independently re-verified)
 
-- **The expected path is a FRESH database** — owner's decision 2026-07-24 ("ฐานข้อมูลตอนนี้
-  เดี๋ยวต้องเคลียร์ใหม่อยู่ดี"): the demo database's data is throwaway test data and will be
-  cleared before real use, so plan for: open the app once → Setup Wizard runs → seeds roles
-  (which DO include every current permission — no manual grant steps needed on a fresh seed) +
-  creates indexes + creates the Super Admin, then recreate real users/products/customers.
-- **If any demo data ends up being kept instead** (decision can change): users/roles/data carry
-  over as-is, and the still-pending manual Role Management grants must be completed —
-  `quotations:viewAll`, `scopeOfWork:viewAll`, and the 7 `deliveryOrder:*` permissions for
-  existing roles (`defaultRoles` only seeds on first-run setup, never re-applies).
-- **Budget note (2026-07-24)**: no paid services at all for now — everything in this plan must
-  stay on free tiers until the owner says otherwise (Atlas free tier; email is a non-issue since
-  2026-08-07 — the app sends none; a domain for the app URL is the one unavoidable purchase and
-  waits until go-live approaches).
+- The plan called for a **fresh database** (owner's 2026-07-24 decision) — Setup Wizard runs once,
+  seeds roles with every current permission, creates the Super Admin. Whether the live server
+  actually started from a clean Setup Wizard run vs. carried over demo data was not itemized in
+  the owner's 2026-08-14 confirmation — assume fresh per the original plan unless real user/role
+  data suggests otherwise on inspection.
+- **Budget note (2026-07-24)**: the plan called for staying on free tiers — a VPS + domain are the
+  unavoidable real costs; confirm with the owner whether that's still the only spend.
 
-### F. Verify after cutover (each of these exercises a different subsystem)
+### F. Verify after cutover — not independently re-run in this doc pass
+
+The 6-point subsystem checklist below was the intended post-cutover smoke test (sign-in over
+HTTPS, in-app notifications, attachment capability URLs, Delivery Order print, cross-account
+notification polling, role-gated UI). The app has been live ~1 week as of 2026-08-14 with no
+reported issues, which is a reasonable proxy for "these all work," but the checklist itself
+was not walked point-by-point in this doc-only pass:
 
 1. Sign in over HTTPS (JWT cookie) + sign out.
 2. Press "ส่งแจ้งเตือนผู้รับเอกสาร" on a Scope of Work with a picked recipient, and confirm the
-   recipient account sees the bell notification + the record in their list (2026-08-07: email was
-   removed — this now verifies the in-app notification path only).
+   recipient account sees the bell notification + the record in their list.
 3. Upload an attachment, then open its capability URL from a logged-out browser (proves
    `APP_URL` + unauthenticated download route).
 4. Print a per-milestone Delivery Order (print CSS is host-independent, but verify once).
@@ -145,27 +139,20 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
    other account without a reload (the 45 s polling).
 6. Role check: a view-only account must NOT see the send-email button / edit actions.
 
-### G. Final step before go-live: UPDATE THE USER MANUAL (owner's explicit reminder, 2026-07-24)
+### G. Final step before go-live: UPDATE THE USER MANUAL — ✅ DONE
 
-- **Regenerate `public/คู่มือการใช้งาน TCS ERP.pdf` as the last step before going live** — the
-  owner asked to be reminded of this specifically ("ท้ายสุดก่อนขึ้น Server ให้อัพเดตคู่มือ").
-  Two reasons it must be redone, not just kept:
-  1. **Content freshness**: the text content was updated 2026-07-29 (approval workflow, manual
-     Scope of Work numbers, PO chasing, login lockout — see CHANGELOG.md) but anything shipped
-     after that date will be missing again. Sweep `WHATS_NEW_ENTRIES` (src/lib/whatsNew.ts)
-     against the manual's chapter list to catch everything.
-  2. **Screenshots show the demo URL** (and predate the 2026-07-29 UI text changes) — recapture
-     against the real host so users see the right address.
-  Regeneration is now one command (2026-07-29): `npm install --no-save puppeteer-core && node
-  docs/manual/generate-pdf.mjs` (committed script, uses system Chrome). Screenshots are still
-  captured via browser automation against the live site — see docs/CHANGELOG.md 2026-07-24.
+- The owner confirmed 2026-08-14 the manual is updated ("คู่มืออัปเดตแล้ว"). Regeneration remains
+  one command going forward whenever it needs another refresh: `npm install --no-save
+  puppeteer-core && node docs/manual/generate-pdf.mjs`.
 
-### H. Decommission the demo
+### H. Decommission the demo — ✅ DONE
 
-- Keep or delete the Vercel project (keeping it as a staging environment is fine — but then
-  restrict who knows the URL, since it shares the production database unless repointed).
-- Delete the unused Vercel Blob store (leftover from the 2026-07-24 attachments rework).
-- Update `docs/ARCHITECTURE.md` + this file to describe the real host as current.
+- The Vercel demo is no longer used (owner confirmed 2026-08-14, "vercel ไม่ใช้"). Whether the
+  Vercel project itself was deleted outright or just left idle/unused, and whether the unused
+  Vercel Blob store was cleaned up, was not itemized in the confirmation — low-stakes either way
+  since neither costs anything or receives traffic now.
+- `docs/ARCHITECTURE.md` and this file were updated 2026-08-14 to describe the real host as
+  current (this pass).
 
 ### Optional post-migration upgrades (only possible on the real server)
 

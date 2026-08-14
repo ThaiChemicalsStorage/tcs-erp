@@ -29,7 +29,7 @@ src/
 
 ## Backend Architecture
 
-**Real backend, deployed and live**: Vite + React frontend (unchanged) + **Vercel Serverless Functions (Node.js)** backend + **MongoDB Atlas** database, live at https://tcs-erp-nine.vercel.app (Vercel project `tcs-erp`, GitHub repo `Wisarutbuasumlee/tcs-erp` connected for auto-deploy on push to `master`). Migrated 2026-07-09 from the fully client-side RBAC/localStorage simulation described in the historical record below — see [API.md](./API.md) for the full route-by-route breakdown and [DATABASE.md](./DATABASE.md) for the MongoDB collections. **As of 2026-08-06 the same `api/` handlers also run under a standalone Express server (`server/`)** — the runtime the real production host will use, and what `npm run dev`/`npm start` now run locally (see "Standalone Express server" below and [DEPLOYMENT.md](./DEPLOYMENT.md)); the Vercel deployment stays up unchanged as the demo until cutover.
+**Real backend, deployed and live**: Vite + React frontend (unchanged) + **Node.js** backend + **MongoDB** database. Migrated 2026-07-09 from the fully client-side RBAC/localStorage simulation described in the historical record below (that first migration ran on Vercel Serverless Functions + MongoDB Atlas) — see [API.md](./API.md) for the full route-by-route breakdown and [DATABASE.md](./DATABASE.md) for the MongoDB collections. **As of 2026-08-06 the same `api/` handlers also run under a standalone Express server (`server/`)**, and **as of the ~2026-08-07 cutover this Express server on a self-hosted VPS (own domain + HTTPS, self-hosted MongoDB) is the real production deployment** — what `npm run dev`/`npm start` now run locally too (see "Standalone Express server" below and [DEPLOYMENT.md](./DEPLOYMENT.md)). The Vercel deployment (`tcs-erp-nine.vercel.app`, Vercel project `tcs-erp`) that served as the pre-cutover demo is decommissioned; `vercel.json` and the GitHub auto-deploy hookup are left in place unused, only as a fallback deploy target.
 
 - **Auth**: bcrypt password hashing (`bcryptjs`, cost 10), JWT sessions (`jsonwebtoken`) in an httpOnly, `secure`, `sameSite=lax` cookie named `tcs_erp_session`, 7-day **rolling/sliding** expiry (added 2026-07-31, `refreshSessionCookie()` in `api/_lib/auth.ts`, called from `withErrorHandling()` in `api/_lib/http.ts` on every API request): each request that carries a still-valid token gets a freshly re-signed cookie with a full new 7-day window, so an actively-used session never hits its expiry — only 7 full days with *zero* requests logs the user out. Every authenticated request also re-fetches the user fresh from MongoDB (`getAuthContext()` in `api/_lib/auth.ts`) rather than trusting JWT claims for role/status — deactivating a user takes effect on their very next request, not just at token expiry. See [RBAC.md](./RBAC.md) for how this compares to true session revocation.
 - **RBAC enforced server-side**: every mutating API route calls `requirePermission()`/`requireUser()` (`api/_lib/auth.ts`), which check permissions via `roleHasPermission()` — the exact same pure permission-checking function from `src/lib/roles.ts`, value-imported into the API layer (not reimplemented). This is genuinely unbypassable via devtools now; the server is the source of truth.
@@ -114,10 +114,10 @@ runtime), and everything the handlers actually touch (`req.url`/`headers`/`body`
   `NODE_ENV=production` (overriding the resolver on a real host could itself break DNS).
 - Integration-tested over real HTTP in `tests/api/expressServer.test.ts` (routing, JSON bodies,
   cookie round-trip, raw-pathname sub-resources, JSON 404/413).
-- **The 12-function Vercel Hobby cap does not apply to this runtime** — but it still applies to
-  the Vercel demo deployment for as long as that stays up, so keep the consolidated handler
-  layout until the demo is decommissioned ([SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md)
-  step H).
+- **The 12-function Vercel Hobby cap never applied to this runtime**, and no longer matters at
+  all now that the Vercel demo is decommissioned (~2026-08-07 cutover,
+  [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) step H) — the consolidated handler
+  layout is kept as-is regardless, since it costs nothing to leave alone.
 - Install/operations guide (PM2/systemd, HTTPS, backups): [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ### TypeScript / build / lint split

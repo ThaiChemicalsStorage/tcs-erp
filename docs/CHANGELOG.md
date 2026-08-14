@@ -4,7 +4,35 @@
 
 ---
 
-## 2026-08-14c (absolute latest) — Fix: Service summary card layout regression
+## 2026-08-14d (absolute latest) — Docs: sync to real production cutover (self-hosted VPS, no more Vercel demo)
+
+The owner confirmed in conversation that the server migration recorded in
+[SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md) actually happened ~2026-08-07 and has been
+live for about a week: production now runs on a **self-hosted VPS with its own domain + HTTPS**,
+the database is **self-hosted MongoDB** (not Atlas), the **Vercel demo is no longer used**, and the
+user manual PDF is already updated. Nothing in the codebase changed — this is a **documentation-only
+sync**, since every "current state" doc still described the Vercel demo as live and the migration
+as pending, which would have misled any future session (including this one, which initially assumed
+the pre-migration state before being corrected).
+
+Updated: `CLAUDE.md` (root + `docs/`), `docs/ARCHITECTURE.md`, `docs/API.md`, `docs/RBAC.md`,
+`docs/PROJECT_STATUS.md`, `docs/DEPLOYMENT.md`, `docs/TODO.md` (checked off the migration checklist
+item; also caught and resolved an unrelated stale item claiming a 2026-07-30 MongoDB DNS fix was
+still uncommitted — `git diff` confirms it's already in `api/_lib/mongodb.ts` with no pending
+changes). `docs/SERVER_MIGRATION_PLAN.md` itself got the heaviest edit: its status banner and Go-Live
+Checklist steps C–H are now marked done, with explicit notes on which sub-details (process manager
+choice, whether Setup Wizard ran fresh vs. carried over demo data, the step F verification checklist)
+were confirmed by the owner's summary rather than independently re-verified line-by-line — the
+distinction is preserved rather than blanket-claiming full verification.
+
+Not changed: historical entries in this file, `SESSION_LOG.md`, `CODEX_REVIEW_REPORT.md`, and
+`docs/manual/user-manual.html` — those correctly describe the Vercel-demo state as it was *at the
+time they were written*, and rewriting history isn't the goal here, only correcting the
+present-tense "current state" framing scattered across the reference docs.
+
+---
+
+## 2026-08-14c — Fix: Service summary card layout regression
 
 Direct user report, with a screenshot, that the new Scope of Work/Delivery Order/Service summary
 cards on the Dashboard (2026-08-14a below) were unreadable — every tile's label was truncated down
