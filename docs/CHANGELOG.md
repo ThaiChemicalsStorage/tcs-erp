@@ -4,7 +4,67 @@
 
 ---
 
-## 2026-08-11 (absolute latest) — fix: approval-link copy button silently failed on plain HTTP
+## 2026-08-13b (absolute latest) — fix: Service customer sign-off should stay draw-only, not draw-or-upload
+
+Direct user correction to the same-day entry below: that pass gave the Service module's customer
+sign-off (on-site *and* the remote LINE-approval page) the same "Draw"/"Upload" toggle as Settings'
+personal signature, on the reasoning that both call sites already shared `SignaturePad.tsx`. The
+user clarified the actual requirement was narrower — **only** Settings' personal signature should
+offer both input methods; a **customer** signing a Service Report must draw their own signature,
+never attach an arbitrary image file standing in for one.
+
+- `SignaturePad.tsx` gained a new `allowUpload` prop (default `true`, so Settings' reuse needed no
+  change). When `false`, the mode toggle isn't rendered at all — the component never leaves Draw
+  mode, so Upload is unreachable, not just hidden-but-present.
+- `ServiceReportEditor.tsx` (on-site customer sign-off) and `CustomerApprovalPage.tsx` (remote
+  LINE-approval signing) both now pass `allowUpload={false}`.
+- Settings' `SettingsPage.tsx` usage is unchanged — it relies on the `true` default and keeps both
+  modes.
+- Re-verified in-browser: opened the same Service Report used for the previous pass's screenshot
+  and confirmed the customer sign-off card now shows the canvas directly, no toggle. `tsc`/`lint`/
+  `build`/`test` (152/152) all pass clean.
+
+---
+
+## 2026-08-13 — Signature capture: draw-or-upload, unified between Settings and Service
+
+Direct user request: the Settings → Profile "Personal Signature" field was upload-only
+(`ImageUploadField.tsx`, added with the rest of Settings) while the Service module's on-site
+customer sign-off was draw-only (`SignaturePad.tsx`, added 2026-08-07) — the user wanted both
+fields to offer both input methods, and wanted the two features unified into one reusable
+control rather than maintained as two separate implementations.
+
+- **`src/components/SignaturePad.tsx`** gained a "Draw"/"Upload" segmented toggle above the
+  input area. Draw mode is the pre-existing canvas capture, unchanged. Upload mode reuses
+  `ImageUploadField.tsx`'s validation (image-type check, 1 MB client-side limit, `FileReader` →
+  base64) inline, showing the picked image in the same preview box the canvas would occupy.
+  Switching modes discards whatever was pending in the mode being left (a stroke or a picked
+  file), so nothing from the abandoned mode can leak into a Confirm. Both modes converge on the
+  same `onConfirm({ dataUrl, name })` callback and the same locked read-only preview + "แก้ไข"
+  redo link — the parent, and the server, don't know or care which mode produced the image.
+  New `requireName` prop (default `true`, unchanged behavior for existing callers): when
+  `false`, the signer-name input is hidden and the caller's own `signerName` prop is sent
+  through unedited — added so Settings' reuse (signer is always the logged-in user, name is
+  redundant) doesn't force a name re-entry on every redraw.
+- **`src/pages/SettingsPage.tsx`** — Profile tab's "Personal Signature" field now renders
+  `SignaturePad` (`requireName={false}`, `signerName={profileDraft.fullName}`) instead of
+  `ImageUploadField`. `ImageUploadField.tsx` itself is unchanged and still used for profile
+  picture and company logo/stamp (upload-only fields with no draw option).
+- **Service module** — `ServiceReportEditor.tsx`'s customer sign-off and
+  `CustomerApprovalPage.tsx`'s remote-approval signing both automatically gained the
+  Draw/Upload toggle with no code change on their end, since both already rendered the shared
+  `SignaturePad` component.
+- New i18n keys (`signaturePad.modeDraw`/`modeUpload`/`uploadPreviewAlt`/`changeFile`, th+en);
+  reused the existing `settings.image.onlyImages`/`tooLarge`/`readError`/`sizeHint` keys for
+  upload-mode validation messages rather than duplicating them.
+- Verified in-browser (Chrome, via claude-in-chrome): drew and saved a signature in Settings,
+  reloaded to confirm persistence, redid it via Upload mode with a real file upload, and
+  confirmed the Service Report sign-off card shows the same toggle. `npx tsc --noEmit`,
+  `npm run lint`, `npm run build`, `npm test` (152/152) all pass clean.
+
+---
+
+## 2026-08-11 — fix: approval-link copy button silently failed on plain HTTP
 
 User-reported: the "คัดลอกลิงก์" button on the Service Report customer-approval dialog
 (`ServiceReportEditor.tsx`, added 2026-08-10) did nothing when clicked. Root cause:

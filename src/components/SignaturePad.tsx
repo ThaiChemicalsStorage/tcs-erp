@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Check, Eraser, PenLine } from "lucide-react";
+import { Check, Eraser, PenLine, Upload } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 
 const STROKE_COLOR = "#0b1d3a";
 const STROKE_WIDTH = 2.4;
 const PAD_HEIGHT = 150;
+const MAX_UPLOAD_BYTES = 1_000_000;
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
+type Mode = "draw" | "upload";
 
 // จัดรูปแบบวันเวลาที่เซ็นตามภาษาที่เลือก (ไทยใช้ พ.ศ. ตามค่าเริ่มต้นของ th-TH)
 // Formats the signing timestamp in the active language (th-TH gives the Buddhist year by default).
@@ -16,24 +18,37 @@ function formatSignedAt(iso: string, lang: string): string {
 }
 
 /**
- * Canvas signature capture for on-site signing — pointer events throughout, so a mouse, a finger
- * and a stylus all take the identical code path (no separate touch handlers to drift apart), and
- * `touch-action: none` keeps a drawing stroke from scrolling the page underneath on a tablet.
+ * Signature capture with two entry modes — Draw (canvas, pointer events throughout so a mouse, a
+ * finger and a stylus all take the identical code path, `touch-action: none` so a stroke doesn't
+ * scroll the page underneath on a tablet) and Upload (pick an existing image, same file-type/size
+ * validation as ImageUploadField.tsx). Switching modes discards whatever was pending in the mode
+ * being left — nothing is silently carried over into the other mode's confirm.
  *
- * Deliberately a *sibling* convention to ImageUploadField.tsx rather than an extension of it: both
- * hand a base64 data URL to their parent and share its label/border/button styling, but a drawn
- * signature has no file to pick, needs a signer name captured alongside it, and — once confirmed —
- * locks into a preview so an accidental swipe can't silently alter a signature someone already
- * gave. Clearing is an explicit action.
+ * Once confirmed (by either mode) the result is a plain base64 data URL like any other signature,
+ * and the component locks into a read-only preview so an accidental re-open can't silently alter a
+ * signature someone already gave. Clearing/redoing is an explicit action.
  *
  * The parent owns the value (`dataUrl`/`signerName`/`signedAt`); this component only reports a
  * confirmed signature or a request to clear one.
+ *
+ * `requireName` defaults to true for the on-site/remote customer-signing use — a signer who isn't
+ * necessarily in the system needs to type who they are. Settings' "personal signature" reuse passes
+ * `requireName={false}` since the signer is always the logged-in user: no input is shown and the
+ * caller's `signerName` (their profile name) is sent straight through on confirm.
+ *
+ * `allowUpload` defaults to true (Settings' reuse). The Service module's customer-facing sign-off
+ * (on-site and the remote LINE-approval page) passes `allowUpload={false}` — a customer must draw
+ * their own signature in front of the engineer or on their own device, not attach an arbitrary
+ * image file standing in for one; the mode toggle isn't rendered at all in that case, and Draw is
+ * the only path to a value.
  */
 export function SignaturePad({
   dataUrl,
   signerName,
   signedAt,
   disabled = false,
+  requireName = true,
+  allowUpload = true,
   onConfirm,
   onClear,
 }: {
@@ -41,19 +56,26 @@ export function SignaturePad({
   signerName: string;
   signedAt: string | null;
   disabled?: boolean;
+  requireName?: boolean;
+  allowUpload?: boolean;
   onConfirm: (signature: { dataUrl: string; name: string }) => void;
   onClear: () => void;
 }) {
   const { t, lang } = useI18n();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const drawingRef = useRef(false);
+  const [mode, setMode] = useState<Mode>("draw");
   const [hasStroke, setHasStroke] = useState(false);
+  const [uploadedDataUrl, setUploadedDataUrl] = useState("");
+  const [uploadError, setUploadError] = useState("");
   const [name, setName] = useState(signerName);
   const nameId = useId();
 
   // Truthiness, not `!== ""` — a legacy report predating these fields can arrive with `undefined`
   // despite the type, and that must read as unsigned, not as a signature with a broken <img>.
   const signed = !!dataUrl;
+  const hasValue = mode === "draw" ? hasStroke : !!uploadedDataUrl;
 
   // ปรับความละเอียด canvas ตาม devicePixelRatio เพื่อให้เส้นคมชัดบนจอความละเอียดสูง
   // Scales the backing store to devicePixelRatio so strokes stay crisp on a HiDPI/retina screen —
@@ -77,11 +99,12 @@ export function SignaturePad({
 
   // Sizing the canvas is DOM synchronization, so it belongs in an effect; `hasStroke` is reset by
   // whichever action emptied the pad (Clear / แก้ไข) rather than here, so this never triggers a
-  // cascading render.
+  // cascading render. Also re-fires on `mode` — the canvas unmounts while Upload mode is active, so
+  // switching back to Draw hands prepareCanvas a fresh (zero-sized-until-now) element to measure.
   useEffect(() => {
-    if (signed) return;
+    if (signed || mode !== "draw") return;
     prepareCanvas();
-  }, [signed, prepareCanvas]);
+  }, [signed, mode, prepareCanvas]);
 
   const pointAt = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -128,10 +151,38 @@ export function SignaturePad({
     setHasStroke(false);
   };
 
+  const clearUpload = () => {
+    setUploadedDataUrl("");
+    setUploadError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // Switching modes discards whatever was pending in the mode being left, so a stray canvas stroke
+  // can never sneak into an Upload confirm (or vice versa) once the toggle is clicked.
+  const switchMode = (next: Mode) => {
+    if (next === mode || disabled) return;
+    if (mode === "draw") clearPad();
+    else clearUpload();
+    setMode(next);
+  };
+
+  const handleFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setUploadError(t("settings.image.onlyImages")); return; }
+    if (file.size > MAX_UPLOAD_BYTES) { setUploadError(t("settings.image.tooLarge")); return; }
+    setUploadError("");
+    const reader = new FileReader();
+    reader.onload = () => setUploadedDataUrl(reader.result as string);
+    reader.onerror = () => setUploadError(t("settings.image.readError"));
+    reader.readAsDataURL(file);
+  };
+
+  const clear = () => (mode === "draw" ? clearPad() : clearUpload());
+
   const confirm = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || !hasStroke || !name.trim()) return;
-    onConfirm({ dataUrl: canvas.toDataURL("image/png"), name: name.trim() });
+    const finalDataUrl = mode === "draw" ? (hasStroke ? canvasRef.current?.toDataURL("image/png") ?? "" : "") : uploadedDataUrl;
+    if (!finalDataUrl || (requireName && !name.trim())) return;
+    onConfirm({ dataUrl: finalDataUrl, name: requireName ? name.trim() : signerName });
   };
 
   if (signed) {
@@ -157,7 +208,7 @@ export function SignaturePad({
           {!disabled && (
             <button
               type="button"
-              onClick={() => { onClear(); setName(signerName); setHasStroke(false); }}
+              onClick={() => { onClear(); setName(signerName); setMode("draw"); clearPad(); clearUpload(); }}
               className="flex-shrink-0 text-xs text-muted-foreground hover:text-[#c9a84c] underline underline-offset-2 transition-colors"
             >
               {t("signaturePad.redo")}
@@ -174,37 +225,104 @@ export function SignaturePad({
     // with the engineer box beside it. The signer-name field sits under the canvas instead of above
     // it for the same reason: above it used to push this whole card lower than the engineer's.
     <div className="border border-border rounded-lg bg-secondary/40 p-3">
-      <canvas
-        ref={canvasRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={endStroke}
-        onPointerLeave={endStroke}
-        onPointerCancel={endStroke}
-        aria-label={t("signaturePad.canvasLabel")}
-        className={`w-full bg-white border border-border rounded-lg ${disabled ? "opacity-60" : "cursor-crosshair"}`}
-        style={{ height: PAD_HEIGHT, touchAction: "none" }}
-      />
-      <div className="mt-2.5">
-        <label htmlFor={nameId} className={labelCls}>
-          <span className="flex items-center gap-1"><PenLine size={10} /> {t("signaturePad.signerName")}</span>
-        </label>
-        <input
-          id={nameId}
-          value={name}
-          disabled={disabled}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t("signaturePad.signerNamePlaceholder")}
-          className="h-9 w-full px-3 text-sm bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+      {allowUpload && (
+        <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit mb-2.5">
+          <button
+            type="button"
+            onClick={() => switchMode("draw")}
+            disabled={disabled}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-medium transition-all disabled:cursor-not-allowed ${
+              mode === "draw" ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <PenLine size={11} /> {t("signaturePad.modeDraw")}
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("upload")}
+            disabled={disabled}
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md font-medium transition-all disabled:cursor-not-allowed ${
+              mode === "upload" ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Upload size={11} /> {t("signaturePad.modeUpload")}
+          </button>
+        </div>
+      )}
+
+      {mode === "draw" ? (
+        <canvas
+          ref={canvasRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={endStroke}
+          onPointerLeave={endStroke}
+          onPointerCancel={endStroke}
+          aria-label={t("signaturePad.canvasLabel")}
+          className={`w-full bg-white border border-border rounded-lg ${disabled ? "opacity-60" : "cursor-crosshair"}`}
+          style={{ height: PAD_HEIGHT, touchAction: "none" }}
         />
-      </div>
+      ) : (
+        <div>
+          <div
+            className={`w-full bg-white border border-border rounded-lg flex items-center justify-center overflow-hidden ${disabled ? "opacity-60" : ""}`}
+            style={{ height: PAD_HEIGHT }}
+          >
+            {uploadedDataUrl ? (
+              <img src={uploadedDataUrl} alt={t("signaturePad.uploadPreviewAlt")} className="max-h-full max-w-full object-contain" />
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled}
+                className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors disabled:cursor-not-allowed"
+              >
+                <Upload size={18} />
+                <span className="text-xs">{t("common.upload")}</span>
+              </button>
+            )}
+          </div>
+          {uploadedDataUrl && !disabled && (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-[10px] text-muted-foreground hover:text-[#c9a84c] underline underline-offset-2 mt-1"
+            >
+              {t("signaturePad.changeFile")}
+            </button>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleFile(e.target.files?.[0])}
+          />
+          {uploadError && <p role="alert" className="text-xs text-[#e05252] mt-1.5">{uploadError}</p>}
+        </div>
+      )}
+      {requireName && (
+        <div className="mt-2.5">
+          <label htmlFor={nameId} className={labelCls}>
+            <span className="flex items-center gap-1"><PenLine size={10} /> {t("signaturePad.signerName")}</span>
+          </label>
+          <input
+            id={nameId}
+            value={name}
+            disabled={disabled}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("signaturePad.signerNamePlaceholder")}
+            className="h-9 w-full px-3 text-sm bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+          />
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2 mt-2">
-        <p className="text-[10px] text-muted-foreground">{t("signaturePad.hint")}</p>
+        <p className="text-[10px] text-muted-foreground">{mode === "draw" ? t("signaturePad.hint") : t("settings.image.sizeHint")}</p>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={clearPad}
-            disabled={disabled || !hasStroke}
+            onClick={clear}
+            disabled={disabled || !hasValue}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Eraser size={12} /> {t("signaturePad.clear")}
@@ -212,7 +330,7 @@ export function SignaturePad({
           <button
             type="button"
             onClick={confirm}
-            disabled={disabled || !hasStroke || !name.trim()}
+            disabled={disabled || !hasValue || (requireName && !name.trim())}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Check size={12} /> {t("signaturePad.confirm")}

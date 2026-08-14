@@ -214,6 +214,7 @@ export default function CustomerApprovalPage() {
                   dataUrl={signature?.dataUrl ?? ""}
                   signerName={signature?.name ?? report.customerSnapshot.contactName}
                   signedAt={null}
+                  allowUpload={false}
                   onConfirm={(sig) => setSignature(sig)}
                   onClear={() => setSignature(null)}
                 />

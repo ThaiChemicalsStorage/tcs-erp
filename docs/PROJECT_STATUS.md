@@ -14,6 +14,22 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-13] Signature capture: Settings gets draw-or-upload; Service customer sign-off stays draw-only.**
+  Direct user request — Settings → Profile's "Personal Signature" was upload-only while the
+  Service module's customer sign-off was draw-only; the user wanted `src/components/
+  SignaturePad.tsx` extended with a Draw/Upload segmented toggle rather than building a second
+  component (upload mode reuses `ImageUploadField.tsx`'s file-type/1MB validation inline). A new
+  `requireName` prop (default `true`) hides the signer-name input for Settings' reuse, where the
+  signer is always the logged-in user. First pass gave both Settings and Service the toggle since
+  both share the component; the user then clarified only Settings should offer Upload — a
+  customer signing a report must draw, not attach an image file — so a second `allowUpload` prop
+  (default `true`) now gates whether the toggle renders at all, and `ServiceReportEditor.tsx` /
+  `CustomerApprovalPage.tsx` both pass `allowUpload={false}`. `SettingsPage.tsx`'s signature field
+  renders `SignaturePad` (both props at their defaults) instead of `ImageUploadField`. Verified
+  in-browser both before and after the correction (draw + save + reload-persist + upload-mode
+  confirm in Settings; confirmed Service's sign-off card shows no toggle after the fix);
+  `tsc`/`lint`/`build`/`test` (152/152) all pass clean. See CHANGELOG.md.
+
 - ✅ **[2026-08-10] Service Report customer approval via time-boxed link + LINE OA.** "ส่งให้ลูกค้า
   อนุมัติ" mints a 7-day capability link; the customer reviews/signs/approves (or rejects with a
   required reason) on the session-free `/approve` page from their phone; paired customers get the

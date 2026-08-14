@@ -13,6 +13,7 @@ import { ApiError } from "../lib/apiClient";
 import type { Role } from "../lib/roles";
 import { useI18n, type Lang } from "../lib/i18n";
 import { ImageUploadField } from "../components/ImageUploadField";
+import { SignaturePad } from "../components/SignaturePad";
 
 // ช่องเลือกภาษาของระบบ (ไทย/อังกฤษ)
 // Field for switching the system language (Thai/English).
@@ -347,13 +348,19 @@ export function SettingsPage({
               onChange={(v) => setProfileDraft((p) => ({ ...p, profilePictureDataUrl: v }))}
               aspect="square"
             />
-            <ImageUploadField
-              label={t("settings.profile.signatureLabel")}
-              icon={PenTool}
-              value={profileDraft.signatureDataUrl}
-              onChange={(v) => setProfileDraft((p) => ({ ...p, signatureDataUrl: v }))}
-              aspect="wide"
-            />
+            <div>
+              <label className={labelCls}>
+                <span className="flex items-center gap-1"><PenTool size={10} /> {t("settings.profile.signatureLabel")}</span>
+              </label>
+              <SignaturePad
+                dataUrl={profileDraft.signatureDataUrl}
+                signerName={profileDraft.fullName}
+                signedAt={null}
+                requireName={false}
+                onConfirm={({ dataUrl }) => setProfileDraft((p) => ({ ...p, signatureDataUrl: dataUrl }))}
+                onClear={() => setProfileDraft((p) => ({ ...p, signatureDataUrl: "" }))}
+              />
+            </div>
           </div>
           <p className="text-[10px] text-muted-foreground -mt-3">{t("settings.profile.signatureHint")}</p>
 

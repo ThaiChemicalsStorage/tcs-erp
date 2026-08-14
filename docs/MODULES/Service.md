@@ -243,8 +243,20 @@ drawn on someone else's behalf.
   sits above the pad, Clear is disabled until there's a stroke, Confirm until there's both. Once
   confirmed it locks into a preview (image + name + formatted timestamp + a "แก้ไข" link) so an
   accidental swipe can't alter a signature someone already gave — clearing is explicit.
-  A sibling of `ImageUploadField.tsx` in styling and in handing a data URL to its parent, but not an
-  extension of it: there's no file to pick, a name to capture alongside, and a lock state.
+  **2026-08-13**: gained an optional second entry mode — a "Draw"/"Upload" segmented toggle above
+  the pad, letting a signer pick an existing image instead of drawing one (same file-type/≤1 MB
+  client-side check as `ImageUploadField.tsx`, still funneled through the same server-side
+  `validateImageDataUrl()` either way), gated by a new `allowUpload` prop (default `true`).
+  **Customer sign-off here is deliberately kept `allowUpload={false}`** (same for the remote
+  LINE-approval page below) — a direct user correction after an initial pass briefly gave the
+  customer the toggle too: a customer signs in front of the engineer or on their own device, not
+  by attaching an arbitrary image file standing in for a signature, so Draw stays the only path to
+  a value and the toggle isn't rendered at all for this call site. Settings' "Personal Signature"
+  reuse (see below) is the one that actually gets both modes — see that section for why. Switching
+  modes (where offered) discards whatever was pending in the mode being left, so a stray canvas
+  stroke can't sneak into an uploaded confirm or vice versa; the locked preview afterward doesn't
+  care which mode produced the image. `ImageUploadField.tsx` remains the choice for fields that
+  are upload-only with no draw option at all (logo, stamp, profile picture).
 - **Server** (`api/_lib/serviceReportHandler.ts`) — an ordinary editable field group on the existing
   `PATCH` route, no new endpoint. The image goes through the shared `validateImageDataUrl()`
   (`api/_lib/uploadValidation.ts`, PNG already in its accepted list, 2 MB cap). **`customerSignedAt`

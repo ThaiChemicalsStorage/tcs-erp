@@ -4,7 +4,86 @@
 
 ---
 
-## Session — 2026-08-07 (absolute latest), person-to-person Gmail email + any-user recipients
+## Session — 2026-08-13b (absolute latest), correction: Service sign-off should stay draw-only
+
+### What was implemented
+Immediate follow-up to the 2026-08-13 session below, same conversation. That session's second
+message was itself a scope correction which I read as "give both fields both input methods" —
+but the user's actual, further-clarified intent was narrower: **only** Settings' personal
+signature should offer Draw+Upload; a **customer** signing a Service Report (on-site or via the
+remote LINE-approval link) must still draw, never attach an arbitrary image file. Added a second
+`allowUpload` prop to `SignaturePad.tsx` (default `true`, so Settings needed no change) that hides
+the mode toggle entirely when `false`; `ServiceReportEditor.tsx` and `CustomerApprovalPage.tsx`
+now pass `allowUpload={false}`. Full details: CHANGELOG.md 2026-08-13b.
+
+### Decisions / gotchas worth remembering
+- **Two "both fields should match" requests in a row does not imply a third** — the natural
+  reading after "give both fields both modes" would be to treat any future signature-related ask
+  as "keep them in sync," but here the user was narrowing scope, not broadening it further. When a
+  correction arrives, re-derive the actual target state from what was said rather than
+  extrapolating the previous change's direction.
+- **A boolean gate that hides the affordance entirely (not just disables it) is the right shape
+  for "this mode must not exist here"** — `allowUpload={false}` skips rendering the toggle rather
+  than rendering it disabled, so there is no dead UI hinting at a capability the customer isn't
+  allowed to use.
+- Re-verified in-browser after the fix (opened the same report as the prior session's screenshot,
+  confirmed the customer sign-off card shows the canvas directly with no toggle); full gate
+  (`tsc`/`lint`/`build`/`test`, 152/152) re-run clean.
+
+### Recommendations for next session
+- None — this closes out the same-day signature-capture work. See the entry below for the
+  original implementation's context.
+
+---
+
+## Session — 2026-08-13, unify Settings/Service signature capture into draw-or-upload
+
+### What was implemented
+User request: change the Settings → Profile signature field (upload-only, `ImageUploadField.tsx`)
+to a drawable box like Service's customer sign-off, and reuse that component between the two. A
+follow-up clarified the actual requirement: **both** fields should offer **both** input methods
+(draw and upload), not just switch Settings from one to the other. Implemented by extending the
+existing `src/components/SignaturePad.tsx` (already shared between Service's on-site sign-off and
+the remote LINE-approval page) with a "Draw"/"Upload" segmented toggle, rather than building a
+second component — upload mode reuses `ImageUploadField.tsx`'s validation logic inline. Added a
+`requireName` prop (default `true`) so Settings' reuse (signer is always the logged-in user) can
+hide the signer-name input that Service's customer-facing use still needs. `SettingsPage.tsx` now
+renders `SignaturePad` instead of `ImageUploadField` for the signature field; Service's two call
+sites needed no changes at all, since they already used the shared component. Full details:
+CHANGELOG.md 2026-08-13.
+
+### Decisions / gotchas worth remembering
+- **Read the second message as a scope correction, not a new request** — the first ask ("make
+  Settings drawable like Service") would have been satisfied by a straight swap to draw-only, but
+  the user actually wanted the *union* of both input methods on *both* fields. Extending the one
+  shared component covered both fields' new requirement with a single change, rather than needing
+  parallel edits to Settings and Service.
+- **Switching modes must discard the abandoned mode's pending data** — otherwise a stroke drawn
+  before switching to Upload (or a file picked before switching to Draw) could silently leak into
+  a Confirm the user never intended for that mode.
+- **Don't start a duplicate `npm run dev`** — a dev server (Express :3001 + Vite :3000) was already
+  running from the user's own session; starting a second one to test in-browser created a stray
+  process fighting for the same ports (Vite fell back to :3002; the api child logged "listening on
+  :3001" despite the port already being held). Always check for an already-running dev server
+  (`netstat`/`curl` the expected ports) before launching another; killed the accidental duplicate's
+  process tree by PID once discovered, left the pre-existing one untouched.
+- **Verified via claude-in-chrome, not just tsc/lint/build/test** — drew and saved a signature in
+  Settings, reloaded to confirm server persistence, redid it via a real file upload (a 1×1 test
+  PNG through the actual file-input element via `file_upload`), and separately opened a Service
+  Report to confirm its customer sign-off card picked up the same toggle automatically.
+
+### Recommendations for next session
+- No open follow-up from this change. If a future signature-capture use case needs a size limit
+  different from the 1 MB client-side check, revisit `MAX_UPLOAD_BYTES` in `SignaturePad.tsx`
+  (server-side cap is the shared 2 MB `validateImageDataUrl()`, unchanged).
+
+### Completion estimate
+No change to overall ERP progress (~40%) — this was a UX/consistency improvement to an existing,
+already-complete feature (Settings profile edit, Service customer sign-off), not new module scope.
+
+---
+
+## Session — 2026-08-07, person-to-person Gmail email + any-user recipients
 
 ### What was implemented
 The user asked (Thai) for the Scope of Work document-email flow to become "1 to many" person-to-

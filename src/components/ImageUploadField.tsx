@@ -5,8 +5,10 @@ import { useI18n } from "../lib/i18n";
 const MAX_IMAGE_BYTES = 1_000_000;
 const labelCls = "text-xs text-muted-foreground block mb-1.5";
 
-// ช่องอัปโหลดรูปภาพ (โลโก้/ตราประทับ/ลายเซ็น/รูปโปรไฟล์) ตรวจชนิด/ขนาดไฟล์เบื้องต้นแล้วแปลงเป็น base64
-// Shared image upload field (logo/stamp/signature/profile picture) — checks type/size, then converts to a base64 data URL
+// ช่องอัปโหลดรูปภาพ (โลโก้/ตราประทับ/รูปโปรไฟล์) ตรวจชนิด/ขนาดไฟล์เบื้องต้นแล้วแปลงเป็น base64
+// Shared image upload field (logo/stamp/profile picture) — checks type/size, then converts to a base64
+// data URL. Personal/customer signatures use SignaturePad.tsx instead (draw or upload, with a lock/confirm
+// step), though its own Upload mode reuses this same validation logic inline.
 export function ImageUploadField({
   label,
   icon: Icon,

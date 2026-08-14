@@ -1004,6 +1004,7 @@ export function ServiceReportEditor({
                 signerName={form.customerSignedName}
                 signedAt={form.customerSignedAt}
                 disabled={!isEditable}
+                allowUpload={false}
                 onConfirm={({ dataUrl, name }) => setForm((f) => ({
                   ...f,
                   customerSignatureDataUrl: dataUrl,
