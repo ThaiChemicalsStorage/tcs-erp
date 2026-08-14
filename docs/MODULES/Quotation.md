@@ -17,7 +17,7 @@ Create, edit, duplicate, and print professional quotation documents for customer
 quote exactly like Duplicate — fresh line/sub-detail IDs, status reset to Draft, fresh
 `createdByUserId`, empty `approvalHistory`, source quote never modified — but assigns a
 **revision-numbered id derived from the quote being rewritten** instead of an unrelated new sequence
-number: `{root}-R{n}`, e.g. rewriting `QT-2567-0041` creates `QT-2567-0041-R1`; rewriting that `-R1`
+number: `{root}-R{n}`, e.g. rewriting `Q#260814-0001` creates `Q#260814-0001-R1`; rewriting that `-R1`
 creates `-R2`, never `-R1-R1` (the root is always found by stripping any existing trailing
 `-R<digits>` suffix off the id actually being rewritten, before reserving the next number). The
 revision number is reserved atomically server-side (`POST /api/quotes/:id/rewrite`,
@@ -185,9 +185,24 @@ The preparer's signature is looked up via `quote.createdByUserId`; the approver'
 
 `InterestButtons`, `FormattedNotes` (above) plus generic `ConfirmDialog`/`Toast` from `src/components/`.
 
+## Numbering Format
+
+**2026-08-14, direct business request.** A new quote's id (`nextQuoteId()`, `api/handlers/quotes.ts`)
+is `Q#YYMMDD-NNNN`, e.g. `Q#260814-0001` — Bangkok-local date the quote was created (`YY`=2-digit
+Gregorian year, `MM`, `DD`) plus a 4-digit sequence that **resets to 1 on the first quote of each new
+day**, reserved atomically via the `counters` collection (`quote_{YYMMDD}` key,
+`findOneAndUpdate($inc, upsert)` — same idiom the old counter used). A Rewrite appends `-R{n}` as
+always (see item 6a above) — e.g. `Q#260814-0001-R1` — and is otherwise unaffected by this format
+change (that logic just strips/re-appends a `-R\d+$` suffix regardless of what the root id looks
+like). This replaces the old `QT-{Buddhist year}-NNNN` format (e.g. `QT-2567-0041`), whose year
+half was a hardcoded constant (`QUOTE_YEAR = 2567`) that never advanced automatically and had
+drifted 2 years stale by the time it was replaced. `src/lib/quotes.tsx`'s client-side `nextQuoteId()`
+(a **preview only** shown on the create-new-quote screen before the server assigns the real id on
+save) was updated to match the same format/shape.
+
 ## Database Tables
 
-The `quotes` MongoDB collection (see [DATABASE.md](../DATABASE.md) for the `Quote`/`QuoteLine`/`SubDetail`/`ApprovalHistoryEntry` shapes) — keyed by the human-readable business ID (e.g. `"QT-2567-0041"`) as the literal MongoDB `_id`, not an `ObjectId`. Migrated 2026-07-09 from `localStorage` (`tcs_erp_quotes`, fixed 2026-07-08) to real server-side persistence. The `job_types` collection (added 2026-07-10, see [DATABASE.md](../DATABASE.md) "`JobType`") backs the Job Type dropdown.
+The `quotes` MongoDB collection (see [DATABASE.md](../DATABASE.md) for the `Quote`/`QuoteLine`/`SubDetail`/`ApprovalHistoryEntry` shapes) — keyed by the human-readable business ID (e.g. `"Q#260814-0001"` — Bangkok-local `YYMMDD` + a sequence resetting daily, see "Numbering Format" below) as the literal MongoDB `_id`, not an `ObjectId`. Migrated 2026-07-09 from `localStorage` (`tcs_erp_quotes`, fixed 2026-07-08) to real server-side persistence. The `job_types` collection (added 2026-07-10, see [DATABASE.md](../DATABASE.md) "`JobType`") backs the Job Type dropdown.
 
 **2026-07-14**: `Quote.customerId`/`customerSnapshot` (replacing the short-lived, incorrect `issuerCompanyId`/`issuerCompanySnapshot` pair from 2026-07-13) are now wired — see "Customer Selection" above and [Customer.md](./Customer.md) for the full flow. Existing quotations from before this pass simply have both fields unset; they display and edit normally via their existing free-text fields and are otherwise completely unaffected — no backfill/migration was run or needed.
 

@@ -95,8 +95,6 @@ async function resolveCustomerIdUpdate(rawValue: unknown): Promise<string | unde
   return trimmed;
 }
 
-const QUOTE_YEAR = 2567;
-
 type JobTypeMasterEntry = { code: string; name: string; isActive: boolean };
 
 async function loadJobTypeMaster(): Promise<JobTypeMasterEntry[]> {
@@ -145,51 +143,35 @@ function isValidInterest(v: unknown): v is QuoteFields["interest"] {
   return v === null || v === "น่าสนใจ" || v === "ไม่น่าสนใจ";
 }
 
-const QUOTE_COUNTER_ID = `quote_${QUOTE_YEAR}`;
-
-/**
- * Bootstraps the atomic counter from the current max `_id` sequence number, exactly once per warm
- * serverless instance — needed because this counter doc doesn't exist yet on an already-provisioned
- * deployment (quotes created before this fix have no counter tracking their numbers). Uses `$max`
- * (not `$set`) so a concurrent bootstrap racing this one can never regress the counter below the
- * true current max, and a duplicate-key error from a genuinely concurrent first-insert race is
- * swallowed as "someone else already bootstrapped it" rather than surfaced as a real failure.
- */
-let quoteCounterBootstrapped = false;
-async function ensureQuoteCounterBootstrapped(
-  counters: Awaited<ReturnType<typeof countersCollection>>,
-  quotes: Awaited<ReturnType<typeof quotesCollection>>,
-): Promise<void> {
-  if (quoteCounterBootstrapped) return;
-  const existing = await counters.findOne({ _id: QUOTE_COUNTER_ID });
-  if (!existing) {
-    const docs = await quotes.find({}, { projection: { _id: 1 } }).toArray();
-    const maxNum = docs
-      .map((d) => parseInt(d._id.split("-").pop() ?? "0", 10))
-      .filter((n) => !Number.isNaN(n))
-      .reduce((max, n) => Math.max(max, n), 0);
-    try {
-      await counters.updateOne({ _id: QUOTE_COUNTER_ID }, { $max: { seq: maxNum } }, { upsert: true });
-    } catch (err) {
-      if (!(err instanceof Error) || !err.message.includes("E11000")) throw err;
-    }
-  }
-  quoteCounterBootstrapped = true;
+/** Bangkok-local "today" as `YYMMDD` (Gregorian, e.g. 2026-08-14 → "260814") — same UTC+7 offset
+ * idiom as `bangkokNow()` in api/dashboard/index.ts. Drives the per-day quote-number counter key. */
+function todayYyMmDd(): string {
+  const bangkokNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  const yy = String(bangkokNow.getUTCFullYear() % 100).padStart(2, "0");
+  const mm = String(bangkokNow.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(bangkokNow.getUTCDate()).padStart(2, "0");
+  return `${yy}${mm}${dd}`;
 }
 
-/** Atomically reserves the next sequence number — replaces the previous scan-all-quotes-then-max+1 approach, which could race two concurrent creates into the same id (see the 2026-07-10 Codex review). */
+/**
+ * Atomically reserves the next sequence number for *today's* Bangkok-local date, keyed
+ * `quote_{YYMMDD}` — the counter resets to 1 on the first quote of each new day, rather than the
+ * old per-year counter (`quote_2567`, a hardcoded Buddhist-year constant that never advanced on
+ * its own). Format: `Q#YYMMDD-NNNN`, e.g. `Q#260814-0001`. Direct 2026-08-14 business request. No
+ * bootstrap-from-existing-quotes step is needed here (unlike the old counter) — every day's key is
+ * brand new and no historical quote ever shares a `Q#YYMMDD-` prefix with it.
+ */
 async function nextQuoteId(
   counters: Awaited<ReturnType<typeof countersCollection>>,
-  quotes: Awaited<ReturnType<typeof quotesCollection>>,
 ): Promise<string> {
-  await ensureQuoteCounterBootstrapped(counters, quotes);
+  const dateKey = todayYyMmDd();
   const result = await counters.findOneAndUpdate(
-    { _id: QUOTE_COUNTER_ID },
+    { _id: `quote_${dateKey}` },
     { $inc: { seq: 1 } },
     { returnDocument: "after", upsert: true },
   );
   const seq = result?.seq ?? 1;
-  return `QT-${QUOTE_YEAR}-${String(seq).padStart(4, "0")}`;
+  return `Q#${dateKey}-${String(seq).padStart(4, "0")}`;
 }
 
 /** Atomically reserves the next revision number for a rewrite chain, keyed by the chain's root
@@ -296,7 +278,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     const customerId = await resolveCustomerIdUpdate(body.customerId);
 
     const [quotes, counters] = await Promise.all([quotesCollection(), countersCollection()]);
-    const id = await nextQuoteId(counters, quotes);
+    const id = await nextQuoteId(counters);
     const today = new Date();
     const customerFields: CustomerFieldSet = {
       client,
@@ -468,7 +450,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
   if (!source) throw new HttpError(404, "ไม่พบใบเสนอราคา");
 
   const { _id: _sourceId, ...rest } = source;
-  const newId = await nextQuoteId(counters, quotes);
+  const newId = await nextQuoteId(counters);
   const lines = cloneLines(source.lines);
   const doc = {
     _id: newId,

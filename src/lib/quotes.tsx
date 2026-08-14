@@ -394,15 +394,21 @@ export function isRevisionQuote(id: string): boolean {
   return /-R\d+$/.test(id);
 }
 
-// สร้างรหัสใบเสนอราคาถัดไปตามลำดับเลขที่มากที่สุดในรายการปัจจุบัน
-// Generates the next quote id based on the highest existing sequence number
+// สร้างรหัสใบเสนอราคาถัดไป (พรีวิวฝั่งไคลเอนต์เท่านั้น — เลขจริงกำหนดจากเซิร์ฟเวอร์ตอนบันทึก)
+// Client-side preview of the next quote id — the server assigns the authoritative id on save
+// (nextQuoteId() in api/handlers/quotes.ts), this is only shown to the user before that happens.
+// Format: Q#YYMMDD-NNNN, sequence resets daily — matches the server's counter exactly in shape,
+// though the preview's own count (of today's ids already loaded client-side) can't guarantee the
+// same number the server actually reserves under concurrent creates.
 export function nextQuoteId(quotes: Quote[]): string {
-  const year = 2567;
-  const maxNum = quotes
-    .map((q) => parseInt(q.id.split("-").pop() ?? "0", 10))
-    .filter((n) => !Number.isNaN(n))
-    .reduce((max, n) => Math.max(max, n), 0);
-  return `QT-${year}-${String(maxNum + 1).padStart(4, "0")}`;
+  const today = new Date();
+  const yy = String(today.getFullYear() % 100).padStart(2, "0");
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  const dateKey = `${yy}${mm}${dd}`;
+  const prefix = `Q#${dateKey}-`;
+  const todayCount = quotes.filter((q) => q.id.startsWith(prefix)).length;
+  return `${prefix}${String(todayCount + 1).padStart(4, "0")}`;
 }
 
 // ดึงรายการใบเสนอราคาทั้งหมดจากเซิร์ฟเวอร์

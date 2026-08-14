@@ -4,7 +4,37 @@
 
 ---
 
-## 2026-08-14f (absolute latest) — Fix: department/salesperson filters floating mid-row on Dashboard
+## 2026-08-14g (absolute latest) — Quotation numbering format: Q#YYMMDD-NNNN, daily-reset sequence
+
+Direct business request: the quote id format changes from `QT-{Buddhist year}-NNNN` (e.g.
+`QT-2567-0041`) to `Q#YYMMDD-NNNN` (e.g. `Q#260814-0001`) — Bangkok-local date the quote was
+created, plus a 4-digit sequence that **resets to 1 on the first quote of each new day** instead
+of the first quote of each year. Rewrite's `-R{n}` suffix (e.g. `Q#260814-0001-R1`) is completely
+unaffected — that logic just strips/re-appends a `-R\d+$` suffix regardless of the root id's shape.
+
+- `api/handlers/quotes.ts`: removed the hardcoded `QUOTE_YEAR = 2567` constant (which had silently
+  drifted 2 real years stale — it was never recomputed from the clock) and its
+  bootstrap-from-existing-quotes machinery (`ensureQuoteCounterBootstrapped()` — not needed for
+  the new scheme, since every day's counter key `quote_{YYMMDD}` is brand new and no historical
+  quote ever shares its prefix). New `todayYyMmDd()` helper (Bangkok UTC+7 offset, same idiom as
+  `bangkokNow()` in `api/dashboard/index.ts`) drives the counter key. `nextQuoteId()` now takes
+  only the `counters` collection (dropped the now-unused `quotes` param) — updated both call sites
+  (`handleList`'s create path, `handleDuplicate`).
+- `src/lib/quotes.tsx`: the client-side `nextQuoteId(quotes)` — a **preview only**, shown on the
+  create-new-quote screen before the server assigns the real id on save — updated to the same
+  format (counts today's already-loaded quotes sharing the `Q#YYMMDD-` prefix).
+- No other module affected: Scope of Work numbers are manually typed (auto-generation removed
+  2026-07-29) and Service Reports use their own separate `nextServiceReportId()` — neither shares
+  `nextQuoteId()` or the `QUOTE_YEAR` constant.
+- Docs updated: `MODULES/Quotation.md` (new "Numbering Format" section), `DATABASE.md`, `API.md`.
+- Verified via `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (152/152, incl.
+  `tests/revisions.test.ts` which still passes unchanged — its `-R\d+$`-suffix regex logic is
+  format-agnostic and its fixture literals are just example data, not something the tested code
+  computes). No live-browser check this session (see PROJECT_STATUS.md "Known Risks").
+
+---
+
+## 2026-08-14f — Fix: department/salesperson filters floating mid-row on Dashboard
 
 Direct user report with a screenshot: the department/salesperson dropdowns appeared floating in
 the middle of the filter bar instead of flush right. Root cause: 2026-08-14a's own VAT toggle

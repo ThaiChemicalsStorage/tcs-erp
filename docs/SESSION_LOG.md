@@ -4,6 +4,51 @@
 
 ---
 
+## Session — 2026-08-14e (absolute latest), Quotation numbering format change
+
+### What was implemented
+Direct business request, given as a concrete worked example (`Q#260720-0003-R1`): change Quotation
+document numbers from `QT-{Buddhist year}-NNNN` (yearly-reset sequence) to `Q#YYMMDD-NNNN`
+(Bangkok-local date + a sequence resetting daily), with the existing `-R{n}` Rewrite suffix logic
+left untouched. Investigated via a research agent first to map every place the old format was
+generated, parsed, or merely referenced as an example, before touching anything — found and fixed
+the actual generator (`api/handlers/quotes.ts`'s `nextQuoteId()`), a client-side *preview-only*
+duplicate implementation (`src/lib/quotes.tsx`, easy to have missed since it doesn't share code
+with the server function at all — different signature, different file, only found via grepping for
+literal `"QT-"` usages across the whole repo), and removed now-dead bootstrap machinery that only
+existed to backfill a *yearly* counter's history and has no equivalent need under a fresh-every-day
+counter key. `tsc`/`lint`/`build`/`test` (152/152) all clean; `tests/revisions.test.ts`'s fixture
+literals still say `QT-2567-0041` and were deliberately left alone since the code under test (the
+`-R\d+$` suffix regex) is format-agnostic — updating them would just be cosmetic, not a real
+coverage gap.
+
+### Decisions / gotchas worth remembering
+- **Grep for the literal string, not just the function name, when hunting every place a format is
+  assumed.** The client-side preview `nextQuoteId()` in `src/lib/quotes.tsx` has the same name as
+  the real server generator but is a completely independent implementation with its own copy of
+  the format string — searching only for calls to "the" `nextQuoteId` function (as if there were
+  one canonical definition) would have missed it entirely, since it's a different function in a
+  different file that happens to share a name. Grepping for the literal `QT-` prefix across the
+  whole repo (not just the obvious handler file) is what actually surfaced it, plus 2 more files
+  that only reference the format in a doc comment (harmless, but confirms the grep-the-string
+  approach is the reliable one).
+- **A "bootstrap the counter from history" step that made sense for the old counter design doesn't
+  automatically transfer to a new one** — the old per-year counter needed one-time backfilling
+  because pre-2026-07-10 quotes existed before atomic counters did at all; the new per-day counter
+  has no equivalent problem (every day's key is brand new, no historical quote can ever collide
+  with it), so carrying the bootstrap logic forward would have been dead complexity, not a safety
+  net. Recognizing *why* a piece of defensive code exists is what let it be safely deleted rather
+  than cargo-culted into the new implementation.
+
+### Recommendations for next session
+- Not yet verified against a live browser/database — see PROJECT_STATUS.md "Known Risks" for the
+  specific untested scenarios (first-quote-of-a-real-day behavior, actual midnight rollover,
+  Rewrite on a new-format id).
+- This ships as part of the growing backlog of `master` commits not yet deployed to
+  `huma-erp.com` (see the 2026-08-14c/d entries below) — worth flagging to the owner again.
+
+---
+
 ## Session — 2026-08-14d (absolute latest), Fix: Dashboard filter-bar layout regression + code-review follow-up
 
 ### What was implemented
