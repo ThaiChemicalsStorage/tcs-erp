@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { Check, AlertTriangle, Camera, X, Loader2, ImageOff } from "lucide-react";
-import type { ServiceChecklistItemDef } from "../lib/serviceTemplates";
+import { Check, AlertTriangle, Camera, X, Loader2, ImageOff, Ruler, ToggleLeft } from "lucide-react";
+import type { ServiceChecklistItemDef, ServiceChecklistItemKind } from "../lib/serviceTemplates";
 import type { ServiceChecklistItemValue, ServiceChecklistItemPhoto } from "../lib/serviceReports";
 import { MAX_CHECKLIST_ITEM_LABEL_LENGTH } from "../lib/validation/serviceReportValidation";
 import { InlineEditableLabel } from "./InlineEditableLabel";
@@ -25,6 +25,7 @@ export function ServiceChecklistItemControl({
   photoUploadDisabledReason,
   onRemove,
   onRename,
+  onChangeKind,
 }: {
   itemDef: ServiceChecklistItemDef;
   value: ServiceChecklistItemValue;
@@ -45,9 +46,16 @@ export function ServiceChecklistItemControl({
   // `structureEditable` rule as onRemove. A rename keeps the item's key, so any recorded
   // status/abnormalDetail/photos survive it — see docs/MODULES/Service.md.
   onRename?: (label: string) => void;
+  // When set, a small toggle next to the label lets this report switch the item between the
+  // Normal/Abnormal checkbox pair and the measurement-value input — same
+  // gated-while-editable-Draft rule as onRemove/onRename. Switching never touches `value` (status/
+  // abnormalDetail/measurementValue/photos all already coexist on every item regardless of kind —
+  // see `ServiceChecklistItemValue`), so toggling back and forth never loses recorded data.
+  onChangeKind?: (kind: ServiceChecklistItemKind) => void;
 }) {
   const { t } = useI18n();
   const isAbnormal = value.status === "abnormal";
+  const isNormal = value.status === "normal";
   const totalCols = onRemove ? 4 : 3;
 
   return (
@@ -70,6 +78,17 @@ export function ServiceChecklistItemControl({
             itemDef.label
           )}
           {itemDef.kind === "measurement" && itemDef.unit && <span className="text-muted-foreground"> ({itemDef.unit})</span>}
+          {onChangeKind && (
+            <button
+              type="button"
+              title={itemDef.kind === "measurement" ? t("service.checklist.switchToNormalAbnormal") : t("service.checklist.switchToMeasurement")}
+              aria-label={itemDef.kind === "measurement" ? t("service.checklist.switchToNormalAbnormal") : t("service.checklist.switchToMeasurement")}
+              onClick={() => onChangeKind(itemDef.kind === "measurement" ? "normalAbnormal" : "measurement")}
+              className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded text-muted-foreground/50 hover:text-[#c9a84c] hover:bg-[#c9a84c]/10 transition-colors align-middle"
+            >
+              {itemDef.kind === "measurement" ? <ToggleLeft size={13} /> : <Ruler size={13} />}
+            </button>
+          )}
         </td>
         {itemDef.kind === "measurement" ? (
           <td colSpan={2} className={`py-2 px-3 ${onRemove ? "" : "pr-5"}`}>
@@ -125,24 +144,27 @@ export function ServiceChecklistItemControl({
           <td colSpan={totalCols} className="pl-5 pr-5 pb-1.5"><p className="text-[11px] text-[#e05252]">{error}</p></td>
         </tr>
       )}
-      {isAbnormal && (
+      {(isAbnormal || isNormal) && (
         <tr>
           <td colSpan={totalCols} className="pl-5 pr-5 pb-3">
-            <div className="pl-3 border-l-2 border-[#e05252]/40 space-y-2">
-              <textarea
-                value={value.abnormalDetail}
-                onChange={(e) => onChange({ ...value, abnormalDetail: e.target.value })}
-                disabled={disabled}
-                rows={2}
-                placeholder={t("service.checklist.abnormalDetailPlaceholder")}
-                className="w-full px-3 py-2 text-sm bg-[#e05252]/5 border border-[#e05252]/25 rounded-lg outline-none focus:border-[#e05252]/60 transition-colors disabled:opacity-60 resize-y"
-              />
+            <div className={`pl-3 border-l-2 space-y-2 ${isAbnormal ? "border-[#e05252]/40" : "border-border"}`}>
+              {isAbnormal && (
+                <textarea
+                  value={value.abnormalDetail}
+                  onChange={(e) => onChange({ ...value, abnormalDetail: e.target.value })}
+                  disabled={disabled}
+                  rows={2}
+                  placeholder={t("service.checklist.abnormalDetailPlaceholder")}
+                  className="w-full px-3 py-2 text-sm bg-[#e05252]/5 border border-[#e05252]/25 rounded-lg outline-none focus:border-[#e05252]/60 transition-colors disabled:opacity-60 resize-y"
+                />
+              )}
               <PhotoAttachments
                 photos={value.photos ?? []}
                 disabled={disabled}
                 disabledReason={photoUploadDisabledReason}
                 onUpload={onUploadPhoto}
                 onDelete={onDeletePhoto}
+                required={isAbnormal}
               />
             </div>
           </td>
@@ -182,16 +204,19 @@ function CheckboxCell({
   );
 }
 
-// แนบรูปภาพประกอบรายการที่ผิดปกติ — แสดงภาพย่อพร้อมปุ่มลบ และปุ่มถ่าย/เลือกรูปใหม่
-// Photo attachments for an Abnormal item — thumbnail grid with per-photo delete, plus an add button.
+// แนบรูปภาพประกอบรายการ (ปกติหรือผิดปกติ) — แสดงภาพย่อพร้อมปุ่มลบ และปุ่มถ่าย/เลือกรูปใหม่
+// Photo attachments for a Normal or Abnormal item — thumbnail grid with per-photo delete, plus an
+// add button. `required` (Abnormal only) shows the red "at least 1 required" hint; Normal items
+// can still attach photos, just optionally.
 function PhotoAttachments({
-  photos, disabled, disabledReason, onUpload, onDelete,
+  photos, disabled, disabledReason, onUpload, onDelete, required,
 }: {
   photos: ServiceChecklistItemPhoto[];
   disabled: boolean;
   disabledReason?: string;
   onUpload?: (file: File) => Promise<void>;
   onDelete?: (photoId: string) => Promise<void>;
+  required?: boolean;
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -213,7 +238,7 @@ function PhotoAttachments({
   return (
     <div>
       <p className="text-[11px] font-medium text-[#a75d1a] mb-1.5">
-        {t("service.checklist.photosLabel")} {photos.length === 0 && <span className="text-[#e05252]">*{t("service.checklist.photoRequired")}</span>}
+        {t("service.checklist.photosLabel")} {required && photos.length === 0 && <span className="text-[#e05252]">*{t("service.checklist.photoRequired")}</span>}
       </p>
       <div className="flex flex-wrap gap-2">
         {photos.map((p) => (

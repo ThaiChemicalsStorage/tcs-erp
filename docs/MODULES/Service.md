@@ -76,9 +76,27 @@ Abnormal reveals, inline:
 - **At least one attached photo** (added same day as the print view) — the "Photos" label shows a
   red "*at least 1 required" hint until one exists.
 
-Neither is silently cleared if the status is later changed back to Normal — only an explicit user
-action (retyping the field, deleting a photo) removes them. A `measurement`-kind item renders a
-single text input instead, with completion requiring it non-blank.
+**2026-08-14, direct business request: photos are no longer Abnormal-only.** Selecting **Normal**
+now also reveals the same photo-attachment grid (no `abnormalDetail` field, and no "at least 1
+required" hint — attaching a photo to a Normal item is always optional, only Abnormal enforces the
+≥1-photo rule). Neither the detail text nor any attached photo is silently cleared if the status is
+later changed (Normal↔Abnormal↔unselected) — only an explicit user action (retyping the field,
+deleting a photo) removes them. A `measurement`-kind item renders a single text input instead, with
+completion requiring it non-blank (no photo attachment on measurement-kind items).
+
+**Per-report kind switch (2026-08-14, same request).** A small toggle next to the item label
+(`ToggleLeft`/`Ruler` icon, gated by the same `structureEditable` rule as rename/remove — see
+"Structure editing" below) lets a report switch an item between `normalAbnormal` and `measurement`
+kind, independent of what the master template defines. Switching never mutates `value` — every
+item already carries `status`/`abnormalDetail`/`measurementValue`/`photos` regardless of its
+current `kind` (see `ServiceChecklistItemDef`/`ServiceChecklistItemValue`) — so toggling back and
+forth never discards whatever was already recorded under the other kind. Implemented via
+`changeChecklistItemKind()` in `ServiceReportEditor.tsx`, following the exact same
+edit-`sections`-only, never-touch-`checklist` pattern as `renameChecklistItem()`; saved through the
+existing `templateSections` PATCH path, re-validated by `sanitizeServiceTemplateSections()`
+(`src/lib/validation/serviceReportValidation.ts`), which already accepted an arbitrary
+`"normalAbnormal" | "measurement"` value per item with no prior constraint tying it to the item's
+original template-defined kind — so this shipped with **zero server-side changes**, frontend-only.
 
 Server-side, `mergeChecklist()` (`api/_lib/serviceReportHandler.ts`) rebuilds the whole `checklist`
 array by walking the report's own frozen `templateSnapshot.sections` on every `PATCH` — a client can

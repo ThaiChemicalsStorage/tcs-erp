@@ -4,6 +4,43 @@
 
 ---
 
+## Session — 2026-08-14f (absolute latest), Service checklist: photos for Normal too + per-report kind switch
+
+### What was implemented
+Direct business request, two changes to the Service checklist UI: (1) photo attachments are no
+longer gated to Abnormal-only — Normal items can now attach photos too, just optionally, no
+required-count hint; (2) a small per-item toggle lets a report switch a checklist item between the
+Normal/Abnormal checkbox pair and the measurement-value input, independent of what the master
+template originally defined for it. Investigated the existing `ServiceChecklistItemControl.tsx` and
+`ServiceReportEditor.tsx` directly (user had just rejected a research-agent delegation, preferring
+direct action) before writing anything — found the exact conditional gate (`{isAbnormal && (...)}`)
+and the existing `renameChecklistItem()`/`onRemove`/`onRename` pattern to model the new kind-switch
+function on. Checked server-side validation (`sanitizeServiceTemplateSections()`) before assuming
+this needed any backend change — it already accepted either kind value per item unconditionally, so
+this shipped as a pure frontend change, zero server-side edits.
+
+### Decisions / gotchas worth remembering
+- **Check whether server validation already permits what you're about to build before assuming a
+  backend change is needed.** `sanitizeServiceTemplateSections()` takes `ir.kind` straight from the
+  client payload and only checks it's one of the two valid enum values — no check ties it to the
+  item's original template-defined kind. Confirming this up front turned "backend + frontend
+  feature" into "frontend-only," a materially smaller and lower-risk change.
+- **`ServiceChecklistItemValue` already carries every field for every kind, always** (`status`,
+  `abnormalDetail`, `measurementValue`, `photos` — see `addChecklistItem()`'s default value shape)
+  — so a kind switch never needs a data-migration step; it's purely a `sections`-level def change,
+  identical in shape to the existing `renameChecklistItem()`.
+- The user rejected an Explore-agent delegation for this task and asked to proceed directly instead
+  — noted for future Service-module UI requests in this session: prefer direct Read/Grep
+  investigation over spinning up a research agent when the ask is a scoped, single-component change.
+
+### Recommendations for next session
+- Not yet verified against a live browser — see PROJECT_STATUS.md "Known Risks" for the specific
+  untested scenarios (Normal-item photo upload, kind-switch re-render, data preserved across a
+  switch-and-switch-back).
+- Adds to the growing backlog of `master` commits not yet deployed to `huma-erp.com`.
+
+---
+
 ## Session — 2026-08-14e (absolute latest), Quotation numbering format change
 
 ### What was implemented

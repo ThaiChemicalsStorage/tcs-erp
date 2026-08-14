@@ -8,7 +8,7 @@ import {
   uploadServiceReportPhoto, deleteServiceReportPhoto, printServiceReport, mergeServerPhotosIntoChecklist,
   sendServiceReportCustomerApproval,
 } from "../../lib/serviceReports";
-import { type ServiceTemplateSummary, type ServiceTemplate, type ServiceChecklistSectionDef, fetchServiceTemplates, fetchServiceTemplate } from "../../lib/serviceTemplates";
+import { type ServiceTemplateSummary, type ServiceTemplate, type ServiceChecklistSectionDef, type ServiceChecklistItemKind, fetchServiceTemplates, fetchServiceTemplate } from "../../lib/serviceTemplates";
 import { type Customer, fetchCustomers, createLinePairingCode } from "../../lib/customers";
 import { type User, fetchUsers } from "../../lib/users";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
@@ -504,6 +504,23 @@ export function ServiceReportEditor({
     })));
   };
 
+  // เปลี่ยนประเภทรายการ (ปกติ/ผิดปกติ ↔ ช่องกรอกค่าที่วัดได้) โดยคง key เดิม ข้อมูลที่บันทึกไว้แล้วไม่หาย
+  /**
+   * Per-report kind switch — same pattern/scope as `renameChecklistItem` above (edits this
+   * report's own frozen `templateSnapshot.sections` only, never the master template). Never
+   * touches `checklist`/`value` — status/abnormalDetail/measurementValue/photos already coexist
+   * on every item regardless of kind (see `ServiceChecklistItemValue`), so switching back and
+   * forth never loses whatever was already recorded under the other kind.
+   */
+  const changeChecklistItemKind = (sectionKey: string, groupKey: string, itemKey: string, kind: ServiceChecklistItemKind) => {
+    setSections((prev) => prev.map((s) => (s.key !== sectionKey ? s : {
+      ...s,
+      groups: s.groups.map((g) => (g.key !== groupKey ? g : {
+        ...g, items: g.items.map((it) => (it.key === itemKey ? { ...it, kind } : it)),
+      })),
+    })));
+  };
+
   const renameChecklistGroup = (sectionKey: string, groupKey: string, title: string) => {
     setSections((prev) => prev.map((s) => (s.key !== sectionKey ? s : {
       ...s, groups: s.groups.map((g) => (g.key === groupKey ? { ...g, title } : g)),
@@ -923,6 +940,7 @@ export function ServiceReportEditor({
                                   onDeletePhoto={isNew ? undefined : (photoId) => handleDeletePhoto(photoId)}
                                   onRemove={structureEditable ? () => requestRemoveItem(sectionDef.key, groupDef.key, itemDef.key) : undefined}
                                   onRename={structureEditable ? (label) => renameChecklistItem(sectionDef.key, groupDef.key, itemDef.key, label) : undefined}
+                                  onChangeKind={structureEditable ? (kind) => changeChecklistItemKind(sectionDef.key, groupDef.key, itemDef.key, kind) : undefined}
                                 />
                               );
                             })}

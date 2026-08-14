@@ -4,7 +4,37 @@
 
 ---
 
-## 2026-08-14g (absolute latest) — Quotation numbering format: Q#YYMMDD-NNNN, daily-reset sequence
+## 2026-08-14h (absolute latest) — Service checklist: photos on Normal items too + per-report kind switch
+
+Direct business request: two Service checklist changes, both frontend-only (server-side validation
+already permitted both — see below).
+
+- **Photos are no longer Abnormal-only.** Selecting **Normal** on a `normalAbnormal`-kind item now
+  also reveals the photo-attachment grid (`ServiceChecklistItemControl.tsx`) — no `abnormalDetail`
+  field and no "at least 1 required" red hint for Normal (that requirement stays Abnormal-only);
+  attaching a photo to a Normal item is always optional. `PhotoAttachments` gained a `required`
+  prop controlling the hint, defaulting to Abnormal-only.
+- **Per-report kind switch.** A small toggle (`ToggleLeft`/`Ruler` icon) next to the item label lets
+  a report switch an item between the Normal/Abnormal checkbox pair and the measurement-value
+  input, independent of the master template — gated by the same `structureEditable` rule as the
+  existing rename/remove controls (editable Draft only). New `changeChecklistItemKind()` in
+  `ServiceReportEditor.tsx`, modeled directly on `renameChecklistItem()` (edits the report's own
+  `sections` snapshot only, never `checklist`/`value` — every item already carries
+  `status`/`abnormalDetail`/`measurementValue`/`photos` regardless of its current `kind`, so
+  switching back and forth never discards previously recorded data under the other kind).
+- **Zero server-side changes** — `sanitizeServiceTemplateSections()`
+  (`src/lib/validation/serviceReportValidation.ts`) already accepted any `"normalAbnormal" |
+  "measurement"` value per item with no constraint tying it to that item's original template-defined
+  kind, and nothing server-side ever gated photo upload on the item's `status`.
+- New i18n keys: `service.checklist.switchToMeasurement`/`switchToNormalAbnormal` (TH+EN).
+- See [MODULES/Service.md](./MODULES/Service.md) "Checklist status rules" for the full detail.
+- Verified via `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (152/152, unchanged
+  — no test exercises this UI-only control). No live-browser check this session (see
+  PROJECT_STATUS.md "Known Risks").
+
+---
+
+## 2026-08-14g — Quotation numbering format: Q#YYMMDD-NNNN, daily-reset sequence
 
 Direct business request: the quote id format changes from `QT-{Buddhist year}-NNNN` (e.g.
 `QT-2567-0041`) to `Q#YYMMDD-NNNN` (e.g. `Q#260814-0001`) — Bangkok-local date the quote was
