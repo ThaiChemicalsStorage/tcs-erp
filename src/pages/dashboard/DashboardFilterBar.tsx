@@ -73,6 +73,10 @@ export function DashboardFilterBar({
         </div>
       )}
 
+      {/* People-filters + VAT toggle share this one sm:ml-auto — splitting them into separate
+          ml-auto siblings previously made the leftover row space divide between both, floating
+          the people-filters group mid-row instead of both hugging the right edge. Any future
+          right-aligned addition belongs inside this container, not as a new sibling. */}
       <div className="flex items-center gap-2.5 flex-wrap sm:ml-auto">
         {!hidePeopleFilters && (
           <>

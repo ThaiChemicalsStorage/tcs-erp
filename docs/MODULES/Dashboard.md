@@ -194,7 +194,12 @@ its own pre-fetch UI state (e.g. a stale toggle position after a slow request).
 
 **UI**: `DashboardFilterBar.tsx` renders a labeled toggle (the new shared `src/components/
 Toggle.tsx`, extracted out of `SettingsPage.tsx` which now imports it instead of defining its own
-copy) next to the other filters, unchecked (pre-tax) by default — `DashboardPage.tsx` seeds
+copy) next to the other filters, unchecked (pre-tax) by default. **2026-08-14 same-day fix**: the
+toggle's own wrapper `<div>` initially used a second, sibling `sm:ml-auto` alongside the
+people-filters group's existing one — two flex siblings each claiming that auto-margin split the
+leftover row space between them, floating the department/salesperson dropdowns mid-row instead of
+flush right (caught via a user screenshot). Fixed by merging both into one shared `sm:ml-auto`
+container; see the inline comment at that container in `DashboardFilterBar.tsx` — `DashboardPage.tsx` seeds
 `filters.vatMode: "pre"` in its initial state and re-fetches whenever it changes, same as every
 other filter. Every affected component receives a `vatMode` prop threaded down from
 `stats.filters.vatMode` (the server-echoed value, not local state): `ExecutiveSummaryCards`,

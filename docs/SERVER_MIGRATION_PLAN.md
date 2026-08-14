@@ -104,12 +104,13 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
 - Environment variables set on the server (`MONGODB_URI`, `JWT_SECRET`, `APP_URL` pointing at the
   real domain — attachment capability-URLs depend on this being correct).
 
-### D. Database — ✅ DONE (Option 2: self-hosted MongoDB)
+### D. Database — ✅ chosen and running (Option 2: self-hosted MongoDB); backups ⚠️ unconfirmed
 
 - The owner chose **self-hosted MongoDB** (not Atlas) — confirmed 2026-08-14 ("ฐานข้อมูล Local
   ตั้งหมดแล้ว"). Indexes/attachments travel with it the same as any MongoDB instance.
-- Backup plan for a self-hosted instance: a scheduled `mongodump` + off-machine copy — confirm
-  this is actually scheduled on the server (not independently re-verified in this doc pass).
+- **Backup plan is not confirmed done.** The plan calls for a scheduled `mongodump` + off-machine
+  copy on a self-hosted instance — this has **not** been independently verified to actually exist
+  on the server. Don't assume backups are running; ask the owner or check for a cron job directly.
 
 ### E. Data/roles on first boot — done (exact path not independently re-verified)
 
@@ -117,7 +118,11 @@ Express server (`server/index.ts`) + `.env.example` + `docs/DEPLOYMENT.md` — s
   seeds roles with every current permission, creates the Super Admin. Whether the live server
   actually started from a clean Setup Wizard run vs. carried over demo data was not itemized in
   the owner's 2026-08-14 confirmation — assume fresh per the original plan unless real user/role
-  data suggests otherwise on inspection.
+  data suggests otherwise on inspection. **If it turns out data was carried over instead of
+  fresh-seeded**, the specific manual grants that path needs (per the original 2026-07-24 plan)
+  are: `quotations:viewAll`, `scopeOfWork:viewAll`, and the 7 `deliveryOrder:*` permissions for
+  every existing role except Super Admin (`defaultRoles` only auto-seeds these on first-run setup,
+  never retroactively on an already-provisioned database) — check Role Management for each role.
 - **Budget note (2026-07-24)**: the plan called for staying on free tiers — a VPS + domain are the
   unavoidable real costs; confirm with the owner whether that's still the only spend.
 
@@ -139,11 +144,16 @@ was not walked point-by-point in this doc-only pass:
    other account without a reload (the 45 s polling).
 6. Role check: a view-only account must NOT see the send-email button / edit actions.
 
-### G. Final step before go-live: UPDATE THE USER MANUAL — ✅ DONE
+### G. Final step before go-live: UPDATE THE USER MANUAL — ✅ DONE for go-live, but ongoing per release
 
-- The owner confirmed 2026-08-14 the manual is updated ("คู่มืออัปเดตแล้ว"). Regeneration remains
-  one command going forward whenever it needs another refresh: `npm install --no-save
-  puppeteer-core && node docs/manual/generate-pdf.mjs`.
+- The owner confirmed 2026-08-14 the manual is updated ("คู่มืออัปเดตแล้ว"), and it got a further
+  content update the same day (2026-08-14e, a new Service module chapter).
+- **⚠️ The live, in-app manual is `public/manual.html`** (served at `/manual.html`, linked from
+  the topbar's gold "คู่มือการใช้งาน" button in `src/App.tsx`) — **edit that file directly for any
+  future content update.** `docs/manual/generate-pdf.mjs` + `docs/manual/user-manual.html` are the
+  *old*, superseded PDF-generation pipeline (see that file's own header comment) — running
+  `generate-pdf.mjs` does **not** update the manual users actually see in the app. This was
+  nearly gotten backwards during the 2026-08-14e update; kept here so it doesn't happen again.
 
 ### H. Decommission the demo — ✅ DONE
 

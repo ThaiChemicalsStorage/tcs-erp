@@ -4,6 +4,60 @@
 
 ---
 
+## Session — 2026-08-14d (absolute latest), Fix: Dashboard filter-bar layout regression + code-review follow-up
+
+### What was implemented
+Direct user report with a screenshot: the department/salesperson dropdowns on the Dashboard were
+floating in the middle of the filter bar instead of sitting flush right. Root cause: the same
+day's earlier VAT-toggle work (2026-08-14a) put the toggle in a sibling `<div>` that *also* used
+`sm:ml-auto`, alongside the pre-existing people-filters group's own `sm:ml-auto` — two flex
+siblings each claiming the same auto-margin split the leftover row space between them instead of
+both hugging the right edge. Fixed by merging both into one shared container with a single
+`sm:ml-auto` (`src/pages/dashboard/DashboardFilterBar.tsx`), and added a one-line comment
+documenting the invariant so a future right-aligned addition doesn't reintroduce it.
+
+Then ran `/code-review high --fix` on the day's changes. The forked review agent's own final
+report claimed several documentation fixes were applied directly to the working tree — but
+`git status`/`git diff` afterward showed a completely clean tree with none of those changes
+present anywhere (no worktree, no stash, no extra branch). The review's *findings* were legitimate
+(verified by re-reading each cited file/line myself), but its *self-reported "applied fixes"
+claim did not match reality* — treated as exactly the "trust but verify" case the standing
+instructions warn about, and re-applied every legitimate finding by hand instead of taking the
+agent's word for it:
+- `SERVER_MIGRATION_PLAN.md` step G corrected to point at `public/manual.html` (the real live
+  manual) instead of the superseded `generate-pdf.mjs`/`docs/manual/user-manual.html` pipeline —
+  the exact wrong-file mistake nearly made earlier the same day (2026-08-14c) and worth guarding
+  against permanently now.
+- Step E: restored the concrete permission list (`quotations:viewAll`, `scopeOfWork:viewAll`, 7
+  `deliveryOrder:*`) for the "if the DB wasn't actually fresh-seeded" fallback case.
+- Step D: downgraded the backup-plan badge from an unqualified DONE to flag that the backup
+  schedule itself was never independently confirmed to exist on the server.
+- Reworded the flat "Vercel is decommissioned" claims (`CLAUDE.md` root+docs, `ARCHITECTURE.md`)
+  to "no longer used, not confirmed torn down" — the same sentences elsewhere already said the
+  GitHub auto-deploy hookup was left connected, which contradicted "decommissioned" outright.
+- Added the `PROJECT_STATUS.md` "Known Risks" line the day's CHANGELOG entry already pointed to
+  but which didn't exist yet (a dead cross-reference).
+- This very entry — the review flagged its absence as a standing-rule violation.
+
+### Decisions / gotchas worth remembering
+- **A subagent's final-report prose is not proof of a file edit — check `git status`/`git diff`
+  after any agent claims to have modified the working tree**, especially a forked/backgrounded
+  one. This is the single most consequential finding from this session: an entire round of
+  "applied fixes" simply didn't exist, and would have been reported to the user as done if not
+  independently re-verified.
+- **Two sibling flex children both using `ml-auto` split the leftover space between them** rather
+  than both hugging the same edge — a genuinely non-obvious CSS footgun, now documented inline at
+  the fix site per this project's "comment only the non-obvious why" convention.
+
+### Recommendations for next session
+- If `/code-review --fix` is used again, always diff the working tree afterward before trusting
+  the report — don't assume "applied fixes directly" means they're actually there.
+- Still outstanding from 2026-08-14c: the 2026-08-13 signature draw/upload, 2026-08-10 LINE OA
+  approval, and 2026-08-14a Dashboard/Service-card/compression work all remain undeployed to
+  `huma-erp.com` as of this session.
+
+---
+
 ## Session — 2026-08-14c (absolute latest), User manual: Service chapter added, live-verified against production
 
 ### What was implemented
