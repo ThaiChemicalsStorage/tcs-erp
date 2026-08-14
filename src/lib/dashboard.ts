@@ -215,6 +215,9 @@ export interface DashboardStats {
   deliveryOrder: DeliveryOrderSummary | null;
   serviceSummary: ServiceSummary | null;
   ownDataOnly: boolean;
+  /** 2026-08-14 — which visibility tier `ownDataOnly` resolved to; drives which banner text/filter
+   * behavior the Dashboard shows (own vs team vs department vs company-wide). */
+  visibilityScope: "own" | "team" | "department" | "all";
   notificationSummary: NotificationSummary;
   availableSalespeople: string[];
   availableDepartments: string[];

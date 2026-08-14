@@ -4,7 +4,8 @@ import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
 import type { User, UserStatus } from "../../lib/users";
 import { createUser, updateUser, deleteUser, isEmployeeIdTaken, isUsernameTaken, isEmailTaken, initials, POSITION_SUGGESTIONS } from "../../lib/users";
-import { DOCUMENT_RECIPIENT_DEPARTMENTS } from "../../lib/documentRequirements";
+import type { Department } from "../../lib/departments";
+import type { Team } from "../../lib/teams";
 import type { Role } from "../../lib/roles";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -25,6 +26,7 @@ interface UserFormState {
   email: string;
   phone: string;
   department: string;
+  teamId: string;
   position: string;
   roleKey: string;
   status: UserStatus;
@@ -35,7 +37,7 @@ interface UserFormState {
 // สร้างค่าเริ่มต้นว่างสำหรับฟอร์มผู้ใช้งาน
 // Returns an empty user form state
 function emptyForm(defaultRoleKey: string): UserFormState {
-  return { fullName: "", employeeId: "", username: "", email: "", phone: "", department: "", position: "", roleKey: defaultRoleKey, status: "active", password: "", confirm: "" };
+  return { fullName: "", employeeId: "", username: "", email: "", phone: "", department: "", teamId: "", position: "", roleKey: defaultRoleKey, status: "active", password: "", confirm: "" };
 }
 
 // กล่องโต้ตอบสำหรับรีเซ็ตรหัสผ่านผู้ใช้ พร้อมจัดการโฟกัสและปิดด้วย Escape
@@ -85,6 +87,8 @@ export function UserManagementPage({
   users,
   onUsersChange,
   roles,
+  departments,
+  teams,
   currentUser,
   isSuperAdmin,
   onAudit,
@@ -94,6 +98,8 @@ export function UserManagementPage({
   users: User[];
   onUsersChange: (users: User[]) => void;
   roles: Role[];
+  departments: Department[];
+  teams: Team[];
   currentUser: User;
   isSuperAdmin: boolean;
   onAudit: (action: string, details: string) => void;
@@ -126,6 +132,7 @@ export function UserManagementPage({
   const emailId = useId();
   const phoneId = useId();
   const departmentId = useId();
+  const teamId = useId();
   const positionId = useId();
   const roleId = useId();
   const statusId = useId();
@@ -134,6 +141,13 @@ export function UserManagementPage({
 
   const assignableRoles = roles.filter((r) => !r.isSuperAdmin || isSuperAdmin);
   const roleName = (roleKey: string) => roles.find((r) => r.key === roleKey)?.name ?? roleKey;
+
+  // แสดงตัวเลือกทีมเฉพาะเมื่อแผนกที่เลือกในฟอร์มมีทีมอยู่จริง (หรือผู้ใช้มีทีมเดิมอยู่แล้ว)
+  // Only offer a team picker once the form's selected department actually has teams (or the user already has one)
+  const selectedDepartmentForTeam = departments.find((d) => d.name === form.department);
+  const teamsInSelectedDepartment = selectedDepartmentForTeam
+    ? teams.filter((tm) => tm.departmentId === selectedDepartmentForTeam.id && tm.isActive)
+    : [];
 
   const filtered = users.filter((u) => {
     const q = search.trim().toLowerCase();
@@ -150,7 +164,7 @@ export function UserManagementPage({
   const startEdit = (u: User) => {
     setForm({
       fullName: u.fullName, employeeId: u.employeeId, username: u.username, email: u.email, phone: u.phone,
-      department: u.department, position: u.position, roleKey: u.roleKey, status: u.status, password: "", confirm: "",
+      department: u.department, teamId: u.teamId, position: u.position, roleKey: u.roleKey, status: u.status, password: "", confirm: "",
     });
     setError("");
     setEditingId(u.id);
@@ -185,7 +199,7 @@ export function UserManagementPage({
         if (form.password !== form.confirm) { setError(t("users.errorPasswordMismatch")); return; }
         const created = await createUser({
           employeeId: form.employeeId, fullName: form.fullName, username: form.username, email: form.email,
-          password: form.password, phone: form.phone, department: form.department, position: form.position, roleKey: form.roleKey,
+          password: form.password, phone: form.phone, department: form.department, teamId: form.teamId, position: form.position, roleKey: form.roleKey,
         });
         onUsersChange([...users, created]);
         onAudit("User Created", `สร้างผู้ใช้ ${created.fullName} (${created.username}) บทบาท ${roleName(created.roleKey)}`);
@@ -200,7 +214,7 @@ export function UserManagementPage({
         }
         const updated = await updateUser(editingId, {
           fullName: form.fullName, employeeId: form.employeeId, username: form.username, email: form.email,
-          phone: form.phone, department: form.department, position: form.position, roleKey: form.roleKey, status: form.status,
+          phone: form.phone, department: form.department, teamId: form.teamId, position: form.position, roleKey: form.roleKey, status: form.status,
         });
         onUsersChange(users.map((u) => (u.id === editingId ? updated : u)));
         onAudit("User Updated", `แก้ไขข้อมูลผู้ใช้ ${form.fullName}${roleChanged ? ` (เปลี่ยนบทบาทเป็น ${roleName(form.roleKey)})` : ""}`);
@@ -301,10 +315,15 @@ export function UserManagementPage({
               <div><label htmlFor={phoneId} className={labelCls}>{t("users.field.phone")}</label><input id={phoneId} className={inputCls} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} /></div>
               <div>
                 <label htmlFor={departmentId} className={labelCls}>{t("users.field.department")}</label>
-                <select id={departmentId} className={inputCls} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
+                <select
+                  id={departmentId}
+                  className={inputCls}
+                  value={form.department}
+                  onChange={(e) => setForm((f) => ({ ...f, department: e.target.value, teamId: "" }))}
+                >
                   <option value="">{t("users.field.department.none")}</option>
-                  {DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => <option key={d.key} value={d.label}>{d.label}</option>)}
-                  {form.department && !DOCUMENT_RECIPIENT_DEPARTMENTS.some((d) => d.label === form.department) && (
+                  {departments.filter((d) => d.isActive).map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                  {form.department && !departments.some((d) => d.name === form.department) && (
                     <option value={form.department}>{form.department} ({t("users.field.department.legacy")})</option>
                   )}
                 </select>
@@ -331,6 +350,21 @@ export function UserManagementPage({
                 {editingId === currentUser.id && <p className="text-[10px] text-muted-foreground mt-1">{t("users.ownRoleLockedHint")}</p>}
               </div>
             </div>
+            {selectedDepartmentForTeam && (teamsInSelectedDepartment.length > 0 || form.teamId) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor={teamId} className={labelCls}>{t("users.field.team")}</label>
+                  <select id={teamId} className={inputCls} value={form.teamId} onChange={(e) => setForm((f) => ({ ...f, teamId: e.target.value }))}>
+                    <option value="">{t("users.field.team.none")}</option>
+                    {teamsInSelectedDepartment.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+                    {form.teamId && !teamsInSelectedDepartment.some((tm) => tm.id === form.teamId) && (
+                      <option value={form.teamId}>{teams.find((tm) => tm.id === form.teamId)?.name ?? form.teamId} ({t("users.field.team.legacy")})</option>
+                    )}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground mt-1">{t("users.field.team.hint")}</p>
+                </div>
+              </div>
+            )}
             {view === "edit" && (
               <div>
                 <label htmlFor={statusId} className={labelCls}>{t("users.field.status")}</label>

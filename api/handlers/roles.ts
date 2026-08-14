@@ -4,6 +4,7 @@ import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser, requirePermission } from "../_lib/auth.js";
 import { rolesCollection, usersCollection } from "../_lib/collections.js";
 import { seedDefaultRolesIfEmpty, bootstrapRbac } from "../_lib/rbacSeed.js";
+import { handleDepartments, handleTeams } from "../_lib/departmentsHandler.js";
 import { sanitizeRolePermissions } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
 
@@ -103,6 +104,20 @@ async function handleOne(req: VercelRequest, res: VercelResponse, key: string) {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   await withErrorHandling(req, res, async () => {
+    // Departments + Teams (added 2026-08-14, Sales' 2-team visibility split) share this function
+    // file rather than getting their own — Vercel Hobby's 12-function cap is still fully used (see
+    // docs/ARCHITECTURE.md). Mounted here specifically (not e.g. users.ts) since both are
+    // Super-Admin-gated org-structure config, the same class as Role Management itself. Checked
+    // first, on the raw pathname, before falling through to the roles logic below — same
+    // established sharing pattern Scope of Work/Delivery Order use inside api/handlers/quotes.ts.
+    const pathname = (req.url ?? "").split("?")[0];
+    if (pathname === "/api/departments" || pathname.startsWith("/api/departments/")) {
+      return handleDepartments(req, res);
+    }
+    if (pathname === "/api/teams" || pathname.startsWith("/api/teams/")) {
+      return handleTeams(req, res);
+    }
+
     const parts = getPathSegments(req, "/api/roles");
 
     if (parts.length === 0) return handleList(req, res);

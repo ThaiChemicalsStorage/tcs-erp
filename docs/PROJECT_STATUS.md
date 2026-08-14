@@ -14,6 +14,25 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-14] Departments (manageable) + Sales Teams + tiered visibility (own/team/department/
+  all).** Direct business request: Sales has 2 teams, each with its own team lead who should only
+  see their own team's records. Wired up the previously schema-only `departments` MongoDB
+  collection (real admin CRUD page, `departments:manage` permission) and added a new `teams`
+  collection (sub-grouping within a department, `teams:manage`) — `src/pages/admin/
+  DepartmentManagementPage.tsx`. Extended Quotations/Scope of Work/Delivery Order's existing binary
+  `view`/`viewAll` model with 6 new `{module}:viewTeam`/`{module}:viewDepartment` permissions and a
+  shared `buildOwnershipClause()`/`resolveVisibilityScope()` cascade (`api/_lib/visibility.ts`, new
+  file), also wired into the Dashboard's own-data scoping (`ownDataOnly` joined by a new
+  `visibilityScope` field). User Management's department `<select>` now sources from this real
+  collection instead of a hardcoded constant; a new team `<select>` sets `User.teamId`. No new
+  default role — a Super Admin creates the actual team-lead roles via existing Role Management once
+  deployed (flagged in TODO.md, same manual-step pattern every prior permission-adding pass has
+  needed). New `tests/api/visibility.test.ts` (in-memory MongoDB, 14 tests: the 4-tier cascade's
+  actual query results, team-vs-department priority, per-module isolation, no-team fallback). See
+  [MODULES/Department.md](./MODULES/Department.md), [RBAC.md](./RBAC.md) "Departments + Teams +
+  Tiered Visibility". `tsc`/`lint`/`build`/`test` (166/166, up from 152) all pass clean. See
+  CHANGELOG.md.
+
 - ✅ **[2026-08-14] Dashboard VAT toggle + Service summary card + browser-side image compression
   across every upload site.** Three features. (1) The 2026-07-14 "always pre-tax" Dashboard rule
   became a user-selectable pre-tax/post-tax toggle (`?vat=pre|post` on `GET /api/dashboard`, a new

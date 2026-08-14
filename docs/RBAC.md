@@ -20,7 +20,7 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **Users** (`src/lib/users.ts`): a `User` is both the employee record and the account — `employeeId`, `fullName`, `username`, `email`, `passwordHash`, `phone`, `department`, `position`, `roleKey`, `status` (`active`/`inactive`), `profilePictureDataUrl`, `signatureDataUrl`. `employeeId`/`username`/`email` are enforced unique. **Position and Role are deliberately separate fields** — Position is a free-text job title (with suggestions: CEO, Director, General Manager, Sales Manager, Sales Executive, Engineer, HR, Accounting, Purchasing, Warehouse) with no bearing on permissions; Role is the RBAC role, assigned independently by an admin.
 
-**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat 37-key `Permission` union — `dashboard:view`; `quotations:view/viewAll/create/edit/delete/approve/reject/export` (`:viewAll` added 2026-07-22, see "Quotation Own-Quotes-Only Viewing" below); `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below); `scopeOfWork:view/viewAll/create/edit/finalize/print/delete` (`:viewAll` added 2026-07-23, see "Scope of Work Own-Records-Only Viewing" below; the other 6 added 2026-07-15, see "Scope of Work" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) **Seven** default `Role`s ship out of the box (six until 2026-08-07, when `service_engineer` was added — see "Service" below):
+**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat `Permission` union (64 keys as of 2026-08-14's Departments/Teams pass — this count is not kept in perfect sync with every module addition below; treat it as an order-of-magnitude reference, `ALL_PERMISSIONS.length` is authoritative) — `dashboard:view`; `quotations:view/viewAll/create/edit/delete/approve/reject/export` (`:viewAll` added 2026-07-22, see "Quotation Own-Quotes-Only Viewing" below); `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below); `scopeOfWork:view/viewAll/create/edit/finalize/print/delete` (`:viewAll` added 2026-07-23, see "Scope of Work Own-Records-Only Viewing" below; the other 6 added 2026-07-15, see "Scope of Work" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) **Seven** default `Role`s ship out of the box (six until 2026-08-07, when `service_engineer` was added — see "Service" below):
 
 | Role | `isSuperAdmin` | `isSystem` | Summary |
 |---|---|---|---|
@@ -455,6 +455,78 @@ Audit logging: every action writes a server-side `AuditLogEntry` via `writeServi
 module `"บริการ"`, with `relatedServiceReportId`/`relatedServiceTemplateId` fields — `userId`/
 `userName`/`roleName` always come from the server's own `AuthContext`, never client input, same
 non-forgeable convention as every other module.
+
+### Departments + Teams + Tiered Visibility (added 2026-08-14)
+
+Direct business request: Sales has 2 teams, each with its own team lead — a lead should see only
+their own team's records, not the other team's (a correction mid-build from an initial "one
+manager oversees both teams" framing, which would have needed the department tier, not the team
+tier — both exist, the org just doesn't currently need the department one). Two related pieces:
+
+**Departments become a real manageable entity.** The `departments` MongoDB collection existed
+since 2026-07-09 but was schema-only, seeded with 7 generic Thai names, never wired to
+`User.department` or exposed in any UI — that note is now stale. `GET/POST/PATCH /api/departments`
+(mounted inside `api/handlers/roles.ts`, see API.md) plus a new admin page
+(`src/pages/admin/DepartmentManagementPage.tsx`, gated by the new `departments:manage` permission)
+let a Super Admin create/rename/archive departments. **A new `teams` collection** (sub-grouping
+within a department — `{ name, departmentId, isActive }`) is managed inline on the same page, gated
+by a new `teams:manage` permission. `User.department` stays free text (unchanged join to
+`Quote.salesperson`, still exactly what the Dashboard's department filter dropdown already uses) —
+User Management's department `<select>` now sources from the real collection instead of the
+hardcoded `DOCUMENT_RECIPIENT_DEPARTMENTS` list (which is untouched and still drives Scope of
+Work's document-recipient routing, an unrelated concern). `User.teamId` is a new field, set via a
+second `<select>` scoped to whichever department is currently chosen in the form. Both
+`departments:manage`/`teams:manage` are in `SUPER_ADMIN_ONLY_PERMISSIONS`, the same class as
+`roles:manage`/`company:manage` — org-structure configuration, not day-to-day data.
+
+**Visibility gains two new tiers, generalized beyond Sales.** The existing binary `X:view` (own
+only) / `X:viewAll` (everyone) model for Quotations, Scope of Work, and Delivery Order — the three
+modules a Sales team actually touches — now has two more permissions each:
+
+| Permission | Sees |
+|---|---|
+| `{module}:view` | Own records only (unchanged baseline) |
+| `{module}:viewTeam` | Every record created by someone sharing the caller's `User.teamId` (new) |
+| `{module}:viewDepartment` | Every record created by someone sharing the caller's `User.department` (new) |
+| `{module}:viewAll` | Every record company-wide (unchanged) |
+
+`{module}` is `quotations`, `scopeOfWork`, or `deliveryOrder` — 6 new permissions total. **No new
+default role was added** — custom roles already support arbitrary permission combinations with zero
+code changes, so the actual "Sales Team 1 Lead"/"Sales Team 2 Lead" roles (each holding
+`quotations:viewTeam` + `scopeOfWork:viewTeam` + `deliveryOrder:viewTeam`, **not**
+`viewDepartment`) are created by a Super Admin via Role Management once this deploys — same
+"manual Role Management step" every prior permission-adding pass has needed, see TODO.md. The
+`viewDepartment` tier exists for the general case (e.g. a role that legitimately should see an
+entire department across multiple teams) but nothing in this pass grants it by default.
+
+**Shared cascade helper** — `buildOwnershipClause()`/`resolveVisibilityScope()`
+(`api/_lib/visibility.ts`, new file): `viewAll` (return `{}`, unfiltered) → `viewDepartment`
+(resolve every user sharing `ctx.user.department`, matched by exact string — same free-text join
+Dashboard already uses) → `viewTeam` (resolve every user sharing `ctx.user.teamId`) → own record
+only. A caller with a view-tier permission but no matching `department`/`teamId` set on their own
+account (e.g. `viewTeam` without ever being assigned to a team) falls through to own-only rather
+than erroring or matching nothing usefully. Legacy/seed records with an empty owner field stay
+visible at every tier — unchanged from the pre-existing `viewAll`-only behavior. Replaces the
+3 near-identical own-vs-viewAll ternaries that previously lived in `api/handlers/quotes.ts`,
+`api/_lib/scopeOfWorkHandler.ts`, and `api/_lib/deliveryOrderHandler.ts`; Scope of Work's own
+"named as a document recipient" `$or` branch (see "Scope of Work" above) is merged alongside the
+cascade's result, not replaced by it.
+
+**Dashboard (`GET /api/dashboard`)** now resolves the same cascade instead of a binary
+own-vs-viewAll check: the response's `ownDataOnly: boolean` is joined by a new
+`visibilityScope: "own" | "team" | "department" | "all"` field. The salesperson/department picker
+is hidden only at the `"own"` tier now (previously hidden for any non-`viewAll` caller) — a
+team/department-tier viewer has more than one visible salesperson, so the picker is now genuinely
+useful to them instead of pointless. The "showing limited data" banner text is tier-specific
+("your data only" / "your team's data only" / "your department's data only"). The Sales Activity
+timeline's own-tier `userName` match (audit entries are keyed by name, not id) now resolves the
+visible peer set from the already-loaded department/team-annotated user list rather than being
+hardcoded to the caller's own name.
+
+Covered by `tests/api/visibility.test.ts` (in-memory MongoDB): the 4-tier cascade's actual query
+results (not just the Mongo operator shape), the team-vs-department priority order, the per-module
+isolation (a `scopeOfWork:viewTeam` grant doesn't leak into `quotations`' resolution), and the
+no-team/no-department fallback-to-own behavior.
 
 ### Sidebar / Menu Visibility
 

@@ -54,6 +54,7 @@ async function handleSetup(req: VercelRequest, res: VercelResponse) {
     passwordHash,
     phone: "",
     department: "",
+    teamId: "",
     position: "",
     roleKey: superAdminRole.key,
     status: "active",

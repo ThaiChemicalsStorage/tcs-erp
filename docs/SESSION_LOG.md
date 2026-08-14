@@ -4,7 +4,79 @@
 
 ---
 
-## Session — 2026-08-14h (absolute latest), Service: create without a template + detail field for Normal items
+## Session — 2026-08-14i (absolute latest), Departments (manageable) + Sales Teams + tiered visibility
+
+### What was implemented
+Direct business request, following a plain "does the system let me add departments?" question:
+"ให้สามารถเพิ่มแผนกได้และคือเมเนเจอร์เซลล์อะมี 2 ทีมทำให้มีแบบยศแต่ละทีมดูได้แค่ทีมตัวเองช่วยออกแบบให้หน่อย" — explicitly
+asked to *design* this ("ช่วยออกแบบให้หน่อย"), so entered Plan Mode: researched the existing binary
+`view`/`viewAll` permission model, found a schema-only, completely unwired `departments` MongoDB
+collection from 2026-07-09 (the natural foundation rather than a new one), asked 4 clarifying
+questions (manager scope, team scope, "add department" meaning, which modules team-visibility
+covers), wrote a full plan, got it approved, then implemented straight through: data model → 8 new
+permissions → shared `buildOwnershipClause()` cascade → wired into Quotations/Scope of
+Work/Delivery Order/Dashboard → `/api/departments`+`/api/teams` routes → client libs → new admin
+page → User Management integration → tests → docs. See CHANGELOG.md 2026-08-14k for the itemized
+diff.
+
+**Mid-build correction, handled without breaking flow**: after the plan was approved and partway
+through implementation, the user corrected their own framing — "คือบอกผิดว่าในแผนกขายมันมี 2 team ใน 1
+ทีมจะมีหัวหน้าทีมนั้นๆคือหัวหน้าทีมเซลล์ 1 จะไม่สามารถดูพวกใบต่างๆของทีมเซลล์ 2 ได้" (each Sales team has its own
+lead who can't see the other team's records — not one manager who sees both). Because the
+architecture was already generic (separate opt-in `viewTeam`/`viewDepartment` tiers, no hardcoded
+role), this needed **zero code changes** — only a stale doc comment (`TeamFields`'s JSDoc in
+`collections.ts`, written before the correction) and the eventual TODO.md guidance for which
+permission tier the post-deploy custom roles should actually get (`viewTeam`, not
+`viewDepartment`).
+
+### Decisions / gotchas worth remembering
+- **A generic, tiered design absorbs a requirements correction for free.** If the department tier
+  had been hardcoded as "the Sales Manager's view," the mid-build correction would have meant
+  reworking the permission model. Because `viewTeam`/`viewDepartment` were built as two independent,
+  always-available tiers (design decision made *before* the correction landed, for unrelated
+  reasons — generality, no dead-end for future departments), the correction only changed which
+  tier a future custom role picks, not any code.
+- **Circular-import constraint decided where a new shared helper lives.** `buildOwnershipClause()`
+  needs both `roleHasPermission()` (from `src/lib/roles.ts`) and `AuthContext` (from
+  `api/_lib/auth.ts`), but `auth.ts` already imports from `collections.ts` — so putting the helper
+  in `collections.ts` (the plan's first-choice location) would have created a cycle. Checked
+  `auth.ts`'s own imports before writing the helper, then created a small new
+  `api/_lib/visibility.ts` file the plan had listed as the fallback option.
+- **Reused an existing free-text join instead of introducing a new one.** The department tier
+  matches `User.department` directly (string equality), the same convention the Dashboard's
+  department filter dropdown already relies on — deliberately not resolving through the new `Team`
+  entity, which would have needed a two-step "find every team in this department, then every member
+  of those teams" query for no behavioral benefit.
+- **A generalization opportunity was caught and taken while wiring the Dashboard**: the existing
+  binary `ownDataOnly: boolean` field would have made a team/department-tier caller's Dashboard show
+  a misleading "only your own data" banner and hide a salesperson picker that's actually useful to
+  them (they have more than one visible salesperson). Extended the response with a
+  `visibilityScope: "own"|"team"|"department"|"all"` field and made the picker-hiding/banner-text
+  logic tier-aware, rather than leaving the new tiers behind an old own-vs-all-shaped UI.
+- **Verified before trusting a stale doc line**: `RBAC.md`'s "flat 37-key `Permission` union" line
+  was already inaccurate before this session (actual count: 56, before this pass's own +8) — checked
+  `ALL_PERMISSIONS.length` directly rather than propagating a number nobody had kept in sync, and
+  reworded the line to point at the authoritative source instead of hardcoding a count likely to go
+  stale again.
+
+### Recommendations for next session
+- **Manual production step still needed**: once this deploys, a Super Admin must create two custom
+  roles ("Sales Team 1 Lead"/"Sales Team 2 Lead" or similar) via Role Management, each holding
+  `quotations:viewTeam` + `scopeOfWork:viewTeam` + `deliveryOrder:viewTeam` (not `viewDepartment`),
+  assign the two Sales team members' `teamId`s via User Management, and create the two Team records
+  under the Sales department via the new Departments admin page first. None of this happens
+  automatically — same "manual Role Management step" every prior permission-adding pass has needed.
+  Flagged in TODO.md.
+- Not yet verified against a live browser/database — same standing limitation as every recent pass
+  (create 2 teams under Sales, assign 2 test users one-per-team plus a role with
+  `quotations:viewTeam`, confirm each team member sees only their own team's quotes).
+- The Docker deployment staleness question from earlier this session (uptime suggesting a stale
+  image, `docker ps -a` output never fully shared) was never resolved — not raised again by the
+  user, but still an open thread if they return to it.
+
+---
+
+## Session — 2026-08-14h, Service: create without a template + detail field for Normal items
 
 ### What was implemented
 Two more direct requests on top of 2026-08-14h's photo/kind-switch pass, in the same conversation:

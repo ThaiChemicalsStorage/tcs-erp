@@ -29,6 +29,8 @@ const API_ROUTES: Record<string, ApiHandler> = {
   auth: authHandler,
   users: usersHandler,
   roles: rolesHandler,
+  departments: rolesHandler,
+  teams: rolesHandler,
   products: productsHandler,
   categories: categoriesHandler,
   notifications: notificationsHandler,

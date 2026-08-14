@@ -4,7 +4,60 @@
 
 ---
 
-## 2026-08-14j (absolute latest) — Service: create a report without a template + detail field for Normal items too
+## 2026-08-14k (absolute latest) — Departments (manageable) + Sales Teams + tiered visibility (own/team/department/all)
+
+Direct business request: "ให้สามารถเพิ่มแผนกได้และคือเมเนเจอร์เซลล์อะมี 2 ทีมทำให้มีแบบยศแต่ละทีมดูได้แค่ทีมตัวเองช่วยออกแบบให้หน่อย" —
+add manageable departments, and Sales' 2 teams should each only see their own team's records
+(clarified mid-build: each team has its own team lead, not one manager overseeing both — no code
+impact, just which custom role gets created post-deploy). Designed in Plan Mode, approved, then
+implemented end to end.
+
+- **`departments` collection wired up** (existed schema-only since 2026-07-09, seeded, never
+  touched by any route/UI). New `GET/POST/PATCH /api/departments` (`api/_lib/departmentsHandler.ts`,
+  mounted inside `api/handlers/roles.ts` — Vercel Hobby's 12-function cap is still fully used, same
+  sharing pattern Scope of Work/Delivery Order use inside `quotes.ts`) + a new admin page
+  (`src/pages/admin/DepartmentManagementPage.tsx`, gated by new `departments:manage` permission).
+  `code` auto-generates (`DEPT_<ObjectId>`) if the admin doesn't type one — not exposed in the UI.
+- **New `teams` collection** — sub-grouping within a department (`{name, departmentId, isActive}`),
+  managed inline on the same admin page, gated by new `teams:manage` permission. Team name only
+  needs to be unique within its own department. `User.teamId` (new field, `""` = no team).
+- **6 new visibility permissions**: `quotations:viewTeam`/`viewDepartment`,
+  `scopeOfWork:viewTeam`/`viewDepartment`, `deliveryOrder:viewTeam`/`viewDepartment` — extending the
+  existing binary `view` (own-only) / `viewAll` (everyone) model to a 4-tier cascade. No new default
+  role was added; custom roles already support arbitrary permission combinations, so the actual
+  "Sales Team 1/2 Lead" roles get created via Role Management post-deploy (see TODO.md).
+- **Shared `buildOwnershipClause()`/`resolveVisibilityScope()`** (`api/_lib/visibility.ts`, new
+  file) — replaces the 3 near-identical own-vs-viewAll ternaries previously inline in
+  `api/handlers/quotes.ts`, `api/_lib/scopeOfWorkHandler.ts`, `api/_lib/deliveryOrderHandler.ts`.
+  Department/team tiers resolve by matching `User.department`/`User.teamId` directly (department
+  matched as free text — same join the Dashboard's own department filter already uses), not via a
+  Teams-collection traversal. Scope of Work's "named as document recipient" `$or` branch is merged
+  alongside the cascade's result, not replaced by it.
+- **`GET /api/dashboard`** now resolves the same cascade — `ownDataOnly: boolean` is joined by a new
+  `visibilityScope: "own" | "team" | "department" | "all"` field; the salesperson/department filter
+  picker is hidden only at the `"own"` tier now (previously any non-`viewAll` caller); the
+  Sales Activity timeline's own-tier match now resolves the visible peer set instead of being
+  hardcoded to the caller's own name; the "limited data" banner text is tier-specific.
+- **User Management**: the Department `<select>` now sources from the real `departments` collection
+  instead of the hardcoded `DOCUMENT_RECIPIENT_DEPARTMENTS` constant (that constant is untouched —
+  still drives Scope of Work's unrelated document-recipient routing). A new Team `<select>` sets
+  `User.teamId`, scoped to whichever department is currently chosen; changing department clears the
+  team selection.
+- New `src/lib/departments.ts` + `src/lib/teams.ts` client libraries (thin `apiFetch` wrappers,
+  mirroring `src/lib/roles.ts`'s shape).
+- New `tests/api/visibility.test.ts` (in-memory MongoDB, 14 tests) — the 4-tier cascade's actual
+  query results (not just the Mongo operator shape), team-vs-department priority, per-module
+  isolation, and the no-team/no-department fallback-to-own behavior.
+- Docs: [RBAC.md](./RBAC.md) "Departments + Teams + Tiered Visibility" (new section),
+  [DATABASE.md](./DATABASE.md) (`departments` moved out of the schema-prep section, new `teams` row,
+  `User.teamId`), [API.md](./API.md) (new routes + tiered-visibility notes on the 4 affected list
+  routes), new [MODULES/Department.md](./MODULES/Department.md),
+  [MODULES/UserManagement.md](./MODULES/UserManagement.md) updated, `CLAUDE.md` module table + folder
+  structure, `TODO.md` (flags the post-deploy Role Management step).
+- Verified: `npx tsc --noEmit`, `npm run lint`, `npm run build`, `npm test` (166/166, up from 152 —
+  14 new) all pass clean.
+
+## 2026-08-14j — Service: create a report without a template + detail field for Normal items too
 
 Direct business request, two more Service checklist/creation changes, both same-session follow-ups
 to 2026-08-14h.

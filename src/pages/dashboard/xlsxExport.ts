@@ -49,7 +49,9 @@ export async function exportDashboardXlsx(
     ["Date to", filters.to || "(today)"],
     ["Salesperson filter", filters.salesperson],
     ["Department filter", filters.department],
-    ...(stats.ownDataOnly ? [["Scope", "Own data only (caller lacks viewAll)"] as Cell[]] : []),
+    ...(stats.ownDataOnly
+      ? [["Scope", `${stats.visibilityScope[0].toUpperCase()}${stats.visibilityScope.slice(1)} data only (caller lacks viewAll)`] as Cell[]]
+      : []),
     [],
     [`KPIs (all monetary values are ${vatNote})`],
     ...kpiRows(stats, vatLabel),

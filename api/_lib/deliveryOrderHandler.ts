@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { WithId } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
+import { buildOwnershipClause } from "./visibility.js";
 import {
   deliveryOrdersCollection, scopeOfWorksCollection, auditLogCollection,
   usersCollection, rolesCollection, notificationsCollection,
@@ -190,9 +191,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   // documented there (an existence check must never hide a colleague's already-created record and
   // risk a duplicate).
   if (!scopeOfWorkId) {
-    const ownershipMatch = roleHasPermission(ctx.role, "deliveryOrder:viewAll")
-      ? {}
-      : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }] };
+    const ownershipMatch = await buildOwnershipClause(ctx, "deliveryOrder", "createdBy");
     const docs = await deliveryOrders.find({ isDeleted: false, ...ownershipMatch }).sort({ updatedAt: -1 }).toArray();
     res.status(200).json({ deliveryOrders: docs.map(toListItem) });
     return;

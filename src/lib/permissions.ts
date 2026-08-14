@@ -4,6 +4,8 @@ export type Permission =
   | "dashboard:view"
   | "quotations:view"
   | "quotations:viewAll"
+  | "quotations:viewTeam"
+  | "quotations:viewDepartment"
   | "quotations:create"
   | "quotations:edit"
   | "quotations:delete"
@@ -18,6 +20,8 @@ export type Permission =
   | "users:manage"
   | "roles:manage"
   | "company:manage"
+  | "departments:manage"
+  | "teams:manage"
   | "auditLog:view"
   | "customers:view"
   | "customers:create"
@@ -33,6 +37,8 @@ export type Permission =
   | "quotationTemplates:import"
   | "scopeOfWork:view"
   | "scopeOfWork:viewAll"
+  | "scopeOfWork:viewTeam"
+  | "scopeOfWork:viewDepartment"
   | "scopeOfWork:create"
   | "scopeOfWork:edit"
   | "scopeOfWork:finalize"
@@ -41,6 +47,8 @@ export type Permission =
   | "scopeOfWork:chasePo"
   | "deliveryOrder:view"
   | "deliveryOrder:viewAll"
+  | "deliveryOrder:viewTeam"
+  | "deliveryOrder:viewDepartment"
   | "deliveryOrder:create"
   | "deliveryOrder:edit"
   | "deliveryOrder:finalize"
@@ -62,6 +70,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
   "quotations:view",
   "quotations:viewAll",
+  "quotations:viewTeam",
+  "quotations:viewDepartment",
   "quotations:create",
   "quotations:edit",
   "quotations:delete",
@@ -76,6 +86,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "users:manage",
   "roles:manage",
   "company:manage",
+  "departments:manage",
+  "teams:manage",
   "auditLog:view",
   "customers:view",
   "customers:create",
@@ -91,6 +103,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "quotationTemplates:import",
   "scopeOfWork:view",
   "scopeOfWork:viewAll",
+  "scopeOfWork:viewTeam",
+  "scopeOfWork:viewDepartment",
   "scopeOfWork:create",
   "scopeOfWork:edit",
   "scopeOfWork:finalize",
@@ -99,6 +113,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "scopeOfWork:chasePo",
   "deliveryOrder:view",
   "deliveryOrder:viewAll",
+  "deliveryOrder:viewTeam",
+  "deliveryOrder:viewDepartment",
   "deliveryOrder:create",
   "deliveryOrder:edit",
   "deliveryOrder:finalize",
@@ -121,6 +137,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "dashboard:view": "ดูแดชบอร์ด",
   "quotations:view": "ดูใบเสนอราคา",
   "quotations:viewAll": "ดูใบเสนอราคาของผู้อื่น",
+  "quotations:viewTeam": "ดูใบเสนอราคาของทีมตัวเอง",
+  "quotations:viewDepartment": "ดูใบเสนอราคาของแผนกตัวเอง",
   "quotations:create": "สร้างใบเสนอราคา",
   "quotations:edit": "แก้ไขใบเสนอราคา",
   "quotations:delete": "ลบ/ยกเลิกใบเสนอราคา",
@@ -135,6 +153,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "users:manage": "จัดการผู้ใช้งาน",
   "roles:manage": "จัดการบทบาทและสิทธิ์",
   "company:manage": "จัดการข้อมูลบริษัท",
+  "departments:manage": "จัดการแผนก",
+  "teams:manage": "จัดการทีม",
   "auditLog:view": "ดูบันทึกการใช้งาน (Audit Log)",
   "customers:view": "ดูข้อมูลลูกค้า",
   "customers:create": "เพิ่มข้อมูลลูกค้า",
@@ -150,6 +170,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "quotationTemplates:import": "นำเข้า Template จากไฟล์ Excel",
   "scopeOfWork:view": "ดู Scope of Work",
   "scopeOfWork:viewAll": "ดู Scope of Work ของผู้อื่น",
+  "scopeOfWork:viewTeam": "ดู Scope of Work ของทีมตัวเอง",
+  "scopeOfWork:viewDepartment": "ดู Scope of Work ของแผนกตัวเอง",
   "scopeOfWork:create": "สร้าง Scope of Work",
   "scopeOfWork:edit": "แก้ไข Scope of Work",
   "scopeOfWork:finalize": "ยืนยันสถานะ Final ของ Scope of Work",
@@ -158,6 +180,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "scopeOfWork:chasePo": "ทวงเลข PO (ส่งแจ้งเตือนถึงพนักงานขาย)",
   "deliveryOrder:view": "ดูใบส่งมอบสินค้า",
   "deliveryOrder:viewAll": "ดูใบส่งมอบสินค้าของผู้อื่น",
+  "deliveryOrder:viewTeam": "ดูใบส่งมอบสินค้าของทีมตัวเอง",
+  "deliveryOrder:viewDepartment": "ดูใบส่งมอบสินค้าของแผนกตัวเอง",
   "deliveryOrder:create": "สร้างใบส่งมอบสินค้า",
   "deliveryOrder:edit": "แก้ไขใบส่งมอบสินค้า",
   "deliveryOrder:finalize": "ยืนยันสถานะ Final ของใบส่งมอบสินค้า",
@@ -180,6 +204,8 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "dashboard:view": "permission.dashboardView",
   "quotations:view": "permission.quotationsView",
   "quotations:viewAll": "permission.quotationsViewAll",
+  "quotations:viewTeam": "permission.quotationsViewTeam",
+  "quotations:viewDepartment": "permission.quotationsViewDepartment",
   "quotations:create": "permission.quotationsCreate",
   "quotations:edit": "permission.quotationsEdit",
   "quotations:delete": "permission.quotationsDelete",
@@ -194,6 +220,8 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "users:manage": "permission.usersManage",
   "roles:manage": "permission.rolesManage",
   "company:manage": "permission.companyManage",
+  "departments:manage": "permission.departmentsManage",
+  "teams:manage": "permission.teamsManage",
   "auditLog:view": "permission.auditLogView",
   "customers:view": "permission.customersView",
   "customers:create": "permission.customersCreate",
@@ -209,6 +237,8 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "quotationTemplates:import": "permission.quotationTemplatesImport",
   "scopeOfWork:view": "permission.scopeOfWorkView",
   "scopeOfWork:viewAll": "permission.scopeOfWorkViewAll",
+  "scopeOfWork:viewTeam": "permission.scopeOfWorkViewTeam",
+  "scopeOfWork:viewDepartment": "permission.scopeOfWorkViewDepartment",
   "scopeOfWork:create": "permission.scopeOfWorkCreate",
   "scopeOfWork:edit": "permission.scopeOfWorkEdit",
   "scopeOfWork:finalize": "permission.scopeOfWorkFinalize",
@@ -217,6 +247,8 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "scopeOfWork:chasePo": "permission.scopeOfWorkChasePo",
   "deliveryOrder:view": "permission.deliveryOrderView",
   "deliveryOrder:viewAll": "permission.deliveryOrderViewAll",
+  "deliveryOrder:viewTeam": "permission.deliveryOrderViewTeam",
+  "deliveryOrder:viewDepartment": "permission.deliveryOrderViewDepartment",
   "deliveryOrder:create": "permission.deliveryOrderCreate",
   "deliveryOrder:edit": "permission.deliveryOrderEdit",
   "deliveryOrder:finalize": "permission.deliveryOrderFinalize",
@@ -243,6 +275,8 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
     permissions: [
       "quotations:view",
       "quotations:viewAll",
+      "quotations:viewTeam",
+      "quotations:viewDepartment",
       "quotations:create",
       "quotations:edit",
       "quotations:delete",
@@ -259,6 +293,8 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "quotationTemplates:import",
       "scopeOfWork:view",
       "scopeOfWork:viewAll",
+      "scopeOfWork:viewTeam",
+      "scopeOfWork:viewDepartment",
       "scopeOfWork:create",
       "scopeOfWork:edit",
       "scopeOfWork:finalize",
@@ -267,6 +303,8 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "scopeOfWork:chasePo",
       "deliveryOrder:view",
       "deliveryOrder:viewAll",
+      "deliveryOrder:viewTeam",
+      "deliveryOrder:viewDepartment",
       "deliveryOrder:create",
       "deliveryOrder:edit",
       "deliveryOrder:finalize",
@@ -304,11 +342,11 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
   {
     label: "ระบบ",
     labelKey: "permissionGroup.system",
-    permissions: ["users:manage", "roles:manage", "company:manage", "auditLog:view"],
+    permissions: ["users:manage", "roles:manage", "company:manage", "departments:manage", "teams:manage", "auditLog:view"],
   },
 ];
 
-export const SUPER_ADMIN_ONLY_PERMISSIONS: Permission[] = ["roles:manage", "company:manage"];
+export const SUPER_ADMIN_ONLY_PERMISSIONS: Permission[] = ["roles:manage", "company:manage", "departments:manage", "teams:manage"];
 
 /**
  * Permissions that cannot work alone: granting the key without its listed dependencies produces a

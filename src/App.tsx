@@ -11,6 +11,8 @@ import { type Customer, fetchCustomers } from "./lib/customers";
 import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes";
 import { type User, fetchUsers, initials } from "./lib/users";
 import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor, isNavHiddenForUser } from "./lib/roles";
+import { type Department, fetchDepartments } from "./lib/departments";
+import { type Team, fetchTeams } from "./lib/teams";
 import type { Permission } from "./lib/permissions";
 import { fetchSession, setupSuperAdmin, login, logout } from "./lib/session";
 import { ApiError } from "./lib/apiClient";
@@ -39,6 +41,7 @@ const QuotationPage = lazy(() => import("./pages/quotation/QuotationPage").then(
 const DashboardPage = lazy(() => import("./pages/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage").then((m) => ({ default: m.UserManagementPage })));
 const RoleManagementPage = lazy(() => import("./pages/admin/RoleManagementPage").then((m) => ({ default: m.RoleManagementPage })));
+const DepartmentManagementPage = lazy(() => import("./pages/admin/DepartmentManagementPage").then((m) => ({ default: m.DepartmentManagementPage })));
 const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) => ({ default: m.AuditLogPage })));
 const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then((m) => ({ default: m.CustomersPage })));
 const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateManagementPage").then((m) => ({ default: m.TemplateManagementPage })));
@@ -117,9 +120,9 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "products" | "customers" | "users" | "roles" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "products" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
-type ResourceKey = "users" | "roles" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
+type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
 
 const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
@@ -127,13 +130,14 @@ const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
   quotationTemplates: ["jobTypes", "products", "categories"],
   products: ["products", "categories"],
   customers: ["customers"],
-  users: ["users", "roles"],
+  users: ["users", "roles", "departments", "teams"],
   roles: ["roles", "users"],
+  departments: ["departments", "teams"],
   settings: ["company", "roles"],
 };
 
 const INITIAL_RESOURCE_STATUS: Record<ResourceKey, ResourceState> = {
-  users: "loading", roles: "loading", company: "loading", products: "loading", categories: "loading",
+  users: "loading", roles: "loading", departments: "loading", teams: "loading", company: "loading", products: "loading", categories: "loading",
   notifications: "loading", quotes: "loading", jobTypes: "loading", customers: "loading",
 };
 
@@ -158,6 +162,7 @@ const navItems: NavItem[] = [
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
   { key: "roles", icon: ShieldCheck, labelKey: "nav.roles", permission: "roles:manage" },
+  { key: "departments", icon: Layers, labelKey: "nav.departments", permission: "departments:manage" },
   { key: "auditLog", icon: ScrollText, labelKey: "nav.auditLog", permission: "auditLog:view" },
 ];
 
@@ -166,7 +171,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
-  { labelKey: "nav.group.admin", keys: ["users", "roles", "auditLog"] },
+  { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 
 const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
@@ -181,6 +186,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   customers: "nav.customers",
   users: "nav.users",
   roles: "nav.roles",
+  departments: "nav.departments",
   auditLog: "nav.auditLog",
   settings: "nav.settings",
 };
@@ -214,6 +220,8 @@ export default function App() {
   const [bootStatus, setBootStatus] = useState<BootStatus>("loading");
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
@@ -276,6 +284,8 @@ export default function App() {
     setResourceStatus(INITIAL_RESOURCE_STATUS);
     trackResource("users", fetchUsers(), setUsers);
     trackResource("roles", fetchRoles(), setRoles);
+    trackResource("departments", fetchDepartments(), setDepartments);
+    trackResource("teams", fetchTeams(), setTeams);
     trackResource("company", fetchCompany(), setCompany);
     trackResource("products", fetchProducts(), setProducts);
     trackResource("categories", fetchCategories(), setCategories);
@@ -366,6 +376,8 @@ export default function App() {
     setCurrentUser((prev) => (prev ? next.find((u) => u.id === prev.id) ?? prev : prev));
   };
   const updateRoles = (next: Role[]) => setRoles(next);
+  const updateDepartments = (next: Department[]) => setDepartments(next);
+  const updateTeams = (next: Team[]) => setTeams(next);
   const updateCurrentUser = (next: User) => {
     setCurrentUser(next);
     setUsers((prev) => prev.map((u) => (u.id === next.id ? next : u)));
@@ -796,9 +808,11 @@ export default function App() {
               : effectiveNav === "products"
               ? <ProductsPage products={products} onProductsChange={updateProducts} categories={categories} onCategoriesChange={updateCategories} currentUserId={currentUser.id} initialEditId={productDeepLinkId} onEditIdConsumed={() => setProductDeepLinkId(null)} autoView={pageAction?.nav === "products" ? pageAction.action : null} autoViewSeq={pageAction?.nav === "products" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "users"
-              ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
+              ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} departments={departments} teams={teams} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
               : effectiveNav === "roles" && isSuperAdmin
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} currentUserId={currentUser.id} onAudit={handleAudit} />
+              : effectiveNav === "departments" && isSuperAdmin
+              ? <DepartmentManagementPage departments={departments} onDepartmentsChange={updateDepartments} teams={teams} onTeamsChange={updateTeams} />
               : <DashboardPage currentUserId={currentUser.id} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
             }
           </Suspense>

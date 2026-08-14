@@ -254,6 +254,28 @@ export async function departmentsCollection() {
   return db.collection<DepartmentFields>("departments");
 }
 
+/** Sub-grouping within a Department (2026-08-14, direct business request — Sales has 2 teams,
+ * each with its own team lead; a lead sees only their own team's quotations/Scope of Work/
+ * Delivery Order, not the other team's — there is no single manager who sees both). `departmentId`
+ * is the parent `departments` collection's `_id` as a string — not every department needs teams
+ * (Sales is the only one with any today); team name only needs to be unique within its own
+ * department (enforced by the sanitizer, not a DB index). The permission model also supports a
+ * `viewDepartment` tier (whole department, e.g. a role that should see both teams) — it's just not
+ * what this specific Sales scenario currently needs. */
+export interface TeamFields {
+  name: string;
+  departmentId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}
+export async function teamsCollection() {
+  const db = await getDb();
+  return db.collection<TeamFields>("teams");
+}
+
 export interface PositionFields {
   name: string;
   code: string;
@@ -520,14 +542,14 @@ export async function attachmentsCollection() {
 export async function ensureIndexes() {
   const [
     users, roles, products, categories, quotes, notifications, auditLog,
-    permissions, departments, positions, customers, customerContacts,
+    permissions, departments, teams, positions, customers, customerContacts,
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
     notificationTypes, jobTypes, quotationTemplates, scopeOfWorks, deliveryOrders,
     scopeAttachmentFiles, serviceTemplates, serviceReports, serviceChecklistPhotoFiles,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
-    permissionsCollection(), departmentsCollection(), positionsCollection(),
+    permissionsCollection(), departmentsCollection(), teamsCollection(), positionsCollection(),
     customersCollection(), customerContactsCollection(),
     leadsCollection(), leadActivitiesCollection(), productTemplatesCollection(),
     quotationCommentsCollection(), quotationTagsCollection(), notificationTypesCollection(),
@@ -541,6 +563,9 @@ export async function ensureIndexes() {
     users.createIndex({ employeeId: 1 }, { unique: true }),
     users.createIndex({ username: 1 }, { unique: true }),
     users.createIndex({ email: 1 }, { unique: true }),
+    // Backs buildOwnershipClause()'s department/team member-resolution queries (2026-08-14).
+    users.createIndex({ department: 1 }),
+    users.createIndex({ teamId: 1 }),
     roles.createIndex({ key: 1 }, { unique: true }),
     products.createIndex({ categoryId: 1 }),
     products.createIndex({ archived: 1 }),
@@ -559,6 +584,7 @@ export async function ensureIndexes() {
     // New schema-prep collections
     permissions.createIndex({ key: 1 }, { unique: true }),
     departments.createIndex({ code: 1 }, { unique: true }),
+    teams.createIndex({ departmentId: 1 }),
     positions.createIndex({ code: 1 }, { unique: true }),
     customers.createIndex({ isDeleted: 1 }),
     customers.createIndex({ isActive: 1 }),

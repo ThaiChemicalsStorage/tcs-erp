@@ -58,6 +58,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     const { employeeId, fullName, username, email, password, roleKey } = body;
     const phone: string = typeof body.phone === "string" ? body.phone : "";
     const department: string = typeof body.department === "string" ? body.department : "";
+    const teamId: string = typeof body.teamId === "string" ? body.teamId : "";
     const position: string = typeof body.position === "string" ? body.position : "";
 
     if (!employeeId?.trim() || !fullName?.trim() || !username?.trim() || !email?.trim() || !roleKey) {
@@ -88,6 +89,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       passwordHash,
       phone: phone.trim(),
       department: department.trim(),
+      teamId: teamId.trim(),
       position: position.trim(),
       roleKey,
       status: body.status === "inactive" ? "inactive" : "active",
@@ -123,6 +125,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
     if (typeof body.fullName === "string" && body.fullName.trim()) update.fullName = body.fullName.trim();
     if (typeof body.phone === "string") update.phone = body.phone.trim();
     if (typeof body.department === "string") update.department = body.department.trim();
+    if (typeof body.teamId === "string") update.teamId = body.teamId.trim();
     if (typeof body.position === "string") update.position = body.position.trim();
     if (typeof body.profilePictureDataUrl === "string") update.profilePictureDataUrl = validateImageDataUrl(body.profilePictureDataUrl, "รูปโปรไฟล์");
     if (typeof body.signatureDataUrl === "string") update.signatureDataUrl = validateImageDataUrl(body.signatureDataUrl, "ลายเซ็น");

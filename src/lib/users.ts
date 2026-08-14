@@ -10,6 +10,10 @@ export interface User {
   email: string;
   phone: string;
   department: string;
+  // Optional Team (2026-08-14, added for Sales' 2-team visibility split) — references a
+  // src/lib/teams.ts Team.id, always a sub-grouping WITHIN whatever `department` this user has.
+  // Most departments have no teams at all; blank means "no team," not an error.
+  teamId: string;
   position: string;
   roleKey: string;
   status: UserStatus;
@@ -73,6 +77,7 @@ export interface CreateUserFields {
   password: string;
   phone?: string;
   department?: string;
+  teamId?: string;
   position?: string;
   roleKey: string;
   status?: UserStatus;
@@ -85,6 +90,7 @@ export interface UpdateUserFields {
   email?: string;
   phone?: string;
   department?: string;
+  teamId?: string;
   position?: string;
   roleKey?: string;
   status?: UserStatus;

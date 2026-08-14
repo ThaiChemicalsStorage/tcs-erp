@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requireUser, requirePermission, type AuthContext } from "../_lib/auth.js";
+import { buildOwnershipClause } from "../_lib/visibility.js";
 import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, quotationTemplatesCollection, countersCollection, auditLogCollection, customersCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
 import { handleScopeOfWork } from "../_lib/scopeOfWorkHandler.js";
 import { handleDeliveryOrder } from "../_lib/deliveryOrderHandler.js";
@@ -242,15 +243,12 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     const ctx = await requirePermission(req, "quotations:view");
     const quotes = await quotesCollection();
-    // Own-quotes-only scoping (added 2026-07-22, per direct user request) — a role holding
-    // `quotations:view` but not the new `quotations:viewAll` only sees quotes it created itself.
-    // Legacy/seed quotes with an empty `createdByUserId` (ownerless — see the PATCH ownership
-    // check below) are visible to everyone regardless, since there's no real "someone else" to
-    // exclude them for. `quotations:viewAll` holders (and Super Admin, which bypasses every check)
-    // are unaffected and still see every quote, exactly as before this change.
-    const filter = roleHasPermission(ctx.role, "quotations:viewAll")
-      ? {}
-      : { $or: [{ createdByUserId: ctx.user.id }, { createdByUserId: "" }] };
+    // Tiered visibility (added 2026-07-22 as own-only-vs-viewAll, extended 2026-08-14 with
+    // viewTeam/viewDepartment for Sales' 2-team split) — see buildOwnershipClause() for the full
+    // cascade. Legacy/seed quotes with an empty `createdByUserId` (ownerless — see the PATCH
+    // ownership check below) are visible to everyone regardless, since there's no real "someone
+    // else" to exclude them for.
+    const filter = await buildOwnershipClause(ctx, "quotations", "createdByUserId");
     const docs = await quotes.find(filter).toArray();
     res.status(200).json({ quotes: docs.map(withStringId) });
     return;

@@ -4,6 +4,7 @@ import { MongoServerError } from "mongodb";
 import { randomUUID, randomBytes } from "node:crypto";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
+import { buildOwnershipClause } from "./visibility.js";
 import {
   scopeOfWorksCollection, quotesCollection, usersCollection, countersCollection, auditLogCollection,
   notificationsCollection, scopeAttachmentFilesCollection, toObjectId, withStringId,
@@ -456,22 +457,24 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   // QuoteDocument.tsx's toolbar) to "list every Scope of Work company-wide" — added 2026-07-22 for
   // the new standalone Scope of Work management page (src/pages/scopeOfWork/ScopeOfWorkPage.tsx).
   if (!quotationId) {
-    // Own-records-only scoping (added 2026-07-23, per direct user request mirroring Quotation's
-    // `quotations:viewAll`) — a caller without `scopeOfWork:viewAll` only sees, on the standalone
-    // browse-everything page, records it created itself **or that named them as a document
-    // recipient** (added same day, second pass — see "Document Recipients": a Purchase-department
+    // Tiered visibility (added 2026-07-23 as own-only-vs-viewAll, extended 2026-08-14 with
+    // viewTeam/viewDepartment for Sales' 2-team split) — see buildOwnershipClause() for the full
+    // cascade. On top of whichever tier applies, a caller who was named as a **document
+    // recipient** (added 2026-07-23, second pass — see "Document Recipients": a Purchase-department
     // recipient who never created the record still needs to be able to find it on their own list,
-    // not just via the one-time email/notification link). Legacy/seed records with an empty
-    // `createdBy` (ownerless — same convention `isOwnerOf()` uses) stay visible to everyone
-    // regardless, since there's no real "someone else" to exclude them for. Deliberately NOT applied
-    // to the by-quotation lookup below — that's an existence check ("does a Scope of Work already
-    // exist for THIS quotation, which the caller can already see via quotations:view"), not a browse
-    // view, and hiding a colleague's already-created record there would risk the caller creating a
-    // duplicate one instead of opening the existing one.
+    // not just via the one-time email/notification link) always sees the record too, merged into
+    // the same `$or`. Legacy/seed records with an empty `createdBy` (ownerless — same convention
+    // `isOwnerOf()` uses) stay visible to everyone regardless, since there's no real "someone else"
+    // to exclude them for. Deliberately NOT applied to the by-quotation lookup below — that's an
+    // existence check ("does a Scope of Work already exist for THIS quotation, which the caller can
+    // already see via quotations:view"), not a browse view, and hiding a colleague's already-created
+    // record there would risk the caller creating a duplicate one instead of opening the existing one.
     const recipientMatch = ALL_RECIPIENT_KEYS.map((key) => ({ [`documentRecipients.${key}`]: ctx.user.id }));
-    const ownershipMatch = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
-      ? {}
-      : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }, ...recipientMatch] };
+    const ownershipClause = await buildOwnershipClause(ctx, "scopeOfWork", "createdBy");
+    const ownershipMatch: Record<string, unknown> =
+      "$or" in ownershipClause
+        ? { $or: [...(ownershipClause.$or as Record<string, unknown>[]), ...recipientMatch] }
+        : ownershipClause;
     const docs = await scopeOfWorks.find({ isDeleted: false, ...ownershipMatch }).sort({ updatedAt: -1 }).toArray();
     res.status(200).json({ scopeOfWorks: docs.map(toListItem) });
     return;
