@@ -539,15 +539,18 @@ export default function App() {
   // looking at, and a refresh keeps it there. Declared after effectiveNav because the dependency
   // array is evaluated during render.
   //
-  // Gated on bootStatus === "ready": before boot data (currentUser/roles) finishes loading,
-  // every permission check above is evaluated against an empty user/role set, so visibleNavItems
-  // is empty and effectiveNav spuriously resolves to the "settings" fallback. Writing that into
-  // the hash while still loading fires the hashchange listener below, which permanently
-  // overwrites activeNav to "settings" — surviving even after the real permissions load a moment
-  // later, since nothing then corrects it back. This was a real, ~always-reproducible bug: a
-  // refresh on any page other than Settings landed back on Settings every time.
+  // Gated on bootStatus === "ready" AND roles having actually loaded: every permission check
+  // above takes `roles`, and bootStatus flips to "ready" as soon as the session check resolves —
+  // loadDomainData() (incl. fetchRoles()) only *starts* at that point, so there's a real render
+  // (bootStatus "ready", currentUser set, roles still []) where permission checks still evaluate
+  // against an empty role set. Gating on bootStatus alone still hit that window: visibleNavItems
+  // still empty, effectiveNav still fell back to "settings", still got written into the hash, and
+  // the hashchange listener still permanently overwrote activeNav. Waiting for
+  // resourceStatus.roles to leave "loading" (ready or error) closes that window too. This was a
+  // real, ~always-reproducible bug: a refresh on any page other than Settings landed back on
+  // Settings every time.
   useEffect(() => {
-    if (bootStatus !== "ready") return;
+    if (bootStatus !== "ready" || resourceStatus.roles === "loading") return;
     const target = `#${effectiveNav}`;
     if (window.location.hash === target) return;
     if (window.location.hash === "") {
@@ -555,7 +558,7 @@ export default function App() {
     } else {
       window.location.hash = target;
     }
-  }, [effectiveNav, bootStatus]);
+  }, [effectiveNav, bootStatus, resourceStatus.roles]);
   const requiredResources = NAV_RESOURCES[effectiveNav] ?? [];
   const pageDataLoading = requiredResources.some((k) => resourceStatus[k] === "loading");
   const pageDataError = requiredResources.some((k) => resourceStatus[k] === "error");

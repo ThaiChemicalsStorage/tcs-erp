@@ -4,7 +4,37 @@
 
 ---
 
-## 2026-08-17b (absolute latest) — Fix: refresh always landed on Settings, regardless of the page you were on
+## 2026-08-17c (absolute latest) — Fix 2026-08-17b was incomplete: gated on the wrong signal
+
+User re-tested 2026-08-17b's fix and reported it still happened ("เป็นเหมือนเดิม" — same as before).
+
+**Why the first fix didn't close it**: `bootStatus` flips to `"ready"` as soon as the session check
+resolves (`App.tsx`, the session-fetch effect), and `loadDomainData()` — which kicks off
+`fetchRoles()` among ~10 other independent fetches — only *starts* at that same moment, as a plain
+side effect of the same callback, not something React waits on. That leaves a real render where
+`bootStatus === "ready"` and `currentUser` is set, but `roles` is still `[]` because the roles
+fetch hasn't resolved yet. Every permission check `effectiveNav` depends on (`hasPermission`,
+`isNavHiddenForUser`) takes `roles` as an argument, so that render still computed an empty
+`visibleNavItems` and still fell back to `"settings"` — gating on `bootStatus` alone missed this
+narrower but still real window.
+
+**Fix**: also gate the hash-mirroring effect on `resourceStatus.roles !== "loading"` (added to both
+the guard and the dependency array) — `resourceStatus.roles` flips to `"ready"`/`"error"` only once
+`fetchRoles()` itself settles, which is the actual data every permission check in this render path
+reads. `tsc`/`lint`/`build` all pass clean; `curl` against a freshly-restarted dev server confirms
+the corrected guard is present in the served source (2 occurrences of `resourceStatus.roles`, one in
+the condition and one in the deps array).
+
+**Verification note**: same standing browser-automation-tab staleness this session has hit
+repeatedly on every fix so far (see 2026-08-17b/2026-08-17 below) — a live refresh-and-check wasn't
+completed in-session despite `curl`-confirmed correct served source. This is a genuinely deeper root
+cause than the first attempt, traced by reading the actual boot-sequence code (the session-fetch
+effect at the top of `App.tsx`) rather than guessing, so confidence is higher — but still worth a
+real manual refresh check, since the first "should be fixed" claim turned out to be wrong once.
+
+---
+
+## 2026-08-17b — Fix: refresh always landed on Settings, regardless of the page you were on (incomplete — see 2026-08-17c above)
 
 Direct user report: "ทำไมเวลากด refresh แล้วไปหน้า setting ตลอด" (why does refresh always go to
 Settings?) — reliably reproducible on essentially any refresh of any page other than Settings itself.
