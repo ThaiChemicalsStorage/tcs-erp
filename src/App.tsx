@@ -538,7 +538,16 @@ export default function App() {
   // deep-linking to) a nav item hidden from it ends up with a URL matching what it's actually
   // looking at, and a refresh keeps it there. Declared after effectiveNav because the dependency
   // array is evaluated during render.
+  //
+  // Gated on bootStatus === "ready": before boot data (currentUser/roles) finishes loading,
+  // every permission check above is evaluated against an empty user/role set, so visibleNavItems
+  // is empty and effectiveNav spuriously resolves to the "settings" fallback. Writing that into
+  // the hash while still loading fires the hashchange listener below, which permanently
+  // overwrites activeNav to "settings" — surviving even after the real permissions load a moment
+  // later, since nothing then corrects it back. This was a real, ~always-reproducible bug: a
+  // refresh on any page other than Settings landed back on Settings every time.
   useEffect(() => {
+    if (bootStatus !== "ready") return;
     const target = `#${effectiveNav}`;
     if (window.location.hash === target) return;
     if (window.location.hash === "") {
@@ -546,7 +555,7 @@ export default function App() {
     } else {
       window.location.hash = target;
     }
-  }, [effectiveNav]);
+  }, [effectiveNav, bootStatus]);
   const requiredResources = NAV_RESOURCES[effectiveNav] ?? [];
   const pageDataLoading = requiredResources.some((k) => resourceStatus[k] === "loading");
   const pageDataError = requiredResources.some((k) => resourceStatus[k] === "error");

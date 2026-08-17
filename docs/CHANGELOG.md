@@ -4,7 +4,36 @@
 
 ---
 
-## 2026-08-17 (absolute latest) — Fix: sidebar re-click on an already-open detail view did nothing
+## 2026-08-17b (absolute latest) — Fix: refresh always landed on Settings, regardless of the page you were on
+
+Direct user report: "ทำไมเวลากด refresh แล้วไปหน้า setting ตลอด" (why does refresh always go to
+Settings?) — reliably reproducible on essentially any refresh of any page other than Settings itself.
+
+**Root cause**: on boot, there's a real window (however brief) where `currentUser`/`roles` haven't
+finished loading yet. During that window every permission check in `App.tsx` evaluates against an
+empty user/role set, so `visibleNavItems` comes back empty and `effectiveNav` (the *rendered* page)
+spuriously resolves to the "settings" fallback (`homeNav`'s `?? "settings"` default). A separate
+effect mirrors `effectiveNav` into the URL hash "so a role landing on a hidden nav item ends up with
+a URL matching what it's actually looking at" — but during the loading window this writes `#settings`
+into the URL for *everyone*, which fires the `hashchange` listener and permanently overwrites
+`activeNav` itself to `"settings"`. Nothing then corrects it back once the real permissions load a
+moment later, because by that point the browser's own hash is already `#settings` and matches
+`activeNav`, so nothing looks wrong to the effect. This is the same code path the 2026-08-17 sidebar
+re-click fix below touches, found while manually verifying that fix.
+
+**Fix**: gated the hash-mirroring effect on `bootStatus === "ready"` — it now does nothing (doesn't
+read or write the hash) until boot data has actually finished loading, so the loading window's
+degraded permission state can never leak into the URL/`activeNav`. `tsc`/`lint`/`build` all pass clean.
+
+**Verification note**: same standing limitation as the fix below — this session's browser-automation
+tab kept serving stale pre-fix `App.tsx` content despite confirmed-fresh dev-server restarts and
+`curl`-confirmed correct source, so a live refresh-and-check wasn't completed in-session. Logic is
+straightforward (a boot-status guard on an existing effect) and confirmed present in the served
+source via `curl`; still worth a quick manual refresh-on-a-non-Settings-page check in a real browser.
+
+---
+
+## 2026-08-17 — Fix: sidebar re-click on an already-open detail view did nothing
 
 Direct user report: on Scope of Work (and, by the same code path, Quotation/Delivery Order/Service/
 Customers/Products) with a specific record open in detail view, clicking that same module's sidebar
