@@ -230,6 +230,10 @@ export default function App() {
   const mobileNavPanelRef = useRef<HTMLElement>(null);
   const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
   const [activeNav, setActiveNav] = useState<NavKey>(() => navFromHash() ?? "dashboard");
+  // Bumped on every sidebar click (including re-clicking the already-active item) so the page
+  // remounts and drops back to its list view — activeNav alone doesn't change when re-clicking
+  // the same nav item, so the ErrorBoundary/page key below needs this to force a reset.
+  const [navBump, setNavBump] = useState(0);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -648,7 +652,7 @@ export default function App() {
                 {items.map(({ key, icon: Icon, labelKey }) => (
                   <button
                     key={key}
-                    onClick={() => { setActiveNav(key); closeMobileNav(); }}
+                    onClick={() => { setActiveNav(key); setNavBump((n) => n + 1); closeMobileNav(); }}
                     title={navExpanded ? undefined : t(labelKey)}
                     aria-label={navExpanded ? undefined : t(labelKey)}
                     aria-current={activeNav === key ? "page" : undefined}
@@ -664,7 +668,7 @@ export default function App() {
         </nav>
         <div className="px-2 py-3 border-t border-sidebar-border">
           <button
-            onClick={() => { setActiveNav("settings"); closeMobileNav(); }}
+            onClick={() => { setActiveNav("settings"); setNavBump((n) => n + 1); closeMobileNav(); }}
             title={navExpanded ? undefined : t("nav.settings")}
             aria-label={navExpanded ? undefined : t("nav.settings")}
             aria-current={activeNav === "settings" ? "page" : undefined}
@@ -781,7 +785,7 @@ export default function App() {
         </header>
 
         <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden outline-none print:overflow-visible print:block">
-          <ErrorBoundary key={effectiveNav}>
+          <ErrorBoundary key={`${effectiveNav}-${navBump}`}>
           <Suspense fallback={<PageLoading />}>
             {effectiveNav === "dashboard"
               ? <DashboardPage currentUserId={currentUser.id} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />

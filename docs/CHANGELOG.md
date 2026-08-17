@@ -4,7 +4,36 @@
 
 ---
 
-## 2026-08-14k (absolute latest) — Departments (manageable) + Sales Teams + tiered visibility (own/team/department/all)
+## 2026-08-17 (absolute latest) — Fix: sidebar re-click on an already-open detail view did nothing
+
+Direct user report: on Scope of Work (and, by the same code path, Quotation/Delivery Order/Service/
+Customers/Products) with a specific record open in detail view, clicking that same module's sidebar
+link — instead of the in-page back button — did nothing, leaving the user stuck on the detail view.
+
+**Root cause**: `App.tsx` renders exactly one page at a time under `<ErrorBoundary key={effectiveNav}>`,
+and switching between *different* nav items already worked correctly because the key change forces
+a full unmount/remount, resetting that page's internal `view`/`selectedId` state back to its list
+default. But clicking the sidebar link for the nav item that's *already active* calls
+`setActiveNav(key)` with the same value — a no-op in React (`Object.is` bail-out, no re-render) — so
+nothing reset.
+
+**Fix**: added a `navBump` counter, incremented on every sidebar (incl. Settings) click regardless of
+target, folded into the remount key as `` `${effectiveNav}-${navBump}` ``. A re-click on the active
+item now always changes the key and forces a fresh mount, dropping back to the list view exactly
+like navigating in from elsewhere already did. `tsc`/`lint`/`build` all pass clean.
+
+**Verification note**: `tsc`/`lint`/`build` verified clean, and the fix is a minimal, well-understood
+React pattern (key-based forced remount, the same mechanism `effectiveNav` already relied on for the
+cross-page case). A live click-through in this session's browser-automation tab was inconclusive —
+that tab's Vite module resolution appeared to keep serving pre-fix `App.tsx` content even across full
+dev-server restarts and cache clears, while `curl` against the same dev server consistently showed the
+fix present in the served source; root cause of that specific automation-tab discrepancy wasn't
+resolved and looked environment-specific, not a code issue. Worth a quick manual click-through in a
+normal browser tab to confirm.
+
+---
+
+## 2026-08-14k — Departments (manageable) + Sales Teams + tiered visibility (own/team/department/all)
 
 Direct business request: "ให้สามารถเพิ่มแผนกได้และคือเมเนเจอร์เซลล์อะมี 2 ทีมทำให้มีแบบยศแต่ละทีมดูได้แค่ทีมตัวเองช่วยออกแบบให้หน่อย" —
 add manageable departments, and Sales' 2 teams should each only see their own team's records
