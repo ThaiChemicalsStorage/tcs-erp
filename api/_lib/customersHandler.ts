@@ -22,7 +22,16 @@ import { generatePairingCode, PAIRING_CODE_TTL_MS } from "./lineHandler.js";
  * pairing) and defaults `lineUserId` for pre-feature documents. */
 function toPublicCustomer(doc: WithId<CustomerFields>) {
   const { linePairing: _linePairing, ...rest } = withStringId(doc);
-  return { ...rest, lineUserId: doc.lineUserId ?? "" };
+  return {
+    ...rest,
+    lineUserId: doc.lineUserId ?? "",
+    code: doc.code ?? "",
+    apContactName: doc.apContactName ?? "",
+    apContactPhone: doc.apContactPhone ?? "",
+    apContactEmail: doc.apContactEmail ?? "",
+    billingConditions: doc.billingConditions ?? "",
+    requiresReport: doc.requiresReport ?? false,
+  };
 }
 
 let customerIndexesEnsured = false;
@@ -94,6 +103,12 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       updatedAt: now,
       createdBy: ctx.user.id,
       updatedBy: ctx.user.id,
+      code: draft.code ?? "",
+      apContactName: draft.apContactName ?? "",
+      apContactPhone: draft.apContactPhone ?? "",
+      apContactEmail: draft.apContactEmail ?? "",
+      billingConditions: draft.billingConditions ?? "",
+      requiresReport: draft.requiresReport ?? false,
     };
     const insertResult = await customers.insertOne(doc);
     const created = await customers.findOne({ _id: insertResult.insertedId });

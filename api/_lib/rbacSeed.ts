@@ -69,6 +69,19 @@ const RBAC_MIGRATIONS: RbacMigration[] = [
       viewer: ["service:view", "service:viewAll", "serviceTemplates:view"],
     },
   },
+  {
+    // Accounts Receivable (2026-08-17, Phase 1) added 4 permissions and a new "Accounting User"
+    // default role — same "already-provisioned database, existing roles frozen at first-run" gap
+    // as every module before it. accounting_user is a brand-new role key, handled by
+    // syncDefaultRoles() automatically; this migration only needs to backfill the *existing* roles.
+    id: "ar-permissions-2026-08-17",
+    grants: {
+      administrator: ["ar:view", "ar:create", "ar:issue", "ar:cancel"],
+      approver_1: ["ar:view", "ar:cancel"],
+      approver_2: ["ar:view", "ar:cancel"],
+      viewer: ["ar:view"],
+    },
+  },
 ];
 
 /**

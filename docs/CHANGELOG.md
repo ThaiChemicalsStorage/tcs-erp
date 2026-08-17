@@ -4,7 +4,56 @@
 
 ---
 
-## 2026-08-17c (absolute latest) — Fix 2026-08-17b was incomplete: gated on the wrong signal
+## 2026-08-17d (absolute latest) — Accounting module Phase 1 (milestone billing): backend built + verified live, UI paused
+
+A detailed spec from the owner (grounded in the real "Flow งานบัญชี" business-process spreadsheet
+plus 2 real customer billing sets) was designed in Plan Mode, approved, and implemented as Phase 1
+of a new Accounts Receivable / milestone billing module. See
+[MODULES/Accounting.md](./MODULES/Accounting.md) for the full design writeup, including 11
+research-grounded/critique-stress-tested key decisions (e.g. Scope of Work carries no pricing so
+totals are pulled transitively through its source Quotation and frozen once billing starts; AR
+document numbering must use Buddhist year not Gregorian; no Mongo transactions exist anywhere in
+this codebase so document issuing is deliberately sequential, not atomic-batched).
+
+**Built**: `api/_lib/collections.ts` (new `ar_milestones`/`ar_attachment_files`/`ar_documents`
+collections; `Customer` extended with `code`/`apContactName`/`apContactPhone`/`apContactEmail`/
+`billingConditions`/`requiresReport`), `api/_lib/documentNumbering.ts` (Buddhist-year
+`{PREFIX}{YY}{MM}{SEQ}` atomic counter, matching the company's real existing "Express" accounting
+software numbering), `api/_lib/arCalculations.ts` (pure calc functions — reused the *existing*
+`bahtText()` from `src/lib/quotes.tsx` rather than rebuilding it, verified correct against all 12 of
+the spec's worked test cases), `api/_lib/arHandler.ts` (milestones/attachments/documents routes,
+mounted from `api/handlers/quotes.ts` + `server/app.ts` + `vercel.json`), 4 new `ar:*` permissions +
+a new `accounting_user` default role + an `rbac_migrations` backfill entry (no manual Role
+Management step needed post-deploy), and a guard added to `scopeOfWorkHandler.ts`'s
+`handleRewrite()` blocking Rewrite once any installment has been billed (prevents silently orphaning
+billing history). Frontend: `src/lib/accounting.ts`, `src/pages/accounting/AccountingPage.tsx` +
+`ArDocumentPrintDocument.tsx`, sidebar entry under a new "บัญชี" nav group.
+
+**Verified**: `tsc`/`lint`/`build`/`test` all pass clean (197 tests total, including 31 new — new
+`tests/api/arCalculations.test.ts` reproduces both real worked examples, K.Thai Hydraulic and VS
+Chem, to the satang; `tests/api/arNumbering.test.ts` verifies the Buddhist-year math and an explicit
+Dec-31-to-Jan-1 counter rollover). Also **live-verified against a real browser session** on the
+local dev server + local MongoDB (disposable test account created and deleted after): opened a real
+3-installment Scope of Work, completed a milestone's checklist, and the system genuinely issued
+AR6908002 + BI6908002 with correct atomic sequential numbering, appearing immediately in the UI.
+Print correctly triggers `window.print()`; the native print dialog then blocks browser automation,
+so the visual print layout itself still needs a manual look, not just confirmation it fires.
+
+**Paused**: the owner reacted to the built UI (a single job-centric page: pick a Scope of Work → open
+an installment → issue) expecting separate per-document-type pages instead, matching how
+Quotations/Scope of Work/Delivery Order each get their own sidebar page. Asked via AskUserQuestion;
+answer was to note it down and wait for more detail before restructuring — **do not build further UI
+on the current shape** until that follow-up arrives. See Accounting.md "UI structure — PAUSED" and
+TODO.md's Accounting entry for the full exchange and remaining verification items (the "more than 2
+installments" safety-guard test was mid-run when this feedback interrupted the session).
+
+**Not done (Phase 2, explicitly out of scope for this pass)**: RE (payment receipt) with WHT/bank-fee
+reconciliation, WHT-certificate + Retention trackers, reports (AR aging, VAT sales register, monthly
+collections), cancel/reissue polish with a red ยกเลิก watermark + supervisor override.
+
+---
+
+## 2026-08-17c — Fix 2026-08-17b was incomplete: gated on the wrong signal
 
 User re-tested 2026-08-17b's fix and reported it still happened ("เป็นเหมือนเดิม" — same as before).
 

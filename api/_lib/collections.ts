@@ -324,6 +324,17 @@ export interface CustomerFields {
   /** Outstanding pairing code (server-only — stripped by toPublicCustomer() in
    * customersHandler.ts). Cleared the moment the webhook matches it. */
   linePairing?: { code: string; expiresAt: string } | null;
+  /** Accounting AR fields (added 2026-08-17, see docs/MODULES/Accounting.md) — deliberately NOT
+   * payment-terms/credit-days, those already live per-installment on ScopeOfWork.paymentConditions
+   * and are the real source of truth the printed documents use. `code` is the short business code
+   * accounting already uses on paper (e.g. "K-029") — optional since old customers won't have one
+   * yet; left blank rather than auto-generated (no established numbering convention to match). */
+  code?: string;
+  apContactName?: string;
+  apContactPhone?: string;
+  apContactEmail?: string;
+  billingConditions?: string;
+  requiresReport?: boolean;
 }
 export async function customersCollection() {
   const db = await getDb();
@@ -538,6 +549,138 @@ export async function attachmentsCollection() {
  * reversible-only-via-backup decision, not something to do silently as part of a code removal.
  */
 
+// ─── Accounts Receivable / Milestone Billing (added 2026-08-17) ───────────
+// See docs/MODULES/Accounting.md for the full design writeup. Milestones/documents pull job data
+// from the *existing* ScopeOfWork record (not a parallel "Work" entity) — ScopeOfWork itself carries
+// no pricing, so totalContractValueExVat/retentionPct/workClassification are captured once here,
+// frozen at first touch, never re-derived. Deliberately do NOT use the isDeleted soft-delete
+// convention every other collection uses: issued tax invoices/billing notes must never disappear —
+// cancellation is exclusively the `status: "cancelled"` transition on ArDocumentFields.
+
+export type ArBillingStatus = "not_billed" | "billed" | "work_open" | "closed";
+export type ArWorkClassification = "goods" | "service" | "contract";
+
+/** Keys accounting confirmed matter for the §9 attachment checklist — a job's applicable subset is
+ * decided in the wizard (e.g. `report`/`bankGuarantee`/`whtEnvelope` only show up when relevant),
+ * not every key is required for every milestone. */
+export type ArChecklistKey = "poCopy" | "deliveryNote" | "report" | "stampDuty" | "bankGuarantee" | "whtEnvelope";
+
+/** One row per Scope of Work installment AR has touched — created lazily the first time a user
+ * opens that installment's Issue Billing Set wizard, never proactively for every installment in the
+ * system. `pct`/`label`/`paymentType`/`days` are a snapshot of the source
+ * ScopeOfWorkPaymentInstallment at that moment, not re-synced automatically afterward (an explicit
+ * "Refresh from Scope of Work" action can re-pull them for a not-yet-billed milestone) — because by
+ * the time AR has touched a milestone, `totalContractValueExVat` is already frozen, so the row is a
+ * point-in-time snapshot, not a live view. */
+export interface ArMilestoneFields {
+  scopeOfWorkId: string;
+  installmentId: string;
+  isDownPayment: boolean;
+  pct: number | null;
+  label: string;
+  paymentType: "" | "Cash" | "Credit";
+  days: number | null;
+  /** Frozen once at first touch — see file header comment. Pulled transitively via
+   * ScopeOfWork.quotationId -> Quote, through computeQuoteAmountBeforeVat() (api/_lib/quoteAmounts.ts). */
+  totalContractValueExVat: number;
+  retentionPct: number | null;
+  workClassification: ArWorkClassification;
+  billingStatus: ArBillingStatus;
+  checklistState: Partial<Record<ArChecklistKey, boolean>>;
+  attachmentIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}
+export async function arMilestonesCollection() {
+  const db = await getDb();
+  return db.collection<ArMilestoneFields>("ar_milestones");
+}
+
+/** Checklist attachment BYTES for an ar_milestones row (2026-08-17) — a dedicated collection, NOT
+ * Scope of Work's `scope_attachment_files` (that system is hard-scoped to 5 files *per Scope of Work
+ * record*, embedded on the ScopeOfWork document, and gated by Sales' `scopeOfWork:edit` permission —
+ * reusing it would both blow through the cap on any multi-installment job and require Accounting
+ * staff to hold a Sales document-edit permission). Internal-only checklist evidence (never emailed to
+ * an external recipient the way Scope of Work's attachments are), so downloads are gated by a normal
+ * session + `ar:view` permission check — no unguessable capability-URL token needed here. */
+export interface ArAttachmentFileFields {
+  milestoneId: string;
+  attachmentId: string;
+  checklistKey: ArChecklistKey;
+  fileName: string;
+  contentType: string;
+  size: number;
+  data: import("mongodb").Binary;
+  createdAt: string;
+  createdBy: string;
+}
+export async function arAttachmentFilesCollection() {
+  const db = await getDb();
+  return db.collection<ArAttachmentFileFields>("ar_attachment_files");
+}
+
+export type ArDocumentType = "AR" | "IV" | "BI";
+export type ArDocumentStatus = "issued" | "cancelled";
+
+export interface ArDocumentLine {
+  seq: number;
+  description: string;
+  qty: number;
+  unit: string;
+  unitPrice: number;
+  /** May be negative for a down-payment deduction line. */
+  amount: number;
+  /** Set only on a deduction line — traces back to the milestone-1 AR it deducts. */
+  linkedArDocumentId?: string;
+}
+
+export interface ArDocumentCustomerSnapshot {
+  companyName: string;
+  address: string;
+  taxId: string;
+  branch: string;
+  contactName: string;
+  phone: string;
+  email: string;
+}
+
+/** One row per issued AR/IV/BI (all 3 Phase-1 document types, discriminated by `docType`). Never
+ * soft-deleted (see file header) — `status: "cancelled"` is the only way an issued document stops
+ * being active, and it stays visible/auditable forever. */
+export interface ArDocumentFields {
+  scopeOfWorkId: string;
+  milestoneId: string;
+  docType: ArDocumentType;
+  docNo: string;
+  docDate: string;
+  dueDate: string;
+  customerSnapshot: ArDocumentCustomerSnapshot;
+  reference: string;
+  lines: ArDocumentLine[];
+  subtotal: number;
+  discount: number;
+  valueAmount: number;
+  vatRate: number;
+  vatAmount: number;
+  netTotal: number;
+  amountTextTh: string;
+  remarks: string[];
+  status: ArDocumentStatus;
+  cancelledReason?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}
+export async function arDocumentsCollection() {
+  const db = await getDb();
+  return db.collection<ArDocumentFields>("ar_documents");
+}
+
 /** Creates required indexes across every collection. Idempotent — safe to call repeatedly, but only worth calling from setup/cold paths, not every request. */
 export async function ensureIndexes() {
   const [
@@ -546,6 +689,7 @@ export async function ensureIndexes() {
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
     notificationTypes, jobTypes, quotationTemplates, scopeOfWorks, deliveryOrders,
     scopeAttachmentFiles, serviceTemplates, serviceReports, serviceChecklistPhotoFiles,
+    arMilestones, arAttachmentFiles, arDocuments,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -556,6 +700,7 @@ export async function ensureIndexes() {
     jobTypesCollection(), quotationTemplatesCollection(), scopeOfWorksCollection(), deliveryOrdersCollection(),
     scopeAttachmentFilesCollection(), serviceTemplatesCollection(), serviceReportsCollection(),
     serviceChecklistPhotoFilesCollection(),
+    arMilestonesCollection(), arAttachmentFilesCollection(), arDocumentsCollection(),
   ]);
 
   await Promise.all([
@@ -627,6 +772,16 @@ export async function ensureIndexes() {
     serviceReports.createIndex({ inspectionDate: 1 }),
     serviceChecklistPhotoFiles.createIndex({ photoId: 1 }, { unique: true }),
     serviceChecklistPhotoFiles.createIndex({ serviceReportId: 1 }),
+    // Accounts Receivable (added 2026-08-17) — see docs/MODULES/Accounting.md.
+    arMilestones.createIndex({ scopeOfWorkId: 1, installmentId: 1 }, { unique: true }),
+    arMilestones.createIndex({ billingStatus: 1 }),
+    arAttachmentFiles.createIndex({ attachmentId: 1 }, { unique: true }),
+    arAttachmentFiles.createIndex({ milestoneId: 1 }),
+    arDocuments.createIndex({ scopeOfWorkId: 1 }),
+    arDocuments.createIndex({ milestoneId: 1 }),
+    arDocuments.createIndex({ docNo: 1 }, { unique: true }),
+    arDocuments.createIndex({ status: 1 }),
+    arDocuments.createIndex({ dueDate: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

@@ -157,16 +157,49 @@
 - [ ] Consider raising bcrypt's cost factor from 10 (the `bcryptjs` default, not explicitly tuned during migration) if login latency budget allows — the originally-proposed design called for 12.
 - [x] ~~Add explicit MongoDB indexes~~ — **done 2026-07-09**: real indexes now exist across every collection, see [DATABASE.md](./DATABASE.md).
 
-## Medium Priority — Accounting module: Invoice/Billing Note, Receipt, Tax Invoice on pre-printed NCR forms (2026-08-17 discussion, not yet scoped/approved)
+## High Priority — Accounting module Phase 1 (milestone billing): backend built + verified live, UI paused (2026-08-17)
 
-**See [MODULES/Accounting.md](./MODULES/Accounting.md) for the full write-up** — includes a
-condensed read-through of the owner's real "Flow งานบัญชี" reference spreadsheet (actual AR/AP
-business process, document numbering codes, payment-cycle dates) and the open questions to confirm
-with accounting before scoping. The 3 reference files (flow spreadsheet + 2 real customer
-billing-note PDFs) were originally dropped in `public/` (served as public static assets in
-production — a real data-exposure risk, since they contain real customer billing data) and have
-since been **moved to `reference/accounting/` + gitignored (2026-08-17)** so they can't end up
-committed/deployed by accident.
+**See [MODULES/Accounting.md](./MODULES/Accounting.md) for the full write-up.** A detailed spec from
+the owner (grounded in the real "Flow งานบัญชี" reference spreadsheet + 2 real customer billing
+sets) was planned in Plan Mode, approved, and Phase 1 (milestone billing: Customer extension,
+`ar_milestones`/`ar_documents`, atomic AR/IV/BI numbering, calc engine, checklist/attachments,
+issuing, basic cancel, RBAC) was implemented and **live-verified end-to-end** against the local dev
+server/database — see Accounting.md's "What's actually built + verified" section for specifics
+(real AR6908002/BI6908002 issued via the actual UI against a real 3-installment Scope of Work).
+
+- [ ] **⚠️ UI navigation structure is PAUSED, do not build more UI on the current shape.** Owner
+  reacted to the first built UI (a single job-centric page) expecting separate per-document-type
+  pages instead, matching how Quotations/Scope of Work/Delivery Order each get their own sidebar
+  page. Asked via AskUserQuestion; answer was "จดไว้ก่อนค่อยทำเดี๋ยวให้ข้อมูลเพิ่ม" (note it down, more
+  details coming later) — **wait for that follow-up before restructuring** `src/pages/accounting/`.
+  See Accounting.md "UI structure — PAUSED" for the full exchange and the 3 options offered.
+- [ ] **Finish testing the "more than 2 installments" safety guard against real data.** Mid-test
+  (interrupted by the UI feedback above) on `PQ202608-01-LI-SK` (Down payment 20% / Materials 40% /
+  Final 40%) in the local dev DB — down payment already issued as AR6908002/BI6908002. Open
+  "Materials" (should succeed, first non-deposit milestone), then "Final" (should be refused with a
+  clear Thai error, not silently produce a wrong number — Phase 1 is only verified for the
+  deposit+final 2-milestone shape, see arCalculations.ts's doc comment).
+- [ ] **Manually check the print layout in a real browser.** Clicking print correctly triggered
+  `window.print()` in the live-verify session (confirming the wiring works), but the native print
+  dialog blocks browser automation, so the actual visual layout (`ArDocumentPrintDocument.tsx`) was
+  never actually seen rendered — compare against the real reference PDFs in `reference/accounting/`.
+- [ ] **Rotate/replace the disposable local-dev-only test account** used for live verification — it
+  was created and deleted (`username: "artest"`) during this session, but double-check it's gone if
+  picking this back up later. The AR6908002/BI6908002 test documents it created were left in the
+  local dev DB (harmless local test data, not production).
+- [ ] **Phase 2 (not started)**: RE (payment receipt) with WHT/bank-fee reconciliation, WHT-
+  certificate + Retention trackers (clone the PO Chasing pattern), reports (AR aging, VAT sales
+  register, monthly collections), cancel/reissue polish with the red ยกเลิก watermark + supervisor
+  override. See the plan's "Phasing" section (`C:\Users\thaic\.claude\plans\playful-chasing-widget.md`)
+  for the full Phase 2 scope.
+- [ ] **Verify replica-set status of production MongoDB** (decision #10 in the plan) — Phase 1's
+  document issuing is deliberately sequential (not a Mongo transaction) since this was never
+  confirmed; revisit if/when confirmed either way.
+
+The 3 reference files (flow spreadsheet + 2 real customer billing-note PDFs) were originally dropped
+in `public/` (served as public static assets in production — a real data-exposure risk, since they
+contain real customer billing data) and have since been **moved to `reference/accounting/` +
+gitignored (2026-08-17)** so they can't end up committed/deployed by accident.
 
 Exploratory conversation only so far — no design decisions made, nothing built. Accounting department
 has already **purchased pre-printed multi-part NCR (carbonless copy) continuous forms** covering 4

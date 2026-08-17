@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench, Receipt,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -49,6 +49,7 @@ const ScopeOfWorkPage = lazy(() => import("./pages/scopeOfWork/ScopeOfWorkPage")
 const DeliveryOrderPage = lazy(() => import("./pages/deliveryOrder/DeliveryOrderPage").then((m) => ({ default: m.DeliveryOrderPage })));
 const ServicePage = lazy(() => import("./pages/service/ServicePage").then((m) => ({ default: m.ServicePage })));
 const ServiceTemplateManagement = lazy(() => import("./pages/service/ServiceTemplateManagement").then((m) => ({ default: m.ServiceTemplateManagement })));
+const AccountingPage = lazy(() => import("./pages/accounting/AccountingPage").then((m) => ({ default: m.AccountingPage })));
 
 // แสดงสถานะกำลังโหลดหน้าย่อยระหว่างรอโหลดโค้ด (Suspense fallback) พร้อมข้อความสำหรับ screen reader
 // Loading placeholder shown as the Suspense fallback for every lazy-loaded page, with a screen-reader label
@@ -120,7 +121,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "products" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "products" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -158,6 +159,7 @@ const navItems: NavItem[] = [
   { key: "deliveryOrder", icon: Truck, labelKey: "nav.deliveryOrder", permission: "deliveryOrder:view" },
   { key: "service", icon: Wrench, labelKey: "nav.service", permission: "service:view" },
   { key: "serviceTemplates", icon: Layers, labelKey: "nav.serviceTemplates", permission: "serviceTemplates:view" },
+  { key: "accounting", icon: Receipt, labelKey: "nav.accounting", permission: "ar:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -170,6 +172,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
+  { labelKey: "nav.group.accounting", keys: ["accounting"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
@@ -182,6 +185,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   deliveryOrder: "nav.deliveryOrder",
   service: "nav.service",
   serviceTemplates: "nav.serviceTemplates",
+  accounting: "nav.accounting",
   products: "nav.products",
   customers: "nav.customers",
   users: "nav.users",
@@ -611,6 +615,8 @@ export default function App() {
   const canCreateServiceTemplates = hasPermission(currentUser, roles, "serviceTemplates:create");
   const canEditServiceTemplates = hasPermission(currentUser, roles, "serviceTemplates:edit");
   const canArchiveServiceTemplates = hasPermission(currentUser, roles, "serviceTemplates:archive");
+  const canCreateAr = hasPermission(currentUser, roles, "ar:create");
+  const canIssueAr = hasPermission(currentUser, roles, "ar:issue");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
   // ตรวจสิทธิ์ template โดยยอมรับสิทธิ์ระดับ manage แบบเก่า (superset) ควบคู่กับสิทธิ์ย่อยแบบใหม่
   // Checks a template permission, accepting the legacy superset "manage" permission alongside the granular one
@@ -811,6 +817,8 @@ export default function App() {
               ? <ServicePage currentUserId={currentUser.id} company={company} canCreate={canCreateService} canEdit={canEditService} canComplete={canCompleteService} canDelete={canDeleteService} canPrint={canPrintService} initialServiceReportId={serviceReportDeepLinkId} onServiceReportIdConsumed={() => setServiceReportDeepLinkId(null)} />
               : effectiveNav === "serviceTemplates"
               ? <ServiceTemplateManagement currentUserId={currentUser.id} canCreate={canCreateServiceTemplates} canEdit={canEditServiceTemplates} canArchive={canArchiveServiceTemplates} />
+              : effectiveNav === "accounting"
+              ? <AccountingPage canCreate={canCreateAr} canIssue={canIssueAr} />
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"

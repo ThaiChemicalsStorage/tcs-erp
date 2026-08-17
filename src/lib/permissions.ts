@@ -64,7 +64,11 @@ export type Permission =
   | "serviceTemplates:view"
   | "serviceTemplates:create"
   | "serviceTemplates:edit"
-  | "serviceTemplates:archive";
+  | "serviceTemplates:archive"
+  | "ar:view"
+  | "ar:create"
+  | "ar:issue"
+  | "ar:cancel";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -131,6 +135,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "serviceTemplates:create",
   "serviceTemplates:edit",
   "serviceTemplates:archive",
+  "ar:view",
+  "ar:create",
+  "ar:issue",
+  "ar:cancel",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -198,6 +206,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "serviceTemplates:create": "สร้าง Template รายงานบริการใหม่",
   "serviceTemplates:edit": "แก้ไข Template รายงานบริการ",
   "serviceTemplates:archive": "เก็บถาวร/กู้คืน Template รายงานบริการ",
+  "ar:view": "ดูข้อมูลบัญชีลูกหนี้ (งวดบิล/เอกสาร)",
+  "ar:create": "จัดการ checklist และแนบเอกสารงวดบิล",
+  "ar:issue": "ออกเอกสาร AR / ใบกำกับภาษี / ใบวางบิล",
+  "ar:cancel": "ยกเลิกเอกสารบัญชีลูกหนี้",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -265,6 +277,10 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "serviceTemplates:create": "permission.serviceTemplatesCreate",
   "serviceTemplates:edit": "permission.serviceTemplatesEdit",
   "serviceTemplates:archive": "permission.serviceTemplatesArchive",
+  "ar:view": "permission.arView",
+  "ar:create": "permission.arCreate",
+  "ar:issue": "permission.arIssue",
+  "ar:cancel": "permission.arCancel",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -338,6 +354,11 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "serviceTemplates:edit",
       "serviceTemplates:archive",
     ],
+  },
+  {
+    label: "บัญชีลูกหนี้",
+    labelKey: "nav.accounting",
+    permissions: ["ar:view", "ar:create", "ar:issue", "ar:cancel"],
   },
   {
     label: "ระบบ",

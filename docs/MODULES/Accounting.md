@@ -1,12 +1,88 @@
 # Module: Accounting
 
-## Status: ⚠️ Planning notes only (as of 2026-08-17) — nothing scoped, nothing built
+## Status: 🟡 Phase 1 backend built and verified live; UI navigation structure PAUSED (2026-08-17)
 
-This file exists to capture everything discussed/gathered so far, before any real scoping or
-implementation starts. **Not a spec, not a commitment to a design** — just raw material so the
-next session (or whoever picks this up) doesn't have to re-derive it. See the coordination note at
-the top of [`../CLAUDE.md`](../CLAUDE.md) and the "Accounting module" + "Coordination risk" entries
-in [`../TODO.md`](../TODO.md) High/Medium Priority for the task-tracking side of this.
+Phase 1 (milestone billing: Customer extension, ar_milestones/ar_documents, atomic AR/IV/BI
+numbering, the calculation engine, checklist/attachments, issuing, basic cancel, RBAC) is
+implemented per the approved plan and **verified end-to-end against a real local dev
+database/browser session** — see "What's actually built + verified" below. The **UI's information
+architecture is paused** pending owner clarification — see "UI structure — PAUSED" below; do not
+build further UI on top of the current `AccountingPage.tsx` shape without re-reading that section
+first, since it may be restructured.
+
+This file also still carries the original planning notes gathered before implementation started —
+kept below for reference. See the coordination note at the top of [`../CLAUDE.md`](../CLAUDE.md) and
+the "Accounting module" + "Coordination risk" entries in [`../TODO.md`](../TODO.md) High/Medium
+Priority for the task-tracking side of this.
+
+## UI structure — PAUSED pending owner feedback (2026-08-17)
+
+Owner's reaction to the first built UI, verbatim: *"เอกสารบัญชี... คือไอ่พวกนี้มันเป็นหน้าแยกของมันดิ
+คือทำเหมือนเป็นหน้าเหมือนของเซลล์อะ น้องงงไปหมดละทำไมทำออกมาเป็นแบบนั้นอะ"* — expected ใบรับเงินมัดจำ/
+ใบกำกับภาษี, ใบแจ้งหนี้/ใบวางบิล, ใบเสร็จรับเงิน, ใบกำกับภาษี/ใบส่งสินค้า to each be their own
+separate page/list (matching how every Sales module — Quotations, Scope of Work, Delivery Order —
+each get their own dedicated sidebar page with their own browsable list), not bundled into one
+combined page.
+
+**What was actually built (`src/pages/accounting/AccountingPage.tsx`)**: a single job-centric page —
+pick a Scope of Work → see its payment installments → open one → fill a checklist → issue. Issued
+documents only show up embedded inside that job's detail view, not as their own browsable
+per-document-type list anywhere in the app.
+
+**Why it was built that way**: per the real "Flow งานบัญชี" business process, a document is never
+created standalone — it's always issued *from* a specific job's specific installment, and AR+BI (or
+IV+BI) are issued together in one action. So the issuing *mechanism* is inherently job-centric. But
+that doesn't mean the *browsing* experience has to be — nothing stops adding a "all outstanding
+ใบแจ้งหนี้" / "all ใบเสร็จรับเงิน" list view on top of the same underlying `ar_documents` data.
+
+**Asked the owner to choose** (via AskUserQuestion): separate per-document-type pages matching the
+Sales module pattern (adds ~3 more sidebar list pages) / keep the single job-centric page but add a
+combined "all issued documents" list / something else. **Answer: "จดไว้ก่อนค่อยทำเดี๋ยวให้ข้อมูลเพิ่ม"**
+(note it down for now, will give more details later — do not build the restructure yet).
+
+**Do not change the UI navigation structure until the owner provides that follow-up detail.** The
+backend/API (`api/_lib/arHandler.ts`, `src/lib/accounting.ts`) is structure-agnostic — it already
+supports querying `ar_documents` by type/status/scopeOfWorkId, so whichever UI shape gets chosen can
+be built on top of the existing API without backend changes.
+
+## What's actually built + verified (2026-08-17)
+
+**Backend (Phase 1, per the approved plan)** — all of `tsc`/`lint`/`build`/`test` pass clean
+(231 tests). Files: `api/_lib/collections.ts` (new `ar_milestones`/`ar_attachment_files`/
+`ar_documents` collections + indexes, `Customer` extended with `code`/`apContact*`/
+`billingConditions`/`requiresReport`), `api/_lib/documentNumbering.ts` (Buddhist-year `{PREFIX}{YY}
+{MM}{SEQ}` atomic numbering), `api/_lib/arCalculations.ts` (pure calc functions), `api/_lib/
+arHandler.ts` (milestones/attachments/documents routes, mounted from `api/handlers/quotes.ts` +
+`server/app.ts` + `vercel.json`), 4 new `ar:*` permissions + a new `accounting_user` default role +
+an `rbac_migrations` backfill entry, and a guard in `scopeOfWorkHandler.ts`'s `handleRewrite()`
+blocking Rewrite once any installment is billed. Also extended `src/lib/customers.ts`/
+`api/_lib/customerValidation.ts`/`api/_lib/customersHandler.ts` for the new Customer fields.
+
+**`tests/api/arCalculations.test.ts` / `tests/api/arNumbering.test.ts`** reproduce both real worked
+examples (K.Thai Hydraulic: IV6908014 net 134,820.00; VS Chem: IV6908015 net 196,238.00) to the
+satang, verify `bahtText()` (already existed, reused as-is — correctly handles all 12 of the spec's
+test cases including the เอ็ด-across-a-ล้าน-boundary edge case), and verify the Buddhist-year
+Dec-31-to-Jan-1 counter rollover explicitly.
+
+**Live-verified via a real browser session against the local dev server + local MongoDB**
+(not synthetic — a disposable local-only test account was created and deleted after): opened a real
+3-installment Scope of Work (Down payment 20% / Materials 40% / Final 40%), completed the down
+payment milestone's checklist, clicked "ออกเอกสาร (AR + BI)", and the system genuinely issued
+**AR6908002 + BI6908002** (atomic sequential numbering confirmed — a prior AR6908001 already existed
+in that local DB from earlier testing), both appearing immediately in the job's issued-documents
+list with the correct amount. Clicking print correctly triggered `window.print()` (confirming the
+print component is wired correctly) — the native print dialog then blocks browser automation, so the
+**visual print layout itself still needs a manual look** in a real browser, not just confirmation
+that it fires.
+
+**Not yet tried against real data**: the Phase 1 safety guard that refuses to issue a 2nd non-deposit
+milestone (the "more than 2 installments — deposit + final — isn't verified yet" refusal, decision
+in the Key Design Decisions section below) — was mid-test (opening the "Materials" milestone, a
+non-deposit one) when the UI-structure feedback above interrupted the session. Worth finishing that
+specific check next: open "Materials", issue it (should succeed, first non-deposit), then open
+"Final" and attempt to issue (should be refused with the Thai error message, not silently produce a
+wrong number) — the same test Scope of Work (`PQ202608-01-LI-SK`) in the local DB is already primed
+for this with `AR6908002`/`BI6908002` sitting in the "billed" down-payment milestone.
 
 ## Why this came up
 

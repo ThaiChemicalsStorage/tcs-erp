@@ -18,6 +18,7 @@ import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty, sanitizeBo
 import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeChecklistGroups } from "./documentRequirements.js";
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint } from "../../src/lib/validation/scopeOfWorkValidation.js";
 import { getRevisionRoot } from "./quoteRevisions.js";
+import { assertScopeHasNoBilledMilestones } from "./arHandler.js";
 import { ADDITIONAL_RECIPIENT_KEY, ALL_RECIPIENT_KEYS, DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/lib/documentRequirements.js";
 import { normalizePaymentConditions, normalizeDocumentRecipients } from "../../src/lib/scopeOfWork.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
@@ -915,6 +916,10 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   // Same defense-in-depth as handleDuplicate — reading the source's full content needs `:view` too.
   if (!roleHasPermission(ctx.role, "scopeOfWork:view")) throw new HttpError(403, "Forbidden");
   const source = await loadScopeOrThrow(id);
+  // Rewrite creates a brand-new document _id while installment ids carry over unchanged — that
+  // would silently orphan any already-billed ar_milestones history (keyed on the old scopeOfWorkId)
+  // from the record a user now sees. See docs/MODULES/Accounting.md decision #2.
+  await assertScopeHasNoBilledMilestones(id);
 
   const [scopeOfWorks, counters] = await Promise.all([scopeOfWorksCollection(), countersCollection()]);
   // Also drops the legacy {yearMonth, jobSequence} unique index if present — the `...rest` spread

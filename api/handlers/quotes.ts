@@ -5,6 +5,7 @@ import { buildOwnershipClause } from "../_lib/visibility.js";
 import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, quotationTemplatesCollection, countersCollection, auditLogCollection, customersCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
 import { handleScopeOfWork } from "../_lib/scopeOfWorkHandler.js";
 import { handleDeliveryOrder } from "../_lib/deliveryOrderHandler.js";
+import { handleAr } from "../_lib/arHandler.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
@@ -855,6 +856,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // its own function file (Vercel Hobby's 12-function cap is still fully used).
     if (pathname === "/api/delivery-orders" || pathname.startsWith("/api/delivery-orders/")) {
       return handleDeliveryOrder(req, res);
+    }
+    // Accounts Receivable (added 2026-08-17) — same sharing pattern, billing derives from a Scope
+    // of Work's payment installments so it's mounted alongside it. See docs/MODULES/Accounting.md.
+    if (pathname === "/api/ar-milestones" || pathname.startsWith("/api/ar-milestones/")
+      || pathname === "/api/ar-documents" || pathname.startsWith("/api/ar-documents/")) {
+      return handleAr(req, res);
     }
 
     const parts = getPathSegments(req, "/api/quotes");

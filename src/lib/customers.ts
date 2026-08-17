@@ -19,6 +19,14 @@ export interface Customer {
   updatedBy: string;
   /** LINE userId ของแชทลูกค้าที่ผูกไว้ (2026-08-10) — "" คือยังไม่เคยผูก; ผูกครั้งเดียวผ่านรหัสจับคู่ */
   lineUserId: string;
+  /** Accounting AR fields (added 2026-08-17) — see docs/MODULES/Accounting.md. Deliberately not
+   * payment-terms/credit-days (those live per-installment on ScopeOfWork already). */
+  code: string;
+  apContactName: string;
+  apContactPhone: string;
+  apContactEmail: string;
+  billingConditions: string;
+  requiresReport: boolean;
 }
 
 export interface CustomerDraft {
@@ -32,6 +40,12 @@ export interface CustomerDraft {
   projectName: string;
   deliveryAddress: string;
   isActive: boolean;
+  code: string;
+  apContactName: string;
+  apContactPhone: string;
+  apContactEmail: string;
+  billingConditions: string;
+  requiresReport: boolean;
 }
 
 export const emptyCustomerDraft: CustomerDraft = {
@@ -45,6 +59,12 @@ export const emptyCustomerDraft: CustomerDraft = {
   projectName: "",
   deliveryAddress: "",
   isActive: true,
+  code: "",
+  apContactName: "",
+  apContactPhone: "",
+  apContactEmail: "",
+  billingConditions: "",
+  requiresReport: false,
 };
 
 export interface CustomerSnapshot {

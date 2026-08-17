@@ -46,6 +46,13 @@ export function validateCustomerDraft(body: unknown, partial: boolean): Partial<
   if (!partial || b.projectName !== undefined) out.projectName = sanitizeText(b.projectName, "โครงการ", MAX_SHORT_TEXT);
   if (!partial || b.deliveryAddress !== undefined) out.deliveryAddress = sanitizeText(b.deliveryAddress, "ที่อยู่จัดส่ง", MAX_LONG_TEXT);
   if (!partial || b.isActive !== undefined) out.isActive = b.isActive === undefined ? true : b.isActive === true;
+  // Accounting AR fields (added 2026-08-17) — see docs/MODULES/Accounting.md.
+  if (!partial || b.code !== undefined) out.code = sanitizeText(b.code, "รหัสลูกค้า", 40);
+  if (!partial || b.apContactName !== undefined) out.apContactName = sanitizeText(b.apContactName, "ผู้ติดต่อฝ่ายบัญชีลูกค้า", MAX_SHORT_TEXT);
+  if (!partial || b.apContactPhone !== undefined) out.apContactPhone = sanitizeText(b.apContactPhone, "เบอร์โทรฝ่ายบัญชีลูกค้า", 40);
+  if (!partial || b.apContactEmail !== undefined) out.apContactEmail = sanitizeEmail(b.apContactEmail);
+  if (!partial || b.billingConditions !== undefined) out.billingConditions = sanitizeText(b.billingConditions, "เงื่อนไขการวางบิล", MAX_LONG_TEXT);
+  if (!partial || b.requiresReport !== undefined) out.requiresReport = b.requiresReport === true;
 
   return out;
 }
