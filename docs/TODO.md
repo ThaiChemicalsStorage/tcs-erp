@@ -159,6 +159,15 @@
 
 ## Medium Priority — Accounting module: Invoice/Billing Note, Receipt, Tax Invoice on pre-printed NCR forms (2026-08-17 discussion, not yet scoped/approved)
 
+**See [MODULES/Accounting.md](./MODULES/Accounting.md) for the full write-up** — includes a
+condensed read-through of the owner's real "Flow งานบัญชี" reference spreadsheet (actual AR/AP
+business process, document numbering codes, payment-cycle dates) and the open questions to confirm
+with accounting before scoping. The 3 reference files (flow spreadsheet + 2 real customer
+billing-note PDFs) were originally dropped in `public/` (served as public static assets in
+production — a real data-exposure risk, since they contain real customer billing data) and have
+since been **moved to `reference/accounting/` + gitignored (2026-08-17)** so they can't end up
+committed/deployed by accident.
+
 Exploratory conversation only so far — no design decisions made, nothing built. Accounting department
 has already **purchased pre-printed multi-part NCR (carbonless copy) continuous forms** covering 4
 document types in one set: ใบแจ้งหนี้/ใบวางบิล (Invoice/Billing Note), สำเนาใบเสร็จรับเงิน (Receipt

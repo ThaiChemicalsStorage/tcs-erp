@@ -34,3 +34,9 @@ yarn-error.log*
 # a full reference copy lives in docs/DEPLOYMENT.md "Docker". Dockerfile and nginx/ ARE committed
 # (real certs under nginx/certs/ are ignored by that folder's own .gitignore).
 docker-compose.yml
+
+# reference/ — real business documents dropped in for planning context (customer billing PDFs,
+# internal process spreadsheets), deliberately untracked (owner request, 2026-08-17) since they
+# contain real customer/business data. See docs/MODULES/Accounting.md for a written summary of
+# what's in here that's safe to keep in the repo instead.
+reference/
