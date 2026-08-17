@@ -156,6 +156,42 @@
 - [ ] Consider raising bcrypt's cost factor from 10 (the `bcryptjs` default, not explicitly tuned during migration) if login latency budget allows — the originally-proposed design called for 12.
 - [x] ~~Add explicit MongoDB indexes~~ — **done 2026-07-09**: real indexes now exist across every collection, see [DATABASE.md](./DATABASE.md).
 
+## Medium Priority — Accounting module: Invoice/Billing Note, Receipt, Tax Invoice on pre-printed NCR forms (2026-08-17 discussion, not yet scoped/approved)
+
+Exploratory conversation only so far — no design decisions made, nothing built. Accounting department
+has already **purchased pre-printed multi-part NCR (carbonless copy) continuous forms** covering 4
+document types in one set: ใบแจ้งหนี้/ใบวางบิล (Invoice/Billing Note), สำเนาใบเสร็จรับเงิน (Receipt
+copy), สำเนาใบกำกับภาษี (Tax Invoice copy), and ใบส่งสินค้า (Delivery Note). They intend to print onto
+these using a **dot-matrix (impact) printer** — a hard requirement, not a preference: only mechanical
+impact transfers ink through the carbon layers to the copies underneath; laser/inkjet only print the
+top sheet, leaving the copies blank.
+
+- [ ] **Scope gap: 3 of the 4 document types don't exist in the ERP at all.** ใบส่งสินค้า already has a
+  digital equivalent (the Delivery Order module, `deliveryOrder.md`) but currently prints its own
+  plain-paper layout, not this NCR form. **ใบแจ้งหนี้/ใบวางบิล, ใบเสร็จรับเงิน, and ใบกำกับภาษี have zero
+  data model, workflow, or UI today** — this is really "design and build a new Accounting/Billing
+  module" wearing the clothes of "print onto a form I bought." Needs its own scoping pass before any
+  implementation: what triggers each document (invoice from a Delivery Order? receipt on payment
+  received?), what fields each needs (ใบกำกับภาษี is a real Thai Revenue-Department-regulated tax
+  document — sequential numbering, tax ID, VAT breakdown must be correct, not just cosmetically
+  present), and where each sits relative to the existing Quotation → Scope of Work → Delivery Order
+  chain.
+- [ ] **Separately, the physical print-calibration problem** (once the data/workflow side above is
+  designed): building a print view isn't the usual "design the whole document" pattern this app's
+  other print views use (`PrintDocument.tsx`, `DeliveryOrderPrintDocument.tsx`) — the physical form
+  already has the borders/labels printed, so the web view needs to render **only the data fields**,
+  absolutely positioned in mm to match wherever those fields fall on the real form, printed at a
+  custom `@page` size matching the continuous-feed form's actual dimensions. This can't be fully
+  solved in code alone — it needs iterative test-prints against the real dot-matrix printer + real
+  form stock to calibrate position. Connecting a dot-matrix printer to the web app itself is not a
+  concern (it's just another OS-level printer target for `window.print()`, same mechanism already
+  used everywhere else in the app) — the LPT-vs-USB port question is a hardware/OS install detail,
+  not a web app concern.
+- [ ] **Open questions for the accounting department before starting**: exact dot-matrix printer
+  make/model (affects paper-size/driver setup), whether the printer is already on hand or still being
+  procured (blocks calibration until it exists), and the exact form dimensions (continuous-feed width,
+  likely ~9.5") plus a measurement of each field's position on a real blank form.
+
 ## Medium Priority — PDF / Quotation document polish (2026-07-08 request)
 
 - [x] Company **logo** upload (Settings → Company Info) + render in the quotation PDF header, replacing the text-only "TCS ERP" wordmark when set
