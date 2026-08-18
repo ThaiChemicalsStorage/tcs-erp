@@ -157,6 +157,13 @@
 - [ ] Consider raising bcrypt's cost factor from 10 (the `bcryptjs` default, not explicitly tuned during migration) if login latency budget allows — the originally-proposed design called for 12.
 - [x] ~~Add explicit MongoDB indexes~~ — **done 2026-07-09**: real indexes now exist across every collection, see [DATABASE.md](./DATABASE.md).
 
+- [x] ~~**Build a dedicated Accounting Dashboard.**~~ — **done 2026-08-18**: direct request ("ทำ
+  Dashboard เฉพาะแยกออกมาในหมวดของบัญชีให้หน่อย ขอแบบดูได้แบบละเอียด"). New "แดชบอร์ดบัญชี" sidebar
+  page + `GET /api/ar-dashboard`: 5 KPI cards, a 12-month AR+IV trend chart, doc-type breakdown
+  donut, AR aging chart + 30-row detail table, milestone billing-funnel bar, top-8-customers table.
+  Live-verified — every number cross-checked correctly against real local test data. See
+  [MODULES/Accounting.md](./MODULES/Accounting.md) "Accounting Dashboard" and CHANGELOG.md 2026-08-18f.
+
 ## High Priority — Accounting module Phase 1 (milestone billing): backend built + verified live, UI paused (2026-08-17)
 
 **See [MODULES/Accounting.md](./MODULES/Accounting.md) for the full write-up.** A detailed spec from
@@ -167,31 +174,60 @@ issuing, basic cancel, RBAC) was implemented and **live-verified end-to-end** ag
 server/database — see Accounting.md's "What's actually built + verified" section for specifics
 (real AR6908002/BI6908002 issued via the actual UI against a real 3-installment Scope of Work).
 
-- [ ] **⚠️ UI navigation structure is PAUSED, do not build more UI on the current shape.** Owner
-  reacted to the first built UI (a single job-centric page) expecting separate per-document-type
-  pages instead, matching how Quotations/Scope of Work/Delivery Order each get their own sidebar
-  page. Asked via AskUserQuestion; answer was "จดไว้ก่อนค่อยทำเดี๋ยวให้ข้อมูลเพิ่ม" (note it down, more
-  details coming later) — **wait for that follow-up before restructuring** `src/pages/accounting/`.
-  See Accounting.md "UI structure — PAUSED" for the full exchange and the 3 options offered.
-- [ ] **Finish testing the "more than 2 installments" safety guard against real data.** Mid-test
-  (interrupted by the UI feedback above) on `PQ202608-01-LI-SK` (Down payment 20% / Materials 40% /
-  Final 40%) in the local dev DB — down payment already issued as AR6908002/BI6908002. Open
-  "Materials" (should succeed, first non-deposit milestone), then "Final" (should be refused with a
-  clear Thai error, not silently produce a wrong number — Phase 1 is only verified for the
-  deposit+final 2-milestone shape, see arCalculations.ts's doc comment).
-- [ ] **Manually check the print layout in a real browser.** Clicking print correctly triggered
-  `window.print()` in the live-verify session (confirming the wiring works), but the native print
-  dialog blocks browser automation, so the actual visual layout (`ArDocumentPrintDocument.tsx`) was
-  never actually seen rendered — compare against the real reference PDFs in `reference/accounting/`.
-- [ ] **Rotate/replace the disposable local-dev-only test account** used for live verification — it
-  was created and deleted (`username: "artest"`) during this session, but double-check it's gone if
-  picking this back up later. The AR6908002/BI6908002 test documents it created were left in the
-  local dev DB (harmless local test data, not production).
-- [ ] **Phase 2 (not started)**: RE (payment receipt) with WHT/bank-fee reconciliation, WHT-
-  certificate + Retention trackers (clone the PO Chasing pattern), reports (AR aging, VAT sales
-  register, monthly collections), cancel/reissue polish with the red ยกเลิก watermark + supervisor
-  override. See the plan's "Phasing" section (`C:\Users\thaic\.claude\plans\playful-chasing-widget.md`)
-  for the full Phase 2 scope.
+- [x] ~~**⚠️ UI navigation structure is PAUSED, do not build more UI on the current shape.**~~ —
+  **UNPAUSED + restructure done 2026-08-18**: the owner's promised follow-up arrived (the full
+  "Flow การทำงานของบัญชี-รับ" + the confirmed 4-document list + "1 ใบคือ 1 หน้า...เหมือนเอกสารของเซลล์"),
+  and the per-document-type pages were built the same day: 4 standalone sidebar pages (AR/BI/RE/IV,
+  one shared `ArDocumentListPage.tsx` parameterized by docType), plus a new RE (ใบเสร็จรับเงิน)
+  document type end-to-end, a deposit-billed alert on the job-billing page, and a monthly
+  document-summary page for tax filing. Implementation prompt self-authored per
+  `docs/ERP_CLAUDE_PROMPT_ENGINEERING_GUIDE.md` at
+  [PROMPTS/ACCOUNTING_DOCUMENT_PAGES_PROMPT.md](./PROMPTS/ACCOUNTING_DOCUMENT_PAGES_PROMPT.md).
+  See Accounting.md "Phase 1.5" and CHANGELOG.md 2026-08-18.
+- [x] ~~**Manually verify the 2026-08-18 Phase 1.5 pass in a live browser**~~ — **done same day
+  (2026-08-18, second half of the session)** via a real Playwright session against `npm run dev` +
+  the local MongoDB, logged in as a disposable local-only account (created directly in the local DB,
+  deleted after). All checks passed: sidebar shows all 6 บัญชี pages; deposit column/banner correct
+  on `PQ202608-01-LI-SK` (green banner naming AR6908002); "ออกใบเสร็จ" on IV6908001 issued
+  **RE6908001** and flipped the Materials milestone to "จบ"; a second receipt attempt on the same
+  invoice returned 400 with "ใบกำกับภาษี IV6908001 มีใบเสร็จรับเงิน RE6908001 อยู่แล้ว"; cancelling
+  that RE (reason-required dialog) flipped the milestone back to "งานยังไม่จบ"; the owner
+  independently clicked "ออกใบเสร็จ" on the deposit AR6908002 mid-test (→ RE6908002) which proved
+  the deposit-milestone case too (stays "วางบิล", never "จบ"); the monthly summary's per-type and
+  AR+IV grand totals matched to the satang with the cancelled RE struck-through and excluded; the RE
+  print layout rendered 2 clean copies (verified via print-CSS emulation screenshot). **One real bug
+  found and fixed during this pass**: printing from the new pages included the on-screen list/detail
+  content in the printout — the screen wrappers lacked `print:hidden` (reported live by the owner:
+  "เวลากดพิมพ์เอกสารมันไม่ควรมีในนั้น") — fixed in `ArDocumentListPage.tsx` + `AccountingPage.tsx`
+  by moving `ArDocumentPrintDocument` outside a now-`print:hidden` screen wrapper, re-verified via
+  emulation screenshot showing only the document pages. Gate re-run clean after the fix.
+- [x] ~~**Finish testing the "more than 2 installments" safety guard against real data.**~~ —
+  **done 2026-08-18 (live)**: on `PQ202608-01-LI-SK`, issuing "Materials" (first non-deposit
+  milestone) succeeded → IV6908001 + BI6908003 at ฿912,013.13 (quote items 852,348.72 ex-VAT after
+  the AR6908002 deposit deduction — math consistent with `arCalculations.ts`); then attempting
+  "Final" was refused with HTTP 400 and the exact intended Thai message ("...รูปแบบมากกว่า 2 งวด
+  (มัดจำ + งวดสุดท้าย) ยังไม่รองรับ...") and no document number was consumed — the Final milestone
+  stayed `not_billed`.
+- [x] ~~**Manually check the print layout in a real browser.**~~ — **checked 2026-08-18** via
+  print-CSS-emulation screenshots (stub `window.print`, force the `print:hidden`/`print:block`
+  rules, screenshot): the RE layout renders cleanly (letterhead, doc-no/date/ref block, line table,
+  Thai amount-text box, cheque clause, signature block, ต้นฉบับ/สำเนา labels), and the screen-content
+  print-bleed bug this surfaced was fixed (see the Phase 1.5 verification item above). **Still worth
+  a pixel-level comparison against the real reference PDFs in `reference/accounting/` before any NCR
+  printing** — the emulation confirms structure/content, not exact print-dialog pagination.
+- [x] ~~**Rotate/replace the disposable local-dev-only test account**~~ — **confirmed 2026-08-18**:
+  no `artest` user exists in the local DB; the 2026-08-18 live pass used its own disposable
+  `artest-live` account which was likewise deleted at the end (deleteCount 1 confirmed). Test
+  documents left in the local dev DB, deliberately (harmless local data, not production):
+  AR6908001/2, BI6908001/2/3, IV6908001, RE6908001 (cancelled), RE6908002.
+- [ ] **Phase 2 (partially pulled forward 2026-08-18)**: ~~RE (payment receipt)~~ — **basic RE
+  shipped 2026-08-18** (issue-once-per-tax-invoice + milestone close/reopen), but **without** the
+  planned WHT/bank-fee reconciliation (the receipt currently always equals the invoice's net total —
+  recording a customer who paid net-of-withholding-tax is not yet possible). Still open: that
+  WHT/bank-fee reconciliation, WHT-certificate + Retention trackers (clone the PO Chasing pattern),
+  reports beyond the 2026-08-18 monthly summary (AR aging, VAT sales register, monthly collections),
+  cancel/reissue polish with the red ยกเลิก watermark + supervisor override. See the plan's
+  "Phasing" section (`C:\Users\thaic\.claude\plans\playful-chasing-widget.md`) for the full scope.
 - [ ] **Verify replica-set status of production MongoDB** (decision #10 in the plan) — Phase 1's
   document issuing is deliberately sequential (not a Mongo transaction) since this was never
   confirmed; revisit if/when confirmed either way.
@@ -219,17 +255,33 @@ top sheet, leaving the copies blank.
   document — sequential numbering, tax ID, VAT breakdown must be correct, not just cosmetically
   present), and where each sits relative to the existing Quotation → Scope of Work → Delivery Order
   chain.
-- [ ] **Separately, the physical print-calibration problem** (once the data/workflow side above is
-  designed): building a print view isn't the usual "design the whole document" pattern this app's
-  other print views use (`PrintDocument.tsx`, `DeliveryOrderPrintDocument.tsx`) — the physical form
-  already has the borders/labels printed, so the web view needs to render **only the data fields**,
-  absolutely positioned in mm to match wherever those fields fall on the real form, printed at a
-  custom `@page` size matching the continuous-feed form's actual dimensions. This can't be fully
-  solved in code alone — it needs iterative test-prints against the real dot-matrix printer + real
-  form stock to calibrate position. Connecting a dot-matrix printer to the web app itself is not a
-  concern (it's just another OS-level printer target for `window.print()`, same mechanism already
-  used everywhere else in the app) — the LPT-vs-USB port question is a hardware/OS install detail,
-  not a web app concern.
+- [ ] **The physical print-calibration problem — software side now built (2026-08-18), hardware
+  iteration still required.** The data-only NCR print mode exists (`ArDocumentNcrPrintDocument.tsx`:
+  absolute-mm fields, one page per carbon set, per-machine page-size/offset settings, a crosshair
+  test page — see CHANGELOG.md 2026-08-18c), with first-draft coordinates derived proportionally
+  from the owner's photos of the real forms. **Remaining, and impossible in code alone**: get the
+  real form's dimensions (assumed 9"×11" continuous — unconfirmed), print the test page from the
+  actual dot-matrix printer onto real form stock, measure, adjust the offsets in "ตั้งค่าฟอร์ม NCR"
+  (and `FORM` in the component if individual fields are off rather than the whole page), and repeat
+  until the `+` marks land on the boxes. Connecting the dot-matrix printer is just an OS-level
+  printer target for `window.print()` — not a web-app concern.
+- [x] ~~**Confirm with the owner whether the Billing Note (BI/ใบแจ้งหนี้/ใบวางบิล) form is also
+  pre-purchased NCR stock**~~ — **confirmed 2026-08-18, same day**: the owner sent a photo of the
+  actual blank pre-printed BI form stock ("ตัวใบแจ้งหนี้มันมาเป็นฟอร์มเปล่าด้วย") — it IS NCR stock
+  like AR/IV/RE, not plain paper as first guessed. Built the matching data-only NCR mode the same
+  day: `BillingNoteNcrPage` + `FORM_BI` in `ArDocumentNcrPrintDocument.tsx`, reusing the existing
+  "NCR" print button + calibration dialog/test page (now with a `variant` prop so the test page can
+  target either form family). **`FORM_BI`'s coordinates are still a first-draft best-effort guess**
+  (no measured photo of this specific form's field positions was provided, unlike AR/IV/RE which had
+  one) — needs the same physical calibration pass before real use. Live-verified via print-CSS-
+  emulation screenshot (structure/fields render correctly) — see CHANGELOG.md 2026-08-18k.
+- [ ] **NCR form fields the ERP doesn't store yet — decide whether to add them.** The real form
+  prints 3 fields `ArDocument` has no data for (currently left blank in NCR mode): **customer code**
+  (e.g. `H-020` — `Customer.code` exists since Phase 1 but isn't carried into
+  `ArDocument.customerSnapshot`), **สถานที่ส่งสินค้า / Place To Delivery**, and **ผู้ขาย / Sale**
+  (e.g. `SK-สุนันท์ ขำมี` — the Scope of Work's salesperson would be the natural source). Adding them
+  means extending the snapshot at issue time (new documents only) — worth doing before real NCR use
+  if accounting needs those boxes filled.
 - [ ] **Open questions for the accounting department before starting**: exact dot-matrix printer
   make/model (affects paper-size/driver setup), whether the printer is already on hand or still being
   procured (blocks calibration until it exists), and the exact form dimensions (continuous-feed width,

@@ -73,6 +73,15 @@ describe("nextArDocNumber() — atomic per (prefix, yy, mm) sequence", () => {
     expect(ar2.slice(-3)).toBe("002");
   });
 
+  it("RE (receipt, added 2026-08-18) runs its own independent monthly sequence like the Phase-1 prefixes", async () => {
+    const counters = await countersCollection();
+    await nextArDocNumber(counters, "AR"); // bump AR so a shared counter would be exposed
+    const re1 = await nextArDocNumber(counters, "RE");
+    const re2 = await nextArDocNumber(counters, "RE");
+    expect(re1).toMatch(/^RE\d{4}001$/);
+    expect(re2.slice(-3)).toBe("002");
+  });
+
   it("format is exactly {PREFIX}{YY}{MM}{SEQ:3} — 9 characters, matching the real AR6907008 shape", async () => {
     const counters = await countersCollection();
     const docNo = await nextArDocNumber(counters, "BI");

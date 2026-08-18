@@ -4,7 +4,104 @@
 
 ---
 
-## Session — 2026-08-14i (absolute latest), Departments (manageable) + Sales Teams + tiered visibility
+## Session — 2026-08-18 (continued, absolute latest), Accounting Dashboard
+
+### What was implemented
+Direct request: "ทำ Dashboard เฉพาะแยกออกมาในหมวดของบัญชีให้หน่อย ขอแบบดูได้แบบละเอียด" — a dedicated,
+detailed dashboard scoped to Accounting, separate from the main cross-module Dashboard. Researched
+the main Dashboard's architecture first (via a fork) to match conventions: `ChartCard`/`fmtShort`/
+recharts patterns, the `dateRanges.ts` preset math, the "period-filtered vs. current-state-snapshot"
+Filter Honesty distinction the main Dashboard already established. Built `GET /api/ar-dashboard`
+(`handleDashboard()` in `arHandler.ts` — plain `find()` + JS reduction, no aggregation pipeline
+needed since AR documents have no revision-chain concept to dedup) returning KPIs, a 12-month AR+IV
+trend, doc-type breakdown, AR aging (buckets + detail rows), a milestone billing-status funnel, and
+top customers. Built the client lib + two page files
+(`AccountingDashboardPage.tsx`/`AccountingDashboardCharts.tsx`), wired a new sidebar entry, and
+made the deliberate design call that aging/funnel/deposit-count are always current-state (not
+period-filtered) — an AR aging report scoped to a date range would hide real outstanding debt, so
+this was worth stating explicitly in the UI rather than a silent inconsistency.
+
+### Problems found/fixed
+- Same `react-hooks/set-state-in-effect` pattern as earlier in the session — fixed with the
+  established fetch-key-derived-state approach immediately, no repeat mistake.
+
+### Verification
+`npx tsc --noEmit` (both configs) / `npm run lint` (0 errors) / `npm run build` / `npm test`
+198/198, plus a full live browser session: every KPI/chart/table number cross-checked correctly
+against the local dev DB's real accumulated test data from earlier in this session (outstanding
+total, aging bucket/days-overdue, deposit-not-billed count, doc-type totals all matched exactly).
+Disposable test account created and deleted after. Not committed — owner paused auto-commits
+2026-08-17.
+
+---
+
+## Session — 2026-08-18, Accounting Phase 1.5: per-document-type pages + RE + deposit alert + monthly summary
+
+### What was implemented
+The owner delivered the follow-up detail that had paused the Accounting UI restructure (the full
+"Flow การทำงานของบัญชี-รับ", the confirmed 4-document set, the two Express-system improvement asks,
+and "1 ใบคือ 1 หน้า...เหมือนเอกสารของเซลล์"), plus — mid-session — a new
+`docs/ERP_CLAUDE_PROMPT_ENGINEERING_GUIDE.md` with the instruction to **self-author the
+implementation prompt from that guide, then execute it**. Did exactly that: wrote
+[PROMPTS/ACCOUNTING_DOCUMENT_PAGES_PROMPT.md](./PROMPTS/ACCOUNTING_DOCUMENT_PAGES_PROMPT.md)
+(Current Problem → Business Requirement → Scope → investigation findings → behavior → DoD), then
+implemented it: RE (ใบเสร็จรับเงิน) end-to-end (type/numbering/issue-once-per-invoice endpoint/print/
+milestone close-and-reopen), 4 standalone document pages via one shared `ArDocumentListPage.tsx`,
+the deposit-billed alert (job-list column + per-job banner), the monthly tax summary page,
+`docType`/`month` API filters, updated document names, i18n nav keys, What's New entry. See
+CHANGELOG.md 2026-08-18 for the itemized diff.
+
+### Problems found/fixed
+- The interruption arrived mid-task; on resume, confirmed the working tree still held the
+  pre-interruption work and continued rather than restarting.
+- Two `react-hooks/set-state-in-effect` lint errors in the new pages — fixed properly (mount-effect
+  inline fetch + a fetch-key-derived loading/error state) instead of disabling the rule.
+- Noticed the 2026-08-17 Phase 1 session had never updated `API.md`, `DATABASE.md`,
+  `PROJECT_STATUS.md`, or this file for the AR module at all — backfilled all of them this session
+  (Phase 1 + 1.5 together).
+- **Second half of the session: full live verification ran and passed** (Playwright against
+  `npm run dev` + local MongoDB, disposable account deleted after) — including the pending Phase-1
+  >2-installments guard test. **One real owner-reported bug found and fixed live**: printing from
+  the new pages included the on-screen list/detail content ("เวลากดพิมพ์เอกสารมันไม่ควรมีในนั้น") —
+  missing `print:hidden` wrappers, fixed in both accounting page files and re-verified via
+  print-CSS-emulation screenshot. See CHANGELOG.md 2026-08-18b.
+- **Third part: the owner shared photos of the real pre-printed NCR forms** ("มันต้องออกมาเป็นแบบนี้")
+  → built the data-only NCR print mode the same day (`ArDocumentNcrPrintDocument.tsx` +
+  `ncrPrintSettings.ts` + per-row "NCR" buttons + calibration dialog + crosshair test page),
+  first-draft coordinates from the photos, live-emulation-verified on IV6908001. Physical
+  calibration against the real form/printer is the remaining, hardware-dependent step. See
+  CHANGELOG.md 2026-08-18c.
+- **Fourth part: the owner shared a photo of the real Billing Note (BI) form, flagging uncertainty
+  whether it's pre-purchased NCR stock** ("ไม่แน่ใจว่าซื้อมารึเปล่า") — the plain white paper (no
+  carbonless tint/ply label, unlike AR/IV/RE) suggested it's not, so built the correct plain-paper
+  layout (`BillingNotePage`) instead of guessing NCR coordinates for possibly-nonexistent stock.
+  Found and fixed **two real Phase 1 bugs** along the way: a doubled document-prefix string in the
+  BI line description, and every print date using Gregorian 4-digit years instead of the Buddhist
+  2-digit format every real reference form actually shows (fixed for all 4 doc types via a new
+  shared `formatArDocDate()`). Verified live via a seeded fixture (fresh IV+BI+RE matching the
+  fixed handler's exact shape, since the primed scope had no fresh installment left) + print-CSS-
+  emulation screenshot confirming the ชำระแล้ว/เงินคงค้าง columns compute correctly. See
+  CHANGELOG.md 2026-08-18d.
+
+### Recommendations / next steps
+- The receipt currently always equals the invoice's net total — the WHT/bank-fee reconciliation
+  (customers routinely pay net of 3% WHT) is the most likely next real-world pain point; it's the
+  headline Phase 2 item.
+- The NCR/dot-matrix calibration question (printer model, form measurements) is still unanswered
+  and blocks the physical-print phase.
+
+### Verification
+`npx tsc --noEmit` (both configs) / `npm run lint` (0 errors) / `npm run build` / `npm test`
+198/198 (incl. a new RE-prefix numbering test) — run clean twice (before and after the live-found
+print fix). Full live browser verification passed (see Problems found/fixed above and CHANGELOG.md
+2026-08-18b). Not committed — owner paused auto-commits 2026-08-17.
+
+### Completion estimate
+~42% of the long-term vision (Accounting bucket genuinely started; see PROJECT_STATUS.md).
+
+---
+
+## Session — 2026-08-14i, Departments (manageable) + Sales Teams + tiered visibility
 
 ### What was implemented
 Direct business request, following a plain "does the system let me add departments?" question:

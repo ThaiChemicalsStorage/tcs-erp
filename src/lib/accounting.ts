@@ -40,7 +40,7 @@ export interface ArMilestone {
   updatedBy: string;
 }
 
-export type ArDocumentType = "AR" | "IV" | "BI";
+export type ArDocumentType = "AR" | "IV" | "BI" | "RE";
 export type ArDocumentStatus = "issued" | "cancelled";
 
 export interface ArDocumentLine {
@@ -71,6 +71,7 @@ export interface ArDocument {
   docNo: string;
   docDate: string;
   dueDate: string;
+  paymentType: "" | "Cash" | "Credit";
   customerSnapshot: ArDocumentCustomerSnapshot;
   reference: string;
   lines: ArDocumentLine[];
@@ -144,13 +145,22 @@ export async function issueArDocuments(milestoneId: string): Promise<ArDocument[
   return documents;
 }
 
-export async function fetchArDocuments(filter?: { scopeOfWorkId?: string; status?: ArDocumentStatus }): Promise<ArDocument[]> {
+export async function fetchArDocuments(filter?: { scopeOfWorkId?: string; status?: ArDocumentStatus; docType?: ArDocumentType; month?: string }): Promise<ArDocument[]> {
   const params = new URLSearchParams();
   if (filter?.scopeOfWorkId) params.set("scopeOfWorkId", filter.scopeOfWorkId);
   if (filter?.status) params.set("status", filter.status);
+  if (filter?.docType) params.set("docType", filter.docType);
+  if (filter?.month) params.set("month", filter.month); // Gregorian "YYYY-MM" (docDate's own calendar)
   const qs = params.toString() ? `?${params.toString()}` : "";
   const { documents } = await apiFetch<{ documents: ArDocument[] }>(`/ar-documents${qs}`);
   return documents;
+}
+
+/** Issues an RE (ใบเสร็จรับเงิน) against an already-issued AR/IV tax invoice — records the payment
+ * actually received; refused server-side if that invoice already has an active receipt. */
+export async function issueArReceipt(taxInvoiceDocumentId: string): Promise<ArDocument> {
+  const { document } = await apiFetch<{ document: ArDocument }>(`/ar-documents/${taxInvoiceDocumentId}/receipt`, { method: "POST" });
+  return document;
 }
 
 export async function fetchArDocument(id: string): Promise<ArDocument> {
@@ -166,6 +176,25 @@ export async function cancelArDocument(id: string, reason: string): Promise<ArDo
   return document;
 }
 
+/** "2026-08-13" -> "13/08/69" — Buddhist-era 2-digit year, matching every real reference form
+ * (AR/IV/BI/RE) photographed 2026-08-18, not the Gregorian 4-digit format `formatQuoteDateNumeric()`
+ * (Quotation's own printed date style) uses. */
+export function formatArDocDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return "";
+  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${String((y + 543) % 100).padStart(2, "0")}`;
+}
+
+/** "เงื่อนไขการชำระเงิน" wording exactly as printed on the real Billing Note reference form —
+ * e.g. "เครดิต 30 วัน" / "เงินสด". `days` is derived from docDate→dueDate rather than stored
+ * separately, since the two dates already fully determine it. */
+export function formatArPaymentCondition(doc: Pick<ArDocument, "paymentType" | "docDate" | "dueDate">): string {
+  if (!doc.paymentType) return "";
+  if (doc.paymentType === "Cash") return "เงินสด";
+  const days = Math.round((new Date(doc.dueDate).getTime() - new Date(doc.docDate).getTime()) / 86_400_000);
+  return days > 0 ? `เครดิต ${days} วัน` : "เครดิต";
+}
+
 export const BILLING_STATUS_LABELS: Record<ArBillingStatus, string> = {
   not_billed: "ยังไม่ได้วางบิล",
   billed: "วางบิล",
@@ -179,8 +208,11 @@ export const WORK_CLASSIFICATION_LABELS: Record<ArWorkClassification, string> = 
   contract: "งานสัญญา",
 };
 
+// Document names exactly as the owner stated them 2026-08-18 (the "เอกสารบัญชี" list in the
+// follow-up detail that unpaused the UI restructure — see docs/MODULES/Accounting.md).
 export const DOC_TYPE_LABELS: Record<ArDocumentType, string> = {
-  AR: "ใบกำกับภาษี (เงินมัดจำ)",
-  IV: "ใบกำกับภาษี",
-  BI: "ใบวางบิล",
+  AR: "ใบรับเงินมัดจำ/ใบกำกับภาษี",
+  IV: "ใบกำกับภาษี/ใบส่งสินค้า",
+  BI: "ใบแจ้งหนี้/ใบวางบิล",
+  RE: "ใบเสร็จรับเงิน",
 };

@@ -4,7 +4,7 @@
 
 ## Overall ERP Progress
 
-**~40%** of the full long-term vision (Lead/Quotation/Customer/Product now, then HR/Accounting/Inventory/Warehouse/Purchasing/Project Management later, all on a real multi-user backend with RBAC). The 2026-07-10 Executive Dashboard/Job Type pass, its completion pass, an independent Codex review + fix pass, a UI/UX redesign + enhancement pass, and an audit-integrity/workflow-gap fix pass (all 2026-07-10) are quality/correctness/design work on top of existing Quotation data, not new module scope, so none of them move this number much on their own.
+**~42%** of the full long-term vision (Lead/Quotation/Customer/Product now, then HR/Accounting/Inventory/Warehouse/Purchasing/Project Management later, all on a real multi-user backend with RBAC — the Accounting bucket genuinely started 2026-08-17/18 with the AR/Milestone-Billing module's Phase 1 + 1.5, nudging this number for the first time in a while). The 2026-07-10 Executive Dashboard/Job Type pass, its completion pass, an independent Codex review + fix pass, a UI/UX redesign + enhancement pass, and an audit-integrity/workflow-gap fix pass (all 2026-07-10) are quality/correctness/design work on top of existing Quotation data, not new module scope, so none of them move this number much on their own.
 
 Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth, Settings, User Management, Role Management, Notifications, Audit Log, Customer Management (2026-07-14), Scope of Work (2026-07-15), and — new as of 2026-07-23 — Delivery Order), functional completeness is **~98%**. **Company Profiles is no longer one of these modules** — built 2026-07-13, briefly (and incorrectly) wired into the Quotation form, corrected the same week, and then **removed from the user-facing ERP entirely** on 2026-07-14 (this ERP only ever needs one issuer company; see [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md)). The correct requirement — a Customer selector on the Quotation form — is its own module (Customer Management, genuinely new module scope) — see [MODULES/Customer.md](./MODULES/Customer.md). The Dashboard's data/correctness layer is thoroughly reviewed; its presentation layer went through 3 same-day user-driven iterations on 2026-07-13 after the 2026-07-10 redesign's KPI card treatment repeatedly read as too "template-like": first a revert of the two-tier hero/mini-card split back to one flat 22-card grid, then — after further feedback that even the flat grid was still cluttered — a reorganization into 4 primary KPI cards plus 3 new compact panels (Sales Performance rates/cycle-times, Activity & Follow-up counts, and the existing Quotation Status Summary gaining a Percentage column), with every other redesign-added section (pipeline step cards, Sales Activity Analytics, rankings, actionable approval/follow-up lists) kept exactly as-is below an "In-Depth Detail" divider. See CHANGELOG.md for the full iteration history. A first real pass at app-wide UX (shared `PageHeader`/`EmptyState`/`MetricInfoTooltip` components, a `driver.js` guided tour, grouped sidebar nav, clearer required-field/validation messaging) landed too, though it's a bounded subset of a much larger brief. A fifth pass then closed the quotation module's audit-trail integrity gap (audit entries are now server-authoritative, not client-forgeable) and two smaller workflow gaps (required rejection comments, missing terminal-workflow notifications) flagged by an independent re-review — see Known Risks and TODO.md for what's still open. Remaining gaps are genuine business decisions or pre-existing, already-tracked scope (PDF/Excel export beyond CSV, real Lead/Customer entities, full onboarding-tour/PageHeader rollout to every page, automated tests/CI), not defects. The whole Dashboard/Quotation surface still needs a live-data browser verification pass — not because of any known defect, but because every session that's attempted this had no network path to MongoDB Atlas from its sandboxed environment (see Known Risks — reproduced four times now).
 
@@ -13,6 +13,41 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 **Real full-stack app, deployed and live in production.** Vite + React frontend, Node.js backend, self-hosted MongoDB database. **Since the ~2026-08-07 cutover, the primary and only runtime is a standalone Express server (`server/`, `npm start`) on a self-hosted VPS** with its own domain + HTTPS — the earlier Vercel Serverless Functions deployment (https://tcs-erp-nine.vercel.app) that served as the pre-cutover demo is decommissioned. See [ARCHITECTURE.md](./ARCHITECTURE.md), [DEPLOYMENT.md](./DEPLOYMENT.md), and [SERVER_MIGRATION_PLAN.md](./SERVER_MIGRATION_PLAN.md).
 
 ## Completed Features
+
+- ✅ **[2026-08-18] Accounting Dashboard.** Direct request for a dedicated, detailed Accounting
+  detail view separate from the main cross-module Dashboard. New "แดชบอร์ดบัญชี" sidebar page +
+  `GET /api/ar-dashboard`: KPI cards (issued AR+IV/VAT/outstanding/deposit-not-billed jobs/
+  cancelled), a rolling-12-month AR+IV trend chart, a doc-type breakdown donut, an AR aging chart +
+  detail table, a milestone billing-status funnel, and a top-customers table. Deliberately splits
+  "period-filtered" (issued totals/VAT/breakdown/top-customer sales) from "always current-state"
+  (outstanding/aging/funnel/deposit count) sections, surfaced explicitly in the UI per "Filter
+  Honesty." No new permission (reuses `ar:view`). `tsc`/`lint`/`build`/`test` (198/198) all pass
+  clean, plus a live browser session confirming every number against real test data. See
+  [MODULES/Accounting.md](./MODULES/Accounting.md) and CHANGELOG.md 2026-08-18f.
+
+- ✅ **[2026-08-17 + 2026-08-18] Accounting (Accounts Receivable / Milestone Billing) — Phase 1 +
+  Phase 1.5.** The first genuinely new module of the long-term charter's "Accounting" bucket.
+  **Phase 1 (2026-08-17)**: `ar_milestones`/`ar_documents`/`ar_attachment_files` collections, atomic
+  Buddhist-year `{PREFIX}{YY}{MM}{SEQ}` document numbering matching the company's real "Express"
+  accounting software, per-milestone checklist + evidence attachments, job-centric issuing (AR or IV
+  + companion BI in one action, amounts reproduced to the satang against 2 real customer billing
+  sets), basic cancel, 4 `ar:*` permissions + a seeded `accounting_user` role, and a Scope of Work
+  Rewrite guard once billing exists — live-verified end-to-end (real AR6908002/BI6908002 issued via
+  the actual UI). **Phase 1.5 (2026-08-18, from the owner's follow-up that unpaused the UI
+  restructure)**: each document type is now its own sidebar page ("1 ใบคือ 1 หน้า" — AR/BI/RE/IV via
+  one shared `ArDocumentListPage.tsx`), a new **RE (ใบเสร็จรับเงิน)** document type issued once per
+  paid tax invoice (closes its milestone; cancel reopens it), a deposit-billed alert on the
+  job-billing list + detail, and a monthly "สรุปเอกสารประจำเดือน" page for VAT-filing checks.
+  Self-authored implementation prompt (per `ERP_CLAUDE_PROMPT_ENGINEERING_GUIDE.md`) recorded at
+  [PROMPTS/ACCOUNTING_DOCUMENT_PAGES_PROMPT.md](./PROMPTS/ACCOUNTING_DOCUMENT_PAGES_PROMPT.md).
+  `tsc`/`lint`/`build`/`test` (198/198) all pass clean, and the whole Phase 1.5 surface (plus the
+  pending Phase-1 >2-installments guard) was **live-verified the same day** in a real browser
+  session against the local dev stack — one owner-reported print-bleed bug found and fixed during
+  that pass (see CHANGELOG.md 2026-08-18b). Also same day: a **data-only NCR form print mode**
+  (print onto the pre-purchased carbonless forms — per-machine mm calibration settings + crosshair
+  test page; first-draft coordinates from the owner's photos of the real forms, physical
+  calibration still pending — CHANGELOG.md 2026-08-18c). See
+  [MODULES/Accounting.md](./MODULES/Accounting.md).
 
 - ✅ **[2026-08-14] Departments (manageable) + Sales Teams + tiered visibility (own/team/department/
   all).** Direct business request: Sales has 2 teams, each with its own team lead who should only

@@ -7,7 +7,8 @@ import {
   arMilestonesCollection, arAttachmentFilesCollection, arDocumentsCollection,
   scopeOfWorksCollection, quotesCollection, auditLogCollection, withStringId, toObjectId,
   type ArMilestoneFields, type ArDocumentFields, type ArDocumentLine, type ArChecklistKey,
-  type ArWorkClassification, type ScopeOfWorkFields, type QuoteFields, countersCollection,
+  type ArWorkClassification, type ArDocumentType, type ArBillingStatus,
+  type ScopeOfWorkFields, type QuoteFields, countersCollection,
 } from "./collections.js";
 import { computeQuoteAmountBeforeVat } from "./quoteAmounts.js";
 import { nextArDocNumber } from "./documentNumbering.js";
@@ -404,6 +405,7 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
     docNo: principalDocNo,
     docDate,
     dueDate,
+    paymentType: milestone.paymentType,
     customerSnapshot,
     reference: scope.customerPoNumber,
     lines,
@@ -421,8 +423,14 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
   // document, per the real Flow's "AR/IV + BI issue together" workflow.
   const biDocNo = await nextArDocNumber(counters, "BI");
   const biLine: ArDocumentLine = {
-    seq: 1, description: `${docType} ${principalDocNo}`, qty: 1, unit: "รายการ",
+    // was `${docType} ${principalDocNo}` — principalDocNo already carries its own prefix
+    // (e.g. "IV6908024"), so that duplicated it as "IV IV6908024"; fixed 2026-08-18 while building
+    // the real BI print layout, which renders this as the bare "เลขที่ใบกำกับ" column.
+    seq: 1, description: principalDocNo, qty: 1, unit: "รายการ",
     unitPrice: totals.netTotal, amount: totals.netTotal,
+    // Traces back to the invoice this billing note is for — lets the BI print view look up
+    // whether a receipt has since been issued against it (ชำระแล้ว/เงินคงค้าง), added 2026-08-18.
+    linkedArDocumentId: principal._id.toString(),
   };
   const biDoc: ArDocumentFields = {
     scopeOfWorkId: scope._id.toString(),
@@ -431,6 +439,7 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
     docNo: biDocNo,
     docDate,
     dueDate,
+    paymentType: milestone.paymentType,
     customerSnapshot,
     reference: principalDocNo,
     lines: [biLine],
@@ -461,9 +470,22 @@ async function handleDocumentsList(req: VercelRequest, res: VercelResponse) {
   await requirePermission(req, "ar:view");
   const scopeOfWorkId = typeof req.query.scopeOfWorkId === "string" ? req.query.scopeOfWorkId : "";
   const status = typeof req.query.status === "string" ? req.query.status : "";
+  const docType = typeof req.query.docType === "string" ? req.query.docType : "";
+  // Gregorian "YYYY-MM" (docDate is stored Gregorian ISO) — backs the per-document-type list pages'
+  // month filter and the monthly tax-filing summary (added 2026-08-18 per the owner's Express-system
+  // improvement request: "เดือนนี้เราออกเอกสารเลขที่อะไรไปแล้วบ้าง...ยอดรวมเท่าไหร่").
+  const month = typeof req.query.month === "string" ? req.query.month : "";
   const filter: Record<string, unknown> = {};
   if (scopeOfWorkId) filter.scopeOfWorkId = scopeOfWorkId;
   if (status) filter.status = status;
+  if (docType) {
+    if (!["AR", "IV", "BI", "RE"].includes(docType)) throw new HttpError(400, "ประเภทเอกสารไม่ถูกต้อง");
+    filter.docType = docType;
+  }
+  if (month) {
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new HttpError(400, "รูปแบบเดือนไม่ถูกต้อง (YYYY-MM)");
+    filter.docDate = { $gte: `${month}-01`, $lte: `${month}-31` };
+  }
   const arDocuments = await arDocumentsCollection();
   const docs = await arDocuments.find(filter).sort({ createdAt: -1 }).toArray();
   res.status(200).json({ documents: docs.map(withStringId) });
@@ -481,6 +503,73 @@ async function handleDocumentOne(req: VercelRequest, res: VercelResponse, id: st
   await requirePermission(req, "ar:view");
   const doc = await loadDocumentOrThrow(id);
   res.status(200).json({ document: withStringId(doc) });
+}
+
+/** Issues an RE (ใบเสร็จรับเงิน / receipt) against an already-issued AR or IV tax invoice — added
+ * 2026-08-18 when the owner confirmed the 4-document set (AR → RE → BI per the stated
+ * "Flow การทำงานของบัญชี-รับ"). The receipt records the money actually received: one line referencing
+ * the tax invoice, amount = that invoice's VAT-inclusive net total, itself carrying no VAT of its own
+ * (the VAT liability lives on the tax invoice, not the receipt). Issuing the receipt for a
+ * non-deposit milestone closes it (billingStatus "work_open" → "closed" = "จบ" in the Flow's
+ * lifecycle); a deposit milestone stays "billed". */
+async function handleIssueReceipt(req: VercelRequest, res: VercelResponse, principalId: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "ar:issue");
+  const principal = await loadDocumentOrThrow(principalId);
+  if (principal.docType !== "AR" && principal.docType !== "IV") {
+    throw new HttpError(400, "ออกใบเสร็จรับเงินได้เฉพาะจากใบกำกับภาษี (AR/IV) เท่านั้น");
+  }
+  if (principal.status !== "issued") throw new HttpError(400, "ใบกำกับภาษีนี้ถูกยกเลิกแล้ว ไม่สามารถออกใบเสร็จได้");
+
+  const arDocuments = await arDocumentsCollection();
+  const existing = await arDocuments.findOne({
+    docType: "RE", status: "issued", "lines.linkedArDocumentId": principal._id.toString(),
+  });
+  if (existing) throw new HttpError(400, `ใบกำกับภาษี ${principal.docNo} มีใบเสร็จรับเงิน ${existing.docNo} อยู่แล้ว`);
+
+  const counters = await countersCollection();
+  const docNo = await nextArDocNumber(counters, "RE");
+  const now = nowIso();
+  const docDate = now.slice(0, 10);
+  const line: ArDocumentLine = {
+    seq: 1,
+    description: `รับชำระตามใบกำกับภาษีเลขที่ ${principal.docNo}`,
+    qty: 1, unit: "รายการ",
+    unitPrice: principal.netTotal, amount: principal.netTotal,
+    linkedArDocumentId: principal._id.toString(),
+  };
+  const reDoc: ArDocumentFields = {
+    scopeOfWorkId: principal.scopeOfWorkId,
+    milestoneId: principal.milestoneId,
+    docType: "RE",
+    docNo,
+    docDate,
+    dueDate: docDate,
+    paymentType: principal.paymentType,
+    customerSnapshot: principal.customerSnapshot,
+    reference: principal.docNo,
+    lines: [line],
+    subtotal: principal.netTotal, discount: 0, valueAmount: principal.netTotal,
+    vatRate: 0, vatAmount: 0, netTotal: principal.netTotal,
+    amountTextTh: bahtText(principal.netTotal),
+    // Carries over the tax invoice's job-number/PO remarks; drops its first "% of contract value"
+    // line, which describes the invoice's own amount breakdown, not the payment received.
+    remarks: principal.remarks.slice(1),
+    status: "issued",
+    createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+  };
+  const insert = await arDocuments.insertOne(reDoc);
+
+  const milestones = await arMilestonesCollection();
+  const milestone = await milestones.findOne({ _id: toObjectId(principal.milestoneId) });
+  if (milestone && !milestone.isDownPayment && milestone.billingStatus === "work_open") {
+    await milestones.updateOne({ _id: milestone._id }, { $set: { billingStatus: "closed", updatedAt: now, updatedBy: ctx.user.id } });
+  }
+
+  await writeArAuditEntry(ctx, "AR Receipt Issued (RE)", `ออกใบเสร็จรับเงิน ${docNo} สำหรับใบกำกับภาษี ${principal.docNo}`, {
+    scopeOfWorkId: principal.scopeOfWorkId,
+  });
+  res.status(201).json({ document: withStringId({ ...reDoc, _id: insert.insertedId }) });
 }
 
 /** Phase 1: basic cancel — a status transition only (never a delete, see collections.ts's
@@ -501,6 +590,15 @@ async function handleDocumentCancel(req: VercelRequest, res: VercelResponse, id:
     { _id: doc._id },
     { $set: { status: "cancelled", cancelledReason: reason, cancelledBy: ctx.user.id, cancelledAt: now, updatedAt: now, updatedBy: ctx.user.id } },
   );
+  // Cancelling the receipt that closed a non-deposit milestone reopens it — otherwise the job would
+  // stay "จบ" with no active receipt backing that state.
+  if (doc.docType === "RE") {
+    const milestones = await arMilestonesCollection();
+    const milestone = await milestones.findOne({ _id: toObjectId(doc.milestoneId) });
+    if (milestone && !milestone.isDownPayment && milestone.billingStatus === "closed") {
+      await milestones.updateOne({ _id: milestone._id }, { $set: { billingStatus: "work_open", updatedAt: now, updatedBy: ctx.user.id } });
+    }
+  }
   await writeArAuditEntry(ctx, "AR Document Cancelled", `ยกเลิกเอกสาร ${doc.docNo}: ${reason}`, { scopeOfWorkId: doc.scopeOfWorkId });
   const updated = await loadDocumentOrThrow(id);
   res.status(200).json({ document: withStringId(updated) });
@@ -518,10 +616,208 @@ export async function assertScopeHasNoBilledMilestones(scopeOfWorkId: string): P
   }
 }
 
+// ─── Dashboard ──────────────────────────────────────────────────────────────
+
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const AR_DASHBOARD_TREND_MONTHS = 12;
+
+/** "2026-08" -> "ส.ค. 69" — short Thai month label for the trend chart's x-axis. */
+const THAI_MONTH_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+function monthLabel(yyyyMm: string): string {
+  const [y, m] = yyyyMm.split("-").map(Number);
+  return `${THAI_MONTH_SHORT[m - 1]} ${String((y + 543) % 100).padStart(2, "0")}`;
+}
+
+const AGING_BUCKETS = [
+  { key: "notDue", label: "ยังไม่ครบกำหนด", max: 0 },
+  { key: "d1_30", label: "เกินกำหนด 1-30 วัน", max: 30 },
+  { key: "d31_60", label: "เกินกำหนด 31-60 วัน", max: 60 },
+  { key: "d61_90", label: "เกินกำหนด 61-90 วัน", max: 90 },
+  { key: "d90plus", label: "เกินกำหนดมากกว่า 90 วัน", max: Infinity },
+] as const;
+
+const BILLING_STATUS_ORDER: ArBillingStatus[] = ["not_billed", "billed", "work_open", "closed"];
+const DOC_TYPE_ORDER: ArDocumentType[] = ["AR", "IV", "BI", "RE"];
+
+/** Accounting Dashboard (added 2026-08-18) — a detail view separate from the main cross-module
+ * Dashboard (`api/dashboard/index.ts`), scoped entirely to `ar_documents`/`ar_milestones`. Unlike
+ * the main Dashboard, this needs no revision-chain dedup (AR documents have no revision concept —
+ * a cancelled document just carries `status:"cancelled"` forever), so period sections use a single
+ * date-bounded `find()` reduced in JS, same shape as every other route in this file, rather than a
+ * Mongo aggregation pipeline.
+ *
+ * `from`/`to` (default: current month) scope the period-based sections (issued totals, VAT,
+ * doc-type breakdown, top customers). **Aging, the billing funnel, and the deposit-not-billed count
+ * are deliberately NOT period-filtered** — they're current-state snapshots ("what's outstanding
+ * right now"), the only meaningful framing for an AR aging report; scoping them to `from`/`to` would
+ * silently hide a still-unpaid invoice issued before the selected period. The trend chart is also
+ * unaffected by `from`/`to` — it always shows a fixed rolling 12-month window, since the whole point
+ * of a trend line is to give period selection something to compare against. See "Filter Honesty" in
+ * docs/UI_GUIDELINES.md — the client must not imply these sections respect the date filter.
+ *
+ * `salesperson` (added 2026-08-18, matching the main Dashboard's own salesperson filter — "เหมือน
+ * แดชบอร์ดภาพรวมเลย") is different in kind from `from`/`to`: it's an ownership dimension, not a time
+ * window, so unlike the date filter it DOES apply to every section including the current-state
+ * ones — "my outstanding invoices" is a meaningful filter, "my invoices issued last month" isn't a
+ * reason to hide "my invoice from two months ago that's still unpaid." Resolved by joining through
+ * each document's `scopeOfWorkId` to `ScopeOfWork.quotationSalesperson` (the snapshotted salesperson
+ * name from the source Quote — `ScopeOfWork` has no salesperson field of its own; AR documents don't
+ * carry one directly either, so this join is the only path to the same person concept the main
+ * Dashboard filters `Quote.salesperson` by directly). */
+async function handleDashboard(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  await requirePermission(req, "ar:view");
+
+  const todayIso = nowIso().slice(0, 10);
+  const toParam = typeof req.query.to === "string" ? req.query.to : "";
+  const fromParam = typeof req.query.from === "string" ? req.query.from : "";
+  const to = DATE_ONLY_RE.test(toParam) ? toParam : todayIso;
+  const from = DATE_ONLY_RE.test(fromParam) ? fromParam : `${to.slice(0, 7)}-01`;
+  if (from > to) throw new HttpError(400, "ช่วงวันที่ไม่ถูกต้อง (วันเริ่มต้นต้องไม่เกินวันสิ้นสุด)");
+  const salesperson = typeof req.query.salesperson === "string" ? req.query.salesperson.trim() : "";
+
+  const toDate = new Date(`${to}T00:00:00Z`);
+  const trendStart = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth() - (AR_DASHBOARD_TREND_MONTHS - 1), 1));
+  const trendFrom = trendStart.toISOString().slice(0, 10);
+  const queryFrom = trendFrom < from ? trendFrom : from;
+
+  const arDocuments = await arDocumentsCollection();
+  const [periodDocsAll, taxInvoicesAll, receipts, milestonesAll, scopesAll] = await Promise.all([
+    arDocuments.find({ docDate: { $gte: queryFrom, $lte: to } })
+      .project<Pick<ArDocumentFields, "docType" | "docDate" | "status" | "netTotal" | "vatAmount" | "customerSnapshot" | "scopeOfWorkId">>(
+        { docType: 1, docDate: 1, status: 1, netTotal: 1, vatAmount: 1, customerSnapshot: 1, scopeOfWorkId: 1 },
+      ).toArray(),
+    arDocuments.find({ docType: { $in: ["AR", "IV"] }, status: "issued" })
+      .project<Pick<ArDocumentFields, "docNo" | "docType" | "dueDate" | "netTotal" | "scopeOfWorkId" | "customerSnapshot"> & { _id: unknown }>(
+        { docNo: 1, docType: 1, dueDate: 1, netTotal: 1, scopeOfWorkId: 1, customerSnapshot: 1 },
+      ).toArray(),
+    arDocuments.find({ docType: "RE", status: "issued" }).project<{ lines: ArDocumentLine[] }>({ lines: 1 }).toArray(),
+    (await arMilestonesCollection()).find({}).project<Pick<ArMilestoneFields, "billingStatus" | "isDownPayment" | "scopeOfWorkId">>(
+      { billingStatus: 1, isDownPayment: 1, scopeOfWorkId: 1 },
+    ).toArray(),
+    (await scopeOfWorksCollection()).find({ isDeleted: { $ne: true } })
+      .project<{ _id: unknown; scopeNumber: string; quotationSalesperson?: string }>({ scopeNumber: 1, quotationSalesperson: 1 }).toArray(),
+  ]);
+
+  // พนักงานขาย ผูกผ่าน scopeOfWorkId -> ScopeOfWork.quotationSalesperson (snapshot จากใบเสนอราคาต้นทาง)
+  // — เอกสารบัญชีเองไม่มีฟิลด์พนักงานขายโดยตรง ดู doc comment ของฟังก์ชันนี้
+  const salespersonByScopeId = new Map(scopesAll.map((s) => [String(s._id), (s.quotationSalesperson ?? "").trim()]));
+  const availableSalespeople = [...new Set(scopesAll.map((s) => (s.quotationSalesperson ?? "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "th"));
+  const matchesSalesperson = (scopeOfWorkId: string) => !salesperson || salespersonByScopeId.get(scopeOfWorkId) === salesperson;
+
+  const periodDocs = periodDocsAll.filter((d) => matchesSalesperson(d.scopeOfWorkId));
+  const taxInvoices = taxInvoicesAll.filter((d) => matchesSalesperson(d.scopeOfWorkId));
+  const milestones = milestonesAll.filter((m) => matchesSalesperson(m.scopeOfWorkId));
+  const scopes = scopesAll.filter((s) => matchesSalesperson(String(s._id)));
+
+  const paidInvoiceIds = new Set<string>();
+  for (const re of receipts) {
+    for (const line of re.lines) {
+      if (line.linkedArDocumentId) paidInvoiceIds.add(line.linkedArDocumentId);
+    }
+  }
+  const outstandingInvoices = taxInvoices.filter((d) => !paidInvoiceIds.has(String(d._id)));
+
+  // เลขที่งาน (Scope of Work) สำหรับใบที่ค้างชำระ — ใช้รายการเต็มเสมอ (ไม่กรองตามพนักงานขาย) เพราะแค่
+  // แปลง scopeOfWorkId เป็นเลขที่งานที่อ่านง่าย ไม่ใช่ข้อมูลที่ต้องกรอง
+  const scopeNumberById = new Map(scopesAll.map((s) => [String(s._id), s.scopeNumber]));
+
+  const now = new Date(`${todayIso}T00:00:00Z`).getTime();
+  const agingBucketCounts = AGING_BUCKETS.map((b) => ({ key: b.key, label: b.label, count: 0, amount: 0 }));
+  const agingInvoices = outstandingInvoices
+    .map((d) => {
+      const daysOverdue = Math.round((now - new Date(`${d.dueDate}T00:00:00Z`).getTime()) / 86_400_000);
+      const bucketIndex = AGING_BUCKETS.findIndex((b) => daysOverdue <= b.max);
+      const bucket = AGING_BUCKETS[bucketIndex === -1 ? AGING_BUCKETS.length - 1 : bucketIndex];
+      agingBucketCounts[bucketIndex === -1 ? AGING_BUCKETS.length - 1 : bucketIndex].count += 1;
+      agingBucketCounts[bucketIndex === -1 ? AGING_BUCKETS.length - 1 : bucketIndex].amount += d.netTotal;
+      return {
+        id: String(d._id), docNo: d.docNo, docType: d.docType as "AR" | "IV",
+        scopeOfWorkId: d.scopeOfWorkId, scopeNumber: scopeNumberById.get(d.scopeOfWorkId) ?? "",
+        customerName: d.customerSnapshot.companyName, dueDate: d.dueDate, daysOverdue, amount: d.netTotal,
+        bucketKey: bucket.key,
+      };
+    })
+    .sort((a, b) => b.daysOverdue - a.daysOverdue)
+    .slice(0, 30);
+
+  const billedDepositScopeIds = new Set(taxInvoices.filter((d) => d.docType === "AR").map((d) => d.scopeOfWorkId));
+  const depositNotBilledJobs = scopes.filter((s) => !billedDepositScopeIds.has(String(s._id))).length;
+
+  const billingFunnelCounts = new Map<ArBillingStatus, number>(BILLING_STATUS_ORDER.map((s) => [s, 0]));
+  for (const m of milestones) billingFunnelCounts.set(m.billingStatus, (billingFunnelCounts.get(m.billingStatus) ?? 0) + 1);
+  const billingFunnel = BILLING_STATUS_ORDER.map((status) => ({ status, count: billingFunnelCounts.get(status) ?? 0 }));
+
+  // Trend: ยอดใบกำกับภาษี (AR+IV เท่านั้น — ไม่รวม BI/RE ที่แค่อ้างถึงยอดเดียวกันซ้ำ) รายเดือน 12 เดือนล่าสุด
+  const monthBuckets: { month: string; label: string; netTotal: number; count: number }[] = [];
+  for (let i = AR_DASHBOARD_TREND_MONTHS - 1; i >= 0; i--) {
+    const d = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth() - i, 1));
+    const month = d.toISOString().slice(0, 7);
+    monthBuckets.push({ month, label: monthLabel(month), netTotal: 0, count: 0 });
+  }
+  const monthIndex = new Map(monthBuckets.map((b, i) => [b.month, i]));
+  for (const d of periodDocs) {
+    if (d.status !== "issued" || (d.docType !== "AR" && d.docType !== "IV")) continue;
+    const idx = monthIndex.get(d.docDate.slice(0, 7));
+    if (idx === undefined) continue;
+    monthBuckets[idx].netTotal = round2(monthBuckets[idx].netTotal + d.netTotal);
+    monthBuckets[idx].count += 1;
+  }
+
+  // ช่วงที่เลือก (from..to) — สำหรับ KPI/สัดส่วนประเภทเอกสาร/ลูกค้ารายใหญ่ เท่านั้น
+  const inPeriod = periodDocs.filter((d) => d.docDate >= from && d.docDate <= to);
+  const inPeriodIssued = inPeriod.filter((d) => d.status === "issued");
+  const inPeriodTaxInvoices = inPeriodIssued.filter((d) => d.docType === "AR" || d.docType === "IV");
+
+  const docTypeBreakdown = DOC_TYPE_ORDER.map((docType) => {
+    const docs = inPeriodIssued.filter((d) => d.docType === docType);
+    return { docType, count: docs.length, netTotal: round2(docs.reduce((s, d) => s + d.netTotal, 0)) };
+  });
+
+  const outstandingByCustomer = new Map<string, number>();
+  for (const d of outstandingInvoices) {
+    const key = d.customerSnapshot.companyName;
+    outstandingByCustomer.set(key, (outstandingByCustomer.get(key) ?? 0) + d.netTotal);
+  }
+  const customerTotals = new Map<string, { count: number; netTotal: number }>();
+  for (const d of inPeriodTaxInvoices) {
+    const key = d.customerSnapshot.companyName;
+    const cur = customerTotals.get(key) ?? { count: 0, netTotal: 0 };
+    customerTotals.set(key, { count: cur.count + 1, netTotal: round2(cur.netTotal + d.netTotal) });
+  }
+  const topCustomers = [...customerTotals.entries()]
+    .map(([customerName, v]) => ({ customerName, count: v.count, netTotal: v.netTotal, outstandingNet: round2(outstandingByCustomer.get(customerName) ?? 0) }))
+    .sort((a, b) => b.netTotal - a.netTotal)
+    .slice(0, 8);
+
+  res.status(200).json({
+    hasAnyData: taxInvoicesAll.length > 0 || periodDocsAll.length > 0,
+    filters: { from, to, salesperson },
+    availableSalespeople,
+    kpis: {
+      issuedNet: round2(inPeriodTaxInvoices.reduce((s, d) => s + d.netTotal, 0)),
+      issuedCount: inPeriodTaxInvoices.length,
+      vatAmount: round2(inPeriodTaxInvoices.reduce((s, d) => s + d.vatAmount, 0)),
+      outstandingNet: round2(outstandingInvoices.reduce((s, d) => s + d.netTotal, 0)),
+      outstandingCount: outstandingInvoices.length,
+      depositNotBilledJobs,
+      cancelledCount: inPeriod.filter((d) => d.status === "cancelled").length,
+    },
+    trend: monthBuckets,
+    docTypeBreakdown,
+    billingFunnel,
+    aging: { buckets: agingBucketCounts, invoices: agingInvoices },
+    topCustomers,
+  });
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────
 
 export async function handleAr(req: VercelRequest, res: VercelResponse): Promise<void> {
   const pathname = (req.url ?? "").split("?")[0];
+
+  if (pathname === "/api/ar-dashboard") return handleDashboard(req, res);
 
   if (pathname === "/api/ar-milestones") return handleMilestonesList(req, res);
   if (pathname === "/api/ar-milestones/open") return handleMilestoneOpen(req, res);
@@ -539,6 +835,7 @@ export async function handleAr(req: VercelRequest, res: VercelResponse): Promise
   if (pathname === "/api/ar-documents") return req.method === "POST" ? handleIssueDocuments(req, res) : handleDocumentsList(req, res);
   const docParts = getPathSegments(req, "/api/ar-documents");
   if (docParts.length === 1) return handleDocumentOne(req, res, docParts[0]);
+  if (docParts.length === 2 && docParts[1] === "receipt") return handleIssueReceipt(req, res, docParts[0]);
   if (docParts.length === 2 && docParts[1] === "cancel") return handleDocumentCancel(req, res, docParts[0]);
 
   throw new HttpError(404, "Not found");

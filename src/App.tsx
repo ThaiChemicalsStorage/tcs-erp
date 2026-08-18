@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench, Receipt,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -50,6 +51,9 @@ const DeliveryOrderPage = lazy(() => import("./pages/deliveryOrder/DeliveryOrder
 const ServicePage = lazy(() => import("./pages/service/ServicePage").then((m) => ({ default: m.ServicePage })));
 const ServiceTemplateManagement = lazy(() => import("./pages/service/ServiceTemplateManagement").then((m) => ({ default: m.ServiceTemplateManagement })));
 const AccountingPage = lazy(() => import("./pages/accounting/AccountingPage").then((m) => ({ default: m.AccountingPage })));
+const ArDocumentListPage = lazy(() => import("./pages/accounting/ArDocumentListPage").then((m) => ({ default: m.ArDocumentListPage })));
+const ArMonthlyReportPage = lazy(() => import("./pages/accounting/ArMonthlyReportPage").then((m) => ({ default: m.ArMonthlyReportPage })));
+const AccountingDashboardPage = lazy(() => import("./pages/accounting/AccountingDashboardPage").then((m) => ({ default: m.AccountingDashboardPage })));
 
 // แสดงสถานะกำลังโหลดหน้าย่อยระหว่างรอโหลดโค้ด (Suspense fallback) พร้อมข้อความสำหรับ screen reader
 // Loading placeholder shown as the Suspense fallback for every lazy-loaded page, with a screen-reader label
@@ -121,7 +125,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "products" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "products" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -159,7 +163,16 @@ const navItems: NavItem[] = [
   { key: "deliveryOrder", icon: Truck, labelKey: "nav.deliveryOrder", permission: "deliveryOrder:view" },
   { key: "service", icon: Wrench, labelKey: "nav.service", permission: "service:view" },
   { key: "serviceTemplates", icon: Layers, labelKey: "nav.serviceTemplates", permission: "serviceTemplates:view" },
+  // แดชบอร์ดบัญชีอยู่บนสุดของกลุ่ม (ตามคำสั่งเจ้าของ 2026-08-18) — เป็นจุดเริ่มดูภาพรวมก่อนไล่เข้าเอกสารแต่ละใบ
+  { key: "accountingDashboard", icon: BarChart3, labelKey: "nav.accountingDashboard", permission: "ar:view" },
   { key: "accounting", icon: Receipt, labelKey: "nav.accounting", permission: "ar:view" },
+  // เอกสารบัญชีแต่ละประเภทเป็นหน้าแยกของตัวเอง ("1 ใบคือ 1 หน้า") ตามคำสั่งเจ้าของ 2026-08-18 —
+  // เรียงตามลำดับที่เจ้าของแจ้งรายการเอกสารมา ดู docs/MODULES/Accounting.md
+  { key: "arDeposit", icon: Banknote, labelKey: "nav.arDeposit", permission: "ar:view" },
+  { key: "arBilling", icon: FileCheck, labelKey: "nav.arBilling", permission: "ar:view" },
+  { key: "arReceipt", icon: Wallet, labelKey: "nav.arReceipt", permission: "ar:view" },
+  { key: "arTaxInvoice", icon: FileText, labelKey: "nav.arTaxInvoice", permission: "ar:view" },
+  { key: "arMonthly", icon: CalendarDays, labelKey: "nav.arMonthly", permission: "ar:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -172,7 +185,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
-  { labelKey: "nav.group.accounting", keys: ["accounting"] },
+  { labelKey: "nav.group.accounting", keys: ["accountingDashboard", "accounting", "arDeposit", "arBilling", "arReceipt", "arTaxInvoice", "arMonthly"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
@@ -186,6 +199,12 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   service: "nav.service",
   serviceTemplates: "nav.serviceTemplates",
   accounting: "nav.accounting",
+  arDeposit: "nav.arDeposit",
+  arBilling: "nav.arBilling",
+  arReceipt: "nav.arReceipt",
+  arTaxInvoice: "nav.arTaxInvoice",
+  arMonthly: "nav.arMonthly",
+  accountingDashboard: "nav.accountingDashboard",
   products: "nav.products",
   customers: "nav.customers",
   users: "nav.users",
@@ -617,6 +636,7 @@ export default function App() {
   const canArchiveServiceTemplates = hasPermission(currentUser, roles, "serviceTemplates:archive");
   const canCreateAr = hasPermission(currentUser, roles, "ar:create");
   const canIssueAr = hasPermission(currentUser, roles, "ar:issue");
+  const canCancelAr = hasPermission(currentUser, roles, "ar:cancel");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
   // ตรวจสิทธิ์ template โดยยอมรับสิทธิ์ระดับ manage แบบเก่า (superset) ควบคู่กับสิทธิ์ย่อยแบบใหม่
   // Checks a template permission, accepting the legacy superset "manage" permission alongside the granular one
@@ -819,6 +839,18 @@ export default function App() {
               ? <ServiceTemplateManagement currentUserId={currentUser.id} canCreate={canCreateServiceTemplates} canEdit={canEditServiceTemplates} canArchive={canArchiveServiceTemplates} />
               : effectiveNav === "accounting"
               ? <AccountingPage canCreate={canCreateAr} canIssue={canIssueAr} />
+              : effectiveNav === "arDeposit"
+              ? <ArDocumentListPage key="AR" docType="AR" canIssue={canIssueAr} canCancel={canCancelAr} />
+              : effectiveNav === "arBilling"
+              ? <ArDocumentListPage key="BI" docType="BI" canIssue={canIssueAr} canCancel={canCancelAr} />
+              : effectiveNav === "arReceipt"
+              ? <ArDocumentListPage key="RE" docType="RE" canIssue={canIssueAr} canCancel={canCancelAr} />
+              : effectiveNav === "arTaxInvoice"
+              ? <ArDocumentListPage key="IV" docType="IV" canIssue={canIssueAr} canCancel={canCancelAr} />
+              : effectiveNav === "arMonthly"
+              ? <ArMonthlyReportPage />
+              : effectiveNav === "accountingDashboard"
+              ? <AccountingDashboardPage />
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"

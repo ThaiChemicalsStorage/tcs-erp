@@ -4,7 +4,322 @@
 
 ---
 
-## 2026-08-17d (absolute latest) — Accounting module Phase 1 (milestone billing): backend built + verified live, UI paused
+## 2026-08-18k (absolute latest) — BI (ใบแจ้งหนี้/ใบวางบิล) confirmed as NCR stock too — data-only print mode added
+
+The owner sent a photo of the actual blank pre-printed Billing Note form stock: "ตัวใบแจ้งหนี้มันมา
+เป็นฟอร์มเปล่าด้วยออกแบบให้ด้วยเอาขอแบบเหมือนเป๊ะๆ" — confirming it IS pre-purchased NCR/carbonless
+stock like AR/IV/RE, resolving the open question from earlier today (2026-08-18d) where the owner's
+own uncertainty ("ไม่แน่ใจว่าซื้อมารึเปล่า") led to building only a plain-paper layout.
+
+**Built**: `ArDocumentNcrPrintDocument.tsx` gains a `FORM_BI` layout + `BillingNoteNcrPage` renderer,
+branched on `doc.docType === "BI"` inside the existing `ArDocumentNcrPrintDocument` export (no new
+component name to wire up — the existing per-row "NCR" button on `ArDocumentListPage.tsx` now
+produces the correct output for BI automatically). Field set matches the plain-paper `BillingNotePage`
+built earlier today exactly (No./เลขที่ใบกำกับ/วันที่/ครบกำหนด/จำนวนเงิน/ชำระแล้ว/เงินคงค้าง table, no
+tax id/contact, "เลขที่ใบวางบิล"/"เงื่อนไขการชำระเงิน" labels) — only the rendering becomes data-only/
+absolute-mm-positioned. `ArDocumentNcrPrintDocument` and `NcrCalibrationTestPage` both gain the
+plumbing needed (`paidByInvoiceId` prop; `variant="standard"|"billingNote"` prop) — the calibration
+test page can now target either form family's crosshair layout.
+
+**Known limitation, stated in the code**: unlike AR/IV/RE (which had a real measured photo),
+`FORM_BI`'s mm coordinates are a first-draft best-effort guess — no fresh measured photo of this
+specific form's field positions was provided this time. Needs the same physical calibration pass
+(via "ตั้งค่าฟอร์ม NCR" → "พิมพ์หน้าทดสอบ") before real use.
+
+**Verified**: `tsc`/`lint` (0 errors)/`build`/`test` (198/198) clean; live browser session confirmed
+both the data printout (customer/doc-no/date/table/total/amount-text all at their positions) and the
+new `variant="billingNote"` calibration test page (crosshairs at the right labeled anchors) via
+print-CSS-emulation screenshots.
+
+**Also this session**: the owner lifted the 2026-08-17 auto-commit pause ("ทำอะไรเสร็จฝาก commit
+ด้วย") — commit-without-asking resumes (still never push without explicit go-ahead, since push =
+instant production deploy). See the updated `commit-and-push-when-done` memory note.
+
+---
+
+## 2026-08-18j — remove the filter bar's honesty caption entirely
+
+Direct follow-up: "งั้นเอาคำตรงนั้นออกไปเลย" (just remove that text). Rather than keep iterating on the
+just-fixed layout, the caption explaining which sections the date/salesperson filters do/don't
+affect was dropped from the filter bar entirely — the filter bar is back to a single simple row
+(date range + salesperson selects only). The underlying "Filter Honesty" facts themselves are
+unchanged and still documented in code comments (`handleDashboard()` in `arHandler.ts`) and
+per-chart captions ("ไม่ขึ้นกับตัวกรองช่วงเวลา" on the trend/funnel/aging cards) — only this one
+redundant summary line at the top was removed. `tsc`/`lint` (0 errors)/`build`/`test` (198/198) all
+clean; live-verified via screenshot that the filter bar renders as a clean single row.
+
+---
+
+## 2026-08-18i — fix the filter bar's honesty caption wrapping into a jagged column
+
+Owner-reported live (screenshot): the filter bar's explanatory caption ("ตัวกรองช่วงเวลามีผลกับ...")
+was wrapping into a narrow, indented, oddly-staggered column instead of reading as a normal line.
+Root cause: the `<p>` used `w-full sm:w-auto sm:ml-auto` to sit inline-right-aligned on wide screens
+and full-width below on narrow ones — but the actual content area (sidebar-adjacent, narrower than
+the raw viewport) crosses Tailwind's `sm:` breakpoint at a width where `ml-auto` pushes the text
+right while leaving too little room for it, producing the jagged wrap. Fixed by giving the caption
+its own always-full-width row below the filter controls (`AccountingDashboardPage.tsx`) instead of
+trying to share a line with the selects — simpler and viewport-independent. Re-verified live via
+screenshot: clean single/normal-wrapped line under the filters. `tsc`/`lint` (0 errors)/`build`/
+`test` (198/198) all clean.
+
+---
+
+## 2026-08-18h — Accounting Dashboard gains a salesperson filter
+
+Direct request: "ทำให้สามารถเลือกตามเวลาได้เลือกคนได้เหมือนแดชบอร์ดภาพรวมเลย" (add a person filter,
+matching the main Dashboard). AR documents have no salesperson field of their own — resolved by
+joining each document's `scopeOfWorkId` to `ScopeOfWork.quotationSalesperson` (the snapshotted
+salesperson name from the source Quote, the same underlying data the main Dashboard's own
+salesperson filter reads via `Quote.salesperson` directly).
+
+**Key design call**: unlike `from`/`to` (a time window), `salesperson` is an ownership dimension —
+it applies to **every** section including the current-state ones (aging/billing-funnel/deposit-not-
+billed), since "my outstanding invoices" is meaningful in a way "my invoices issued last month
+only" deliberately isn't for a debt-owed report. Every chart/KPI caption that previously said
+"ไม่ขึ้นกับตัวกรองช่วงเวลา" now also notes "(ขึ้นกับพนักงานขายที่เลือก)" for accuracy.
+
+**Backend**: `handleDashboard()` (`api/_lib/arHandler.ts`) reads a new `salesperson` query param,
+builds a `scopeOfWorkId -> quotationSalesperson` map from `scope_of_works` (widened projection),
+and filters every downstream array (`periodDocs`/`taxInvoices`/`milestones`/`scopes`) through it
+before all existing computations run unchanged. Response gains `filters.salesperson` and
+`availableSalespeople: string[]` (always the full unfiltered list, so the dropdown never
+self-narrows). `hasAnyData` deliberately still reflects the *unfiltered* dataset, so selecting a
+salesperson with zero matching data shows per-section empty states, not the whole-page empty state.
+
+**Frontend**: `src/lib/accountingDashboard.ts` (`ArDashboardFilters.salesperson`,
+`ArDashboardStats.availableSalespeople`), a new "พนักงานขาย" `<select>` in
+`AccountingDashboardPage.tsx` next to the existing date-range preset (the options list is kept
+across in-flight reloads via a small piece of state updated inside the fetch's `.then()`, avoiding
+another `react-hooks/set-state-in-effect` violation).
+
+**Verified**: `tsc`/`lint` (0 errors)/`build`/`test` (198/198) clean, plus a live browser session —
+confirmed the dropdown populates from real data, selecting the one real test salesperson reproduces
+identical totals (100% of test data belongs to them), and a direct API call with a nonexistent
+salesperson name zeroes out every section (KPIs, doc-type breakdown, billing funnel, aging, top
+customers) while `availableSalespeople` stays the full list — proving the filter is a real query
+constraint, not a no-op.
+
+---
+
+## 2026-08-18g — move "แดชบอร์ดบัญชี" to the top of the บัญชี sidebar group
+
+Direct request: "ย้าย dashboard ไว้บนสุด". Reordered `navItems` in `src/App.tsx` (the array order
+drives sidebar render order via `visibleNavItems.filter()`, not `NAV_GROUPS.keys`'s order — moved
+both for consistency) so "แดชบอร์ดบัญชี" is now the first item in the บัญชี group, above "วางบิลตามงาน".
+Live-verified in a browser: the sidebar shows the new order and the link still navigates correctly.
+`tsc`/`lint`/`build`/`test` (198/198) all clean.
+
+---
+
+## 2026-08-18f — Accounting Dashboard: a detailed, dedicated AR detail view
+
+Direct request: "ทำ Dashboard เฉพาะแยกออกมาในหมวดของบัญชีให้หน่อย ขอแบบดูได้แบบละเอียด" — a dashboard
+scoped entirely to Accounting, separate from the main cross-module Dashboard, with drill-down detail.
+
+**Backend**: new `GET /api/ar-dashboard` (`handleDashboard()`, `api/_lib/arHandler.ts`, mounted via
+the existing `ar-*` routing surfaces in `api/handlers/quotes.ts`/`server/app.ts`/`vercel.json`) —
+computes KPIs (issued AR+IV net/count, VAT, outstanding, deposit-not-billed job count, cancelled
+count), a rolling 12-month AR+IV trend, a doc-type breakdown, an AR aging report (5 buckets + a
+30-row detail list), a milestone billing-status funnel, and a top-8-customers table, all via plain
+`find()` + JS reduction (no revision-chain dedup needed for AR documents, unlike the main
+Dashboard's aggregation). `from`/`to` scope only the period-based sections; aging/funnel/deposit-
+count are deliberately always current-state snapshots — documented in the handler's own doc
+comment and surfaced to the user in the UI (see [MODULES/Accounting.md](./MODULES/Accounting.md)
+"Accounting Dashboard" for the full rationale).
+
+**Frontend**: `src/lib/accountingDashboard.ts` (types + `fetchArDashboardStats()`),
+`src/pages/accounting/AccountingDashboardPage.tsx` (page shell — reused the main Dashboard's date-
+range preset math from `src/pages/dashboard/dateRanges.ts`) + `AccountingDashboardCharts.tsx` (4
+recharts components reusing `ChartCard`/`fmtShort`/the existing chart-tooltip pattern). New sidebar
+entry "แดชบอร์ดบัญชี" (last item in the บัญชี group). No new permission — reuses `ar:view`.
+
+**Verified**: `tsc` (both configs)/`lint` (0 errors)/`build`/`npm test` (198/198) all clean, plus a
+full live browser session — every number cross-checked correctly against real local test data (the
+outstanding total exactly matched the sum of the two actually-unpaid invoices, the aging bucket
+matched an invoice's real due date, the deposit-not-billed count matched the one genuinely unbilled
+test job).
+
+---
+
+## 2026-08-18e — fix doubled parentheses around the Thai amount-in-words text
+
+Owner-reported live: the NCR print output showed `((สองแสนสองหมื่น...บาทถ้วน))` — doubled
+parentheses. Root cause: `bahtText()` (`src/lib/quotes.tsx`, existing/reused, not new) already
+returns its own `(...)`-wrapped string; both the new NCR component
+(`ArDocumentNcrPrintDocument.tsx`) and the new plain-paper `BillingNotePage`
+(`ArDocumentPrintDocument.tsx`, both added earlier today) wrapped it in an *additional* pair.
+Fixed by rendering `amountTextTh` bare in both places, matching the AR/IV/RE `DocumentPage`
+rendering (which was already correct — never had the extra wrap). `tsc`/`lint`/`build`/`test`
+(198/198) re-run clean.
+
+---
+
+## 2026-08-18d — Real Billing Note (BI) print layout + a Buddhist-date fix across every document type
+
+The owner shared a photo of the real ใบแจ้งหนี้/ใบวางบิล (Invoice/Billing Note) — plain white paper,
+no carbonless tint, no ply-count "สำเนา" label, unlike the AR/IV/RE forms — with the note "ไม่แน่ใจว่า
+ซื้อมารึเปล่า" (not sure if this was purchased pre-printed). The paper's appearance strongly suggests
+it is **not** a pre-purchased NCR form, but printed entirely by the existing system onto blank
+stock — so this pass built the correct **plain-paper** layout (no NCR/calibration mode added for BI;
+flagged as still-open below in case the owner confirms otherwise).
+
+The real form's structure turned out genuinely different from what Phase 1 shipped: no tax ID/
+contact/bilingual title, a compact 3-line letterhead (adds a "โรงงาน" factory phone number this ERP
+never had), and — the real substance — a **totals-owed table** (No./เลขที่ใบกำกับ/วันที่/ครบกำหนด/
+จำนวนเงิน/**ชำระแล้ว**/**เงินคงค้าง**) instead of a generic line-items table. This is exactly the
+"Phase 1 simplification, revisit once checked against reference PDFs" gap `ArDocumentPrintDocument.tsx`'s
+own doc comment had been flagging since 2026-08-17.
+
+**Two real bugs found and fixed while building this** (both predate today, from Phase 1):
+1. The BI line's description was `${docType} ${principalDocNo}` where `principalDocNo` already
+   carries its own prefix — produced a doubled "IV IV6908024"-style string. Now just
+   `principalDocNo` (`api/_lib/arHandler.ts`).
+2. Every printed date used `formatQuoteDateNumeric()` (Gregorian, 4-digit year — Quotation's own
+   convention) instead of the Buddhist 2-digit year every real reference form actually shows
+   (`13/08/69`). New `formatArDocDate()` (`src/lib/accounting.ts`) fixes this across **all** doc
+   types (AR/IV/BI/RE), not just BI — `ArDocumentNcrPrintDocument.tsx`'s private duplicate of the
+   same logic was deleted in favor of the shared one.
+
+**Built**: `ArDocumentFields`/`ArDocument` gain `paymentType` (denormalized from the milestone at
+issue time, populated on principal/BI/RE — new `formatArPaymentCondition()` renders it as "เครดิต 30
+วัน"/"เงินสด" for the real form's "เงื่อนไขการชำระเงิน" field); the BI line gains
+`linkedArDocumentId` pointing at its underlying invoice, letting the print view look up whether a
+receipt has since been issued (`ArPaidByInvoiceId`, computed from already-loaded receipt data in
+both `ArDocumentListPage.tsx` and `AccountingPage.tsx` — no extra fetch needed on the job-centric
+page, and the BI list page now also fetches RE documents for this). `ArDocumentPrintDocument.tsx`
+gained a dedicated `BillingNotePage` renderer, selected by `docType === "BI"`.
+
+**Verified**: `tsc` (both configs)/`lint` (0 errors)/`build`/`npm test` (198/198) all clean; a fresh
+IV+BI+RE fixture (inserted directly, matching the fixed handler's exact shape — the primed local
+scope had no fresh installment left to issue through the UI) confirmed via print-CSS-emulation
+screenshot that the new BI layout renders correctly end-to-end, including a **fully paid** row
+(ชำระแล้ว 107,000.00 / เงินคงค้าง 0.00) matching the linked receipt. Fixture + disposable test
+account deleted after. **Open**: confirm with the owner whether this BI form actually is a
+pre-purchased NCR form (if so, an NCR mode + calibration is still needed, same as AR/IV/RE) — see
+TODO.md.
+
+---
+
+## 2026-08-18c — NCR form print mode (data-only, calibratable) — first draft from real form photos
+
+The owner shared photos of the **real pre-printed NCR forms** (green สำเนาใบเสร็จรับเงิน RE6908021;
+pink สำเนาใบกำกับภาษี/ใบส่งสินค้า IV6908024 pages 1/2+2/2, all printed by the existing Express
+system) with the instruction that the web app's output "ต้องออกมาเป็นแบบนี้" on those pre-purchased
+forms. Key facts the photos establish: **all document types share one identical form layout**
+(only the top-right title + ply color differ); the pre-printed part carries every frame/label, so
+the app must print **data only**; long documents print as sets ("หน้า 1/2"); remarks (`**PQ...**`,
+deposit-deduction notes) print as extra rows in the description column; receipts print only the
+net total (other total boxes blank); dates print as Buddhist `dd/mm/yy`.
+
+**Built** (`src/pages/accounting/ArDocumentNcrPrintDocument.tsx` + `src/lib/ncrPrintSettings.ts`):
+- **`ArDocumentNcrPrintDocument`** — data-only print view, absolute mm positioning per a
+  `FORM` layout map (first-draft coordinates derived proportionally from the photos —
+  **must be calibrated against the physical form before real use**, clearly flagged in the code),
+  one page per form set (the carbon layers make the copies — deliberately unlike the plain-paper
+  `ArDocumentPrintDocument`'s one-page-per-copy), line+remark rows chunked 12/page with a "1/2"
+  page indicator, RE prints net-only per the real form's convention, `@page` sized from settings.
+- **Calibration settings** (`ncrPrintSettings.ts`) — page width/height (default 9"×11" = 228.6×279.4
+  mm, unconfirmed) + X/Y offsets, stored in `localStorage` **per machine** (printer alignment is a
+  machine property, not business data — same convention as `tour.ts`/`whatsNew.ts`).
+- **UI** (`ArDocumentListPage.tsx`): per-row **"NCR"** button next to the existing plain-paper print
+  (both title-texted to explain the difference); a **"ตั้งค่าฟอร์ม NCR"** header button opening a
+  dialog (page size + offsets, reset-to-default) with a **"พิมพ์หน้าทดสอบ"** action that prints
+  `+` crosshairs at every field anchor for hold-against-the-real-form calibration.
+
+Data fields the form has but `ArDocument` doesn't yet carry (left blank on the NCR output, noted
+as follow-ups in TODO.md): customer code (`H-020`), สถานที่ส่งสินค้า, ผู้ขาย (salesperson).
+Verified: `tsc`/`lint` (0 errors)/`build`/`npm test` all clean; a live print-CSS-emulation
+screenshot of IV6908001 confirmed the data-only output (fields at position, deduction line,
+remark rows, totals; no screen content). **Physical calibration against the real form + dot-matrix
+printer is still required** — that part cannot be done in software alone.
+
+---
+
+## 2026-08-18b — Accounting Phase 1.5 live-verified end-to-end + print-bleed fix
+
+Full live verification of the Phase 1.5 pass (entry below) against `npm run dev` + the local
+MongoDB, via a real Playwright browser session logged in as a disposable local-only account
+(created directly in the local DB, deleted afterward — same precedent as Phase 1's `artest`).
+
+**Verified live** (all passed): the 6-page "บัญชี" sidebar; the deposit-billed column + green
+banner on `PQ202608-01-LI-SK`; the **pending Phase-1 guard test** — issuing the "Materials"
+milestone succeeded (IV6908001 + BI6908003, ฿912,013.13 with the AR6908002 deposit deduction,
+consistent to the satang), then attempting "Final" was refused with the exact intended Thai
+>2-installments error and consumed no document number; **RE issuing** — "ออกใบเสร็จ" on IV6908001
+issued RE6908001 and flipped Materials to "จบ", a duplicate attempt 400'd ("ใบกำกับภาษี IV6908001
+มีใบเสร็จรับเงิน RE6908001 อยู่แล้ว"), cancelling the RE flipped Materials back to "งานยังไม่จบ";
+the owner independently issued RE6908002 from the deposit AR6908002 mid-test, proving the
+deposit-milestone case (stays "วางบิล"); the monthly summary matched every per-type and AR+IV total
+with the cancelled RE struck-through and excluded; the RE print layout rendered 2 clean copies
+(verified via print-CSS-emulation screenshot).
+
+**One real bug found (reported live by the owner: "เวลากดพิมพ์เอกสารมันไม่ควรมีในนั้น") and fixed**:
+printing from the new accounting pages included the on-screen list/detail content in the printout —
+`ArDocumentListPage.tsx` and `AccountingPage.tsx`'s detail view lacked the `print:hidden` treatment
+every other module's print flow uses (e.g. `DeliveryOrderDocument.tsx`). Fixed by wrapping all
+screen content in a `print:hidden` container and moving `ArDocumentPrintDocument` outside it;
+re-verified via emulation screenshot showing only the document pages. `tsc` (both configs) /
+`lint` (0 errors) / `build` / `npm test` (198/198) re-run clean after the fix. Test data left in
+the local dev DB: IV6908001, BI6908003, RE6908001 (cancelled), RE6908002.
+
+---
+
+## 2026-08-18 — Accounting Phase 1.5: per-document-type pages, RE receipt, deposit-billed alert, monthly tax summary
+
+The owner delivered the follow-up detail that had paused the Accounting UI restructure (2026-08-17d
+below): the full "Flow การทำงานของบัญชี-รับ" (Down-Payment case AR→RE→BI; Production and Project
+cases IV→RE→BI after a customer-signed ใบส่งมอบงาน), the confirmed 4-document set (resolving the old
+open question — "ใบรับเงินมัดจำ/ใบกำกับภาษี" is one combined AR document, not a 5th type), the two
+Express-system improvement requests (deposit-billed alert per job; monthly issued-documents pull for
+tax filing), and the instruction that each document type be its own page like the Sales modules
+("1 ใบคือ 1 หน้า"). Per the owner's same-day instruction, the implementation prompt was
+**self-authored** following the new (untracked→now committed) `docs/ERP_CLAUDE_PROMPT_ENGINEERING_GUIDE.md`
+and saved as [PROMPTS/ACCOUNTING_DOCUMENT_PAGES_PROMPT.md](./PROMPTS/ACCOUNTING_DOCUMENT_PAGES_PROMPT.md),
+then executed.
+
+**Built** (full detail in [MODULES/Accounting.md](./MODULES/Accounting.md) "2026-08-18 follow-up +
+Phase 1.5"):
+
+- **RE (ใบเสร็จรับเงิน) document type end-to-end**: `ArDocumentType` gains `"RE"`
+  (`api/_lib/collections.ts`, `documentNumbering.ts`, `src/lib/accounting.ts`); atomic
+  `RE{YY}{MM}{SEQ}` Buddhist-year numbering; new `POST /api/ar-documents/:id/receipt` (`ar:issue`)
+  issuing a receipt from an already-issued AR/IV — one line referencing the invoice via
+  `linkedArDocumentId` (also the duplicate guard: a second active RE per invoice → 400), amount =
+  the invoice's VAT-inclusive net, zero VAT of its own; issuing on a non-deposit milestone sets
+  `billingStatus` "closed" (จบ), cancelling that RE reverts it to "work_open"; print = 2 copies in
+  the shared `ArDocumentPrintDocument` frame.
+- **4 standalone document pages** ("1 ใบคือ 1 หน้า"): new `src/pages/accounting/ArDocumentListPage.tsx`,
+  one shared component mounted per docType from `App.tsx` (nav keys
+  `arDeposit`/`arBilling`/`arReceipt`/`arTaxInvoice`, all `ar:view`) — summary cards
+  (ทั้งหมด/ออกเดือนนี้/ยอดรวมเดือนนี้/ยกเลิกแล้ว), search, month + status filters, receipt-linkage
+  column on the AR/IV pages with an "ออกใบเสร็จ" action (confirm-dialog gated), print, and
+  reason-required cancel (`PromptDialog`, `ar:cancel`). Sidebar "บัญชี" group order follows the
+  owner's list; the job page was retitled "วางบิลตามงาน" (`nav.accounting`).
+- **Deposit-billed alert** (Express improvement #1): the job list on `AccountingPage.tsx` gains a
+  "บิลมัดจำ" badge column (เลขที่ AR ที่ออกแล้ว / "ยังไม่ออก") and every job's billing detail opens with
+  a green/amber banner stating the deposit-billing state; the issued-documents list there also gained
+  the inline "ออกใบเสร็จ" button + "รับชำระแล้ว (RExxxxxxx)" tag.
+- **Monthly tax summary** (Express improvement #2): new `ArMonthlyReportPage.tsx` ("สรุปเอกสารประจำเดือน",
+  nav `arMonthly`) — month picker (defaults to the current month), documents grouped per type with
+  doc no./date/company/pre-VAT/VAT/net/status per row, per-type counts+sums, an AR+IV grand-total
+  card for the VAT return, cancelled documents struck-through and excluded from every total,
+  printable via `window.print()`.
+- `GET /api/ar-documents` gains validated `docType` + `month=YYYY-MM` filters; document display
+  names updated everywhere to the owner's exact combined names (AR "ใบรับเงินมัดจำ/ใบกำกับภาษี",
+  IV "ใบกำกับภาษี/ใบส่งสินค้า", BI "ใบแจ้งหนี้/ใบวางบิล"). ~10 new i18n nav keys (th+en); Thai What's
+  New entry added.
+
+**Verified**: `npx tsc --noEmit`, `npm run lint` (0 errors), `npm run build`, `npm test` — 198/198,
+including a new RE-prefix case in `tests/api/arNumbering.test.ts`. No live browser session this
+pass — the manual checks (duplicate-guard 400, milestone close/reopen, deposit banner against the
+primed `PQ202608-01-LI-SK`, monthly totals, RE print layout) are itemized in TODO.md High Priority.
+Deliberate limitation carried forward: receipts always equal the invoice net (WHT/bank-fee
+reconciliation remains Phase 2).
+
+---
+
+## 2026-08-17d — Accounting module Phase 1 (milestone billing): backend built + verified live, UI paused
 
 A detailed spec from the owner (grounded in the real "Flow งานบัญชี" business-process spreadsheet
 plus 2 real customer billing sets) was designed in Plan Mode, approved, and implemented as Phase 1

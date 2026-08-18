@@ -200,6 +200,30 @@ Client wrapper functions: `src/lib/scopeOfWork.ts`'s `fetchScopeOfWorksByQuotati
 `updateScopeOfWork(id, fields)`/`finalizeScopeOfWork(id)`/`duplicateScopeOfWork(id)`/
 `refreshScopeOfWorkFromQuotation(id)`/`deleteScopeOfWork(id)`/`logScopeOfWorkPrinted(id)`.
 
+## Accounts Receivable (`api/_lib/arHandler.ts`, mounted at `/api/ar-milestones` and `/api/ar-documents` via `api/handlers/quotes.ts` — added 2026-08-17 Phase 1, extended 2026-08-18 Phase 1.5)
+
+Shares `api/handlers/quotes.ts`'s function file on the raw pathname (same convention as Scope of
+Work/Delivery Order). Full design: [MODULES/Accounting.md](./MODULES/Accounting.md). Client wrapper:
+`src/lib/accounting.ts`.
+
+| Route | Permission | Notes |
+|---|---|---|
+| `GET /api/ar-milestones?scopeOfWorkId=` | `ar:view` | Billing-milestone rows (lazily created per opened installment). |
+| `POST /api/ar-milestones/open` | `ar:create` | Returns-or-creates the milestone for `{scopeOfWorkId, installmentId}` — frozen snapshot of pct/label/paymentType/days + contract total. |
+| `PATCH /api/ar-milestones/:id` | `ar:create` | `workClassification`/`retentionPct`/`checklistState` only; refused once billed. |
+| `POST /api/ar-milestones/:id/refresh` | `ar:create` | Explicit-only re-pull from the Scope of Work; refused once billed. |
+| `POST /api/ar-milestones/:id/attachments` + `DELETE`/`GET .../:attachmentId` | `ar:create` (upload/delete), `ar:view` (download) | Checklist evidence, ≤2 MB × ≤5/milestone, own `ar_attachment_files` collection (session-gated, not capability-URL). |
+| `POST /api/ar-documents` | `ar:issue` | Issues the milestone's principal document (AR if down-payment, IV otherwise) **plus** a companion BI in one action. Checklist must be complete; >2-installment shapes refused (Phase 1 guard). |
+| `GET /api/ar-documents?scopeOfWorkId=&status=&docType=&month=` | `ar:view` | `docType` ∈ AR/IV/BI/RE, `month` = Gregorian `YYYY-MM` matched against `docDate` — both validated (400 otherwise). Backs the per-document-type pages + monthly tax summary (2026-08-18). |
+| `GET /api/ar-documents/:id` | `ar:view` | One document. |
+| `POST /api/ar-documents/:id/receipt` | `ar:issue` | **Added 2026-08-18.** Issues an RE (ใบเสร็จรับเงิน) from an issued AR/IV: refuses non-AR/IV targets, cancelled targets, and duplicates (an active RE already linked via `lines.linkedArDocumentId`); amount = the invoice's VAT-inclusive net with zero VAT of its own; closes a non-deposit milestone (`work_open` → `closed`). |
+| `POST /api/ar-documents/:id/cancel` | `ar:cancel` | Reason required; status flip only, never a delete. Cancelling an RE that closed its milestone reopens it (`closed` → `work_open`). |
+| `GET /api/ar-dashboard?from=&to=&salesperson=` | `ar:view` | **Added 2026-08-18, `salesperson` added same day.** Accounting Dashboard aggregation — KPIs, a 12-month AR+IV trend, doc-type breakdown, AR aging, the milestone billing-status funnel, and top customers. `from`/`to` (default: current month) scope only the period-based sections (issued totals/VAT/doc-type breakdown/top-customer sales); aging, the billing funnel, and the deposit-not-billed count are always current-state snapshots, never date-filtered — see `handleDashboard()`'s doc comment for why. `salesperson` (matched via `scopeOfWorkId` → `ScopeOfWork.quotationSalesperson`, since AR documents carry no salesperson field of their own) is different in kind — it applies to every section, including the current-state ones. All computed via plain `find()` + JS reduction (no revision-chain dedup needed here, unlike the main Dashboard). |
+
+Numbering: atomic Buddhist-year `{PREFIX}{YY}{MM}{SEQ}` per prefix per month
+(`api/_lib/documentNumbering.ts`, counters `ar_/iv_/bi_/re_{yy}{mm}`), matching the company's real
+"Express" software numbering. Issue/cancel write audit entries (module `"บัญชีลูกหนี้"`).
+
 ## Service Templates + Service Reports (`api/_lib/serviceTemplateHandler.ts` + `api/_lib/serviceReportHandler.ts`, mounted at `/api/service-templates` and `/api/service-reports` via `api/handlers/customers.ts` — added 2026-08-06, Phase 1)
 
 Shares `api/handlers/customers.ts`'s function file (checked on the raw pathname, after `/api/search`

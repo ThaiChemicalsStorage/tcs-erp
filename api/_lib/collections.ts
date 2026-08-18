@@ -621,7 +621,7 @@ export async function arAttachmentFilesCollection() {
   return db.collection<ArAttachmentFileFields>("ar_attachment_files");
 }
 
-export type ArDocumentType = "AR" | "IV" | "BI";
+export type ArDocumentType = "AR" | "IV" | "BI" | "RE";
 export type ArDocumentStatus = "issued" | "cancelled";
 
 export interface ArDocumentLine {
@@ -646,7 +646,8 @@ export interface ArDocumentCustomerSnapshot {
   email: string;
 }
 
-/** One row per issued AR/IV/BI (all 3 Phase-1 document types, discriminated by `docType`). Never
+/** One row per issued AR/IV/BI/RE (discriminated by `docType` — RE, the receipt, added 2026-08-18
+ * when the owner confirmed the 4-document set; the others are Phase 1, 2026-08-17). Never
  * soft-deleted (see file header) — `status: "cancelled"` is the only way an issued document stops
  * being active, and it stays visible/auditable forever. */
 export interface ArDocumentFields {
@@ -656,6 +657,11 @@ export interface ArDocumentFields {
   docNo: string;
   docDate: string;
   dueDate: string;
+  /** Denormalized from the source milestone at issue time (added 2026-08-18, for the Invoice/
+   * Billing Note's "เงื่อนไขการชำระเงิน" field on the real reference form) — never re-derived, so a
+   * later milestone edit (impossible post-billing anyway) can't retroactively change an issued
+   * document's printed condition. */
+  paymentType: "" | "Cash" | "Credit";
   customerSnapshot: ArDocumentCustomerSnapshot;
   reference: string;
   lines: ArDocumentLine[];

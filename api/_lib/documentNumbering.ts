@@ -16,7 +16,7 @@ import { countersCollection } from "./collections.js";
  * because the counter `_id` naturally becomes a new string on Jan 1 — same reasoning `nextQuoteId()`
  * already relies on for its own daily rollover.
  */
-export type ArDocumentPrefix = "AR" | "IV" | "BI";
+export type ArDocumentPrefix = "AR" | "IV" | "BI" | "RE";
 
 /** Bangkok-local Buddhist-era "YYMM", e.g. 2026-08 -> "2608" (พ.ศ. 2569 -> "69"). Exported for tests. */
 export function bangkokBuddhistYyMm(now: Date = new Date()): { yy: string; mm: string } {

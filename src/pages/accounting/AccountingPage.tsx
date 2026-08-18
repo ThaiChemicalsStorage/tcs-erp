@@ -1,17 +1,18 @@
-import { useEffect, useState } from "react";
-import { FileText, Receipt, ClipboardCheck, ChevronLeft, Loader2, Upload, Printer } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { FileText, Receipt, ClipboardCheck, ChevronLeft, Loader2, Upload, Printer, CheckCircle2, AlertTriangle } from "lucide-react";
 import { fetchAllScopeOfWorks, fetchScopeOfWork, type ScopeOfWorkListItem, type ScopeOfWork } from "../../lib/scopeOfWork";
 import {
-  openArMilestone, updateArMilestone, uploadArAttachment, issueArDocuments,
+  openArMilestone, updateArMilestone, uploadArAttachment, issueArDocuments, issueArReceipt,
   fetchArDocuments, fetchArDocument,
   AR_CHECKLIST_LABELS, BILLING_STATUS_LABELS, WORK_CLASSIFICATION_LABELS, DOC_TYPE_LABELS,
   type ArMilestone, type ArDocument, type ArChecklistKey, type ArWorkClassification, type ArBillingStatus,
 } from "../../lib/accounting";
 import { EmptyState } from "../../components/EmptyState";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
-import { ArDocumentPrintDocument } from "./ArDocumentPrintDocument";
+import { ArDocumentPrintDocument, type ArPaidByInvoiceId } from "./ArDocumentPrintDocument";
 
 // หน้าบัญชีลูกหนี้ (Accounts Receivable) — งวดที่ 1: เลือกงาน (Scope of Work) แล้ววางบิลตามงวดงาน
 // Accounts Receivable page — Phase 1: pick a job (Scope of Work), then bill it milestone by milestone.
@@ -24,6 +25,9 @@ export function AccountingPage({
 }) {
   const [view, setView] = useState<"list" | "detail">("list");
   const [scopeOfWorks, setScopeOfWorks] = useState<ScopeOfWorkListItem[]>([]);
+  // เลขที่บิลมัดจำ (AR) ที่ยังใช้งาน ต่อ Scope of Work — ใช้แจ้งเตือนในทุกงานว่าออกบิลมัดจำแล้วหรือยัง
+  // ตามที่บัญชีขอไว้ ("ให้มีการแจ้งเตือนทุกครั้งว่างานนั้นๆ มีการออกบิลมัดจำไปแล้วหรือยัง")
+  const [depositDocByScope, setDepositDocByScope] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -32,8 +36,13 @@ export function AccountingPage({
 
   useEffect(() => {
     let cancelled = false;
-    fetchAllScopeOfWorks()
-      .then((list) => { if (!cancelled) { setScopeOfWorks(list); setLoading(false); } })
+    Promise.all([fetchAllScopeOfWorks(), fetchArDocuments({ docType: "AR", status: "issued" })])
+      .then(([list, depositDocs]) => {
+        if (cancelled) return;
+        setScopeOfWorks(list);
+        setDepositDocByScope(Object.fromEntries(depositDocs.map((d) => [d.scopeOfWorkId, d.docNo])));
+        setLoading(false);
+      })
       .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
     return () => { cancelled = true; };
   }, []);
@@ -59,8 +68,8 @@ export function AccountingPage({
   return (
     <div className="flex-1 flex flex-col overflow-y-auto p-6 gap-6">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>บัญชีลูกหนี้</h1>
-        <p className="text-sm text-muted-foreground font-mono mt-1">เลือกงาน (Scope of Work) เพื่อดูงวดการชำระเงินและวางบิล</p>
+        <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>วางบิลตามงาน</h1>
+        <p className="text-sm text-muted-foreground font-mono mt-1">เลือกงาน (Scope of Work) เพื่อดูงวดการชำระเงินและออกเอกสารบัญชี</p>
       </div>
 
       <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full max-w-md">
@@ -88,6 +97,7 @@ export function AccountingPage({
                 <th className="text-left px-4 py-2.5">เลขที่งาน</th>
                 <th className="text-left px-4 py-2.5">ลูกค้า</th>
                 <th className="text-left px-4 py-2.5">ใบเสนอราคา</th>
+                <th className="text-left px-4 py-2.5">บิลมัดจำ</th>
                 <th className="text-left px-4 py-2.5">สถานะ</th>
               </tr>
             </thead>
@@ -104,6 +114,17 @@ export function AccountingPage({
                   <td className="px-4 py-3 font-mono text-foreground">{s.scopeNumber}</td>
                   <td className="px-4 py-3 text-foreground">{s.customerName}</td>
                   <td className="px-4 py-3 font-mono text-muted-foreground">{s.quotationNumber}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {depositDocByScope[s.id] ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20">
+                        <CheckCircle2 size={12} /> {depositDocByScope[s.id]}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
+                        <AlertTriangle size={12} /> ยังไม่ออก
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{s.status}</td>
                 </tr>
               ))}
@@ -138,6 +159,20 @@ function ScopeBillingDetail({
   const [milestoneLoading, setMilestoneLoading] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [printDoc, setPrintDoc] = useState<ArDocument | null>(null);
+  const [receiptTarget, setReceiptTarget] = useState<ArDocument | null>(null);
+  const [receiptBusy, setReceiptBusy] = useState(false);
+
+  // ยอดชำระแล้วต่อใบกำกับภาษี — สำหรับพิมพ์ใบแจ้งหนี้/ใบวางบิล (คอลัมน์ชำระแล้ว/เงินคงค้าง)
+  const paidByInvoiceId: ArPaidByInvoiceId = useMemo(() => {
+    const map: ArPaidByInvoiceId = {};
+    for (const d of documents) {
+      if (d.docType !== "RE" || d.status !== "issued") continue;
+      for (const line of d.lines) {
+        if (line.linkedArDocumentId) map[line.linkedArDocumentId] = d.netTotal;
+      }
+    }
+    return map;
+  }, [documents]);
 
   useEffect(() => {
     if (!printDoc) return;
@@ -221,6 +256,21 @@ function ScopeBillingDetail({
     reader.readAsDataURL(file);
   };
 
+  const handleIssueReceipt = async () => {
+    if (!receiptTarget || receiptBusy) return;
+    setReceiptBusy(true);
+    try {
+      const re = await issueArReceipt(receiptTarget.id);
+      showToast(`ออกใบเสร็จรับเงิน ${re.docNo} แล้ว`);
+      setReceiptTarget(null);
+      reload();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "ออกใบเสร็จไม่สำเร็จ");
+    } finally {
+      setReceiptBusy(false);
+    }
+  };
+
   const handleIssue = async () => {
     if (!milestone || issuing) return;
     setIssuing(true);
@@ -250,7 +300,10 @@ function ScopeBillingDetail({
   const checklistOk = alwaysRequired.every((k) => milestone?.checklistState[k] === true);
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto p-6 gap-5">
+    <>
+    {/* ส่วนแสดงผลบนหน้าจอทั้งหมดต้องซ่อนตอนพิมพ์ — เอกสารพิมพ์ (ArDocumentPrintDocument ด้านล่าง)
+        ต้องเป็นสิ่งเดียวที่ออกกระดาษ (pattern เดียวกับ DeliveryOrderDocument's print:hidden blocks) */}
+    <div className="flex-1 flex flex-col overflow-y-auto p-6 gap-5 print:hidden">
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit">
         <ChevronLeft size={16} /> กลับไปรายการงาน
       </button>
@@ -259,6 +312,22 @@ function ScopeBillingDetail({
         <h1 className="text-xl font-semibold text-foreground font-mono">{scope.scopeNumber}</h1>
         <p className="text-sm text-muted-foreground mt-1">{scope.customerSnapshot.companyName} · {scope.quotationNumber}</p>
       </div>
+
+      {/* แจ้งเตือนสถานะบิลมัดจำของงานนี้ทุกครั้งที่เปิดดู — ตามที่บัญชีขอไว้ */}
+      {(() => {
+        const depositDoc = documents.find((d) => d.docType === "AR" && d.status === "issued");
+        return depositDoc ? (
+          <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-[#2aa36b]/10 border border-[#2aa36b]/20 text-sm text-[#207e52]">
+            <CheckCircle2 size={15} className="flex-shrink-0" />
+            งานนี้ออกบิลมัดจำแล้ว — {depositDoc.docNo} ยอด ฿{depositDoc.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-[#e08a3c]/10 border border-[#e08a3c]/20 text-sm text-[#a75d1a]">
+            <AlertTriangle size={15} className="flex-shrink-0" />
+            งานนี้ยังไม่ได้ออกบิลมัดจำ
+          </div>
+        );
+      })()}
 
       <div className="bg-card border border-border rounded-xl p-4">
         <h2 className="text-sm font-semibold text-foreground mb-3">งวดการชำระเงิน</h2>
@@ -350,31 +419,56 @@ function ScopeBillingDetail({
           <p className="text-sm text-muted-foreground">ยังไม่มีเอกสารที่ออก</p>
         ) : (
           <div className="space-y-1.5">
-            {documents.map((d) => (
-              <div key={d.id} className="flex items-center justify-between gap-3 text-sm border-b border-border/40 py-1.5 last:border-0">
-                <div className="flex items-center gap-2">
-                  <Receipt size={14} className="text-muted-foreground" />
-                  <span className="font-mono text-foreground">{d.docNo}</span>
-                  <span className="text-xs text-muted-foreground">{DOC_TYPE_LABELS[d.docType]}</span>
-                  {d.status === "cancelled" && <span className="text-xs text-[#c23f3f]">ยกเลิกแล้ว</span>}
+            {documents.map((d) => {
+              // ใบเสร็จที่ยังใช้งานซึ่งอ้างถึงใบกำกับภาษีฉบับนี้ (ผูกผ่าน linkedArDocumentId ในบรรทัดรายการ)
+              const receipt = (d.docType === "AR" || d.docType === "IV")
+                ? documents.find((re) => re.docType === "RE" && re.status === "issued" && re.lines.some((l) => l.linkedArDocumentId === d.id))
+                : undefined;
+              return (
+                <div key={d.id} className="flex items-center justify-between gap-3 text-sm border-b border-border/40 py-1.5 last:border-0">
+                  <div className="flex items-center gap-2">
+                    <Receipt size={14} className="text-muted-foreground" />
+                    <span className="font-mono text-foreground">{d.docNo}</span>
+                    <span className="text-xs text-muted-foreground">{DOC_TYPE_LABELS[d.docType]}</span>
+                    {d.status === "cancelled" && <span className="text-xs text-[#c23f3f]">ยกเลิกแล้ว</span>}
+                    {receipt && <span className="text-xs text-[#207e52]">รับชำระแล้ว ({receipt.docNo})</span>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-xs text-foreground">฿{d.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })}</span>
+                    {canIssue && d.status === "issued" && (d.docType === "AR" || d.docType === "IV") && !receipt && (
+                      <button
+                        onClick={() => setReceiptTarget(d)}
+                        className="px-2 py-1 text-xs border border-[#c9a84c]/40 text-[#a5813a] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
+                      >
+                        ออกใบเสร็จ
+                      </button>
+                    )}
+                    <button
+                      onClick={() => void handlePrint(d.id)}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      title="พิมพ์"
+                    >
+                      <Printer size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-foreground">฿{d.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })}</span>
-                  <button
-                    onClick={() => void handlePrint(d.id)}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                    title="พิมพ์"
-                  >
-                    <Printer size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
-      {printDoc && <ArDocumentPrintDocument document={printDoc} />}
+      <ConfirmDialog
+        open={receiptTarget !== null}
+        title="ออกใบเสร็จรับเงิน"
+        message={`ยืนยันการออกใบเสร็จรับเงินสำหรับใบกำกับภาษี ${receiptTarget?.docNo ?? ""} ยอด ${receiptTarget ? receiptTarget.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : ""} บาท (ออกเมื่อได้รับชำระเงินแล้วเท่านั้น)`}
+        confirmLabel={receiptBusy ? "กำลังออกเอกสาร..." : "ออกใบเสร็จ"}
+        busy={receiptBusy}
+        onConfirm={() => void handleIssueReceipt()}
+        onCancel={() => setReceiptTarget(null)}
+      />
     </div>
+    {printDoc && <ArDocumentPrintDocument document={printDoc} paidByInvoiceId={paidByInvoiceId} />}
+    </>
   );
 }
 

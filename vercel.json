@@ -33,6 +33,7 @@
     { "source": "/api/ar-milestones/:path*", "destination": "/api/handlers/quotes" },
     { "source": "/api/ar-documents", "destination": "/api/handlers/quotes" },
     { "source": "/api/ar-documents/:path*", "destination": "/api/handlers/quotes" },
+    { "source": "/api/ar-dashboard", "destination": "/api/handlers/quotes" },
     { "source": "/api/service-templates", "destination": "/api/handlers/customers" },
     { "source": "/api/service-templates/:path*", "destination": "/api/handlers/customers" },
     { "source": "/api/service-reports", "destination": "/api/handlers/customers" },

@@ -860,7 +860,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Accounts Receivable (added 2026-08-17) — same sharing pattern, billing derives from a Scope
     // of Work's payment installments so it's mounted alongside it. See docs/MODULES/Accounting.md.
     if (pathname === "/api/ar-milestones" || pathname.startsWith("/api/ar-milestones/")
-      || pathname === "/api/ar-documents" || pathname.startsWith("/api/ar-documents/")) {
+      || pathname === "/api/ar-documents" || pathname.startsWith("/api/ar-documents/")
+      || pathname === "/api/ar-dashboard") {
       return handleAr(req, res);
     }
 
