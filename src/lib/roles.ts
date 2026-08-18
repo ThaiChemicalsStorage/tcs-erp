@@ -116,14 +116,17 @@ export const defaultRoles: Role[] = [
   {
     key: "accounting_user",
     name: "Accounting User",
-    description: "ฝ่ายบัญชีลูกหนี้ — ดูงาน Scope of Work ทั้งหมดเพื่อวางบิล จัดการ checklist และออกเอกสาร AR/ใบกำกับภาษี/ใบวางบิล",
+    description: "ฝ่ายบัญชีลูกหนี้ — ดูงาน Scope of Work ทั้งหมดเพื่อวางบิล จัดการ checklist ออกเอกสาร AR/ใบกำกับภาษี/ใบวางบิล/ใบเสร็จรับเงิน และยกเลิกเอกสารที่ออกผิดพลาดได้เอง",
     permissions: [
       "dashboard:view",
       "customers:view", "customers:edit",
       // scopeOfWork:viewAll (not just :view) — accounting needs to see every job company-wide to
       // bill it, not just their own, unlike a typical Sales-side own-records-only role.
       "scopeOfWork:view", "scopeOfWork:viewAll",
-      "ar:view", "ar:create", "ar:issue",
+      // ar:cancel added 2026-08-18 — the role that actually issues AR/IV/BI/RE day to day must be
+      // able to cancel its own mis-issued documents without escalating to an Administrator/Approver
+      // every time (a real gap from Phase 1, where only Administrator/Approver 1/2/Viewer had it).
+      "ar:view", "ar:create", "ar:issue", "ar:cancel",
     ],
     isSuperAdmin: false,
     isSystem: false,

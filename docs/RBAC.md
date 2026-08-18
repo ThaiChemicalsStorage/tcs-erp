@@ -20,17 +20,20 @@ As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/
 
 **Users** (`src/lib/users.ts`): a `User` is both the employee record and the account — `employeeId`, `fullName`, `username`, `email`, `passwordHash`, `phone`, `department`, `position`, `roleKey`, `status` (`active`/`inactive`), `profilePictureDataUrl`, `signatureDataUrl`. `employeeId`/`username`/`email` are enforced unique. **Position and Role are deliberately separate fields** — Position is a free-text job title (with suggestions: CEO, Director, General Manager, Sales Manager, Sales Executive, Engineer, HR, Accounting, Purchasing, Warehouse) with no bearing on permissions; Role is the RBAC role, assigned independently by an admin.
 
-**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat `Permission` union (64 keys as of 2026-08-14's Departments/Teams pass — this count is not kept in perfect sync with every module addition below; treat it as an order-of-magnitude reference, `ALL_PERMISSIONS.length` is authoritative) — `dashboard:view`; `quotations:view/viewAll/create/edit/delete/approve/reject/export` (`:viewAll` added 2026-07-22, see "Quotation Own-Quotes-Only Viewing" below); `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below); `scopeOfWork:view/viewAll/create/edit/finalize/print/delete` (`:viewAll` added 2026-07-23, see "Scope of Work Own-Records-Only Viewing" below; the other 6 added 2026-07-15, see "Scope of Work" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) **Seven** default `Role`s ship out of the box (six until 2026-08-07, when `service_engineer` was added — see "Service" below):
+**Roles & Permissions** (`src/lib/roles.ts`, `src/lib/permissions.ts`): a flat `Permission` union (64 keys as of 2026-08-14's Departments/Teams pass — this count is not kept in perfect sync with every module addition below; treat it as an order-of-magnitude reference, `ALL_PERMISSIONS.length` is authoritative) — `dashboard:view`; `quotations:view/viewAll/create/edit/delete/approve/reject/export` (`:viewAll` added 2026-07-22, see "Quotation Own-Quotes-Only Viewing" below); `products:view/create/edit/delete/export`; `users:manage`; `roles:manage`; `company:manage`; `auditLog:view`; `customers:view/create/edit/archive` (added 2026-07-14, see "Customers" below); `quotationTemplates:manage/view/create/edit/duplicate/activate/archive/import` (`:manage` added 2026-07-14, the other 7 granular ones added 2026-07-15, see "Quotation Templates" below); `scopeOfWork:view/viewAll/create/edit/finalize/print/delete` (`:viewAll` added 2026-07-23, see "Scope of Work Own-Records-Only Viewing" below; the other 6 added 2026-07-15, see "Scope of Work" below). (The union briefly had 27 keys, 2026-07-13–14, while `companyProfiles:view/create/edit/archive/delete/setDefault` existed for the now-removed Company Profiles module — see "Company Profiles" below.) **Eight** default `Role`s ship out of the box (seven from 2026-08-07 when `service_engineer` was
+added, six before that — see "Service" below; `accounting_user` added 2026-08-17, see "Accounts
+Receivable" below):
 
 | Role | `isSuperAdmin` | `isSystem` | Summary |
 |---|---|---|---|
 | Super Admin | ✅ | ✅ (undeletable) | Every permission, always — `roleHasPermission()` short-circuits to `true` regardless of the stored list |
-| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15) + full Scope of Work access (all 7 `scopeOfWork:*` permissions, incl. `:viewAll` added 2026-07-23). No `roles:manage`/`company:manage`. |
+| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15) + full Scope of Work access (all 7 `scopeOfWork:*` permissions, incl. `:viewAll` added 2026-07-23) + all 4 `ar:*` permissions (added 2026-08-17). No `roles:manage`/`company:manage`. |
 | Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Also `scopeOfWork:view/create/edit/print` — can create/edit a Scope of Work from a quotation they can access and print it, but not finalize or delete one. **Does not hold `quotations:viewAll` or `scopeOfWork:viewAll`** — only sees quotations/Scope of Work records it created itself (see the two "Own-Records-Only Viewing" sections below). Maps to the request's "Sales Executive." |
 | Service Engineer | — | — | Added 2026-08-07. Runs a field-service job end to end: `service:view/create/edit/complete/print` + `serviceTemplates:view` (required — the report editor's boot fetch needs it) + `customers:view` + `dashboard:view`. **No `service:viewAll`** — own reports only, mirroring Sales User. No quotation/product/user access at all. See "Service" below. |
-| Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Also `scopeOfWork:view/viewAll/edit/finalize/print` (no `:create`/`:delete` — edits/finalizes Sales' drafts rather than starting new ones; `scopeOfWork:viewAll` added 2026-07-23, alongside the pre-existing `quotations:viewAll` — an Approver must be able to see everyone's records to act on them). Maps to "Sales Manager." |
-| Approver Level 2 | — | — | Same rights as Level 1 in this build, including the same Scope of Work grants (see Known Simplifications below). Maps to "CEO." |
-| Viewer | — | — | `*:view` only (incl. `customers:view`, `scopeOfWork:view`), plus `quotations:viewAll`/`scopeOfWork:viewAll` — a read-only role that can't act on anything still needs to be able to *see* everything to be useful as a viewer. |
+| Accounting User | — | — | Added 2026-08-17. Runs the AR billing workflow end to end: `ar:view/create/issue/cancel` (`:cancel` added 2026-08-18 — see "Accounts Receivable" below) + `scopeOfWork:view/viewAll` (must see every job company-wide to bill it, not just its own) + `customers:view/edit` + `dashboard:view`. No quotation/product/user/service access at all. See "Accounts Receivable" below. |
+| Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Also `scopeOfWork:view/viewAll/edit/finalize/print` (no `:create`/`:delete` — edits/finalizes Sales' drafts rather than starting new ones; `scopeOfWork:viewAll` added 2026-07-23, alongside the pre-existing `quotations:viewAll` — an Approver must be able to see everyone's records to act on them). Also `ar:view/cancel` (added 2026-08-17 — oversight, not day-to-day issuing). Maps to "Sales Manager." |
+| Approver Level 2 | — | — | Same rights as Level 1 in this build, including the same Scope of Work and AR grants (see Known Simplifications below). Maps to "CEO." |
+| Viewer | — | — | `*:view` only (incl. `customers:view`, `scopeOfWork:view`, `ar:view` added 2026-08-17), plus `quotations:viewAll`/`scopeOfWork:viewAll` — a read-only role that can't act on anything still needs to be able to *see* everything to be useful as a viewer. |
 
 **No new permission was added for the 2026-07-10 Job Type / Executive Dashboard pass.** `GET /api/jobtypes` reuses `quotations:view` (already required to touch a quote); `POST`/`PATCH /api/jobtypes` reuse `company:manage` (Super Admin only, matching the existing precedent for company-wide configuration data like bank/VAT/T&C). `GET /api/dashboard` continues to reuse `dashboard:view`, which every default role already has — two of its response sections (`activityTimeline`, `approvalDashboard`) are additionally gated per-caller by the `auditLog:view`/`quotations:approve` the caller already has, rather than a new dashboard-specific permission.
 
@@ -455,6 +458,55 @@ Audit logging: every action writes a server-side `AuditLogEntry` via `writeServi
 module `"บริการ"`, with `relatedServiceReportId`/`relatedServiceTemplateId` fields — `userId`/
 `userName`/`roleName` always come from the server's own `AuthContext`, never client input, same
 non-forgeable convention as every other module.
+
+### Accounts Receivable (added 2026-08-17 Phase 1; `ar:cancel` for Accounting User added 2026-08-18)
+
+4 permissions, gating both the AR/milestone-billing engine and every page under the "บัญชี" sidebar
+group (per-document-type list pages, the monthly summary, the Accounting Dashboard, the NCR print
+calibration dialog — all of them reuse `ar:view`/`ar:issue`/`ar:cancel`, no page-specific permission
+was added for any of them):
+
+| Permission | Gates |
+|---|---|
+| `ar:view` | `GET /api/ar-milestones`, `GET /api/ar-documents` (incl. `docType`/`month`/`salesperson`-filtered list views), `GET /api/ar-documents/:id`, `GET /api/ar-dashboard`, and every "บัญชี" sidebar page's mere visibility (the 4 document-type pages, monthly summary, Accounting Dashboard). Also gates downloading checklist attachments. |
+| `ar:create` | `POST /api/ar-milestones/open`, `PATCH /api/ar-milestones/:id`, `POST /api/ar-milestones/:id/refresh`, and the checklist-attachment upload/delete routes — everything that prepares a milestone for billing but doesn't issue a document. |
+| `ar:issue` | `POST /api/ar-documents` (issues the AR-or-IV + companion BI together) and `POST /api/ar-documents/:id/receipt` (issues an RE against an already-issued AR/IV) — the two "produces a real numbered document" actions. |
+| `ar:cancel` | `POST /api/ar-documents/:id/cancel` — a status-flip only, never a delete (see docs/DATABASE.md `ar_documents`). |
+
+Default grants: **Super Admin**/**Administrator** get all 4; **Approver Level 1/2** get
+`ar:view`/`ar:cancel` only (oversight + the ability to void a mistake, not day-to-day issuing);
+**Viewer** gets `ar:view` only; **Sales User**/**Service Engineer** get none — AR is outside both
+roles' defined duties. **Accounting User** (see below) is the role that actually runs AR billing.
+
+#### Accounting User (added 2026-08-17)
+
+The 8th default role. `ar:view/create/issue/cancel` (all 4 — the only default role besides
+Super Admin/Administrator to hold every AR permission) + `scopeOfWork:view/viewAll` (must see every
+job company-wide to bill it, not just its own — the one deliberate departure from a typical
+Sales-side own-records-only role) + `customers:view/edit` + `dashboard:view`. No quotation/product/
+user/service access at all — `isSystem: false`, so an admin can rename, re-scope, or delete it, same
+as Sales User/Approver/Viewer.
+
+**`ar:cancel` was missing from this role for its first day** (2026-08-17–18) — every *other* default
+role touched by the AR migration got `ar:cancel`, but the role actually meant to issue documents day
+to day couldn't cancel its own mistakes without escalating to an Administrator or Approver. Closed
+2026-08-18 via a dedicated migration, `ar-cancel-for-accounting-user-2026-08-18` (see below) — a real
+gap, not a deliberate design choice, unlike Approver 1/2's `ar:view/cancel`-only grant (which *is*
+deliberate: oversight without day-to-day issuing rights).
+
+Audit logging: every issue/cancel action writes a server-side `AuditLogEntry` via
+`writeArAuditEntry()`, module `"บัญชีลูกหนี้"`, with `relatedScopeId`/`relatedScopeNumber` fields —
+`userId`/`userName`/`roleName` always come from the server's own `AuthContext`, same non-forgeable
+convention as every other module.
+
+**RBAC catch-up** (same `syncDefaultRoles()`/`applyRbacMigrations()`/`bootstrapRbac()` machinery
+documented under "Service" above): `accounting_user` itself reached an already-provisioned database
+via `syncDefaultRoles()` (a brand-new role key, purely additive). Two `RBAC_MIGRATIONS` entries then
+backfilled *existing* roles: `ar-permissions-2026-08-17` (Administrator/Approver 1/Approver 2/Viewer
+gain their AR grants) and `ar-cancel-for-accounting-user-2026-08-18` (Accounting User itself gains
+the `ar:cancel` it was missing). Both covered by `tests/api/rbacMigrations.test.ts` (in-memory
+MongoDB), including the "revoked stays revoked" and "skips a deleted role" properties. **What is
+still a human decision**: which real employees get assigned the Accounting User role.
 
 ### Departments + Teams + Tiered Visibility (added 2026-08-14)
 

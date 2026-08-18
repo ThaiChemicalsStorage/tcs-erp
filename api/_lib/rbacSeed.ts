@@ -82,6 +82,18 @@ const RBAC_MIGRATIONS: RbacMigration[] = [
       viewer: ["ar:view"],
     },
   },
+  {
+    // accounting_user itself (the role real accounting staff actually get) was missing ar:cancel
+    // from day one — every OTHER role touched by the migration above got it, but the role meant to
+    // issue AR/IV/BI/RE day to day couldn't cancel its own mistakes without an Administrator/
+    // Approver. accounting_user is not a brand-new role key here (syncDefaultRoles() already
+    // inserted it on 2026-08-17), so this migration is what actually reaches an already-provisioned
+    // database — the same gap every "add a permission to an existing role" pass has needed to close.
+    id: "ar-cancel-for-accounting-user-2026-08-18",
+    grants: {
+      accounting_user: ["ar:cancel"],
+    },
+  },
 ];
 
 /**

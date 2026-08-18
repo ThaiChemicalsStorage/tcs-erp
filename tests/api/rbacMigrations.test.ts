@@ -138,3 +138,52 @@ describe("applyRbacMigrations (the once-only service permission backfill)", () =
     expect(await permissionsOf("super_admin")).toEqual(before);
   });
 });
+
+describe("applyRbacMigrations (accounting_user gains ar:cancel, 2026-08-18)", () => {
+  const AR_CANCEL_MIGRATION_ID = "ar-cancel-for-accounting-user-2026-08-18";
+
+  // Simulates a database provisioned on/after 2026-08-17 (accounting_user already exists via
+  // syncDefaultRoles()) but before this fix — the real gap this migration closes.
+  beforeEach(async () => {
+    await roles.updateOne({ key: "accounting_user" }, { $pull: { permissions: "ar:cancel" } });
+  });
+
+  it("grants accounting_user ar:cancel", async () => {
+    expect(await permissionsOf("accounting_user")).not.toContain("ar:cancel");
+    await applyRbacMigrations();
+    expect(await permissionsOf("accounting_user")).toContain("ar:cancel");
+  });
+
+  it("does not touch a role that never had ar:* at all", async () => {
+    const before = await permissionsOf("sales_user");
+    await applyRbacMigrations();
+    expect(await permissionsOf("sales_user")).toEqual(before);
+  });
+
+  it("records the migration so a second run is idempotent", async () => {
+    await applyRbacMigrations();
+    const marker = await markers.findOne({ _id: AR_CANCEL_MIGRATION_ID });
+    expect(marker?.appliedRoleKeys).toEqual(["accounting_user"]);
+
+    const snapshot = await permissionsOf("accounting_user");
+    await applyRbacMigrations();
+    expect(await permissionsOf("accounting_user")).toEqual(snapshot);
+  });
+
+  it("a permission an admin revokes afterward stays revoked", async () => {
+    await applyRbacMigrations();
+    await roles.updateOne({ key: "accounting_user" }, { $pull: { permissions: "ar:cancel" } });
+
+    await applyRbacMigrations();
+
+    expect(await permissionsOf("accounting_user")).not.toContain("ar:cancel");
+  });
+
+  it("skips the role if an admin has since deleted it", async () => {
+    await roles.deleteOne({ key: "accounting_user" });
+    await applyRbacMigrations();
+    expect(await roles.findOne({ key: "accounting_user" })).toBeNull();
+    const marker = await markers.findOne({ _id: AR_CANCEL_MIGRATION_ID });
+    expect(marker?.appliedRoleKeys).not.toContain("accounting_user");
+  });
+});

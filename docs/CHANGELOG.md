@@ -4,7 +4,39 @@
 
 ---
 
-## 2026-08-18k (absolute latest) — BI (ใบแจ้งหนี้/ใบวางบิล) confirmed as NCR stock too — data-only print mode added
+## 2026-08-18l (absolute latest) — Accounting RBAC gap closed: `accounting_user` gains `ar:cancel`, `docs/RBAC.md` gains its first AR write-up
+
+Direct request: "ทำสิทธิ์ของบัญชีมาด้วย" (complete the Accounting module's permissions). Auditing the
+existing `ar:*` grants against the 2026-08-17 AR migration found that `accounting_user` — the
+default role real accounting staff actually get — was the one role that migration *should* have
+covered but didn't: Administrator/Approver 1/Approver 2/Viewer all received their `ar:*` grants that
+day, but `accounting_user` itself (inserted the same day via `syncDefaultRoles()`, not through that
+migration) never got `ar:cancel`. Net effect: the people issuing AR/IV/BI/RE day to day could not
+cancel their own mis-issued documents without escalating to an Administrator or Approver — a real
+functional gap, not a deliberate design choice (unlike Approver 1/2's intentionally cancel-only
+`ar:view`/`ar:cancel` pair). Separately, `docs/RBAC.md` had never documented the AR permission set
+or the `accounting_user` role at all since Phase 1 shipped.
+
+**Built**: `"ar:cancel"` added to `accounting_user` in `src/lib/roles.ts`; a new append-only
+`RBAC_MIGRATIONS` entry, `ar-cancel-for-accounting-user-2026-08-18`, in `api/_lib/rbacSeed.ts` (backfills
+already-provisioned databases — `syncDefaultRoles()` alone only reaches a *missing* role, not a
+permission gap on one that already exists); a new 5-test `describe` block in
+`tests/api/rbacMigrations.test.ts` mirroring the existing Service-migration test pattern (grants the
+permission, doesn't touch unrelated roles, records the migration marker/idempotent, a later admin
+revoke stays revoked, skips a since-deleted role); `docs/RBAC.md` gains a full "Accounts Receivable"
+section (permission-to-route table, default-grants summary, an "Accounting User" subsection
+documenting this exact gap/fix) plus updated default-roles table rows for all 8 roles' `ar:*` grants.
+
+**Verified**: `npx vitest run tests/api/rbacMigrations.test.ts` — 14/14 passed; full gate (`tsc`
+root + `-p tsconfig.api.json`, `lint`, `build`, `test`) all clean, 203/203 tests passing. Live
+browser session: created a disposable local-only `accounting_user`-role account, confirmed
+"ยกเลิกเอกสาร" now renders on the ใบกำกับภาษี/ใบส่งสินค้า (IV) list for that role, confirmed the real
+local dev MongoDB's `accounting_user` role document and the `rbac_migrations` marker both reflect the
+fix (not just the in-memory test fixture) — then deleted the test account.
+
+---
+
+## 2026-08-18k — BI (ใบแจ้งหนี้/ใบวางบิล) confirmed as NCR stock too — data-only print mode added
 
 The owner sent a photo of the actual blank pre-printed Billing Note form stock: "ตัวใบแจ้งหนี้มันมา
 เป็นฟอร์มเปล่าด้วยออกแบบให้ด้วยเอาขอแบบเหมือนเป๊ะๆ" — confirming it IS pre-purchased NCR/carbonless

@@ -4,7 +4,35 @@
 
 ---
 
-## Session — 2026-08-18 (continued, absolute latest), Accounting Dashboard
+## Session — 2026-08-18 (continued, absolute latest), Accounting RBAC audit
+
+### What was implemented
+Direct request: "ทำสิทธิ์ของบัญชีมาด้วย" (complete the Accounting module's permissions). Audited every
+`ar:*` grant across all 8 default roles against the 2026-08-17 AR migration and found `accounting_user`
+— the role real accounting staff actually get — was the one role that migration should have reached
+but didn't (it was inserted the same day via `syncDefaultRoles()`, a separate code path from the
+migration that backfilled `ar:cancel` onto Administrator/Approver 1/Approver 2/Viewer). Net effect: the
+people issuing AR/IV/BI/RE day to day couldn't cancel their own mis-issued documents without
+escalating. Fixed via a new append-only `RBAC_MIGRATIONS` entry (same pattern every prior module gap
+has used), 5 new tests, and — since `docs/RBAC.md` had never documented AR/`accounting_user` at all —
+a full new "Accounts Receivable" section plus updated role-table rows.
+
+### Problems found/fixed
+- The `accounting_user` → `ar:cancel` gap itself (see above) — a real functional gap, not a
+  deliberate cancel-only design like Approver 1/2's grant.
+- `docs/RBAC.md` documentation gap: zero mention of AR permissions or the `accounting_user` role
+  since Phase 1 shipped 2026-08-17 — closed in the same pass.
+
+### Verification
+`npx vitest run tests/api/rbacMigrations.test.ts` — 14/14 passed; full gate (`tsc` both configs /
+`lint` / `build` / `test`) clean, 203/203. Live browser session: disposable `accounting_user`-role
+test account confirmed "ยกเลิกเอกสาร" now renders on the IV list; confirmed directly against the real
+local dev MongoDB (not just the in-memory test fixture) that the role document and the
+`rbac_migrations` marker both reflect the fix. Test account deleted after.
+
+---
+
+## Session — 2026-08-18 (continued), Accounting Dashboard
 
 ### What was implemented
 Direct request: "ทำ Dashboard เฉพาะแยกออกมาในหมวดของบัญชีให้หน่อย ขอแบบดูได้แบบละเอียด" — a dedicated,
