@@ -4,7 +4,35 @@
 
 ---
 
-## 2026-08-18n (absolute latest) — Manual Tax Invoice creation (AR/IV), "+ create" button matching Quotation's style
+## 2026-08-18o (absolute latest) — Accounting list pages' status cards now mirror the filter tabs, matching Delivery Order's layout
+
+**Feature**: Direct request, with a screenshot of the Delivery Order list page as the reference: "ทำ
+ออกมาเป็นสถานะออกมาด้วยแบบนี้" — clarified as "take this card+tab layout and apply it to the Accounting
+AR/IV/BI/RE pages." Research first: `ArDocumentListPage.tsx`'s 4 KPI cards and 3 filter tabs already
+used the *exact same* Tailwind classes as Delivery Order's (pixel-identical card/grid/tab styling —
+confirmed via a side-by-side code diff) — the only real gap was semantic. Delivery Order's 4 cards
+mirror its 4 filter-tab statuses 1:1 (ทั้งหมด/Draft/รออนุมัติ/Final); AR's cards showed unrelated
+metrics (this-month count, this-month money total) that didn't mirror its own 3 tabs
+(ทั้งหมด/ใช้งาน/ยกเลิกแล้ว).
+
+**Files Modified**: `src/pages/accounting/ArDocumentListPage.tsx` (shared by all 4 AR/BI/RE/IV pages)
+— the KPI card array now reads `[ทั้งหมด, ใช้งาน, ยกเลิกแล้ว]` (3 cards, matching the 3 filter tabs
+exactly), colored to match the table's own status-badge colors (green for ใช้งาน, red for ยกเลิกแล้ว,
+same hexes as the badge). Removed the now-unused `thisMonthDocs`/`thisMonthTotal`/`now`/`thisMonth`
+locals (the money-total card they fed is gone from this view — that figure still lives on the
+existing "สรุปเอกสารประจำเดือน" monthly report page, not lost from the app).
+
+**Reason**: Direct visual-consistency request from the owner, confirmed via a quick check (which page
+should get the layout) since the request's exact target wasn't stated in the first message.
+
+**Verified**: `npx tsc --noEmit` (both configs, incl. the removed-locals cleanup)/`npm run lint` (0
+errors)/`npm run build`/`npm test` (207/207, unchanged). Live-verified via screenshot on both the AR
+and BI pages with a disposable `accounting_user`-role test account — cards render correctly, colors
+match the status badges, counts match the filter tabs. Test account and screenshots deleted after.
+
+---
+
+## 2026-08-18n — Manual Tax Invoice creation (AR/IV), "+ create" button matching Quotation's style
 
 **Feature**: Direct request: "อยากได้เป็นแบบที่กดสร้างเหมือนปุ่มในหน้าสร้างใบเสนอราคา...ปรับใช้กับของแผนก
 บัญชีทุกอันเลย" (want a "+ create" button styled like Quotation's, applied everywhere in Accounting).

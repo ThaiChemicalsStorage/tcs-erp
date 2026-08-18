@@ -45,6 +45,13 @@ job-centric, unchanged) → ใบรับเงินมัดจำ/ใบก
 (RE) → ใบกำกับภาษี/ใบส่งสินค้า (IV) → สรุปเอกสารประจำเดือน. All gated on `ar:view` (no new
 permissions — degraded view-only UI without `ar:issue`/`ar:cancel`).
 
+**2026-08-18, later the same day**: the summary cards were re-pointed to mirror the filter tabs 1:1
+(ทั้งหมด/ใช้งาน/ยกเลิกแล้ว — matching `DeliveryOrderList.tsx`'s own card-mirrors-tabs pattern exactly,
+not just its Tailwind classes, which already matched) per a direct request with a Delivery Order
+screenshot as the reference. The this-month count/money cards that used to sit here were dropped from
+this view (that money figure still lives on the "สรุปเอกสารประจำเดือน" monthly report page) — card
+colors now match the table's own status-badge colors. See CHANGELOG.md 2026-08-18o.
+
 **New in the backend (Phase 1.5)**:
 - **RE (ใบเสร็จรับเงิน) document type** — `ArDocumentType` gains `"RE"`; numbering `RE{YY}{MM}{SEQ}`
   via the same atomic Buddhist-year counter (`re_{yy}{mm}`); `POST /api/ar-documents/:id/receipt`

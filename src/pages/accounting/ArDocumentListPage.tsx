@@ -140,11 +140,6 @@ export function ArDocumentListPage({
     return map;
   }, [receiptByInvoiceId]);
 
-  const now = new Date();
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const thisMonthDocs = documents.filter((d) => d.docDate.startsWith(thisMonth));
-  const thisMonthTotal = thisMonthDocs.filter((d) => d.status === "issued").reduce((sum, d) => sum + d.netTotal, 0);
-
   const normalizedSearch = search.trim().toLowerCase();
   const filtered = documents
     .filter((d) => statusFilter === "all" || d.status === statusFilter)
@@ -250,11 +245,17 @@ export function ArDocumentListPage({
         )}
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* การ์ดสรุปสถานะ 3 ใบ ตรงกับแท็บกรองสถานะด้านล่างแบบ 1:1 เสมอ (ทั้งหมด/ใช้งาน/ยกเลิกแล้ว) — สีเดียวกับ
+          badge สถานะในตาราง (เขียว = ใช้งาน, แดง = ยกเลิกแล้ว) เพื่อให้เห็นความหมายตรงกันทั้งหน้า ปรับ
+          layout ให้ตรงกับหน้าใบส่งมอบสินค้า (Delivery Order) ตามคำขอ 2026-08-18 — ยอดรวมเดือนนี้ (บาท) ที่
+          เคยอยู่ตรงนี้ยังคงอยู่ในสรุปเอกสารประจำเดือน (ArMonthlyReportPage) ไม่ได้หายไปจากระบบ
+          Status-summary cards mirror the filter tabs below 1:1 (ทั้งหมด/ใช้งาน/ยกเลิกแล้ว), same color
+          language as the table's own status badges — matches Delivery Order's card layout per direct
+          request. The this-month money total previously shown here still lives on the monthly report page. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: "ทั้งหมด", value: String(documents.length), color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
-          { label: "ออกเดือนนี้", value: String(thisMonthDocs.length), color: "#c9a84c", bg: "from-[#c9a84c]/15 to-[#c9a84c]/5" },
-          { label: "ยอดรวมเดือนนี้ (บาท)", value: money(thisMonthTotal), color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
+          { label: "ใช้งาน", value: String(documents.filter((d) => d.status === "issued").length), color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
           { label: "ยกเลิกแล้ว", value: String(documents.filter((d) => d.status === "cancelled").length), color: "#e05252", bg: "from-[#e05252]/15 to-[#e05252]/5" },
         ].map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">

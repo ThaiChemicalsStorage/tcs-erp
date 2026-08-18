@@ -4,6 +4,28 @@
 
 ---
 
+## Session — 2026-08-18 (continued, absolute latest), Accounting status cards match Delivery Order layout
+
+### What was implemented
+Direct request with a Delivery Order screenshot as the reference: "ทำออกมาเป็นสถานะออกมาด้วยแบบนี้."
+The target page wasn't stated, so asked a clarifying question first — confirmed it meant applying the
+card+tab layout to the Accounting AR/IV/BI/RE pages. Dispatched a research fork to diff the two
+pages' actual code before touching anything: found the Tailwind styling was already pixel-identical
+between Delivery Order's and Accounting's card grids — the only real gap was semantic (Delivery
+Order's cards mirror its filter tabs 1:1; Accounting's didn't). Fixed by swapping the KPI card content
+to `[ทั้งหมด, ใช้งาน, ยกเลิกแล้ว]`, matching the 3 filter tabs and the table's own status-badge colors.
+
+### Problems found/fixed
+- None — a clean, small, mechanical change once the actual gap was identified via research rather
+  than guessed at from the screenshot alone.
+
+### Verification
+`npx tsc --noEmit` (both configs)/`npm run lint` (0 errors)/`npm run build`/`npm test` (207/207,
+unchanged). Live-verified via screenshot on the AR and BI pages with a disposable
+`accounting_user`-role test account. Test account and screenshots deleted after.
+
+---
+
 ## Session — 2026-08-18 (continued, absolute latest), Manual Tax Invoice creation (AR/IV)
 
 ### What was implemented
