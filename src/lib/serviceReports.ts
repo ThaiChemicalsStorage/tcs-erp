@@ -236,7 +236,7 @@ export async function fetchAllServiceReports(): Promise<ServiceReportListItem[]>
 // ดึงข้อมูลรายงานบริการแบบเต็มตาม id
 // Fetches a single Service Report's full content by id
 export async function fetchServiceReport(id: string): Promise<ServiceReport> {
-  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${id}`);
+  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${encodeURIComponent(id)}`);
   return serviceReport;
 }
 
@@ -253,7 +253,7 @@ export async function createServiceReport(draft: ServiceReportDraft): Promise<Se
 // แก้ไขรายงานบริการที่ยังเป็นร่าง
 // Updates a Draft Service Report
 export async function updateServiceReport(id: string, fields: ServiceReportUpdate): Promise<ServiceReport> {
-  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${id}`, {
+  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(fields),
   });
@@ -263,7 +263,7 @@ export async function updateServiceReport(id: string, fields: ServiceReportUpdat
 // เปลี่ยนสถานะรายงานบริการ (เสร็จสิ้น / เปิดใหม่ / ยกเลิก)
 // Changes a Service Report's status (complete / reopen / cancel)
 export async function changeServiceReportStatus(id: string, action: ServiceReportStatusAction): Promise<ServiceReport> {
-  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${id}/status`, {
+  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${encodeURIComponent(id)}/status`, {
     method: "POST",
     body: JSON.stringify({ action }),
   });
@@ -273,7 +273,7 @@ export async function changeServiceReportStatus(id: string, action: ServiceRepor
 // ลบ (soft delete) รายงานบริการ
 // Soft-deletes a Service Report
 export async function deleteServiceReport(id: string): Promise<void> {
-  await apiFetch<void>(`/service-reports/${id}`, { method: "DELETE" });
+  await apiFetch<void>(`/service-reports/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 // อ่านไฟล์เป็น base64 (ตัดส่วนหัว data URL ออก)
@@ -301,7 +301,7 @@ export async function uploadServiceReportPhoto(
     ? { blob: (await compressImageFile(file)).blob, fileName: file.name, contentType: "image/webp" }
     : { blob: file, fileName: file.name, contentType: file.type };
   const dataBase64 = await fileToBase64(blob);
-  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${reportId}/photos`, {
+  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${encodeURIComponent(reportId)}/photos`, {
     method: "POST",
     body: JSON.stringify({ ...path, fileName, contentType, dataBase64 }),
   });
@@ -311,7 +311,7 @@ export async function uploadServiceReportPhoto(
 // ลบรูปภาพประกอบรายการตรวจเช็ค
 // Deletes a checklist item photo
 export async function deleteServiceReportPhoto(reportId: string, photoId: string): Promise<ServiceReport> {
-  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${reportId}/photos/${photoId}`, {
+  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${encodeURIComponent(reportId)}/photos/${encodeURIComponent(photoId)}`, {
     method: "DELETE",
   });
   return serviceReport;
@@ -320,7 +320,7 @@ export async function deleteServiceReportPhoto(reportId: string, photoId: string
 // บันทึกการพิมพ์รายงานบริการที่เซิร์ฟเวอร์ (audit log) ก่อนเปิดหน้าต่างพิมพ์ของเบราว์เซอร์
 // Logs the print on the server (audit trail) before the caller opens the browser print dialog
 export async function printServiceReport(reportId: string): Promise<void> {
-  await apiFetch<{ ok: true }>(`/service-reports/${reportId}/print`, { method: "POST" });
+  await apiFetch<{ ok: true }>(`/service-reports/${encodeURIComponent(reportId)}/print`, { method: "POST" });
 }
 
 // ─── Customer approval via time-boxed link / LINE OA (added 2026-08-10) ────────────────────────
@@ -333,7 +333,7 @@ export async function sendServiceReportCustomerApproval(id: string): Promise<{
   sentViaLine: boolean;
   lineError?: string;
 }> {
-  return apiFetch(`/service-reports/${id}/send-approval`, { method: "POST" });
+  return apiFetch(`/service-reports/${encodeURIComponent(id)}/send-approval`, { method: "POST" });
 }
 
 /** The read-only subset the public approval page renders — everything a customer may see, nothing

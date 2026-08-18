@@ -44,3 +44,18 @@ export async function buildOwnershipClause(
 
   return { $or: [{ [ownerField]: ctx.user.id }, { [ownerField]: "" }] };
 }
+
+/**
+ * Binary own-vs-viewAll filter (added 2026-08-18, Project module Stage 3) — for modules with no
+ * team/department visibility tiers. Stage 2 deliberately gave `project`/`materialRequisition`/
+ * `jobOrder`/`purchaseRequest` only `:view`/`:viewAll` (no `:viewTeam`/`:viewDepartment`), since the
+ * departments this module serves (Project/Store/Factory/Purchasing) don't have Sales' team-lead
+ * structure — so `buildOwnershipClause()` above can't be reused as-is (its `modulePrefix` union is
+ * fixed to the 3 modules that actually have all 4 tiers, and `${modulePrefix}:viewTeam`/
+ * `:viewDepartment` must be real `Permission` keys for it to type-check). Same pre-2026-08-14
+ * own-vs-viewAll shape every module used before the tiered cascade existed.
+ */
+export function buildSimpleOwnershipClause(userId: string, hasViewAll: boolean, ownerField: string): Record<string, unknown> {
+  if (hasViewAll) return {};
+  return { $or: [{ [ownerField]: userId }, { [ownerField]: "" }] };
+}

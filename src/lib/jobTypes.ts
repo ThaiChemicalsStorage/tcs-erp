@@ -26,6 +26,6 @@ export async function createJobType(code: string, name: string): Promise<JobType
 // แก้ไขข้อมูลประเภทงานที่มีอยู่ตาม id
 // Updates an existing job type identified by id
 export async function updateJobType(id: string, fields: { code?: string; name?: string; isActive?: boolean }): Promise<JobType> {
-  const { jobType } = await apiFetch<{ jobType: JobType }>(`/jobtypes/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { jobType } = await apiFetch<{ jobType: JobType }>(`/jobtypes/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return jobType;
 }

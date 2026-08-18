@@ -68,7 +68,35 @@ export type Permission =
   | "ar:view"
   | "ar:create"
   | "ar:issue"
-  | "ar:cancel";
+  | "ar:cancel"
+  | "project:view"
+  | "project:viewAll"
+  | "project:create"
+  | "project:edit"
+  | "project:finalize"
+  | "project:print"
+  | "project:delete"
+  | "materialRequisition:view"
+  | "materialRequisition:viewAll"
+  | "materialRequisition:create"
+  | "materialRequisition:edit"
+  | "materialRequisition:finalize"
+  | "materialRequisition:print"
+  | "materialRequisition:delete"
+  | "jobOrder:view"
+  | "jobOrder:viewAll"
+  | "jobOrder:create"
+  | "jobOrder:edit"
+  | "jobOrder:finalize"
+  | "jobOrder:print"
+  | "jobOrder:delete"
+  | "purchaseRequest:view"
+  | "purchaseRequest:viewAll"
+  | "purchaseRequest:create"
+  | "purchaseRequest:edit"
+  | "purchaseRequest:finalize"
+  | "purchaseRequest:print"
+  | "purchaseRequest:delete";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -139,6 +167,34 @@ export const ALL_PERMISSIONS: Permission[] = [
   "ar:create",
   "ar:issue",
   "ar:cancel",
+  "project:view",
+  "project:viewAll",
+  "project:create",
+  "project:edit",
+  "project:finalize",
+  "project:print",
+  "project:delete",
+  "materialRequisition:view",
+  "materialRequisition:viewAll",
+  "materialRequisition:create",
+  "materialRequisition:edit",
+  "materialRequisition:finalize",
+  "materialRequisition:print",
+  "materialRequisition:delete",
+  "jobOrder:view",
+  "jobOrder:viewAll",
+  "jobOrder:create",
+  "jobOrder:edit",
+  "jobOrder:finalize",
+  "jobOrder:print",
+  "jobOrder:delete",
+  "purchaseRequest:view",
+  "purchaseRequest:viewAll",
+  "purchaseRequest:create",
+  "purchaseRequest:edit",
+  "purchaseRequest:finalize",
+  "purchaseRequest:print",
+  "purchaseRequest:delete",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -210,6 +266,34 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "ar:create": "จัดการ checklist และแนบเอกสารงวดบิล",
   "ar:issue": "ออกเอกสาร AR / ใบกำกับภาษี / ใบวางบิล",
   "ar:cancel": "ยกเลิกเอกสารบัญชีลูกหนี้",
+  "project:view": "ดูโครงการ",
+  "project:viewAll": "ดูโครงการของผู้อื่น",
+  "project:create": "สร้างโครงการ",
+  "project:edit": "แก้ไขโครงการ (แบ่งรายการเข้าสาขาการจัดหา)",
+  "project:finalize": "ยืนยันสถานะ Final ของโครงการ",
+  "project:print": "พิมพ์ / ส่งออกโครงการ",
+  "project:delete": "ลบโครงการ",
+  "materialRequisition:view": "ดูใบเบิกและใบคืนวัสดุ",
+  "materialRequisition:viewAll": "ดูใบเบิกและใบคืนวัสดุของผู้อื่น",
+  "materialRequisition:create": "สร้างใบเบิกและใบคืนวัสดุ",
+  "materialRequisition:edit": "แก้ไขใบเบิกและใบคืนวัสดุ",
+  "materialRequisition:finalize": "ยืนยันสถานะ Final ของใบเบิกและใบคืนวัสดุ",
+  "materialRequisition:print": "พิมพ์ / ส่งออกใบเบิกและใบคืนวัสดุ",
+  "materialRequisition:delete": "ลบใบเบิกและใบคืนวัสดุ",
+  "jobOrder:view": "ดูใบสั่งงาน",
+  "jobOrder:viewAll": "ดูใบสั่งงานของผู้อื่น",
+  "jobOrder:create": "สร้างใบสั่งงาน",
+  "jobOrder:edit": "แก้ไขใบสั่งงาน",
+  "jobOrder:finalize": "ยืนยันสถานะ Final ของใบสั่งงาน",
+  "jobOrder:print": "พิมพ์ / ส่งออกใบสั่งงาน",
+  "jobOrder:delete": "ลบใบสั่งงาน",
+  "purchaseRequest:view": "ดูใบขอซื้อ",
+  "purchaseRequest:viewAll": "ดูใบขอซื้อของผู้อื่น",
+  "purchaseRequest:create": "สร้างใบขอซื้อ",
+  "purchaseRequest:edit": "แก้ไขใบขอซื้อ",
+  "purchaseRequest:finalize": "ยืนยันสถานะ Final ของใบขอซื้อ",
+  "purchaseRequest:print": "พิมพ์ / ส่งออกใบขอซื้อ",
+  "purchaseRequest:delete": "ลบใบขอซื้อ",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -281,6 +365,34 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "ar:create": "permission.arCreate",
   "ar:issue": "permission.arIssue",
   "ar:cancel": "permission.arCancel",
+  "project:view": "permission.projectView",
+  "project:viewAll": "permission.projectViewAll",
+  "project:create": "permission.projectCreate",
+  "project:edit": "permission.projectEdit",
+  "project:finalize": "permission.projectFinalize",
+  "project:print": "permission.projectPrint",
+  "project:delete": "permission.projectDelete",
+  "materialRequisition:view": "permission.materialRequisitionView",
+  "materialRequisition:viewAll": "permission.materialRequisitionViewAll",
+  "materialRequisition:create": "permission.materialRequisitionCreate",
+  "materialRequisition:edit": "permission.materialRequisitionEdit",
+  "materialRequisition:finalize": "permission.materialRequisitionFinalize",
+  "materialRequisition:print": "permission.materialRequisitionPrint",
+  "materialRequisition:delete": "permission.materialRequisitionDelete",
+  "jobOrder:view": "permission.jobOrderView",
+  "jobOrder:viewAll": "permission.jobOrderViewAll",
+  "jobOrder:create": "permission.jobOrderCreate",
+  "jobOrder:edit": "permission.jobOrderEdit",
+  "jobOrder:finalize": "permission.jobOrderFinalize",
+  "jobOrder:print": "permission.jobOrderPrint",
+  "jobOrder:delete": "permission.jobOrderDelete",
+  "purchaseRequest:view": "permission.purchaseRequestView",
+  "purchaseRequest:viewAll": "permission.purchaseRequestViewAll",
+  "purchaseRequest:create": "permission.purchaseRequestCreate",
+  "purchaseRequest:edit": "permission.purchaseRequestEdit",
+  "purchaseRequest:finalize": "permission.purchaseRequestFinalize",
+  "purchaseRequest:print": "permission.purchaseRequestPrint",
+  "purchaseRequest:delete": "permission.purchaseRequestDelete",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -359,6 +471,40 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
     label: "บัญชีลูกหนี้",
     labelKey: "nav.accounting",
     permissions: ["ar:view", "ar:create", "ar:issue", "ar:cancel"],
+  },
+  {
+    label: "โครงการ",
+    labelKey: "nav.project",
+    permissions: [
+      "project:view",
+      "project:viewAll",
+      "project:create",
+      "project:edit",
+      "project:finalize",
+      "project:print",
+      "project:delete",
+      "materialRequisition:view",
+      "materialRequisition:viewAll",
+      "materialRequisition:create",
+      "materialRequisition:edit",
+      "materialRequisition:finalize",
+      "materialRequisition:print",
+      "materialRequisition:delete",
+      "jobOrder:view",
+      "jobOrder:viewAll",
+      "jobOrder:create",
+      "jobOrder:edit",
+      "jobOrder:finalize",
+      "jobOrder:print",
+      "jobOrder:delete",
+      "purchaseRequest:view",
+      "purchaseRequest:viewAll",
+      "purchaseRequest:create",
+      "purchaseRequest:edit",
+      "purchaseRequest:finalize",
+      "purchaseRequest:print",
+      "purchaseRequest:delete",
+    ],
   },
   {
     label: "ระบบ",

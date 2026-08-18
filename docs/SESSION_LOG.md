@@ -4,7 +4,117 @@
 
 ---
 
-## Session — 2026-08-14i (absolute latest), Departments (manageable) + Sales Teams + tiered visibility
+## Session — 2026-08-18b (absolute latest), Project module Stage 6: live browser verification, 3 real bugs found and fixed
+
+### What was implemented
+Explicit instruction: walk through creating/viewing all 4 Project-module document types in a real
+browser (Thai and English), specifically hunting for the class of bug static type-checks can't catch
+— text overflow, truncation, layout breaks from English strings running longer than Thai ones — fix
+anything found, do a final holistic check against open items from earlier stages, then commit Stage 2
+through the i18n fix as one commit if everything checked out clean, or report back instead if
+something surfaced unresolved. Something did surface — three real, previously-undiscovered bugs,
+found via actual reproduction (network traces, not just reading code), all fixed and
+regression-tested before continuing. See CHANGELOG.md 2026-08-18b for the itemized writeup.
+
+### Decisions / gotchas worth remembering
+- **A live click-through found bugs that four separate passes of `tsc`/`lint`/`build`/`test` had all
+  missed, across two different Stage 5-vintage sessions.** The quotation URL-fragment bug and the
+  full-ISO-timestamp-vs-`YYYY-MM-DD` bug are both the kind of defect that's invisible to every static
+  check this app runs: TypeScript doesn't know a runtime string will contain `#`, and a passing test
+  suite only proves the tests that exist pass — neither one had a test exercising "save an
+  already-created record" or "PATCH a record whose id contains a special character." This is the
+  concrete argument for why "not verified against a live deployment/browser" belongs in a module's
+  Known Limitations as a real, named risk, not boilerplate.
+- **When a live bug surfaces outside the stage's own scope, stop and ask before fixing — but do fix
+  it once asked, and keep it out of the stage's commit.** The quotation URL-encoding bug is a
+  Quotation-module defect, not a Project-module one; it was found only because Project's own
+  verification needed a working Quotation to seed test data. Surfaced it explicitly via
+  AskUserQuestion before touching anything (severity + reproduction + proposed fix), got explicit
+  "fix now" approval, then treated it as a separate, clearly-scoped change — not silently folded into
+  the Project-module commit message, and audited *systemically* across all 20 `src/lib/*.ts` files
+  matching the pattern rather than patching only the one call site that happened to be observed
+  failing (the same defect existed, dormant, in 17 other files' id-in-URL calls).
+- **A confirmed reproduction beats a plausible one, especially before writing "this is the root
+  cause" in permanent documentation.** For the description-truncation bug, the actual browser
+  screenshot after the fix (partial text + a horizontal scrollbar visible) was the confirmation used,
+  not just "the code change looks right." For the date-field bug, the fix was verified by watching
+  the real network response flip from 400 to 200 on a freshly-created document, not by inspecting the
+  code and assuming it would work — reused an existing test record first, which still failed (because
+  its bad data predated the fix), and that false negative was itself worth understanding before
+  concluding the fix was correct, rather than being alarmed by it.
+- **A `ScopeOfWorkItem.id`-stability gap was found and documented but deliberately not fixed this
+  pass** — it's a data-model change to Scope of Work (an already-shipped, heavily-relied-upon
+  module), not Project, and the proper fix (threading `QuoteLine.id` through as a stable correlation
+  key) has a wider blast radius than this stage's mandate. Correcting a prior stage's own
+  documentation claim ("keeps its links" in MODULES/Project.md) to be honest about this, rather than
+  leaving an inaccurate guarantee on record, was treated as equally important as fixing the 3 bugs
+  that were fixed.
+
+### What's next
+Commit decision (Stage 2 through this Stage 6 fix pass) is the immediate next step, gated on this
+session's own "everything checked out clean" holistic-review requirement. The `ScopeOfWorkItem.id`
+stability gap (TODO.md) is real follow-up work, scoped to a different module. A genuine live-browser
+walkthrough against the *actual deployed* huma-erp.com production server (as opposed to this
+session's local dev stack) has still never happened for this module.
+
+---
+
+## Session — 2026-08-18, Project module Stage 5: Job Order + Purchase Request frontend, i18n retrofit
+
+### What was implemented
+Explicit "COMBINED STAGE 5 + i18n FIX" instruction: build Job Order + Purchase Request's frontend
+(their backend already existed from Stage 3), and fix Project + Material Requisition's Stage-4
+hardcoded-Thai UI in the same pass, so the two new modules got real i18n from the start instead of
+being translated after the fact. Required 3 investigation steps up front (all done via direct code
+reading, not assumption) before any UI code was written: confirmed `materialRequisition:viewAll`
+already correctly gated the standalone list (no bug — reported honestly as "already correct" rather
+than inventing a fix); read `i18n.tsx` and studied Quotation/Scope of Work/Delivery Order's existing
+usage pattern; confirmed via grep that neither existing print document imports `useI18n` and applied
+that precedent to all 4 print documents here. See CHANGELOG.md 2026-08-18 for the itemized diff and
+[MODULES/Project.md](./MODULES/Project.md) (fully rewritten) for the module writeup.
+
+### Decisions / gotchas worth remembering
+- **A prior message in this same session had already claimed Stage 5 was done and asked me to fix
+  its i18n** — that message was factually wrong (Stage 5 hadn't been built yet, only Stage
+  4/Material Requisition existed). Caught the discrepancy by checking actual repo state rather than
+  trusting the message, surfaced it via AskUserQuestion instead of silently proceeding on a false
+  premise, and the user paused rather than correcting in the moment — the real combined instruction
+  came later. Worth remembering generally: a user's framing of "what's already built" can be stale
+  relative to what's actually in the repo; verify before acting on it, especially in a long session
+  where earlier stages may be misremembered.
+- **`TranslationKey = keyof typeof translations.th` only proves the Thai dictionary has every used
+  key — it says nothing about the English dictionary.** A missing `en` entry fails silently at
+  runtime (falls back to Thai) with zero compile error. Relying on `tsc --noEmit` passing as proof
+  of i18n completeness would have been a false confidence — a separate key-parity verification
+  script was written and run specifically to close this gap. Worth doing on any future i18n pass in
+  this codebase, not just this one.
+- **A `src/lib/*.ts` file that's value-imported into `api/` must never value-import `i18n.tsx`** —
+  this is a real, previously-triggered incident (2026-07-09, documented in CLAUDE.md), not a
+  theoretical concern. It directly decided *not* to wire `buildJobOrderChecklistGroups()`
+  (`src/lib/jobOrder.ts`, imported by `api/_lib/jobOrderHandler.ts`) through i18n, on top of the
+  independent precedent reason (Scope of Work's own checklist builder also never uses i18n).
+- **Business/catalog data and UI chrome look similar in Thai-hardcoded code but must be told apart
+  before an i18n pass touches anything.** The 4 seeded `ProductCategory` names, the 82 catalog item
+  names, and the checklist option labels are real content transcribed from actual reference PDFs —
+  translating them would corrupt data, not fix UI. Confirmed this distinction explicitly before
+  touching any of the 4 modules' files, per direct instruction to treat them differently from the
+  start.
+- **Static verification stood in for a live browser walkthrough again this session** — no network
+  path to a real deployment/browser was available, the same standing limitation logged across many
+  prior sessions in this file. Reported that limitation explicitly rather than implying the
+  "VERIFY: switch to English and click through" instruction had been literally carried out.
+
+### What's next
+ใบส่งมอบงาน (Job/Work Delivery Note) — the 4th document type flagged in the original Project-vs-
+Accounting coordination note — was deliberately scoped out of Stage 1 and is still fully unbuilt; see
+the updated coordination note at the top of CLAUDE.md and TODO.md High Priority. It's the actual
+blocker for Accounting's milestone-billing gate to move from a checklist item to a structured link. A
+real live-browser walkthrough of all 4 Project-module document types in English mode (never done any
+session so far) remains open.
+
+---
+
+## Session — 2026-08-14i, Departments (manageable) + Sales Teams + tiered visibility
 
 ### What was implemented
 Direct business request, following a plain "does the system let me add departments?" question:

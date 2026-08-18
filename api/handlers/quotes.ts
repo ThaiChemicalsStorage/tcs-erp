@@ -6,6 +6,10 @@ import { quotesCollection, usersCollection, rolesCollection, notificationsCollec
 import { handleScopeOfWork } from "../_lib/scopeOfWorkHandler.js";
 import { handleDeliveryOrder } from "../_lib/deliveryOrderHandler.js";
 import { handleAr } from "../_lib/arHandler.js";
+import { handleProject } from "../_lib/projectHandler.js";
+import { handleMaterialRequisition } from "../_lib/materialRequisitionHandler.js";
+import { handleJobOrder } from "../_lib/jobOrderHandler.js";
+import { handlePurchaseRequest } from "../_lib/purchaseRequestHandler.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
@@ -862,6 +866,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (pathname === "/api/ar-milestones" || pathname.startsWith("/api/ar-milestones/")
       || pathname === "/api/ar-documents" || pathname.startsWith("/api/ar-documents/")) {
       return handleAr(req, res);
+    }
+    // Project module (added 2026-08-18, Stage 3) — same sharing pattern, a Project is created from
+    // and always belongs to exactly one Scope of Work, so mounted here rather than getting its own
+    // function file (api/handlers/ is exactly 9 files + 3 plain-route files = 12/12, no headroom —
+    // confirmed Stage 2). The 3 sub-document types (Material Requisition/Job Order/Purchase Request)
+    // are generated from a Project's items, not directly from the Scope of Work, but share this same
+    // mount point for the same slot-availability reason.
+    if (pathname === "/api/projects" || pathname.startsWith("/api/projects/")) {
+      return handleProject(req, res);
+    }
+    if (pathname === "/api/material-requisitions" || pathname.startsWith("/api/material-requisitions/")) {
+      return handleMaterialRequisition(req, res);
+    }
+    if (pathname === "/api/job-orders" || pathname.startsWith("/api/job-orders/")) {
+      return handleJobOrder(req, res);
+    }
+    if (pathname === "/api/purchase-requests" || pathname.startsWith("/api/purchase-requests/")) {
+      return handlePurchaseRequest(req, res);
     }
 
     const parts = getPathSegments(req, "/api/quotes");

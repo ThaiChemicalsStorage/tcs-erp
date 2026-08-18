@@ -81,6 +81,40 @@ export const defaultRoles: Role[] = [
       "ar:create",
       "ar:issue",
       "ar:cancel",
+      // Project module (added 2026-08-18, Stage 2) — granted to Administrator/Super Admin only by
+      // default, per the Stage 1 recommendation: none of the existing default roles (Sales/Approver/
+      // Viewer/Service Engineer/Accounting User) belong to the Project/Store/Factory/Purchasing
+      // departments this module serves. Real custom roles (e.g. "เจ้าหน้าที่โครงการ") should be
+      // created via Role Management once the module is functional — same "manual Role Management
+      // step" pattern every prior module has needed.
+      "project:view",
+      "project:viewAll",
+      "project:create",
+      "project:edit",
+      "project:finalize",
+      "project:print",
+      "project:delete",
+      "materialRequisition:view",
+      "materialRequisition:viewAll",
+      "materialRequisition:create",
+      "materialRequisition:edit",
+      "materialRequisition:finalize",
+      "materialRequisition:print",
+      "materialRequisition:delete",
+      "jobOrder:view",
+      "jobOrder:viewAll",
+      "jobOrder:create",
+      "jobOrder:edit",
+      "jobOrder:finalize",
+      "jobOrder:print",
+      "jobOrder:delete",
+      "purchaseRequest:view",
+      "purchaseRequest:viewAll",
+      "purchaseRequest:create",
+      "purchaseRequest:edit",
+      "purchaseRequest:finalize",
+      "purchaseRequest:print",
+      "purchaseRequest:delete",
     ],
     isSuperAdmin: false,
     isSystem: true,
@@ -297,11 +331,11 @@ export async function createRole(fields: RoleFields): Promise<Role> {
 // แก้ไขบทบาทที่มีอยู่ตาม key
 // Updates an existing role identified by key
 export async function updateRole(key: string, fields: Partial<RoleFields>): Promise<Role> {
-  const { role } = await apiFetch<{ role: Role }>(`/roles/${key}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { role } = await apiFetch<{ role: Role }>(`/roles/${encodeURIComponent(key)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return role;
 }
 // ลบบทบาทตาม key
 // Deletes a role identified by key
 export async function deleteRole(key: string): Promise<void> {
-  await apiFetch<void>(`/roles/${key}`, { method: "DELETE" });
+  await apiFetch<void>(`/roles/${encodeURIComponent(key)}`, { method: "DELETE" });
 }

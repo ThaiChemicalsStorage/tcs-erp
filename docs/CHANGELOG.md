@@ -4,7 +4,138 @@
 
 ---
 
-## 2026-08-17d (absolute latest) — Accounting module Phase 1 (milestone billing): backend built + verified live, UI paused
+## 2026-08-18b (absolute latest) — Project module Stage 6: live browser verification, 3 real bugs found and fixed
+
+Explicit instruction: walk through creating/viewing all 4 Project-module document types in a real
+browser, in both Thai and English, watching specifically for text overflow/truncation/layout breaks
+from English strings being longer than Thai ones — the class of bug static type-checks can't catch —
+and fix anything found, then commit Stage 2 through the i18n fix as one commit if everything checked
+out clean.
+
+**Found and fixed 3 real bugs, none of them theoretical**, all confirmed via actual browser
+reproduction (network traces, not just code reading) before being fixed:
+
+1. **Every quotation save was silently broken app-wide** — not a Project-module bug, but discovered
+   while trying to give a test Scope of Work real line items to test with, and severe enough to
+   report and fix immediately rather than defer. `Quote.id` always contains a literal `#` (e.g.
+   `"Q#260817-0001"`); `src/lib/quotes.tsx`'s id-taking functions
+   (`updateQuote`/`duplicateQuote`/`rewriteQuote`/`printQuote`/`performWorkflowAction`) interpolated
+   it unencoded into the request URL, and browsers strip everything from `#` onward as a URL
+   *fragment* before `fetch()` ever sends the request — so every save/duplicate/rewrite/print-log/
+   workflow-action on an existing quotation actually hit e.g. `/api/quotes/Q` and 404'd. A quotation
+   could never be edited after creation. Fixed by auditing and wrapping every id-shaped URL path
+   segment in `encodeURIComponent()` across all 18 affected `src/lib/*.ts` files (not just
+   Quotation), and by making the shared `getPathSegments()` helper (`api/_lib/http.ts`)
+   `decodeURIComponent()` each segment so the server resolves the id back to its literal form.
+2. **Every Material Requisition/Job Order/Purchase Request was permanently unsavable after
+   creation** — `handleCreate()` in all 3 `api/_lib/*Handler.ts` files seeded the signatory timestamp
+   (`preparedAt`/`requestedAt`) from the full ISO datetime `nowIso()` returns, but the frontend
+   editors round-trip that same value on every save, and the server's own `validateIsoDateOrEmpty()`
+   requires strict `YYYY-MM-DD` — so the first save after creation always 400'd, permanently, for
+   every document of all 3 types (confirmed live: a Material Requisition finalized this way ended up
+   Final with **empty lines**, since Finalize doesn't touch `lines` and the document had never
+   actually saved). Scope of Work's own equivalent fields already established the correct
+   `nowIso().slice(0, 10)` precedent; Stage 3 just didn't follow it. Fixed in all 3 handlers.
+3. **A free-typed Purchase Request/Job Order line description could silently clip mid-word in
+   English mode** — no minimum width on the description `<input>` in a table where other
+   English-mode column headers (`WAREHOUSE REMAINING`, `QTY REQUESTED`, ...) are much longer than
+   their Thai originals and squeeze the flexible column; `<input>` elements never wrap, so text just
+   clipped with no ellipsis. Fixed with `min-w-[200px]` on both files, relying on the existing
+   `overflow-x-auto` wrapper (the app's own documented wide-table convention) for scroll.
+
+**Also found, NOT fixed this pass (documented instead)**: `ScopeOfWorkItem.id` is regenerated fresh
+on every Scope-of-Work-side "refresh from quotation," so Project's own "keeps sub-document links on
+refresh" promise rarely holds in practice — confirmed live (a finalized Material Requisition and a
+finalized Job Order both got silently orphaned after refreshing the Scope of Work). Root cause and
+proper fix belong to the Scope of Work module, not Project; see TODO.md's new entry and
+[MODULES/Project.md](./MODULES/Project.md).
+
+**Regression tests added**: `tests/api/pathSegments.test.ts` (new, 4 tests — `getPathSegments()`
+decodes percent-encoded id segments including ones containing literal `#`) and 3 new tests appended
+to `tests/api/projectAtomicity.test.ts` ("immediate re-save after creation" for all 3 sub-document
+types — would have failed before the date-field fix). `tsc`/`lint`/`build`/`test` all pass clean
+(211/211, up from 204).
+
+**Live-verified beyond the 3 bugs above**: the atomic parent-child link invariant end-to-end via real
+creates/deletes/finalizes; Material Requisition's Return column stays editable post-Final; Job
+Order's checklist per-option fill-in inputs render/save correctly; Purchase Request's dual
+catalog/free-typed line UI; every other English-mode label/button/table header checked; print
+documents and catalog/checklist content correctly staying fixed-Thai in English mode (`window.print()`
+itself fires correctly for all 3 new print documents, but the native print dialog blocks browser
+automation — same standing limitation this app's session history has hit before — so the visual print
+layout itself still needs a manual look, unchanged from the Stage 5 known-limitation).
+
+See [MODULES/Project.md](./MODULES/Project.md) (updated with the full Stage 6 writeup and a corrected
+"Refresh from Scope of Work" claim) and [TODO.md](./TODO.md) (new `ScopeOfWorkItem.id` entry).
+
+---
+
+## 2026-08-18 — Project module Stage 5: Job Order + Purchase Request frontend, plus i18n retrofit for the whole module
+
+Combined pass, per direct instruction: build Job Order and Purchase Request's frontend (Stage 5,
+backend already existed from Stage 3), and fix Project + Material Requisition's Stage-4-shipped
+hardcoded-Thai UI — one pass, so Job Order/Purchase Request were built with real i18n from the start
+instead of being translated after the fact.
+
+**Investigated first, per instruction, before writing any UI**: (1) confirmed
+`materialRequisitionHandler.ts`'s `handleList()` already correctly gated the standalone company-wide
+list behind `materialRequisition:viewAll` — no bug found; (2) read `src/lib/i18n.tsx` and how
+Quotation/Scope of Work/Delivery Order consume it (`useI18n()`'s `t()`, dotted key convention,
+`TranslationKey = keyof typeof translations.th` — meaning TS validates keys exist in `th` but never
+checks `en` has matching keys, a real silent-fallback risk closed later via a dedicated verification
+script); (3) confirmed via direct grep that neither `ScopeOfWorkPrintDocument.tsx` nor
+`DeliveryOrderPrintDocument.tsx` import `useI18n` — printed documents in this app always render in a
+fixed language regardless of the preparer's UI toggle — and applied the same treatment to all 4 print
+documents in this module.
+
+**Built**: full CRUD wrapper sets added to `src/lib/jobOrder.ts`/`purchaseRequest.ts`; standalone
+sidebar modules `src/pages/jobOrder/` and `src/pages/purchaseRequest/` (`Page`/`List`/`Document`/
+`PrintDocument.tsx` each) — Job Order's `Document.tsx` embeds the existing `ChecklistGroupCard`
+(shared with Scope of Work) for its ~23-item scope-of-work checklist plus 3 signatory blocks;
+Purchase Request's `Document.tsx` supports both catalog-linked lines (`ProductPickerModal`, filtered
+to the 4 material categories) and free-typed lines side by side. `ChecklistGroupCard.tsx` gained one
+small additive change: it now renders an inline fill-in `<input>` next to any `ChecklistOption` whose
+`value !== undefined` (Job Order's HYDRO-TEST ___ BAR-style fields), a pure addition with no behavior
+change for Scope of Work's own existing options (which never set `value`). `App.tsx` wired both as
+new nav items + deep-link navigation from `ProjectItemsEditor.tsx`'s "Create Job Order"/"Create
+Purchase Request" buttons (previously a Stage 4 placeholder toast). Backend: `jobOrderHandler.ts`/
+`purchaseRequestHandler.ts`'s `handleList()` gained the same company-wide list mode (omit
+`projectId`) Material Requisition's own handler already had from Stage 4, needed for the new
+standalone list pages.
+
+**i18n retrofit**: `ProjectList/Page/ItemsEditor/Document.tsx` and all of
+`materialRequisition/*.tsx` (except its print document) rewritten to route every string through
+`t()`; 232 new key/value pairs added to `src/lib/i18n.tsx` as real th+en pairs (not placeholders).
+Deliberately left untranslated, matching established precedent: all 4 print documents; the 4 seeded
+`ProductCategory` names + 82 catalog item names (real business data, not UI chrome); `"Draft"`/
+`"Final"` status literals (kept as literal English in both languages, matching Delivery Order's own
+precedent); and `buildJobOrderChecklistGroups()` (`src/lib/jobOrder.ts`) — left completely untouched,
+both because Scope of Work's equivalent checklist builder also never uses i18n (persisted content,
+not chrome) and because this file is value-imported into `api/_lib/jobOrderHandler.ts` (the Node
+server bundle) — importing `i18n.tsx` there would break every API route the same way the documented
+2026-07-09 incident did.
+
+**Verified**: `npx tsc -b`/`npx tsc --noEmit -p tsconfig.api.json`/`npm run lint`/`npm run build`/
+`npm test` all pass clean (204/204 tests, up from 197). i18n completeness verified three independent
+ways, not just trusting tsc's 0 errors: (1) TypeScript's own key-existence check at every `t()` call
+site; (2) a one-off Node script comparing `th`/`en` key sets directly — 1623 keys each, 0 missing
+either direction, only 6 of the 232 new keys intentionally identical between languages (form codes
+like `"FM-ST-04"`, the `"Draft"`/`"Final"` literals); (3) a manual grep audit for stray Thai
+characters across all 4 module folders' `.tsx` files outside print documents/comments — none found.
+**Not verified**: no live browser walkthrough of the actual English-mode UI was possible this
+session (same standing sandboxed-session limitation as prior passes) — the static/code-level checks
+above stand in for it; a real click-through in English mode across all 4 document types is still
+recommended before calling this module fully done.
+
+See [MODULES/Project.md](./MODULES/Project.md) (fully rewritten to reflect Stage 5), and the updated
+Project-module coordination note at the top of [CLAUDE.md](./CLAUDE.md) and in
+[TODO.md](./TODO.md) High Priority — ใบส่งมอบงาน (Job/Work Delivery Note), the 4th document type
+originally flagged alongside these 3, was deliberately scoped out of this workstream back in Stage 1
+and remains unbuilt; it's still what Accounting's milestone-billing gate is waiting on.
+
+---
+
+## 2026-08-17d — Accounting module Phase 1 (milestone billing): backend built + verified live, UI paused
 
 A detailed spec from the owner (grounded in the real "Flow งานบัญชี" business-process spreadsheet
 plus 2 real customer billing sets) was designed in Plan Mode, approved, and implemented as Phase 1

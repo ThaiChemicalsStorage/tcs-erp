@@ -14,6 +14,33 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-18] Project module Stage 6: live browser verification, 3 real bugs found and fixed.**
+  Actually clicked through creating/viewing all 4 document types in a real browser, Thai and English.
+  Found and fixed: (1) every quotation save/duplicate/rewrite/print/workflow-action was silently
+  broken app-wide — `Quote.id` always contains a literal `#`, stripped by browsers as a URL fragment
+  before every id-taking `fetch()` call ever reached the network; fixed across all 18 affected
+  `src/lib/*.ts` files plus the shared server-side `getPathSegments()` decoder. (2) Material
+  Requisition/Job Order/Purchase Request were all permanently unsavable after creation — a
+  full-ISO-timestamp field seeded at creation always failed its own `YYYY-MM-DD`-only validator on
+  save; fixed in all 3 handlers. (3) a free-typed line description could silently clip mid-word in
+  English mode; fixed with a minimum column width. Also found and documented (not fixed — belongs to
+  the Scope of Work module): `ScopeOfWorkItem.id` regenerates on every quotation refresh, so
+  Project's own item-link-preservation promise rarely holds in practice. 7 new regression tests
+  (`tests/api/pathSegments.test.ts` + 3 in `projectAtomicity.test.ts`). `tsc`/`lint`/`build`/`test`
+  all pass clean (211/211, up from 204). See [MODULES/Project.md](./MODULES/Project.md), CHANGELOG.md.
+
+- ✅ **[2026-08-18] Project module Stage 5: Job Order + Purchase Request frontend, plus a full i18n
+  retrofit of the whole module.** Job Order (FM-PJ-01) and Purchase Request (FMPU05) gained full
+  CRUD wrappers + standalone sidebar pages (backend already existed from Stage 3), and Project +
+  Material Requisition — shipped Thai-hardcoded in Stage 4 — were retrofitted onto the app's real
+  `useI18n()`/`t()` system alongside them (232 new th+en key pairs, verified for full key parity via
+  a dedicated script, not just tsc's key-existence check). All 4 print documents and the seeded
+  catalog/checklist content deliberately stay fixed-Thai, matching confirmed precedent from Scope of
+  Work/Delivery Order. All 4 document types (Project, Material Requisition, Job Order, Purchase
+  Request) are now frontend-complete. `tsc`/`lint`/`build`/`test` (204/204, up from 197) all pass
+  clean; no live-browser English-mode walkthrough was possible this session (standing sandboxed
+  limitation). See [MODULES/Project.md](./MODULES/Project.md), CHANGELOG.md.
+
 - ✅ **[2026-08-14] Departments (manageable) + Sales Teams + tiered visibility (own/team/department/
   all).** Direct business request: Sales has 2 teams, each with its own team lead who should only
   see their own team's records. Wired up the previously schema-only `departments` MongoDB

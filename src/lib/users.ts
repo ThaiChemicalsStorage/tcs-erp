@@ -115,11 +115,11 @@ export async function createUser(fields: CreateUserFields): Promise<User> {
 // แก้ไขข้อมูลผู้ใช้ที่มีอยู่
 // Updates an existing user.
 export async function updateUser(id: string, fields: UpdateUserFields): Promise<User> {
-  const { user } = await apiFetch<{ user: User }>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { user } = await apiFetch<{ user: User }>(`/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return user;
 }
 // ลบผู้ใช้
 // Deletes a user.
 export async function deleteUser(id: string): Promise<void> {
-  await apiFetch<void>(`/users/${id}`, { method: "DELETE" });
+  await apiFetch<void>(`/users/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

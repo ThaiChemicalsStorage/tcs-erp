@@ -156,7 +156,7 @@ export async function fetchNotifications(): Promise<Notification[]> {
 // ทำเครื่องหมายว่าอ่านการแจ้งเตือนรายการนี้แล้ว
 // Marks a single notification as read
 export async function markNotificationRead(id: string): Promise<Notification> {
-  const { notification } = await apiFetch<{ notification: Notification }>(`/notifications/${id}`, { method: "PATCH" });
+  const { notification } = await apiFetch<{ notification: Notification }>(`/notifications/${encodeURIComponent(id)}`, { method: "PATCH" });
   return notification;
 }
 // ทำเครื่องหมายว่าอ่านการแจ้งเตือนทั้งหมดแล้ว
@@ -167,5 +167,5 @@ export async function markAllNotificationsRead(): Promise<void> {
 // ลบการแจ้งเตือนตาม id
 // Deletes a notification identified by id
 export async function deleteNotification(id: string): Promise<void> {
-  await apiFetch<void>(`/notifications/${id}`, { method: "DELETE" });
+  await apiFetch<void>(`/notifications/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

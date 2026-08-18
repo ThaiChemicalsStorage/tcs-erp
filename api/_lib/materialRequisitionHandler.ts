@@ -1,0 +1,333 @@
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { Collection } from "mongodb";
+import { HttpError, getPathSegments } from "./http.js";
+import { requireUser, requirePermission, type AuthContext } from "./auth.js";
+import { buildSimpleOwnershipClause } from "./visibility.js";
+import {
+  materialRequisitionsCollection, jobOrdersCollection, productsCollection, countersCollection, auditLogCollection,
+  toObjectId, withStringId, type MaterialRequisitionFields, type CounterFields,
+} from "./collections.js";
+import { loadPendingProjectItemOrThrow, linkProjectItemToSubDocument, markProjectItemFulfilled, unlinkProjectItem, findProjectItemIdByLink } from "./projectHandler.js";
+import { roleHasPermission } from "../../src/lib/roles.js";
+import { nowIso, newId } from "../../src/lib/products.js";
+import { sanitizeShortText, validateIsoDateOrEmpty } from "./quoteValidation.js";
+import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
+import { ensureMaterialCatalogSeeded } from "./materialCatalogSeedData.js";
+import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary } from "../../src/lib/materialRequisition.js";
+
+/**
+ * Material Requisition API (added 2026-08-18, Stage 3) — mounted from `api/handlers/quotes.ts`
+ * alongside Project/Job Order/Purchase Request (same 12/12-slot-sharing constraint, see
+ * projectHandler.ts's file header). See src/lib/materialRequisition.ts for the full domain-shape
+ * doc comment and the FM-ST-04 PDF-to-field mapping.
+ */
+
+const MAX_LINES = 100;
+const MATERIAL_CATEGORIES: readonly MaterialRequisitionCategory[] = ["chemical", "consumable", "hardware", "other"];
+
+/** Same shape as Service Report's `nextServiceReportId()` — an atomic per-Buddhist-year counter,
+ * business id stored directly as `_id`. Deliberately a clean new prefix, not the real Purchase
+ * Request example's legacy "ED" scheme (see docs/DATABASE.md "Project module" for why). */
+async function nextMaterialRequisitionId(counters: Collection<CounterFields>): Promise<string> {
+  const buddhistYear = new Date().getFullYear() + 543;
+  const counterId = `material_requisition_${buddhistYear}`;
+  const result = await counters.findOneAndUpdate({ _id: counterId }, { $inc: { seq: 1 } }, { returnDocument: "after", upsert: true });
+  const seq = result?.seq ?? 1;
+  return `MR-${buddhistYear}-${String(seq).padStart(4, "0")}`;
+}
+
+async function writeAuditEntry(ctx: AuthContext, action: string, details: string, related: { scopeOfWorkId?: string }): Promise<void> {
+  const auditLog = await auditLogCollection();
+  await auditLog.insertOne({
+    userId: ctx.user.id, userName: ctx.user.fullName, roleName: ctx.role?.name ?? ctx.user.roleKey,
+    module: "ใบเบิกและใบคืนวัสดุ", action, details, createdAt: nowIso(),
+    ...(related.scopeOfWorkId ? { relatedScopeId: related.scopeOfWorkId } : {}),
+  });
+}
+
+function isOwnerOf(ctx: AuthContext, doc: { createdBy: string }): boolean {
+  return !doc.createdBy || doc.createdBy === ctx.user.id;
+}
+function canEdit(ctx: AuthContext, doc: { createdBy: string }): boolean {
+  if (!roleHasPermission(ctx.role, "materialRequisition:edit")) return false;
+  return isOwnerOf(ctx, doc) || roleHasPermission(ctx.role, "materialRequisition:finalize");
+}
+
+/** `jobOrderId` is a real, nullable FK (confirmed Stage 2 — see src/lib/materialRequisition.ts's
+ * header comment) — resolved and verified server-side, never trusted from a client-sent
+ * `jobOrderCode` snapshot. Requires the referenced Job Order to belong to the same Project, so a
+ * requisition can't be linked to an unrelated job's paperwork by id-guessing. */
+async function resolveJobOrderLink(projectId: string, raw: unknown): Promise<{ jobOrderId: string | null; jobOrderCode: string }> {
+  if (raw === undefined || raw === null || raw === "") return { jobOrderId: null, jobOrderCode: "" };
+  if (typeof raw !== "string") throw new HttpError(400, "เลขที่ใบสั่งงานไม่ถูกต้อง");
+  const jobOrders = await jobOrdersCollection();
+  const jobOrder = await jobOrders.findOne({ _id: raw, isDeleted: false });
+  if (!jobOrder) throw new HttpError(400, "ไม่พบใบสั่งงานที่ระบุ");
+  if (jobOrder.projectId !== projectId) throw new HttpError(400, "ใบสั่งงานนี้ไม่ได้อยู่ในโครงการเดียวกัน");
+  return { jobOrderId: raw, jobOrderCode: jobOrder.jobCode };
+}
+
+/** Every line REQUIRES a real, resolvable `productId` (unlike Purchase Request's optional one) —
+ * see MaterialRequisitionLine's own doc comment. `productCode`/`productName`/`unit` are always
+ * rebuilt server-side from the resolved Product record, never trusted from client input — same
+ * "server-resolved snapshot" integrity rule Quotation Templates' product links already established. */
+async function sanitizeLines(raw: unknown): Promise<MaterialRequisitionLine[]> {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลรายการวัสดุไม่ถูกต้อง");
+  if (raw.length > MAX_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_LINES} รายการ`);
+  const rows = raw as Record<string, unknown>[];
+
+  const productIds = [...new Set(rows.map((r) => (typeof r.productId === "string" ? r.productId : "")).filter(Boolean))];
+  const products = await productsCollection();
+  const productDocs = productIds.length > 0 ? await products.find({ _id: { $in: productIds.map((id) => toObjectId(id)) } }).toArray() : [];
+  const productById = new Map(productDocs.map((p) => [p._id.toString(), p]));
+
+  return rows.map((r, idx) => {
+    const productId = typeof r.productId === "string" ? r.productId : "";
+    if (!productId) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: กรุณาระบุสินค้า`);
+    const product = productById.get(productId);
+    if (!product) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: ไม่พบสินค้าที่ระบุ`);
+    return {
+      id: typeof r.id === "string" && r.id ? r.id : newId("mrline"),
+      productId, productCode: product.code, productName: product.name, unit: product.unit,
+      category: sanitizeEnum(r.category, MATERIAL_CATEGORIES, `หมวดหมู่ลำดับที่ ${idx + 1}`),
+      plannedQty: sanitizeNullableNumber(r.plannedQty, `จำนวนที่วางแผนลำดับที่ ${idx + 1}`),
+      withdrawal1Qty: sanitizeNullableNumber(r.withdrawal1Qty, `เบิกครั้งที่1 ลำดับที่ ${idx + 1}`),
+      withdrawal2Qty: sanitizeNullableNumber(r.withdrawal2Qty, `เบิกครั้งที่2 ลำดับที่ ${idx + 1}`),
+      returnQty: sanitizeNullableNumber(r.returnQty, `คืนของลำดับที่ ${idx + 1}`),
+      actualUsedQty: sanitizeNullableNumber(r.actualUsedQty, `ใช้จริงลำดับที่ ${idx + 1}`),
+    };
+  });
+}
+
+function toClient(doc: MaterialRequisitionFields & { _id: string }) {
+  return withStringId(doc);
+}
+function toSummary(doc: MaterialRequisitionFields & { _id: string }): MaterialRequisitionSummary {
+  const full = withStringId(doc);
+  return { id: full.id, projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, updatedAt: full.updatedAt };
+}
+
+async function loadOrThrow(id: string) {
+  const materialRequisitions = await materialRequisitionsCollection();
+  const doc = await materialRequisitions.findOne({ _id: id });
+  if (!doc || doc.isDeleted) throw new HttpError(404, "ไม่พบใบเบิกและใบคืนวัสดุ");
+  return doc;
+}
+
+async function handleList(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "materialRequisition:view");
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
+
+  // Omitting projectId switches from "list by Project" to "list every Material Requisition
+  // company-wide" — Stage 4 addition, needed for the standalone list page Store staff use as their
+  // own entry point (per the original Stage 1 "Store staff shouldn't have to go through Project"
+  // reasoning) — same dual-mode shape Project's own GET /api/projects already established. Both
+  // modes are scoped by materialRequisition:viewAll via buildSimpleOwnershipClause().
+  const ownershipMatch = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "materialRequisition:viewAll"), "createdBy");
+  const materialRequisitions = await materialRequisitionsCollection();
+  const filter = projectId ? { projectId, isDeleted: false, ...ownershipMatch } : { isDeleted: false, ...ownershipMatch };
+  const docs = await materialRequisitions.find(filter).sort({ updatedAt: -1 }).toArray();
+  res.status(200).json({ materialRequisitions: docs.map(toSummary) });
+}
+
+async function handleCreate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "materialRequisition:create");
+  if (!roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
+  const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
+  if (!projectId || !itemId) throw new HttpError(400, "กรุณาระบุโครงการและรายการ");
+
+  // Validates the item exists and is still "pending" BEFORE anything is inserted — see
+  // loadPendingProjectItemOrThrow()'s own doc comment for why this ordering is what makes the
+  // create-then-link sequence below safe without a real multi-document transaction.
+  const { project, item } = await loadPendingProjectItemOrThrow(projectId, itemId);
+  const jobOrderLink = await resolveJobOrderLink(projectId, body.jobOrderId);
+
+  const counters = await countersCollection();
+  const id = await nextMaterialRequisitionId(counters);
+  const now = nowIso();
+  const doc: MaterialRequisitionFields = {
+    projectId, scopeOfWorkId: project.scopeOfWorkId, jobCode: project.scopeNumber,
+    customerName: project.customerCompanyName,
+    jobOrderId: jobOrderLink.jobOrderId, jobOrderCode: jobOrderLink.jobOrderCode,
+    productName: item.name, responsibleEmployee: "", productionStartDate: "",
+    lines: [], status: "Draft",
+    // preparedAt seeds from a date-only slice of `now`, not the full ISO timestamp — see
+    // jobOrderHandler.ts's identical fix/comment on requestedAt for why (validateIsoDateOrEmpty
+    // requires strict YYYY-MM-DD; the full timestamp made every save after creation fail with 400).
+    preparedBy: ctx.user.fullName, preparedAt: now.slice(0, 10),
+    approvedBy: "", approvedAt: "",
+    storeDeptBy: "", storeDeptAt: "",
+    costDeptBy: "", costDeptAt: "",
+    returnedBy: "", returnReceivedBy: "", returnedAt: "",
+    createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
+  };
+  const materialRequisitions = await materialRequisitionsCollection();
+  await materialRequisitions.insertOne({ ...doc, _id: id });
+
+  // CRITICAL invariant: the parent ProjectItem is updated atomically (in the sense described in
+  // linkProjectItemToSubDocument()'s doc comment) immediately after the insert succeeds — never
+  // trusting any client-sent sourcingMethod/itemStatus/materialRequisitionId value.
+  await linkProjectItemToSubDocument(projectId, itemId, "requisition", "materialRequisitionId", id);
+
+  await writeAuditEntry(ctx, "Material Requisition Created", `สร้างใบเบิกและใบคืนวัสดุ ${id} สำหรับรายการ "${item.name}"`, { scopeOfWorkId: project.scopeOfWorkId });
+  res.status(201).json({ materialRequisition: toClient({ ...doc, _id: id }) });
+}
+
+async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  await requirePermission(req, "materialRequisition:view");
+  const doc = await loadOrThrow(id);
+  res.status(200).json({ materialRequisition: toClient(doc) });
+}
+
+const SHORT_TEXT_FIELDS: { key: keyof MaterialRequisitionFields; label: string }[] = [
+  { key: "customerName", label: "ชื่อลูกค้า" },
+  { key: "productName", label: "ชื่อสินค้า" },
+  { key: "responsibleEmployee", label: "ชื่อพนักงานดูแล" },
+  { key: "preparedBy", label: "ผู้จัดทำ" },
+  { key: "approvedBy", label: "ผู้อนุมัติ" },
+  { key: "storeDeptBy", label: "แผนกสโตร์" },
+  { key: "costDeptBy", label: "แผนกต้นทุน" },
+];
+const DATE_FIELDS: { key: keyof MaterialRequisitionFields; label: string }[] = [
+  { key: "productionStartDate", label: "วันที่เริ่มผลิต" },
+  { key: "preparedAt", label: "วันที่จัดทำ" },
+  { key: "approvedAt", label: "วันที่อนุมัติ" },
+  { key: "storeDeptAt", label: "วันที่แผนกสโตร์" },
+  { key: "costDeptAt", label: "วันที่แผนกต้นทุน" },
+];
+
+async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadOrThrow(id);
+  if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (doc.status === "Final") throw new HttpError(400, "เอกสารนี้อนุมัติแล้ว (Final) ไม่สามารถแก้ไขได้");
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const update: Partial<MaterialRequisitionFields> = {};
+  if ("lines" in body) update.lines = await sanitizeLines(body.lines);
+  if ("jobOrderId" in body) {
+    const link = await resolveJobOrderLink(doc.projectId, body.jobOrderId);
+    update.jobOrderId = link.jobOrderId;
+    update.jobOrderCode = link.jobOrderCode;
+  }
+  for (const f of SHORT_TEXT_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = sanitizeShortText(body[f.key], f.label);
+  for (const f of DATE_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = validateIsoDateOrEmpty(body[f.key], f.label);
+
+  update.updatedAt = nowIso();
+  update.updatedBy = ctx.user.id;
+  const materialRequisitions = await materialRequisitionsCollection();
+  await materialRequisitions.updateOne({ _id: id }, { $set: update });
+  const updated = await loadOrThrow(id);
+  await writeAuditEntry(ctx, "Material Requisition Updated", `แก้ไขใบเบิกและใบคืนวัสดุ ${id}`, { scopeOfWorkId: updated.scopeOfWorkId });
+  res.status(200).json({ materialRequisition: toClient(updated) });
+}
+
+/**
+ * "คืนของ" — leftover material returned via this same document, after issuance. Exempt from the
+ * `status === "Final"` lock `handleUpdate()` enforces above — same "follow-up fields survive Final"
+ * pattern Scope of Work's PO-chasing fields established (see docs/MODULES/ScopeOfWork.md
+ * "PO Chasing"), since the paper form's own footer has separate returner/receiver-of-return
+ * signatures implying the return happens after the document is otherwise done. Only `returnQty` per
+ * line, plus the document-level returner/receiver signatures, are touched here — every other field
+ * stays governed by the regular Draft-only PATCH above.
+ */
+async function handleReturn(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadOrThrow(id);
+  if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const returns = Array.isArray(body.lines) ? (body.lines as Record<string, unknown>[]) : [];
+  const returnById = new Map(returns.map((r) => [typeof r.id === "string" ? r.id : "", r]));
+  const lines = doc.lines.map((line) => {
+    const r = returnById.get(line.id);
+    if (!r) return line;
+    return { ...line, returnQty: sanitizeNullableNumber(r.returnQty, `คืนของ (${line.productName})`) };
+  });
+
+  const update: Partial<MaterialRequisitionFields> = {
+    lines,
+    updatedAt: nowIso(),
+    updatedBy: ctx.user.id,
+  };
+  if ("returnedBy" in body) update.returnedBy = sanitizeShortText(body.returnedBy, "ผู้คืน");
+  if ("returnReceivedBy" in body) update.returnReceivedBy = sanitizeShortText(body.returnReceivedBy, "ผู้รับคืน");
+  if (update.returnedBy || update.returnReceivedBy) update.returnedAt = nowIso();
+
+  const materialRequisitions = await materialRequisitionsCollection();
+  await materialRequisitions.updateOne({ _id: id }, { $set: update });
+  const updated = await loadOrThrow(id);
+  await writeAuditEntry(ctx, "Material Requisition Return Recorded", `บันทึกการคืนวัสดุของใบเบิกและใบคืนวัสดุ ${id}`, { scopeOfWorkId: updated.scopeOfWorkId });
+  res.status(200).json({ materialRequisition: toClient(updated) });
+}
+
+async function handleFinalize(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "materialRequisition:finalize");
+  const doc = await loadOrThrow(id);
+  if (doc.status === "Final") throw new HttpError(400, "เอกสารนี้อนุมัติแล้ว (Final)");
+
+  const materialRequisitions = await materialRequisitionsCollection();
+  await materialRequisitions.updateOne({ _id: id }, { $set: { status: "Final", updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const updated = await loadOrThrow(id);
+  const itemId = await findProjectItemIdByLink(doc.projectId, "materialRequisitionId", id);
+  if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
+  await writeAuditEntry(ctx, "Material Requisition Finalized", `ยืนยันสถานะ Final ของใบเบิกและใบคืนวัสดุ ${id}`, { scopeOfWorkId: updated.scopeOfWorkId });
+  res.status(200).json({ materialRequisition: toClient(updated) });
+}
+
+async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "materialRequisition:print");
+  const doc = await loadOrThrow(id);
+  await writeAuditEntry(ctx, "Material Requisition Printed", `พิมพ์ใบเบิกและใบคืนวัสดุ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
+  res.status(200).json({ ok: true });
+}
+
+async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "materialRequisition:delete");
+  const doc = await loadOrThrow(id);
+  if (!isOwnerOf(ctx, doc) && !roleHasPermission(ctx.role, "materialRequisition:finalize")) throw new HttpError(403, "Forbidden");
+
+  const materialRequisitions = await materialRequisitionsCollection();
+  await materialRequisitions.updateOne({ _id: id }, { $set: { isDeleted: true, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const itemId = await findProjectItemIdByLink(doc.projectId, "materialRequisitionId", id);
+  if (itemId) await unlinkProjectItem(doc.projectId, itemId, "materialRequisitionId");
+  await writeAuditEntry(ctx, "Material Requisition Deleted", `ลบใบเบิกและใบคืนวัสดุ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
+  res.status(200).json({ ok: true });
+}
+
+async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method === "GET") return handleGetOne(req, res, id);
+  if (req.method === "PATCH") return handleUpdate(req, res, id);
+  if (req.method === "DELETE") return handleDelete(req, res, id);
+  throw new HttpError(405, "Method not allowed");
+}
+
+export async function handleMaterialRequisition(req: VercelRequest, res: VercelResponse): Promise<void> {
+  // Defensive "seed on first request to this resource" — same pattern seedJobTypesIfEmpty()/
+  // seedQuotationTemplatesIfEmpty() already established, guarded to run once per warm instance (see
+  // ensureMaterialCatalogSeeded()'s own doc comment).
+  await ensureMaterialCatalogSeeded();
+  const parts = getPathSegments(req, "/api/material-requisitions");
+
+  if (parts.length === 0) {
+    if (req.method === "POST") return handleCreate(req, res);
+    return handleList(req, res);
+  }
+  if (parts.length === 1) return handleOne(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "return") return handleReturn(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "finalize") return handleFinalize(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
+  throw new HttpError(404, "Not found");
+}

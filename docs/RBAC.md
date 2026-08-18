@@ -528,6 +528,33 @@ results (not just the Mongo operator shape), the team-vs-department priority ord
 isolation (a `scopeOfWork:viewTeam` grant doesn't leak into `quotations`' resolution), and the
 no-team/no-department fallback-to-own behavior.
 
+### Project module (added 2026-08-18, Stage 2 data layer + Stage 3 API routes)
+
+28 permissions gate the module end-to-end, **enforced server-side as of Stage 3** in
+`api/_lib/projectHandler.ts`/`materialRequisitionHandler.ts`/`jobOrderHandler.ts`/
+`purchaseRequestHandler.ts` (never just hidden client-side — there is no client yet):
+`project`/`materialRequisition`/`jobOrder`/`purchaseRequest`, each with the same 7-permission shape
+Scope of Work/Delivery Order established — `:view`/`:viewAll`/`:create`/`:edit`/`:finalize`/`:print`/
+`:delete`. No `:viewTeam`/`:viewDepartment` tiers (unlike Quotation/Scope of Work/Delivery Order's
+2026-08-14 tiered-visibility addition) — not requested for this module, and the departments it
+actually serves (Project/Store/Factory/Purchasing) don't currently have the team-lead-style structure
+Sales does. The company-wide list routes use a new `buildSimpleOwnershipClause()` (`api/_lib/
+visibility.ts`) instead of the tiered `buildOwnershipClause()` every other module uses, precisely
+because this module has no `:viewTeam`/`:viewDepartment` permissions for the tiered cascade to check.
+
+**Default grants: Administrator/Super Admin only.** None of the existing default roles (Sales User,
+Approver Level 1/2, Viewer, Service Engineer, Accounting User) belong to the Project/Store/Factory/
+Purchasing departments this module serves, so none were extended — unlike every prior module, which
+grants at least view access to some existing default role. Real custom roles (e.g. "เจ้าหน้าที่โครงการ",
+"พนักงานสโตร์", "เจ้าหน้าที่จัดซื้อ") should be created via Role Management once the module is
+functional, same "manual Role Management step" every prior module has needed on an
+already-provisioned deployment — except this time there's no *existing* role to backfill either, so
+there's no `rbac_migrations` entry to write yet (that only makes sense once a route actually checks
+these permissions).
+
+See [DATABASE.md](./DATABASE.md) "Project module" for the full data-model writeup and the
+Products-catalog-reuse / Delivery-Order-vs-ใบส่งมอบงาน decisions.
+
 ### Sidebar / Menu Visibility
 
 `App.tsx`'s `navItems` array carries an optional `permission` field per entry; `hasPermission(currentUser, roles, item.permission)` filters the rendered list — **items are fully removed from the DOM, not just disabled**, satisfying "hide inaccessible menus completely." A render-time `effectiveNav` guard (not a `useEffect`, to avoid a setState-in-effect cascade) falls back to the Dashboard if `activeNav` somehow points at a module the current user can't see. `Settings` is always visible (every signed-in user can edit their own profile); only its Company tab is conditionally rendered, gated by `company:manage`.

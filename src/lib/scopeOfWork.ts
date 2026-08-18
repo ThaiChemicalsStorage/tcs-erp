@@ -267,7 +267,7 @@ export async function fetchAllScopeOfWorks(): Promise<ScopeOfWorkListItem[]> {
 // ดึงข้อมูลเต็มของ Scope of Work รายการเดียวตาม id
 // Fetches the full content of a single Scope of Work by id
 export async function fetchScopeOfWork(id: string): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}`);
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}`);
   return scopeOfWork;
 }
 // สร้าง Scope of Work ใหม่จากใบเสนอราคาที่ระบุ
@@ -282,7 +282,7 @@ export async function createScopeOfWorkFromQuotation(quotationId: string, scopeN
 // แก้ไขข้อมูล Scope of Work ที่มีอยู่ตาม id
 // Updates an existing Scope of Work identified by id
 export async function updateScopeOfWork(id: string, fields: ScopeOfWorkUpdateFields): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}`, {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(fields),
   });
@@ -291,19 +291,19 @@ export async function updateScopeOfWork(id: string, fields: ScopeOfWorkUpdateFie
 // อนุมัติ Scope of Work (PendingApproval → Final)
 // Approves a Scope of Work (PendingApproval → Final)
 export async function finalizeScopeOfWork(id: string): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/finalize`, { method: "POST" });
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}/finalize`, { method: "POST" });
   return scopeOfWork;
 }
 // ส่งขออนุมัติ Scope of Work (Draft → PendingApproval)
 // Submits a Scope of Work for approval (Draft → PendingApproval)
 export async function submitScopeOfWorkApproval(id: string): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/submit-approval`, { method: "POST" });
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}/submit-approval`, { method: "POST" });
   return scopeOfWork;
 }
 // ปฏิเสธ/ตีกลับ Scope of Work พร้อมความคิดเห็น (PendingApproval → Draft)
 // Rejects a Scope of Work with a required comment (PendingApproval → Draft)
 export async function rejectScopeOfWork(id: string, comment: string): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/reject`, {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}/reject`, {
     method: "POST",
     body: JSON.stringify({ comment }),
   });
@@ -312,13 +312,13 @@ export async function rejectScopeOfWork(id: string, comment: string): Promise<Sc
 // ถอนคำขออนุมัติ Scope of Work (PendingApproval → Draft)
 // Withdraws a pending Scope of Work approval request (PendingApproval → Draft)
 export async function withdrawScopeOfWorkApproval(id: string): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/withdraw-approval`, { method: "POST" });
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}/withdraw-approval`, { method: "POST" });
   return scopeOfWork;
 }
 // ทำสำเนา Scope of Work ด้วยเลขเอกสารใหม่ที่ผู้ใช้กำหนด
 // Duplicates a Scope of Work under a new user-provided document number
 export async function duplicateScopeOfWork(id: string, scopeNumber: string): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/duplicate`, {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}/duplicate`, {
     method: "POST",
     body: JSON.stringify({ scopeNumber }),
   });
@@ -327,35 +327,35 @@ export async function duplicateScopeOfWork(id: string, scopeNumber: string): Pro
 // สร้างรีวิชันใหม่ของ Scope of Work โดยไม่แก้ไขต้นฉบับ
 // Creates a new revision of a Scope of Work without modifying the source record
 export async function rewriteScopeOfWork(id: string): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/rewrite`, { method: "POST" });
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}/rewrite`, { method: "POST" });
   return scopeOfWork;
 }
 // ดึงข้อมูลล่าสุดจากใบเสนอราคาต้นทางมาอัปเดต Scope of Work
 // Re-pulls the latest data from the source quotation into this Scope of Work
 export async function refreshScopeOfWorkFromQuotation(id: string): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/refresh`, { method: "POST" });
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}/refresh`, { method: "POST" });
   return scopeOfWork;
 }
 // ลบ Scope of Work ตาม id
 // Deletes a Scope of Work identified by id
 export async function deleteScopeOfWork(id: string): Promise<void> {
-  await apiFetch<void>(`/scope-of-works/${id}`, { method: "DELETE" });
+  await apiFetch<void>(`/scope-of-works/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 // ส่งแจ้งเตือนทวงเลข PO ไปยังพนักงานขายที่รับผิดชอบ
 // Sends a notification chasing the customer PO number to the resolved salesperson
 export async function chaseScopeOfWorkPo(id: string): Promise<{ notifiedUserName: string }> {
-  return apiFetch<{ notifiedUserName: string }>(`/scope-of-works/${id}/chase-po`, { method: "POST" });
+  return apiFetch<{ notifiedUserName: string }>(`/scope-of-works/${encodeURIComponent(id)}/chase-po`, { method: "POST" });
 }
 // บันทึกประวัติว่ามีการพิมพ์ Scope of Work นี้
 // Logs that this Scope of Work was printed
 export async function logScopeOfWorkPrinted(id: string): Promise<void> {
-  await apiFetch<void>(`/scope-of-works/${id}/print`, { method: "POST" });
+  await apiFetch<void>(`/scope-of-works/${encodeURIComponent(id)}/print`, { method: "POST" });
 }
 
 // ส่งแจ้งเตือนในระบบถึงผู้รับทุกคนที่เลือกไว้ใน documentRecipients (อีเมลถูกถอดออก 2026-08-07)
 // Sends the in-app notification to every recipient selected in documentRecipients (email removed 2026-08-07)
 export async function sendScopeOfWorkDocumentNotifications(id: string): Promise<{ sentCount: number; failedCount: number; recipientCount: number }> {
-  return apiFetch<{ sentCount: number; failedCount: number; recipientCount: number }>(`/scope-of-works/${id}/send-documents`, { method: "POST" });
+  return apiFetch<{ sentCount: number; failedCount: number; recipientCount: number }>(`/scope-of-works/${encodeURIComponent(id)}/send-documents`, { method: "POST" });
 }
 // อัปโหลดไฟล์แนบหนึ่งไฟล์เข้ากับ Scope of Work นี้
 // Uploads a single attachment to this Scope of Work
@@ -363,7 +363,7 @@ export async function uploadScopeOfWorkAttachment(
   id: string,
   file: { fileName: string; contentType: string; dataBase64: string },
 ): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${id}/attachments`, {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}/attachments`, {
     method: "POST",
     body: JSON.stringify(file),
   });
@@ -373,7 +373,7 @@ export async function uploadScopeOfWorkAttachment(
 // Deletes an attachment from this Scope of Work
 export async function deleteScopeOfWorkAttachment(id: string, attachmentId: string): Promise<ScopeOfWork> {
   const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(
-    `/scope-of-works/${id}/attachments/${encodeURIComponent(attachmentId)}`,
+    `/scope-of-works/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`,
     { method: "DELETE" },
   );
   return scopeOfWork;

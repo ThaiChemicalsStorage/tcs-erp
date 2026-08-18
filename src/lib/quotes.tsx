@@ -426,25 +426,25 @@ export async function createQuote(fields: QuoteDraftFields): Promise<Quote> {
 // แก้ไขใบเสนอราคาที่มีอยู่ตาม id
 // Updates an existing quote identified by id
 export async function updateQuote(id: string, fields: QuoteUpdateFields): Promise<Quote> {
-  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return quote;
 }
 // ทำสำเนาใบเสนอราคา
 // Duplicates a quote
 export async function duplicateQuote(id: string): Promise<Quote> {
-  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}/duplicate`, { method: "POST" });
+  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${encodeURIComponent(id)}/duplicate`, { method: "POST" });
   return quote;
 }
 // สร้างรีวิชันใหม่ของใบเสนอราคาโดยไม่แก้ไขต้นฉบับ
 // Creates a new revision of a quote without modifying the source record
 export async function rewriteQuote(id: string): Promise<Quote> {
-  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}/rewrite`, { method: "POST" });
+  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${encodeURIComponent(id)}/rewrite`, { method: "POST" });
   return quote;
 }
 // ตรวจสอบความครบถ้วนของเอกสารก่อนพิมพ์/ส่งออก PDF
 // Validates document completeness before printing/exporting as PDF
 export async function printQuote(id: string): Promise<void> {
-  await apiFetch<void>(`/quotes/${id}/print`, { method: "POST" });
+  await apiFetch<void>(`/quotes/${encodeURIComponent(id)}/print`, { method: "POST" });
 }
 // ดำเนินการตามขั้นตอนอนุมัติของใบเสนอราคา (ส่งขออนุมัติ/อนุมัติ/ปฏิเสธ ฯลฯ)
 // Performs a workflow action on a quote (submit/approve/reject etc.)
@@ -454,7 +454,7 @@ export async function performWorkflowAction(
   comment: string,
   draft: QuoteUpdateFields,
 ): Promise<Quote> {
-  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${id}/workflow`, {
+  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${encodeURIComponent(id)}/workflow`, {
     method: "POST",
     body: JSON.stringify({ action, comment, draft }),
   });

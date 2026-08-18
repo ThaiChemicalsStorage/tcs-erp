@@ -2,6 +2,11 @@ export interface ChecklistOption {
   key: string;
   label: string;
   checked: boolean;
+  /** Optional fill-in text/number for an option that isn't a pure yes/no toggle (e.g. Job Order's
+   * "HYDRO-TEST ___ BAR" / "PRIMER COAT: ___ / ___ MICRON" lines) — added for Job Order (2026-08-18,
+   * Project module Stage 2), backward-compatible since it's optional and Scope of Work's existing
+   * options never set it. */
+  value?: string;
 }
 
 /** Extra `documentRecipients` key for recipients picked freely from the whole staff directory,
@@ -11,10 +16,16 @@ export interface ChecklistOption {
 export const ADDITIONAL_RECIPIENT_KEY = "additional";
 export const ADDITIONAL_RECIPIENT_LABEL = "ผู้รับเพิ่มเติม";
 
+/** "Store" added 2026-08-18 (Project module Stage 2) — the Material Requisition reference PDF
+ * (FM-ST-04) has a distinct "แผนกสโตร์" (Store dept) sign-off, separate from Factory/Production.
+ * ASSUMPTION, not confirmed against real org structure yet — flagged for owner sign-off; if Store
+ * turns out to just be a function within Factory, this entry should be removed rather than kept as
+ * dead org-chart data. */
 export const DOCUMENT_RECIPIENT_DEPARTMENTS: { key: string; label: string }[] = [
   { key: "purchase", label: "Purchase" },
   { key: "project", label: "Project" },
   { key: "factory", label: "Factory" },
+  { key: "store", label: "Store" },
   { key: "technic", label: "Technic" },
   { key: "service", label: "Service" },
   { key: "accounting", label: "Accounting" },

@@ -72,7 +72,7 @@ export async function fetchAllDeliveryOrders(): Promise<DeliveryOrderListItem[]>
   return deliveryOrders;
 }
 export async function fetchDeliveryOrder(id: string): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}`);
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}`);
   return deliveryOrder;
 }
 export async function createDeliveryOrderFromScope(scopeOfWorkId: string): Promise<DeliveryOrder> {
@@ -83,7 +83,7 @@ export async function createDeliveryOrderFromScope(scopeOfWorkId: string): Promi
   return deliveryOrder;
 }
 export async function updateDeliveryOrder(id: string, fields: DeliveryOrderUpdateFields): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}`, {
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(fields),
   });
@@ -92,19 +92,19 @@ export async function updateDeliveryOrder(id: string, fields: DeliveryOrderUpdat
 // อนุมัติใบส่งมอบสินค้า (เปลี่ยนสถานะจาก PendingApproval เป็น Final)
 // Approves a Delivery Order (PendingApproval -> Final)
 export async function finalizeDeliveryOrder(id: string): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/finalize`, { method: "POST" });
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}/finalize`, { method: "POST" });
   return deliveryOrder;
 }
 // ส่งขออนุมัติใบส่งมอบสินค้า (เปลี่ยนสถานะจาก Draft เป็น PendingApproval)
 // Submits a Delivery Order for approval (Draft -> PendingApproval)
 export async function submitDeliveryOrderApproval(id: string): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/submit-approval`, { method: "POST" });
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}/submit-approval`, { method: "POST" });
   return deliveryOrder;
 }
 // ปฏิเสธ/ตีกลับใบส่งมอบสินค้า กลับไปเป็นฉบับร่าง พร้อมเหตุผล
 // Rejects a Delivery Order back to Draft, with a required comment
 export async function rejectDeliveryOrder(id: string, comment: string): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/reject`, {
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}/reject`, {
     method: "POST",
     body: JSON.stringify({ comment }),
   });
@@ -113,21 +113,21 @@ export async function rejectDeliveryOrder(id: string, comment: string): Promise<
 // ถอนคำขออนุมัติ กลับไปเป็นฉบับร่าง
 // Withdraws a pending approval request back to Draft
 export async function withdrawDeliveryOrderApproval(id: string): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/withdraw-approval`, { method: "POST" });
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}/withdraw-approval`, { method: "POST" });
   return deliveryOrder;
 }
 // สร้างฉบับร่างใหม่จากใบส่งมอบสินค้าที่อนุมัติแล้ว เพื่อแก้ไขได้โดยไม่ต้องปลดล็อกฉบับเดิม
 // Creates a fresh Draft copy of a Final Delivery Order so it can be corrected without unlocking it
 export async function rewriteDeliveryOrder(id: string): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/rewrite`, { method: "POST" });
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}/rewrite`, { method: "POST" });
   return deliveryOrder;
 }
 export async function refreshDeliveryOrderFromScope(id: string): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${id}/refresh`, { method: "POST" });
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}/refresh`, { method: "POST" });
   return deliveryOrder;
 }
 export async function deleteDeliveryOrder(id: string): Promise<void> {
-  await apiFetch<void>(`/delivery-orders/${id}`, { method: "DELETE" });
+  await apiFetch<void>(`/delivery-orders/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 // สร้างข้อความ "Remark" เริ่มต้นสำหรับงวดชำระเงิน จากเปอร์เซ็นต์/ชื่องวด/วิธีชำระ/จำนวนวัน
