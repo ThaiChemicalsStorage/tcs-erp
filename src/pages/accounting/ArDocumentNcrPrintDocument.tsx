@@ -179,6 +179,12 @@ function NcrPage({ doc, rows, pageIndex, pageCount, settings }: {
       }}
     >
       <div style={{ position: "relative", width: "100%", height: "100%" }}>
+        {/* สแตมป์สถานะตัดสต๊อก (เฉพาะ IV, เพิ่ม 2026-08-18) — วางที่มุมซ้ายบน (top:4/left:4) จุดเดียวกับ
+            ที่ NcrCalibrationTestPage ใช้เป็นมุมทดสอบ เพราะยืนยันแล้วว่าเป็นพื้นที่ขอบกระดาษว่างบนฟอร์มจริง
+            ไม่ทับกรอบพิมพ์ — เหมือน FORM_BI ยังเป็นตำแหน่งร่างแรก ควร calibrate กับฟอร์มจริงก่อนใช้งาน */}
+        {doc.docType === "IV" && (
+          <Field top={4} left={4} bold>{doc.stockDeducted ? "✓ ตัดสต๊อกแล้ว" : "ยังไม่ตัดสต๊อก"}</Field>
+        )}
         {pageCount > 1 && <Field top={FORM.pageIndicator.top} left={FORM.pageIndicator.left}>{pageIndex + 1}/{pageCount}</Field>}
 
         <Field top={FORM.customerName.top} left={FORM.customerName.left} width={FORM.customerName.width}>{doc.customerSnapshot.companyName}</Field>

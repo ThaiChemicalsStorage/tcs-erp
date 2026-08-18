@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -54,6 +54,7 @@ const AccountingPage = lazy(() => import("./pages/accounting/AccountingPage").th
 const ArDocumentListPage = lazy(() => import("./pages/accounting/ArDocumentListPage").then((m) => ({ default: m.ArDocumentListPage })));
 const ArMonthlyReportPage = lazy(() => import("./pages/accounting/ArMonthlyReportPage").then((m) => ({ default: m.ArMonthlyReportPage })));
 const AccountingDashboardPage = lazy(() => import("./pages/accounting/AccountingDashboardPage").then((m) => ({ default: m.AccountingDashboardPage })));
+const StockPage = lazy(() => import("./pages/stock/StockPage").then((m) => ({ default: m.StockPage })));
 
 // แสดงสถานะกำลังโหลดหน้าย่อยระหว่างรอโหลดโค้ด (Suspense fallback) พร้อมข้อความสำหรับ screen reader
 // Loading placeholder shown as the Suspense fallback for every lazy-loaded page, with a screen-reader label
@@ -125,7 +126,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "products" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "products" | "stock" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -134,6 +135,7 @@ const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
   quotations: ["quotes", "company", "users", "roles", "products", "categories", "jobTypes", "customers"],
   quotationTemplates: ["jobTypes", "products", "categories"],
   products: ["products", "categories"],
+  stock: ["products", "categories"],
   customers: ["customers"],
   users: ["users", "roles", "departments", "teams"],
   roles: ["roles", "users"],
@@ -174,6 +176,7 @@ const navItems: NavItem[] = [
   { key: "arTaxInvoice", icon: FileText, labelKey: "nav.arTaxInvoice", permission: "ar:view" },
   { key: "arMonthly", icon: CalendarDays, labelKey: "nav.arMonthly", permission: "ar:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
+  { key: "stock", icon: Boxes, labelKey: "nav.stock", permission: "stock:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
   { key: "roles", icon: ShieldCheck, labelKey: "nav.roles", permission: "roles:manage" },
@@ -186,7 +189,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
   { labelKey: "nav.group.accounting", keys: ["accountingDashboard", "accounting", "arDeposit", "arBilling", "arReceipt", "arTaxInvoice", "arMonthly"] },
-  { labelKey: "nav.group.inventory", keys: ["products"] },
+  { labelKey: "nav.group.inventory", keys: ["products", "stock"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 
@@ -206,6 +209,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   arMonthly: "nav.arMonthly",
   accountingDashboard: "nav.accountingDashboard",
   products: "nav.products",
+  stock: "nav.stock",
   customers: "nav.customers",
   users: "nav.users",
   roles: "nav.roles",
@@ -637,6 +641,8 @@ export default function App() {
   const canCreateAr = hasPermission(currentUser, roles, "ar:create");
   const canIssueAr = hasPermission(currentUser, roles, "ar:issue");
   const canCancelAr = hasPermission(currentUser, roles, "ar:cancel");
+  const canViewStock = hasPermission(currentUser, roles, "stock:view");
+  const canAdjustStock = hasPermission(currentUser, roles, "stock:adjust");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
   // ตรวจสิทธิ์ template โดยยอมรับสิทธิ์ระดับ manage แบบเก่า (superset) ควบคู่กับสิทธิ์ย่อยแบบใหม่
   // Checks a template permission, accepting the legacy superset "manage" permission alongside the granular one
@@ -840,13 +846,13 @@ export default function App() {
               : effectiveNav === "accounting"
               ? <AccountingPage canCreate={canCreateAr} canIssue={canIssueAr} />
               : effectiveNav === "arDeposit"
-              ? <ArDocumentListPage key="AR" docType="AR" canIssue={canIssueAr} canCancel={canCancelAr} />
+              ? <ArDocumentListPage key="AR" docType="AR" canIssue={canIssueAr} canCancel={canCancelAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arBilling"
-              ? <ArDocumentListPage key="BI" docType="BI" canIssue={canIssueAr} canCancel={canCancelAr} />
+              ? <ArDocumentListPage key="BI" docType="BI" canIssue={canIssueAr} canCancel={canCancelAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arReceipt"
-              ? <ArDocumentListPage key="RE" docType="RE" canIssue={canIssueAr} canCancel={canCancelAr} />
+              ? <ArDocumentListPage key="RE" docType="RE" canIssue={canIssueAr} canCancel={canCancelAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arTaxInvoice"
-              ? <ArDocumentListPage key="IV" docType="IV" canIssue={canIssueAr} canCancel={canCancelAr} />
+              ? <ArDocumentListPage key="IV" docType="IV" canIssue={canIssueAr} canCancel={canCancelAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arMonthly"
               ? <ArMonthlyReportPage />
               : effectiveNav === "accountingDashboard"
@@ -863,6 +869,8 @@ export default function App() {
               ? <SettingsPage company={company} onCompanyChange={updateCompany} currentUser={currentUser} onUserChange={updateCurrentUser} roles={roles} canManageCompany={canManageCompany} onAudit={handleAudit} />
               : effectiveNav === "products"
               ? <ProductsPage products={products} onProductsChange={updateProducts} categories={categories} onCategoriesChange={updateCategories} currentUserId={currentUser.id} initialEditId={productDeepLinkId} onEditIdConsumed={() => setProductDeepLinkId(null)} autoView={pageAction?.nav === "products" ? pageAction.action : null} autoViewSeq={pageAction?.nav === "products" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
+              : effectiveNav === "stock"
+              ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} />
               : effectiveNav === "users"
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} departments={departments} teams={teams} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
               : effectiveNav === "roles" && isSuperAdmin

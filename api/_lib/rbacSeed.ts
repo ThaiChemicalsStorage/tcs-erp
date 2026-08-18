@@ -94,6 +94,18 @@ const RBAC_MIGRATIONS: RbacMigration[] = [
       accounting_user: ["ar:cancel"],
     },
   },
+  {
+    // Product Stock (added 2026-08-18) added 2 new permissions to `defaultRoles` — same
+    // already-provisioned-database gap as every module before it. administrator/accounting_user
+    // get both (accounting cuts stock against IV documents); viewer gets stock:view only, matching
+    // its existing view-everything-nothing-else pattern.
+    id: "stock-permissions-2026-08-18",
+    grants: {
+      administrator: ["stock:view", "stock:adjust"],
+      accounting_user: ["stock:view", "stock:adjust"],
+      viewer: ["stock:view"],
+    },
+  },
 ];
 
 /**

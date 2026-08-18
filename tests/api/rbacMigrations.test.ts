@@ -187,3 +187,45 @@ describe("applyRbacMigrations (accounting_user gains ar:cancel, 2026-08-18)", ()
     expect(marker?.appliedRoleKeys).not.toContain("accounting_user");
   });
 });
+
+describe("applyRbacMigrations (Product Stock permissions, 2026-08-18)", () => {
+  const STOCK_MIGRATION_ID = "stock-permissions-2026-08-18";
+  const STOCK_PERMISSION = /^stock:/;
+
+  beforeEach(async () => {
+    await roles.updateMany({}, { $pull: { permissions: { $in: ["stock:view", "stock:adjust"] } } });
+  });
+
+  it("grants administrator/accounting_user both stock permissions, viewer only stock:view", async () => {
+    await applyRbacMigrations();
+    expect((await permissionsOf("administrator")).filter((p) => STOCK_PERMISSION.test(p)).sort()).toEqual(["stock:adjust", "stock:view"]);
+    expect((await permissionsOf("accounting_user")).filter((p) => STOCK_PERMISSION.test(p)).sort()).toEqual(["stock:adjust", "stock:view"]);
+    expect((await permissionsOf("viewer")).filter((p) => STOCK_PERMISSION.test(p))).toEqual(["stock:view"]);
+  });
+
+  it("does not touch a role that never had stock:* at all", async () => {
+    const before = await permissionsOf("sales_user");
+    await applyRbacMigrations();
+    expect(await permissionsOf("sales_user")).toEqual(before);
+  });
+
+  it("records the migration so a second run is idempotent", async () => {
+    await applyRbacMigrations();
+    const marker = await markers.findOne({ _id: STOCK_MIGRATION_ID });
+    expect(marker?.appliedRoleKeys.sort()).toEqual(["accounting_user", "administrator", "viewer"]);
+
+    const snapshot = await permissionsOf("administrator");
+    await applyRbacMigrations();
+    expect(await permissionsOf("administrator")).toEqual(snapshot);
+  });
+
+  it("a permission an admin revokes afterward stays revoked", async () => {
+    await applyRbacMigrations();
+    await roles.updateOne({ key: "accounting_user" }, { $pull: { permissions: "stock:adjust" } });
+
+    await applyRbacMigrations();
+
+    expect(await permissionsOf("accounting_user")).not.toContain("stock:adjust");
+    expect(await permissionsOf("accounting_user")).toContain("stock:view");
+  });
+});

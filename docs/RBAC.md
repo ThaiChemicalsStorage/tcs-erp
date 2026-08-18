@@ -27,13 +27,13 @@ Receivable" below):
 | Role | `isSuperAdmin` | `isSystem` | Summary |
 |---|---|---|---|
 | Super Admin | ✅ | ✅ (undeletable) | Every permission, always — `roleHasPermission()` short-circuits to `true` regardless of the stored list |
-| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15) + full Scope of Work access (all 7 `scopeOfWork:*` permissions, incl. `:viewAll` added 2026-07-23) + all 4 `ar:*` permissions (added 2026-08-17). No `roles:manage`/`company:manage`. |
+| Administrator | — | ✅ (undeletable) | Manage users + full quotation/product/customer CRUD + audit log view + full Quotation Template management (all 8 `quotationTemplates:*` permissions, `:manage` added 2026-07-14, the 7 granular ones added 2026-07-15) + full Scope of Work access (all 7 `scopeOfWork:*` permissions, incl. `:viewAll` added 2026-07-23) + all 4 `ar:*` permissions (added 2026-08-17) + both `stock:*` permissions (added 2026-08-18). No `roles:manage`/`company:manage`. |
 | Sales User | — | — | Create/edit/export quotations + view/create/edit customers, no approve/reject/archive. Also `scopeOfWork:view/create/edit/print` — can create/edit a Scope of Work from a quotation they can access and print it, but not finalize or delete one. **Does not hold `quotations:viewAll` or `scopeOfWork:viewAll`** — only sees quotations/Scope of Work records it created itself (see the two "Own-Records-Only Viewing" sections below). Maps to the request's "Sales Executive." |
 | Service Engineer | — | — | Added 2026-08-07. Runs a field-service job end to end: `service:view/create/edit/complete/print` + `serviceTemplates:view` (required — the report editor's boot fetch needs it) + `customers:view` + `dashboard:view`. **No `service:viewAll`** — own reports only, mirroring Sales User. No quotation/product/user access at all. See "Service" below. |
-| Accounting User | — | — | Added 2026-08-17. Runs the AR billing workflow end to end: `ar:view/create/issue/cancel` (`:cancel` added 2026-08-18 — see "Accounts Receivable" below) + `scopeOfWork:view/viewAll` (must see every job company-wide to bill it, not just its own) + `customers:view/edit` + `dashboard:view`. No quotation/product/user/service access at all. See "Accounts Receivable" below. |
+| Accounting User | — | — | Added 2026-08-17. Runs the AR billing workflow end to end: `ar:view/create/issue/cancel` (`:cancel` added 2026-08-18 — see "Accounts Receivable" below) + `scopeOfWork:view/viewAll` (must see every job company-wide to bill it, not just its own) + `customers:view/edit` + `dashboard:view` + both `stock:view`/`stock:adjust` (added 2026-08-18 — cuts stock against IV documents from the same dual-pane view they issue/print from, see "Stock" below). No quotation/product/user/service access at all — reaches `GET /api/products`/`GET /api/categories` (needed to pick a product to cut stock against) via `stock:view` alone, since it holds no `products:view`; see "Stock" below for how that's wired. |
 | Approver Level 1 | — | — | View/edit/approve/reject quotations + view customers. Also `scopeOfWork:view/viewAll/edit/finalize/print` (no `:create`/`:delete` — edits/finalizes Sales' drafts rather than starting new ones; `scopeOfWork:viewAll` added 2026-07-23, alongside the pre-existing `quotations:viewAll` — an Approver must be able to see everyone's records to act on them). Also `ar:view/cancel` (added 2026-08-17 — oversight, not day-to-day issuing). Maps to "Sales Manager." |
 | Approver Level 2 | — | — | Same rights as Level 1 in this build, including the same Scope of Work and AR grants (see Known Simplifications below). Maps to "CEO." |
-| Viewer | — | — | `*:view` only (incl. `customers:view`, `scopeOfWork:view`, `ar:view` added 2026-08-17), plus `quotations:viewAll`/`scopeOfWork:viewAll` — a read-only role that can't act on anything still needs to be able to *see* everything to be useful as a viewer. |
+| Viewer | — | — | `*:view` only (incl. `customers:view`, `scopeOfWork:view`, `ar:view` added 2026-08-17, `stock:view` added 2026-08-18), plus `quotations:viewAll`/`scopeOfWork:viewAll` — a read-only role that can't act on anything still needs to be able to *see* everything to be useful as a viewer. |
 
 **No new permission was added for the 2026-07-10 Job Type / Executive Dashboard pass.** `GET /api/jobtypes` reuses `quotations:view` (already required to touch a quote); `POST`/`PATCH /api/jobtypes` reuse `company:manage` (Super Admin only, matching the existing precedent for company-wide configuration data like bank/VAT/T&C). `GET /api/dashboard` continues to reuse `dashboard:view`, which every default role already has — two of its response sections (`activityTimeline`, `approvalDashboard`) are additionally gated per-caller by the `auditLog:view`/`quotations:approve` the caller already has, rather than a new dashboard-specific permission.
 
@@ -507,6 +507,49 @@ gain their AR grants) and `ar-cancel-for-accounting-user-2026-08-18` (Accounting
 the `ar:cancel` it was missing). Both covered by `tests/api/rbacMigrations.test.ts` (in-memory
 MongoDB), including the "revoked stays revoked" and "skips a deleted role" properties. **What is
 still a human decision**: which real employees get assigned the Accounting User role.
+
+### Stock (added 2026-08-18)
+
+2 permissions, gating the new "สต๊อกสินค้า" page and Accounting's IV stock-cutting action:
+
+| Permission | Gates |
+|---|---|
+| `stock:view` | `GET /api/stock-movements`, the Stock page's mere visibility, and — via `requireOneOfPermissions()` (see below) — `GET /api/products`/`GET /api/categories` for a role that holds no `products:view` of its own. |
+| `stock:adjust` | `POST /api/stock-movements` (manual receive/deduct/adjust from the Stock page) and `POST /api/ar-documents/:id/stock-deduction` (cutting stock against an issued IV from `ArStockPanel.tsx`, Accounting's dual-pane view) — the two "actually changes `Product.stockQty`" actions. |
+
+Default grants: **Super Admin**/**Administrator** get both; **Accounting User** gets both (cuts
+stock against IV documents from the same screen it issues/prints from — see "Accounts Receivable"
+above); **Viewer** gets `stock:view` only; every other default role (Sales User, Service Engineer,
+Approver 1/2) gets neither — stock-cutting is Accounting's action, not theirs.
+
+**`requireOneOfPermissions()` (`api/_lib/auth.ts`)**: `GET /api/products` and `GET /api/categories`
+were, until this pass, strictly `products:view`-gated — which broke the Stock page (and
+`ArStockPanel.tsx`'s product picker) for `stock:view`-only roles like Accounting User, who holds no
+`products:view` at all. Fixed by adding `requireOneOfPermissions(req, permissions[])` — passes if the
+caller holds ANY of the listed permissions — and gating those two GET routes on
+`["products:view", "stock:view"]` instead of `products:view` alone; every other products/categories
+route (create/edit/delete) is untouched. This is the first shared, reusable any-of check in
+`api/_lib/auth.ts` — not the first in the codebase overall, though: `api/_lib/quotationTemplatesHandler.ts`
+already has its own file-scoped `requireAnyPermission(ctx, permissions[])` (different signature) for
+`GET /api/quotation-templates`'s "admin view OR picking-for-a-quotation" need. The two are unrelated
+functions with a similar idea — deliberately given different names (`requireOneOfPermissions` vs.
+`requireAnyPermission`) precisely so they don't read as the same abstraction. **This bug was not
+caught during the feature's initial build**
+— it shipped broken and was only found and fixed during live verification the same day; see
+[CHANGELOG.md](./CHANGELOG.md) 2026-08-18 for the honest writeup of how that happened.
+
+Audit logging: `POST /api/ar-documents/:id/stock-deduction` writes a server-side `AuditLogEntry` via
+the existing `writeArAuditEntry()` (module `"บัญชีลูกหนี้"`, action `"AR Stock Deducted"`) — a manual
+receive/deduct/adjust from the Stock page itself does not write an audit entry (it's already
+self-documenting via the `stock_movements` ledger's own `reason`/`createdBy` fields, the same
+"the ledger IS the audit trail" reasoning the collection's own doc comment in `collections.ts` gives
+— see [DATABASE.md](./DATABASE.md) "`StockMovement`").
+
+**RBAC catch-up**: no new role key was added (`stock:*` was folded into the existing default roles
+above, not a 9th role), so only `applyRbacMigrations()` was needed — `stock-permissions-2026-08-18`
+grants Administrator/Accounting User both permissions and Viewer `stock:view` only. Covered by
+`tests/api/rbacMigrations.test.ts` (in-memory MongoDB), same "revoked stays revoked"/"skips a deleted
+role" properties as every prior migration.
 
 ### Departments + Teams + Tiered Visibility (added 2026-08-14)
 

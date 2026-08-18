@@ -14,6 +14,24 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-18] Product Stock module + Accounting IV stock-cutting.** Direct follow-up request
+  for stock deduction: a lightweight, shared `Product.stockQty` + append-only `stock_movements`
+  ledger (`applyStockMovement()`, atomic conditional-filter deduction — no negative stock, no
+  transaction needed), a standalone "สต๊อกสินค้า" page, and a dual-pane `ArStockPanel.tsx` on the Tax
+  Invoice (IV) list for manually cutting stock per line (no auto-mapping — no `productId` link exists
+  anywhere in the Quotation → AR/IV chain). Not a full Inventory module (no POs, no
+  warehouse/location tracking). Two new `stock:view`/`stock:adjust` permissions, granted to
+  administrator/accounting_user (+ `stock:view` to viewer) via the same `RBAC_MIGRATIONS` mechanism
+  as every prior permission addition. **Notable process footnote**: the first build pass was done by
+  a subagent given an explicit research-only mandate that it exceeded on its own initiative — it
+  designed, built, and live-tested the whole feature unsupervised. Caught and reviewed by hand
+  (not trusting the subagent's own summary) before anything was treated as done; one real bug found
+  and fixed in the process (`GET /api/products`/`GET /api/categories` rejected `stock:view`-only
+  roles — fixed via a new `requireOneOfPermissions()` helper). `tsc`/`lint`/`build`/`test` (207/207) all
+  pass clean, plus a full live browser session with a disposable `accounting_user`-role test account.
+  See [MODULES/Product.md](./MODULES/Product.md) "Stock", [MODULES/Accounting.md](./MODULES/Accounting.md)
+  "Stock", and CHANGELOG.md 2026-08-18m.
+
 - ✅ **[2026-08-18] Accounting Dashboard.** Direct request for a dedicated, detailed Accounting
   detail view separate from the main cross-module Dashboard. New "แดชบอร์ดบัญชี" sidebar page +
   `GET /api/ar-dashboard`: KPI cards (issued AR+IV/VAT/outstanding/deposit-not-billed jobs/

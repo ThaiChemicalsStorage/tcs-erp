@@ -68,7 +68,9 @@ export type Permission =
   | "ar:view"
   | "ar:create"
   | "ar:issue"
-  | "ar:cancel";
+  | "ar:cancel"
+  | "stock:view"
+  | "stock:adjust";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -139,6 +141,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "ar:create",
   "ar:issue",
   "ar:cancel",
+  "stock:view",
+  "stock:adjust",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -210,6 +214,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "ar:create": "จัดการ checklist และแนบเอกสารงวดบิล",
   "ar:issue": "ออกเอกสาร AR / ใบกำกับภาษี / ใบวางบิล",
   "ar:cancel": "ยกเลิกเอกสารบัญชีลูกหนี้",
+  "stock:view": "ดูสต๊อกสินค้าและประวัติการปรับสต๊อก",
+  "stock:adjust": "รับเข้า/ตัดออก/ปรับยอดสต๊อกสินค้า",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -281,6 +287,8 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "ar:create": "permission.arCreate",
   "ar:issue": "permission.arIssue",
   "ar:cancel": "permission.arCancel",
+  "stock:view": "permission.stockView",
+  "stock:adjust": "permission.stockAdjust",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -331,7 +339,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
   {
     label: "คลังสินค้า",
     labelKey: "nav.products",
-    permissions: ["products:view", "products:create", "products:edit", "products:delete", "products:export"],
+    permissions: ["products:view", "products:create", "products:edit", "products:delete", "products:export", "stock:view", "stock:adjust"],
   },
   {
     label: "ลูกค้า",

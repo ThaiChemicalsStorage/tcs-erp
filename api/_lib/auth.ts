@@ -119,3 +119,17 @@ export async function requirePermission(req: VercelRequest, permission: Permissi
   }
   return ctx;
 }
+
+/** Passes if the caller holds ANY of the given permissions — for a route two otherwise-unrelated
+ * permission groups both need read access to (e.g. GET /api/products, needed by both Product
+ * Library and the Stock page's stock:view-only holders). See RBAC.md "Permission dependencies".
+ * Named distinctly from `quotationTemplatesHandler.ts`'s own module-local `requireAnyPermission()`
+ * (different shape: sync, takes an already-resolved AuthContext) — same "any of" idea, unrelated
+ * code, deliberately not sharing a name to avoid confusing the two at a glance. */
+export async function requireOneOfPermissions(req: VercelRequest, permissions: Permission[]): Promise<AuthContext> {
+  const ctx = await requireUser(req);
+  if (!permissions.some((p) => roleHasPermission(ctx.role, p))) {
+    throw new HttpError(403, "Forbidden");
+  }
+  return ctx;
+}

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
-import { requirePermission } from "../_lib/auth.js";
+import { requirePermission, requireOneOfPermissions } from "../_lib/auth.js";
 import { categoriesCollection, toObjectId, withStringId } from "../_lib/collections.js";
 import { nowIso } from "../../src/lib/products.js";
 
@@ -10,7 +10,9 @@ function escapeRegExp(s: string): string {
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
-    await requirePermission(req, "products:view");
+    // stock:view-only holders (e.g. accounting_user) need category names on the Stock page too —
+    // same reasoning as GET /api/products, see that handler's comment.
+    await requireOneOfPermissions(req, ["products:view", "stock:view"]);
     const categories = await categoriesCollection();
     const docs = await categories.find({}).sort({ name: 1 }).toArray();
     res.status(200).json({ categories: docs.map(withStringId) });

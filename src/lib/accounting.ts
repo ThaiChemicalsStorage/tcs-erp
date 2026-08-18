@@ -83,6 +83,9 @@ export interface ArDocument {
   netTotal: number;
   amountTextTh: string;
   remarks: string[];
+  /** True once any stock has been cut against this document (added 2026-08-18, IV only in
+   * practice) — see src/lib/stock.ts and api/_lib/collections.ts's StockMovementFields. */
+  stockDeducted: boolean;
   status: ArDocumentStatus;
   cancelledReason?: string;
   cancelledBy?: string;
@@ -161,6 +164,13 @@ export async function fetchArDocuments(filter?: { scopeOfWorkId?: string; status
 export async function issueArReceipt(taxInvoiceDocumentId: string): Promise<ArDocument> {
   const { document } = await apiFetch<{ document: ArDocument }>(`/ar-documents/${taxInvoiceDocumentId}/receipt`, { method: "POST" });
   return document;
+}
+
+/** Cuts stock against an issued IV (ใบกำกับภาษี/ใบส่งสินค้า) — see api/_lib/arHandler.ts's
+ * handleStockDeduction() for why this is a separate, incremental action rather than automatic at
+ * issue time (no reliable Quotation-line → Product link exists to derive it from). */
+export async function deductArDocumentStock(id: string, lines: { productId: string; qty: number }[]): Promise<{ document: ArDocument; movements: import("./stock.js").StockMovement[] }> {
+  return apiFetch(`/ar-documents/${id}/stock-deduction`, { method: "POST", body: JSON.stringify({ lines }) });
 }
 
 export async function fetchArDocument(id: string): Promise<ArDocument> {

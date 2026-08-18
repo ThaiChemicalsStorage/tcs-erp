@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Receipt, Search, X, Printer, Ban, FileText, Settings2 } from "lucide-react";
+import { Receipt, Search, X, Printer, Ban, FileText, Settings2, Boxes } from "lucide-react";
 import {
   fetchArDocuments, fetchArDocument, cancelArDocument, issueArReceipt,
   DOC_TYPE_LABELS,
@@ -16,6 +16,7 @@ import { ApiError } from "../../lib/apiClient";
 import { ArDocumentPrintDocument, type ArPaidByInvoiceId } from "./ArDocumentPrintDocument";
 import { ArDocumentNcrPrintDocument, NcrCalibrationTestPage } from "./ArDocumentNcrPrintDocument";
 import { loadNcrSettings, saveNcrSettings, DEFAULT_NCR_SETTINGS, type NcrPrintSettings } from "../../lib/ncrPrintSettings";
+import { ArStockPanel } from "./ArStockPanel";
 
 // หน้ารายการเอกสารบัญชีแยกตามประเภท — "1 ใบคือ 1 หน้า" ตามที่เจ้าของสั่ง (2026-08-18) ให้แต่ละ
 // ประเภทเอกสาร (ใบรับเงินมัดจำ/ใบกำกับภาษี, ใบแจ้งหนี้/ใบวางบิล, ใบเสร็จรับเงิน, ใบกำกับภาษี/ใบส่งสินค้า)
@@ -23,11 +24,13 @@ import { loadNcrSettings, saveNcrSettings, DEFAULT_NCR_SETTINGS, type NcrPrintSe
 // Per-document-type accounting list page — one shared component parameterized by docType,
 // matching the Sales modules' standalone-list pattern per the owner's 2026-08-18 instruction.
 export function ArDocumentListPage({
-  docType, canIssue, canCancel,
+  docType, canIssue, canCancel, canViewStock, canAdjustStock,
 }: {
   docType: ArDocumentType;
   canIssue: boolean;
   canCancel: boolean;
+  canViewStock: boolean;
+  canAdjustStock: boolean;
 }) {
   const [documents, setDocuments] = useState<ArDocument[]>([]);
   const [receipts, setReceipts] = useState<ArDocument[]>([]);
@@ -45,10 +48,14 @@ export function ArDocumentListPage({
   const [ncrSettings, setNcrSettings] = useState<NcrPrintSettings>(loadNcrSettings);
   const [cancelTarget, setCancelTarget] = useState<ArDocument | null>(null);
   const [receiptTarget, setReceiptTarget] = useState<ArDocument | null>(null);
+  const [detailDoc, setDetailDoc] = useState<ArDocument | null>(null);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
   const isTaxInvoicePage = docType === "AR" || docType === "IV";
+  // ตัดสต๊อกได้เฉพาะ IV — มีแต่ประเภทนี้ที่บรรทัดเป็นรายการสินค้า/บริการจริงจาก Quotation
+  // (AR เป็นได้แค่บรรทัดเงินมัดจำ, BI/RE อ้างอิงยอดรวม ไม่ใช่บรรทัดสินค้า) ดู buildDocumentLines()
+  const isStockPage = docType === "IV";
   // AR/IV pages show receipt-linkage per row; the BI page needs receipts too, to compute each
   // billing note's ชำระแล้ว/เงินคงค้าง print columns (added 2026-08-18, real BI reference form).
   const needsReceipts = isTaxInvoicePage || docType === "BI";
@@ -151,6 +158,14 @@ export function ArDocumentListPage({
     }
   };
 
+  const handleOpenStock = async (id: string) => {
+    try {
+      setDetailDoc(await fetchArDocument(id));
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : "เปิดเอกสารไม่สำเร็จ");
+    }
+  };
+
   const handleNcrPrint = async (id: string) => {
     try {
       setNcrPrintDoc(await fetchArDocument(id));
@@ -194,7 +209,23 @@ export function ArDocumentListPage({
   return (
     <>
     {/* ส่วนแสดงผลบนหน้าจอทั้งหมดต้องซ่อนตอนพิมพ์ — เอกสารพิมพ์ (ArDocumentPrintDocument ด้านล่าง)
-        ต้องเป็นสิ่งเดียวที่ออกกระดาษ (pattern เดียวกับ DeliveryOrderDocument's print:hidden blocks) */}
+        ต้องเป็นสิ่งเดียวที่ออกกระดาษ (pattern เดียวกับ DeliveryOrderDocument's print:hidden blocks).
+        ArStockPanel เป็นอีก view หนึ่งของหน้าเดียวกัน (ไม่ early-return ทิ้ง fragment) เพื่อให้ปุ่มพิมพ์ใน
+        panel นั้นยังเรียก printDoc/ncrPrintDoc state เดียวกับด้านล่างได้ — พิมพ์ได้ทันทีหลังตัดสต๊อกเสร็จ
+        โดยไม่ต้องย้อนกลับไปหน้ารายการก่อน (ตามคำขอ "พอเสร็จก็สามารถเลือกได้ว่าจะกดปริ้นอันไหน") */}
+    {detailDoc ? (
+      <ArStockPanel
+        doc={detailDoc}
+        canAdjust={canAdjustStock}
+        onBack={() => setDetailDoc(null)}
+        onDocumentUpdated={(updated) => {
+          setDetailDoc(updated);
+          setDocuments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+        }}
+        onPrint={() => void handlePrint(detailDoc.id)}
+        onNcrPrint={() => void handleNcrPrint(detailDoc.id)}
+      />
+    ) : (
     <div className="flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
       <div>
         <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{DOC_TYPE_LABELS[docType]}</h1>
@@ -337,6 +368,11 @@ export function ArDocumentListPage({
                               ออกใบเสร็จ
                             </button>
                           )}
+                          {isStockPage && canViewStock && (
+                            <button onClick={() => void handleOpenStock(d.id)} className="text-muted-foreground hover:text-foreground transition-colors" title="เปิดดู / ตัดสต๊อกสินค้า">
+                              <Boxes size={14} />
+                            </button>
+                          )}
                           <button onClick={() => void handlePrint(d.id)} className="text-muted-foreground hover:text-foreground transition-colors" title="พิมพ์ (กระดาษเปล่า — เอกสารเต็มรูปแบบ)">
                             <Printer size={14} />
                           </button>
@@ -393,6 +429,7 @@ export function ArDocumentListPage({
       )}
       <Toast message={toast.message} />
     </div>
+    )}
     {printDoc && <ArDocumentPrintDocument document={printDoc} paidByInvoiceId={paidByInvoiceId} />}
     {ncrPrintDoc && <ArDocumentNcrPrintDocument document={ncrPrintDoc} settings={ncrSettings} paidByInvoiceId={paidByInvoiceId} />}
     {ncrTestPrinting && <NcrCalibrationTestPage settings={ncrSettings} variant={docType === "BI" ? "billingNote" : "standard"} />}

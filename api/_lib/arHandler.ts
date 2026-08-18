@@ -8,7 +8,7 @@ import {
   scopeOfWorksCollection, quotesCollection, auditLogCollection, withStringId, toObjectId,
   type ArMilestoneFields, type ArDocumentFields, type ArDocumentLine, type ArChecklistKey,
   type ArWorkClassification, type ArDocumentType, type ArBillingStatus,
-  type ScopeOfWorkFields, type QuoteFields, countersCollection,
+  type ScopeOfWorkFields, type QuoteFields, countersCollection, type StockMovementFields,
 } from "./collections.js";
 import { computeQuoteAmountBeforeVat } from "./quoteAmounts.js";
 import { nextArDocNumber } from "./documentNumbering.js";
@@ -17,6 +17,7 @@ import {
 } from "./arCalculations.js";
 import { bahtText } from "../../src/lib/quotes.js";
 import { nowIso } from "../../src/lib/products.js";
+import { applyStockMovement } from "./stockHandler.js";
 
 /**
  * Accounts Receivable API (added 2026-08-17, Phase 1 — see docs/MODULES/Accounting.md for the full
@@ -413,6 +414,7 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
     vatRate: 7,
     amountTextTh: bahtText(totals.netTotal),
     remarks,
+    stockDeducted: false,
     status: "issued",
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
   };
@@ -446,6 +448,7 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
     subtotal: totals.netTotal, discount: 0, valueAmount: totals.netTotal, vatRate: 0, vatAmount: 0, netTotal: totals.netTotal,
     amountTextTh: bahtText(totals.netTotal),
     remarks: [],
+    stockDeducted: false,
     status: "issued",
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
   };
@@ -555,6 +558,7 @@ async function handleIssueReceipt(req: VercelRequest, res: VercelResponse, princ
     // Carries over the tax invoice's job-number/PO remarks; drops its first "% of contract value"
     // line, which describes the invoice's own amount breakdown, not the payment received.
     remarks: principal.remarks.slice(1),
+    stockDeducted: false,
     status: "issued",
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
   };
@@ -570,6 +574,60 @@ async function handleIssueReceipt(req: VercelRequest, res: VercelResponse, princ
     scopeOfWorkId: principal.scopeOfWorkId,
   });
   res.status(201).json({ document: withStringId({ ...reDoc, _id: insert.insertedId }) });
+}
+
+/** Cuts stock against an issued IV (ใบกำกับภาษี/ใบส่งสินค้า) — added 2026-08-18. Deliberately a
+ * separate, incremental action rather than something that happens automatically at issue time: a
+ * Quotation line item has no reliable link back to a real Product (QuoteLine carries no
+ * `productId` — ProductPickerModal only ever copies name/unit/price into a fresh line once), so
+ * staff pick which product(s)/quantities correspond to what actually left the warehouse, and may
+ * do so in more than one pass over time (a single invoice can ship in parts). Each call writes one
+ * StockMovementFields row per line via applyStockMovement() (the shared ledger, see
+ * collections.ts) and flips `stockDeducted` true so the print stamp reflects it — never flipped
+ * back false by a later call, since a document that's had ANY stock cut against it should read as
+ * "ตัดสต๊อกแล้ว" from that point on. */
+async function handleStockDeduction(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "stock:adjust");
+  const doc = await loadDocumentOrThrow(id);
+  if (doc.docType !== "IV") throw new HttpError(400, "ตัดสต๊อกได้เฉพาะใบกำกับภาษี/ใบส่งสินค้า (IV) เท่านั้น");
+  if (doc.status !== "issued") throw new HttpError(400, "เอกสารนี้ถูกยกเลิกแล้ว ไม่สามารถตัดสต๊อกได้");
+
+  const body = req.body ?? {};
+  const rawLines = Array.isArray(body.lines) ? body.lines : [];
+  const lines: { productId: string; qty: number }[] = rawLines
+    .filter((l: unknown): l is { productId: unknown; qty: unknown } => typeof l === "object" && l !== null)
+    .map((l: { productId: unknown; qty: unknown }) => ({
+      productId: typeof l.productId === "string" ? l.productId : "",
+      qty: typeof l.qty === "number" ? l.qty : NaN,
+    }))
+    .filter((l: { productId: string; qty: number }) => l.productId && Number.isFinite(l.qty) && l.qty > 0);
+  if (lines.length === 0) throw new HttpError(400, "กรุณาเลือกสินค้าและระบุจำนวนอย่างน้อย 1 รายการ");
+
+  const movements: (StockMovementFields & { id: string })[] = [];
+  for (const line of lines) {
+    const { movement } = await applyStockMovement({
+      productId: line.productId,
+      kind: "deduct",
+      delta: -line.qty,
+      reason: `ตัดสต๊อกตามใบกำกับภาษี ${doc.docNo}`,
+      sourceType: "ar_document",
+      sourceId: doc._id.toString(),
+      sourceLabel: doc.docNo,
+      userId: ctx.user.id,
+    });
+    movements.push(movement);
+  }
+
+  if (!doc.stockDeducted) {
+    const arDocuments = await arDocumentsCollection();
+    await arDocuments.updateOne({ _id: doc._id }, { $set: { stockDeducted: true, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  }
+  await writeArAuditEntry(ctx, "AR Stock Deducted", `ตัดสต๊อก ${lines.length} รายการสำหรับใบกำกับภาษี ${doc.docNo}`, {
+    scopeOfWorkId: doc.scopeOfWorkId,
+  });
+  const updatedDoc = await loadDocumentOrThrow(id);
+  res.status(201).json({ document: withStringId(updatedDoc), movements });
 }
 
 /** Phase 1: basic cancel — a status transition only (never a delete, see collections.ts's
@@ -837,6 +895,7 @@ export async function handleAr(req: VercelRequest, res: VercelResponse): Promise
   if (docParts.length === 1) return handleDocumentOne(req, res, docParts[0]);
   if (docParts.length === 2 && docParts[1] === "receipt") return handleIssueReceipt(req, res, docParts[0]);
   if (docParts.length === 2 && docParts[1] === "cancel") return handleDocumentCancel(req, res, docParts[0]);
+  if (docParts.length === 2 && docParts[1] === "stock-deduction") return handleStockDeduction(req, res, docParts[0]);
 
   throw new HttpError(404, "Not found");
 }

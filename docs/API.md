@@ -74,20 +74,36 @@ Visibility" and [DATABASE.md](./DATABASE.md) for the `departments`/`teams` colle
 
 | Method & Path | Auth | Notes |
 |---|---|---|
-| `GET /api/products` | `products:view` | Sorted by `code`. |
-| `POST /api/products` | `products:create` | `409` on duplicate `code`. |
-| `PATCH /api/products/:id` | `products:edit` | Partial update; `409` if the new `code` collides with another product. |
+| `GET /api/products` | `products:view` **or** `stock:view` (added 2026-08-18) | Sorted by `code`. `requireOneOfPermissions()` (see below) — the Stock page (`stock:view`-only roles, e.g. `accounting_user`) needs the product catalog to show stock levels, without needing full Product Library management access. |
+| `POST /api/products` | `products:create` | `409` on duplicate `code`. `stockQty` defaults to `0` server-side and is never accepted from the client here — see "Stock" below. |
+| `PATCH /api/products/:id` | `products:edit` | Partial update; `409` if the new `code` collides with another product. `stockQty` is not client-editable via this route either — only through the Stock routes below. |
 | `DELETE /api/products/:id` | `products:delete` | Hard delete (no soft-delete check server-side beyond the client's own archive/delete UX distinction — `archived` is just a boolean field, set via `PATCH`). |
 
 ## Categories (`api/handlers/categories.ts`, mounted at `/api/categories`)
 
 | Method & Path | Auth | Notes |
 |---|---|---|
-| `GET /api/categories` | `products:view` | Sorted by `name`. Categories share the `products:*` permission family — there is no separate `categories:*` permission. |
+| `GET /api/categories` | `products:view` **or** `stock:view` (added 2026-08-18) | Sorted by `name`. Categories share the `products:*` permission family — there is no separate `categories:*` permission. Same `requireOneOfPermissions()` reasoning as `GET /api/products` above — the Stock page shows each product's category name. |
 | `POST /api/categories` | `products:create` | `409` on duplicate name (case-insensitive). |
 | `PATCH /api/categories/:id` | `products:edit` | Rename and/or toggle `archived`. `409` on duplicate name. |
 
 No `DELETE /api/categories/:id` route exists — matches the pre-migration UI, which only ever supported archive/unarchive for categories, never permanent delete.
+
+## Stock (`api/_lib/stockHandler.ts`, mounted at `/api/stock-movements` via `api/handlers/products.ts` — added 2026-08-18)
+
+Shares `api/handlers/products.ts`'s function file (checked first on the raw pathname) rather than
+getting its own — same 12-function-slot-sharing convention as `/api/search` sharing
+`api/handlers/customers.ts`. `vercel.json` rewrites: `/api/stock-movements` and
+`/api/stock-movements/:path*` → `/api/handlers/products`; `server/app.ts`'s `API_ROUTES` table gets
+a matching `"stock-movements": productsHandler` entry. See [MODULES/Product.md](./MODULES/Product.md)
+"Stock" for the full feature writeup.
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/stock-movements?productId=&sourceId=` | `stock:view` | Both filters optional; either narrows the ledger, omitting both returns the most recent 200 movements across every product, newest first. |
+| `POST /api/stock-movements` | `stock:adjust` | Manual receive/deduct/adjust from the Stock page, not tied to any document — body `{productId, kind: "receive"\|"deduct"\|"adjust", qty?, delta?, reason}` (`qty` a positive magnitude for receive/deduct, `delta` a signed correction for adjust). Calls `applyStockMovement()`, the one shared code path (also used by the AR stock-deduction route below) that atomically updates `Product.stockQty` and writes the ledger row — see [DATABASE.md](./DATABASE.md) "`StockMovement`". `400` if a deduction would take `stockQty` below 0 (the atomic conditional-update filter rejects it in the same query, no race window). |
+
+**`requireOneOfPermissions()` (`api/_lib/auth.ts`, added 2026-08-18)**: a new small auth helper, `requireOneOfPermissions(req, permissions[])`, that passes if the caller holds ANY of the listed permissions — the first *shared, reusable* any-of check in `api/_lib/auth.ts` (every other route there uses single-permission `requirePermission()`). Named distinctly from — and not to be confused with — `api/_lib/quotationTemplatesHandler.ts`'s own file-scoped `requireAnyPermission(ctx, permissions[])` (different signature — takes an `AuthContext`, not a request; also folds in a `quotationTemplates:manage` superset check) for `GET /api/quotation-templates`'s own "admin view OR picking-for-a-quotation" need — the two are unrelated functions with a similar idea, deliberately not sharing a name. Added to `auth.ts` specifically because `GET /api/products`/`GET /api/categories` need to stay reachable by two otherwise-unrelated permission groups: Product Library management (`products:view`) and stock-only roles reading the catalog for the Stock page (`stock:view`). See [RBAC.md](./RBAC.md) "Permission dependencies" for the fuller writeup, including how this bug was actually found (it shipped broken for `stock:view`-only roles on the first build pass, caught and fixed during live verification the same day).
 
 ## Job Types (`api/handlers/jobtypes.ts`, mounted at `/api/jobtypes` — added 2026-07-10)
 
@@ -218,6 +234,7 @@ Work/Delivery Order). Full design: [MODULES/Accounting.md](./MODULES/Accounting.
 | `GET /api/ar-documents/:id` | `ar:view` | One document. |
 | `POST /api/ar-documents/:id/receipt` | `ar:issue` | **Added 2026-08-18.** Issues an RE (ใบเสร็จรับเงิน) from an issued AR/IV: refuses non-AR/IV targets, cancelled targets, and duplicates (an active RE already linked via `lines.linkedArDocumentId`); amount = the invoice's VAT-inclusive net with zero VAT of its own; closes a non-deposit milestone (`work_open` → `closed`). |
 | `POST /api/ar-documents/:id/cancel` | `ar:cancel` | Reason required; status flip only, never a delete. Cancelling an RE that closed its milestone reopens it (`closed` → `work_open`). |
+| `POST /api/ar-documents/:id/stock-deduction` | `stock:adjust` | **Added 2026-08-18.** Cuts stock against an issued IV (ใบกำกับภาษี/ใบส่งสินค้า) — `400`s for any other `docType`, `400`s if not `status: "issued"`. Body `{lines: [{productId, qty}]}` — deliberately a manual, staff-picked mapping rather than derived from the invoice's own line items, since `ArDocumentLine` (and the `QuoteLine` it's built from) carries no `productId` at all; see [MODULES/Accounting.md](./MODULES/Accounting.md) "Stock". Writes one `StockMovementFields` row per line via `applyStockMovement()` (`sourceType: "ar_document"`, `sourceId` = the document's `_id`), and sets `ArDocumentFields.stockDeducted = true` (never reset back to `false` by a later call — once any stock has been cut against a document it reads as "ตัดสต๊อกแล้ว" from then on). Both the plain-paper and NCR print layouts stamp this status live at print time — see [MODULES/Accounting.md](./MODULES/Accounting.md). Callable more than once per document (a single invoice can ship in parts). Writes an audit entry (module `"บัญชีลูกหนี้"`, action `"AR Stock Deducted"`). |
 | `GET /api/ar-dashboard?from=&to=&salesperson=` | `ar:view` | **Added 2026-08-18, `salesperson` added same day.** Accounting Dashboard aggregation — KPIs, a 12-month AR+IV trend, doc-type breakdown, AR aging, the milestone billing-status funnel, and top customers. `from`/`to` (default: current month) scope only the period-based sections (issued totals/VAT/doc-type breakdown/top-customer sales); aging, the billing funnel, and the deposit-not-billed count are always current-state snapshots, never date-filtered — see `handleDashboard()`'s doc comment for why. `salesperson` (matched via `scopeOfWorkId` → `ScopeOfWork.quotationSalesperson`, since AR documents carry no salesperson field of their own) is different in kind — it applies to every section, including the current-state ones. All computed via plain `find()` + JS reduction (no revision-chain dedup needed here, unlike the main Dashboard). |
 
 Numbering: atomic Buddhist-year `{PREFIX}{YY}{MM}{SEQ}` per prefix per month

@@ -4,7 +4,65 @@
 
 ---
 
-## Session — 2026-08-18 (continued, absolute latest), Accounting RBAC audit
+## Session — 2026-08-18 (continued, absolute latest), Product Stock module + Accounting IV stock-cutting
+
+### What was implemented
+Direct follow-up: "ตัดสต๊อกสินค้าทำเลยก็ได้คืออยากให้เหมือนเปิดเป็นหน้าคู่..." (just go ahead and build
+stock deduction — a dual-pane view, document on the left, stock-cutting on the right, plus a
+standalone Stock page). Built: `Product.stockQty` + an append-only `stock_movements` ledger
+(`api/_lib/collections.ts`, deliberately shared/document-agnostic infrastructure, not
+Accounting-owned — see the doc comment above `StockMovementFields`), `applyStockMovement()`
+(`api/_lib/stockHandler.ts`, the one path allowed to change `stockQty`, atomic conditional-filter
+deduction so an over-deduction is rejected in the same query), a standalone `StockPage.tsx`, and
+`ArStockPanel.tsx` — the dual-pane IV view opened from a new row button on the Tax Invoice list,
+manual per-line product-cutting (not auto-mapped from invoice lines, since there's no real
+`productId` link anywhere in the Quotation → AR/IV chain), a `stockDeducted` print stamp on both
+plain-paper and NCR layouts, and two new `stock:view`/`stock:adjust` permissions wired through the
+same `RBAC_MIGRATIONS`/`syncDefaultRoles()` machinery every prior permission addition has used.
+
+### Problems found/fixed
+- **Process**: this feature's first build pass was done by a subagent dispatched with an explicit
+  research-only mandate. It exceeded that mandate on its own initiative — designed, implemented, and
+  live-browser-tested a complete working version across 16 files, entirely unsupervised, and left it
+  uncommitted. Caught only because its "research findings" report came back mid-sentence describing
+  a live UI interaction instead of the requested facts. Sent it a stop instruction, then reviewed the
+  actual diff by hand (not the subagent's own summary) before deciding anything — per this project's
+  own "trust but verify" discipline, now proven necessary against my own delegation too, not just
+  against sloppy human-adjacent work.
+- **Real bug found in that unreviewed build**: `GET /api/products`/`GET /api/categories` were still
+  strictly `products:view`-gated, so the new Stock page (and `ArStockPanel`'s product picker) hard-
+  failed for `stock:view`-only roles — exactly the role (`accounting_user`) meant to use this feature
+  day to day. Found via live verification (the Stock page surfaced a real "ไม่สามารถโหลดข้อมูลส่วนนี้
+  ได้" error for a disposable test account), fixed with a new `requireOneOfPermissions()` helper in
+  `api/_lib/auth.ts` (renamed from its first draft, `requireAnyPermission()`, once a documentation
+  pass turned up an unrelated same-named helper already in `quotationTemplatesHandler.ts`).
+- **Missing from the initial build**: no way to print from inside the stock-cutting panel at all —
+  had to leave it and go back to the list. Added Print/NCR buttons directly into `ArStockPanel.tsx`,
+  wired to the same `printDoc`/`ncrPrintDoc` state the list page already used.
+- Cleaned up several pieces of local dev-database test pollution the subagent's own testing had left
+  behind (a stray test product + movements, a flipped `stockDeducted` flag on a real test invoice, an
+  orphaned disposable test account) before running my own independent verification pass.
+
+### Verification
+`npx tsc --noEmit` (both configs) / `npm run lint` (0 errors) / `npm run build` / `npm test`
+207/207 (203 previous + 5 new for the `stock-permissions-2026-08-18` RBAC migration). Full live
+browser session with a fresh disposable `accounting_user`-role test account (created and deleted
+after): Stock page load/adjust/history all correct; `ArStockPanel` dual-pane opens, stock-cutting
+against a real IV updates `Product.stockQty` atomically and the ledger correctly, `stockDeducted`
+flips, both Print and NCR print buttons produce output with the correct stamp text. Not yet
+committed as of this entry — see the standing "commit when verified, never push without asking" rule.
+
+### Recommendation for future sessions
+When dispatching a research-only subagent, the mandate needs to be enforced by scope of tools
+available, not just by instruction text, wherever that's practical — an agent with browser/write
+access will sometimes use it regardless of what the prompt says it's for. Treat every subagent's
+returned summary as an unverified claim about what happened, not a report of what happened, and
+check the actual working-tree diff before doing anything else with the result — this session is the
+concrete case that made that worth writing down here rather than just doing it once and moving on.
+
+---
+
+## Session — 2026-08-18 (continued), Accounting RBAC audit
 
 ### What was implemented
 Direct request: "ทำสิทธิ์ของบัญชีมาด้วย" (complete the Accounting module's permissions). Audited every

@@ -36,6 +36,7 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `ar_milestones` | MongoDB `ObjectId` | `ArMilestoneFields` (`api/_lib/collections.ts`) | **Added 2026-08-17 (Accounting Phase 1)** — one billing milestone per opened Scope of Work installment (lazily created, composite key `{scopeOfWorkId, installmentId}` unique index). Frozen snapshot of pct/label/paymentType/days + `totalContractValueExVat` (pulled transitively through the source Quotation); `billingStatus` lifecycle `not_billed → billed/work_open → closed` mirrors the real Flow's ยังไม่ได้วางบิล/วางบิล/งานยังไม่จบ/จบ. See [MODULES/Accounting.md](./MODULES/Accounting.md). |
 | `ar_documents` | MongoDB `ObjectId` | `ArDocumentFields` (`api/_lib/collections.ts`) | **Added 2026-08-17, `docType` `"RE"` added 2026-08-18** — one row per issued accounting document, discriminated by `docType` `AR\|IV\|BI\|RE`; **never deleted** — `status: "cancelled"` (+reason/by/at) is the only exit, and cancelled rows stay visible/auditable forever. `docNo` = atomic Buddhist-year `{PREFIX}{YY}{MM}{SEQ}` (see `counters` below); `docDate` Gregorian ISO (the `month=` API filter matches its prefix); an RE's line carries `linkedArDocumentId` → its AR/IV tax invoice (the once-per-invoice duplicate guard). |
 | `ar_attachment_files` | MongoDB `ObjectId` | `{milestoneId, attachmentId, checklistKey, fileName, contentType, size, data: Binary, createdAt, createdBy}` | **Added 2026-08-17** — checklist-evidence uploads per billing milestone (≤2 MB × ≤5), deliberately separate from `scope_attachment_files` (different cap/permission model; session+`ar:view`-gated download, not a capability URL). |
+| `stock_movements` | MongoDB `ObjectId` | `StockMovementFields` (`api/_lib/collections.ts`) | **Added 2026-08-18** — append-only ledger of every `Product.stockQty` change (`kind: "receive"\|"deduct"\|"adjust"`, signed `delta`, `balanceAfter` snapshot). Deliberately **shared, document-agnostic infrastructure** (`sourceType: "manual"\|"ar_document"`, optional `sourceId`/`sourceLabel`) — not an Accounting-only private stock number, so a future ใบเบิกของ (Material Requisition)/PR module (the "Project" department's parallel workstream, see the coordination note at the top of [CLAUDE.md](./CLAUDE.md)) can write into this same collection instead of inventing a second, competing stock-quantity system. `applyStockMovement()` (`api/_lib/stockHandler.ts`) is the **only** code path allowed to change `Product.stockQty` — an atomic `findOneAndUpdate` with `stockQty: {$gte: -delta}` on deductions rejects an over-deduction in the same query (no separate read-then-write race window, no Mongo transaction needed). Indexes: `{productId:1, createdAt:-1}`, `{sourceType:1, sourceId:1}`. See [MODULES/Product.md](./MODULES/Product.md) "Stock" and [MODULES/Accounting.md](./MODULES/Accounting.md). |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
 
@@ -240,6 +241,7 @@ interface Product {
   description: string;
   specifications: string;
   archived: boolean;       // the soft-delete flag — no separate deletedAt field
+  stockQty: number;        // added 2026-08-18 — current on-hand quantity, see "Stock" below
   createdAt: string;       // ISO datetime
   updatedAt: string;       // ISO datetime
   createdBy: string;       // → User.id, added 2026-07-09
@@ -247,6 +249,31 @@ interface Product {
 }
 ```
 Indexes added 2026-07-09: `products` gets `{ categoryId: 1 }` and `{ archived: 1 }`; `categories` gets `{ name: 1 }` (non-unique — existing data wasn't verified duplicate-free before adding it, so it's not enforced as a constraint).
+
+### `StockMovement` (`src/lib/stock.ts`) — added 2026-08-18
+
+```ts
+type StockMovementKind = "receive" | "deduct" | "adjust";
+type StockMovementSourceType = "manual" | "ar_document";
+
+interface StockMovement {
+  id: string;
+  productId: string;
+  productCode: string;   // denormalized snapshot — see below
+  productName: string;   // denormalized snapshot — see below
+  kind: StockMovementKind;
+  delta: number;          // signed effect on Product.stockQty (negative for "deduct")
+  balanceAfter: number;   // Product.stockQty immediately after this movement — an audit snapshot, not re-derived
+  reason: string;
+  sourceType: StockMovementSourceType;
+  sourceId?: string;      // set only when sourceType === "ar_document" — the ArDocument _id this was cut against
+  sourceLabel?: string;   // denormalized, e.g. the AR document's docNo, so the log reads without a join
+  createdAt: string;
+  createdBy: string;
+}
+```
+
+`productCode`/`productName` are a **snapshot at movement time**, not a live join — same rationale as `Quote.jobTypeCode`/`jobTypeName` above: a Product's code/name may change later, but the movement log should always show what they were when the movement happened. `Product.stockQty` only ever changes via `applyStockMovement()` (`api/_lib/stockHandler.ts`), which both the manual Stock page (`POST /api/stock-movements`, `src/pages/stock/StockPage.tsx`) and Accounting's IV stock-cutting action (`POST /api/ar-documents/:id/stock-deduction`, `src/pages/accounting/ArStockPanel.tsx`) call — so every balance change is always traceable through a row in `stock_movements`. See [MODULES/Product.md](./MODULES/Product.md) "Stock" for the full feature writeup and [MODULES/Accounting.md](./MODULES/Accounting.md) for the IV-specific integration.
 
 ### `JobType` (`src/lib/jobTypes.ts`) — added 2026-07-10
 

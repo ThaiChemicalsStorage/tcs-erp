@@ -28,15 +28,53 @@ Uses `src/components/ConfirmDialog.tsx` for delete confirmation. No product-spec
 
 ## Database Tables
 
-The `products` and `categories` MongoDB collections — see [DATABASE.md](../DATABASE.md) for the `Product`/`ProductCategory` shapes. Migrated 2026-07-09 from `localStorage` (`tcs_erp_products`, `tcs_erp_categories`).
+The `products` and `categories` MongoDB collections — see [DATABASE.md](../DATABASE.md) for the `Product`/`ProductCategory` shapes. Migrated 2026-07-09 from `localStorage` (`tcs_erp_products`, `tcs_erp_categories`). **2026-08-18**: `Product` gained `stockQty` (see "Stock" below), and a new `stock_movements` collection was added — see [DATABASE.md](../DATABASE.md) "`StockMovement`".
 
 ## APIs
 
-`GET/POST /api/products`, `PATCH/DELETE /api/products/:id`, `GET/POST /api/categories`, `PATCH /api/categories/:id` — see [API.md](../API.md).
+`GET/POST /api/products`, `PATCH/DELETE /api/products/:id`, `GET/POST /api/categories`, `PATCH /api/categories/:id` — see [API.md](../API.md). **2026-08-18**: the two `GET` routes above also accept a `stock:view` holder who has no `products:view` (see "Stock" below); `GET/POST /api/stock-movements` added.
 
 ## Permissions
 
-Server-enforced per action: `products:view`/`create`/`edit`/`delete` on the respective API routes (categories share the same `products:*` permission family — there is no separate `categories:*` permission). The UI itself only gates the sidebar entry (`products:view`) — the create/edit/delete buttons inside `ProductsPage`/`ProductList` are not yet hidden per-permission (a known UX gap, see [TODO.md](../TODO.md)), though a user without the right permission would now get a real `403` from the server if they somehow triggered the action anyway.
+Server-enforced per action: `products:view`/`create`/`edit`/`delete` on the respective API routes (categories share the same `products:*` permission family — there is no separate `categories:*` permission). The UI itself only gates the sidebar entry (`products:view`) — the create/edit/delete buttons inside `ProductsPage`/`ProductList` are not yet hidden per-permission (a known UX gap, see [TODO.md](../TODO.md)), though a user without the right permission would now get a real `403` from the server if they somehow triggered the action anyway. **2026-08-18**: `stock:view`/`stock:adjust` added for the Stock page — see "Stock" below and [RBAC.md](../RBAC.md) "Stock".
+
+## Stock (added 2026-08-18)
+
+Closes the "Stock/inventory linkage once an Inventory module exists" item that used to sit under
+Future Improvements below — built as a direct request tied to Accounting's Tax Invoice workflow,
+not as a full standalone Inventory module (no purchase orders, no warehouse/location tracking, no
+reorder points — just an on-hand quantity per product and a ledger of what changed it).
+
+- **`Product.stockQty`** — the current on-hand quantity. Server-set-only: defaults to `0` on create
+  (`api/handlers/products.ts`), and is **never** accepted from the client via `POST`/`PATCH
+  /api/products` — the only way it changes is through a `StockMovement`.
+- **`stock_movements` ledger** (`api/_lib/collections.ts`'s `StockMovementFields`, see
+  [DATABASE.md](../DATABASE.md)) — every change to `stockQty` is a `kind: "receive"|"deduct"|"adjust"`
+  row with a signed `delta`, a `balanceAfter` snapshot, and `sourceType: "manual"|"ar_document"`.
+  Deliberately shared, document-agnostic infrastructure rather than something owned by this module or
+  by Accounting alone — see the doc comment above `StockMovementFields` in `collections.ts` for the
+  full reasoning, including that a future ใบเบิกของ (Material Requisition)/PR module (the "Project"
+  department's parallel workstream, see the coordination note at the top of
+  [CLAUDE.md](../CLAUDE.md)) can write into this same ledger instead of inventing a second,
+  competing stock-quantity system.
+- **`applyStockMovement()`** (`api/_lib/stockHandler.ts`) — the one code path allowed to change
+  `stockQty`. Uses an atomic MongoDB conditional filter (`stockQty: {$gte: -delta}` on a deduction)
+  inside the `findOneAndUpdate` itself, so an over-deduction is rejected in the same query — no
+  separate read-then-write race window, no Mongo transaction needed for what's still a
+  single-document update.
+- **`src/pages/stock/StockPage.tsx`** — new standalone "สต๊อกสินค้า" sidebar page (own "คลังสินค้า"
+  nav group entry, alongside this module's own "คลังสินค้า" Products page): product list with current
+  `stockQty` + search, a per-product "ปรับสต๊อก" (receive/deduct/adjust) dialog, and a movement
+  history table (all-products or filtered to one product). Gated on `stock:view` (page) /
+  `stock:adjust` (the adjust button) — see [RBAC.md](../RBAC.md) "Stock".
+- **Accounting integration**: the ใบกำกับภาษี/ใบส่งสินค้า (IV) document list gained a dual-pane
+  "เปิดดู / ตัดสต๊อกสินค้า" view (`ArStockPanel.tsx`) for cutting stock against an issued invoice —
+  see [MODULES/Accounting.md](./Accounting.md) "Stock".
+- **Known limitations**: no undo/reversal flow for a stock movement — correcting one requires a
+  fresh opposite movement via the Stock page, there's no dedicated "undo this deduction" action; no
+  bulk/CSV stock import (the picker in `ArStockPanel.tsx` also shows a "คงเหลือ" count that can go
+  stale within the same panel session after a successful deduction — cosmetic only, the underlying
+  data is correct). See [TODO.md](../TODO.md).
 
 ## Current Features
 
@@ -62,7 +100,8 @@ Quotation. See CHANGELOG.md 2026-07-30.
 - Bulk import/export (CSV) — not requested yet, but a natural fit for a "product library"
 - Product images/attachments
 - Per-customer or per-region pricing tiers (currently one `defaultPrice` only)
-- Stock/inventory linkage once an Inventory module exists
+- ~~Stock/inventory linkage once an Inventory module exists~~ — closed 2026-08-18, see "Stock" above (a lightweight on-hand-quantity ledger tied to Accounting's IV workflow, not a full standalone Inventory module)
+- Bulk/CSV stock import; a dedicated "undo this stock movement" action (see "Stock" above)
 
 ## Known Issues
 

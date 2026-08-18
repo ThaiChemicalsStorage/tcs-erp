@@ -19,7 +19,7 @@ import type { ServiceReport } from "../../src/lib/serviceReports.js";
  * `toPublicUser()` still strips it defensively from any legacy document.) */
 export type UserFields = Omit<User, "id"> & { passwordHash: string; emailAppPasswordEnc?: string };
 export type PublicUser = User;
-type ProductFields = Omit<Product, "id">;
+export type ProductFields = Omit<Product, "id">;
 type CategoryFields = Omit<ProductCategory, "id">;
 type NotificationFields = Omit<Notification, "id">;
 type AuditLogFields = Omit<AuditLogEntry, "id">;
@@ -673,6 +673,11 @@ export interface ArDocumentFields {
   netTotal: number;
   amountTextTh: string;
   remarks: string[];
+  /** True once any stock has been cut against this document (added 2026-08-18, IV only in
+   * practice — AR/BI/RE carry no real product lines, see stockHandler.ts). Denormalized off the
+   * `stock_movements` ledger purely so the print layout can stamp "ตัดสต๊อกแล้ว"/"ยังไม่ตัดสต๊อก"
+   * without a join; the ledger itself (filter by sourceId) is the source of truth for what/how much. */
+  stockDeducted: boolean;
   status: ArDocumentStatus;
   cancelledReason?: string;
   cancelledBy?: string;
@@ -687,6 +692,46 @@ export async function arDocumentsCollection() {
   return db.collection<ArDocumentFields>("ar_documents");
 }
 
+// ─── Product Stock (added 2026-08-18) ──────────────────────────────────────
+// Deliberately shared, document-agnostic infrastructure, NOT an Accounting-only private stock
+// number — Accounting's Tax Invoice (IV) stock-cutting feature is the first caller, but
+// `sourceType`/`sourceId` exist precisely so a future ใบเบิกของ (Material Requisition)/PR module
+// (the "Project" department's parallel workstream — see the coordination note in docs/CLAUDE.md and
+// docs/TODO.md High Priority) can write its own movement rows into this SAME collection/ledger
+// instead of inventing a second, competing stock-quantity system that would silently drift out of
+// sync with this one. `Product.stockQty` (src/lib/products.ts) is the denormalized current balance,
+// kept in sync via applyStockMovement() (api/_lib/stockHandler.ts) — the only writer, so every
+// balance change is traceable through a StockMovementFields row. See docs/MODULES/Product.md "Stock".
+export type StockMovementKind = "receive" | "deduct" | "adjust";
+export type StockMovementSourceType = "manual" | "ar_document";
+
+export interface StockMovementFields {
+  productId: string;
+  /** Denormalized snapshot — code/name may change on the Product later; the movement log should
+   * always show what they were at the time, like ArDocumentCustomerSnapshot does for customers. */
+  productCode: string;
+  productName: string;
+  kind: StockMovementKind;
+  /** Signed effect on `Product.stockQty` — positive for "receive", negative for "deduct", either
+   * sign for "adjust" (a manual correction, e.g. after a physical stock count). */
+  delta: number;
+  /** `Product.stockQty` immediately after this movement was applied — an audit snapshot, not
+   * re-derived, so the log stays readable even if later movements are viewed out of order. */
+  balanceAfter: number;
+  reason: string;
+  sourceType: StockMovementSourceType;
+  /** Set only when sourceType === "ar_document" — the ArDocument _id this movement was cut against. */
+  sourceId?: string;
+  /** Denormalized, e.g. the AR document's docNo, so the movement log reads without a join. */
+  sourceLabel?: string;
+  createdAt: string;
+  createdBy: string;
+}
+export async function stockMovementsCollection() {
+  const db = await getDb();
+  return db.collection<StockMovementFields>("stock_movements");
+}
+
 /** Creates required indexes across every collection. Idempotent — safe to call repeatedly, but only worth calling from setup/cold paths, not every request. */
 export async function ensureIndexes() {
   const [
@@ -695,7 +740,7 @@ export async function ensureIndexes() {
     leads, leadActivities, productTemplates, quotationComments, quotationTags,
     notificationTypes, jobTypes, quotationTemplates, scopeOfWorks, deliveryOrders,
     scopeAttachmentFiles, serviceTemplates, serviceReports, serviceChecklistPhotoFiles,
-    arMilestones, arAttachmentFiles, arDocuments,
+    arMilestones, arAttachmentFiles, arDocuments, stockMovements,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -707,6 +752,7 @@ export async function ensureIndexes() {
     scopeAttachmentFilesCollection(), serviceTemplatesCollection(), serviceReportsCollection(),
     serviceChecklistPhotoFilesCollection(),
     arMilestonesCollection(), arAttachmentFilesCollection(), arDocumentsCollection(),
+    stockMovementsCollection(),
   ]);
 
   await Promise.all([
@@ -788,6 +834,9 @@ export async function ensureIndexes() {
     arDocuments.createIndex({ docNo: 1 }, { unique: true }),
     arDocuments.createIndex({ status: 1 }),
     arDocuments.createIndex({ dueDate: 1 }),
+    // Product Stock (added 2026-08-18)
+    stockMovements.createIndex({ productId: 1, createdAt: -1 }),
+    stockMovements.createIndex({ sourceType: 1, sourceId: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

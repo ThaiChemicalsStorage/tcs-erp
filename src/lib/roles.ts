@@ -81,6 +81,8 @@ export const defaultRoles: Role[] = [
       "ar:create",
       "ar:issue",
       "ar:cancel",
+      "stock:view",
+      "stock:adjust",
     ],
     isSuperAdmin: false,
     isSystem: true,
@@ -127,6 +129,9 @@ export const defaultRoles: Role[] = [
       // able to cancel its own mis-issued documents without escalating to an Administrator/Approver
       // every time (a real gap from Phase 1, where only Administrator/Approver 1/2/Viewer had it).
       "ar:view", "ar:create", "ar:issue", "ar:cancel",
+      // Stock (added 2026-08-18) — accounting cuts stock against IV documents from the same
+      // dual-pane view they issue/print from, so both view+adjust travel together here.
+      "stock:view", "stock:adjust",
     ],
     isSuperAdmin: false,
     isSystem: false,
@@ -179,7 +184,7 @@ export const defaultRoles: Role[] = [
     key: "viewer",
     name: "Viewer",
     description: "ดูข้อมูลได้อย่างเดียว ไม่สามารถสร้าง แก้ไข หรืออนุมัติได้",
-    permissions: ["dashboard:view", "quotations:view", "quotations:viewAll", "products:view", "customers:view", "scopeOfWork:view", "scopeOfWork:viewAll", "deliveryOrder:view", "deliveryOrder:viewAll", "service:view", "service:viewAll", "serviceTemplates:view", "ar:view"],
+    permissions: ["dashboard:view", "quotations:view", "quotations:viewAll", "products:view", "customers:view", "scopeOfWork:view", "scopeOfWork:viewAll", "deliveryOrder:view", "deliveryOrder:viewAll", "service:view", "service:viewAll", "serviceTemplates:view", "ar:view", "stock:view"],
     isSuperAdmin: false,
     isSystem: false,
   },

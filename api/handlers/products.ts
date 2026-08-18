@@ -1,12 +1,15 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
-import { requirePermission } from "../_lib/auth.js";
+import { requirePermission, requireOneOfPermissions } from "../_lib/auth.js";
 import { productsCollection, toObjectId, withStringId } from "../_lib/collections.js";
 import { nowIso } from "../../src/lib/products.js";
+import { handleStock } from "../_lib/stockHandler.js";
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
-    await requirePermission(req, "products:view");
+    // stock:view-only holders (e.g. accounting_user) reach the Stock page without products:view —
+    // it needs the product catalog to show stock levels, not full Product Library management.
+    await requireOneOfPermissions(req, ["products:view", "stock:view"]);
     const products = await productsCollection();
     const docs = await products.find({}).sort({ code: 1 }).toArray();
     res.status(200).json({ products: docs.map(withStringId) });
@@ -33,6 +36,9 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       description: typeof body.description === "string" ? body.description : "",
       specifications: typeof body.specifications === "string" ? body.specifications : "",
       archived: false,
+      // Never accepted from the client here — only /api/stock-movements (stockHandler.ts) may change
+      // it, so every change is traceable through a StockMovement row. See docs/MODULES/Product.md.
+      stockQty: 0,
       createdAt: now,
       updatedAt: now,
       createdBy: ctx.user.id,
@@ -94,8 +100,12 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   await withErrorHandling(req, res, async () => {
-    const parts = getPathSegments(req, "/api/products");
+    // Stock movements share this function slot with Products — see the multi-resource-sharing
+    // convention documented in docs/CLAUDE.md (e.g. customers.ts also serves /api/search).
+    const pathname = (req.url ?? "").split("?")[0];
+    if (pathname === "/api/stock-movements" || pathname.startsWith("/api/stock-movements/")) return handleStock(req, res);
 
+    const parts = getPathSegments(req, "/api/products");
     if (parts.length === 0) return handleList(req, res);
     if (parts.length === 1) return handleOne(req, res, parts[0]);
     throw new HttpError(404, "Not found");

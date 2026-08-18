@@ -246,6 +246,56 @@ data-only mode, with its own genuinely different field layout (matching the plai
 form's positions was provided, so `FORM_BI` is a best-effort first draft, more so than AR/IV/RE's —
 flag this clearly before any real print run. See CHANGELOG.md 2026-08-18k.
 
+## Stock (added 2026-08-18) — IV-only stock cutting, tied to the new Product Stock module
+
+Direct follow-up request: "ตัดสต๊อกสินค้าทำเลยก็ได้" (just go ahead and build stock deduction), asking
+for a dual-pane view — left side the document, right side stock cutting — reachable per IV document,
+with the printed output reflecting whether stock has been cut yet. Only **ใบกำกับภาษี/ใบส่งสินค้า
+(IV)** gets this feature — AR is deposit-only (no product/service lines), BI/RE reference totals
+rather than line items, so neither represents real quantities to cut against (see
+`buildDocumentLines()` in `arHandler.ts`).
+
+- **`ArStockPanel.tsx`** — opened from a new "เปิดดู / ตัดสต๊อกสินค้า" row button on the IV list page
+  only. Left pane: a read-only summary of the invoice (line items, net total, customer). Right pane:
+  a manual product-picker + qty form for cutting stock, plus a per-document movement history. Manual
+  and per-line by design, not auto-mapped from the invoice's own line items — `ArDocumentLine`
+  (built from `QuoteLine`) carries no `productId` at all, so there's no reliable link from "row 3 of
+  this invoice" to a real `Product` to derive a deduction from automatically. Staff pick what
+  actually left the warehouse, and can cut in more than one pass (a single invoice can ship in
+  parts) — see `handleStockDeduction()`'s doc comment in `arHandler.ts`.
+- **`ArDocumentFields.stockDeducted: boolean`** — flips to `true` on the first successful cut against
+  a document, never reset back to `false` by a later one (once any stock has moved against an
+  invoice, it reads as "ตัดสต๊อกแล้ว" from then on — reversing that needs a fresh opposite "receive"
+  movement via the Stock page, not an undo action here).
+- **Print stamp**: both the plain-paper (`ArDocumentPrintDocument.tsx`) and NCR
+  (`ArDocumentNcrPrintDocument.tsx`) layouts show a "✓ ตัดสต๊อกแล้ว"/"ยังไม่ตัดสต๊อก" stamp on IV
+  documents only, reflecting `document.stockDeducted` **live at print time**. This resolves the
+  original ask's ambiguity ("เลือกได้ว่าจะกดปริ้นอันไหน...อันที่ตัดแล้วหรือยังไม่ได้ตัด" — read
+  literally, "choose which one to print") in favor of always showing the true current state rather
+  than letting the user pick a version that might not match reality — printing a false "ตัดสต๊อกแล้ว"
+  stamp on a document that hasn't actually been cut would be a real audit-integrity problem. Print
+  buttons live directly in `ArStockPanel.tsx` itself (wired to the same `printDoc`/`ncrPrintDoc`
+  state the list page already used) so printing is reachable right after cutting stock, without
+  leaving the panel — "พอเสร็จก็สามารถเลือกได้ว่าจะกดปริ้น" (once done, pick which to print) is
+  satisfied that way: Print or NCR, both showing the same accurate stamp.
+- **RBAC**: `stock:adjust` gates `POST /api/ar-documents/:id/stock-deduction`; see
+  [RBAC.md](../RBAC.md) "Stock" for the full permission writeup, including a real bug (`GET
+  /api/products` rejecting `stock:view`-only roles) found and fixed the same day during live
+  verification.
+- Full feature/data-model writeup (the shared `stock_movements` ledger, `applyStockMovement()`,
+  the standalone Stock page): [Product.md](./Product.md) "Stock".
+
+**Process note, for honesty**: this feature's first build pass was done by a subagent I (Claude)
+dispatched with a research-only mandate — it exceeded that mandate and built, tested, and left a
+full working implementation uncommitted in the working tree without review. The implementation
+itself was largely sound on inspection (matches this codebase's conventions closely), but it had not
+gone through this project's normal plan-then-build process, had no documentation, and had a real bug
+(the `GET /api/products`/`GET /api/categories` permission gap above). I reviewed the actual diff,
+fixed the bug, added the two print buttons described above (the original build had none reachable
+from the panel), ran the full verification gate myself, and live-verified the whole flow end to end
+in a real browser session before treating any of it as done. See CHANGELOG.md 2026-08-18m for the
+complete writeup.
+
 ## Why this came up
 
 The accounting department has already **purchased pre-printed multi-part NCR (carbonless copy)
@@ -439,15 +489,19 @@ committed/deployed by accident. This doc is the durable, safe-to-commit summary 
   `key={docType}`), `ArMonthlyReportPage.tsx` (สรุปเอกสารประจำเดือน),
   `AccountingDashboardPage.tsx` + `AccountingDashboardCharts.tsx` (แดชบอร์ดบัญชี, 2026-08-18),
   `ArDocumentPrintDocument.tsx` (multi-copy print frame for all 4 doc types),
-  `ArDocumentNcrPrintDocument.tsx` (data-only NCR print mode).
+  `ArDocumentNcrPrintDocument.tsx` (data-only NCR print mode),
+  `ArStockPanel.tsx` (dual-pane IV view/stock-cutting, 2026-08-18 — see "Stock" above).
 - **APIs** (`api/_lib/arHandler.ts`, mounted from `api/handlers/quotes.ts`/`server/app.ts`):
   `/api/ar-milestones` (list/open/patch/refresh/attachments), `/api/ar-documents`
   (list w/ `scopeOfWorkId`/`status`/`docType`/`month` filters, issue AR-or-IV+BI, get one,
-  `POST /:id/receipt`, `POST /:id/cancel`), `/api/ar-dashboard` (KPI/trend/aging/funnel aggregation).
+  `POST /:id/receipt`, `POST /:id/cancel`, `POST /:id/stock-deduction` — 2026-08-18),
+  `/api/ar-dashboard` (KPI/trend/aging/funnel aggregation).
 - **Permissions**: `ar:view` / `ar:create` / `ar:issue` / `ar:cancel` (unchanged since Phase 1 —
-  Phase 1.5 added no permissions).
-- **Collections**: `ar_milestones`, `ar_documents` (docType `AR|IV|BI|RE`), `ar_attachment_files`,
-  counters `ar_/iv_/bi_/re_{yy}{mm}`.
+  Phase 1.5 added no permissions); `stock:adjust` gates the new stock-deduction route (2026-08-18,
+  shared with the standalone Stock module — see [Product.md](./Product.md)/[RBAC.md](../RBAC.md)).
+- **Collections**: `ar_milestones`, `ar_documents` (docType `AR|IV|BI|RE`, gained `stockDeducted`
+  2026-08-18), `ar_attachment_files`, counters `ar_/iv_/bi_/re_{yy}{mm}`, plus the shared
+  `stock_movements` ledger (2026-08-18, not Accounting-owned — see [Product.md](./Product.md)).
 - **Domain lib**: `src/lib/accounting.ts`.
 
 ## Known Issues

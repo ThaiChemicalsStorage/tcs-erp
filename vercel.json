@@ -12,6 +12,8 @@
     { "source": "/api/teams/:path*", "destination": "/api/handlers/roles" },
     { "source": "/api/products", "destination": "/api/handlers/products" },
     { "source": "/api/products/:path*", "destination": "/api/handlers/products" },
+    { "source": "/api/stock-movements", "destination": "/api/handlers/products" },
+    { "source": "/api/stock-movements/:path*", "destination": "/api/handlers/products" },
     { "source": "/api/categories", "destination": "/api/handlers/categories" },
     { "source": "/api/categories/:path*", "destination": "/api/handlers/categories" },
     { "source": "/api/notifications", "destination": "/api/handlers/notifications" },

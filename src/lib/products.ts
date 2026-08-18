@@ -20,6 +20,11 @@ export interface Product {
   description: string;
   specifications: string;
   archived: boolean;
+  /** Current on-hand quantity (added 2026-08-18 for the Stock module) — never set directly via
+   * create/edit; only `POST /api/stock-movements` (src/lib/stock.ts) or an AR/IV stock deduction
+   * may change it, so every change is traceable through a StockMovement row. Defaults to 0 on
+   * create — see docs/MODULES/Product.md "Stock". */
+  stockQty: number;
   createdAt: string;
   updatedAt: string;
   createdBy: string;

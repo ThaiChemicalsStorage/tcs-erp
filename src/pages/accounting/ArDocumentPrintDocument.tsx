@@ -75,6 +75,13 @@ function DocumentPage({ document, copyLabel }: { document: ArDocument; copyLabel
           <p style={{ fontWeight: 700, fontSize: "15px" }}>{DOC_TITLE[document.docType].th}</p>
           <p style={{ fontSize: "11px" }}>{DOC_TITLE[document.docType].en}</p>
           <p style={{ fontSize: "10px", marginTop: "4px" }}>สำหรับลูกค้า</p>
+          {/* สแตมป์สถานะตัดสต๊อก (เฉพาะ IV, เพิ่ม 2026-08-18) — พิมพ์ใบเดิม แต่มีข้อความบอกสถานะ
+              ตามที่เจ้าของเลือก ไม่ใช่ layout แยกกันสองแบบ */}
+          {document.docType === "IV" && (
+            <p style={{ fontSize: "10px", marginTop: "2px", fontWeight: 700, color: document.stockDeducted ? "#207e52" : "#999" }}>
+              {document.stockDeducted ? "✓ ตัดสต๊อกแล้ว" : "ยังไม่ตัดสต๊อก"}
+            </p>
+          )}
         </div>
       </div>
 
