@@ -3,8 +3,9 @@ import { Plus, Trash2, X } from "lucide-react";
 import type { Customer } from "../../lib/customers";
 import { fetchCustomers } from "../../lib/customers";
 import { CustomerSelector } from "../quotation/CustomerSelector";
-import { DOC_TYPE_LABELS, issueManualArDocument, type ArDocument } from "../../lib/accounting";
+import { DOC_TYPE_LABEL_KEY, issueManualArDocument, type ArDocument } from "../../lib/accounting";
 import { ApiError } from "../../lib/apiClient";
+import { useI18n } from "../../lib/i18n";
 
 interface DraftLine {
   key: number;
@@ -26,6 +27,7 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
   onClose: () => void;
   onIssued: (documents: ArDocument[]) => void;
 }) {
+  const { t } = useI18n();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [docType, setDocType] = useState<"AR" | "IV">(initialDocType);
   const [customerId, setCustomerId] = useState("");
@@ -67,11 +69,11 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
   const removeLine = (key: number) => setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev));
 
   const handleSubmit = async () => {
-    if (!companyName.trim()) { setError("กรุณาระบุชื่อบริษัทลูกค้า"); return; }
+    if (!companyName.trim()) { setError(t("accounting.manual.error.companyRequired")); return; }
     const parsedLines = lines
       .map((l) => ({ description: l.description.trim(), qty: Number(l.qty), unit: l.unit.trim(), unitPrice: Number(l.unitPrice) }))
       .filter((l) => l.description && Number.isFinite(l.qty) && l.qty > 0 && Number.isFinite(l.unitPrice) && l.unitPrice >= 0);
-    if (parsedLines.length === 0) { setError("กรุณาระบุรายการอย่างน้อย 1 รายการ (คำอธิบาย จำนวน และราคาต่อหน่วยที่ถูกต้อง)"); return; }
+    if (parsedLines.length === 0) { setError(t("accounting.manual.error.lineRequired")); return; }
 
     setBusy(true);
     setError("");
@@ -85,7 +87,7 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
       });
       onIssued(documents);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "ออกเอกสารไม่สำเร็จ");
+      setError(err instanceof ApiError ? err.message : t("accounting.manual.error.issueFailed"));
     } finally {
       setBusy(false);
     }
@@ -96,46 +98,46 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
       <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
-            สร้างใบกำกับภาษี (Manual)
+            {t("accounting.manual.title")}
           </h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title="ปิด">
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.manual.close")}>
             <X size={18} />
           </button>
         </div>
         <p className="text-xs text-muted-foreground">
-          ออกเอกสารแบบไม่ผูกกับ Scope of Work — ระบบจะออกใบแจ้งหนี้/ใบวางบิล (BI) คู่กันให้อัตโนมัติเหมือนวางบิลตามงานปกติ
+          {t("accounting.manual.description")}
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">ประเภทเอกสาร</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.docType")}</label>
             <select
               value={docType}
               onChange={(e) => setDocType(e.target.value as "AR" | "IV")}
               className="w-full h-9 px-2 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
             >
-              <option value="AR">{DOC_TYPE_LABELS.AR}</option>
-              <option value="IV">{DOC_TYPE_LABELS.IV}</option>
+              <option value="AR">{t(DOC_TYPE_LABEL_KEY.AR)}</option>
+              <option value="IV">{t(DOC_TYPE_LABEL_KEY.IV)}</option>
             </select>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">เงื่อนไขการชำระเงิน</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.paymentType")}</label>
             <div className="flex items-center gap-2">
               <select
                 value={paymentType}
                 onChange={(e) => setPaymentType(e.target.value as "" | "Cash" | "Credit")}
                 className="flex-1 h-9 px-2 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
               >
-                <option value="">— ไม่ระบุ —</option>
-                <option value="Cash">เงินสด</option>
-                <option value="Credit">เครดิต</option>
+                <option value="">{t("accounting.manual.paymentType.none")}</option>
+                <option value="Cash">{t("accounting.manual.paymentType.cash")}</option>
+                <option value="Credit">{t("accounting.manual.paymentType.credit")}</option>
               </select>
               {paymentType === "Credit" && (
                 <input
                   type="number"
                   value={days}
                   onChange={(e) => setDays(e.target.value)}
-                  placeholder="วัน"
+                  placeholder={t("accounting.manual.field.daysPlaceholder")}
                   className="w-20 h-9 px-2 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
                 />
               )}
@@ -144,78 +146,78 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
         </div>
 
         <div>
-          <label className="text-xs text-muted-foreground block mb-1">ลูกค้า (เลือกจากรายชื่อที่บันทึกไว้ หรือพิมพ์เอง)</label>
+          <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.customer")}</label>
           <CustomerSelector customers={customers} selectedId={customerId} onSelect={handleSelectCustomer} onClear={handleClearCustomer} disabled={false} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">ชื่อบริษัท *</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.companyName")}</label>
             <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">เลขประจำตัวผู้เสียภาษี</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.taxId")}</label>
             <input value={taxId} onChange={(e) => setTaxId(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
           <div className="sm:col-span-2">
-            <label className="text-xs text-muted-foreground block mb-1">ที่อยู่</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.address")}</label>
             <input value={address} onChange={(e) => setAddress(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">สาขา</label>
-            <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="สำนักงานใหญ่" className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.branch")}</label>
+            <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder={t("accounting.manual.field.branchPlaceholder")} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">ผู้ติดต่อ</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.contactName")}</label>
             <input value={contactName} onChange={(e) => setContactName(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">เบอร์โทร</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.phone")}</label>
             <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground block mb-1">อีเมล</label>
+            <label className="text-xs text-muted-foreground block mb-1">{t("accounting.manual.field.email")}</label>
             <input value={email} onChange={(e) => setEmail(e.target.value)} className="w-full h-9 px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors" />
           </div>
         </div>
 
         <div>
-          <label className="text-xs text-muted-foreground block mb-1.5">รายการ</label>
+          <label className="text-xs text-muted-foreground block mb-1.5">{t("accounting.manual.field.lines")}</label>
           <div className="space-y-2">
             {lines.map((l) => (
               <div key={l.key} className="flex items-center gap-2">
                 <input
                   value={l.description}
                   onChange={(e) => updateLine(l.key, { description: e.target.value })}
-                  placeholder="รายละเอียด"
+                  placeholder={t("accounting.manual.line.description")}
                   className="flex-1 h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
                 />
                 <input
                   type="number"
                   value={l.qty}
                   onChange={(e) => updateLine(l.key, { qty: e.target.value })}
-                  placeholder="จำนวน"
+                  placeholder={t("accounting.manual.line.qty")}
                   className="w-20 h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
                 />
                 <input
                   value={l.unit}
                   onChange={(e) => updateLine(l.key, { unit: e.target.value })}
-                  placeholder="หน่วย"
+                  placeholder={t("accounting.manual.line.unit")}
                   className="w-20 h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
                 />
                 <input
                   type="number"
                   value={l.unitPrice}
                   onChange={(e) => updateLine(l.key, { unitPrice: e.target.value })}
-                  placeholder="ราคา/หน่วย"
+                  placeholder={t("accounting.manual.line.unitPrice")}
                   className="w-28 h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
                 />
-                <button onClick={() => removeLine(l.key)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title="ลบรายการนี้">
+                <button onClick={() => removeLine(l.key)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("accounting.manual.line.remove")}>
                   <Trash2 size={14} />
                 </button>
               </div>
             ))}
             <button onClick={addLine} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-              <Plus size={13} /> เพิ่มรายการ
+              <Plus size={13} /> {t("accounting.manual.line.add")}
             </button>
           </div>
         </div>
@@ -223,13 +225,13 @@ export function ManualTaxInvoiceDialog({ docType: initialDocType, onClose, onIss
         {error && <p className="text-xs text-[#c23f3f]">{error}</p>}
 
         <div className="flex items-center justify-end gap-2 pt-1">
-          <button onClick={onClose} disabled={busy} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">ยกเลิก</button>
+          <button onClick={onClose} disabled={busy} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">{t("accounting.manual.btn.cancel")}</button>
           <button
             onClick={() => void handleSubmit()}
             disabled={busy}
             className="px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-50"
           >
-            {busy ? "กำลังออกเอกสาร..." : "ออกเอกสาร"}
+            {busy ? t("accounting.manual.btn.issuingBusy") : t("accounting.manual.btn.issue")}
           </button>
         </div>
       </div>

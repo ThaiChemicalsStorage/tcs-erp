@@ -8,6 +8,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { ArTrendChart, DocTypeBreakdownChart, BillingFunnelChart, AgingChart } from "./AccountingDashboardCharts";
 import { AGING_BUCKET_COLORS } from "../../lib/accountingDashboard";
+import { useI18n } from "../../lib/i18n";
 
 // แดชบอร์ดบัญชี (เพิ่ม 2026-08-18) — ภาพรวมและรายละเอียดเชิงลึกของบัญชีลูกหนี้ (AR/IV/BI/RE)
 // แยกจากแดชบอร์ดหลักของบริษัท (ซึ่งเน้นภาพรวมงานขาย/ใบเสนอราคา) — ดึงข้อมูลจาก GET /api/ar-dashboard
@@ -15,6 +16,7 @@ import { AGING_BUCKET_COLORS } from "../../lib/accountingDashboard";
 // main cross-module Dashboard. Some sections are current-state snapshots, not period-filtered —
 // each is labeled honestly per docs/UI_GUIDELINES.md "Filter Honesty"; see accountingDashboard.ts.
 export function AccountingDashboardPage() {
+  const { t } = useI18n();
   const [preset, setPreset] = useState<DateRangePreset>("thisMonth");
   const [from, setFrom] = useState<string>(() => rangeForPreset("thisMonth")?.from ?? "");
   const [to, setTo] = useState<string>(() => rangeForPreset("thisMonth")?.to ?? "");
@@ -52,33 +54,33 @@ export function AccountingDashboardPage() {
   };
 
   const PRESETS: { key: DateRangePreset; label: string }[] = [
-    { key: "thisMonth", label: "เดือนนี้" },
-    { key: "lastMonth", label: "เดือนที่แล้ว" },
-    { key: "thisQuarter", label: "ไตรมาสนี้" },
-    { key: "thisYear", label: "ปีนี้" },
-    { key: "custom", label: "กำหนดเอง" },
+    { key: "thisMonth", label: t("accountingDashboard.preset.thisMonth") },
+    { key: "lastMonth", label: t("accountingDashboard.preset.lastMonth") },
+    { key: "thisQuarter", label: t("accountingDashboard.preset.thisQuarter") },
+    { key: "thisYear", label: t("accountingDashboard.preset.thisYear") },
+    { key: "custom", label: t("accountingDashboard.preset.custom") },
   ];
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
-      <PageHeader title="แดชบอร์ดบัญชี" description="ภาพรวมและรายละเอียดบัญชีลูกหนี้ (ใบรับเงินมัดจำ/ใบกำกับภาษี/ใบแจ้งหนี้/ใบเสร็จรับเงิน)" />
+      <PageHeader title={t("accountingDashboard.title")} description={t("accountingDashboard.description")} />
 
       <div className="flex items-center gap-2.5 flex-wrap bg-card border border-border rounded-lg px-3 py-2">
         <div className="flex items-center gap-1.5 text-muted-foreground pl-1"><CalendarRange size={13} /></div>
         <select
           value={preset}
           onChange={(e) => applyPreset(e.target.value as DateRangePreset)}
-          aria-label="ช่วงเวลา"
+          aria-label={t("accountingDashboard.filter.dateRangeLabel")}
           className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
         >
           {PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
         </select>
         {preset === "custom" && (
           <div className="flex items-center gap-1.5">
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="วันเริ่มต้น"
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label={t("accountingDashboard.filter.fromDateLabel")}
               className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors font-mono" />
             <span className="text-xs text-muted-foreground">—</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="วันสิ้นสุด"
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label={t("accountingDashboard.filter.toDateLabel")}
               className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors font-mono" />
           </div>
         )}
@@ -86,10 +88,10 @@ export function AccountingDashboardPage() {
         <select
           value={salesperson}
           onChange={(e) => setSalesperson(e.target.value)}
-          aria-label="พนักงานขาย"
+          aria-label={t("accountingDashboard.filter.salespersonLabel")}
           className="text-xs text-foreground bg-secondary border border-border rounded-md px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors"
         >
-          <option value="">พนักงานขายทั้งหมด</option>
+          <option value="">{t("accountingDashboard.filter.allSalespeople")}</option>
           {availableSalespeople.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
@@ -100,11 +102,11 @@ export function AccountingDashboardPage() {
         </div>
       ) : loadError || !stats ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16">
-          <p className="text-sm text-muted-foreground">โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง</p>
-          <button onClick={() => setRetryToken((t) => t + 1)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">ลองใหม่</button>
+          <p className="text-sm text-muted-foreground">{t("accountingDashboard.error.loadFailed")}</p>
+          <button onClick={() => setRetryToken((n) => n + 1)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">{t("accountingDashboard.error.retry")}</button>
         </div>
       ) : !stats.hasAnyData ? (
-        <EmptyState icon={Wallet} title="ยังไม่มีข้อมูลบัญชี" description="ยังไม่มีเอกสารบัญชี (AR/IV/BI/RE) ในระบบ — ออกเอกสารได้จากหน้า 'วางบิลตามงาน'" />
+        <EmptyState icon={Wallet} title={t("accountingDashboard.empty.title")} description={t("accountingDashboard.empty.description")} />
       ) : (
         <>
           <KpiCards stats={stats} />
@@ -146,48 +148,60 @@ function SummaryCard({ title, value, sub, icon: Icon, accent, help }: {
 }
 
 function KpiCards({ stats }: { stats: ArDashboardStats }) {
+  const { t } = useI18n();
   const { kpis } = stats;
+  const docsUnit = t("accountingDashboard.unit.docs");
+  const asOfNow = t("accountingDashboard.sub.asOfNow");
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
       <SummaryCard
-        title="ยอดออกใบกำกับภาษี" value={fmtShort(kpis.issuedNet)} sub={`${kpis.issuedCount.toLocaleString("th-TH")} ฉบับ`}
-        icon={Receipt} accent="#c9a84c" help="ยอดสุทธิรวมของ AR+IV ที่ออกในช่วงเวลาที่เลือกด้านบน (ไม่รวมเอกสารที่ยกเลิก)"
+        title={t("accountingDashboard.kpi.issuedTotal.title")} value={fmtShort(kpis.issuedNet)} sub={`${kpis.issuedCount.toLocaleString("th-TH")} ${docsUnit}`}
+        icon={Receipt} accent="#c9a84c" help={t("accountingDashboard.kpi.issuedTotal.help")}
       />
       <SummaryCard
-        title="VAT ขาย" value={fmtShort(kpis.vatAmount)} sub="ตามช่วงเวลาที่เลือก"
-        icon={Banknote} accent="#1a5fb4" help="ภาษีมูลค่าเพิ่มของใบกำกับภาษี (AR+IV) ที่ออกในช่วงเวลาที่เลือก — สำหรับกระทบยอดยื่นภาษีขาย"
+        title={t("accountingDashboard.kpi.vatSales.title")} value={fmtShort(kpis.vatAmount)} sub={t("accountingDashboard.sub.selectedPeriod")}
+        icon={Banknote} accent="#1a5fb4" help={t("accountingDashboard.kpi.vatSales.help")}
       />
       <SummaryCard
-        title="ยอดค้างชำระ" value={fmtShort(kpis.outstandingNet)} sub={`${kpis.outstandingCount.toLocaleString("th-TH")} ฉบับ · ข้อมูล ณ ปัจจุบัน`}
-        icon={AlertTriangle} accent="#e08a3c" help="ใบกำกับภาษี (AR/IV) ที่ออกแล้วแต่ยังไม่มีใบเสร็จรับเงิน — เป็นข้อมูล ณ ปัจจุบัน ไม่ขึ้นกับตัวกรองช่วงเวลาด้านบน (ขึ้นกับพนักงานขายที่เลือก)"
+        title={t("accountingDashboard.kpi.outstanding.title")} value={fmtShort(kpis.outstandingNet)} sub={`${kpis.outstandingCount.toLocaleString("th-TH")} ${docsUnit} · ${asOfNow}`}
+        icon={AlertTriangle} accent="#e08a3c" help={t("accountingDashboard.kpi.outstanding.help")}
       />
       <SummaryCard
-        title="งานที่ยังไม่ออกบิลมัดจำ" value={kpis.depositNotBilledJobs.toLocaleString("th-TH")} sub="ข้อมูล ณ ปัจจุบัน"
-        icon={Wallet} accent="#5a7299" help="Scope of Work ที่ยังไม่มีการออกใบรับเงินมัดจำ/ใบกำกับภาษี (AR) เลย — เป็นข้อมูล ณ ปัจจุบัน ไม่ขึ้นกับตัวกรองช่วงเวลาด้านบน (ขึ้นกับพนักงานขายที่เลือก)"
+        title={t("accountingDashboard.kpi.depositNotBilled.title")} value={kpis.depositNotBilledJobs.toLocaleString("th-TH")} sub={asOfNow}
+        icon={Wallet} accent="#5a7299" help={t("accountingDashboard.kpi.depositNotBilled.help")}
       />
       <SummaryCard
-        title="เอกสารที่ยกเลิก" value={kpis.cancelledCount.toLocaleString("th-TH")} sub="ตามช่วงเวลาที่เลือก"
-        icon={Ban} accent="#e05252" help="จำนวนเอกสารบัญชีทุกประเภทที่ถูกยกเลิกในช่วงเวลาที่เลือก"
+        title={t("accountingDashboard.kpi.cancelled.title")} value={kpis.cancelledCount.toLocaleString("th-TH")} sub={t("accountingDashboard.sub.selectedPeriod")}
+        icon={Ban} accent="#e05252" help={t("accountingDashboard.kpi.cancelled.help")}
       />
     </div>
   );
 }
 
 function AgingTable({ invoices }: { invoices: ArDashboardStats["aging"]["invoices"] }) {
+  const { t } = useI18n();
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border">
-        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>รายการค้างชำระ (สูงสุด 30 รายการ)</h2>
-        <p className="text-xs text-muted-foreground font-mono mt-0.5">เรียงตามจำนวนวันที่เกินกำหนดมากที่สุดก่อน — ข้อมูล ณ ปัจจุบัน</p>
+        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accountingDashboard.agingTable.title")}</h2>
+        <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("accountingDashboard.agingTable.sub")}</p>
       </div>
       {invoices.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-10">ไม่มียอดค้างชำระ</p>
+        <p className="text-sm text-muted-foreground text-center py-10">{t("accountingDashboard.msg.noOutstanding")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/40">
-                {["เลขที่เอกสาร", "ประเภท", "เลขที่งาน", "ลูกค้า", "ครบกำหนด", "เกินกำหนด", "ยอดค้างชำระ (บาท)"].map((h) => (
+                {[
+                  t("accountingDashboard.agingTable.col.docNo"),
+                  t("accountingDashboard.agingTable.col.docType"),
+                  t("accountingDashboard.agingTable.col.scopeNumber"),
+                  t("accountingDashboard.agingTable.col.customer"),
+                  t("accountingDashboard.agingTable.col.dueDate"),
+                  t("accountingDashboard.agingTable.col.overdue"),
+                  t("accountingDashboard.agingTable.col.outstandingAmount"),
+                ].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -202,7 +216,7 @@ function AgingTable({ invoices }: { invoices: ArDashboardStats["aging"]["invoice
                   <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{fmtDateShort(inv.dueDate, "th")}</td>
                   <td className="px-4 py-2.5 whitespace-nowrap">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ background: `${AGING_BUCKET_COLORS[inv.bucketKey]}1a`, color: AGING_BUCKET_COLORS[inv.bucketKey] }}>
-                      {inv.daysOverdue <= 0 ? "ยังไม่ครบกำหนด" : `${inv.daysOverdue} วัน`}
+                      {inv.daysOverdue <= 0 ? t("accountingDashboard.agingTable.notYetDue") : `${inv.daysOverdue} ${t("accountingDashboard.unit.days")}`}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-xs text-foreground font-mono whitespace-nowrap">{inv.amount.toLocaleString("th-TH", { minimumFractionDigits: 2 })}</td>
@@ -217,20 +231,26 @@ function AgingTable({ invoices }: { invoices: ArDashboardStats["aging"]["invoice
 }
 
 function TopCustomersTable({ customers }: { customers: ArDashboardStats["topCustomers"] }) {
+  const { t } = useI18n();
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border">
-        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ลูกค้ารายใหญ่</h2>
-        <p className="text-xs text-muted-foreground font-mono mt-0.5">เรียงตามยอดใบกำกับภาษี (AR+IV) ในช่วงเวลาที่เลือก</p>
+        <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accountingDashboard.topCustomers.title")}</h2>
+        <p className="text-xs text-muted-foreground font-mono mt-0.5">{t("accountingDashboard.topCustomers.sub")}</p>
       </div>
       {customers.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-10">ยังไม่มีข้อมูลในช่วงนี้</p>
+        <p className="text-sm text-muted-foreground text-center py-10">{t("accountingDashboard.msg.noDataInPeriod")}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-muted/40">
-                {["ลูกค้า", "จำนวนใบกำกับภาษี", "ยอดสุทธิ (บาท)", "ยอดค้างชำระปัจจุบัน (บาท)"].map((h) => (
+                {[
+                  t("accountingDashboard.topCustomers.col.customer"),
+                  t("accountingDashboard.topCustomers.col.invoiceCount"),
+                  t("accountingDashboard.topCustomers.col.netTotal"),
+                  t("accountingDashboard.topCustomers.col.currentOutstanding"),
+                ].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>

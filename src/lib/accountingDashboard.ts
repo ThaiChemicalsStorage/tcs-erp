@@ -1,5 +1,6 @@
 import { apiFetch } from "./apiClient.js";
 import type { ArDocumentType, ArBillingStatus } from "./accounting.js";
+import type { TranslationKey } from "./i18n.js";
 
 /**
  * Accounting Dashboard (added 2026-08-18) — a detail view scoped entirely to Accounts Receivable
@@ -113,4 +114,16 @@ export const AGING_BUCKET_COLORS: Record<ArAgingBucketKey, string> = {
   d31_60: "#e08a3c",
   d61_90: "#d3672f",
   d90plus: "#c23f3f",
+};
+
+/** i18n key equivalent of each bucket's `label` field — the server (`handleDashboard()` in
+ * `api/_lib/arHandler.ts`) sends `label` as a plain Thai string alongside `key`; the UI should
+ * render `t(AGING_BUCKET_LABEL_KEY[bucket.key])` instead of `bucket.label` directly, so this chart
+ * translates with the rest of the app. Added 2026-08-18. */
+export const AGING_BUCKET_LABEL_KEY: Record<ArAgingBucketKey, TranslationKey> = {
+  notDue: "accounting.agingBucket.notDue",
+  d1_30: "accounting.agingBucket.d1_30",
+  d31_60: "accounting.agingBucket.d31_60",
+  d61_90: "accounting.agingBucket.d61_90",
+  d90plus: "accounting.agingBucket.d90plus",
 };

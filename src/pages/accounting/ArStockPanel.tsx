@@ -8,6 +8,7 @@ import { fetchStockMovements, type StockMovement } from "../../lib/stock";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
+import { useI18n } from "../../lib/i18n";
 
 interface DraftLine {
   key: number;
@@ -31,6 +32,7 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
   onPrint: () => void;
   onNcrPrint: () => void;
 }) {
+  const { t } = useI18n();
   const [products, setProducts] = useState<Product[]>([]);
   const [lines, setLines] = useState<DraftLine[]>([{ key: 1, productId: "", qty: "" }]);
   const [nextKey, setNextKey] = useState(2);
@@ -40,7 +42,7 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
 
   useEffect(() => {
     let cancelled = false;
-    fetchProducts().then((p) => { if (!cancelled) setProducts(p); }).catch(() => { if (!cancelled) toast.show("โหลดรายการสินค้าไม่สำเร็จ"); });
+    fetchProducts().then((p) => { if (!cancelled) setProducts(p); }).catch(() => { if (!cancelled) toast.show(t("accounting.stockPanel.toast.loadProductsFailed")); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -72,7 +74,7 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
     const payload = lines
       .filter((l) => l.productId && Number(l.qty) > 0)
       .map((l) => ({ productId: l.productId, qty: Number(l.qty) }));
-    if (payload.length === 0) { setError("กรุณาเลือกสินค้าและระบุจำนวนอย่างน้อย 1 รายการ"); return; }
+    if (payload.length === 0) { setError(t("accounting.stockPanel.error.selectRequired")); return; }
 
     setBusy(true);
     setError("");
@@ -82,9 +84,9 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
       setLines([{ key: nextKey, productId: "", qty: "" }]);
       setNextKey((n) => n + 1);
       setMovementsRetryToken((n) => n + 1);
-      toast.show("ตัดสต๊อกแล้ว");
+      toast.show(t("accounting.stockPanel.toast.deducted"));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "ตัดสต๊อกไม่สำเร็จ");
+      setError(err instanceof ApiError ? err.message : t("accounting.stockPanel.error.deductFailed"));
     } finally {
       setBusy(false);
     }
@@ -96,16 +98,16 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
     <div className="flex-1 overflow-y-auto p-6 space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft size={14} /> กลับไปหน้ารายการ
+          <ArrowLeft size={14} /> {t("accounting.stockPanel.back")}
         </button>
         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${doc.stockDeducted ? "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20" : "bg-muted text-muted-foreground border border-border"}`}>
-          {doc.stockDeducted ? "ตัดสต๊อกแล้ว" : "ยังไม่ตัดสต๊อก"}
+          {doc.stockDeducted ? t("accounting.stockPanel.status.deducted") : t("accounting.stockPanel.status.notDeducted")}
         </span>
         <div className="flex items-center gap-2 ml-auto">
-          <button onClick={onPrint} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors" title="พิมพ์ (กระดาษเปล่า — เอกสารเต็มรูปแบบ) — สถานะตัดสต๊อกปัจจุบันจะแสดงบนเอกสารพิมพ์ด้วย">
-            <Printer size={13} /> พิมพ์
+          <button onClick={onPrint} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors" title={t("accounting.stockPanel.btn.printTitle")}>
+            <Printer size={13} /> {t("accounting.stockPanel.btn.print")}
           </button>
-          <button onClick={onNcrPrint} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors" title="พิมพ์ลงฟอร์มกระดาษเคมี (NCR)">
+          <button onClick={onNcrPrint} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors" title={t("accounting.stockPanel.btn.ncrTitle")}>
             <FileText size={13} /> NCR
           </button>
         </div>
@@ -125,9 +127,9 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground">
-                  <th className="text-left font-medium px-3 py-2">รายการ</th>
-                  <th className="text-right font-medium px-3 py-2">จำนวน</th>
-                  <th className="text-right font-medium px-3 py-2">จำนวนเงิน</th>
+                  <th className="text-left font-medium px-3 py-2">{t("accounting.stockPanel.col.description")}</th>
+                  <th className="text-right font-medium px-3 py-2">{t("accounting.stockPanel.col.qty")}</th>
+                  <th className="text-right font-medium px-3 py-2">{t("accounting.stockPanel.col.amount")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -141,12 +143,12 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
               </tbody>
             </table>
           </div>
-          <div className="flex justify-end text-sm font-semibold text-foreground font-mono">ยอดสุทธิ {money(doc.netTotal)} บาท</div>
+          <div className="flex justify-end text-sm font-semibold text-foreground font-mono">{t("accounting.stockPanel.netTotalPrefix")} {money(doc.netTotal)} {t("accounting.stockPanel.currency.baht")}</div>
         </div>
 
         {/* ฝั่งขวา: ตัดสต๊อก */}
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ตัดสต๊อกสินค้า</h2>
+          <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accounting.stockPanel.deductHeading")}</h2>
 
           {canAdjust && doc.status === "issued" && (
             <div className="space-y-2">
@@ -159,27 +161,27 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
                       onChange={(e) => updateLine(l.key, { productId: e.target.value })}
                       className="h-9 flex-1 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
                     >
-                      <option value="">— เลือกสินค้า —</option>
+                      <option value="">{t("accounting.stockPanel.selectProduct")}</option>
                       {products.filter((p) => !p.archived).map((p) => (
-                        <option key={p.id} value={p.id}>{p.code} — {p.name} (คงเหลือ {p.stockQty})</option>
+                        <option key={p.id} value={p.id}>{p.code} — {p.name} ({t("accounting.stockPanel.stockRemainingPrefix")} {p.stockQty})</option>
                       ))}
                     </select>
                     <input
                       type="number"
                       value={l.qty}
                       onChange={(e) => updateLine(l.key, { qty: e.target.value })}
-                      placeholder="จำนวน"
+                      placeholder={t("accounting.stockPanel.line.qtyPlaceholder")}
                       className="h-9 w-24 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
                     />
                     <span className="text-xs text-muted-foreground w-10 whitespace-nowrap">{product?.unit ?? ""}</span>
-                    <button onClick={() => removeLine(l.key)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title="ลบรายการนี้">
+                    <button onClick={() => removeLine(l.key)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("accounting.stockPanel.line.remove")}>
                       <Trash2 size={14} />
                     </button>
                   </div>
                 );
               })}
               <button onClick={addLine} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                <Plus size={13} /> เพิ่มรายการ
+                <Plus size={13} /> {t("accounting.stockPanel.line.add")}
               </button>
               {error && <p className="text-xs text-[#c23f3f]">{error}</p>}
               <button
@@ -187,19 +189,19 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
                 disabled={busy}
                 className="w-full h-9 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-medium hover:brightness-95 transition-all disabled:opacity-50"
               >
-                {busy ? "กำลังบันทึก..." : "ตัดสต๊อก"}
+                {busy ? t("accounting.stockPanel.btn.savingBusy") : t("accounting.stockPanel.btn.deduct")}
               </button>
             </div>
           )}
-          {!canAdjust && <p className="text-xs text-muted-foreground">ไม่มีสิทธิ์ตัดสต๊อก — ดูได้เฉพาะประวัติด้านล่าง</p>}
-          {doc.status !== "issued" && <p className="text-xs text-muted-foreground">เอกสารนี้ถูกยกเลิกแล้ว ตัดสต๊อกเพิ่มไม่ได้</p>}
+          {!canAdjust && <p className="text-xs text-muted-foreground">{t("accounting.stockPanel.noPermission")}</p>}
+          {doc.status !== "issued" && <p className="text-xs text-muted-foreground">{t("accounting.stockPanel.cancelledNotice")}</p>}
 
           <div className="pt-2 border-t border-border">
-            <h3 className="text-xs font-semibold text-muted-foreground mb-2">ประวัติการตัดสต๊อกของใบนี้</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground mb-2">{t("accounting.stockPanel.historyHeading")}</h3>
             {loadingMovements ? (
-              <p className="text-xs text-muted-foreground">กำลังโหลด...</p>
+              <p className="text-xs text-muted-foreground">{t("accounting.stockPanel.loading")}</p>
             ) : movements.length === 0 ? (
-              <p className="text-xs text-muted-foreground">ยังไม่มีการตัดสต๊อกสำหรับเอกสารนี้</p>
+              <p className="text-xs text-muted-foreground">{t("accounting.stockPanel.noHistory")}</p>
             ) : (
               <div className="space-y-1.5">
                 {movements.map((m) => (

@@ -4,7 +4,7 @@ import { fetchAllScopeOfWorks, fetchScopeOfWork, type ScopeOfWorkListItem, type 
 import {
   openArMilestone, updateArMilestone, uploadArAttachment, issueArDocuments, issueArReceipt,
   fetchArDocuments, fetchArDocument,
-  AR_CHECKLIST_LABELS, BILLING_STATUS_LABELS, WORK_CLASSIFICATION_LABELS, DOC_TYPE_LABELS,
+  DOC_TYPE_LABEL_KEY, BILLING_STATUS_LABEL_KEY,
   type ArMilestone, type ArDocument, type ArChecklistKey, type ArWorkClassification, type ArBillingStatus,
 } from "../../lib/accounting";
 import { EmptyState } from "../../components/EmptyState";
@@ -13,6 +13,23 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { ArDocumentPrintDocument, type ArPaidByInvoiceId } from "./ArDocumentPrintDocument";
+import { useI18n, type TranslationKey } from "../../lib/i18n";
+
+// i18n key lookups for the two enums that have no shared _LABEL_KEY map in lib/accounting.ts yet
+// (see the task note that scoped src/lib/accounting.ts out of this pass) — built locally here.
+const WORK_CLASSIFICATION_LABEL_KEY: Record<ArWorkClassification, TranslationKey> = {
+  goods: "accounting.jobBilling.workClass.goods",
+  service: "accounting.jobBilling.workClass.service",
+  contract: "accounting.jobBilling.workClass.contract",
+};
+const CHECKLIST_LABEL_KEY: Record<ArChecklistKey, TranslationKey> = {
+  poCopy: "accounting.jobBilling.checklist.poCopy",
+  deliveryNote: "accounting.jobBilling.checklist.deliveryNote",
+  report: "accounting.jobBilling.checklist.report",
+  stampDuty: "accounting.jobBilling.checklist.stampDuty",
+  bankGuarantee: "accounting.jobBilling.checklist.bankGuarantee",
+  whtEnvelope: "accounting.jobBilling.checklist.whtEnvelope",
+};
 
 // หน้าบัญชีลูกหนี้ (Accounts Receivable) — งวดที่ 1: เลือกงาน (Scope of Work) แล้ววางบิลตามงวดงาน
 // Accounts Receivable page — Phase 1: pick a job (Scope of Work), then bill it milestone by milestone.
@@ -33,6 +50,7 @@ export function AccountingPage({
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const toast = useToast();
+  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -68,15 +86,15 @@ export function AccountingPage({
   return (
     <div className="flex-1 flex flex-col overflow-y-auto p-6 gap-6">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>วางบิลตามงาน</h1>
-        <p className="text-sm text-muted-foreground font-mono mt-1">เลือกงาน (Scope of Work) เพื่อดูงวดการชำระเงินและออกเอกสารบัญชี</p>
+        <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accounting.jobBilling.title")}</h1>
+        <p className="text-sm text-muted-foreground font-mono mt-1">{t("accounting.jobBilling.subtitle")}</p>
       </div>
 
       <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full max-w-md">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="ค้นหาเลขที่งาน / ลูกค้า / เลขที่ใบเสนอราคา"
+          placeholder={t("accounting.jobBilling.search.placeholder")}
           className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
         />
       </div>
@@ -86,19 +104,19 @@ export function AccountingPage({
           {[...Array(4)].map((_, i) => <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />)}
         </div>
       ) : loadError ? (
-        <div className="text-sm text-muted-foreground">โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง</div>
+        <div className="text-sm text-muted-foreground">{t("accounting.jobBilling.error.loadFailed")}</div>
       ) : filtered.length === 0 ? (
-        <EmptyState icon={FileText} title="ไม่พบงาน" description="ยังไม่มี Scope of Work ในระบบ หรือไม่พบรายการที่ค้นหา" />
+        <EmptyState icon={FileText} title={t("accounting.jobBilling.empty.title")} description={t("accounting.jobBilling.empty.description")} />
       ) : (
         <div className="bg-card border border-border rounded-xl overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted-foreground">
-                <th className="text-left px-4 py-2.5">เลขที่งาน</th>
-                <th className="text-left px-4 py-2.5">ลูกค้า</th>
-                <th className="text-left px-4 py-2.5">ใบเสนอราคา</th>
-                <th className="text-left px-4 py-2.5">บิลมัดจำ</th>
-                <th className="text-left px-4 py-2.5">สถานะ</th>
+                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.scopeNumber")}</th>
+                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.customer")}</th>
+                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.quotation")}</th>
+                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.depositBill")}</th>
+                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.status")}</th>
               </tr>
             </thead>
             <tbody>
@@ -121,7 +139,7 @@ export function AccountingPage({
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
-                        <AlertTriangle size={12} /> ยังไม่ออก
+                        <AlertTriangle size={12} /> {t("accounting.jobBilling.depositNotIssued")}
                       </span>
                     )}
                   </td>
@@ -161,6 +179,7 @@ function ScopeBillingDetail({
   const [printDoc, setPrintDoc] = useState<ArDocument | null>(null);
   const [receiptTarget, setReceiptTarget] = useState<ArDocument | null>(null);
   const [receiptBusy, setReceiptBusy] = useState(false);
+  const { t } = useI18n();
 
   // ยอดชำระแล้วต่อใบกำกับภาษี — สำหรับพิมพ์ใบแจ้งหนี้/ใบวางบิล (คอลัมน์ชำระแล้ว/เงินคงค้าง)
   const paidByInvoiceId: ArPaidByInvoiceId = useMemo(() => {
@@ -187,7 +206,7 @@ function ScopeBillingDetail({
       const doc = await fetchArDocument(id);
       setPrintDoc(doc);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "เปิดเอกสารไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("accounting.jobBilling.toast.openDocFailed"));
     }
   };
 
@@ -216,7 +235,7 @@ function ScopeBillingDetail({
       const m = await openArMilestone(scopeOfWorkId, installmentId);
       setMilestone(m);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "เปิดงวดบิลไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("accounting.jobBilling.toast.openMilestoneFailed"));
       setOpenMilestoneId(null);
     } finally {
       setMilestoneLoading(false);
@@ -229,7 +248,7 @@ function ScopeBillingDetail({
       const updated = await updateArMilestone(milestone.id, fields);
       setMilestone(updated);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("accounting.jobBilling.toast.saveFailed"));
     }
   };
 
@@ -248,9 +267,9 @@ function ScopeBillingDetail({
       try {
         const updated = await uploadArAttachment(milestone.id, key, { fileName: file.name, contentType: file.type, dataBase64 });
         setMilestone(updated);
-        showToast("แนบไฟล์แล้ว");
+        showToast(t("accounting.jobBilling.toast.fileAttached"));
       } catch (err) {
-        showToast(err instanceof ApiError ? err.message : "แนบไฟล์ไม่สำเร็จ");
+        showToast(err instanceof ApiError ? err.message : t("accounting.jobBilling.toast.fileAttachFailed"));
       }
     };
     reader.readAsDataURL(file);
@@ -261,11 +280,11 @@ function ScopeBillingDetail({
     setReceiptBusy(true);
     try {
       const re = await issueArReceipt(receiptTarget.id);
-      showToast(`ออกใบเสร็จรับเงิน ${re.docNo} แล้ว`);
+      showToast(`${t("accounting.jobBilling.toast.receiptIssuedPrefix")} ${re.docNo} ${t("accounting.jobBilling.toast.doneSuffix")}`);
       setReceiptTarget(null);
       reload();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ออกใบเสร็จไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("accounting.jobBilling.toast.receiptIssueFailed"));
     } finally {
       setReceiptBusy(false);
     }
@@ -276,12 +295,12 @@ function ScopeBillingDetail({
     setIssuing(true);
     try {
       const docs = await issueArDocuments(milestone.id);
-      showToast(`ออกเอกสาร ${docs.map((d) => d.docNo).join(", ")} แล้ว`);
+      showToast(`${t("accounting.jobBilling.toast.docsIssuedPrefix")} ${docs.map((d) => d.docNo).join(", ")} ${t("accounting.jobBilling.toast.doneSuffix")}`);
       setOpenMilestoneId(null);
       setMilestone(null);
       reload();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ออกเอกสารไม่สำเร็จ");
+      showToast(err instanceof ApiError ? err.message : t("accounting.jobBilling.toast.issueDocsFailed"));
     } finally {
       setIssuing(false);
     }
@@ -305,7 +324,7 @@ function ScopeBillingDetail({
         ต้องเป็นสิ่งเดียวที่ออกกระดาษ (pattern เดียวกับ DeliveryOrderDocument's print:hidden blocks) */}
     <div className="flex-1 flex flex-col overflow-y-auto p-6 gap-5 print:hidden">
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit">
-        <ChevronLeft size={16} /> กลับไปรายการงาน
+        <ChevronLeft size={16} /> {t("accounting.jobBilling.backToList")}
       </button>
 
       <div>
@@ -319,18 +338,18 @@ function ScopeBillingDetail({
         return depositDoc ? (
           <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-[#2aa36b]/10 border border-[#2aa36b]/20 text-sm text-[#207e52]">
             <CheckCircle2 size={15} className="flex-shrink-0" />
-            งานนี้ออกบิลมัดจำแล้ว — {depositDoc.docNo} ยอด ฿{depositDoc.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })}
+            {t("accounting.jobBilling.depositIssuedPrefix")} {depositDoc.docNo} {t("accounting.jobBilling.amountPrefix")} ฿{depositDoc.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })}
           </div>
         ) : (
           <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-[#e08a3c]/10 border border-[#e08a3c]/20 text-sm text-[#a75d1a]">
             <AlertTriangle size={15} className="flex-shrink-0" />
-            งานนี้ยังไม่ได้ออกบิลมัดจำ
+            {t("accounting.jobBilling.depositNotIssuedNotice")}
           </div>
         );
       })()}
 
       <div className="bg-card border border-border rounded-xl p-4">
-        <h2 className="text-sm font-semibold text-foreground mb-3">งวดการชำระเงิน</h2>
+        <h2 className="text-sm font-semibold text-foreground mb-3">{t("accounting.jobBilling.installmentsHeading")}</h2>
         <div className="space-y-2">
           {scope.paymentConditions.installments.map((inst) => (
             <div key={inst.id} className="border border-border/60 rounded-lg p-3">
@@ -340,7 +359,7 @@ function ScopeBillingDetail({
               >
                 <div>
                   <p className="text-sm font-medium text-foreground">{inst.label} — {inst.pct ?? "-"}%</p>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">{inst.paymentType}{inst.days ? ` ${inst.days} วัน` : ""}</p>
+                  <p className="text-xs text-muted-foreground font-mono mt-0.5">{inst.paymentType}{inst.days ? ` ${inst.days} ${t("accounting.jobBilling.daysUnit")}` : ""}</p>
                 </div>
                 {openMilestoneId === inst.id && milestoneLoading && <Loader2 className="animate-spin text-muted-foreground" size={16} />}
               </button>
@@ -348,22 +367,22 @@ function ScopeBillingDetail({
               {openMilestoneId === inst.id && milestone && (
                 <div className="mt-3 pt-3 border-t border-border/60 space-y-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">สถานะ:</span>
+                    <span className="text-xs text-muted-foreground">{t("accounting.jobBilling.statusLabel")}</span>
                     <StatusPill status={milestone.billingStatus} />
                   </div>
 
                   {milestone.billingStatus === "not_billed" ? (
                     <>
                       <div className="flex items-center gap-3">
-                        <label className="text-xs text-muted-foreground">ประเภทงาน</label>
+                        <label className="text-xs text-muted-foreground">{t("accounting.jobBilling.workClassificationLabel")}</label>
                         <select
                           value={milestone.workClassification}
                           disabled={!canCreate}
                           onChange={(e) => patchMilestone({ workClassification: e.target.value as ArWorkClassification })}
                           className="bg-secondary border border-border rounded-lg px-2 py-1 text-xs"
                         >
-                          {(Object.keys(WORK_CLASSIFICATION_LABELS) as ArWorkClassification[]).map((k) => (
-                            <option key={k} value={k}>{WORK_CLASSIFICATION_LABELS[k]}</option>
+                          {(Object.keys(WORK_CLASSIFICATION_LABEL_KEY) as ArWorkClassification[]).map((k) => (
+                            <option key={k} value={k}>{t(WORK_CLASSIFICATION_LABEL_KEY[k])}</option>
                           ))}
                         </select>
                       </div>
@@ -375,14 +394,14 @@ function ScopeBillingDetail({
                           return (
                             <div key={key} className="flex items-center gap-2 text-xs">
                               <input type="checkbox" checked={checked} disabled={!canCreate} onChange={() => toggleChecklist(key)} />
-                              <span className="flex-1 text-foreground">{AR_CHECKLIST_LABELS[key]}{alwaysRequired.includes(key) && <span className="text-[#c23f3f]"> *</span>}</span>
+                              <span className="flex-1 text-foreground">{t(CHECKLIST_LABEL_KEY[key])}{alwaysRequired.includes(key) && <span className="text-[#c23f3f]"> *</span>}</span>
                               {canCreate && (
                                 <label className="flex items-center gap-1 text-muted-foreground hover:text-foreground cursor-pointer">
                                   <Upload size={12} />
                                   <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFileUpload(key, f); }} />
                                 </label>
                               )}
-                              {attached && <span className="text-xs text-muted-foreground">({milestone.attachmentIds.length} ไฟล์)</span>}
+                              {attached && <span className="text-xs text-muted-foreground">({milestone.attachmentIds.length} {t("accounting.jobBilling.filesUnit")})</span>}
                             </div>
                           );
                         })}
@@ -395,28 +414,28 @@ function ScopeBillingDetail({
                           className="flex items-center gap-2 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {issuing ? <Loader2 size={13} className="animate-spin" /> : <ClipboardCheck size={13} />}
-                          ออกเอกสาร ({milestone.isDownPayment ? "AR" : "IV"} + BI)
+                          {t("accounting.jobBilling.issueDocsBtn")} ({milestone.isDownPayment ? "AR" : "IV"} + BI)
                         </button>
                       )}
-                      {!checklistOk && <p className="text-xs text-muted-foreground">ต้องแนบสำเนาใบสั่งซื้อ/สัญญา และใบส่งมอบงานก่อนจึงจะออกเอกสารได้</p>}
+                      {!checklistOk && <p className="text-xs text-muted-foreground">{t("accounting.jobBilling.checklistRequiredNotice")}</p>}
                     </>
                   ) : (
-                    <p className="text-xs text-muted-foreground">งวดนี้ออกเอกสารแล้ว ดูรายการเอกสารด้านล่าง</p>
+                    <p className="text-xs text-muted-foreground">{t("accounting.jobBilling.installmentAlreadyIssuedNotice")}</p>
                   )}
                 </div>
               )}
             </div>
           ))}
           {scope.paymentConditions.installments.length === 0 && (
-            <p className="text-sm text-muted-foreground">Scope of Work นี้ยังไม่มีงวดการชำระเงิน</p>
+            <p className="text-sm text-muted-foreground">{t("accounting.jobBilling.noInstallmentsNotice")}</p>
           )}
         </div>
       </div>
 
       <div className="bg-card border border-border rounded-xl p-4">
-        <h2 className="text-sm font-semibold text-foreground mb-3">เอกสารที่ออกแล้ว</h2>
+        <h2 className="text-sm font-semibold text-foreground mb-3">{t("accounting.jobBilling.issuedDocsHeading")}</h2>
         {documents.length === 0 ? (
-          <p className="text-sm text-muted-foreground">ยังไม่มีเอกสารที่ออก</p>
+          <p className="text-sm text-muted-foreground">{t("accounting.jobBilling.noIssuedDocsNotice")}</p>
         ) : (
           <div className="space-y-1.5">
             {documents.map((d) => {
@@ -429,9 +448,9 @@ function ScopeBillingDetail({
                   <div className="flex items-center gap-2">
                     <Receipt size={14} className="text-muted-foreground" />
                     <span className="font-mono text-foreground">{d.docNo}</span>
-                    <span className="text-xs text-muted-foreground">{DOC_TYPE_LABELS[d.docType]}</span>
-                    {d.status === "cancelled" && <span className="text-xs text-[#c23f3f]">ยกเลิกแล้ว</span>}
-                    {receipt && <span className="text-xs text-[#207e52]">รับชำระแล้ว ({receipt.docNo})</span>}
+                    <span className="text-xs text-muted-foreground">{t(DOC_TYPE_LABEL_KEY[d.docType])}</span>
+                    {d.status === "cancelled" && <span className="text-xs text-[#c23f3f]">{t("accounting.jobBilling.cancelledLabel")}</span>}
+                    {receipt && <span className="text-xs text-[#207e52]">{t("accounting.jobBilling.paidLabel")} ({receipt.docNo})</span>}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-xs text-foreground">฿{d.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })}</span>
@@ -440,13 +459,13 @@ function ScopeBillingDetail({
                         onClick={() => setReceiptTarget(d)}
                         className="px-2 py-1 text-xs border border-[#c9a84c]/40 text-[#a5813a] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
                       >
-                        ออกใบเสร็จ
+                        {t("accounting.jobBilling.issueReceiptBtn")}
                       </button>
                     )}
                     <button
                       onClick={() => void handlePrint(d.id)}
                       className="text-muted-foreground hover:text-foreground transition-colors"
-                      title="พิมพ์"
+                      title={t("accounting.jobBilling.printTitle")}
                     >
                       <Printer size={14} />
                     </button>
@@ -459,9 +478,9 @@ function ScopeBillingDetail({
       </div>
       <ConfirmDialog
         open={receiptTarget !== null}
-        title="ออกใบเสร็จรับเงิน"
-        message={`ยืนยันการออกใบเสร็จรับเงินสำหรับใบกำกับภาษี ${receiptTarget?.docNo ?? ""} ยอด ${receiptTarget ? receiptTarget.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : ""} บาท (ออกเมื่อได้รับชำระเงินแล้วเท่านั้น)`}
-        confirmLabel={receiptBusy ? "กำลังออกเอกสาร..." : "ออกใบเสร็จ"}
+        title={t("accounting.jobBilling.receiptDialog.title")}
+        message={`${t("accounting.jobBilling.receiptDialog.messageBefore")} ${receiptTarget?.docNo ?? ""} ${t("accounting.jobBilling.receiptDialog.messageMid")} ${receiptTarget ? receiptTarget.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 }) : ""} ${t("accounting.jobBilling.receiptDialog.messageAfter")}`}
+        confirmLabel={receiptBusy ? t("accounting.jobBilling.receiptDialog.busy") : t("accounting.jobBilling.issueReceiptBtn")}
         busy={receiptBusy}
         onConfirm={() => void handleIssueReceipt()}
         onCancel={() => setReceiptTarget(null)}
@@ -473,11 +492,12 @@ function ScopeBillingDetail({
 }
 
 function StatusPill({ status }: { status: ArBillingStatus }) {
+  const { t } = useI18n();
   const style: Record<ArBillingStatus, string> = {
     not_billed: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
     billed: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
     work_open: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
     closed: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
   };
-  return <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${style[status]}`}>{BILLING_STATUS_LABELS[status]}</span>;
+  return <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${style[status]}`}>{t(BILLING_STATUS_LABEL_KEY[status])}</span>;
 }

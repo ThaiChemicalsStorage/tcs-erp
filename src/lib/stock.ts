@@ -1,4 +1,5 @@
 import { apiFetch } from "./apiClient.js";
+import type { TranslationKey } from "./i18n.js";
 
 /**
  * Product Stock (added 2026-08-18). See api/_lib/collections.ts's StockMovementFields doc comment
@@ -28,6 +29,15 @@ export const STOCK_MOVEMENT_KIND_LABELS: Record<StockMovementKind, string> = {
   receive: "รับเข้า",
   deduct: "ตัดออก",
   adjust: "ปรับยอด",
+};
+
+/** i18n key equivalent of the map above — same `t(SOME_LABEL_KEY[x])` pattern as
+ * `DOC_TYPE_LABEL_KEY` (src/lib/accounting.ts). Use this (not the plain-Thai map above) in any
+ * on-screen UI. Added 2026-08-18. */
+export const STOCK_MOVEMENT_KIND_LABEL_KEY: Record<StockMovementKind, TranslationKey> = {
+  receive: "stock.movementKind.receive",
+  deduct: "stock.movementKind.deduct",
+  adjust: "stock.movementKind.adjust",
 };
 
 export async function fetchStockMovements(filter?: { productId?: string; sourceId?: string }): Promise<StockMovement[]> {

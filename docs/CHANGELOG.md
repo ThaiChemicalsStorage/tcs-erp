@@ -4,7 +4,72 @@
 
 ---
 
-## 2026-08-18o (absolute latest) — Accounting list pages' status cards now mirror the filter tabs, matching Delivery Order's layout
+## 2026-08-18p (absolute latest) — Accounting/Stock i18n gap closed: full English translation for every on-screen page
+
+**Feature**: Owner-reported live (screenshot): switching the UI language to English (Settings →
+Profile) correctly translated the sidebar nav labels but left the entire "บัญชี" (Accounting) section
+— dashboard, every document list, every dialog, the Stock module — on-screen in Thai. Confirmed via
+`docs/CLAUDE.md`'s own stated i18n policy that this was a real, unintentional gap: Accounting/Stock
+(added 2026-08-17/18) simply never got wired to `useI18n()`/`t()` at all when built, unlike every
+other module. Fixed across all 8 on-screen files (the two print-only components,
+`ArDocumentPrintDocument.tsx`/`ArDocumentNcrPrintDocument.tsx`, deliberately excluded — same
+always-Thai convention as `PrintDocument.tsx`, since these are physical/filed documents, not UI
+chrome the preparer's own language toggle should affect).
+
+**Files Modified** (~1,215 new lines across 3 passes): `src/pages/accounting/{AccountingDashboardPage,AccountingDashboardCharts,AccountingPage,ArDocumentListPage,ArMonthlyReportPage,ManualTaxInvoiceDialog,ArStockPanel}.tsx`,
+`src/pages/stock/StockPage.tsx`, `src/lib/i18n.tsx` (1,431 → 1,692 keys, +261 new pairs across
+`accountingDashboard.*`/`accounting.docType.*`/`accounting.billingStatus.*`/`accounting.agingBucket.*`/
+`accounting.list.*`/`accounting.manual.*`/`accounting.stockPanel.*`/`accounting.jobBilling.*`/
+`accounting.monthly.*`/`stock.*`), `src/lib/accounting.ts` (new `DOC_TYPE_LABEL_KEY`/
+`BILLING_STATUS_LABEL_KEY` — i18n-key equivalents of the existing plain-Thai label maps, same
+`t(SOME_LABEL_KEY[x])` pattern as `PERMISSION_LABEL_KEY`, added so every file showing a document-type
+or billing-status name translates the SAME way rather than each file inventing its own text),
+`src/lib/accountingDashboard.ts` (`AGING_BUCKET_LABEL_KEY` — the server sends aging-bucket `label` as
+plain Thai alongside `key`; the chart now re-translates client-side from `key` instead of rendering
+the server string directly), `src/lib/stock.ts` (`STOCK_MOVEMENT_KIND_LABEL_KEY`, same pattern).
+
+**Reason**: Direct owner report of a real, user-visible bug — the language toggle promised full
+English but didn't deliver it for an entire module.
+
+**Notes — process**: done as 3 sequential subagent passes (dashboard cluster → list/dialogs cluster →
+job-billing/monthly/stock cluster), each briefed with an explicit shared-file-collision-avoidance
+protocol (distinct key namespaces, insert-after-last-matching-key instructions, mandatory 1:1
+Thai/English parity self-check) since all three write to the same `i18n.tsx`. Ran sequentially, not in
+parallel, specifically to avoid concurrent edits to that one shared file. I (Claude) verified each
+pass myself before starting the next — `tsc`/lint/key-parity script, not trusting the agents' own
+"done" claims — same discipline as every subagent-delegated pass tonight. Two real gaps I caught that
+the delegated passes missed or couldn't reach (their file lists didn't include the responsible file):
+(1) `AccountingDashboardCharts.tsx`'s doc-type/billing-status/aging-bucket chart **legend labels**
+were still hardcoded Thai after pass 1 — the two label constants they read from
+(`DOC_TYPE_LABELS`/`BILLING_STATUS_LABELS` in `lib/accounting.ts`, plus the server-sent aging-bucket
+`label` field) lived outside any single file's edit scope, so I built the `_LABEL_KEY` maps described
+above myself and wired the chart to them, establishing the pattern the later two passes then reused
+correctly. (2) `StockPage.tsx`'s movement-kind tab labels (รับเข้า/ตัดออก/ปรับยอด) used
+`STOCK_MOVEMENT_KIND_LABELS` from `lib/stock.ts`, a file outside pass 3's authorized edit list — the
+agent correctly left it alone and flagged it in its own report rather than silently going out of
+scope; I fixed it the same way afterward. (3) **A real string-concatenation bug found only through
+live browser testing**, not caught by `tsc`/lint/build/test: `StockPage.tsx`'s history heading built
+"Stock Adjustment History" + "Recent" by directly concatenating two `t()` calls with no separator —
+correct in Thai (where compounds like this read naturally with no space) but rendered
+"Stock Adjustment HistoryRecent" in English. Fixed by replacing the two-fragment concatenation with a
+single full-phrase key (`accounting.jobBilling`-style `_headingLatest` key) instead of assembling
+translated fragments — the same class of bug flagged as a real risk anywhere translated strings get
+concatenated rather than composed as whole sentences.
+
+**Verified**: `npx tsc --noEmit` (both configs)/`npm run lint` (0 errors)/`npm run build`/`npm test`
+(207/207 — one transient single-file failure on a concurrent full run, confirmed unrelated to this
+change and non-reproducible via isolated + full re-runs, see Notes above) all clean; a 1:1 Thai/English
+key-parity check script run after every pass (0 orphaned keys throughout). Extensive live browser
+verification in English across every affected page (Accounting Dashboard incl. all 4 charts' legends,
+Job Billing incl. an open installment's status panel and the full issued-documents list, Monthly
+Document Summary, all 4 AR/BI/RE/IV list pages, the Manual Tax Invoice dialog, the IV stock-cutting
+dual-pane panel in both `stock:adjust` and `stock:view`-only forms, and the Stock page incl. the
+adjust-stock dialog) — this is where the concatenation bug above was actually caught. Disposable test
+accounts (administrator, viewer) and all screenshots deleted after.
+
+---
+
+## 2026-08-18o — Accounting list pages' status cards now mirror the filter tabs, matching Delivery Order's layout
 
 **Feature**: Direct request, with a screenshot of the Delivery Order list page as the reference: "ทำ
 ออกมาเป็นสถานะออกมาด้วยแบบนี้" — clarified as "take this card+tab layout and apply it to the Accounting

@@ -14,6 +14,17 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-18] Accounting/Stock i18n gap closed.** Owner-reported: switching to English left the
+  entire Accounting section on-screen in Thai (sidebar nav translated, page content didn't — the
+  module was simply never wired to `useI18n()`/`t()` when built). Fixed across all 8 on-screen
+  Accounting/Stock files (~261 new key pairs, 1,431 → 1,692 total); the two print-only components
+  stay Thai-only, same convention as `PrintDocument.tsx`. One real bug caught only via live browser
+  testing (not `tsc`/lint/build/test): a heading built by concatenating two translated fragments
+  rendered "Stock Adjustment HistoryRecent" in English (fine in Thai, which compounds with no space) —
+  fixed with a single full-phrase key instead. `tsc`/`lint`/`build`/`test` (207/207) clean, extensive
+  live verification across every affected page incl. an RBAC-boundary check. See
+  [CHANGELOG.md](./CHANGELOG.md) 2026-08-18p.
+
 - ✅ **[2026-08-18] Manual Tax Invoice creation (AR/IV).** Direct request for a "+ create" button
   matching Quotation's own style, applied to Accounting — clarified scope first (every doc type vs.
   AR/IV only) since BI/RE always reference a principal invoice and can't stand alone; confirmed

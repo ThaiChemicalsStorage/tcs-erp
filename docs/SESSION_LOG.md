@@ -4,6 +4,44 @@
 
 ---
 
+## Session — 2026-08-18 (continued, absolute latest), Accounting/Stock i18n gap closed
+
+### What was implemented
+Owner reported live (screenshot) that switching to English left the whole Accounting section
+on-screen in Thai — sidebar labels translated, page content didn't. Confirmed via `docs/CLAUDE.md`'s
+own i18n policy this was a real gap (Accounting/Stock never got wired at all when built 2026-08-17/18),
+not a documented exception. Sized the work first via a research fork (~8 files, ~270-330 strings)
+before touching anything, then executed as 3 sequential subagent passes — deliberately sequential, not
+parallel, since all three write to the same `src/lib/i18n.tsx` and parallel edits would collide.
+Established a shared-infrastructure pattern early (pass 1) — `DOC_TYPE_LABEL_KEY`/
+`BILLING_STATUS_LABEL_KEY`/`AGING_BUCKET_LABEL_KEY` — so every later file showing a document type or
+billing status name translates identically rather than each file inventing its own text.
+
+### Problems found/fixed
+- Two label-map gaps the delegated passes correctly couldn't reach (the responsible file was outside
+  their authorized edit list): `AccountingDashboardCharts.tsx`'s chart legends and `StockPage.tsx`'s
+  movement-kind tabs both read from plain-Thai constants living in `lib/accounting.ts`/`lib/stock.ts` —
+  fixed by building the `_LABEL_KEY` maps myself and wiring the charts/tabs to them.
+- **A real bug caught only through live browser testing, not by `tsc`/lint/build/test**:
+  `StockPage.tsx`'s "Stock Adjustment History" heading concatenated two separately-translated `t()`
+  fragments with no separator — correct in Thai (compounds fine with no space) but rendered
+  "Stock Adjustment HistoryRecent" in English. Fixed by using one full-phrase key instead of
+  assembling fragments — a lesson for any future i18n work: never concatenate translated pieces
+  where a language's grammar might not need what another language does.
+- A transient test-suite failure on one full concurrent run (`expressServer.test.ts`, an `afterAll`
+  teardown error) — confirmed via isolated re-run (7/7 passed) and a second full run (207/207) that
+  this was resource contention from the long-lived session, not a real regression.
+
+### Verification
+`npx tsc --noEmit` (both configs)/`npm run lint` (0 errors)/`npm run build`/`npm test` (207/207) all
+clean; a 1:1 Thai/English key-parity check script run after every pass. Extensive live browser
+verification in English across every affected page, plus a targeted RBAC-boundary check (a disposable
+`viewer`-role account correctly sees a read-only stock panel with no deduct form, correctly translated:
+"No permission to deduct stock — you can only view the history below"). All disposable test accounts
+and screenshots deleted after.
+
+---
+
 ## Session — 2026-08-18 (continued, absolute latest), Accounting status cards match Delivery Order layout
 
 ### What was implemented

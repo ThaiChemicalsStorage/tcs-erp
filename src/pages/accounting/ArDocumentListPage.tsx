@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Receipt, Search, X, Printer, Ban, FileText, Settings2, Boxes, Plus } from "lucide-react";
 import {
   fetchArDocuments, fetchArDocument, cancelArDocument, issueArReceipt,
-  DOC_TYPE_LABELS,
+  DOC_TYPE_LABEL_KEY,
   type ArDocument, type ArDocumentType,
 } from "../../lib/accounting";
 import { fetchAllScopeOfWorks } from "../../lib/scopeOfWork";
@@ -18,6 +18,7 @@ import { ArDocumentNcrPrintDocument, NcrCalibrationTestPage } from "./ArDocument
 import { loadNcrSettings, saveNcrSettings, DEFAULT_NCR_SETTINGS, type NcrPrintSettings } from "../../lib/ncrPrintSettings";
 import { ArStockPanel } from "./ArStockPanel";
 import { ManualTaxInvoiceDialog } from "./ManualTaxInvoiceDialog";
+import { useI18n } from "../../lib/i18n";
 
 // หน้ารายการเอกสารบัญชีแยกตามประเภท — "1 ใบคือ 1 หน้า" ตามที่เจ้าของสั่ง (2026-08-18) ให้แต่ละ
 // ประเภทเอกสาร (ใบรับเงินมัดจำ/ใบกำกับภาษี, ใบแจ้งหนี้/ใบวางบิล, ใบเสร็จรับเงิน, ใบกำกับภาษี/ใบส่งสินค้า)
@@ -36,6 +37,7 @@ export function ArDocumentListPage({
   canViewStock: boolean;
   canAdjustStock: boolean;
 }) {
+  const { t } = useI18n();
   const [documents, setDocuments] = useState<ArDocument[]>([]);
   const [receipts, setReceipts] = useState<ArDocument[]>([]);
   const [scopeNumbers, setScopeNumbers] = useState<Record<string, string>>({});
@@ -154,7 +156,7 @@ export function ArDocumentListPage({
     try {
       setPrintDoc(await fetchArDocument(id));
     } catch (err) {
-      toast.show(err instanceof ApiError ? err.message : "เปิดเอกสารไม่สำเร็จ");
+      toast.show(err instanceof ApiError ? err.message : t("accounting.list.toast.openFailed"));
     }
   };
 
@@ -162,7 +164,7 @@ export function ArDocumentListPage({
     try {
       setDetailDoc(await fetchArDocument(id));
     } catch (err) {
-      toast.show(err instanceof ApiError ? err.message : "เปิดเอกสารไม่สำเร็จ");
+      toast.show(err instanceof ApiError ? err.message : t("accounting.list.toast.openFailed"));
     }
   };
 
@@ -170,7 +172,7 @@ export function ArDocumentListPage({
     try {
       setNcrPrintDoc(await fetchArDocument(id));
     } catch (err) {
-      toast.show(err instanceof ApiError ? err.message : "เปิดเอกสารไม่สำเร็จ");
+      toast.show(err instanceof ApiError ? err.message : t("accounting.list.toast.openFailed"));
     }
   };
 
@@ -179,11 +181,11 @@ export function ArDocumentListPage({
     setBusy(true);
     try {
       await cancelArDocument(cancelTarget.id, reason);
-      toast.show(`ยกเลิกเอกสาร ${cancelTarget.docNo} แล้ว`);
+      toast.show(`${t("accounting.list.toast.cancelledPrefix")} ${cancelTarget.docNo} ${t("accounting.list.suffixDone")}`);
       setCancelTarget(null);
       load();
     } catch (err) {
-      toast.show(err instanceof ApiError ? err.message : "ยกเลิกเอกสารไม่สำเร็จ");
+      toast.show(err instanceof ApiError ? err.message : t("accounting.list.toast.cancelFailed"));
     } finally {
       setBusy(false);
     }
@@ -194,11 +196,11 @@ export function ArDocumentListPage({
     setBusy(true);
     try {
       const re = await issueArReceipt(receiptTarget.id);
-      toast.show(`ออกใบเสร็จรับเงิน ${re.docNo} แล้ว`);
+      toast.show(`${t("accounting.list.toast.receiptIssuedPrefix")} ${re.docNo} ${t("accounting.list.suffixDone")}`);
       setReceiptTarget(null);
       load();
     } catch (err) {
-      toast.show(err instanceof ApiError ? err.message : "ออกใบเสร็จไม่สำเร็จ");
+      toast.show(err instanceof ApiError ? err.message : t("accounting.list.toast.receiptFailed"));
     } finally {
       setBusy(false);
     }
@@ -229,10 +231,10 @@ export function ArDocumentListPage({
     <div className="flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{DOC_TYPE_LABELS[docType]}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t(DOC_TYPE_LABEL_KEY[docType])}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">
-            เลขที่เอกสารขึ้นต้นด้วย {docType} · ออกเอกสารได้จากหน้า "วางบิลตามงาน"
-            {isTaxInvoicePage && canCreate && canIssue ? ' หรือสร้างแบบ Manual ด้านล่าง' : ""}
+            {t("accounting.list.subtitle.before")} {docType} {t("accounting.list.subtitle.after")}
+            {isTaxInvoicePage && canCreate && canIssue ? ` ${t("accounting.list.subtitle.orManual")}` : ""}
           </p>
         </div>
         {isTaxInvoicePage && canCreate && canIssue && (
@@ -240,7 +242,7 @@ export function ArDocumentListPage({
             onClick={() => setManualDialogOpen(true)}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
           >
-            <Plus size={15} /> สร้างใบกำกับภาษี (Manual)
+            <Plus size={15} /> {t("accounting.list.btn.createManual")}
           </button>
         )}
       </div>
@@ -254,9 +256,9 @@ export function ArDocumentListPage({
           request. The this-month money total previously shown here still lives on the monthly report page. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: "ทั้งหมด", value: String(documents.length), color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
-          { label: "ใช้งาน", value: String(documents.filter((d) => d.status === "issued").length), color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
-          { label: "ยกเลิกแล้ว", value: String(documents.filter((d) => d.status === "cancelled").length), color: "#e05252", bg: "from-[#e05252]/15 to-[#e05252]/5" },
+          { label: t("accounting.list.status.all"), value: String(documents.length), color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
+          { label: t("accounting.list.status.issued"), value: String(documents.filter((d) => d.status === "issued").length), color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
+          { label: t("accounting.list.status.cancelled"), value: String(documents.filter((d) => d.status === "cancelled").length), color: "#e05252", bg: "from-[#e05252]/15 to-[#e05252]/5" },
         ].map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">
             <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.bg} flex items-center justify-center mb-3`}>
@@ -276,7 +278,7 @@ export function ArDocumentListPage({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ค้นหาเลขที่เอกสาร / ลูกค้า / เลขที่งาน"
+              placeholder={t("accounting.list.search.placeholder")}
               className="h-9 w-full pl-9 pr-8 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
             />
             {search && (
@@ -286,7 +288,7 @@ export function ArDocumentListPage({
             )}
           </div>
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            เดือน
+            {t("accounting.list.filter.month")}
             <input
               type="month"
               value={monthFilter}
@@ -294,7 +296,7 @@ export function ArDocumentListPage({
               className="h-9 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
             />
             {monthFilter && (
-              <button onClick={() => setMonthFilter("")} className="text-muted-foreground hover:text-foreground" title="ล้างตัวกรองเดือน">
+              <button onClick={() => setMonthFilter("")} className="text-muted-foreground hover:text-foreground" title={t("accounting.list.filter.clearMonth")}>
                 <X size={13} />
               </button>
             )}
@@ -302,13 +304,13 @@ export function ArDocumentListPage({
           <button
             onClick={() => setNcrSettingsOpen(true)}
             className="flex items-center gap-1.5 h-9 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all ml-auto"
-            title="ตั้งค่าตำแหน่งพิมพ์ลงฟอร์มกระดาษเคมี (NCR)"
+            title={t("accounting.list.ncr.settingsTitle")}
           >
-            <Settings2 size={13} /> ตั้งค่าฟอร์ม NCR
+            <Settings2 size={13} /> {t("accounting.list.ncr.settingsBtn")}
           </button>
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {([["all", "ทั้งหมด"], ["issued", "ใช้งาน"], ["cancelled", "ยกเลิกแล้ว"]] as const).map(([key, label]) => (
+          {([["all", t("accounting.list.status.all")], ["issued", t("accounting.list.status.issued")], ["cancelled", t("accounting.list.status.cancelled")]] as const).map(([key, label]) => (
             <button key={key} onClick={() => setStatusFilter(key)}
               className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${statusFilter === key ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
               {label}
@@ -324,16 +326,16 @@ export function ArDocumentListPage({
           </div>
         ) : loadError ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <p className="text-sm text-muted-foreground">โหลดข้อมูลไม่สำเร็จ</p>
-            <button onClick={load} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">ลองใหม่</button>
+            <p className="text-sm text-muted-foreground">{t("accounting.list.error.loadFailed")}</p>
+            <button onClick={load} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">{t("accounting.list.error.retry")}</button>
           </div>
         ) : documents.length === 0 ? (
           <EmptyState
             icon={FileText}
-            title={`ยังไม่มี${DOC_TYPE_LABELS[docType]}`}
+            title={`${t("accounting.list.empty.titlePrefix")}${t(DOC_TYPE_LABEL_KEY[docType])}`}
             description={docType === "RE"
-              ? "ใบเสร็จรับเงินออกได้จากใบกำกับภาษี (AR/IV) ที่ออกแล้ว — ดูที่หน้ารายการใบกำกับภาษี หรือหน้าวางบิลตามงาน"
-              : "เอกสารจะออกจากหน้า \"วางบิลตามงาน\" — เลือกงาน (Scope of Work) แล้วออกเอกสารตามงวดการชำระเงิน"}
+              ? t("accounting.list.empty.descRE")
+              : t("accounting.list.empty.descOther")}
             compact
           />
         ) : filtered.length === 0 ? (
@@ -341,14 +343,14 @@ export function ArDocumentListPage({
             <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
               <FileText size={20} className="text-muted-foreground" />
             </div>
-            <p className="text-sm text-muted-foreground">ไม่พบเอกสารตามเงื่อนไขที่ค้นหา</p>
+            <p className="text-sm text-muted-foreground">{t("accounting.list.noMatch")}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  {["เลขที่เอกสาร", "วันที่", "ลูกค้า", "เลขที่งาน", docType === "RE" ? "อ้างถึงใบกำกับภาษี" : "ใบเสร็จรับเงิน", "ยอดสุทธิ (บาท)", "สถานะ", ""].map((h, i) => (
+                  {[t("accounting.list.col.docNo"), t("accounting.list.col.date"), t("accounting.list.col.customer"), t("accounting.list.col.scopeNumber"), docType === "RE" ? t("accounting.list.col.refInvoice") : t("accounting.list.col.receipt"), t("accounting.list.col.netTotal"), t("accounting.list.col.status"), ""].map((h, i) => (
                     <th key={i} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -361,8 +363,8 @@ export function ArDocumentListPage({
                       <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">
                         {d.docNo}
                         {d.isManual && (
-                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20 align-middle" title="สร้างแบบ Manual ไม่ผูกกับ Scope of Work">
-                            แบบ Manual
+                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20 align-middle" title={t("accounting.list.badge.manualTitle")}>
+                            {t("accounting.list.badge.manual")}
                           </span>
                         )}
                       </td>
@@ -375,13 +377,13 @@ export function ArDocumentListPage({
                           : isTaxInvoicePage
                           ? (receipt
                             ? <span className="text-[#207e52]">{receipt.docNo}</span>
-                            : <span className="text-muted-foreground">ยังไม่ออก</span>)
+                            : <span className="text-muted-foreground">{t("accounting.list.receiptNotIssued")}</span>)
                           : <span className="text-muted-foreground">{d.reference || "—"}</span>}
                       </td>
                       <td className="px-4 py-3.5 text-xs text-foreground font-mono whitespace-nowrap">{money(d.netTotal)}</td>
                       <td className="px-4 py-3.5">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${d.status === "issued" ? "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20" : "bg-[#e05252]/10 text-[#c23f3f] border border-[#e05252]/20"}`}>
-                          {d.status === "issued" ? "ใช้งาน" : "ยกเลิกแล้ว"}
+                          {d.status === "issued" ? t("accounting.list.status.issued") : t("accounting.list.status.cancelled")}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">
@@ -391,26 +393,26 @@ export function ArDocumentListPage({
                               onClick={() => setReceiptTarget(d)}
                               className="px-2 py-1 text-xs border border-[#c9a84c]/40 text-[#a5813a] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
                             >
-                              ออกใบเสร็จ
+                              {t("accounting.list.action.issueReceipt")}
                             </button>
                           )}
                           {isStockPage && canViewStock && (
-                            <button onClick={() => void handleOpenStock(d.id)} className="text-muted-foreground hover:text-foreground transition-colors" title="เปิดดู / ตัดสต๊อกสินค้า">
+                            <button onClick={() => void handleOpenStock(d.id)} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.list.action.viewStockTitle")}>
                               <Boxes size={14} />
                             </button>
                           )}
-                          <button onClick={() => void handlePrint(d.id)} className="text-muted-foreground hover:text-foreground transition-colors" title="พิมพ์ (กระดาษเปล่า — เอกสารเต็มรูปแบบ)">
+                          <button onClick={() => void handlePrint(d.id)} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.list.action.printTitle")}>
                             <Printer size={14} />
                           </button>
                           <button
                             onClick={() => void handleNcrPrint(d.id)}
                             className="px-1.5 py-0.5 text-xs font-mono border border-border rounded text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
-                            title="พิมพ์ลงฟอร์มกระดาษเคมี (NCR) — พิมพ์เฉพาะข้อมูลลงฟอร์มที่มีกรอบพิมพ์มาแล้ว"
+                            title={t("accounting.list.action.ncrPrintTitle")}
                           >
                             NCR
                           </button>
                           {canCancel && d.status === "issued" && (
-                            <button onClick={() => setCancelTarget(d)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title="ยกเลิกเอกสาร">
+                            <button onClick={() => setCancelTarget(d)} className="text-muted-foreground hover:text-[#e05252] transition-colors" title={t("accounting.list.action.cancelTitle")}>
                               <Ban size={14} />
                             </button>
                           )}
@@ -427,20 +429,20 @@ export function ArDocumentListPage({
 
       <PromptDialog
         open={cancelTarget !== null}
-        title={`ยกเลิกเอกสาร ${cancelTarget?.docNo ?? ""}`}
-        message="เอกสารที่ยกเลิกจะยังแสดงในระบบ (ไม่ถูกลบ) แต่จะไม่ถูกนับในยอดรวม"
-        label="เหตุผลในการยกเลิก"
-        confirmLabel={busy ? "กำลังยกเลิก..." : "ยกเลิกเอกสาร"}
-        requiredMessage="กรุณาระบุเหตุผลในการยกเลิก"
+        title={`${t("accounting.list.action.cancelTitle")} ${cancelTarget?.docNo ?? ""}`}
+        message={t("accounting.list.cancelDialog.message")}
+        label={t("accounting.list.cancelDialog.label")}
+        confirmLabel={busy ? t("accounting.list.cancelDialog.busy") : t("accounting.list.action.cancelTitle")}
+        requiredMessage={t("accounting.list.cancelDialog.required")}
         busy={busy}
         onConfirm={(reason) => void handleCancel(reason)}
         onCancel={() => setCancelTarget(null)}
       />
       <ConfirmDialog
         open={receiptTarget !== null}
-        title="ออกใบเสร็จรับเงิน"
-        message={`ยืนยันการออกใบเสร็จรับเงินสำหรับใบกำกับภาษี ${receiptTarget?.docNo ?? ""} ยอด ${receiptTarget ? money(receiptTarget.netTotal) : ""} บาท (ออกเมื่อได้รับชำระเงินแล้วเท่านั้น)`}
-        confirmLabel={busy ? "กำลังออกเอกสาร..." : "ออกใบเสร็จ"}
+        title={t("accounting.list.receiptDialog.title")}
+        message={`${t("accounting.list.receiptDialog.messageBefore")} ${receiptTarget?.docNo ?? ""} ${t("accounting.list.receiptDialog.messageMid")} ${receiptTarget ? money(receiptTarget.netTotal) : ""} ${t("accounting.list.receiptDialog.messageAfter")}`}
+        confirmLabel={busy ? t("accounting.list.receiptDialog.busy") : t("accounting.list.receiptDialog.confirm")}
         busy={busy}
         onConfirm={() => void handleIssueReceipt()}
         onCancel={() => setReceiptTarget(null)}
@@ -448,7 +450,7 @@ export function ArDocumentListPage({
       {ncrSettingsOpen && (
         <NcrSettingsDialog
           settings={ncrSettings}
-          onSave={(next) => { saveNcrSettings(next); setNcrSettings(next); setNcrSettingsOpen(false); toast.show("บันทึกการตั้งค่าฟอร์ม NCR แล้ว"); }}
+          onSave={(next) => { saveNcrSettings(next); setNcrSettings(next); setNcrSettingsOpen(false); toast.show(t("accounting.list.ncr.savedToast")); }}
           onTestPrint={(next) => { saveNcrSettings(next); setNcrSettings(next); setNcrSettingsOpen(false); setNcrTestPrinting(true); }}
           onClose={() => setNcrSettingsOpen(false)}
         />
@@ -459,7 +461,7 @@ export function ArDocumentListPage({
           onClose={() => setManualDialogOpen(false)}
           onIssued={(issued) => {
             setManualDialogOpen(false);
-            toast.show(`ออกเอกสาร ${issued.map((d) => d.docNo).join(" และ ")} แล้ว`);
+            toast.show(`${t("accounting.list.toast.issuedPrefix")} ${issued.map((d) => d.docNo).join(` ${t("accounting.list.and")} `)} ${t("accounting.list.suffixDone")}`);
             load();
           }}
         />
@@ -482,6 +484,7 @@ function NcrSettingsDialog({ settings, onSave, onTestPrint, onClose }: {
   onTestPrint: (next: NcrPrintSettings) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState<NcrPrintSettings>(settings);
   const num = (v: string, fallback: number) => { const n = Number(v); return Number.isFinite(n) ? n : fallback; };
   const field = (label: string, key: keyof NcrPrintSettings) => (
@@ -500,34 +503,33 @@ function NcrSettingsDialog({ settings, onSave, onTestPrint, onClose }: {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 print:hidden">
       <div className="absolute inset-0 bg-[#0b1d3a]/40" onClick={onClose} />
       <div role="dialog" aria-modal="true" className="relative bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ตั้งค่าฟอร์ม NCR</h2>
+        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accounting.list.ncr.settingsBtn")}</h2>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          สำหรับพิมพ์ข้อมูลลงฟอร์มกระดาษเคมีที่มีกรอบพิมพ์มาแล้ว — พิมพ์หน้าทดสอบทาบกับฟอร์มจริง
-          แล้วปรับค่าเยื้อง (มม.) จนเครื่องหมาย + ตกตรงจุดเริ่มของแต่ละช่อง ค่านี้บันทึกเฉพาะเครื่องนี้
+          {t("accounting.list.ncr.description")}
         </p>
-        {field("ความกว้างกระดาษ (มม.)", "pageWidthMm")}
-        {field("ความสูงกระดาษ (มม.)", "pageHeightMm")}
-        {field("เยื้องแนวนอน X (มม.)", "offsetXMm")}
-        {field("เยื้องแนวตั้ง Y (มม.)", "offsetYMm")}
+        {field(t("accounting.list.ncr.field.pageWidth"), "pageWidthMm")}
+        {field(t("accounting.list.ncr.field.pageHeight"), "pageHeightMm")}
+        {field(t("accounting.list.ncr.field.offsetX"), "offsetXMm")}
+        {field(t("accounting.list.ncr.field.offsetY"), "offsetYMm")}
         <div className="flex items-center justify-between gap-2 pt-1">
           <button
             onClick={() => setDraft({ ...DEFAULT_NCR_SETTINGS })}
             className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
           >
-            ค่าเริ่มต้น
+            {t("accounting.list.ncr.reset")}
           </button>
           <div className="flex items-center gap-2">
             <button
               onClick={() => onTestPrint(draft)}
               className="px-3 py-1.5 text-xs border border-[#c9a84c]/40 text-[#a5813a] rounded-lg hover:bg-[#c9a84c]/10 transition-colors"
             >
-              พิมพ์หน้าทดสอบ
+              {t("accounting.list.ncr.testPrint")}
             </button>
             <button
               onClick={() => onSave(draft)}
               className="px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
             >
-              บันทึก
+              {t("accounting.list.ncr.save")}
             </button>
           </div>
         </div>

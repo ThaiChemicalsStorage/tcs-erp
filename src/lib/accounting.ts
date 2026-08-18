@@ -1,4 +1,5 @@
 import { apiFetch } from "./apiClient.js";
+import type { TranslationKey } from "./i18n.js";
 
 /**
  * Accounts Receivable (Milestone Billing) — Phase 1 (added 2026-08-17). See
@@ -242,6 +243,17 @@ export const BILLING_STATUS_LABELS: Record<ArBillingStatus, string> = {
   closed: "จบ",
 };
 
+/** i18n key equivalents of the two label maps above — same `t(SOME_LABEL_KEY[x])` pattern as
+ * `PERMISSION_LABEL_KEY` (src/lib/permissions.ts). Use these (not the plain-Thai maps above) in any
+ * on-screen UI; the plain maps stay for print-only components, which are always Thai regardless of
+ * the UI language toggle (same convention as PrintDocument.tsx — see docs/CLAUDE.md). Added 2026-08-18. */
+export const BILLING_STATUS_LABEL_KEY: Record<ArBillingStatus, TranslationKey> = {
+  not_billed: "accounting.billingStatus.notBilled",
+  billed: "accounting.billingStatus.billed",
+  work_open: "accounting.billingStatus.workOpen",
+  closed: "accounting.billingStatus.closed",
+};
+
 export const WORK_CLASSIFICATION_LABELS: Record<ArWorkClassification, string> = {
   goods: "สินค้า",
   service: "บริการ",
@@ -255,4 +267,13 @@ export const DOC_TYPE_LABELS: Record<ArDocumentType, string> = {
   IV: "ใบกำกับภาษี/ใบส่งสินค้า",
   BI: "ใบแจ้งหนี้/ใบวางบิล",
   RE: "ใบเสร็จรับเงิน",
+};
+
+/** i18n key equivalent of `DOC_TYPE_LABELS` above — see `BILLING_STATUS_LABEL_KEY`'s doc comment
+ * for when to use this vs. the plain-Thai map. Added 2026-08-18. */
+export const DOC_TYPE_LABEL_KEY: Record<ArDocumentType, TranslationKey> = {
+  AR: "accounting.docType.AR",
+  IV: "accounting.docType.IV",
+  BI: "accounting.docType.BI",
+  RE: "accounting.docType.RE",
 };
