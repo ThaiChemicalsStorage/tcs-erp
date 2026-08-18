@@ -846,13 +846,13 @@ export default function App() {
               : effectiveNav === "accounting"
               ? <AccountingPage canCreate={canCreateAr} canIssue={canIssueAr} />
               : effectiveNav === "arDeposit"
-              ? <ArDocumentListPage key="AR" docType="AR" canIssue={canIssueAr} canCancel={canCancelAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage key="AR" docType="AR" canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arBilling"
-              ? <ArDocumentListPage key="BI" docType="BI" canIssue={canIssueAr} canCancel={canCancelAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage key="BI" docType="BI" canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arReceipt"
-              ? <ArDocumentListPage key="RE" docType="RE" canIssue={canIssueAr} canCancel={canCancelAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage key="RE" docType="RE" canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arTaxInvoice"
-              ? <ArDocumentListPage key="IV" docType="IV" canIssue={canIssueAr} canCancel={canCancelAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage key="IV" docType="IV" canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arMonthly"
               ? <ArMonthlyReportPage />
               : effectiveNav === "accountingDashboard"

@@ -678,6 +678,11 @@ export interface ArDocumentFields {
    * `stock_movements` ledger purely so the print layout can stamp "ตัดสต๊อกแล้ว"/"ยังไม่ตัดสต๊อก"
    * without a join; the ledger itself (filter by sourceId) is the source of truth for what/how much. */
   stockDeducted: boolean;
+  /** True for a freestanding tax invoice created via "+ สร้างใบกำกับภาษี (Manual)" (added
+   * 2026-08-18) — no Scope of Work/milestone behind it at all (`scopeOfWorkId`/`milestoneId` are
+   * both `""`). Lets list/detail UI label it clearly instead of implying a job link that doesn't
+   * exist. `false` on every job-derived AR/IV/BI/RE. */
+  isManual: boolean;
   status: ArDocumentStatus;
   cancelledReason?: string;
   cancelledBy?: string;

@@ -3,11 +3,12 @@ import { type WithId, Binary } from "mongodb";
 import { randomUUID } from "node:crypto";
 import { HttpError, getPathSegments } from "./http.js";
 import { requirePermission, type AuthContext } from "./auth.js";
+import { roleHasPermission } from "../../src/lib/roles.js";
 import {
   arMilestonesCollection, arAttachmentFilesCollection, arDocumentsCollection,
   scopeOfWorksCollection, quotesCollection, auditLogCollection, withStringId, toObjectId,
   type ArMilestoneFields, type ArDocumentFields, type ArDocumentLine, type ArChecklistKey,
-  type ArWorkClassification, type ArDocumentType, type ArBillingStatus,
+  type ArWorkClassification, type ArDocumentType, type ArBillingStatus, type ArDocumentCustomerSnapshot,
   type ScopeOfWorkFields, type QuoteFields, countersCollection, type StockMovementFields,
 } from "./collections.js";
 import { computeQuoteAmountBeforeVat } from "./quoteAmounts.js";
@@ -415,6 +416,7 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
     amountTextTh: bahtText(totals.netTotal),
     remarks,
     stockDeducted: false,
+    isManual: false,
     status: "issued",
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
   };
@@ -449,6 +451,7 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
     amountTextTh: bahtText(totals.netTotal),
     remarks: [],
     stockDeducted: false,
+    isManual: false,
     status: "issued",
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
   };
@@ -466,6 +469,116 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
   });
 
   res.status(201).json({ documents: [withStringId(principal), withStringId(bi)].map((d) => ({ ...d, id: d.id })) });
+}
+
+/** Freestanding AR/IV creation — no Scope of Work/milestone at all (added 2026-08-18, direct
+ * request: "ตัดสต๊อกสินค้าทำเลยก็ได้..." led into asking for a Quotation-style "+ สร้าง" button on
+ * every Accounting page; scoped down to AR/IV only — a standalone BI or RE with nothing to bill
+ * against would violate the existing "BI/RE always reference a principal invoice" invariant every
+ * other AR route in this file relies on). Deliberately a separate endpoint from
+ * `handleIssueDocuments()` above rather than a branch inside it — that function is deeply tied to
+ * milestone/checklist semantics that don't apply here, and branching it would risk the already-
+ * live-tested milestone flow. Still issues a companion BI in the same action, matching the
+ * "AR/IV + BI together" convention every tax invoice follows regardless of how it was created. */
+async function handleManualIssue(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "ar:create");
+  if (!roleHasPermission(ctx.role, "ar:issue")) throw new HttpError(403, "Forbidden");
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const docType = body.docType === "AR" || body.docType === "IV" ? body.docType : null;
+  if (!docType) throw new HttpError(400, "ประเภทเอกสารต้องเป็นใบรับเงินมัดจำ/ใบกำกับภาษี (AR) หรือใบกำกับภาษี/ใบส่งสินค้า (IV) เท่านั้น");
+
+  const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+  const customerBody = body.customer && typeof body.customer === "object" ? body.customer as Record<string, unknown> : {};
+  const companyName = str(customerBody.companyName);
+  if (!companyName) throw new HttpError(400, "กรุณาระบุชื่อบริษัทลูกค้า");
+  const customerSnapshot: ArDocumentCustomerSnapshot = {
+    companyName,
+    address: str(customerBody.address),
+    taxId: str(customerBody.taxId),
+    branch: str(customerBody.branch),
+    contactName: str(customerBody.contactName),
+    phone: str(customerBody.phone),
+    email: str(customerBody.email),
+  };
+
+  const rawLines = Array.isArray(body.lines) ? body.lines : [];
+  const lines: ArDocumentLine[] = rawLines
+    .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null)
+    .map((l, i) => {
+      const qty = typeof l.qty === "number" ? l.qty : NaN;
+      const unitPrice = typeof l.unitPrice === "number" ? l.unitPrice : NaN;
+      return { seq: i + 1, description: str(l.description), qty, unit: str(l.unit), unitPrice, amount: round2(qty * unitPrice) };
+    })
+    .filter((l) => l.description && Number.isFinite(l.qty) && l.qty > 0 && Number.isFinite(l.unitPrice) && l.unitPrice >= 0);
+  if (lines.length === 0) throw new HttpError(400, "กรุณาระบุรายการอย่างน้อย 1 รายการ (คำอธิบาย จำนวน และราคาต่อหน่วยที่ถูกต้อง)");
+
+  const paymentType: "" | "Cash" | "Credit" = body.paymentType === "Cash" || body.paymentType === "Credit" ? body.paymentType : "";
+  const days = typeof body.days === "number" && Number.isFinite(body.days) ? body.days : null;
+
+  const totals = computeArDocumentTotals(lines.map((l) => l.amount));
+  const docDate = nowIso().slice(0, 10);
+  const dueDate = computeDueDate(docDate, paymentType, days);
+
+  const counters = await countersCollection();
+  const principalDocNo = await nextArDocNumber(counters, docType);
+  const now = nowIso();
+  const arDocuments = await arDocumentsCollection();
+  const principalDoc: ArDocumentFields = {
+    scopeOfWorkId: "",
+    milestoneId: "",
+    docType,
+    docNo: principalDocNo,
+    docDate,
+    dueDate,
+    paymentType,
+    customerSnapshot,
+    reference: "",
+    lines,
+    ...totals,
+    vatRate: 7,
+    amountTextTh: bahtText(totals.netTotal),
+    remarks: [],
+    stockDeducted: false,
+    isManual: true,
+    status: "issued",
+    createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+  };
+  const principalInsert = await arDocuments.insertOne(principalDoc);
+  const principal = { ...principalDoc, _id: principalInsert.insertedId };
+
+  const biDocNo = await nextArDocNumber(counters, "BI");
+  const biLine: ArDocumentLine = {
+    seq: 1, description: principalDocNo, qty: 1, unit: "รายการ",
+    unitPrice: totals.netTotal, amount: totals.netTotal,
+    linkedArDocumentId: principal._id.toString(),
+  };
+  const biDoc: ArDocumentFields = {
+    scopeOfWorkId: "",
+    milestoneId: "",
+    docType: "BI",
+    docNo: biDocNo,
+    docDate,
+    dueDate,
+    paymentType,
+    customerSnapshot,
+    reference: principalDocNo,
+    lines: [biLine],
+    subtotal: totals.netTotal, discount: 0, valueAmount: totals.netTotal, vatRate: 0, vatAmount: 0, netTotal: totals.netTotal,
+    amountTextTh: bahtText(totals.netTotal),
+    remarks: [],
+    stockDeducted: false,
+    isManual: true,
+    status: "issued",
+    createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+  };
+  const biInsert = await arDocuments.insertOne(biDoc);
+  const bi = { ...biDoc, _id: biInsert.insertedId };
+
+  await writeArAuditEntry(ctx, "AR Document Issued (Manual)", `ออกเอกสาร ${principalDocNo} และ ${biDocNo} แบบ Manual สำหรับลูกค้า ${companyName}`, {});
+
+  res.status(201).json({ documents: [withStringId(principal), withStringId(bi)] });
 }
 
 async function handleDocumentsList(req: VercelRequest, res: VercelResponse) {
@@ -559,15 +672,20 @@ async function handleIssueReceipt(req: VercelRequest, res: VercelResponse, princ
     // line, which describes the invoice's own amount breakdown, not the payment received.
     remarks: principal.remarks.slice(1),
     stockDeducted: false,
+    isManual: principal.isManual,
     status: "issued",
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
   };
   const insert = await arDocuments.insertOne(reDoc);
 
-  const milestones = await arMilestonesCollection();
-  const milestone = await milestones.findOne({ _id: toObjectId(principal.milestoneId) });
-  if (milestone && !milestone.isDownPayment && milestone.billingStatus === "work_open") {
-    await milestones.updateOne({ _id: milestone._id }, { $set: { billingStatus: "closed", updatedAt: now, updatedBy: ctx.user.id } });
+  // A manually-created principal has no milestone at all (milestoneId "") — toObjectId("") throws,
+  // so this lookup must be skipped entirely for it rather than erroring the receipt out.
+  if (principal.milestoneId) {
+    const milestones = await arMilestonesCollection();
+    const milestone = await milestones.findOne({ _id: toObjectId(principal.milestoneId) });
+    if (milestone && !milestone.isDownPayment && milestone.billingStatus === "work_open") {
+      await milestones.updateOne({ _id: milestone._id }, { $set: { billingStatus: "closed", updatedAt: now, updatedBy: ctx.user.id } });
+    }
   }
 
   await writeArAuditEntry(ctx, "AR Receipt Issued (RE)", `ออกใบเสร็จรับเงิน ${docNo} สำหรับใบกำกับภาษี ${principal.docNo}`, {
@@ -891,6 +1009,7 @@ export async function handleAr(req: VercelRequest, res: VercelResponse): Promise
   }
 
   if (pathname === "/api/ar-documents") return req.method === "POST" ? handleIssueDocuments(req, res) : handleDocumentsList(req, res);
+  if (pathname === "/api/ar-documents/manual") return handleManualIssue(req, res);
   const docParts = getPathSegments(req, "/api/ar-documents");
   if (docParts.length === 1) return handleDocumentOne(req, res, docParts[0]);
   if (docParts.length === 2 && docParts[1] === "receipt") return handleIssueReceipt(req, res, docParts[0]);

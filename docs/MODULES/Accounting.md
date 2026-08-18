@@ -1,6 +1,6 @@
 # Module: Accounting
 
-## Status: 🟢 Phase 1.5 built (2026-08-18) — per-document-type pages + RE receipt + deposit alert + monthly summary; UI restructure UNPAUSED and done
+## Status: 🟢 Phase 1.5 built (2026-08-18) — per-document-type pages + RE receipt + deposit alert + monthly summary; UI restructure UNPAUSED and done. Same day, also gained IV stock-cutting (see "Stock") and Manual Tax Invoice creation for AR/IV (see "Manual Tax Invoice Creation") — both same-day follow-ups, not part of the original Phase 1.5 plan.
 
 Phase 1 (milestone billing: Customer extension, ar_milestones/ar_documents, atomic AR/IV/BI
 numbering, the calculation engine, checklist/attachments, issuing, basic cancel, RBAC) is
@@ -295,6 +295,63 @@ fixed the bug, added the two print buttons described above (the original build h
 from the panel), ran the full verification gate myself, and live-verified the whole flow end to end
 in a real browser session before treating any of it as done. See CHANGELOG.md 2026-08-18m for the
 complete writeup.
+
+## Manual Tax Invoice Creation (added 2026-08-18) — AR/IV only, no Scope of Work
+
+Direct follow-up: "อยากได้เป็นแบบที่กดสร้างเหมือนปุ่มในหน้าสร้างใบเสนอราคา...ปรับใช้กับของแผนกบัญชีทุกอันเลย"
+(want a "+ create" button styled like Quotation's, applied everywhere in Accounting). Clarified with
+the owner before building: scoped to **AR and IV only**, not BI/RE — a standalone Billing Note or
+Receipt with nothing to bill against would violate the "BI/RE always reference a principal invoice"
+invariant every other AR route in this file relies on, so those two pages deliberately never get this
+button. This closes a gap flagged (but never built) back in Phase 1: every AR/IV/BI/RE document was
+issuable **only** through the job-centric "วางบิลตามงาน" flow, hard-tied to a Scope of Work milestone
+— there was no way to bill a customer with no prior Quotation/Scope of Work at all.
+
+- **`POST /api/ar-documents/manual`** (`handleManualIssue()`, `arHandler.ts`) — a deliberately
+  separate endpoint from `handleIssueDocuments()`, not a branch inside it (that function is deeply
+  tied to milestone/checklist semantics that don't apply here; branching it would risk the
+  already-live-tested milestone flow). Body: `{ docType: "AR"|"IV", customer: {companyName, address,
+  taxId, branch, contactName, phone, email}, paymentType, days, lines: [{description, qty, unit,
+  unitPrice}] }`. Validates at least 1 line with a positive qty/unit price and a non-empty
+  `companyName`. Issues the principal doc with `scopeOfWorkId: "", milestoneId: "", isManual: true`
+  **plus a companion BI in the same action** (`isManual: true` too), matching the existing "AR/IV + BI
+  together" convention every tax invoice follows regardless of how it was created. Gated on
+  `ar:create` **and** `ar:issue` together (both already existed; no new permission) — the first
+  all-of permission check in this file, done via `requirePermission(req, "ar:create")` then a plain
+  `roleHasPermission(ctx.role, "ar:issue")` check on the already-resolved role, rather than two
+  separate `requirePermission()` calls (which would hit the database twice for one request).
+- **`ArDocumentFields.isManual: boolean`** — `true` only for a freestanding AR/IV (and its companion
+  BI); `false` on every job-derived document. Purely a UI label (a gold "แบบ Manual" badge next to the
+  doc number on the list), no behavioral branching depends on it elsewhere.
+- **Real bug found and fixed while building this**: `handleIssueReceipt()` looked up the principal
+  document's milestone via `toObjectId(principal.milestoneId)` unconditionally — for a manually
+  created principal, `milestoneId` is `""`, and `toObjectId("")` throws `400 Invalid id`. Issuing a
+  receipt against ANY manually-created AR/IV would have crashed. Fixed by skipping the milestone
+  lookup entirely when `principal.milestoneId` is empty — caught during this feature's own live
+  verification (issued a receipt against a fresh manual IV, confirmed no crash and a `false`→(RE
+  inherits) chain), not by a separate test.
+- **UI**: `ManualTaxInvoiceDialog.tsx` — docType (AR/IV) + payment-terms selects, a customer section
+  reusing `CustomerSelector.tsx`'s exact pick-a-saved-customer-or-type-your-own pattern from
+  Quotation (autofills plain editable inputs, doesn't lock them), and a lightweight line-item editor
+  (description/qty/unit/unit price, add/remove rows — a lighter version of Quotation's
+  `LineItemsEditor.tsx`, no sub-details/drag-reorder/product-picker). Opened via a gold-pill "+
+  สร้างใบกำกับภาษี (Manual)" button in `ArDocumentListPage.tsx`'s header — **the exact same visual
+  style as Quotation/Customers/Products' own create buttons** (`bg-[#c9a84c] text-[#0b1d3a]
+  rounded-lg font-semibold hover:bg-[#f0c040]`, `<Plus size={15}/>` + label), per the owner's direct
+  request — shown only when `docType === "AR" || docType === "IV"` and both `canCreate`/`canIssue`
+  are true. `ArDocumentListPage` gained a new `canCreate` prop, threaded from `App.tsx`'s existing
+  `canCreateAr` (already computed for `AccountingPage`, just needed passing through to all 4 list
+  pages for prop consistency — only the AR/IV instances actually render the button).
+- **Deliberately out of scope**: no `revenueType`/WHT/bank-fee/retention fields, no
+  "ผลกระทบทางบัญชี" impact-table view, no Dashboard changes — those remain the still-unstarted,
+  broader Phase 2 plan (`recursive-greeting-raven.md`); this pass is scoped strictly to the create
+  button + manual-issuance endpoint the owner asked for directly.
+- **Verified**: `tsc` (both configs)/`lint`/`build`/`test` (207/207) all clean; full live browser
+  session with a disposable `accounting_user`-role account — created a manual IV against a
+  freshly-typed customer, confirmed the companion BI appeared with the correct reference/amount,
+  confirmed the "แบบ Manual" badge and "—" job-number fallback render correctly, and confirmed issuing
+  a receipt against the manual IV succeeds (exercising the `milestoneId` fix above). Confirmed the
+  button does **not** appear on the BI/RE pages.
 
 ## Why this came up
 

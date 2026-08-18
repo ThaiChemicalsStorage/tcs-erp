@@ -86,6 +86,9 @@ export interface ArDocument {
   /** True once any stock has been cut against this document (added 2026-08-18, IV only in
    * practice) — see src/lib/stock.ts and api/_lib/collections.ts's StockMovementFields. */
   stockDeducted: boolean;
+  /** True for a freestanding tax invoice created via "+ สร้างใบกำกับภาษี (Manual)" — no Scope of
+   * Work/milestone behind it. See api/_lib/collections.ts's ArDocumentFields doc comment. */
+  isManual: boolean;
   status: ArDocumentStatus;
   cancelledReason?: string;
   cancelledBy?: string;
@@ -144,6 +147,33 @@ export async function issueArDocuments(milestoneId: string): Promise<ArDocument[
   const { documents } = await apiFetch<{ documents: ArDocument[] }>("/ar-documents", {
     method: "POST",
     body: JSON.stringify({ milestoneId }),
+  });
+  return documents;
+}
+
+export interface ManualArDocumentPayload {
+  docType: "AR" | "IV";
+  customer: {
+    companyName: string;
+    address: string;
+    taxId: string;
+    branch: string;
+    contactName: string;
+    phone: string;
+    email: string;
+  };
+  paymentType: "" | "Cash" | "Credit";
+  days: number | null;
+  lines: { description: string; qty: number; unit: string; unitPrice: number }[];
+}
+
+/** Freestanding AR/IV creation with no Scope of Work/milestone — issues the principal doc plus a
+ * companion BI in the same action, same as `issueArDocuments()`. See
+ * api/_lib/arHandler.ts's handleManualIssue() for why this is a separate endpoint. */
+export async function issueManualArDocument(payload: ManualArDocumentPayload): Promise<ArDocument[]> {
+  const { documents } = await apiFetch<{ documents: ArDocument[] }>("/ar-documents/manual", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
   return documents;
 }

@@ -469,8 +469,8 @@ was added for any of them):
 | Permission | Gates |
 |---|---|
 | `ar:view` | `GET /api/ar-milestones`, `GET /api/ar-documents` (incl. `docType`/`month`/`salesperson`-filtered list views), `GET /api/ar-documents/:id`, `GET /api/ar-dashboard`, and every "บัญชี" sidebar page's mere visibility (the 4 document-type pages, monthly summary, Accounting Dashboard). Also gates downloading checklist attachments. |
-| `ar:create` | `POST /api/ar-milestones/open`, `PATCH /api/ar-milestones/:id`, `POST /api/ar-milestones/:id/refresh`, and the checklist-attachment upload/delete routes — everything that prepares a milestone for billing but doesn't issue a document. |
-| `ar:issue` | `POST /api/ar-documents` (issues the AR-or-IV + companion BI together) and `POST /api/ar-documents/:id/receipt` (issues an RE against an already-issued AR/IV) — the two "produces a real numbered document" actions. |
+| `ar:create` | `POST /api/ar-milestones/open`, `PATCH /api/ar-milestones/:id`, `POST /api/ar-milestones/:id/refresh`, the checklist-attachment upload/delete routes, and — **together with** `ar:issue`, added 2026-08-18 — `POST /api/ar-documents/manual` (see below). |
+| `ar:issue` | `POST /api/ar-documents` (issues the AR-or-IV + companion BI together), `POST /api/ar-documents/:id/receipt` (issues an RE against an already-issued AR/IV), and — **together with** `ar:create` — `POST /api/ar-documents/manual` (added 2026-08-18, freestanding AR/IV creation with no Scope of Work; see [MODULES/Accounting.md](./MODULES/Accounting.md) "Manual Tax Invoice Creation"). This is the first route in `arHandler.ts` requiring BOTH permissions rather than one — checked as `requirePermission(req, "ar:create")` then a plain `roleHasPermission(ctx.role, "ar:issue")` on the already-resolved role, not two separate `requirePermission()` calls (which would re-fetch the user from MongoDB twice for one request). |
 | `ar:cancel` | `POST /api/ar-documents/:id/cancel` — a status-flip only, never a delete (see docs/DATABASE.md `ar_documents`). |
 
 Default grants: **Super Admin**/**Administrator** get all 4; **Approver Level 1/2** get

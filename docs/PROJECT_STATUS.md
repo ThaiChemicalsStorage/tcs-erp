@@ -14,6 +14,18 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-18] Manual Tax Invoice creation (AR/IV).** Direct request for a "+ create" button
+  matching Quotation's own style, applied to Accounting — clarified scope first (every doc type vs.
+  AR/IV only) since BI/RE always reference a principal invoice and can't stand alone; confirmed
+  AR/IV only. New `POST /api/ar-documents/manual` issues a freestanding principal doc (no Scope of
+  Work) plus a companion BI, gated on `ar:create` **and** `ar:issue` together (the first all-of
+  permission check in `arHandler.ts`). Real bug found and fixed while building: issuing a receipt
+  against any manually-created document would have crashed (`toObjectId("")` on an empty
+  `milestoneId`) — caught during this feature's own live verification. `tsc`/`lint`/`build`/`test`
+  (207/207) all pass clean, plus a full live browser session with a disposable
+  `accounting_user`-role test account. See [MODULES/Accounting.md](./MODULES/Accounting.md) "Manual
+  Tax Invoice Creation" and CHANGELOG.md 2026-08-18n.
+
 - ✅ **[2026-08-18] Product Stock module + Accounting IV stock-cutting.** Direct follow-up request
   for stock deduction: a lightweight, shared `Product.stockQty` + append-only `stock_movements`
   ledger (`applyStockMovement()`, atomic conditional-filter deduction — no negative stock, no

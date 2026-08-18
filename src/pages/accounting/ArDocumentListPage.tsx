@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Receipt, Search, X, Printer, Ban, FileText, Settings2, Boxes } from "lucide-react";
+import { Receipt, Search, X, Printer, Ban, FileText, Settings2, Boxes, Plus } from "lucide-react";
 import {
   fetchArDocuments, fetchArDocument, cancelArDocument, issueArReceipt,
   DOC_TYPE_LABELS,
@@ -17,6 +17,7 @@ import { ArDocumentPrintDocument, type ArPaidByInvoiceId } from "./ArDocumentPri
 import { ArDocumentNcrPrintDocument, NcrCalibrationTestPage } from "./ArDocumentNcrPrintDocument";
 import { loadNcrSettings, saveNcrSettings, DEFAULT_NCR_SETTINGS, type NcrPrintSettings } from "../../lib/ncrPrintSettings";
 import { ArStockPanel } from "./ArStockPanel";
+import { ManualTaxInvoiceDialog } from "./ManualTaxInvoiceDialog";
 
 // หน้ารายการเอกสารบัญชีแยกตามประเภท — "1 ใบคือ 1 หน้า" ตามที่เจ้าของสั่ง (2026-08-18) ให้แต่ละ
 // ประเภทเอกสาร (ใบรับเงินมัดจำ/ใบกำกับภาษี, ใบแจ้งหนี้/ใบวางบิล, ใบเสร็จรับเงิน, ใบกำกับภาษี/ใบส่งสินค้า)
@@ -24,11 +25,14 @@ import { ArStockPanel } from "./ArStockPanel";
 // Per-document-type accounting list page — one shared component parameterized by docType,
 // matching the Sales modules' standalone-list pattern per the owner's 2026-08-18 instruction.
 export function ArDocumentListPage({
-  docType, canIssue, canCancel, canViewStock, canAdjustStock,
+  docType, canIssue, canCancel, canCreate, canViewStock, canAdjustStock,
 }: {
   docType: ArDocumentType;
   canIssue: boolean;
   canCancel: boolean;
+  /** Gates the "+ สร้างใบกำกับภาษี (Manual)" button (added 2026-08-18) — only rendered on the AR/IV
+   * pages, see `isManualCreatable` below. */
+  canCreate: boolean;
   canViewStock: boolean;
   canAdjustStock: boolean;
 }) {
@@ -49,6 +53,7 @@ export function ArDocumentListPage({
   const [cancelTarget, setCancelTarget] = useState<ArDocument | null>(null);
   const [receiptTarget, setReceiptTarget] = useState<ArDocument | null>(null);
   const [detailDoc, setDetailDoc] = useState<ArDocument | null>(null);
+  const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -227,9 +232,22 @@ export function ArDocumentListPage({
       />
     ) : (
     <div className="flex-1 overflow-y-auto p-6 space-y-5 print:hidden">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{DOC_TYPE_LABELS[docType]}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5 font-mono">เลขที่เอกสารขึ้นต้นด้วย {docType} · ออกเอกสารได้จากหน้า "วางบิลตามงาน"</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{DOC_TYPE_LABELS[docType]}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">
+            เลขที่เอกสารขึ้นต้นด้วย {docType} · ออกเอกสารได้จากหน้า "วางบิลตามงาน"
+            {isTaxInvoicePage && canCreate && canIssue ? ' หรือสร้างแบบ Manual ด้านล่าง' : ""}
+          </p>
+        </div>
+        {isTaxInvoicePage && canCreate && canIssue && (
+          <button
+            onClick={() => setManualDialogOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+          >
+            <Plus size={15} /> สร้างใบกำกับภาษี (Manual)
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -339,7 +357,14 @@ export function ArDocumentListPage({
                   const receipt = isTaxInvoicePage ? receiptByInvoiceId[d.id] : undefined;
                   return (
                     <tr key={d.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                      <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{d.docNo}</td>
+                      <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">
+                        {d.docNo}
+                        {d.isManual && (
+                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20 align-middle" title="สร้างแบบ Manual ไม่ผูกกับ Scope of Work">
+                            แบบ Manual
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(d.docDate)}</td>
                       <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[240px] truncate" title={d.customerSnapshot.companyName}>{d.customerSnapshot.companyName}</td>
                       <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{scopeNumbers[d.scopeOfWorkId] ?? "—"}</td>
@@ -425,6 +450,17 @@ export function ArDocumentListPage({
           onSave={(next) => { saveNcrSettings(next); setNcrSettings(next); setNcrSettingsOpen(false); toast.show("บันทึกการตั้งค่าฟอร์ม NCR แล้ว"); }}
           onTestPrint={(next) => { saveNcrSettings(next); setNcrSettings(next); setNcrSettingsOpen(false); setNcrTestPrinting(true); }}
           onClose={() => setNcrSettingsOpen(false)}
+        />
+      )}
+      {manualDialogOpen && (
+        <ManualTaxInvoiceDialog
+          docType={docType === "IV" ? "IV" : "AR"}
+          onClose={() => setManualDialogOpen(false)}
+          onIssued={(issued) => {
+            setManualDialogOpen(false);
+            toast.show(`ออกเอกสาร ${issued.map((d) => d.docNo).join(" และ ")} แล้ว`);
+            load();
+          }}
         />
       )}
       <Toast message={toast.message} />

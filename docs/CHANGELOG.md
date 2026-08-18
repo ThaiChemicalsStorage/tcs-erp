@@ -4,7 +4,55 @@
 
 ---
 
-## 2026-08-18m (absolute latest) — Product Stock module + Accounting IV stock-cutting
+## 2026-08-18n (absolute latest) — Manual Tax Invoice creation (AR/IV), "+ create" button matching Quotation's style
+
+**Feature**: Direct request: "อยากได้เป็นแบบที่กดสร้างเหมือนปุ่มในหน้าสร้างใบเสนอราคา...ปรับใช้กับของแผนก
+บัญชีทุกอันเลย" (want a "+ create" button styled like Quotation's, applied everywhere in Accounting).
+Clarified with the owner first (every AR/BI/RE/IV page, or just AR/IV?) — confirmed **AR/IV only**,
+since BI/RE always reference a principal invoice and a standalone one would have nothing to bill
+against. Closes a real gap from Phase 1: every AR document was issuable only through the job-centric
+"วางบิลตามงาน" flow, hard-tied to a Scope of Work milestone — no way to bill a customer with no prior
+Quotation/Scope of Work.
+
+**Files Added**: `src/pages/accounting/ManualTaxInvoiceDialog.tsx` (docType/payment-terms selects, a
+`CustomerSelector.tsx`-based pick-or-type customer section, a lightweight line-item editor).
+
+**Files Modified**: `api/_lib/arHandler.ts` (`handleManualIssue()`, `POST /api/ar-documents/manual`;
+`isManual: false` added to every existing AR/IV/BI/RE construction site; a real bug fixed in
+`handleIssueReceipt()` — see Notes), `api/_lib/collections.ts` (`ArDocumentFields.isManual`),
+`src/lib/accounting.ts` (`ArDocument.isManual`, `issueManualArDocument()`), `ArDocumentListPage.tsx`
+(new `canCreate` prop, the gold-pill "+ สร้างใบกำกับภาษี (Manual)" button on the AR/IV pages only, a
+"แบบ Manual" badge next to the doc number), `src/App.tsx` (threads `canCreateAr` into all 4
+`ArDocumentListPage` instances).
+
+**Reason**: Direct owner request, scope clarified via a quick check (AR/IV only vs. every doc type) —
+the shape of the ask ("apply to everything") conflicted with an existing hard invariant (BI/RE need a
+principal invoice), so this was worth confirming rather than guessing.
+
+**Notes — a real bug found while building this**: `handleIssueReceipt()` looked up the principal
+document's milestone via `toObjectId(principal.milestoneId)` unconditionally. A manually-created
+principal has `milestoneId: ""` — `toObjectId("")` throws `400 Invalid id` — so issuing a receipt
+against ANY manual AR/IV would have crashed before this fix. Caught during this feature's own live
+verification (issued a receipt against a freshly-created manual IV, confirmed no crash) rather than by
+a dedicated test; fixed by skipping the milestone lookup entirely when `milestoneId` is empty. Also
+fixed while building: the companion-BI/RE-issuing code paths all needed an explicit `isManual: false`
+(or, for a manual principal's own companion BI, `isManual: true`) added at every document
+construction site, matching the existing `stockDeducted` convention (a required boolean, defaulted
+explicitly everywhere, not left optional).
+
+**Verified**: `npx tsc --noEmit` (both configs)/`npm run lint` (0 errors)/`npm run build`/`npm test`
+(207/207, unchanged — no new pure-function logic needed dedicated unit tests; the new endpoint reuses
+`computeArDocumentTotals()`/`computeDueDate()` unchanged, same precedent as the Stock module's
+`handleStockDeduction()` earlier today). Live-verified end to end with a disposable
+`accounting_user`-role account: created a manual IV against a freshly-typed customer, confirmed the
+companion BI appeared with the correct amount/reference, confirmed the "แบบ Manual" badge and "—"
+job-number column render correctly, issued a receipt against it successfully (the bug-fix path above),
+and confirmed the create button is absent from the BI/RE pages. See
+[MODULES/Accounting.md](./MODULES/Accounting.md) "Manual Tax Invoice Creation" for the full writeup.
+
+---
+
+## 2026-08-18m — Product Stock module + Accounting IV stock-cutting
 
 **Feature**: A lightweight stock/inventory feature — a direct follow-up request ("ตัดสต๊อกสินค้าทำเลย
 ก็ได้") asking for a dual-pane view on Tax Invoice (IV) documents (left: the document, right: stock

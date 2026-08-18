@@ -4,7 +4,42 @@
 
 ---
 
-## Session — 2026-08-18 (continued, absolute latest), Product Stock module + Accounting IV stock-cutting
+## Session — 2026-08-18 (continued, absolute latest), Manual Tax Invoice creation (AR/IV)
+
+### What was implemented
+Direct follow-up: "อยากได้เป็นแบบที่กดสร้างเหมือนปุ่มในหน้าสร้างใบเสนอราคา...ปรับใช้กับของแผนกบัญชี
+ทุกอันเลย" (want a "+ create" button styled like Quotation's, applied everywhere in Accounting).
+Before building, researched Quotation's actual create button (a gold-pill "+ สร้าง" that opens the
+Create Quotation wizard, same visual pattern reused on Customers/Products) and confirmed AR/IV/BI/RE
+today are issuable **only** via the job-centric "วางบิลตามงาน" flow — there was already an unbuilt
+plan for exactly this feature (`~/.claude/plans/recursive-greeting-raven.md`, section 2, from an
+earlier Phase 2 planning pass). Since "ทุกอันเลย" (every one) conflicted with BI/RE's hard invariant
+of always referencing a principal invoice, asked a clarifying question rather than guessing — owner
+confirmed AR/IV only. Built `POST /api/ar-documents/manual`, `ManualTaxInvoiceDialog.tsx`, and the
+matching gold-pill button + "แบบ Manual" badge on the AR/IV list pages.
+
+### Problems found/fixed
+- **Real bug, not from this session's earlier subagent-scope incidents — a genuine oversight of my
+  own this time**: `handleIssueReceipt()` unconditionally called `toObjectId(principal.milestoneId)`
+  to look up the invoice's milestone. A manually-created principal has `milestoneId: ""`, and
+  `toObjectId("")` throws — so issuing a receipt against any manual AR/IV would have crashed. Caught
+  via this feature's own live verification (issued a receipt against a fresh manual IV, watched for
+  exactly this), fixed by skipping the lookup when `milestoneId` is empty.
+- Every existing AR/IV/BI/RE document-construction site needed an explicit `isManual` value added
+  (`false` for job-derived, `true` for a manual principal + its companion BI) — same "required
+  boolean, no optional shortcut" convention as `stockDeducted` from earlier today.
+
+### Verification
+`npx tsc --noEmit` (both configs) / `npm run lint` (0 errors) / `npm run build` / `npm test`
+207/207 (unchanged — no new pure-function logic, reuses `computeArDocumentTotals()`/
+`computeDueDate()`). Full live browser session with a disposable `accounting_user`-role account:
+created a manual IV, confirmed the companion BI + correct amounts + "แบบ Manual" badge, issued a
+receipt against it (exercising the bug fix), confirmed the button is absent on BI/RE pages. Test
+account and test documents deleted after.
+
+---
+
+## Session — 2026-08-18 (continued), Product Stock module + Accounting IV stock-cutting
 
 ### What was implemented
 Direct follow-up: "ตัดสต๊อกสินค้าทำเลยก็ได้คืออยากให้เหมือนเปิดเป็นหน้าคู่..." (just go ahead and build
