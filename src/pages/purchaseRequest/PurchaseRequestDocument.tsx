@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
   type PurchaseRequest, type PurchaseRequestLine, type PurchaseRequestUpdateFields,
@@ -9,6 +10,8 @@ import {
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { PurchaseRequestPrintDocument } from "./PurchaseRequestPrintDocument";
 import { useI18n } from "../../lib/i18n";
@@ -34,6 +37,7 @@ function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
 // Purchase Request editor: header fields, a line table (catalog-linked or free-typed), and signatories.
 export function PurchaseRequestDocument({
   purchaseRequestId,
+  currentUserId,
   canEdit,
   canFinalize,
   canPrint,
@@ -43,6 +47,7 @@ export function PurchaseRequestDocument({
   showToast,
 }: {
   purchaseRequestId: string;
+  currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
@@ -77,6 +82,13 @@ export function PurchaseRequestDocument({
       });
     return () => { cancelled = true; };
   }, [purchaseRequestId, reloadKey, t]);
+
+  const docTourSteps: DriveStep[] = [
+    { element: '[data-tour="prdoc-actions"]', popover: { title: t("tour.prdoc.actions.title"), description: t("tour.prdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="prdoc-addline"]', popover: { title: t("tour.prdoc.addline.title"), description: t("tour.prdoc.addline.desc"), side: "bottom" } },
+    { element: '[data-tour="prdoc-lines"]', popover: { title: t("tour.prdoc.lines.title"), description: t("tour.prdoc.lines.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("purchaseRequestDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
   useEffect(() => {
     if (!showPrint) return;
@@ -208,7 +220,8 @@ export function PurchaseRequestDocument({
           {isDraftStatus ? t("materialRequisition.status.draft") : t("materialRequisition.status.final")}
         </span>
 
-        <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+        <div data-tour="prdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <TourReplayButton onClick={docTour.start} />
           {canPrint && (
             <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("purchaseRequestDoc.print")}
@@ -273,7 +286,7 @@ export function PurchaseRequestDocument({
         </div>
 
         <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+          <div data-tour="prdoc-addline" className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3 flex-wrap">
             <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseRequestDoc.linesTitle")}</h2>
             {editable && (
               <div className="flex items-center gap-2">
@@ -286,6 +299,7 @@ export function PurchaseRequestDocument({
               </div>
             )}
           </div>
+          <div data-tour="prdoc-lines">
           {draft.lines.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">{t("purchaseRequestDoc.linesEmpty")}</div>
           ) : (
@@ -359,6 +373,7 @@ export function PurchaseRequestDocument({
               </table>
             </div>
           )}
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5">

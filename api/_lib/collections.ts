@@ -17,6 +17,7 @@ import type { Project } from "../../src/lib/project.js";
 import type { MaterialRequisition } from "../../src/lib/materialRequisition.js";
 import type { JobOrder } from "../../src/lib/jobOrder.js";
 import type { PurchaseRequest } from "../../src/lib/purchaseRequest.js";
+import type { WorkHandoverNote } from "../../src/lib/workHandover.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits.
  * (`emailAppPasswordEnc` existed briefly on 2026-08-07 for the since-removed Gmail sending feature;
@@ -723,6 +724,18 @@ export async function purchaseRequestsCollection() {
   return db.collection<PurchaseRequestFields & { _id: string }>("purchase_requests");
 }
 
+/** Business-id-keyed (e.g. "WH-2569-0001"), same convention as MaterialRequisitionFields above.
+ * Work Handover Note (ใบส่งมอบงาน, added 2026-08-19) — the 4th Project-module document type,
+ * previously deferred; see src/lib/workHandover.ts for the full domain-shape doc comment and the
+ * explicit "no reference PDF, first-draft structure" caveat. Generated from a Project directly (not
+ * a ScopeOfWorkItem), so unlike materialRequisitionsCollection()/jobOrdersCollection()/
+ * purchaseRequestsCollection() above it has no itemId-shaped link back onto a ProjectItem. */
+export type WorkHandoverFields = Omit<WorkHandoverNote, "id">;
+export async function workHandoverNotesCollection() {
+  const db = await getDb();
+  return db.collection<WorkHandoverFields & { _id: string }>("work_handover_notes");
+}
+
 /** Creates required indexes across every collection. Idempotent — safe to call repeatedly, but only worth calling from setup/cold paths, not every request. */
 export async function ensureIndexes() {
   const [
@@ -732,7 +745,7 @@ export async function ensureIndexes() {
     notificationTypes, jobTypes, quotationTemplates, scopeOfWorks, deliveryOrders,
     scopeAttachmentFiles, serviceTemplates, serviceReports, serviceChecklistPhotoFiles,
     arMilestones, arAttachmentFiles, arDocuments,
-    projects, materialRequisitions, jobOrders, purchaseRequests,
+    projects, materialRequisitions, jobOrders, purchaseRequests, workHandoverNotes,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -745,6 +758,7 @@ export async function ensureIndexes() {
     serviceChecklistPhotoFilesCollection(),
     arMilestonesCollection(), arAttachmentFilesCollection(), arDocumentsCollection(),
     projectsCollection(), materialRequisitionsCollection(), jobOrdersCollection(), purchaseRequestsCollection(),
+    workHandoverNotesCollection(),
   ]);
 
   await Promise.all([
@@ -843,6 +857,10 @@ export async function ensureIndexes() {
     purchaseRequests.createIndex({ scopeOfWorkId: 1 }),
     purchaseRequests.createIndex({ status: 1 }),
     purchaseRequests.createIndex({ isDeleted: 1 }),
+    workHandoverNotes.createIndex({ projectId: 1 }),
+    workHandoverNotes.createIndex({ scopeOfWorkId: 1 }),
+    workHandoverNotes.createIndex({ isSigned: 1 }),
+    workHandoverNotes.createIndex({ isDeleted: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

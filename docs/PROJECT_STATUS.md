@@ -14,6 +14,31 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- 🟡 **[2026-08-19] Work Handover Note (ใบส่งมอบงาน) — the 4th Project-module document type,
+  first-draft/unverified.** Direct instruction to build the previously-deferred document Accounting's
+  milestone-billing gate is waiting on (see `docs/MODULES/Accounting.md`). ⚠️ **Unlike Material
+  Requisition/Job Order/Purchase Request, no reference PDF exists for this document** — the structure
+  (customer/site/work-completed-date header, free-typed work-delivered lines, preparer + customer
+  signature blocks via the existing `SignaturePad` component) is inferred purely from the document's
+  known *purpose*, not transcribed from a real paper form; `documentCode` is deliberately left `null`
+  (never invented) pending the real form. Signing (`isSigned`/`signedAt`) — not a Draft/Final
+  "finalize" lock — is the meaningful state transition, matching customer acceptance rather than
+  internal approval; a new `workHandover:sign` permission replaces the `:finalize` every other
+  Project-module document has. **Deliberately does NOT auto-update any Scope of Work billing status**
+  — the Accounting module doesn't exist yet, so this stays a manual signal a human checks. Full stack:
+  `src/lib/workHandover.ts`, `api/_lib/workHandoverHandler.ts` (mounted from `api/handlers/quotes.ts`,
+  same 12-function-slot sharing as the other 3), new `work_handover_notes` collection, 7 new
+  `workHandover:*` permissions (Administrator/Super Admin only by default, same precedent as the rest
+  of the module), standalone `src/pages/workHandover/` page + list + document + print, entry point via
+  a "Create/Open Work Handover Note" button on `ProjectDocument.tsx`, full i18n from the start
+  (40 new key pairs), and a `useModuleTour()` guided tour. 8 new integration tests
+  (`tests/api/workHandover.test.ts`) covering the no-invented-documentCode guarantee, the
+  sign-requires-signature gate, the edit-locked-after-sign rule, and that multiple notes can exist per
+  Project. `tsc` (both configs)/`lint`/`build`/`test` all pass clean (219/219, up from 211). See
+  [MODULES/Project.md](./MODULES/Project.md) "Work Handover Note (first draft, unverified)",
+  CHANGELOG.md. **Marked 🟡, not ✅** — the structure genuinely needs verification against the real
+  paper form once available, and has not had a live-browser walkthrough this session.
+
 - ✅ **[2026-08-18] Project module Stage 6: live browser verification, 3 real bugs found and fixed.**
   Actually clicked through creating/viewing all 4 document types in a real browser, Thai and English.
   Found and fixed: (1) every quotation save/duplicate/rewrite/print/workflow-action was silently

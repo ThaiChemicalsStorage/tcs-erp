@@ -1,35 +1,35 @@
 import { useEffect, useState } from "react";
-import { type MaterialRequisitionSummary, fetchAllMaterialRequisitions } from "../../lib/materialRequisition";
-import { MaterialRequisitionList } from "./MaterialRequisitionList";
-import { MaterialRequisitionDocument } from "./MaterialRequisitionDocument";
+import { type WorkHandoverSummary, fetchAllWorkHandovers } from "../../lib/workHandover";
+import { WorkHandoverList } from "./WorkHandoverList";
+import { WorkHandoverDocument } from "./WorkHandoverDocument";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { useI18n } from "../../lib/i18n";
 
-// หน้าจัดการใบเบิกและใบคืนวัสดุแบบแยกอิสระ (ไม่ผูกกับหน้าโครงการ — พนักงานสโตร์เข้าถึงได้โดยตรง)
-// Standalone Material Requisition management page — not nested under Project, so Store staff have
-// their own entry point.
-export function MaterialRequisitionPage({
+// หน้าจัดการใบส่งมอบงานแบบแยกอิสระ (ไม่ผูกกับหน้าโครงการ — เข้าถึงได้โดยตรง)
+// Standalone Work Handover Note management page — not nested under Project, same reasoning as
+// Material Requisition/Job Order/Purchase Request's own standalone pages.
+export function WorkHandoverPage({
   currentUserId,
   canEdit,
-  canFinalize,
+  canSign,
   canPrint,
   canDelete,
-  initialMaterialRequisitionId,
-  onMaterialRequisitionIdConsumed,
+  initialWorkHandoverId,
+  onWorkHandoverIdConsumed,
 }: {
   currentUserId: string;
   canEdit: boolean;
-  canFinalize: boolean;
+  canSign: boolean;
   canPrint: boolean;
   canDelete: boolean;
-  initialMaterialRequisitionId?: string | null;
-  onMaterialRequisitionIdConsumed?: () => void;
+  initialWorkHandoverId?: string | null;
+  onWorkHandoverIdConsumed?: () => void;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<"list" | "detail">("list");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [materialRequisitions, setMaterialRequisitions] = useState<MaterialRequisitionSummary[]>([]);
+  const [workHandovers, setWorkHandovers] = useState<WorkHandoverSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const toast = useToast();
@@ -37,20 +37,20 @@ export function MaterialRequisitionPage({
   const loadList = () => {
     setLoading(true);
     setLoadError(false);
-    fetchAllMaterialRequisitions()
-      .then((list) => { setMaterialRequisitions(list); setLoading(false); })
+    fetchAllWorkHandovers()
+      .then((list) => { setWorkHandovers(list); setLoading(false); })
       .catch(() => { setLoadError(true); setLoading(false); });
   };
 
   useEffect(() => {
     let cancelled = false;
-    fetchAllMaterialRequisitions()
-      .then((list) => { if (!cancelled) { setMaterialRequisitions(list); setLoading(false); } })
+    fetchAllWorkHandovers()
+      .then((list) => { if (!cancelled) { setWorkHandovers(list); setLoading(false); } })
       .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
     return () => { cancelled = true; };
   }, []);
 
-  const openMaterialRequisition = (id: string) => {
+  const openWorkHandover = (id: string) => {
     setSelectedId(id);
     setView("detail");
   };
@@ -60,24 +60,24 @@ export function MaterialRequisitionPage({
   };
 
   const [appliedId, setAppliedId] = useState<string | null>(null);
-  if (initialMaterialRequisitionId && initialMaterialRequisitionId !== appliedId) {
-    setAppliedId(initialMaterialRequisitionId);
-    setSelectedId(initialMaterialRequisitionId);
+  if (initialWorkHandoverId && initialWorkHandoverId !== appliedId) {
+    setAppliedId(initialWorkHandoverId);
+    setSelectedId(initialWorkHandoverId);
     setView("detail");
   }
   useEffect(() => {
-    if (initialMaterialRequisitionId) onMaterialRequisitionIdConsumed?.();
-  }, [initialMaterialRequisitionId, onMaterialRequisitionIdConsumed]);
+    if (initialWorkHandoverId) onWorkHandoverIdConsumed?.();
+  }, [initialWorkHandoverId, onWorkHandoverIdConsumed]);
 
   if (view === "detail" && selectedId) {
     return (
       <>
-        <MaterialRequisitionDocument
+        <WorkHandoverDocument
           key={selectedId}
-          materialRequisitionId={selectedId}
+          workHandoverId={selectedId}
           currentUserId={currentUserId}
           canEdit={canEdit}
-          canFinalize={canFinalize}
+          canSign={canSign}
           canPrint={canPrint}
           canDelete={canDelete}
           onBack={backToList}
@@ -93,7 +93,7 @@ export function MaterialRequisitionPage({
     return (
       <div className="flex-1 flex items-center justify-center p-6" role="status" aria-live="polite">
         <div className="space-y-3 w-full max-w-3xl">
-          <span className="sr-only">{t("materialRequisition.loading")}</span>
+          <span className="sr-only">{t("workHandover.loading")}</span>
           {[...Array(4)].map((_, i) => (
             <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" aria-hidden="true" />
           ))}
@@ -105,12 +105,12 @@ export function MaterialRequisitionPage({
   if (loadError) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-sm text-muted-foreground">{t("materialRequisition.loadError")}</p>
+        <p className="text-sm text-muted-foreground">{t("workHandover.loadError")}</p>
         <button
           onClick={loadList}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
         >
-          {t("materialRequisition.retry")}
+          {t("workHandover.retry")}
         </button>
       </div>
     );
@@ -118,7 +118,7 @@ export function MaterialRequisitionPage({
 
   return (
     <>
-      <MaterialRequisitionList materialRequisitions={materialRequisitions} currentUserId={currentUserId} onOpen={openMaterialRequisition} />
+      <WorkHandoverList workHandovers={workHandovers} currentUserId={currentUserId} onOpen={openWorkHandover} />
       <Toast message={toast.message} />
     </>
   );

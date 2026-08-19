@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Hammer, Search, X } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { JobOrderSummary, JobOrderStatus } from "../../lib/jobOrder";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
@@ -16,13 +19,20 @@ const statusStyle: Record<JobOrderStatus, string> = {
 // Renders the Job Order list table with a status filter and search box.
 export function JobOrderList({
   jobOrders,
+  currentUserId,
   onOpen,
 }: {
   jobOrders: JobOrderSummary[];
+  currentUserId: string;
   onOpen: (id: string) => void;
 }) {
   const { t } = useI18n();
   const statusLabel: Record<JobOrderStatus, string> = { Draft: t("materialRequisition.status.draft"), Final: t("materialRequisition.status.final") };
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="jo-filters"]', popover: { title: t("tour.jo.filters.title"), description: t("tour.jo.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="jo-table"]', popover: { title: t("tour.jo.table.title"), description: t("tour.jo.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("jobOrder", currentUserId, tourSteps);
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -34,12 +44,15 @@ export function JobOrderList({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrder.pageTitle")}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("jobOrder.pageSubtitle")}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrder.pageTitle")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("jobOrder.pageSubtitle")}</p>
+        </div>
+        <TourReplayButton onClick={tour.start} />
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div data-tour="jo-filters" className="flex items-center gap-3 flex-wrap">
         <div className="relative h-9 w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
@@ -65,7 +78,7 @@ export function JobOrderList({
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="jo-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {items.length === 0 ? (
           <EmptyState icon={Hammer} title={t("jobOrder.empty.title")} description={t("jobOrder.empty.description")} compact />
         ) : filtered.length === 0 ? (

@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, RotateCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import { ChevronRight, RotateCw, Trash2, Loader2, AlertTriangle, FileSignature } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import {
   type Project, type ProjectStatus,
   fetchProject, updateProjectStatus, refreshProjectFromScope, deleteProject,
 } from "../../lib/project";
+import { type WorkHandoverSummary, fetchWorkHandoversByProject, createWorkHandoverFromProject } from "../../lib/workHandover";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProjectItemsEditor } from "./ProjectItemsEditor";
 import { useI18n } from "../../lib/i18n";
 
@@ -20,30 +24,38 @@ const STATUS_OPTIONS: ProjectStatus[] = ["Planning", "InProgress", "Completed"];
 // Project detail view: header info (customer/job code) and the 3-branch sourcing item table.
 export function ProjectDocument({
   projectId,
+  currentUserId,
   canEdit,
   canDelete,
   canCreateMaterialRequisition,
   canCreateJobOrder,
   canCreatePurchaseRequest,
-  onBack,
-  backLabel,
+  canViewWorkHandover,
+  canCreateWorkHandover,
   onOpenMaterialRequisition,
   onOpenJobOrder,
   onOpenPurchaseRequest,
+  onOpenWorkHandover,
+  onBack,
+  backLabel,
   onDeleted,
   showToast,
 }: {
   projectId: string;
+  currentUserId: string;
   canEdit: boolean;
   canDelete: boolean;
   canCreateMaterialRequisition: boolean;
   canCreateJobOrder: boolean;
   canCreatePurchaseRequest: boolean;
+  canViewWorkHandover: boolean;
+  canCreateWorkHandover: boolean;
   onBack: () => void;
   backLabel?: string;
   onOpenMaterialRequisition: (id: string) => void;
   onOpenJobOrder: (id: string) => void;
   onOpenPurchaseRequest: (id: string) => void;
+  onOpenWorkHandover: (id: string) => void;
   onDeleted: () => void;
   showToast: (msg: string) => void;
 }) {
@@ -60,6 +72,8 @@ export function ProjectDocument({
   const [statusSaving, setStatusSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [existingWorkHandover, setExistingWorkHandover] = useState<WorkHandoverSummary | null>(null);
+  const [workHandoverBusy, setWorkHandoverBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +85,24 @@ export function ProjectDocument({
       });
     return () => { cancelled = true; };
   }, [projectId, reloadKey, t]);
+
+  // ตรวจสอบว่าโครงการนี้มีใบส่งมอบงานอยู่แล้วหรือไม่ (ใช้ตัดสินใจว่าปุ่มจะ "สร้าง" หรือ "เปิด")
+  // Checks whether this Project already has a Work Handover Note — decides the entry-point button's "Create" vs "Open" label
+  useEffect(() => {
+    if (!canViewWorkHandover) return;
+    let cancelled = false;
+    fetchWorkHandoversByProject(projectId)
+      .then((list) => { if (!cancelled) setExistingWorkHandover(list[0] ?? null); })
+      .catch(() => { if (!cancelled) setExistingWorkHandover(null); });
+    return () => { cancelled = true; };
+  }, [projectId, canViewWorkHandover]);
+
+  const docTourSteps: DriveStep[] = [
+    { element: '[data-tour="projectdoc-actions"]', popover: { title: t("tour.projectdoc.actions.title"), description: t("tour.projectdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="projectdoc-header"]', popover: { title: t("tour.projectdoc.header.title"), description: t("tour.projectdoc.header.desc"), side: "bottom" } },
+    { element: '[data-tour="projectdoc-items"]', popover: { title: t("tour.projectdoc.items.title"), description: t("tour.projectdoc.items.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("projectDoc", currentUserId, docTourSteps, { autoStart: !!project });
 
   const handleStatusChange = async (status: ProjectStatus) => {
     if (!project) return;
@@ -96,6 +128,23 @@ export function ProjectDocument({
       showToast(err instanceof ApiError ? err.message : t("project.doc.errorRefresh"));
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const handleWorkHandoverClick = async () => {
+    if (!project || workHandoverBusy) return;
+    if (existingWorkHandover) {
+      onOpenWorkHandover(existingWorkHandover.id);
+      return;
+    }
+    setWorkHandoverBusy(true);
+    try {
+      const created = await createWorkHandoverFromProject(project.id);
+      onOpenWorkHandover(created.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("project.doc.errorWorkHandover"));
+    } finally {
+      setWorkHandoverBusy(false);
     }
   };
 
@@ -170,10 +219,16 @@ export function ProjectDocument({
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+        <div data-tour="projectdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <TourReplayButton onClick={docTour.start} />
           {canEdit && (
             <button onClick={handleRefresh} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {refreshing ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />} {t("project.doc.refresh")}
+            </button>
+          )}
+          {canViewWorkHandover && canCreateWorkHandover && (
+            <button onClick={handleWorkHandoverClick} disabled={workHandoverBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              {workHandoverBusy ? <Loader2 size={13} className="animate-spin" /> : <FileSignature size={13} />} {existingWorkHandover ? t("project.doc.workHandoverOpen") : t("project.doc.workHandoverCreate")}
             </button>
           )}
           {canDelete && (
@@ -185,7 +240,7 @@ export function ProjectDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto">
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div data-tour="projectdoc-header" className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("project.doc.title")}</h1>
             <p className="text-[#a8bed8] text-xs mt-1">{t("project.doc.scopeOfWorkPrefix")} {project.scopeNumber}</p>
@@ -199,16 +254,18 @@ export function ProjectDocument({
           </div>
         </div>
 
-        <ProjectItemsEditor
-          project={project}
-          canCreateMaterialRequisition={canCreateMaterialRequisition}
-          canCreateJobOrder={canCreateJobOrder}
-          canCreatePurchaseRequest={canCreatePurchaseRequest}
-          onOpenMaterialRequisition={onOpenMaterialRequisition}
-          onOpenJobOrder={onOpenJobOrder}
-          onOpenPurchaseRequest={onOpenPurchaseRequest}
-          showToast={showToast}
-        />
+        <div data-tour="projectdoc-items">
+          <ProjectItemsEditor
+            project={project}
+            canCreateMaterialRequisition={canCreateMaterialRequisition}
+            canCreateJobOrder={canCreateJobOrder}
+            canCreatePurchaseRequest={canCreatePurchaseRequest}
+            onOpenMaterialRequisition={onOpenMaterialRequisition}
+            onOpenJobOrder={onOpenJobOrder}
+            onOpenPurchaseRequest={onOpenPurchaseRequest}
+            showToast={showToast}
+          />
+        </div>
       </div>
 
       <ConfirmDialog

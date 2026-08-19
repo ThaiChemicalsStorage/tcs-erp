@@ -10,6 +10,7 @@ import { useI18n } from "../../lib/i18n";
 // Standalone Job Order management page — not nested under Project, same reasoning as Material
 // Requisition's own standalone page.
 export function JobOrderPage({
+  currentUserId,
   canEdit,
   canFinalize,
   canPrint,
@@ -17,6 +18,7 @@ export function JobOrderPage({
   initialJobOrderId,
   onJobOrderIdConsumed,
 }: {
+  currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
@@ -73,6 +75,7 @@ export function JobOrderPage({
         <JobOrderDocument
           key={selectedId}
           jobOrderId={selectedId}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canFinalize={canFinalize}
           canPrint={canPrint}
@@ -115,7 +118,7 @@ export function JobOrderPage({
 
   return (
     <>
-      <JobOrderList jobOrders={jobOrders} onOpen={openJobOrder} />
+      <JobOrderList jobOrders={jobOrders} currentUserId={currentUserId} onOpen={openJobOrder} />
       <Toast message={toast.message} />
     </>
   );

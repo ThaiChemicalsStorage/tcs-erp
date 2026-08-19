@@ -10,6 +10,7 @@ import { useI18n } from "../../lib/i18n";
 // Standalone Purchase Request management page — not nested under Project, same reasoning as
 // Material Requisition's own standalone page.
 export function PurchaseRequestPage({
+  currentUserId,
   canEdit,
   canFinalize,
   canPrint,
@@ -17,6 +18,7 @@ export function PurchaseRequestPage({
   initialPurchaseRequestId,
   onPurchaseRequestIdConsumed,
 }: {
+  currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
@@ -73,6 +75,7 @@ export function PurchaseRequestPage({
         <PurchaseRequestDocument
           key={selectedId}
           purchaseRequestId={selectedId}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canFinalize={canFinalize}
           canPrint={canPrint}
@@ -115,7 +118,7 @@ export function PurchaseRequestPage({
 
   return (
     <>
-      <PurchaseRequestList purchaseRequests={purchaseRequests} onOpen={openPurchaseRequest} />
+      <PurchaseRequestList purchaseRequests={purchaseRequests} currentUserId={currentUserId} onOpen={openPurchaseRequest} />
       <Toast message={toast.message} />
     </>
   );

@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Briefcase, Search, X } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { ProjectListItem, ProjectStatus } from "../../lib/project";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
@@ -17,9 +20,11 @@ const statusStyle: Record<ProjectStatus, string> = {
 // Renders the Project list table with a status filter and search box.
 export function ProjectList({
   projects,
+  currentUserId,
   onOpen,
 }: {
   projects: ProjectListItem[];
+  currentUserId: string;
   onOpen: (id: string) => void;
 }) {
   const { t } = useI18n();
@@ -28,6 +33,12 @@ export function ProjectList({
     InProgress: t("project.status.inProgress"),
     Completed: t("project.status.completed"),
   };
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="project-summary"]', popover: { title: t("tour.project.summary.title"), description: t("tour.project.summary.desc"), side: "bottom" } },
+    { element: '[data-tour="project-filters"]', popover: { title: t("tour.project.filters.title"), description: t("tour.project.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="project-table"]', popover: { title: t("tour.project.table.title"), description: t("tour.project.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("project", currentUserId, tourSteps);
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -45,12 +56,15 @@ export function ProjectList({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("project.pageTitle")}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("project.pageSubtitle")}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("project.pageTitle")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("project.pageSubtitle")}</p>
+        </div>
+        <TourReplayButton onClick={tour.start} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div data-tour="project-summary" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: t("quotation.filterAll"), count: items.length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
           { label: statusLabel.Planning, count: items.filter((p) => p.status === "Planning").length, color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
@@ -67,7 +81,7 @@ export function ProjectList({
         ))}
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div data-tour="project-filters" className="flex items-center gap-3 flex-wrap">
         <div className="relative h-9 w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
@@ -93,7 +107,7 @@ export function ProjectList({
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="project-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {items.length === 0 ? (
           <EmptyState icon={Briefcase} title={t("project.empty.title")} description={t("project.empty.description")} compact />
         ) : filtered.length === 0 ? (

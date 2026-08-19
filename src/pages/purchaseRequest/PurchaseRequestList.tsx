@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { ShoppingCart, Search, X } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { PurchaseRequestSummary, PurchaseRequestStatus } from "../../lib/purchaseRequest";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
@@ -16,13 +19,20 @@ const statusStyle: Record<PurchaseRequestStatus, string> = {
 // Renders the Purchase Request list table with a status filter and search box.
 export function PurchaseRequestList({
   purchaseRequests,
+  currentUserId,
   onOpen,
 }: {
   purchaseRequests: PurchaseRequestSummary[];
+  currentUserId: string;
   onOpen: (id: string) => void;
 }) {
   const { t } = useI18n();
   const statusLabel: Record<PurchaseRequestStatus, string> = { Draft: t("materialRequisition.status.draft"), Final: t("materialRequisition.status.final") };
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="pr-filters"]', popover: { title: t("tour.pr.filters.title"), description: t("tour.pr.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="pr-table"]', popover: { title: t("tour.pr.table.title"), description: t("tour.pr.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("purchaseRequest", currentUserId, tourSteps);
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -34,12 +44,15 @@ export function PurchaseRequestList({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseRequest.pageTitle")}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("purchaseRequest.pageSubtitle")}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseRequest.pageTitle")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("purchaseRequest.pageSubtitle")}</p>
+        </div>
+        <TourReplayButton onClick={tour.start} />
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div data-tour="pr-filters" className="flex items-center gap-3 flex-wrap">
         <div className="relative h-9 w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
@@ -65,7 +78,7 @@ export function PurchaseRequestList({
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="pr-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {items.length === 0 ? (
           <EmptyState icon={ShoppingCart} title={t("purchaseRequest.empty.title")} description={t("purchaseRequest.empty.description")} compact />
         ) : filtered.length === 0 ? (

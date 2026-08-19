@@ -1,6 +1,6 @@
 # Module: Project
 
-## Status: ✅ All 4 document types built and working — Project, Material Requisition (Stage 4), Job Order + Purchase Request (Stage 5). Fully i18n-wired (Stage 5, same pass as Job Order/Purchase Request — also retrofitted onto Project/Material Requisition, which had shipped Thai-only in Stage 4).
+## Status: ✅ All 4 original document types built and working — Project, Material Requisition (Stage 4), Job Order + Purchase Request (Stage 5). Fully i18n-wired (Stage 5). **+ 🟡 a 5th document, Work Handover Note, added 2026-08-19 as a first-draft/unverified structure — see "Work Handover Note (first draft, unverified)" below.**
 
 Manages the workflow a Project follows once its Scope of Work + Cost Control are finalized:
 sourcing materials from the store, having items fabricated in-house, or purchasing items
@@ -10,7 +10,8 @@ standalone Scope of Work page, and same existence-check pattern Delivery Order's
 established: if a Project already exists for this Scope of Work, the button opens it; otherwise it
 creates one). Requested by, and primarily serves, the **Project/Store/Factory/Purchasing**
 departments — a different set of users than every module before it, which is why this module grants
-none of its 28 permissions to any existing default role (see "RBAC" below).
+none of its 35 permissions (28 across the original 4 document types + 7 for Work Handover Note) to
+any existing default role (see "RBAC" below).
 
 ## Business Flow
 
@@ -179,6 +180,163 @@ either side, zero of the 232 new English values accidentally left identical to t
 untranslated `"Draft"`/`"Final"` literals above) — see the Stage 5 session for the verification
 script. `tsc --noEmit`/`npm run lint`/`npm run build`/`npm test` all pass clean.
 
+## Guided Tours (added 2026-08-19)
+
+The 4 document types had never had `useModuleTour()` coverage — they postdated the 2026-07-29
+tour-rollout sessions that covered every other module, so they showed no popup at all until now.
+Same infra as every other tour (`src/components/GuidedTour.tsx`'s `useModuleTour()` + the shared
+`TourReplayButton.tsx`, auto-start once per user per page via `hasPageTourCompleted()`, real
+`t()`-backed th/en copy — no hardcoded Thai, per the standing rule this module already had to fix
+once during the Stage 5 i18n retrofit):
+
+- **`ProjectList.tsx`** (tourKey `project`, 3 steps): summary cards → search/status filters → the
+  table (row-click to open; notes that new projects are created from the "Create Project" button on
+  a finalized Scope of Work, not from this page).
+- **`ProjectDocument.tsx`** (tourKey `projectDoc`, 3 steps, `autoStart: !!project`): the
+  refresh/delete actions → the read-only customer/snapshot header → `ProjectItemsEditor`'s 3-branch
+  sourcing table (the actual point of the whole module — assigning each item to Material
+  Requisition/Job Order/Purchase Request). Needed a new `currentUserId` prop threaded
+  `ProjectPage.tsx` → both `ProjectList`/`ProjectDocument`, the same way `ScopeOfWorkPage.tsx`/
+  `DeliveryOrderPage.tsx` already do for their own list+document tours.
+- **`MaterialRequisitionDocument.tsx`** (tourKey `materialRequisitionDoc`, 4 steps,
+  `autoStart: !!doc`): document actions → the "Add from Catalog" product picker entry point → the
+  withdrawal-1/withdrawal-2/return columns (explicitly states the return column stays editable even
+  once the document is Final) → the separate Material Return card (saved via its own button,
+  independent of the main draft).
+- **`JobOrderDocument.tsx`** (tourKey `jobOrderDoc`, 3 steps, `autoStart: !!doc`): document actions
+  → the free-typed line editor (states it isn't tied to the product catalog, unlike Material
+  Requisition/Purchase Request) → the scope-of-work checklist (`ChecklistGroupCard`, shared with
+  Scope of Work).
+- **`PurchaseRequestDocument.tsx`** (tourKey `purchaseRequestDoc`, 3 steps, `autoStart: !!doc`):
+  document actions → the "Add from Catalog"/"Add Custom Line" entry point → the line table (states
+  catalog lines lock description/unit while custom lines stay fully editable).
+- **Document tours all pass `autoStart: !!doc` (or `!!project`)** — the same load-race guard every
+  other document editor's tour uses (`ScopeOfWorkDocument`/`DeliveryOrderDocument`/
+  `ServiceReportEditor`), so the one-time auto-fire waits for the real record instead of firing over
+  the loading spinner.
+- **Follow-up pass (2026-08-19, same day)**: `MaterialRequisitionList.tsx`/`JobOrderList.tsx`/
+  `PurchaseRequestList.tsx` — the 3 standalone list pages deliberately left out of the first pass
+  above — each gained the same 2-step tour (tourKeys `materialRequisition`/`jobOrder`/
+  `purchaseRequest`, distinct from their document tourKeys' `*Doc` suffix): search/status filters →
+  the table (row-click to open; states that new documents are created from a Project's item table,
+  the 3-branch sourcing buttons, not from these standalone list pages). These 3 lists have no
+  summary-card row (unlike `ProjectList`), so 2 steps matches the shorter precedent
+  `AuditLogPage`/`RoleManagementPage` already use for similarly minimal list pages. `currentUserId`
+  was already threaded to all 3 `*Page.tsx` wrappers from the first pass (for their Document
+  children) — this pass just passed the same prop one level further, into the List components.
+- 40 new i18n keys × 2 languages = 80 new dictionary entries total across both passes
+  (`tour.project.*`, `tour.projectdoc.*`, `tour.mrdoc.*`, `tour.jodoc.*`, `tour.prdoc.*`, plus
+  `tour.mr.*`/`tour.jo.*`/`tour.pr.*` from the follow-up), verified 1:1 th/en parity by direct
+  key-count comparison (not just `tsc`, which only proves every key exists in the Thai dictionary —
+  see "i18n" above for why that alone isn't sufficient). `tsc --noEmit` (both configs)/`npm run lint`/
+  `npm run build`/`npm test` (211/211) all pass clean, both passes.
+
+## Work Handover Note (first draft, unverified) — added 2026-08-19
+
+**⚠️ Read this before touching anything related to Work Handover Note.** This is the 4th document
+type originally flagged in the coordination note at the top of `docs/CLAUDE.md` — deliberately
+scoped OUT of Stages 1–6 above, and built now on direct instruction. **Unlike Material
+Requisition/Job Order/Purchase Request, no reference PDF was ever provided for this document.** The
+structure below is a first-draft guess inferred purely from the document's known *purpose* (per
+`docs/MODULES/Accounting.md`'s "Flow งานบัญชี.(13.8.69).xlsx" summary, item 7 of the "บัญชีรับ"
+sheet): prepared by Project staff once work is complete, signed by the customer on-site as
+acceptance, and the signed copy is what tells Accounting the next payment installment can be
+billed. **Every field below should be verified against the actual paper form once the
+owner/accounting department provides one** — do not treat the current shape, print layout, or field
+labels as calibrated the way the other 3 document types' FM-ST-04/FM-PJ-01/FMPU05 reproductions are.
+
+**Purpose vs. the other 3 document types**: Material Requisition/Job Order/Purchase Request are
+*sourcing* documents — each is generated from one specific `ProjectItem` and distributes it across
+one of 3 branches (store/fabrication/purchase). Work Handover Note is a *completion* record for the
+whole job — generated directly from a `Project` (not a `ProjectItem`), with no atomic link-back the
+way the other 3 have (`linkProjectItemToSubDocument()`/`ProjectItem.sourcingMethod` don't apply
+here — there is no per-item concept to update).
+
+**Data model** (`src/lib/workHandover.ts`, `WorkHandoverNote`): `projectId` + denormalized
+`scopeOfWorkId`/`jobCode` snapshot for traceability (same convention as the other 3); `documentCode:
+string | null` — **deliberately always `null`, on explicit instruction never to invent a form code**
+(e.g. an "FM-PJ-0x" guess) until a real one is confirmed; `customerName` snapshot; free-text
+`siteDescription`; `workCompletedDate`; free-typed `lines: WorkHandoverLine[]` (same
+no-fixed-catalog shape/reasoning as Job Order's own lines — a handover can describe a mix of
+fabricated items, installed equipment, or services, so there's nothing sensible to catalog-link
+against); a preparer block (`preparedByName`/`preparedBySignatureDataUrl`/`preparedAt`) and a
+customer acceptance block (`customerSignedName`/`customerSignatureDataUrl`/`customerSignedAt`), both
+captured via the existing `SignaturePad` component (`src/components/SignaturePad.tsx`, already used
+by Settings' personal signature and Service's customer sign-off) rather than plain typed-name text
+fields — the preparer's block allows upload (`allowUpload` default true, might already have a saved
+signature), the customer's block is draw-only (`allowUpload={false}`, same reasoning as Service's
+customer-facing sign-off: a customer must draw their own signature in front of the preparer or on
+their own device, not attach an arbitrary image standing in for one).
+
+**Status is NOT the Draft/Final lock the other 3 document types use.** There is no `status` field at
+all — `isSigned: boolean` + `signedAt: string | null` are the sole source of truth. Signing
+(customer acceptance) is the meaningful state transition here, not an internal "finalize" approval,
+which is why the 7th permission is `workHandover:sign`, not `:finalize`. `POST /:id/sign`
+(`api/_lib/workHandoverHandler.ts`'s `handleSign()`) requires `customerSignatureDataUrl` to already
+be saved via a prior `PATCH` — the same "save draft, then act" two-step flow every other
+Project-module document uses for its own state transition — and rejects any further `PATCH` once
+`isSigned` is true (`editable = canEdit && !doc.isSigned` on the client, mirrored server-side).
+
+**Deliberately does NOT touch Scope of Work / any billing status.** `handleSign()` sets only
+`isSigned`/`signedAt`/`customerSignedAt` on the Work Handover Note document itself — it does not
+write to `scope_of_works`, does not call into `arHandler.ts`, and has no awareness of Accounting's
+milestone-billing gate at all. This is intentional, not an oversight: the Accounting module's UI is
+paused and Accounting has no code path that reads `WorkHandoverNote.isSigned` yet (see
+`docs/MODULES/Accounting.md` decision #6, still gated on a plain checklist item). `isSigned`/
+`signedAt` are a manual signal a human (Accounting) checks, not an automated trigger — wiring that
+link is future work, tracked in `docs/TODO.md` High Priority, and should not be assumed or
+hard-coded from either side until the two modules explicitly agree on the shape.
+
+**No existence-check, unlike Project↔Scope of Work.** `ProjectDocument.tsx`'s entry-point button
+("สร้าง/เปิดใบส่งมอบงาน") follows the same create-or-open UX pattern as `ScopeOfWorkDocument.tsx`'s
+own "Create/Open Project" button (`fetchWorkHandoversByProject()` existence-check, opens the first
+one found or creates a new one), but nothing in the API *enforces* one-per-Project the way handling
+elsewhere might imply — `POST /api/work-handovers` never checks for an existing record, so multiple
+Work Handover Notes can exist for the same Project if created through means other than that one
+button (confirmed in `tests/api/workHandover.test.ts`). This was a deliberate simplification given
+the real "Flow งานบัญชี" process ties each *installment's* billing to its own signed note, and the
+current data model has no installment linkage at all — see "Known Limitations" below.
+
+**Files**: `src/lib/workHandover.ts` (types + API wrappers); `api/_lib/workHandoverHandler.ts`
+(mounted from `api/handlers/quotes.ts`, same 12-function-slot sharing as the other 3 sub-document
+types — reuses `loadProjectOrThrow()` from `projectHandler.ts` rather than
+`loadPendingProjectItemOrThrow()`, since there's no `ProjectItem` involved); new `work_handover_notes`
+MongoDB collection (`api/_lib/collections.ts`); `src/pages/workHandover/` (`Page`/`List`/`Document`/
+`PrintDocument.tsx`, same standalone-sidebar-page pattern as the other 3); entry point via
+`ProjectDocument.tsx`'s new button (`canViewWorkHandover`/`canCreateWorkHandover`/`onOpenWorkHandover`
+props, threaded through `ProjectPage.tsx` from `App.tsx`, same shape as Scope of Work's Project
+button). `WorkHandoverPrintDocument.tsx` embeds the actual captured signature images
+(`<img src={...SignatureDataUrl}>`) when present, unlike the other 3 print documents which only ever
+print a blank line for wet-ink signing — this document's signatures are captured digitally in-app,
+not signed on the physical printout.
+
+**RBAC**: 7 new permissions (`workHandover:view`/`viewAll`/`create`/`edit`/`sign`/`print`/`delete`),
+granted to Administrator/Super Admin only by default — same "none of the existing default roles
+belong to the departments this module serves" reasoning as the other 27. **No automatic RBAC
+migration was added** (`api/_lib/rbacSeed.ts`'s `RBAC_MIGRATIONS`) — same precedent the original 4
+Project-module document types set: an already-provisioned production database needs a manual Role
+Management pass to grant these to Administrator, same as every module before the Service/AR
+migrations introduced the automatic-backfill pattern.
+
+**i18n**: 40 new key pairs (80 dictionary entries th+en) — `nav.workHandover`,
+`project.doc.workHandover*` (the entry-point button), `workHandover.*` (list page),
+`workHandoverDoc.*` (document page), `permission.workHandover*`, `tour.wh.*`/`tour.whdoc.*` (guided
+tour) — verified 1:1 parity by direct key-count comparison, not just `tsc`. The print document stays
+fixed-Thai with no `useI18n`, matching the exact precedent the other 3 print documents established.
+
+**Guided tour**: same `useModuleTour()` pattern as every other page in the app —
+`WorkHandoverList.tsx` (tourKey `workHandover`, 2 steps: filters, table) and
+`WorkHandoverDocument.tsx` (tourKey `workHandoverDoc`, 3 steps: actions, the free-typed line editor,
+the preparer/customer signature blocks — the signatures step explicitly states that signing does not
+auto-update any billing status).
+
+**Tests**: `tests/api/workHandover.test.ts` (8 integration tests, in-memory MongoDB, same
+`makeReqRes()`-over-the-real-handler pattern `projectAtomicity.test.ts` established) — covers
+`documentCode` staying `null`, `preparedAt` seeding as date-only (the exact bug class Stage 6 found
+in the other 3 document types), signing being rejected without a saved customer signature, signing
+succeeding once one is saved, editing being rejected once signed, signing twice being rejected, and
+that multiple notes can exist per Project (no existence-check enforcement server-side).
+
 ## Files
 
 - `src/lib/project.ts` / `materialRequisition.ts` / `jobOrder.ts` / `purchaseRequest.ts` — types +
@@ -207,9 +365,9 @@ script. `tsc --noEmit`/`npm run lint`/`npm run build`/`npm test` all pass clean.
   (`handleProjectClick`, `existingProject` existence-check effect) — threaded through both places
   `ScopeOfWorkDocument` is mounted (`ScopeOfWorkPage.tsx` standalone, `QuotationPage.tsx` embedded),
   same `canView*`/`canCreate*`/`onOpen*` prop shape Delivery Order's identical button already uses.
-- `src/App.tsx` — `project`/`materialRequisition`/`jobOrder`/`purchaseRequest` `NavKey`s, sidebar
-  entries (the "Project" nav group), deep-link state + `navigateTo*()` for all 4, and the
-  permission-derived `can*` booleans threaded into all 4 pages.
+- `src/App.tsx` — `project`/`materialRequisition`/`jobOrder`/`purchaseRequest`/`workHandover`
+  `NavKey`s, sidebar entries (the "Project" nav group), deep-link state + `navigateTo*()` for all 5,
+  and the permission-derived `can*` booleans threaded into all 5 pages.
 - Backend: `GET /api/material-requisitions`, `GET /api/job-orders`, and `GET /api/purchase-requests`
   all gained a company-wide list mode (omit `projectId`) mirroring Project's own dual-mode `GET` —
   Stage 3 had only built the by-project mode; the Material Requisition gap was found and fixed in
@@ -223,7 +381,10 @@ script. `tsc --noEmit`/`npm run lint`/`npm run build`/`npm test` all pass clean.
 3 and genuinely wired to UI buttons/nav visibility for all 4 document types as of Stage 5 — every
 action button is conditionally rendered based on the matching permission, not shown-but-disabled,
 matching this app's standing "filter the array, don't grey out the button" convention (see
-[UI_GUIDELINES.md](../UI_GUIDELINES.md) "Permission-Locked Form Fields"). **Default grants:
+[UI_GUIDELINES.md](../UI_GUIDELINES.md) "Permission-Locked Form Fields"). **+7 more, added
+2026-08-19**: `workHandover:view`/`viewAll`/`create`/`edit`/`sign`/`print`/`delete` — `:sign` replaces
+`:finalize` since customer acceptance, not internal approval, is this document's real state
+transition (see "Work Handover Note" above). **35 permissions total across the module. Default grants:
 Administrator/Super Admin only** — none of the existing default roles (Sales User, Approver Level
 1/2, Viewer, Service Engineer, Accounting User) belong to the Project/Store/Factory/Purchasing
 departments this module serves. A Super Admin needs to create real custom roles (e.g. "เจ้าหน้าที่โครงการ",
@@ -301,4 +462,17 @@ fixed); print documents and catalog/checklist content correctly stay fixed-Thai 
   limitation this app's own session history has hit before for other modules), so the visual layout
   itself still needs a manual look.
 - **Project's `status` has no automatic transition logic** — purely user-set via a dropdown.
-- **No Global Search integration** — none of these 4 document types have a search result group yet.
+- **No Global Search integration** — none of these 5 document types have a search result group yet.
+- **Work Handover Note's entire structure is an unverified first draft** (added 2026-08-19) — no
+  reference PDF exists for it, unlike the other 4. Field shapes, the print layout, and even whether
+  a preparer signature block belongs on this form at all are guesses pending confirmation against
+  the real paper form. Do not treat this document's shape as settled the way the other 4's are.
+- **Work Handover Note has no installment linkage** — the real "Flow งานบัญชี" business process (see
+  `docs/MODULES/Accounting.md`) gates each Scope of Work *installment's* billing on its own signed
+  ใบส่งมอบงาน, but this implementation attaches a Work Handover Note to a `Project` as a whole, with
+  no concept of "which installment does this cover." Multiple notes can exist per Project with no
+  way to distinguish which installment each one is for. Revisit once Accounting's milestone-billing
+  UI resumes and the real per-installment gating requirement is confirmed.
+- **Signing a Work Handover Note does not update anything outside itself** — deliberately, per
+  explicit scope limits (see "Work Handover Note" above). `isSigned`/`signedAt` are a manual signal;
+  no Scope of Work field, no Accounting record, and no notification currently reads them.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2 } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
   type MaterialRequisition, type MaterialRequisitionLine, type MaterialRequisitionUpdateFields,
@@ -9,6 +10,8 @@ import {
 } from "../../lib/materialRequisition";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { MaterialRequisitionPrintDocument } from "./MaterialRequisitionPrintDocument";
 import { useI18n } from "../../lib/i18n";
@@ -35,6 +38,7 @@ function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields
 // Material Requisition editor: header fields, catalog line table, and the material-return section.
 export function MaterialRequisitionDocument({
   materialRequisitionId,
+  currentUserId,
   canEdit,
   canFinalize,
   canPrint,
@@ -44,6 +48,7 @@ export function MaterialRequisitionDocument({
   showToast,
 }: {
   materialRequisitionId: string;
+  currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
@@ -79,6 +84,14 @@ export function MaterialRequisitionDocument({
       });
     return () => { cancelled = true; };
   }, [materialRequisitionId, reloadKey, t]);
+
+  const docTourSteps: DriveStep[] = [
+    { element: '[data-tour="mrdoc-actions"]', popover: { title: t("tour.mrdoc.actions.title"), description: t("tour.mrdoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="mrdoc-addline"]', popover: { title: t("tour.mrdoc.addline.title"), description: t("tour.mrdoc.addline.desc"), side: "bottom" } },
+    { element: '[data-tour="mrdoc-lines"]', popover: { title: t("tour.mrdoc.lines.title"), description: t("tour.mrdoc.lines.desc"), side: "top" } },
+    { element: '[data-tour="mrdoc-returnCard"]', popover: { title: t("tour.mrdoc.returnCard.title"), description: t("tour.mrdoc.returnCard.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("materialRequisitionDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
   useEffect(() => {
     if (!showPrint) return;
@@ -227,7 +240,8 @@ export function MaterialRequisitionDocument({
           {isDraftStatus ? t("materialRequisition.status.draft") : t("materialRequisition.status.final")}
         </span>
 
-        <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+        <div data-tour="mrdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <TourReplayButton onClick={docTour.start} />
           {canPrint && (
             <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("materialRequisitionDoc.print")}
@@ -286,7 +300,7 @@ export function MaterialRequisitionDocument({
         </div>
 
         <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
+          <div data-tour="mrdoc-addline" className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("materialRequisitionDoc.linesTitle")}</h2>
             {editable && (
               <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
@@ -294,6 +308,7 @@ export function MaterialRequisitionDocument({
               </button>
             )}
           </div>
+          <div data-tour="mrdoc-lines">
           {draft.lines.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">{t("materialRequisitionDoc.linesEmpty")}</div>
           ) : (
@@ -356,9 +371,10 @@ export function MaterialRequisitionDocument({
               </table>
             </div>
           )}
+          </div>
         </div>
 
-        <div className="bg-card border border-[#c9a84c]/30 rounded-xl p-5 space-y-3">
+        <div data-tour="mrdoc-returnCard" className="bg-card border border-[#c9a84c]/30 rounded-xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <Undo2 size={15} className="text-[#c9a84c]" />
             <h2 className="text-sm font-semibold text-foreground">{t("materialRequisitionDoc.returnTitle")}</h2>

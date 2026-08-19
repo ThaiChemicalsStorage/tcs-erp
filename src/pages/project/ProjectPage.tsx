@@ -9,25 +9,33 @@ import { useI18n } from "../../lib/i18n";
 // หน้าจัดการโครงการแบบแยกอิสระ สลับระหว่างมุมมองรายการและรายละเอียดของแต่ละโครงการ
 // Standalone Project management page, switching between the list view and a per-project detail view.
 export function ProjectPage({
+  currentUserId,
   canEdit,
   canDelete,
   canCreateMaterialRequisition,
   canCreateJobOrder,
   canCreatePurchaseRequest,
+  canViewWorkHandover,
+  canCreateWorkHandover,
   onOpenMaterialRequisition,
   onOpenJobOrder,
   onOpenPurchaseRequest,
+  onOpenWorkHandover,
   initialProjectId,
   onProjectIdConsumed,
 }: {
+  currentUserId: string;
   canEdit: boolean;
   canDelete: boolean;
   canCreateMaterialRequisition: boolean;
   canCreateJobOrder: boolean;
   canCreatePurchaseRequest: boolean;
+  canViewWorkHandover: boolean;
+  canCreateWorkHandover: boolean;
   onOpenMaterialRequisition: (id: string) => void;
   onOpenJobOrder: (id: string) => void;
   onOpenPurchaseRequest: (id: string) => void;
+  onOpenWorkHandover: (id: string) => void;
   initialProjectId?: string | null;
   onProjectIdConsumed?: () => void;
 }) {
@@ -80,15 +88,19 @@ export function ProjectPage({
         <ProjectDocument
           key={selectedId}
           projectId={selectedId}
+          currentUserId={currentUserId}
           canEdit={canEdit}
           canDelete={canDelete}
           canCreateMaterialRequisition={canCreateMaterialRequisition}
           canCreateJobOrder={canCreateJobOrder}
           canCreatePurchaseRequest={canCreatePurchaseRequest}
+          canViewWorkHandover={canViewWorkHandover}
+          canCreateWorkHandover={canCreateWorkHandover}
           onBack={backToList}
           onOpenMaterialRequisition={onOpenMaterialRequisition}
           onOpenJobOrder={onOpenJobOrder}
           onOpenPurchaseRequest={onOpenPurchaseRequest}
+          onOpenWorkHandover={onOpenWorkHandover}
           onDeleted={backToList}
           showToast={toast.show}
         />
@@ -126,7 +138,7 @@ export function ProjectPage({
 
   return (
     <>
-      <ProjectList projects={projects} onOpen={openProject} />
+      <ProjectList projects={projects} currentUserId={currentUserId} onOpen={openProject} />
       <Toast message={toast.message} />
     </>
   );

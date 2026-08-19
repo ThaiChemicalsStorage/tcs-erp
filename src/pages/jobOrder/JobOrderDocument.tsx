@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import {
   type JobOrder, type JobOrderLine, type JobOrderUpdateFields,
   fetchJobOrder, updateJobOrder, finalizeJobOrder, logJobOrderPrinted, deleteJobOrder, blankJobOrderLine,
 } from "../../lib/jobOrder";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import { ChecklistGroupCard } from "../quotation/ChecklistGroupCard";
 import { JobOrderPrintDocument } from "./JobOrderPrintDocument";
 import { useI18n } from "../../lib/i18n";
@@ -33,6 +36,7 @@ function toUpdateFields(j: JobOrder): JobOrderUpdateFields {
 // Job Order editor: header fields, free-typed line table, scope-of-work checklist, and signatories.
 export function JobOrderDocument({
   jobOrderId,
+  currentUserId,
   canEdit,
   canFinalize,
   canPrint,
@@ -42,6 +46,7 @@ export function JobOrderDocument({
   showToast,
 }: {
   jobOrderId: string;
+  currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
   canPrint: boolean;
@@ -73,6 +78,13 @@ export function JobOrderDocument({
       });
     return () => { cancelled = true; };
   }, [jobOrderId, reloadKey, t]);
+
+  const docTourSteps: DriveStep[] = [
+    { element: '[data-tour="jodoc-actions"]', popover: { title: t("tour.jodoc.actions.title"), description: t("tour.jodoc.actions.desc"), side: "bottom" } },
+    { element: '[data-tour="jodoc-lines"]', popover: { title: t("tour.jodoc.lines.title"), description: t("tour.jodoc.lines.desc"), side: "top" } },
+    { element: '[data-tour="jodoc-checklist"]', popover: { title: t("tour.jodoc.checklist.title"), description: t("tour.jodoc.checklist.desc"), side: "top" } },
+  ];
+  const docTour = useModuleTour("jobOrderDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
   useEffect(() => {
     if (!showPrint) return;
@@ -196,7 +208,8 @@ export function JobOrderDocument({
           {isDraftStatus ? t("materialRequisition.status.draft") : t("materialRequisition.status.final")}
         </span>
 
-        <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+        <div data-tour="jodoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+          <TourReplayButton onClick={docTour.start} />
           {canPrint && (
             <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("jobOrderDoc.print")}
@@ -261,7 +274,7 @@ export function JobOrderDocument({
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div data-tour="jodoc-lines" className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrderDoc.linesTitle")}</h2>
             {editable && (
@@ -316,7 +329,7 @@ export function JobOrderDocument({
           )}
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <div data-tour="jodoc-checklist" className="bg-card border border-border rounded-xl p-5 space-y-3">
           <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrderDoc.scopeChecklistTitle")}</h2>
           {draft.scopeChecklist.map((group) => (
             <ChecklistGroupCard

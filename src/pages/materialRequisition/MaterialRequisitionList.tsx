@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Package2, Search, X } from "lucide-react";
+import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
+import { useModuleTour } from "../../components/GuidedTour";
+import { TourReplayButton } from "../../components/TourReplayButton";
 import type { MaterialRequisitionSummary, MaterialRequisitionStatus } from "../../lib/materialRequisition";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
@@ -16,13 +19,20 @@ const statusStyle: Record<MaterialRequisitionStatus, string> = {
 // Renders the Material Requisition list table with a status filter and search box.
 export function MaterialRequisitionList({
   materialRequisitions,
+  currentUserId,
   onOpen,
 }: {
   materialRequisitions: MaterialRequisitionSummary[];
+  currentUserId: string;
   onOpen: (id: string) => void;
 }) {
   const { t } = useI18n();
   const statusLabel: Record<MaterialRequisitionStatus, string> = { Draft: t("materialRequisition.status.draft"), Final: t("materialRequisition.status.final") };
+  const tourSteps: DriveStep[] = [
+    { element: '[data-tour="mr-filters"]', popover: { title: t("tour.mr.filters.title"), description: t("tour.mr.filters.desc"), side: "bottom" } },
+    { element: '[data-tour="mr-table"]', popover: { title: t("tour.mr.table.title"), description: t("tour.mr.table.desc"), side: "top" } },
+  ];
+  const tour = useModuleTour("materialRequisition", currentUserId, tourSteps);
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -34,12 +44,15 @@ export function MaterialRequisitionList({
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("materialRequisition.pageTitle")}</h1>
-        <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("materialRequisition.pageSubtitle")}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("materialRequisition.pageTitle")}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("materialRequisition.pageSubtitle")}</p>
+        </div>
+        <TourReplayButton onClick={tour.start} />
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div data-tour="mr-filters" className="flex items-center gap-3 flex-wrap">
         <div className="relative h-9 w-72">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <input
@@ -65,7 +78,7 @@ export function MaterialRequisitionList({
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div data-tour="mr-table" className="bg-card border border-border rounded-xl overflow-hidden">
         {items.length === 0 ? (
           <EmptyState icon={Package2} title={t("materialRequisition.empty.title")} description={t("materialRequisition.empty.description")} compact />
         ) : filtered.length === 0 ? (
