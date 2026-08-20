@@ -49,6 +49,20 @@ cannot leave stale values behind.
 **ผู้อนุมัติ block is read-only in the editor** — the server fills it on approval, so a typed-in name
 can never stand in for a real approval.
 
+The blocks sign at **three different times**, which the edit lock has to respect:
+
+| Block | When it's filled | Editable while |
+|---|---|---|
+| ผู้สั่งผลิต | as the order is written | `Draft` only |
+| ผู้อนุมัติ | on approval | never — server-stamped |
+| ผู้ส่งมอบงาน / ผู้ตรวจรับงาน / แผนกต้นทุน | **after the work is finished** | any status |
+
+The last three therefore save through their own route, `POST /api/production-orders/:id/signatories`,
+which is deliberately **not** Final-locked and writes only those three fields — the general `PATCH`
+stays locked at `Draft` as usual. Without this the three blocks could only ever print blank, since
+the document is locked the moment it is approved (found by the `2026-08-20i` review). In the editor
+they stay enabled after approval and get their own save button in the signature card.
+
 ## Approval workflow (shared with three other documents)
 
 Requested as "ใบที่ต้องมีการอนุมัติต้องมีปุ่มอนุมัติด้วย", behaving "เหมือน Scope of Work เป๊ะ".
@@ -98,6 +112,14 @@ stale list) — the same multi-mount pattern `ArDocumentListPage` already uses.
 7 new `productionOrder:*` permissions (`view`/`viewAll`/`create`/`edit`/`finalize`/`print`/`delete`)
 with a "ผลิต" group in Role Management, granted to Administrator/Super Admin only by default — the
 same precedent the Project module set. `:finalize` is the approve/reject permission.
+
+Two things this needed that are easy to miss on a similar module later:
+- `src/lib/roles.ts`'s `defaultRoles` covers **fresh installs only**. `syncDefaultRoles()` inserts
+  missing roles but never edits an existing role's permission array, so an already-provisioned
+  database — production — also needs an `RBAC_MIGRATIONS` entry
+  (`production-order-permissions-2026-08-20`). Ship both or the feature is invisible to real users.
+- Raising an MR/PR from a Production Order requires that order to be `Final` **and** checks
+  `productionOrder:view` on the parent. A Draft order must not be able to spend materials.
 
 ## Known gaps
 

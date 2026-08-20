@@ -4,7 +4,80 @@
 
 ---
 
-## 2026-08-20h (absolute latest) — Production (ผลิต) department: new ใบสั่งผลิต, approval workflow on four documents, per-department record separation
+## 2026-08-20i (absolute latest) — Code review of the Production module: 4 critical fixes, one of them a real permission leak
+
+**Review**: The owner's instruction for the Production work was *"หลังจากเสร็จงานให้รีวิวโค้ดด้วยและแก้"*
+— review it afterwards and fix what's found. This entry covers reviewing `3352c4e`…`bf6cb76` and the
+9 defects that came out of it. Each was reproduced before being fixed, not fixed on suspicion.
+
+### CRITICAL — a permission leak from two `$or` keys colliding
+
+`buildSimpleOwnershipClause()` returns `{ $or: [...] }`, and the new department filter *also* built a
+`$or`. The list query spread both into one object literal, so **the department clause silently
+overwrote the ownership clause** — every user without `:viewAll` could see everyone else's Material
+Requisitions and Purchase Requests. This is the kind of bug object-spread makes invisible: the code
+reads as "both filters apply". Fixed by combining them explicitly:
+
+```ts
+// $and, not spread: buildSimpleOwnershipClause() also returns a $or, so spreading both
+// would have the department clause silently overwrite the ownership one (a real leak).
+$and: [ownershipMatch, departmentClause]
+```
+
+### CRITICAL — `toObjectId("")` throwing *after* the write had already landed
+
+Production-owned documents have `projectId: ""` by design (they hang off a Production Order, not a
+project item). Four call sites still passed that empty string to `findProjectItemIdByLink()`, which
+threw — **after** the status change or soft-delete had already been written. The document ended up
+mutated while the caller saw a 500. Guarded with `doc.projectId ? … : null` at all four.
+
+### CRITICAL — the whole ผลิต module was invisible to Administrator
+
+`src/lib/roles.ts` contained **zero** `productionOrder:` entries. An earlier scripted edit had failed
+silently on the file's CRLF line endings (a multi-line `String.replace` anchor doesn't match `\r\n`)
+and the "permissions added" claim in `2026-08-20h` was wrong for the default-roles half. Added the 7
+grants, plus a `production-order-permissions-2026-08-20` entry in `RBAC_MIGRATIONS` — required
+because `syncDefaultRoles()` only inserts *missing* roles and never edits an existing role's
+permission array, so an already-provisioned database (i.e. production) would never have received them.
+
+### HIGH — documents were still editable while awaiting approval
+
+All four handlers only locked `Final`. A `PendingApproval` document could be edited underneath its
+approver, who would then be approving something other than what they reviewed. All four now refuse
+any non-Draft edit, with distinct messages so the user knows whether to withdraw the request or that
+it is finished.
+
+### MEDIUM — three signatures that could never be collected
+
+On the real FM-PD-02, ผู้ส่งมอบงาน / ผู้ตรวจรับงาน / แผนกต้นทุน sign *after* the work is done — but the
+editor locked the entire document at approval, so those three blocks could only ever print blank. A
+dedicated `POST /:id/signatories` route (deliberately **not** Final-locked, and it touches only those
+three fields) plus a matching save button that appears in the signature card once the document is
+approved.
+
+### Also
+
+Raising an MR/PR from a Production Order now requires that order to be `Final` and checks
+`productionOrder:view` — previously a Draft order could spend materials, and the parent was read
+without any permission check. **Both are pinned by a new test**, verified by removing the gate and
+watching it fail. A misleading "kept for backward compatibility" comment on the `/finalize` alias was
+corrected: it is not backward compatible, it now enforces the approval path.
+
+### Deliberately not fixed
+
+`GET /api/<doc>/:id` performs no `:viewAll` scoping — a user who guesses a document id can read it.
+This is real, but it is the **existing pattern in every sibling module**, not something introduced
+here, and document ids are sequential and therefore guessable. Changing read scoping across four
+live modules is a behaviour change the owner should decide on, so it is logged in `TODO.md` under
+High Priority instead of being changed unilaterally on the way to a commit.
+
+**Verified**: `tsc` (both configs) / `lint` (0 errors) / `build` / **252 tests**, i18n parity 2,131
+keys each way. Two existing tests failed on the new Final gate and were rewritten to walk the real
+approval workflow rather than relaxed.
+
+---
+
+## 2026-08-20h — Production (ผลิต) department: new ใบสั่งผลิต, approval workflow on four documents, per-department record separation
 
 **Feature**: The owner supplied the Production department's spec and its reference form and asked for
 the module to be built, for the documents needing approval to get real approve buttons, and for the

@@ -873,3 +873,19 @@ audit trail cannot be forged by editing the form field.
 `ownerDepartment`, so the Project and Production departments never see each other's records even
 with `:viewAll`. This is a *data-scoping* filter in the list query, layered on top of the existing
 `buildSimpleOwnershipClause()` own-vs-viewAll check — not a permission of its own.
+
+⚠️ **The two clauses must be combined with `$and`, never object-spread.** Both return a top-level
+`$or`, so `{ ...ownershipMatch, ...departmentClause }` silently drops the ownership half and exposes
+every user's documents to anyone holding plain `:view`. That exact leak shipped in `bf6cb76` and was
+caught by the review in `2026-08-20i`; the fix carries a comment saying why. Any future filter that
+also produces a `$or` has the same hazard.
+
+### Known gap: `GET /api/<doc>/:id` is not ownership-scoped
+
+Single-document reads across Material Requisition, Purchase Request, Job Order and Production Order
+check only `{doc}:view` — they do **not** apply `buildSimpleOwnershipClause()`. A user without
+`:viewAll` sees a filtered *list*, but can still fetch any document by id, and ids are sequential
+(`MR-2569-0001`, `SC-2026-08-009`) and therefore guessable. This predates the Production work and is
+consistent across all four modules, so it was left alone rather than changed unilaterally — it is
+logged in [TODO.md](./TODO.md) High Priority for an explicit decision, since tightening it would
+change behaviour for existing users who share document ids between themselves.

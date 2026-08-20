@@ -125,6 +125,20 @@ export async function updateProductionOrder(id: string, fields: ProductionOrderU
 export async function deleteProductionOrder(id: string): Promise<void> {
   await apiFetch(`/production-orders/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
+/**
+ * ช่องเซ็นหลังอนุมัติ (ผู้ส่งมอบงาน/ผู้ตรวจรับงาน/แผนกต้นทุน) — กรอกได้แม้เอกสารอนุมัติแล้ว เพราะบน
+ * ฟอร์มจริงสามช่องนี้เซ็นหลังทำงานเสร็จ ดู handleSignatories() ใน api/_lib/productionOrderHandler.ts
+ */
+export async function updateProductionOrderSignatories(
+  id: string,
+  fields: Partial<Pick<ProductionOrder, "deliveredBy" | "receivedBy" | "costDeptBy">>,
+): Promise<ProductionOrder> {
+  const { productionOrder } = await apiFetch<{ productionOrder: ProductionOrder }>(`/production-orders/${encodeURIComponent(id)}/signatories`, {
+    method: "POST", body: JSON.stringify(fields),
+  });
+  return productionOrder;
+}
+
 export async function logProductionOrderPrinted(id: string): Promise<void> {
   await apiFetch(`/production-orders/${encodeURIComponent(id)}/print`, { method: "POST" });
 }

@@ -460,6 +460,27 @@ describe("Production Order", () => {
  * no such field at all, and must keep showing up for the Project department rather than vanishing.
  */
 describe("Material Requisition / Purchase Request are separated by owning department", () => {
+  /**
+   * ใบเบิก/ใบขอซื้อของฝ่ายผลิตออกจากใบสั่งผลิตที่ "อนุมัติแล้ว" เท่านั้น จึงต้องเดินขั้นตอนจริงให้ครบ
+   * (ร่าง → รออนุมัติ → อนุมัติ) แทนที่จะยัดสถานะลงฐานข้อมูลตรง ๆ — จะได้ทดสอบเส้นทางที่ผู้ใช้เดินจริง
+   */
+  async function createApprovedProductionOrder(): Promise<string> {
+    const po = await call("POST", "/api/production-orders", { scopeOfWorkId });
+    expect(po.statusCode, JSON.stringify(po.body)).toBe(201);
+    const poId = (po.body as { productionOrder: { id: string } }).productionOrder.id;
+    await call("POST", `/api/production-orders/${poId}/submit-approval`);
+    const approved = await call("POST", `/api/production-orders/${poId}/approve`);
+    expect(approved.statusCode, JSON.stringify(approved.body)).toBe(200);
+    return poId;
+  }
+
+  it("refuses to raise a requisition from a production order that is not approved yet", async () => {
+    const po = await call("POST", "/api/production-orders", { scopeOfWorkId });
+    const poId = (po.body as { productionOrder: { id: string } }).productionOrder.id;
+    const tooEarly = await call("POST", "/api/material-requisitions", { productionOrderId: poId });
+    expect(tooEarly.statusCode, "a Draft production order must not be able to spend materials").toBe(400);
+  });
+
   it("a production-owned requisition is invisible to the project list and vice versa, and legacy rows stay with Project", async () => {
     const db = client.db("tcs_erp");
 
@@ -469,9 +490,8 @@ describe("Material Requisition / Purchase Request are separated by owning depart
     expect(projectMr.statusCode, JSON.stringify(projectMr.body)).toBe(201);
     const projectMrId = (projectMr.body as { materialRequisition: { id: string } }).materialRequisition.id;
 
-    // ของฝ่ายผลิต (ออกจากใบสั่งผลิต)
-    const po = await call("POST", "/api/production-orders", { scopeOfWorkId });
-    const poId = (po.body as { productionOrder: { id: string } }).productionOrder.id;
+    // ของฝ่ายผลิต (ออกจากใบสั่งผลิตที่อนุมัติแล้ว)
+    const poId = await createApprovedProductionOrder();
     const prodMr = await call("POST", "/api/material-requisitions", { productionOrderId: poId });
     expect(prodMr.statusCode, JSON.stringify(prodMr.body)).toBe(201);
     const prodMrDoc = (prodMr.body as { materialRequisition: { id: string; ownerDepartment: string; projectId: string; productionOrderId: string } }).materialRequisition;
@@ -503,8 +523,7 @@ describe("Material Requisition / Purchase Request are separated by owning depart
   });
 
   it("a purchase request can also be raised straight from a production order", async () => {
-    const po = await call("POST", "/api/production-orders", { scopeOfWorkId });
-    const poId = (po.body as { productionOrder: { id: string } }).productionOrder.id;
+    const poId = await createApprovedProductionOrder();
     const res = await call("POST", "/api/purchase-requests", { productionOrderId: poId });
     expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
     const doc = (res.body as { purchaseRequest: { ownerDepartment: string; productionOrderId: string } }).purchaseRequest;

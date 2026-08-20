@@ -187,7 +187,13 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const ctx = await requireUser(req);
   const doc = await loadOrThrow(id);
   if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
-  if (doc.status === "Final") throw new HttpError(400, "เอกสารนี้อนุมัติแล้ว (Final) ไม่สามารถแก้ไขได้");
+  // ล็อกทั้ง Final และ PendingApproval — ระหว่างรออนุมัติต้องแก้ไม่ได้ ไม่งั้นผู้อนุมัติจะกดอนุมัติ
+  // เนื้อหาที่ต่างจากตอนที่ตรวจ (Scope of Work ล็อกสองสถานะนี้เหมือนกัน ดู scopeOfWorkHandler.ts)
+  if (doc.status !== "Draft") {
+    throw new HttpError(400, doc.status === "Final"
+      ? "เอกสารนี้อนุมัติแล้ว ไม่สามารถแก้ไขได้"
+      : "เอกสารนี้กำลังรออนุมัติ ต้องถอนการขออนุมัติก่อนจึงจะแก้ไขได้");
+  }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<JobOrderFields> = {};
@@ -265,7 +271,9 @@ export async function handleJobOrder(req: VercelRequest, res: VercelResponse): P
     return handleList(req, res);
   }
   if (parts.length === 1) return handleOne(req, res, parts[0]);
-  // finalize คงไว้เป็น alias ของ approve เพื่อความเข้ากันได้ย้อนหลัง
+  // finalize เป็น alias ของ approve — แต่ "ไม่" เข้ากันได้ย้อนหลังจริง: ผู้เรียกเดิมยิงตอนเอกสารยัง
+  // เป็นร่าง ซึ่งตอนนี้จะได้ 400 (ต้องส่งขออนุมัติก่อน) เก็บชื่อเดิมไว้เพื่อไม่ให้ URL หาย ไม่ใช่เพื่อ
+  // รักษาพฤติกรรมเดิม — พฤติกรรมเปลี่ยนโดยตั้งใจ
   if (parts.length === 2 && (parts[1] === "approve" || parts[1] === "finalize")) return handleApprove(req, res, parts[0], approvalConfig);
     if (parts.length === 2 && parts[1] === "submit-approval") return handleSubmitApproval(req, res, parts[0], approvalConfig);
     if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);

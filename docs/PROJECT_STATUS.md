@@ -14,6 +14,26 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-20i] Reviewed the Production module and fixed 9 defects — four of them critical.**
+  Done on the owner's own instruction to review the work afterwards. The worst was a **permission
+  leak**: `buildSimpleOwnershipClause()` and the new department filter both return a top-level `$or`,
+  and the list query spread them into one object, so the department clause silently overwrote the
+  ownership one — every user without `:viewAll` could read everyone else's Material Requisitions and
+  Purchase Requests. Also fixed: `toObjectId("")` throwing *after* a write had already landed on
+  production-owned documents (4 call sites); `roles.ts` containing **zero** `productionOrder:` grants,
+  so the whole ผลิต module was invisible even to Administrator (an earlier scripted edit had failed
+  silently on CRLF — the `2026-08-20h` "permissions added" claim was wrong); documents still editable
+  while awaiting approval, letting content change underneath the approver; and three FM-PD-02
+  signature blocks that could never be filled because they are signed *after* approval, now saved via
+  a dedicated non-Final-locked route. Raising an MR/PR from a Production Order now requires that order
+  to be Final and checks `productionOrder:view` — pinned by a new test, verified by removing the gate
+  and watching it fail. One finding was deliberately **not** fixed: single-document `GET` routes have
+  no ownership scoping, but that is the pre-existing pattern in all four sibling modules, so it is
+  logged in TODO.md for an explicit owner decision instead of changed unilaterally.
+  `tsc` (both configs) / `lint` (0 errors) / `build` / **252 tests** all clean; i18n parity 2,131.
+  Two existing tests failed on the new Final gate and were rewritten to walk the real approval
+  workflow rather than relaxed. See CHANGELOG.md 2026-08-20i.
+
 - ✅ **[2026-08-20h] Production (ผลิต) department module + approval workflow on four documents.**
   Built the new **ใบสั่งผลิต** (Production Order, FM-PD-02 — transcribed from a scanned form by
   extracting and rendering its embedded bitmap, since the PDF has no text layer), gave **ใบเบิก-คืนวัสดุ

@@ -207,7 +207,13 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const ctx = await requirePermission(req, "productionOrder:edit");
   const doc = await loadOrThrow(id);
   if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
-  if (doc.status === "Final") throw new HttpError(400, "ใบสั่งผลิตนี้อนุมัติแล้ว ไม่สามารถแก้ไขได้");
+  // ล็อกทั้ง Final และ PendingApproval — ระหว่างรออนุมัติต้องแก้ไม่ได้ ไม่งั้นผู้อนุมัติจะกดอนุมัติ
+  // เนื้อหาที่ต่างจากตอนที่ตรวจ (Scope of Work ล็อกสองสถานะนี้เหมือนกัน ดู scopeOfWorkHandler.ts)
+  if (doc.status !== "Draft") {
+    throw new HttpError(400, doc.status === "Final"
+      ? "เอกสารนี้อนุมัติแล้ว ไม่สามารถแก้ไขได้"
+      : "เอกสารนี้กำลังรออนุมัติ ต้องถอนการขออนุมัติก่อนจึงจะแก้ไขได้");
+  }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const set: Partial<ProductionOrderFields> = { updatedAt: nowIso(), updatedBy: ctx.user.id };
@@ -218,6 +224,32 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if (body.lines !== undefined) set.lines = sanitizeLines(body.lines);
   // ช่องเซ็น: ผู้อนุมัติแก้เองไม่ได้ผ่านทางนี้ — ระบบเติมให้ตอนกดอนุมัติเท่านั้น กันไม่ให้ปลอมลายเซ็น
   if (body.orderedBy !== undefined) set.orderedBy = sanitizeSignatory(body.orderedBy, "ผู้สั่งผลิต");
+  if (body.deliveredBy !== undefined) set.deliveredBy = sanitizeSignatory(body.deliveredBy, "ผู้ส่งมอบงาน");
+  if (body.receivedBy !== undefined) set.receivedBy = sanitizeSignatory(body.receivedBy, "ผู้ตรวจรับงาน");
+  if (body.costDeptBy !== undefined) set.costDeptBy = sanitizeSignatory(body.costDeptBy, "แผนกต้นทุน");
+
+  const productionOrders = await productionOrdersCollection();
+  await productionOrders.updateOne({ _id: id }, { $set: set });
+  res.status(200).json({ productionOrder: toClient(await loadOrThrow(id)) });
+}
+
+/**
+ * ช่องเซ็นหลังอนุมัติ — ผู้ส่งมอบงาน / ผู้ตรวจรับงาน / แผนกต้นทุน
+ *
+ * ตั้งใจไม่ติดล็อก Final เหมือน handleUpdate() เพราะบนฟอร์มจริงสามช่องนี้เซ็นกัน "หลัง" อนุมัติและ
+ * ทำงานเสร็จแล้ว ถ้าล็อกไปด้วยจะกรอกไม่ได้ตลอดไป — แนวเดียวกับ `POST /:id/return` ของใบเบิก-คืนวัสดุ
+ * ที่ยกเว้นการล็อกด้วยเหตุผลเดียวกัน (ของที่เหลือคืนหลังเบิกไปแล้ว)
+ *
+ * ผู้สั่งผลิต/ผู้อนุมัติ ไม่อยู่ในนี้: ผู้สั่งผลิตเป็นข้อมูลตอนสร้าง ส่วนผู้อนุมัติระบบเขียนเองตอนกดอนุมัติ
+ */
+async function handleSignatories(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "productionOrder:edit");
+  const doc = await loadOrThrow(id);
+  if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const set: Partial<ProductionOrderFields> = { updatedAt: nowIso(), updatedBy: ctx.user.id };
   if (body.deliveredBy !== undefined) set.deliveredBy = sanitizeSignatory(body.deliveredBy, "ผู้ส่งมอบงาน");
   if (body.receivedBy !== undefined) set.receivedBy = sanitizeSignatory(body.receivedBy, "ผู้ตรวจรับงาน");
   if (body.costDeptBy !== undefined) set.costDeptBy = sanitizeSignatory(body.costDeptBy, "แผนกต้นทุน");
@@ -254,7 +286,8 @@ export async function handleProductionOrder(req: VercelRequest, res: VercelRespo
   }
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
-  // finalize คงไว้เป็น alias ของ approve เพื่อความสอดคล้องกับเอกสารอื่น
+  if (parts.length === 2 && parts[1] === "signatories") return handleSignatories(req, res, parts[0]);
+  // finalize เป็น alias ของ approve — พฤติกรรมเปลี่ยนโดยตั้งใจ: ต้องผ่าน PendingApproval ก่อนเสมอ
   if (parts.length === 2 && (parts[1] === "approve" || parts[1] === "finalize")) return handleApprove(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "submit-approval") return handleSubmitApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);

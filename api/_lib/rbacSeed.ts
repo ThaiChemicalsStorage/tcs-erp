@@ -54,6 +54,15 @@ interface RbacMigration {
  */
 const RBAC_MIGRATIONS: RbacMigration[] = [
   {
+    // ใบสั่งผลิต (2026-08-20) — เพิ่ม 7 สิทธิ์เข้า defaultRoles แต่ฐานข้อมูลที่ provision ไปแล้ว
+    // มี role document อยู่ครบ syncDefaultRoles() จึงไม่แตะให้ ต้องมี migration นี้เท่านั้น
+    // ไม่งั้น Administrator บนเครื่องจริงจะเข้าเมนู "ผลิต" ไม่ได้เลย
+    id: "production-order-permissions-2026-08-20",
+    grants: {
+      administrator: ["productionOrder:view", "productionOrder:viewAll", "productionOrder:create", "productionOrder:edit", "productionOrder:finalize", "productionOrder:print", "productionOrder:delete"],
+    },
+  },
+  {
     // The Service module (2026-08-06) added 11 permissions to `defaultRoles`, but a provisioned
     // database's role documents were frozen at first-run — every module since scopeOfWork had
     // needed a manual Role Management pass to catch up. This is that pass, in code.

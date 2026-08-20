@@ -4,7 +4,59 @@
 
 ---
 
-## Session — 2026-08-20 (continued, absolute latest), Production department module end to end
+## Session — 2026-08-20 (continued, absolute latest), reviewing the Production module and fixing what it found
+
+### What happened
+The owner's instruction with the Production work was *"หลังจากเสร็จงานให้รีวิวโค้ดด้วยและแก้"* — review it
+afterwards and fix it. This is that review, over `3352c4e`…`bf6cb76`. It found **9 defects, four of
+them critical**, in code that had already passed `tsc`, `lint`, `build` and 251 tests. That gap is
+the main thing worth remembering from this session: the green gate said nothing about any of them.
+
+### The four that mattered
+- **A real permission leak.** Two filters that each return a top-level `$or` were combined with
+  object spread, so the second silently deleted the first. The code *reads* as "both apply". Every
+  user without `:viewAll` could see everyone else's requisitions. Now `$and`, with a comment saying
+  why, and RBAC.md warns about the pattern for whatever filter comes next.
+- **`toObjectId("")` throwing after the write.** Production-owned documents legitimately have
+  `projectId: ""`; four call sites still fed it to a lookup that threw — *after* the status change or
+  soft-delete had already been persisted, so the document mutated while the caller got a 500.
+- **The whole module was invisible.** `roles.ts` had zero `productionOrder:` entries. An earlier
+  scripted edit had no-op'd on the file's CRLF line endings and I recorded "permissions added" in the
+  changelog without checking the file. Needed both the `defaultRoles` grants *and* an
+  `RBAC_MIGRATIONS` entry, since `syncDefaultRoles()` never edits an existing role's array — a
+  fresh-install-only fix would have left production exactly as broken.
+- **Three signatures that could never be collected.** On the real FM-PD-02, ผู้ส่งมอบงาน/ผู้ตรวจรับงาน/
+  แผนกต้นทุน sign *after* the work is done, but approval locked the whole document, so those blocks
+  could only ever print blank. This one is only findable by thinking about how the paper form is
+  actually used — no test or type would have caught it.
+
+### Verification discipline
+Two existing tests failed on the new "a Draft production order cannot spend materials" gate. They
+were **rewritten to walk the real approval workflow**, not relaxed — the gate is the point. The new
+test pinning that gate was then verified by deleting the gate line, watching it fail with the right
+message, and restoring it. Final: `tsc` ×2 / `lint` 0 errors / `build` / **252 tests** / i18n parity
+2,131 keys each way.
+
+### Judgement call worth recording
+Finding #8 — single-document `GET` routes do no ownership scoping, so a guessed (sequential) id
+reads any document — is real, but it is the **existing pattern in all four sibling modules**, not
+something this work introduced. Tightening read scoping across four live modules changes behaviour
+for people who share document ids today. Logged in TODO.md for the owner to decide rather than
+changed unilaterally on the way to a commit.
+
+### Also cleared
+The standing "user-facing features need a What's New entry" rule had been missed twice: the whole
+ผลิต department, and (already logged in TODO) Product Stock + manual tax-invoice creation. Both now
+have Thai entries written for staff — what the feature does, not how it was built.
+
+### Still outstanding
+Unchanged from the previous entry and still the top item: **none of this has been clicked in a real
+browser.** Everything here is tests and type-checking. The FM-PD-02 print layout in particular has
+never been held up against the physical form.
+
+---
+
+## Session — 2026-08-20 (continued), Production department module end to end
 
 ### What was implemented
 The owner supplied the Production (ผลิต) department's spec plus a list of which documents need

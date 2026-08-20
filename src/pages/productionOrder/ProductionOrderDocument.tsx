@@ -3,7 +3,7 @@ import { ChevronRight, Loader2, Printer, Save, Trash2, Plus, CornerDownRight, He
 import {
   fetchProductionOrder, updateProductionOrder, deleteProductionOrder, logProductionOrderPrinted,
   submitProductionOrderApproval, approveProductionOrder, rejectProductionOrder, withdrawProductionOrderApproval,
-  blankProductionOrderLine,
+  blankProductionOrderLine, updateProductionOrderSignatories,
   type ProductionOrder, type ProductionOrderLine, type ProductionOrderUpdateFields,
 } from "../../lib/productionOrder";
 import { ProductionOrderPrintDocument } from "./ProductionOrderPrintDocument";
@@ -123,12 +123,38 @@ export function ProductionOrderDocument({
     </div>
   );
 
-  const signatoryRow = (label: string, key: "orderedBy" | "deliveredBy" | "receivedBy" | "costDeptBy") => (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {field(label, draft[key].name, (v) => setDraft({ ...draft, [key]: { ...draft[key], name: v } }))}
-      {field(t("productionOrderDoc.field.date"), draft[key].date, (v) => setDraft({ ...draft, [key]: { ...draft[key], date: v } }), "date")}
-    </div>
-  );
+  // ผู้ส่งมอบงาน/ผู้ตรวจรับงาน/แผนกต้นทุน เซ็นกันหลังอนุมัติและทำงานเสร็จ จึงกรอกได้แม้เอกสาร Final แล้ว
+  // (บันทึกผ่าน route แยก /signatories ที่ไม่ติดล็อก Final — ดู handleSignatories() ฝั่งเซิร์ฟเวอร์)
+  const postApprovalKeys = ["deliveredBy", "receivedBy", "costDeptBy"] as const;
+  const signatoryRow = (label: string, key: "orderedBy" | "deliveredBy" | "receivedBy" | "costDeptBy") => {
+    const alwaysEditable = (postApprovalKeys as readonly string[]).includes(key) && canEdit;
+    const enabled = editable || alwaysEditable;
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">{label}</label>
+          <input disabled={!enabled} value={draft[key].name} onChange={(e) => setDraft({ ...draft, [key]: { ...draft[key], name: e.target.value } })} className={inputCls} />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">{t("productionOrderDoc.field.date")}</label>
+          <input type="date" disabled={!enabled} value={draft[key].date} onChange={(e) => setDraft({ ...draft, [key]: { ...draft[key], date: e.target.value } })} className={inputCls} />
+        </div>
+      </div>
+    );
+  };
+
+  const saveSignatories = async () => {
+    setSaving(true);
+    try {
+      const updated = await updateProductionOrderSignatories(draft.id, {
+        deliveredBy: draft.deliveredBy, receivedBy: draft.receivedBy, costDeptBy: draft.costDeptBy,
+      });
+      setDoc(updated); setDraft(updated);
+      showToast(t("productionOrderDoc.saved"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorSave"));
+    } finally { setSaving(false); }
+  };
 
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
@@ -285,6 +311,16 @@ export function ProductionOrderDocument({
           {signatoryRow(t("productionOrderDoc.field.deliveredBy"), "deliveredBy")}
           {signatoryRow(t("productionOrderDoc.field.receivedBy"), "receivedBy")}
           {signatoryRow(t("productionOrderDoc.field.costDeptBy"), "costDeptBy")}
+
+          {/* หลังอนุมัติแล้วปุ่ม "บันทึกฉบับร่าง" ด้านบนหายไป สามช่องล่างจึงต้องมีปุ่มบันทึกของตัวเอง */}
+          {!editable && canEdit && (
+            <div className="pt-1">
+              <button onClick={() => void saveSignatories()} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+                {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("productionOrderDoc.saveSignatories")}
+              </button>
+              <p className="text-xs text-muted-foreground mt-1.5">{t("productionOrderDoc.saveSignatoriesHint")}</p>
+            </div>
+          )}
         </div>
       </div>
 

@@ -136,9 +136,11 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     ? { ownerDepartment: "production" }
     : { $or: [{ ownerDepartment: "project" }, { ownerDepartment: { $exists: false } }] };
   // เวลาระบุ projectId คือเช็คของโครงการนั้นโดยตรง ไม่ต้องกรองแผนกซ้ำ
+  // $and, not spread: buildSimpleOwnershipClause() also returns a $or, so spreading both
+  // would have the department clause silently overwrite the ownership one (a real leak).
   const filter = projectId
     ? { projectId, isDeleted: false, ...ownershipMatch }
-    : { isDeleted: false, ...ownershipMatch, ...departmentClause };
+    : { isDeleted: false, $and: [ownershipMatch, departmentClause] };
   const docs = await materialRequisitions.find(filter).sort({ updatedAt: -1 }).toArray();
   res.status(200).json({ materialRequisitions: docs.map(toSummary) });
 }
@@ -169,6 +171,10 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     const productionOrders = await productionOrdersCollection();
     const po = await productionOrders.findOne({ _id: productionOrderId });
     if (!po || po.isDeleted) throw new HttpError(404, "ไม่พบใบสั่งผลิต");
+    // ต้องอนุมัติใบสั่งผลิตก่อน จึงจะเบิกของ/ขอซื้อตามได้ — แนวเดียวกับที่ใบสั่งผลิตเองต้องมาจาก
+    // Scope of Work ที่อนุมัติแล้ว และใบฝั่งโครงการต้องมาจากรายการที่ยัง pending
+    if (po.status !== "Final") throw new HttpError(400, "ใบสั่งผลิตนี้ยังไม่ได้รับการอนุมัติ");
+    if (!roleHasPermission(ctx.role, "productionOrder:view")) throw new HttpError(403, "Forbidden");
     source = { projectId: "", scopeOfWorkId: po.scopeOfWorkId, jobCode: po.jobCode, customerName: po.customerCompanyName, productName: po.productName };
   } else {
     // Validates the item exists and is still "pending" BEFORE anything is inserted — see
@@ -254,7 +260,13 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const ctx = await requireUser(req);
   const doc = await loadOrThrow(id);
   if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
-  if (doc.status === "Final") throw new HttpError(400, "เอกสารนี้อนุมัติแล้ว (Final) ไม่สามารถแก้ไขได้");
+  // ล็อกทั้ง Final และ PendingApproval — ระหว่างรออนุมัติต้องแก้ไม่ได้ ไม่งั้นผู้อนุมัติจะกดอนุมัติ
+  // เนื้อหาที่ต่างจากตอนที่ตรวจ (Scope of Work ล็อกสองสถานะนี้เหมือนกัน ดู scopeOfWorkHandler.ts)
+  if (doc.status !== "Draft") {
+    throw new HttpError(400, doc.status === "Final"
+      ? "เอกสารนี้อนุมัติแล้ว ไม่สามารถแก้ไขได้"
+      : "เอกสารนี้กำลังรออนุมัติ ต้องถอนการขออนุมัติก่อนจึงจะแก้ไขได้");
+  }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<MaterialRequisitionFields> = {};
@@ -332,7 +344,7 @@ const approvalConfig: ApprovalConfig<MaterialRequisitionFields & { _id: string }
   writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
   // อนุมัติแล้วถือว่ารายการใน Project ต้นทางถูกจัดหาเรียบร้อย (เดิมทำตอน finalize)
   onApproved: async (_ctx, doc) => {
-    const itemId = await findProjectItemIdByLink(doc.projectId, "materialRequisitionId", doc._id);
+    const itemId = doc.projectId ? await findProjectItemIdByLink(doc.projectId, "materialRequisitionId", doc._id) : null;
     if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
   },
   respond: (res, doc) => res.status(200).json({ materialRequisition: toClient(doc) }),
@@ -354,7 +366,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
 
   const materialRequisitions = await materialRequisitionsCollection();
   await materialRequisitions.updateOne({ _id: id }, { $set: { isDeleted: true, updatedAt: nowIso(), updatedBy: ctx.user.id } });
-  const itemId = await findProjectItemIdByLink(doc.projectId, "materialRequisitionId", id);
+  const itemId = doc.projectId ? await findProjectItemIdByLink(doc.projectId, "materialRequisitionId", id) : null;
   if (itemId) await unlinkProjectItem(doc.projectId, itemId, "materialRequisitionId");
   await writeAuditEntry(ctx, "Material Requisition Deleted", `ลบใบเบิกและใบคืนวัสดุ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
   res.status(200).json({ ok: true });
@@ -380,7 +392,9 @@ export async function handleMaterialRequisition(req: VercelRequest, res: VercelR
   }
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "return") return handleReturn(req, res, parts[0]);
-  // finalize คงไว้เป็น alias ของ approve เพื่อความเข้ากันได้ย้อนหลัง
+  // finalize เป็น alias ของ approve — แต่ "ไม่" เข้ากันได้ย้อนหลังจริง: ผู้เรียกเดิมยิงตอนเอกสารยัง
+  // เป็นร่าง ซึ่งตอนนี้จะได้ 400 (ต้องส่งขออนุมัติก่อน) เก็บชื่อเดิมไว้เพื่อไม่ให้ URL หาย ไม่ใช่เพื่อ
+  // รักษาพฤติกรรมเดิม — พฤติกรรมเปลี่ยนโดยตั้งใจ
   if (parts.length === 2 && (parts[1] === "approve" || parts[1] === "finalize")) return handleApprove(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "submit-approval") return handleSubmitApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);

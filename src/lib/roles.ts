@@ -83,6 +83,15 @@ export const defaultRoles: Role[] = [
       "ar:cancel",
       "stock:view",
       "stock:adjust",
+      // ใบสั่งผลิต (ฝ่ายผลิต, 2026-08-20) — ให้ Administrator/Super Admin เท่านั้นโดยปริยาย
+      // เหมือนโมดูลโปรเจกต์: ฝ่ายผลิตต้องสร้าง role ของตัวเองผ่านหน้าจัดการบทบาท
+      "productionOrder:view",
+      "productionOrder:viewAll",
+      "productionOrder:create",
+      "productionOrder:edit",
+      "productionOrder:finalize",
+      "productionOrder:print",
+      "productionOrder:delete",
       // Project module (added 2026-08-18, Stage 2) — granted to Administrator/Super Admin only by
       // default, per the Stage 1 recommendation: none of the existing default roles (Sales/Approver/
       // Viewer/Service Engineer/Accounting User) belong to the Project/Store/Factory/Purchasing
