@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, Briefcase, Package2, Hammer, ShoppingCart,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, Briefcase, Package2, Hammer, ShoppingCart, Factory,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -52,6 +52,7 @@ const ProjectPage = lazy(() => import("./pages/project/ProjectPage").then((m) =>
 const MaterialRequisitionPage = lazy(() => import("./pages/materialRequisition/MaterialRequisitionPage").then((m) => ({ default: m.MaterialRequisitionPage })));
 const JobOrderPage = lazy(() => import("./pages/jobOrder/JobOrderPage").then((m) => ({ default: m.JobOrderPage })));
 const PurchaseRequestPage = lazy(() => import("./pages/purchaseRequest/PurchaseRequestPage").then((m) => ({ default: m.PurchaseRequestPage })));
+const ProductionOrderPage = lazy(() => import("./pages/productionOrder/ProductionOrderPage").then((m) => ({ default: m.ProductionOrderPage })));
 const ServicePage = lazy(() => import("./pages/service/ServicePage").then((m) => ({ default: m.ServicePage })));
 const ServiceTemplateManagement = lazy(() => import("./pages/service/ServiceTemplateManagement").then((m) => ({ default: m.ServiceTemplateManagement })));
 const AccountingPage = lazy(() => import("./pages/accounting/AccountingPage").then((m) => ({ default: m.AccountingPage })));
@@ -130,7 +131,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "products" | "stock" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "productionOrder" | "products" | "stock" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -183,6 +184,7 @@ const navItems: NavItem[] = [
   { key: "materialRequisition", icon: Package2, labelKey: "nav.materialRequisition", permission: "materialRequisition:view" },
   { key: "jobOrder", icon: Hammer, labelKey: "nav.jobOrder", permission: "jobOrder:view" },
   { key: "purchaseRequest", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
+  { key: "productionOrder", icon: Factory, labelKey: "nav.productionOrder", permission: "productionOrder:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "stock", icon: Boxes, labelKey: "nav.stock", permission: "stock:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
@@ -198,6 +200,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
   { labelKey: "nav.group.accounting", keys: ["accountingDashboard", "accounting", "arDeposit", "arBilling", "arReceipt", "arTaxInvoice", "arMonthly"] },
   { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest"] },
+  { labelKey: "nav.group.production", keys: ["productionOrder"] },
   { labelKey: "nav.group.inventory", keys: ["products", "stock"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
@@ -221,6 +224,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   materialRequisition: "nav.materialRequisition",
   jobOrder: "nav.jobOrder",
   purchaseRequest: "nav.purchaseRequest",
+  productionOrder: "nav.productionOrder",
   products: "nav.products",
   stock: "nav.stock",
   customers: "nav.customers",
@@ -297,6 +301,7 @@ export default function App() {
   const [materialRequisitionDeepLinkId, setMaterialRequisitionDeepLinkId] = useState<string | null>(null);
   const [jobOrderDeepLinkId, setJobOrderDeepLinkId] = useState<string | null>(null);
   const [purchaseRequestDeepLinkId, setPurchaseRequestDeepLinkId] = useState<string | null>(null);
+  const [productionOrderDeepLinkId, setProductionOrderDeepLinkId] = useState<string | null>(null);
   const [serviceReportDeepLinkId, setServiceReportDeepLinkId] = useState<string | null>(null);
   const [templateCreateForJobType, setTemplateCreateForJobType] = useState<{ jobTypeCode: string; jobTypeName: string; seq: number } | null>(null);
   const templateCreateSeq = useRef(0);
@@ -678,6 +683,11 @@ export default function App() {
   const canPrintJobOrder = hasPermission(currentUser, roles, "jobOrder:print");
   const canDeleteJobOrder = hasPermission(currentUser, roles, "jobOrder:delete");
   const canCreatePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:create");
+  const canCreateProductionOrder = hasPermission(currentUser, roles, "productionOrder:create");
+  const canEditProductionOrder = hasPermission(currentUser, roles, "productionOrder:edit");
+  const canApproveProductionOrder = hasPermission(currentUser, roles, "productionOrder:finalize");
+  const canPrintProductionOrder = hasPermission(currentUser, roles, "productionOrder:print");
+  const canDeleteProductionOrder = hasPermission(currentUser, roles, "productionOrder:delete");
   const canEditPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:edit");
   const canFinalizePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:finalize");
   const canPrintPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:print");
@@ -899,6 +909,8 @@ export default function App() {
               ? <JobOrderPage currentUserId={currentUser.id} canEdit={canEditJobOrder} canFinalize={canFinalizeJobOrder} canPrint={canPrintJobOrder} canDelete={canDeleteJobOrder} canCreate={canCreateJobOrder} initialJobOrderId={jobOrderDeepLinkId} onJobOrderIdConsumed={() => setJobOrderDeepLinkId(null)} />
               : effectiveNav === "purchaseRequest"
               ? <PurchaseRequestPage currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
+              : effectiveNav === "productionOrder"
+              ? <ProductionOrderPage canEdit={canEditProductionOrder} canApprove={canApproveProductionOrder} canPrint={canPrintProductionOrder} canDelete={canDeleteProductionOrder} canCreate={canCreateProductionOrder} initialProductionOrderId={productionOrderDeepLinkId} onProductionOrderIdConsumed={() => setProductionOrderDeepLinkId(null)} />
               : effectiveNav === "service"
               ? <ServicePage currentUserId={currentUser.id} company={company} canCreate={canCreateService} canEdit={canEditService} canComplete={canCompleteService} canDelete={canDeleteService} canPrint={canPrintService} initialServiceReportId={serviceReportDeepLinkId} onServiceReportIdConsumed={() => setServiceReportDeepLinkId(null)} />
               : effectiveNav === "serviceTemplates"

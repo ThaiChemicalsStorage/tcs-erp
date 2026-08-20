@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import {
   type JobOrder, type JobOrderLine, type JobOrderUpdateFields,
   fetchJobOrder, updateJobOrder, finalizeJobOrder, logJobOrderPrinted, deleteJobOrder, blankJobOrderLine,
+  submitJobOrderApproval, approveJobOrder, rejectJobOrder, withdrawJobOrderApproval,
 } from "../../lib/jobOrder";
+import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -204,8 +206,8 @@ export function JobOrderDocument({
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
         <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{doc.id}</span>
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${isDraftStatus ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
-          {isDraftStatus ? t("materialRequisition.status.draft") : t("materialRequisition.status.final")}
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${doc.status === "Draft" ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20" : doc.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
+          {doc.status === "Draft" ? t("materialRequisition.status.draft") : doc.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
         </span>
 
         <div data-tour="jodoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
@@ -220,11 +222,17 @@ export function JobOrderDocument({
               {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("jobOrderDoc.saveDraft")}
             </button>
           )}
-          {isDraftStatus && canFinalize && (
-            <button onClick={() => setConfirmFinalize(true)} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors">
-              <CheckCircle2 size={13} /> {t("jobOrderDoc.finalize")}
-            </button>
-          )}
+          <DocumentApprovalActions
+            status={doc.status}
+            canEdit={canEdit}
+            canApprove={canFinalize}
+            onSubmit={() => submitJobOrderApproval(doc.id)}
+            onApprove={() => approveJobOrder(doc.id)}
+            onReject={(c) => rejectJobOrder(doc.id, c)}
+            onWithdraw={() => withdrawJobOrderApproval(doc.id)}
+            onUpdated={(updated) => { setDoc(updated); setDraft(updated); }}
+            showToast={showToast}
+          />
           {canDelete && (
             <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
               <Trash2 size={13} /> {t("jobOrderDoc.delete")}
@@ -234,6 +242,7 @@ export function JobOrderDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:hidden">
+        <RejectionNotice comment={doc.rejectionComment ?? ""} />
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("jobOrderDoc.title")}</h1>

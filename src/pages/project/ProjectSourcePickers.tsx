@@ -36,9 +36,14 @@ function SkeletonRows() {
  * `POST /api/projects` allows several projects per scope — but creating a second one by accident is
  * far more likely to be a mistake than intent, so the UI steers away from it while staying honest).
  */
-export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect }: {
+export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiplePerScope = false }: {
   onClose: () => void;
   onSelect: (scopeOfWorkId: string) => void;
+  /**
+   * ปิดการเช็ค "มีโครงการแล้ว" — ใช้กับใบสั่งผลิต ซึ่งงานหนึ่งออกได้หลายใบตามจำนวนสินค้าที่ต้องผลิต
+   * (ต่างจากโครงการที่ปกติมีใบเดียวต่อหนึ่งงาน) ตัวเช็คนั้นยิง API ต่อ 1 งาน จึงข้ามไปเลยเมื่อไม่ใช้
+   */
+  allowMultiplePerScope?: boolean;
 }) {
   const { t } = useI18n();
   const [scopes, setScopes] = useState<ScopeOfWorkListItem[]>([]);
@@ -57,6 +62,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect }: {
         setLoading(false);
         // แต่ละงานมีโครงการอยู่แล้วหรือยัง — ยิงทีละใบ (ไม่มี endpoint รวม) จึงโหลดหลังแสดงรายการแล้ว
         // เพื่อไม่ให้หน่วงการเปิดกล่อง; ระหว่างรอ ปุ่มยังกดได้ตามปกติ
+        if (allowMultiplePerScope) return;
         const pairs = await Promise.all(list.map(async (s) => {
           try {
             const projects = await fetchProjectsByScope(s.id);
@@ -67,7 +73,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect }: {
       })
       .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
     return () => { cancelled = true; };
-  }, []);
+  }, [allowMultiplePerScope]);
 
   const q = search.trim().toLowerCase();
   const filtered = scopes.filter((s) => !q
@@ -100,7 +106,7 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect }: {
             ) : (
               <div className="space-y-1.5">
                 {filtered.map((s) => {
-                  const taken = Boolean(existingByScope[s.id]);
+                  const taken = !allowMultiplePerScope && Boolean(existingByScope[s.id]);
                   // เฉพาะงานที่อนุมัติแล้ว (Final) เท่านั้นที่เปิดโครงการได้ — ตรงกับด่านฝั่งเซิร์ฟเวอร์ใน
                   // handleCreate() (api/_lib/projectHandler.ts) ซึ่งเป็นตัวบังคับจริง
                   const notApproved = s.status !== "Final";
