@@ -1,5 +1,33 @@
 # Module: Project
 
+## Audited against the owner's real spec (2026-08-20)
+
+The owner supplied "การทำงานของโปรเจค" in full for the first time. What the audit confirmed as
+**correct**: the 3 sourcing branches (`requisition`/`jobOrder`/`purchaseRequest`) map 1:1 to spec
+points 2/3/4, and — the spec's own bolded requirement, *"กรณีใช้ของไม่หมด ให้นำของที่เหลือมาคืนสโตร์
+โดยใช้เอกสารใบเบิก-คืนวัสดุใบเดิม"* — leftover material is genuinely returned on the **same** document:
+a per-line `returnQty` plus `POST /api/material-requisitions/:id/return`, which deliberately carries
+no `status === "Final"` lock (the plain `PATCH` does), so returns still work after issuance.
+
+**Gaps found, still open** (tracked in [`../TODO.md`](../TODO.md) High Priority):
+- **Cost Control is entirely absent from the code.** The spec's precondition "เมื่อโปรเจคได้รับ Scope
+  of work, **Cost Control** แล้ว" is unmodelled — `Project` has no cost/budget field of any kind.
+  Needs the owner to define what Cost Control *is* as data before it can be built.
+- **"แจกจ่ายงานให้น้องๆ ในทีม" is unmodelled** — `ProjectItem` has no assignee field.
+- **The module gives no pointer to ใบส่งมอบงาน.** Correctly not rebuilt (it's the Delivery Order
+  module — see the removal note below), but nothing inside the Project pages links to it, so a user
+  following the spec's workflow has no path there.
+- **`POST /api/projects` does not require the Scope of Work to be finalized** — a Draft scope can
+  spawn a project.
+- **`POST /:id/return` has no test coverage and no quantity validation** — a return larger than what
+  was withdrawn is accepted, and nothing reconciles it against the withdrawal quantities.
+- **Reference-PDF fidelity is unverifiable from this repo** — all 6 named PDFs live under the
+  gitignored `reference/`, so the transcribed field sets can't be re-checked against the real forms.
+
+**Built the same day** in response: a "+ สร้าง" button with a source picker on all 4 standalone pages
+(previously every document could only be created from inside a Project's item table) — see
+"Creating from each document's own page" below and CHANGELOG.md 2026-08-20e.
+
 ## Status: ✅ All 4 document types built and working — Project, Material Requisition (Stage 4), Job Order + Purchase Request (Stage 5). Fully i18n-wired (Stage 5). A 5th document, Work Handover Note, was built 2026-08-19 and **removed 2026-08-20** — confirmed redundant with the pre-existing Delivery Order module (FM-SL-05), per direct business-side confirmation. See CHANGELOG.md.
 
 Manages the workflow a Project follows once its Scope of Work + Cost Control are finalized:
@@ -129,6 +157,14 @@ from, just filtered, not a second endpoint. **The 4 category names and 82 produc
 business/catalog data, deliberately never i18n-wired** — see "i18n" below.
 
 ## i18n (added Stage 5, 2026-08-18)
+
+> ⚠️ **Correction (2026-08-20)**: the "all 4 modules" claim below was **not** true as written — the
+> module's single entry point, the "สร้าง/เปิดโครงการ" button on `ScopeOfWorkDocument.tsx` (and its
+> error toast), was still hardcoded Thai, so in English mode the only way into the whole Project
+> module rendered in Thai. Found while auditing the module against the owner's real spec; fixed the
+> same day with `scopeOfWorkDoc.openProject`/`.createProject`/`.createProjectFailed`. The lesson: the
+> Stage 5 parity script compared th-vs-en *within the dictionary*, which cannot catch a string that
+> never reached the dictionary at all. See CHANGELOG.md 2026-08-20e.
 
 All 4 modules' interactive UI now goes through `useI18n()`'s `t()`, following the exact convention
 already used by Quotation/Scope of Work/Delivery Order — dotted keys per module/screen
@@ -366,3 +402,33 @@ fixed); print documents and catalog/checklist content correctly stay fixed-Thai 
   itself still needs a manual look.
 - **Project's `status` has no automatic transition logic** — purely user-set via a dropdown.
 - **No Global Search integration** — none of these 4 document types have a search result group yet.
+
+## Creating from each document's own page (added 2026-08-20)
+
+Direct request: *"อยากให้มันสามารถกดสร้างในหน้าของตัวเองได้เลย ตอนกดสร้างก็ขึ้นมาให้เลือกว่าจะมาจากใบไหน"*.
+Until this pass every Project-module document could **only** be created from inside a Project's item
+table (`ProjectItemsEditor.tsx`'s per-row buttons); the 4 standalone sidebar pages were browse-only.
+
+`src/pages/project/ProjectSourcePickers.tsx` adds two dialogs, both following the search-and-pick
+shape `AccountingPage.tsx`'s own `ScopeOfWorkPickerDialog` established:
+
+- **`ScopeOfWorkSourcePickerDialog`** (used by `ProjectPage`) — pick a Scope of Work to open a
+  Project from. A scope that already has a project is rendered **disabled with a "มีโครงการแล้ว"
+  label rather than hidden**, so the user can see why it isn't selectable. (`POST /api/projects`
+  itself permits several projects per scope; the UI steers away from that without pretending the
+  server forbids it.) The has-a-project lookup runs per scope after the list renders, so opening the
+  dialog is never blocked on it.
+- **`ProjectItemSourcePickerDialog`** (used by the Material Requisition / Job Order / Purchase
+  Request pages) — two steps in one dialog, Project → item, because the create API needs both ids.
+  Only `itemStatus === "pending"` items are offered, mirroring the server's own
+  `loadPendingProjectItemOrThrow()` rule so the user can never pick a row that would 400. An item
+  already pre-assigned to a *different* branch still appears (creating overwrites `sourcingMethod`,
+  which the server allows) but is labelled with its current assignment so the choice is informed.
+
+The 4 list components gained an optional `headerAction?: ReactNode` prop — each Page owns its dialog
+state while the List stays a presentational component. **No API or data-model change**: creation
+still goes through the same `POST /api/{material-requisitions,job-orders,purchase-requests}` with
+`{projectId, itemId}`, and each page's button is gated on that document's own `:create` permission.
+
+Verified via `tsc` (both configs)/`lint`/`build`/`test` (238/238). **Not yet click-tested in a real
+browser** — tracked in [`../TODO.md`](../TODO.md).

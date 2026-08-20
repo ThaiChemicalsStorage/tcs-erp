@@ -18,7 +18,7 @@ import {
 } from "./arCalculations.js";
 import { bahtText } from "../../src/lib/quotes.js";
 import { nowIso } from "../../src/lib/products.js";
-import { applyStockMovement } from "./stockHandler.js";
+import { applyStockMovement, assertProductsHaveStock } from "./stockHandler.js";
 
 /**
  * Accounts Receivable API (added 2026-08-17, Phase 1 — see docs/MODULES/Accounting.md for the full
@@ -77,6 +77,14 @@ async function loadTotalContractValueExVat(scope: WithId<ScopeOfWorkFields>): Pr
   return { total: round2(total), quote };
 }
 
+/** Whether a Scope of Work payment installment is the deposit/down-payment one — matched by label,
+ * since `ScopeOfWorkPaymentInstallment` (src/lib/scopeOfWork.ts) carries no flag of its own.
+ * Single source of truth for the rule: `getOrCreateMilestone()` freezes it onto the milestone as
+ * `isDownPayment`, and `handleDashboard()` re-applies it to scopes that have no milestone yet. */
+function isDownPaymentInstallment(label: string): boolean {
+  return ["down payment", "deposit", "เงินมัดจำ", "ชำระเงินล่วงหน้า"].includes(label.trim().toLowerCase());
+}
+
 /** Lazily creates (or returns the existing) ar_milestones row for a Scope of Work installment — the
  * first time a user opens that installment's Issue Billing Set wizard, per decision #2 (never
  * proactively for every installment in the system). `pct`/`label`/`paymentType`/`days` and
@@ -94,7 +102,7 @@ async function getOrCreateMilestone(
   const installment = scope.paymentConditions.installments.find((i) => i.id === installmentId);
   if (!installment) throw new HttpError(404, "ไม่พบงวดการชำระเงินนี้ใน Scope of Work");
   const { total } = await loadTotalContractValueExVat(scope);
-  const isDownPayment = ["down payment", "deposit", "เงินมัดจำ", "ชำระเงินล่วงหน้า"].includes(installment.label.trim().toLowerCase());
+  const isDownPayment = isDownPaymentInstallment(installment.label);
 
   const now = nowIso();
   const doc: ArMilestoneFields = {
@@ -307,8 +315,19 @@ const REQUIRED_CHECKLIST_FOR: Record<ArWorkClassification, ArChecklistKey[]> = {
   contract: ["poCopy", "deliveryNote"],
 };
 
+/**
+ * งวดมัดจำไม่ต้องมีใบส่งมอบงานที่ลูกค้าเซ็น — ตาม Flow การทำงานของบัญชี-รับ เคสที่ 1 บิลมัดจำออกได้
+ * ทันที "หลังจากได้ใบ Scope of work จากฝ่ายขายแล้ว" ยังไม่มีการส่งมอบอะไรให้เซ็นรับ (ต่างจากเคสงานฝ่าย
+ * ผลิต/ฝ่ายโครงการ ที่ต้องได้ใบส่งมอบงานเซ็นกลับมาก่อนจึงออก IV ได้)
+ *
+ * A deposit milestone is exempt from the signed-delivery-note requirement: per the owner's
+ * "Flow การทำงานของบัญชี-รับ" case 1, the deposit invoice is issued as soon as Sales hands over the
+ * Scope of Work — nothing has been delivered yet, so requiring proof of delivery would force staff
+ * to tick a box asserting something untrue. Cases 2/3 (production/project work) still require it.
+ */
 function checklistIsComplete(milestone: WithId<ArMilestoneFields>): boolean {
-  const required = REQUIRED_CHECKLIST_FOR[milestone.workClassification];
+  const required = REQUIRED_CHECKLIST_FOR[milestone.workClassification]
+    .filter((key) => !(milestone.isDownPayment && key === "deliveryNote"));
   return required.every((key) => milestone.checklistState[key] === true);
 }
 
@@ -722,6 +741,16 @@ async function handleStockDeduction(req: VercelRequest, res: VercelResponse, id:
     .filter((l: { productId: string; qty: number }) => l.productId && Number.isFinite(l.qty) && l.qty > 0);
   if (lines.length === 0) throw new HttpError(400, "กรุณาเลือกสินค้าและระบุจำนวนอย่างน้อย 1 รายการ");
 
+  // The loop below is not a transaction — a line that fails halfway through would leave the earlier
+  // lines permanently cut while the caller sees only an error and no audit entry is written. Two
+  // lines for the SAME product also have to be checked against one shared balance, not twice
+  // against the full one. So collapse duplicates and pre-check every product's balance up front;
+  // applyStockMovement()'s own atomic `$gte` filter still guards the (much narrower) race window
+  // between this check and the write.
+  const qtyByProductId = new Map<string, number>();
+  for (const line of lines) qtyByProductId.set(line.productId, (qtyByProductId.get(line.productId) ?? 0) + line.qty);
+  await assertProductsHaveStock(qtyByProductId);
+
   const movements: (StockMovementFields & { id: string })[] = [];
   for (const line of lines) {
     const { movement } = await applyStockMovement({
@@ -767,8 +796,10 @@ async function handleDocumentCancel(req: VercelRequest, res: VercelResponse, id:
     { $set: { status: "cancelled", cancelledReason: reason, cancelledBy: ctx.user.id, cancelledAt: now, updatedAt: now, updatedBy: ctx.user.id } },
   );
   // Cancelling the receipt that closed a non-deposit milestone reopens it — otherwise the job would
-  // stay "จบ" with no active receipt backing that state.
-  if (doc.docType === "RE") {
+  // stay "จบ" with no active receipt backing that state. A receipt issued against a manually-created
+  // tax invoice has no milestone at all (milestoneId "") and toObjectId("") throws, so the lookup
+  // must be skipped entirely for it — same guard handleIssueReceipt() above already carries.
+  if (doc.docType === "RE" && doc.milestoneId) {
     const milestones = await arMilestonesCollection();
     const milestone = await milestones.findOne({ _id: toObjectId(doc.milestoneId) });
     if (milestone && !milestone.isDownPayment && milestone.billingStatus === "closed") {
@@ -872,7 +903,9 @@ async function handleDashboard(req: VercelRequest, res: VercelResponse) {
       { billingStatus: 1, isDownPayment: 1, scopeOfWorkId: 1 },
     ).toArray(),
     (await scopeOfWorksCollection()).find({ isDeleted: { $ne: true } })
-      .project<{ _id: unknown; scopeNumber: string; quotationSalesperson?: string }>({ scopeNumber: 1, quotationSalesperson: 1 }).toArray(),
+      .project<{ _id: unknown; scopeNumber: string; quotationSalesperson?: string; paymentConditions?: { installments?: { label?: string }[] } }>(
+        { scopeNumber: 1, quotationSalesperson: 1, "paymentConditions.installments.label": 1 },
+      ).toArray(),
   ]);
 
   // พนักงานขาย ผูกผ่าน scopeOfWorkId -> ScopeOfWork.quotationSalesperson (snapshot จากใบเสนอราคาต้นทาง)
@@ -904,10 +937,11 @@ async function handleDashboard(req: VercelRequest, res: VercelResponse) {
   const agingInvoices = outstandingInvoices
     .map((d) => {
       const daysOverdue = Math.round((now - new Date(`${d.dueDate}T00:00:00Z`).getTime()) / 86_400_000);
+      // The last bucket's `max` is Infinity, so findIndex() always matches — no -1 fallback needed.
       const bucketIndex = AGING_BUCKETS.findIndex((b) => daysOverdue <= b.max);
-      const bucket = AGING_BUCKETS[bucketIndex === -1 ? AGING_BUCKETS.length - 1 : bucketIndex];
-      agingBucketCounts[bucketIndex === -1 ? AGING_BUCKETS.length - 1 : bucketIndex].count += 1;
-      agingBucketCounts[bucketIndex === -1 ? AGING_BUCKETS.length - 1 : bucketIndex].amount += d.netTotal;
+      const bucket = AGING_BUCKETS[bucketIndex];
+      agingBucketCounts[bucketIndex].count += 1;
+      agingBucketCounts[bucketIndex].amount += d.netTotal;
       return {
         id: String(d._id), docNo: d.docNo, docType: d.docType as "AR" | "IV",
         scopeOfWorkId: d.scopeOfWorkId, scopeNumber: scopeNumberById.get(d.scopeOfWorkId) ?? "",
@@ -919,7 +953,13 @@ async function handleDashboard(req: VercelRequest, res: VercelResponse) {
     .slice(0, 30);
 
   const billedDepositScopeIds = new Set(taxInvoices.filter((d) => d.docType === "AR").map((d) => d.scopeOfWorkId));
-  const depositNotBilledJobs = scopes.filter((s) => !billedDepositScopeIds.has(String(s._id))).length;
+  // Only jobs that actually HAVE a deposit installment can be "deposit not billed" — counting every
+  // job without an AR document would permanently include every full-payment-on-completion job,
+  // which can never have one. Same label rule getOrCreateMilestone() freezes as `isDownPayment`.
+  const depositNotBilledJobs = scopes.filter((s) =>
+    (s.paymentConditions?.installments ?? []).some((i) => isDownPaymentInstallment(i.label ?? ""))
+    && !billedDepositScopeIds.has(String(s._id)),
+  ).length;
 
   const billingFunnelCounts = new Map<ArBillingStatus, number>(BILLING_STATUS_ORDER.map((s) => [s, 0]));
   for (const m of milestones) billingFunnelCounts.set(m.billingStatus, (billingFunnelCounts.get(m.billingStatus) ?? 0) + 1);

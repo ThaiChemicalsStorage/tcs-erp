@@ -56,6 +56,9 @@ export function StockPage({
   const movementsKey = `${historyProduct?.id ?? ""}#${historyRetryToken}`;
   const currentMovements = movementsResult?.key === movementsKey ? movementsResult : null;
   const loadingMovements = currentMovements === null;
+  // ต้องแยกสถานะ "โหลดพัง" ออกจาก "ไม่มีประวัติ" — ไม่งั้นรอบที่ fetch ไม่สำเร็จจะขึ้นข้อความว่า
+  // ยังไม่มีประวัติการปรับสต๊อก ซึ่งอ่านเหมือนข้อมูลจริงทั้งที่แค่โหลดไม่ได้ (pattern เดียวกับ ArMonthlyReportPage)
+  const movementsError = currentMovements?.error === true;
   const movements = currentMovements?.movements ?? [];
 
   const totalUnits = activeProducts.reduce((sum, p) => sum + p.stockQty, 0);
@@ -190,7 +193,17 @@ export function StockPage({
               {movements.length === 0 && (
                 <tr>
                   <td colSpan={historyProduct ? 5 : 6} className="text-center text-xs text-muted-foreground py-10">
-                    {loadingMovements ? t("stock.history.loading") : t("stock.history.empty")}
+                    {loadingMovements ? t("stock.history.loading") : movementsError ? (
+                      <span className="inline-flex items-center gap-2">
+                        {t("stock.toast.loadHistoryFailed")}
+                        <button
+                          onClick={() => setHistoryRetryToken((n) => n + 1)}
+                          className="px-2 py-1 border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+                        >
+                          {t("stock.history.retry")}
+                        </button>
+                      </span>
+                    ) : t("stock.history.empty")}
                   </td>
                 </tr>
               )}

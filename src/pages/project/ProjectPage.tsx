@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { type ProjectListItem, fetchAllProjects } from "../../lib/project";
+import { Plus } from "lucide-react";
+import { type ProjectListItem, fetchAllProjects, createProjectFromScope } from "../../lib/project";
 import { ProjectList } from "./ProjectList";
 import { ProjectDocument } from "./ProjectDocument";
+import { ScopeOfWorkSourcePickerDialog } from "./ProjectSourcePickers";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
+import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 
 // หน้าจัดการโครงการแบบแยกอิสระ สลับระหว่างมุมมองรายการและรายละเอียดของแต่ละโครงการ
@@ -12,6 +15,7 @@ export function ProjectPage({
   currentUserId,
   canEdit,
   canDelete,
+  canCreate,
   canCreateMaterialRequisition,
   canCreateJobOrder,
   canCreatePurchaseRequest,
@@ -24,6 +28,7 @@ export function ProjectPage({
   currentUserId: string;
   canEdit: boolean;
   canDelete: boolean;
+  canCreate: boolean;
   canCreateMaterialRequisition: boolean;
   canCreateJobOrder: boolean;
   canCreatePurchaseRequest: boolean;
@@ -39,7 +44,21 @@ export function ProjectPage({
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const toast = useToast();
+
+  // สร้างโครงการจากหน้านี้ได้เลย โดยเลือก Scope of Work ต้นทางเอง (เดิมสร้างได้จากหน้า Scope of Work
+  // เท่านั้น) — ตามคำขอ 2026-08-20 "กดสร้างในหน้าของตัวเองได้เลย ตอนกดสร้างก็ขึ้นมาให้เลือกว่าจะมาจากใบไหน"
+  const handleCreateFromScope = async (scopeOfWorkId: string) => {
+    try {
+      const project = await createProjectFromScope(scopeOfWorkId);
+      setPickerOpen(false);
+      openProject(project.id);
+    } catch (err) {
+      setPickerOpen(false);
+      toast.show(err instanceof ApiError ? err.message : t("project.loadError"));
+    }
+  };
 
   const loadList = () => {
     setLoading(true);
@@ -129,7 +148,25 @@ export function ProjectPage({
 
   return (
     <>
-      <ProjectList projects={projects} currentUserId={currentUserId} onOpen={openProject} />
+      <ProjectList
+        projects={projects}
+        currentUserId={currentUserId}
+        onOpen={openProject}
+        headerAction={canCreate ? (
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+          >
+            <Plus size={15} /> {t("project.createBtn")}
+          </button>
+        ) : undefined}
+      />
+      {pickerOpen && (
+        <ScopeOfWorkSourcePickerDialog
+          onClose={() => setPickerOpen(false)}
+          onSelect={(scopeOfWorkId) => void handleCreateFromScope(scopeOfWorkId)}
+        />
+      )}
       <Toast message={toast.message} />
     </>
   );

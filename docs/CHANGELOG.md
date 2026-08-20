@@ -4,7 +4,178 @@
 
 ---
 
-## 2026-08-20c (absolute latest) — Home-screen icon ("Add to Home Screen") — a Web App Manifest, no app store needed
+## 2026-08-20e (absolute latest) — Audited both modules against the owner's real spec; Project gets its own "+ สร้าง" flows
+
+**Why**: The owner supplied the full business spec for both live workstreams for the first time —
+the 4 accounting documents + "Flow การทำงานของบัญชี-รับ" (3 cases) + 2 Express improvement requests,
+and the Project department's 4 documents + "การทำงานของโปรเจค" (3 sourcing branches) — and asked
+whether what was built actually matches. Audited both against real code, then fixed the mismatches
+and built the one thing explicitly requested.
+
+**Audit result — what already matched**: all 4 accounting document types and their AR-vs-IV case
+branching; both Express improvement requests (the deposit-billed alert, and the monthly document
+summary carrying doc no./company/date/count/totals/VAT, printable); the Project module's 3 sourcing
+branches mapping 1:1 to spec points 2/3/4; and — the spec's own bolded requirement — leftover
+material returned **on the same original ใบเบิก-คืนวัสดุ**, verified as a per-line `returnQty` plus a
+`POST /:id/return` route that deliberately carries no `status === "Final"` lock (the plain `PATCH`
+does), so returns still work after the document is issued.
+
+**Fixed — deposit milestones no longer require a signed delivery note** (`api/_lib/arHandler.ts`
+`checklistIsComplete()`, mirrored client-side in `AccountingPage.tsx`'s `alwaysRequired`): the
+checklist required `deliveryNote` ("ใบส่งมอบงาน/ใบส่งสินค้า ที่มีลายเซ็นลูกค้า") for **every**
+milestone including the deposit one, but spec case 1 issues the deposit invoice as soon as Sales
+hands over the Scope of Work — nothing has been delivered yet, so staff were forced to tick a box
+asserting something untrue in order to bill. Cases 2/3 (production/project work) still require it.
+2 new tests in `tests/api/arReceiptWorkflow.test.ts`; **verified the positive one genuinely fails
+against the pre-fix code** before keeping it.
+
+**Fixed — the Project module's only entry point rendered in Thai in English mode**
+(`ScopeOfWorkDocument.tsx`): the "สร้าง/เปิดโครงการ" button and its error toast were hardcoded Thai,
+while the Delivery Order button on the line immediately above correctly used `t()`. Added
+`scopeOfWorkDoc.openProject`/`.createProject`/`.createProjectFailed` (th+en). This contradicted
+`docs/MODULES/Project.md`'s own claim of full i18n coverage — corrected there too.
+
+**Built — "+ สร้าง" with a source picker on all 4 Project pages** (the explicit request: "อยากให้มัน
+สามารถกดสร้างในหน้าของตัวเองได้เลย ตอนกดสร้างก็ขึ้นมาให้เลือกว่าจะมาจากใบไหน"). Every Project-module
+document could previously **only** be created from inside a Project's item table; the 4 standalone
+sidebar pages were browse-only with no create button at all. New
+`src/pages/project/ProjectSourcePickers.tsx` exports two dialogs, same search-and-pick shape as
+`AccountingPage.tsx`'s own `ScopeOfWorkPickerDialog`:
+- `ScopeOfWorkSourcePickerDialog` — pick a Scope of Work to open a Project from. A scope that already
+  has a project renders disabled with a "มีโครงการแล้ว" label rather than being hidden, so the user
+  sees *why* it isn't selectable (the API permits several projects per scope, but doing it by
+  accident is far likelier to be a mistake than intent).
+- `ProjectItemSourcePickerDialog` — two steps in one dialog (pick Project → pick item), because the
+  create API needs both ids. Only `itemStatus === "pending"` items are offered, mirroring the
+  server's own `loadPendingProjectItemOrThrow()` rule so a user can never pick a row that would 400;
+  an item already pre-assigned to a different branch still shows, labelled with its assignment.
+
+The 4 list components gained an optional `headerAction?: ReactNode` prop so each Page owns its dialog
+state while the List stays presentational. No API/data-model changes — creation still goes through
+the same `POST /api/{material-requisitions,job-orders,purchase-requests}` with `{projectId, itemId}`.
+
+**Files Added**: `src/pages/project/ProjectSourcePickers.tsx`.
+**Files Changed**: `api/_lib/arHandler.ts`, `src/App.tsx` (4 new `canCreate` props),
+`src/lib/i18n.tsx` (+28 key pairs, th/en parity verified at 2,034 each),
+`src/pages/accounting/AccountingPage.tsx`, `src/pages/quotation/ScopeOfWorkDocument.tsx`,
+`src/pages/{project,materialRequisition,jobOrder,purchaseRequest}/*{Page,List}.tsx`,
+`tests/api/arReceiptWorkflow.test.ts`.
+
+**Reported, NOT fixed — needs the owner's input, since these are unbuilt features rather than
+defects**: (1) **Cost Control does not exist anywhere in the code** — the spec's precondition
+"เมื่อโปรเจคได้รับ Scope of work, **Cost Control** แล้ว" is unmodelled; `Project` has no cost/budget
+field of any kind. (2) **แจกจ่ายงานให้น้องๆ ในทีม is unmodelled** — `ProjectItem` has no assignee.
+(3) **The accounting document ORDER still does not match the spec**: every case reads
+`AR/IV → RE → BI`, but the code issues the companion BI *together with* the AR/IV and the receipt
+last. Deliberately left alone this pass — it changes which BI number a document gets and affects
+already-issued live records, so it needs an explicit decision first. Note this also invalidates the
+justification given on 2026-08-20b for refusing a create button on the BI page; if BI moves last, it
+should get one. All logged in TODO.md.
+
+**Verified**: `tsc` (both configs)/`lint` (0 errors)/`build`/`test` — **238 passed**, up from 236.
+No live browser session (standing sandbox limitation) — the 4 new create flows need a manual
+click-through.
+
+---
+
+## 2026-08-20d — Code review pass over the Accounting Phase 1.5 + Product Stock work: 12 fixes
+
+**Context**: A recall-oriented code review over the whole unpushed Accounting Phase 1.5 / Product
+Stock / Accounting Dashboard range (`origin/master..HEAD`, 8 commits). `tsc`/`lint`/`build`/`test`
+were already clean before this pass — every item below is a runtime/semantic defect those gates
+can't see, plus the cleanups the same read turned up.
+
+**Correctness fixes**
+
+1. **`Product.stockQty` had no backfill, so the Stock page white-screened on any real database.**
+   `stockQty` was added 2026-08-18 as a required `number`, but `ensureIndexes()` only ever runs from
+   the one-time Setup Wizard — every product created before that date has no such field at all, and
+   `StockPage.tsx`'s `p.stockQty.toLocaleString()` throws on `undefined`. Added
+   `backfillProductStockDefaults()` (`api/_lib/stockHandler.ts`), a one-`updateMany`-per-process
+   catch-up guarded in memory exactly like `bootstrapRbac()`, called from `GET /api/products` and
+   from `applyStockMovement()`. Also fixed the insufficient-stock message printing
+   `คงเหลือ undefined`.
+2. **Cancelling a receipt issued against a *manual* tax invoice returned 400 "Invalid id" *after*
+   already flipping the document to cancelled.** `handleDocumentCancel()`'s new RE branch called
+   `toObjectId(doc.milestoneId)` unconditionally, and a manual invoice's `milestoneId` is `""`,
+   which `toObjectId()` rejects — so the status write landed, the response was an error, and no
+   audit entry was written. Added the same `if (doc.milestoneId)` guard `handleIssueReceipt()`
+   already carried.
+3. **A partial stock cut could be left behind by a failed multi-line deduction.**
+   `handleStockDeduction()` looped `applyStockMovement()` with no transaction: line 3 running out of
+   stock left lines 1-2 permanently cut behind an error response and no audit entry. Added
+   `assertProductsHaveStock()` — a pre-flight that also sums duplicate `productId`s so two lines for
+   the same product are checked against one shared balance, not twice against the full one.
+   `applyStockMovement()`'s atomic `$gte` filter still closes the (now much narrower) race window.
+4. **The Accounting Dashboard's "งานที่ยังไม่ออกบิลมัดจำ" KPI counted every job without an AR
+   document**, including jobs whose payment terms have no deposit installment at all and therefore
+   can never have one. Now filtered by the same down-payment label rule `getOrCreateMilestone()`
+   freezes as `isDownPayment`, extracted to a shared `isDownPaymentInstallment()`.
+5. **`ArStockPanel.tsx` was missing `print:hidden`.** It's a second view of `ArDocumentListPage`
+   rather than an early return, so its own print buttons fired `window.print()` with the whole panel
+   still on screen — the UI printed alongside the document.
+6. **`ArStockPanel.tsx`'s movement-history effect had no `.catch()`** — a failed request became an
+   unhandled rejection and pinned the panel on "กำลังโหลด" forever.
+7. **The "วางบิลตามงาน" page became a dead end for `ar:view`-only users** (e.g. the Viewer role) when
+   the always-rendered Scope of Work table was replaced by a picker dialog gated on `canCreate` —
+   there was no longer any way in. The picker only *selects* a job (every mutating action inside is
+   still gated on `canCreate`/`canIssue`), so it's now reachable by anyone who can open the page,
+   labelled "เปิดดูงาน" instead of "สร้างวางบิล" for read-only users.
+8. **The trend chart's "ไตรมาส" toggle wasn't producing calendar quarters.** `toQuarterly()` sliced
+   the trailing-12-month window in fixed 3s from index 0, and that window doesn't start in January —
+   the groups were arbitrary 3-month spans. Now bucketed by real calendar quarter (Q1 = Jan-Mar).
+9. **The per-document-type list page's three status cards ignored the month/search filters** while
+   the table honoured them, so the counts contradicted the visible rows (see "Filter Honesty",
+   UI_GUIDELINES.md). Cards now count from the same filtered set, minus the status tab they mirror.
+10. **The NCR form-settings dialog accepted `0` for page width/height** (`Number("")` is `0` and
+    passes `Number.isFinite`), which printed as `@page { size: 0mm 0mm }`. `loadNcrSettings()`
+    already guarded this on read; the in-session state now guards it on write too.
+11. **`POST /api/stock-movements/` (trailing slash) fell through to the list handler** instead of
+    creating a movement — `handleStock()`'s zero-segment branch didn't repeat the method check.
+    Both paths now route through one branch.
+
+**Cleanups**: the invoice→receipt join (`linkedArDocumentId`) was re-implemented three times across
+`ArDocumentListPage.tsx`/`AccountingPage.tsx`; it now lives once in `src/lib/accounting.ts` as
+`receiptByInvoiceId()`/`paidByInvoiceId()`. Removed the dead `bucketIndex === -1` fallback repeated
+three times in the aging-bucket loop (the last bucket's `max` is `Infinity`, so `findIndex()` always
+matches). `StockPage.tsx`'s movement history now distinguishes "load failed" (with a retry) from
+"no history yet", instead of rendering a failure as real emptiness.
+
+**Tests added** (per the standing rule's "workflow transitions / money math get a test in the same
+task"): `tests/api/stockMovements.test.ts` (10 tests — never-negative balances, `balanceAfter` as a
+true post-write snapshot, ledger-row-per-change, the legacy-product backfill, and the multi-line
+pre-flight including the summed-duplicate case) and `tests/api/arReceiptWorkflow.test.ts` (5 tests —
+RE issue closes a non-deposit milestone / cancel reopens it, a deposit milestone stays `billed`,
+the manual-invoice receipt issue+cancel path that reproduces fix #2, double-receipt refusal and
+re-issue after cancellation, and refusal against BI/cancelled principals). Both are in-memory-MongoDB
+integration tests. Confirmed fix #2's test genuinely fails against the pre-fix code.
+
+**Files Changed**: `api/_lib/arHandler.ts`, `api/_lib/stockHandler.ts`, `api/handlers/products.ts`,
+`src/lib/accounting.ts`, `src/lib/i18n.tsx`, `src/pages/accounting/AccountingPage.tsx`,
+`src/pages/accounting/ArDocumentListPage.tsx`, `src/pages/accounting/ArStockPanel.tsx`,
+`src/pages/accounting/AccountingDashboardCharts.tsx`, `src/pages/stock/StockPage.tsx`.
+**Files Added**: `tests/api/stockMovements.test.ts`, `tests/api/arReceiptWorkflow.test.ts`.
+
+**12th fix, from the `impeccable` design hook (same pass)**: the "แบบ Manual" badge in
+`ArDocumentListPage.tsx`'s document-number column sat at `text-[10px]`, below
+[DESIGN.md](../DESIGN.md)'s 12px chrome floor. That floor has exactly one documented exception —
+uppercase/tracking-wide "section eyebrows" (table header cells, sidebar group labels, DESIGN.md
+L159/L247) — which this badge doesn't qualify for: it's neither uppercase nor tracking-wide, and its
+Thai label ("แบบ Manual") can't meaningfully be either. Raised to `text-xs`, matching the
+status pill three columns to its right in the same table. The same file's `<th>` cells stay at
+`text-[10px]`: they *are* the documented exception (table headers, uppercase, `tracking-wider`), so
+the hook's flag on those lines is a false positive, left unchanged deliberately. This is the same
+class of drift TODO.md already tracks for `CustomerAnalytics.tsx`'s stat-tile caption.
+
+**Not fixed (deliberately)**: the per-document-type list page still fetches every document of its
+type (plus every RE and every Scope of Work) on mount and filters the month client-side, even though
+`GET /api/ar-documents` already supports a server-side `month` filter. Moving it server-side means
+refetching on every month change and interacts with fix #9's card counts — worth doing as its own
+pass once document volume justifies it. Logged in TODO.md.
+
+---
+
+## 2026-08-20c — Home-screen icon ("Add to Home Screen") — a Web App Manifest, no app store needed
 
 **Feature**: Direct request: a way to open the app from a phone home-screen icon without publishing to
 the App Store/Play Store, so users don't have to open Chrome/Safari and navigate to the site every

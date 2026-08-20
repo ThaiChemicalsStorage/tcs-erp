@@ -5,6 +5,7 @@ import {
   openArMilestone, updateArMilestone, uploadArAttachment, issueArDocuments, issueArReceipt,
   fetchArDocuments, fetchArDocument,
   DOC_TYPE_LABEL_KEY, BILLING_STATUS_LABEL_KEY,
+  receiptByInvoiceId as buildReceiptByInvoiceId, paidByInvoiceId as buildPaidByInvoiceId,
   type ArMilestone, type ArDocument, type ArChecklistKey, type ArWorkClassification, type ArBillingStatus,
 } from "../../lib/accounting";
 import { EmptyState } from "../../components/EmptyState";
@@ -65,22 +66,24 @@ export function AccountingPage({
           <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accounting.jobBilling.title")}</h1>
           <p className="text-sm text-muted-foreground font-mono mt-1">{t("accounting.jobBilling.subtitle")}</p>
         </div>
-        {canCreate && (
-          <button
-            onClick={() => setPickerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors flex-shrink-0"
-          >
-            <Plus size={15} /> {t("accounting.jobBilling.createBtn")}
-          </button>
-        )}
+        {/* ปุ่มเดียวกัน แต่คนที่มีแค่สิทธิ์ดู (ar:view) ก็ต้องเข้าถึงงานได้ — เดิมหน้านี้แสดงตาราง SOW
+            ทั้งหมดให้ทุกคนที่เปิดหน้าได้ พอเปลี่ยนเป็น dialog แล้วผูกปุ่มไว้กับ canCreate อย่างเดียว
+            คนที่มีแค่สิทธิ์ดูจะเจอหน้าว่างที่กดอะไรไม่ได้เลย (การกดเลือกงานเป็นแค่การเปิดดู ไม่ใช่การแก้ไข
+            — ปุ่มออกเอกสาร/เช็คลิสต์ข้างในยังคุมด้วย canCreate/canIssue เหมือนเดิมทุกประการ) */}
+        <button
+          onClick={() => setPickerOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors flex-shrink-0"
+        >
+          <Plus size={15} /> {canCreate ? t("accounting.jobBilling.createBtn") : t("accounting.jobBilling.openBtn")}
+        </button>
       </div>
 
       <EmptyState
         icon={FileText}
         title={t("accounting.jobBilling.landing.title")}
-        description={t("accounting.jobBilling.landing.description")}
-        actionLabel={canCreate ? t("accounting.jobBilling.createBtn") : undefined}
-        onAction={canCreate ? () => setPickerOpen(true) : undefined}
+        description={canCreate ? t("accounting.jobBilling.landing.description") : t("accounting.jobBilling.landing.descriptionReadOnly")}
+        actionLabel={canCreate ? t("accounting.jobBilling.createBtn") : t("accounting.jobBilling.openBtn")}
+        onAction={() => setPickerOpen(true)}
       />
 
       {pickerOpen && <ScopeOfWorkPickerDialog onClose={() => setPickerOpen(false)} onSelect={openScope} />}
@@ -209,17 +212,10 @@ function ScopeBillingDetail({
   const [receiptBusy, setReceiptBusy] = useState(false);
   const { t } = useI18n();
 
-  // ยอดชำระแล้วต่อใบกำกับภาษี — สำหรับพิมพ์ใบแจ้งหนี้/ใบวางบิล (คอลัมน์ชำระแล้ว/เงินคงค้าง)
-  const paidByInvoiceId: ArPaidByInvoiceId = useMemo(() => {
-    const map: ArPaidByInvoiceId = {};
-    for (const d of documents) {
-      if (d.docType !== "RE" || d.status !== "issued") continue;
-      for (const line of d.lines) {
-        if (line.linkedArDocumentId) map[line.linkedArDocumentId] = d.netTotal;
-      }
-    }
-    return map;
-  }, [documents]);
+  // ใบเสร็จที่ยังไม่ถูกยกเลิก + ยอดชำระแล้ว ต่อใบกำกับภาษี — กติกาการจับคู่อยู่ที่ lib/accounting.ts
+  // ที่เดียว (ใช้ร่วมกับหน้ารายการเอกสารและเอกสารพิมพ์ใบแจ้งหนี้/ใบวางบิล)
+  const receiptByInvoiceId = useMemo(() => buildReceiptByInvoiceId(documents), [documents]);
+  const paidByInvoiceId: ArPaidByInvoiceId = useMemo(() => buildPaidByInvoiceId(documents), [documents]);
 
   useEffect(() => {
     if (!printDoc) return;
@@ -343,7 +339,9 @@ function ScopeBillingDetail({
   }
 
   const requiredKeys = milestone ? CHECKLIST_KEYS_FOR[milestone.workClassification] : [];
-  const alwaysRequired: ArChecklistKey[] = ["poCopy", "deliveryNote"];
+  // งวดมัดจำไม่ต้องแนบใบส่งมอบงาน — ยังไม่มีการส่งมอบให้ลูกค้าเซ็นรับ ตรงกับ checklistIsComplete()
+  // ฝั่งเซิร์ฟเวอร์ (api/_lib/arHandler.ts) ที่ยกเว้นให้เหมือนกัน ต้องแก้คู่กันเสมอ
+  const alwaysRequired: ArChecklistKey[] = milestone?.isDownPayment ? ["poCopy"] : ["poCopy", "deliveryNote"];
   const checklistOk = alwaysRequired.every((k) => milestone?.checklistState[k] === true);
 
   return (
@@ -468,9 +466,7 @@ function ScopeBillingDetail({
           <div className="space-y-1.5">
             {documents.map((d) => {
               // ใบเสร็จที่ยังใช้งานซึ่งอ้างถึงใบกำกับภาษีฉบับนี้ (ผูกผ่าน linkedArDocumentId ในบรรทัดรายการ)
-              const receipt = (d.docType === "AR" || d.docType === "IV")
-                ? documents.find((re) => re.docType === "RE" && re.status === "issued" && re.lines.some((l) => l.linkedArDocumentId === d.id))
-                : undefined;
+              const receipt = (d.docType === "AR" || d.docType === "IV") ? receiptByInvoiceId[d.id] : undefined;
               return (
                 <div key={d.id} className="flex items-center justify-between gap-3 text-sm border-b border-border/40 py-1.5 last:border-0">
                   <div className="flex items-center gap-2">

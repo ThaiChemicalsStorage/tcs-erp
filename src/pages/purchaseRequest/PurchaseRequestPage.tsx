@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { type PurchaseRequestSummary, fetchAllPurchaseRequests } from "../../lib/purchaseRequest";
+import { Plus } from "lucide-react";
+import { type PurchaseRequestSummary, fetchAllPurchaseRequests, createPurchaseRequest } from "../../lib/purchaseRequest";
 import { PurchaseRequestList } from "./PurchaseRequestList";
 import { PurchaseRequestDocument } from "./PurchaseRequestDocument";
+import { ProjectItemSourcePickerDialog } from "../project/ProjectSourcePickers";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
+import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 
 // หน้าจัดการใบขอซื้อแบบแยกอิสระ (ไม่ผูกกับหน้าโครงการ — เข้าถึงได้โดยตรง)
@@ -15,6 +18,7 @@ export function PurchaseRequestPage({
   canFinalize,
   canPrint,
   canDelete,
+  canCreate,
   initialPurchaseRequestId,
   onPurchaseRequestIdConsumed,
 }: {
@@ -23,6 +27,7 @@ export function PurchaseRequestPage({
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
+  canCreate: boolean;
   initialPurchaseRequestId?: string | null;
   onPurchaseRequestIdConsumed?: () => void;
 }) {
@@ -32,7 +37,21 @@ export function PurchaseRequestPage({
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequestSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const toast = useToast();
+
+  // สร้างใบขอซื้อจากหน้านี้ได้เลย โดยเลือกโครงการและรายการต้นทางเอง (เดิมสร้างได้จากในหน้าโครงการเท่านั้น)
+  // ตามคำขอ 2026-08-20; API ยังต้องการทั้ง projectId และ itemId เหมือนเดิมทุกประการ
+  const handleCreate = async (projectId: string, itemId: string) => {
+    try {
+      const created = await createPurchaseRequest(projectId, itemId);
+      setPickerOpen(false);
+      openPurchaseRequest(created.id);
+    } catch (err) {
+      setPickerOpen(false);
+      toast.show(err instanceof ApiError ? err.message : t("purchaseRequest.loadError"));
+    }
+  };
 
   const loadList = () => {
     setLoading(true);
@@ -118,7 +137,27 @@ export function PurchaseRequestPage({
 
   return (
     <>
-      <PurchaseRequestList purchaseRequests={purchaseRequests} currentUserId={currentUserId} onOpen={openPurchaseRequest} />
+      <PurchaseRequestList
+        purchaseRequests={purchaseRequests}
+        currentUserId={currentUserId}
+        onOpen={openPurchaseRequest}
+        headerAction={canCreate ? (
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+          >
+            <Plus size={15} /> {t("purchaseRequest.createBtn")}
+          </button>
+        ) : undefined}
+      />
+      {pickerOpen && (
+        <ProjectItemSourcePickerDialog
+          title={t("purchaseRequest.createBtn")}
+          description={t("project.picker.project.description")}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(projectId, itemId) => void handleCreate(projectId, itemId)}
+        />
+      )}
       <Toast message={toast.message} />
     </>
   );

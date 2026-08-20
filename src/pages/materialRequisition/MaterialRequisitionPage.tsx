@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { type MaterialRequisitionSummary, fetchAllMaterialRequisitions } from "../../lib/materialRequisition";
+import { Plus } from "lucide-react";
+import { type MaterialRequisitionSummary, fetchAllMaterialRequisitions, createMaterialRequisition } from "../../lib/materialRequisition";
 import { MaterialRequisitionList } from "./MaterialRequisitionList";
 import { MaterialRequisitionDocument } from "./MaterialRequisitionDocument";
+import { ProjectItemSourcePickerDialog } from "../project/ProjectSourcePickers";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
+import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 
 // หน้าจัดการใบเบิกและใบคืนวัสดุแบบแยกอิสระ (ไม่ผูกกับหน้าโครงการ — พนักงานสโตร์เข้าถึงได้โดยตรง)
@@ -15,6 +18,7 @@ export function MaterialRequisitionPage({
   canFinalize,
   canPrint,
   canDelete,
+  canCreate,
   initialMaterialRequisitionId,
   onMaterialRequisitionIdConsumed,
 }: {
@@ -23,6 +27,7 @@ export function MaterialRequisitionPage({
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
+  canCreate: boolean;
   initialMaterialRequisitionId?: string | null;
   onMaterialRequisitionIdConsumed?: () => void;
 }) {
@@ -32,7 +37,21 @@ export function MaterialRequisitionPage({
   const [materialRequisitions, setMaterialRequisitions] = useState<MaterialRequisitionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const toast = useToast();
+
+  // สร้างใบเบิก-คืนวัสดุจากหน้านี้ได้เลย โดยเลือกโครงการและรายการต้นทางเอง (เดิมสร้างได้จากในหน้าโครงการ
+  // เท่านั้น) — ตามคำขอ 2026-08-20; API ยังต้องการทั้ง projectId และ itemId เหมือนเดิมทุกประการ
+  const handleCreate = async (projectId: string, itemId: string) => {
+    try {
+      const created = await createMaterialRequisition(projectId, itemId);
+      setPickerOpen(false);
+      openMaterialRequisition(created.id);
+    } catch (err) {
+      setPickerOpen(false);
+      toast.show(err instanceof ApiError ? err.message : t("materialRequisition.loadError"));
+    }
+  };
 
   const loadList = () => {
     setLoading(true);
@@ -118,7 +137,27 @@ export function MaterialRequisitionPage({
 
   return (
     <>
-      <MaterialRequisitionList materialRequisitions={materialRequisitions} currentUserId={currentUserId} onOpen={openMaterialRequisition} />
+      <MaterialRequisitionList
+        materialRequisitions={materialRequisitions}
+        currentUserId={currentUserId}
+        onOpen={openMaterialRequisition}
+        headerAction={canCreate ? (
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+          >
+            <Plus size={15} /> {t("materialRequisition.createBtn")}
+          </button>
+        ) : undefined}
+      />
+      {pickerOpen && (
+        <ProjectItemSourcePickerDialog
+          title={t("materialRequisition.createBtn")}
+          description={t("project.picker.project.description")}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(projectId, itemId) => void handleCreate(projectId, itemId)}
+        />
+      )}
       <Toast message={toast.message} />
     </>
   );

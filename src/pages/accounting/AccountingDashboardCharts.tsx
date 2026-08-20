@@ -35,19 +35,26 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 
 type TrendGrouping = "monthly" | "quarterly";
 
-// รวมจุดข้อมูลรายเดือน 12 จุด เป็นรายไตรมาส 4 จุด
-// Re-buckets 12 monthly points into 4 quarterly points, client-side.
+// รวมจุดข้อมูลรายเดือนเป็นรายไตรมาสตามปฏิทินจริง (ม.ค.-มี.ค. = Q1 ฯลฯ)
+// เดิมตัดทีละ 3 จุดจากต้น array ซึ่งหน้าต่าง 12 เดือนย้อนหลังไม่ได้เริ่มที่เดือน ม.ค. กลุ่มที่ได้จึงเป็น
+// "สามเดือนติดกัน" เฉย ๆ ไม่ใช่ไตรมาสตามที่ป้ายปุ่มบอก — บัญชียื่นภาษี/ปิดงบเป็นรายไตรมาสปฏิทิน
+// Buckets monthly points into REAL calendar quarters (Q1 = Jan-Mar, ...). The trailing-12-month
+// window doesn't start in January, so slicing it in fixed 3s produced arbitrary 3-month groups,
+// not the quarters the toggle label promises.
 function toQuarterly(monthly: ArDashboardTrendPoint[]): { label: string; netTotal: number; count: number }[] {
-  const out: { label: string; netTotal: number; count: number }[] = [];
-  for (let i = 0; i < monthly.length; i += 3) {
-    const chunk = monthly.slice(i, i + 3);
-    out.push({
-      label: `${chunk[0]?.label ?? ""} - ${chunk[chunk.length - 1]?.label ?? ""}`,
-      netTotal: chunk.reduce((s, p) => s + p.netTotal, 0),
-      count: chunk.reduce((s, p) => s + p.count, 0),
-    });
+  const byQuarter = new Map<string, { label: string; netTotal: number; count: number }>();
+  for (const p of monthly) {
+    const [y, m] = p.month.split("-").map(Number);
+    if (!y || !m) continue;
+    const quarter = Math.floor((m - 1) / 3) + 1;
+    const key = `${y}-Q${quarter}`;
+    const bucket = byQuarter.get(key) ?? { label: `Q${quarter}/${String((y + 543) % 100).padStart(2, "0")}`, netTotal: 0, count: 0 };
+    bucket.netTotal += p.netTotal;
+    bucket.count += p.count;
+    byQuarter.set(key, bucket);
   }
-  return out;
+  // Map preserves insertion order and `monthly` is already oldest-first, so the result is too.
+  return [...byQuarter.values()];
 }
 
 // กราฟแนวโน้มยอดใบกำกับภาษี (AR+IV) 12 เดือนล่าสุด — ไม่ขึ้นกับตัวกรองช่วงเวลาที่เลือกไว้ด้านบน

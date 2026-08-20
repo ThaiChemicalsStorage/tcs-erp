@@ -4,6 +4,70 @@
 
 ---
 
+## Session — 2026-08-20 (continued, absolute latest), spec audit of both modules + Project create flows
+
+### What was implemented
+The owner pasted the full business spec for **both** live workstreams for the first time — the 4
+accounting documents plus "Flow การทำงานของบัญชี-รับ" (3 cases) and its 2 Express improvement
+requests, and the Project department's 4 documents plus "การทำงานของโปรเจค" (3 sourcing branches) —
+and asked "ช่วยเช็คให้หน่อยว่าที่ทำมาตรงตามนี้มั้ย". Audited the Accounting half myself against real
+code while a subagent audited the Project half, then verified every claim of that subagent's report
+personally before acting on any of it (the `handleReturn` Final-lock absence, the Cost Control
+absence, and the hardcoded-Thai button were each re-checked by hand).
+
+**What matched**: all 4 accounting document types and the AR-vs-IV case branching; both Express
+improvement requests; the Project module's 3 sourcing branches mapping 1:1 to spec points 2/3/4; and
+the spec's bolded requirement that leftover material return on the *same* ใบเบิก-คืนวัสดุ — genuinely
+implemented, with `POST /:id/return` deliberately carrying no Final lock while the plain `PATCH`
+does.
+
+**Fixed**: (1) deposit milestones were requiring a signed delivery note, but spec case 1 issues the
+deposit invoice as soon as Sales hands over the Scope of Work — nothing has been delivered yet, so
+staff had to tick a box asserting something untrue in order to bill; now exempt server-side with the
+client gate mirrored. (2) The Project module's single entry point ("สร้าง/เปิดโครงการ" on
+`ScopeOfWorkDocument.tsx`) plus its error toast were hardcoded Thai while the Delivery Order button
+one line above correctly used `t()` — so English mode showed Thai on the only way into the module.
+
+**Built** (the explicit request): a "+ สร้าง" button with a source picker on all 4 Project pages.
+Previously every Project-module document could only be created from inside a Project's item table;
+the standalone sidebar pages were browse-only. New `ProjectSourcePickers.tsx` holds two dialogs —
+pick a Scope of Work (for a Project), or Project → pending item (for the 3 sub-documents) — reusing
+the search-and-pick shape the Accounting billing picker established earlier the same day. The 4 list
+components gained an optional `headerAction` prop so each Page owns its dialog state. No API change.
+
+### Problems found/fixed
+- I had told the owner two turns earlier, confidently, that "BI is always issued together with its
+  AR/IV — a real business rule", and used that to justify refusing a create button on the BI page
+  when they pushed back citing Odoo. **The spec says the opposite**: all 3 cases read
+  `AR/IV → RE → BI`, with BI last. My claim came from a code comment, not from the spec — and
+  `docs/MODULES/Accounting.md` had recorded the correct order all along, contradicting that same
+  comment. Owned the error explicitly to the owner rather than quietly fixing it. The reordering
+  itself is deliberately **not** done: it changes which BI number a document receives and touches
+  already-issued production records, so it needs an explicit decision first.
+- The Stage 5 i18n parity script compared th-vs-en *within the dictionary*, which structurally cannot
+  catch a string that never entered the dictionary — which is exactly how the hardcoded Project
+  button survived a pass that claimed "zero keys missing on either side". Corrected that claim in
+  `MODULES/Project.md` rather than leaving a doc that overstates its own coverage.
+
+### Verification
+`tsc` (both configs)/`lint` (0 errors)/`build`/`test` — **238 passed**, up from 236. Added 2 tests
+for the deposit-exemption rule and **verified the positive one genuinely fails against the pre-fix
+code** (`expected 'CHECKLIST_INCOMPLETE' not to be 'CHECKLIST_INCOMPLETE'`) before keeping it, then
+restored the fix — the same revert-and-prove discipline used on the code-review pass earlier today.
+Also re-ran a th/en key-parity check across the whole dictionary: 2,034 keys each, zero missing.
+No live browser session (standing sandbox limitation).
+
+### Next steps
+- **Blocked on the owner**: what Cost Control *is* as data (the spec names it as a precondition but
+  it exists nowhere in code); whether team work-distribution should be tracked in-system; and whether
+  to reorder BI after RE — which, if done, should also give the BI page the create button refused
+  earlier today.
+- Manually click-test the 4 new Project create flows in a real browser.
+- `POST /:id/return` still has no test coverage and no quantity validation (a return larger than the
+  withdrawal is accepted) — worth closing since it implements the spec's headline requirement.
+
+---
+
 ## Session — 2026-08-20 (continued further, absolute latest), Home-screen icon ("Add to Home Screen")
 
 ### What was implemented

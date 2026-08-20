@@ -529,7 +529,7 @@ export function ScopeOfWorkDocument({
       const created = await createProjectFromScope(scope.id);
       onOpenProject(created.id);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "ไม่สามารถสร้างโครงการได้");
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.createProjectFailed"));
     } finally {
       setProjectBusy(false);
     }
@@ -711,7 +711,7 @@ export function ScopeOfWorkDocument({
           )}
           {canViewProject && canCreateProject && (
             <button onClick={handleProjectClick} disabled={projectBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
-              <Briefcase size={13} /> {existingProject ? "เปิดโครงการ" : "สร้างโครงการ"}
+              <Briefcase size={13} /> {existingProject ? t("scopeOfWorkDoc.openProject") : t("scopeOfWorkDoc.createProject")}
             </button>
           )}
           {editable && (

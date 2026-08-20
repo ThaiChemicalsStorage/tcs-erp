@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Package2, Search, X } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
@@ -21,10 +21,13 @@ export function MaterialRequisitionList({
   materialRequisitions,
   currentUserId,
   onOpen,
+  headerAction,
 }: {
   materialRequisitions: MaterialRequisitionSummary[];
   currentUserId: string;
   onOpen: (id: string) => void;
+  /** ปุ่ม "+ สร้าง" ของหน้านั้นๆ — หน้า Page เป็นเจ้าของ state ของกล่องเลือกต้นทาง (2026-08-20) */
+  headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
   const statusLabel: Record<MaterialRequisitionStatus, string> = { Draft: t("materialRequisition.status.draft"), Final: t("materialRequisition.status.final") };
@@ -49,7 +52,10 @@ export function MaterialRequisitionList({
           <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("materialRequisition.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("materialRequisition.pageSubtitle")}</p>
         </div>
-        <TourReplayButton onClick={tour.start} />
+        <div className="flex items-center gap-2">
+          {headerAction}
+          <TourReplayButton onClick={tour.start} />
+        </div>
       </div>
 
       <div data-tour="mr-filters" className="flex items-center gap-3 flex-wrap">

@@ -14,6 +14,23 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-20e] Audited Accounting + Project against the owner's real spec; Project gained its own
+  "+ สร้าง" flows.** The owner supplied both departments' full business specs for the first time and
+  asked whether what was built matches. **Confirmed correct**: all 4 accounting document types and
+  their AR-vs-IV branching, both Express improvement requests (deposit alert, monthly tax summary),
+  the Project module's 3 sourcing branches, and — the spec's own bolded requirement — leftover
+  material returned on the **same** ใบเบิก-คืนวัสดุ, still editable after Final. **Fixed**: deposit
+  milestones no longer require a signed delivery note (spec case 1 bills the deposit before anything
+  is delivered — staff were being forced to tick an untrue box), and the Project module's only entry
+  point no longer renders in Thai in English mode. **Built**: a "+ สร้าง" button with a source picker
+  on all 4 Project pages (previously creatable only from inside a Project's item table) — pick a
+  Scope of Work for a Project, or Project → pending item for the 3 sub-documents.
+  **Still open, needs the owner's input** (unbuilt features rather than defects): Cost Control is
+  absent from the code entirely, team work-distribution is unmodelled, and the accounting document
+  **order** still doesn't match (spec reads `AR/IV → RE → BI`; code issues BI together with the
+  AR/IV) — left alone deliberately because it changes live document numbering. `tsc` (both
+  configs)/`lint`/`build`/`test` (238/238) clean. See CHANGELOG.md 2026-08-20e and TODO.md.
+
 - ✅ **[2026-08-20c] Home-screen icon ("Add to Home Screen") — no app store needed.** Direct request
   for a phone home-screen icon that opens the app without going through the App Store/Play Store. Added
   a Web App Manifest (`public/manifest.webmanifest`, navy `#0b1d3a` theme, `display: "standalone"`) +

@@ -3,13 +3,17 @@ import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requirePermission, requireOneOfPermissions } from "../_lib/auth.js";
 import { productsCollection, toObjectId, withStringId } from "../_lib/collections.js";
 import { nowIso } from "../../src/lib/products.js";
-import { handleStock } from "../_lib/stockHandler.js";
+import { handleStock, backfillProductStockDefaults } from "../_lib/stockHandler.js";
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     // stock:view-only holders (e.g. accounting_user) reach the Stock page without products:view —
     // it needs the product catalog to show stock levels, not full Product Library management.
     await requireOneOfPermissions(req, ["products:view", "stock:view"]);
+    // Products created before `stockQty` existed (2026-08-18) carry no such field, but the type
+    // declares it a required number — backfill once per process before serving them, or the Stock
+    // page's `p.stockQty.toLocaleString()` throws. See backfillProductStockDefaults().
+    await backfillProductStockDefaults();
     const products = await productsCollection();
     const docs = await products.find({}).sort({ code: 1 }).toArray();
     res.status(200).json({ products: docs.map(withStringId) });

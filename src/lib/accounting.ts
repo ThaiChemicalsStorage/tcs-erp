@@ -236,6 +236,31 @@ export function formatArPaymentCondition(doc: Pick<ArDocument, "paymentType" | "
   return days > 0 ? `เครดิต ${days} วัน` : "เครดิต";
 }
 
+/** Maps each tax invoice's id → the still-active (non-cancelled) RE receipt issued against it,
+ * joined through every receipt line's `linkedArDocumentId`. Three views need the same
+ * "has this invoice been paid?" answer off whatever document set they happen to be holding — the
+ * per-document-type list page (ชำระแล้ว column + the "ออกใบเสร็จ" row action), the job-billing
+ * detail view, and the Billing Note print's ชำระแล้ว/เงินคงค้าง columns — so the join rule lives
+ * here once rather than being re-derived at each call site. Added 2026-08-20. */
+export function receiptByInvoiceId(documents: ArDocument[]): Record<string, ArDocument> {
+  const map: Record<string, ArDocument> = {};
+  for (const d of documents) {
+    if (d.docType !== "RE" || d.status !== "issued") continue;
+    for (const line of d.lines) {
+      if (line.linkedArDocumentId) map[line.linkedArDocumentId] = d;
+    }
+  }
+  return map;
+}
+
+/** The `ArPaidByInvoiceId` the print components take — invoice id → amount actually received,
+ * derived from `receiptByInvoiceId()` above (a receipt's net total IS the amount received). */
+export function paidByInvoiceId(documents: ArDocument[]): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(receiptByInvoiceId(documents)).map(([invoiceId, re]) => [invoiceId, re.netTotal]),
+  );
+}
+
 export const BILLING_STATUS_LABELS: Record<ArBillingStatus, string> = {
   not_billed: "ยังไม่ได้วางบิล",
   billed: "วางบิล",

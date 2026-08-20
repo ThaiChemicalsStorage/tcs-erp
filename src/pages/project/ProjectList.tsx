@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Briefcase, Search, X } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
@@ -22,10 +22,14 @@ export function ProjectList({
   projects,
   currentUserId,
   onOpen,
+  headerAction,
 }: {
   projects: ProjectListItem[];
   currentUserId: string;
   onOpen: (id: string) => void;
+  /** ปุ่ม "+ สร้าง" ของหน้านั้นๆ — ให้หน้า Page เป็นเจ้าของ state ของกล่องเลือกต้นทาง ส่วน List ยังเป็น
+   * component แสดงผลล้วนเหมือนเดิม (2026-08-20) */
+  headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
   const statusLabel: Record<ProjectStatus, string> = {
@@ -61,7 +65,10 @@ export function ProjectList({
           <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("project.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("project.pageSubtitle")}</p>
         </div>
-        <TourReplayButton onClick={tour.start} />
+        <div className="flex items-center gap-2">
+          {headerAction}
+          <TourReplayButton onClick={tour.start} />
+        </div>
       </div>
 
       <div data-tour="project-summary" className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -55,8 +55,13 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
   useEffect(() => {
     let cancelled = false;
     const key = `${doc.id}#${movementsRetryToken}`;
-    fetchStockMovements({ sourceId: doc.id }).then((movements) => { if (!cancelled) setMovementsResult({ key, movements }); });
+    fetchStockMovements({ sourceId: doc.id })
+      .then((movements) => { if (!cancelled) setMovementsResult({ key, movements }); })
+      // ต้องมี catch เสมอ — ไม่งั้น request ที่พังจะกลายเป็น unhandled rejection และแผงประวัติค้างที่
+      // "กำลังโหลด" ตลอดไป (ผลลัพธ์รอบนี้ไม่ถูก set สักที) — pattern เดียวกับ StockPage.tsx
+      .catch(() => { if (!cancelled) { setMovementsResult({ key, movements: [] }); toast.show(t("accounting.stockPanel.toast.loadProductsFailed")); } });
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.id, movementsRetryToken]);
   const movementsKey = `${doc.id}#${movementsRetryToken}`;
   const movements = movementsResult?.key === movementsKey ? movementsResult.movements : [];
@@ -95,7 +100,10 @@ export function ArStockPanel({ doc, canAdjust, onBack, onDocumentUpdated, onPrin
   const money = (n: number) => n.toLocaleString("th-TH", { minimumFractionDigits: 2 });
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+    // print:hidden — แผงนี้เป็นอีก view ของหน้ารายการ (ArDocumentListPage) ที่ไม่ early-return ทิ้ง
+    // เอกสารพิมพ์ด้านล่าง ปุ่มพิมพ์ในแผงนี้จึงสั่ง window.print() ทั้งที่แผงยังอยู่บนจอ — ถ้าไม่ซ่อน
+    // หน้าจอทั้งแผงจะออกกระดาษมาปนกับตัวเอกสาร (ดูหมายเหตุ print:hidden ใน ArDocumentListPage.tsx)
+    <div className="flex-1 overflow-y-auto p-6 space-y-4 print:hidden">
       <div className="flex items-center gap-3 flex-wrap">
         <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft size={14} /> {t("accounting.stockPanel.back")}

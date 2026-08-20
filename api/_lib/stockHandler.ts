@@ -15,6 +15,46 @@ import { nowIso } from "../../src/lib/products.js";
  * Accounting's IV stock-cutting action (arHandler.ts's handleStockDeduction) call it, so every
  * balance change is always traceable through a StockMovementFields row.
  */
+
+let stockDefaultsBackfilled = false;
+
+/**
+ * One-per-process catch-up for an already-provisioned database: `Product.stockQty` was added
+ * 2026-08-18 and `ensureIndexes()` only ever runs from the one-time Setup Wizard, so every product
+ * created before that date has NO `stockQty` field at all. `Product.stockQty` is declared a
+ * required `number` (src/lib/products.ts), so the Stock page's `p.stockQty.toLocaleString()` threw
+ * on those rows and `applyStockMovement()`'s `$gte` guard could never match them. Guarded in memory
+ * exactly like `bootstrapRbac()` (api/_lib/rbacSeed.ts) — one `updateMany` per warm process, a
+ * no-op once every row carries the field.
+ */
+export async function backfillProductStockDefaults(): Promise<void> {
+  if (stockDefaultsBackfilled) return;
+  const products = await productsCollection();
+  await products.updateMany({ stockQty: { $exists: false } }, { $set: { stockQty: 0 } });
+  stockDefaultsBackfilled = true;
+}
+
+/**
+ * Pre-flight balance check for a caller about to apply SEVERAL movements in a row (Accounting's IV
+ * stock-cutting, arHandler.ts's handleStockDeduction). `applyStockMovement()` is atomic per
+ * product, but a loop over it is not — without this, line 3 running out of stock would leave lines
+ * 1-2 permanently cut behind an error response. Takes the already-summed quantity per product, so
+ * two lines for the same product are checked against one shared balance rather than twice against
+ * the full one. Does not replace applyStockMovement()'s own `$gte` guard, which still closes the
+ * remaining race window between this check and the writes.
+ */
+export async function assertProductsHaveStock(qtyByProductId: Map<string, number>): Promise<void> {
+  await backfillProductStockDefaults();
+  const products = await productsCollection();
+  for (const [productId, qty] of qtyByProductId) {
+    const product = await products.findOne({ _id: toObjectId(productId) });
+    if (!product) throw new HttpError(404, "ไม่พบสินค้า");
+    if ((product.stockQty ?? 0) < qty) {
+      throw new HttpError(400, `สต๊อก ${product.code} ไม่พอ (ต้องการ ${qty} คงเหลือ ${product.stockQty ?? 0} หน่วย)`);
+    }
+  }
+}
+
 export async function applyStockMovement(params: {
   productId: string;
   kind: StockMovementKind;
@@ -27,6 +67,7 @@ export async function applyStockMovement(params: {
 }): Promise<{ movement: StockMovementFields & { id: string }; balanceAfter: number }> {
   if (!Number.isFinite(params.delta) || params.delta === 0) throw new HttpError(400, "จำนวนต้องไม่เป็นศูนย์");
 
+  await backfillProductStockDefaults();
   const products = await productsCollection();
   const productObjectId = toObjectId(params.productId);
   // Atomic: the `stockQty: { $gte: ... }` filter only matches (and the update only applies) when
@@ -43,7 +84,7 @@ export async function applyStockMovement(params: {
   if (!updated) {
     const exists = await products.findOne({ _id: productObjectId });
     if (!exists) throw new HttpError(404, "ไม่พบสินค้า");
-    throw new HttpError(400, `สต๊อกคงเหลือไม่พอ (คงเหลือ ${exists.stockQty} หน่วย)`);
+    throw new HttpError(400, `สต๊อกคงเหลือไม่พอ (คงเหลือ ${exists.stockQty ?? 0} หน่วย)`);
   }
 
   const now = nowIso();
@@ -107,11 +148,12 @@ async function handleMovementCreate(req: VercelRequest, res: VercelResponse) {
 }
 
 export async function handleStock(req: VercelRequest, res: VercelResponse): Promise<void> {
-  const pathname = (req.url ?? "").split("?")[0];
-  if (pathname === "/api/stock-movements") {
+  // getPathSegments() already drops the prefix and any trailing slash, so a bare
+  // /api/stock-movements (with or without one) is exactly the zero-segment case — routing it
+  // through the same branch keeps POST from falling through to the list handler.
+  const parts = getPathSegments(req, "/api/stock-movements");
+  if (parts.length === 0) {
     return req.method === "POST" ? handleMovementCreate(req, res) : handleMovementsList(req, res);
   }
-  const parts = getPathSegments(req, "/api/stock-movements");
-  if (parts.length === 0) return handleMovementsList(req, res);
   throw new HttpError(404, "Not found");
 }

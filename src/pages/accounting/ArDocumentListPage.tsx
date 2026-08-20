@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Receipt, Search, X, Printer, Ban, FileText, Settings2, Boxes, Plus } from "lucide-react";
 import {
   fetchArDocuments, fetchArDocument, cancelArDocument, issueArReceipt,
-  DOC_TYPE_LABEL_KEY,
+  DOC_TYPE_LABEL_KEY, receiptByInvoiceId as buildReceiptByInvoiceId, paidByInvoiceId as buildPaidByInvoiceId,
   type ArDocument, type ArDocumentType,
 } from "../../lib/accounting";
 import { fetchAllScopeOfWorks } from "../../lib/scopeOfWork";
@@ -124,24 +124,11 @@ export function ArDocumentListPage({
     return () => window.removeEventListener("afterprint", reset);
   }, [ncrTestPrinting]);
 
-  // ใบเสร็จที่ยังไม่ถูกยกเลิก จับคู่กับใบกำกับภาษีต้นทางผ่าน linkedArDocumentId
-  const receiptByInvoiceId = useMemo(() => {
-    const map: Record<string, ArDocument> = {};
-    for (const re of receipts) {
-      if (re.status !== "issued") continue;
-      for (const line of re.lines) {
-        if (line.linkedArDocumentId) map[line.linkedArDocumentId] = re;
-      }
-    }
-    return map;
-  }, [receipts]);
+  // ใบเสร็จที่ยังไม่ถูกยกเลิก จับคู่กับใบกำกับภาษีต้นทางผ่าน linkedArDocumentId (ดู lib/accounting.ts)
+  const receiptByInvoiceId = useMemo(() => buildReceiptByInvoiceId(receipts), [receipts]);
 
   // ยอดชำระแล้วต่อใบกำกับภาษี — สำหรับพิมพ์ใบแจ้งหนี้/ใบวางบิล (คอลัมน์ชำระแล้ว/เงินคงค้าง)
-  const paidByInvoiceId: ArPaidByInvoiceId = useMemo(() => {
-    const map: ArPaidByInvoiceId = {};
-    for (const [invoiceId, re] of Object.entries(receiptByInvoiceId)) map[invoiceId] = re.netTotal;
-    return map;
-  }, [receiptByInvoiceId]);
+  const paidByInvoiceId: ArPaidByInvoiceId = useMemo(() => buildPaidByInvoiceId(receipts), [receipts]);
 
   // เฉพาะหน้า RE เอง — `documents` ที่โหลดไว้แล้วคือรายการใบเสร็จทั้งหมด ใช้หาว่าใบกำกับภาษีไหน (id)
   // มีใบเสร็จ (ยังใช้งาน) แล้วบ้าง เพื่อกรองออกจาก ReceiptSourcePickerDialog — ไม่ต้อง fetch ซ้ำ
@@ -156,14 +143,17 @@ export function ArDocumentListPage({
   }, [documents, docType]);
 
   const normalizedSearch = search.trim().toLowerCase();
-  const filtered = documents
-    .filter((d) => statusFilter === "all" || d.status === statusFilter)
+  // ทุกตัวกรอง "ยกเว้น" สถานะ — การ์ดสรุปด้านล่างนับจากชุดนี้ ไม่ใช่ documents ดิบ เพราะการ์ดสามใบ
+  // สะท้อนแท็บสถานะแบบ 1:1 ถ้านับจาก documents ดิบ ตัวเลขบนการ์ดจะขัดกับแถวที่เห็นในตารางทันทีที่
+  // ผู้ใช้กรองเดือน/ค้นหา (ดู "Filter Honesty" ใน docs/UI_GUIDELINES.md)
+  const scoped = documents
     .filter((d) => !monthFilter || d.docDate.startsWith(monthFilter))
     .filter((d) => !normalizedSearch
       || d.docNo.toLowerCase().includes(normalizedSearch)
       || d.customerSnapshot.companyName.toLowerCase().includes(normalizedSearch)
       || (scopeNumbers[d.scopeOfWorkId] ?? "").toLowerCase().includes(normalizedSearch)
       || d.reference.toLowerCase().includes(normalizedSearch));
+  const filtered = scoped.filter((d) => statusFilter === "all" || d.status === statusFilter);
 
   const handlePrint = async (id: string) => {
     try {
@@ -278,9 +268,9 @@ export function ArDocumentListPage({
           request. The this-month money total previously shown here still lives on the monthly report page. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: t("accounting.list.status.all"), value: String(documents.length), color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
-          { label: t("accounting.list.status.issued"), value: String(documents.filter((d) => d.status === "issued").length), color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
-          { label: t("accounting.list.status.cancelled"), value: String(documents.filter((d) => d.status === "cancelled").length), color: "#e05252", bg: "from-[#e05252]/15 to-[#e05252]/5" },
+          { label: t("accounting.list.status.all"), value: String(scoped.length), color: "#5a7299", bg: "from-[#5a7299]/15 to-[#5a7299]/5" },
+          { label: t("accounting.list.status.issued"), value: String(scoped.filter((d) => d.status === "issued").length), color: "#2aa36b", bg: "from-[#2aa36b]/15 to-[#2aa36b]/5" },
+          { label: t("accounting.list.status.cancelled"), value: String(scoped.filter((d) => d.status === "cancelled").length), color: "#e05252", bg: "from-[#e05252]/15 to-[#e05252]/5" },
         ].map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">
             <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${s.bg} flex items-center justify-center mb-3`}>
@@ -385,7 +375,7 @@ export function ArDocumentListPage({
                       <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">
                         {d.docNo}
                         {d.isManual && (
-                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20 align-middle" title={t("accounting.list.badge.manualTitle")}>
+                          <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-sans font-medium bg-[#5a7299]/10 text-[#5a7299] border border-[#5a7299]/20 align-middle" title={t("accounting.list.badge.manualTitle")}>
                             {t("accounting.list.badge.manual")}
                           </span>
                         )}
@@ -515,7 +505,14 @@ function NcrSettingsDialog({ settings, onSave, onTestPrint, onClose }: {
 }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<NcrPrintSettings>(settings);
-  const num = (v: string, fallback: number) => { const n = Number(v); return Number.isFinite(n) ? n : fallback; };
+  // ขนาดกระดาษต้องมากกว่า 0 เสมอ — Number("") คือ 0 ซึ่งผ่าน Number.isFinite() ทำให้ล้างช่องแล้วได้
+  // 0 แล้วไปโผล่เป็น `@page { size: 0mm 0mm }` ตอนสั่งพิมพ์ (loadNcrSettings() กันค่านี้ตอนอ่านจาก
+  // localStorage อยู่แล้ว แต่ state ในหน้านี้ถูกใช้พิมพ์ตรง ๆ จึงต้องกันซ้ำที่นี่ด้วย)
+  const num = (v: string, fallback: number, positiveOnly: boolean) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return fallback;
+    return positiveOnly && n <= 0 ? fallback : n;
+  };
   const field = (label: string, key: keyof NcrPrintSettings) => (
     <label className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
       {label}
@@ -523,7 +520,7 @@ function NcrSettingsDialog({ settings, onSave, onTestPrint, onClose }: {
         type="number"
         step="0.5"
         value={draft[key]}
-        onChange={(e) => setDraft((d) => ({ ...d, [key]: num(e.target.value, d[key]) }))}
+        onChange={(e) => setDraft((d) => ({ ...d, [key]: num(e.target.value, d[key], key === "pageWidthMm" || key === "pageHeightMm") }))}
         className="w-24 h-8 px-2 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors font-mono text-right"
       />
     </label>
