@@ -216,6 +216,72 @@ which is itself checked before the plain quotes logic) — no new Vercel functio
 12-function-slot-sharing convention Scope of Work and Quotation Templates already use. New
 `api/_lib/deliveryOrderHandler.ts`. See [API.md](../API.md) for the full route table.
 
+## Department Routing (added 2026-08-20)
+
+The owner's requirement: *"ทำให้แผนกที่เกี่ยวข้องมีโมดูลทำใบส่งมอบงานเป็นของตัวเอง เวลาเซลล์ติ๊กส่งมา
+ให้ไปโผล่ในหน้าของแผนกนั้น ๆ"* — Sales ticks which departments a delivery note goes to, and it appears
+on those departments' own lists. ใบส่งมอบงาน is shared by **Sales, Project and Production**; there is
+still exactly one module and one set of records, per the owner's confirmation that the three
+departments use the same document.
+
+Confirmed with the owner before building:
+- **Department-level, not person-level.** Everyone whose `User.department` matches sees it. (Scope of
+  Work's older "เอกสารส่งถึง" picks named individuals; this deliberately does not.)
+- **Recipients get view + print only.** They cannot edit, approve, or delete.
+- **ผลิต maps to the existing Factory department**, not a new one.
+
+### Why it stores department *ids* and matches on *names*
+
+`DeliveryOrder.sentToDepartmentIds` holds `Department.id` values, but `User.department` holds a
+department **name** — so `departmentIdForUser()` resolves the caller's name → id on every query,
+rather than storing names on the document. Storing names would break every existing document the
+moment an admin renames a department in แผนกและทีม; resolving in this direction re-reads the current
+name each time, so renames keep working.
+
+⚠️ **Two department lists exist in this app and they do not overlap.** `DOCUMENT_RECIPIENT_DEPARTMENTS`
+(`src/lib/documentRequirements.ts`, hardcoded: Purchase/Project/Factory/Store/Technic/Service/
+Accounting) drives Scope of Work's checklist, while the real `departments` collection drives
+`User.department`. Scope of Work never had to reconcile them because it routes to user ids. This
+feature does, so it sources **only** from the real `departments` collection. Do not "unify" these by
+pointing this feature at the hardcoded list — nothing would match and nobody would see anything.
+
+### Setup this feature depends on (not code — real data)
+
+Checked against the database on 2026-08-20: the `departments` collection still holds only the seven
+generic seeded rows (ฝ่ายขาย/ฝ่ายจัดซื้อ/ฝ่ายคลังสินค้า/ฝ่ายบัญชี/ฝ่ายทรัพยากรบุคคล/ฝ่ายบริหาร/ฝ่ายไอที)
+— **there is no ฝ่ายผลิต and no ฝ่ายโปรเจกต์** — and the existing users hold legacy free-text values
+(`"Purchase"`, `"Technic"`) that match no department row at all. Until an admin adds the real
+departments and reassigns staff, ticking a department routes the document to **nobody**.
+
+Because that failure is completely silent, the send route returns `recipientCount` (how many active
+staff actually match) and the UI shows an explicit warning when it comes back `0`, instead of a
+success toast that means nothing.
+
+### Enforcement
+
+`POST /api/delivery-orders/:id/send-to-departments` requires `deliveryOrder:edit` + the usual
+owner-or-`:finalize` check, and is deliberately **not** locked to `Draft` — Sales routinely forwards a
+document after it is approved, and routing changes no document content (same exemption reasoning as
+Scope of Work's PO chasing).
+
+The "view + print only" rule is enforced in **one** place: a guard in the handler's dispatcher covers
+every mutating sub-route at once, so a route added later cannot quietly bypass it. It holds even if a
+recipient's role is granted `:edit`/`:finalize`/`:delete` — there is a test that grants exactly those
+and asserts 403 — because the rule is about who owns the document, not about how the role was
+configured. The document's own creator is exempt even if they happen to be in a ticked department.
+
+`tests/api/deliveryOrderDepartmentRouting.test.ts` covers all of this, including the case where a
+recipient **also owns** a delivery order — that one exists specifically to catch the `$or`-overwrite
+bug class that caused the permission leak fixed in CHANGELOG 2026-08-20i, and it was verified by
+introducing that exact bug and watching it fail.
+
+### Navigation
+
+`deliveryOrder` now appears in the **ขาย, โปรเจกต์ and ผลิต** sidebar groups. It is the same module and
+the same page in all three — not a copy. Note that an Administrator who can see all three groups
+sees the entry highlighted in all of them at once when it is active; staff with only their own
+department's permissions see it once.
+
 ## Approval Workflow + Rewrite (added 2026-07-24)
 
 Same state machine as Scope of Work's (see [ScopeOfWork.md](./ScopeOfWork.md) "Approval

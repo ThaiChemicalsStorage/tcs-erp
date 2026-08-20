@@ -18,6 +18,7 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   scope_of_work_submitted: <Send size={14} />,
   scope_of_work_approved: <CheckCircle2 size={14} />,
   scope_of_work_rejected: <XCircle size={14} />,
+  delivery_order_sent_to_department: <Send size={14} />,
   delivery_order_submitted: <Send size={14} />,
   delivery_order_approved: <CheckCircle2 size={14} />,
   delivery_order_rejected: <XCircle size={14} />,

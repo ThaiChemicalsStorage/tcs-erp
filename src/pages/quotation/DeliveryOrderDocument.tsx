@@ -14,6 +14,7 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import type { DriveStep } from "driver.js";
 import { useI18n } from "../../lib/i18n";
 import { DeliveryOrderPrintDocument } from "./DeliveryOrderPrintDocument";
+import { DeliveryOrderDepartmentRouting } from "./DeliveryOrderDepartmentRouting";
 
 function toUpdateFields(d: DeliveryOrder): DeliveryOrderUpdateFields {
   return { installments: d.installments };
@@ -402,12 +403,20 @@ export function DeliveryOrderDocument({
             {deliveryOrder.customerAddress.trim() && (
               <p className="text-xs text-muted-foreground whitespace-pre-line pl-1">{deliveryOrder.customerAddress}</p>
             )}
-            <p className="text-[10px] text-muted-foreground leading-relaxed pt-2">
+            <p className="text-xs text-muted-foreground leading-relaxed pt-2">
               ข้อมูลลูกค้าและรายการสินค้าถูกดึงมาจาก Scope of Work นี้โดยอัตโนมัติเมื่อสร้างครั้งแรก
               หาก Scope of Work มีการแก้ไขภายหลัง ใช้ปุ่ม "อัปเดตข้อมูลจาก Scope of Work" เพื่อดึงข้อมูลล่าสุดมาแทนที่
             </p>
           </div>
         </div>
+
+        {/* ส่งเอกสารถึงแผนก — ไม่ผูกกับล็อก Draft เพราะเซลล์มักส่งต่อหลังเอกสารอนุมัติแล้ว */}
+        <DeliveryOrderDepartmentRouting
+          deliveryOrder={deliveryOrder}
+          canEdit={canEdit}
+          onUpdated={setDeliveryOrder}
+          showToast={showToast}
+        />
 
         <div data-tour={deliveryOrder.installments.length > 0 ? "dodoc-installments" : undefined} className="space-y-5 print:hidden">
           {deliveryOrder.installments.length === 0 ? (

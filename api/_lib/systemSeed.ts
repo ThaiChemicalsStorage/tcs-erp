@@ -82,6 +82,7 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   scope_of_work_submitted: { label: "Scope of Work รออนุมัติ", module: "Scope of Work" },
   scope_of_work_approved: { label: "Scope of Work ได้รับอนุมัติ", module: "Scope of Work" },
   scope_of_work_rejected: { label: "Scope of Work ถูกตีกลับ", module: "Scope of Work" },
+  delivery_order_sent_to_department: { label: "มีใบส่งมอบงานส่งถึงแผนก", module: "Delivery Order" },
   delivery_order_submitted: { label: "ใบส่งมอบสินค้ารออนุมัติ", module: "Delivery Order" },
   delivery_order_approved: { label: "ใบส่งมอบสินค้าได้รับอนุมัติ", module: "Delivery Order" },
   delivery_order_rejected: { label: "ใบส่งมอบสินค้าถูกตีกลับ", module: "Delivery Order" },

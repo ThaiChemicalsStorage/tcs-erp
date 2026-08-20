@@ -880,6 +880,25 @@ every user's documents to anyone holding plain `:view`. That exact leak shipped 
 caught by the review in `2026-08-20i`; the fix carries a comment saying why. Any future filter that
 also produces a `$or` has the same hazard.
 
+## Delivery Order department routing (added 2026-08-20)
+
+Adds **no new permission**. A delivery note ticked through to a department becomes visible to every
+active user whose `User.department` matches, on top of whatever `buildOwnershipClause()` already
+grants them — merged into the same `$or`, never spread over it (see the warning above).
+
+Two things this deliberately does *not* do:
+- It never grants mutation. Recipients are view + print only, enforced by a dispatcher-level guard
+  that fires even if their role holds `:edit`/`:finalize`/`:delete`, because the document belongs to
+  the issuing department. The creator is exempt.
+- It does not use `DOCUMENT_RECIPIENT_DEPARTMENTS`. That hardcoded list drives Scope of Work's
+  person-level picker and **shares no value** with the real `departments` collection that
+  `User.department` comes from. Routing sources only from the real collection — see
+  [MODULES/DeliveryOrder.md](./MODULES/DeliveryOrder.md) "Department Routing" for why, and for the
+  data setup this depends on.
+
+A Production/Project role that should only *receive* delivery notes needs just `deliveryOrder:view`
++ `deliveryOrder:print`.
+
 ### Known gap: `GET /api/<doc>/:id` is not ownership-scoped
 
 Single-document reads across Material Requisition, Purchase Request, Job Order and Production Order

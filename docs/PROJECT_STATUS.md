@@ -14,6 +14,23 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-20j] Delivery Order can be routed to departments — and the department master data
+  turns out to be unusable as-is.** Sales ticks which departments a delivery note goes to; everyone
+  in those departments sees it on their own list (view + print only, enforced by a single
+  dispatcher-level guard that holds even against a role granted `:edit`/`:finalize`/`:delete`) and
+  gets a deep-linked notification. `deliveryOrder` now also sits in the โปรเจกต์ and ผลิต nav groups —
+  the same module, not a copy. **The blocking finding**: this app carries two department lists that
+  share not one value — the hardcoded `DOCUMENT_RECIPIENT_DEPARTMENTS` behind Scope of Work's
+  checklist, and the real `departments` collection behind `User.department`. Scope of Work never had
+  to reconcile them because it routes to user ids. Checked against the database: **no ฝ่ายผลิต and no
+  ฝ่ายโปรเจกต์ row exists**, and current users hold legacy values (`"Purchase"`, `"Technic"`) matching
+  no row — so routing reaches nobody until an admin sets the real departments up. Because that
+  failure is silent, the route returns `recipientCount` and the UI warns explicitly when it is 0.
+  Also worth recording: the owner's opening message read as "undo the Project/Production record
+  separation"; asking instead of acting revealed they meant the opposite, and **no MR/PR code
+  changed**. `tsc` ×2 / `lint` 0 errors / `build` / **261 tests**; i18n parity 2,139.
+  See CHANGELOG.md 2026-08-20j and [MODULES/DeliveryOrder.md](./MODULES/DeliveryOrder.md).
+
 - ✅ **[2026-08-20i] Reviewed the Production module and fixed 9 defects — four of them critical.**
   Done on the owner's own instruction to review the work afterwards. The worst was a **permission
   leak**: `buildSimpleOwnershipClause()` and the new department filter both return a top-level `$or`,

@@ -32,6 +32,15 @@ export interface DeliveryOrder {
   items: DeliveryOrderItem[];
   installments: DeliveryOrderInstallment[];
   status: DeliveryOrderStatus;
+  /**
+   * แผนกที่เซลล์ติ๊กส่งเอกสารนี้ไปให้ (2026-08-20) — เก็บเป็น **id** ของ Department ไม่ใช่ชื่อ
+   * เพราะแอดมินเปลี่ยนชื่อแผนกในหน้า "แผนกและทีม" ได้ตลอด ถ้าเก็บชื่อไว้ เอกสารเก่าจะหลุดทันทีที่
+   * เปลี่ยนชื่อ ฝั่งเซิร์ฟเวอร์แปลง id เป็นชื่อ ณ เวลาที่ query แล้วค่อยจับคู่กับ `User.department`
+   * (ซึ่งเก็บเป็นชื่อ — ดู docs/MODULES/DeliveryOrder.md "Department Routing")
+   *
+   * เป็น optional เพราะเอกสารที่สร้างก่อนฟีเจอร์นี้ไม่มีฟิลด์นี้ใน MongoDB เลย
+   */
+  sentToDepartmentIds?: string[];
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -88,6 +97,21 @@ export async function updateDeliveryOrder(id: string, fields: DeliveryOrderUpdat
     body: JSON.stringify(fields),
   });
   return deliveryOrder;
+}
+/**
+ * ส่งเอกสารนี้ให้แผนกที่เกี่ยวข้อง (2026-08-20) — ทุกคนที่ถูกตั้งแผนกไว้ตรงกับแผนกที่ติ๊ก จะเห็นเอกสารนี้
+ * ในหน้ารายการของตัวเอง (ดู/พิมพ์อย่างเดียว แก้ไม่ได้) และได้แจ้งเตือนที่กระดิ่ง
+ *
+ * แยกจาก PATCH ปกติเพราะ **ไม่ติดล็อก Final** — เซลล์มักส่งเอกสารต่อหลังอนุมัติแล้ว และการส่งต่อ
+ * ไม่ได้แก้เนื้อหาเอกสารเลย (แนวเดียวกับ PO chasing ของ Scope of Work ที่ยกเว้นล็อก Final เหมือนกัน)
+ */
+export async function sendDeliveryOrderToDepartments(
+  id: string, departmentIds: string[],
+): Promise<{ deliveryOrder: DeliveryOrder; recipientCount: number }> {
+  return apiFetch<{ deliveryOrder: DeliveryOrder; recipientCount: number }>(
+    `/delivery-orders/${encodeURIComponent(id)}/send-to-departments`,
+    { method: "POST", body: JSON.stringify({ departmentIds }) },
+  );
 }
 // อนุมัติใบส่งมอบสินค้า (เปลี่ยนสถานะจาก PendingApproval เป็น Final)
 // Approves a Delivery Order (PendingApproval -> Final)

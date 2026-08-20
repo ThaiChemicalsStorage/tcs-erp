@@ -4,7 +4,71 @@
 
 ---
 
-## 2026-08-20i (absolute latest) — Code review of the Production module: 4 critical fixes, one of them a real permission leak
+## 2026-08-20j (absolute latest) — Delivery Order can be routed to departments; the two department lists are found to be disconnected
+
+**Feature**: The owner corrected an assumption from the Production pass and asked for department
+routing on ใบส่งมอบงาน: *"ทำให้แผนกที่เกี่ยวข้องมีโมดูลทำใบส่งมอบงานเป็นของตัวเอง เวลาเซลล์ติ๊กส่งมาให้
+ไปโผล่ในหน้าของแผนกนั้น ๆ"*.
+
+### First, a correction that turned out not to be needed
+
+The owner opened with *"ใบเบิกและคืนวัสดุ ใบขอซื้อ แผนกโปรเจกต์กับผลิตจะใช้ร่วมกัน"*, which read as
+"remove the `ownerDepartment` separation built in `bf6cb76`". Asking rather than acting was the right
+call: what they meant was *"ฟอร์มเหมือนกันแต่แบบออกใครออกมัน"* — same form, each department issues its
+own — which is **exactly what already shipped**. No code changed for MR/PR. Had that been implemented
+from the first reading, a correct feature would have been torn out.
+
+### The real finding: two department lists that share nothing
+
+Building "tick a department, everyone in it sees the document" required matching a document's
+department against `User.department`. That surfaced a structural problem neither list's author had to
+face before:
+
+| Source | Values | Drives |
+|---|---|---|
+| `departments` collection | ฝ่ายขาย, ฝ่ายจัดซื้อ, ฝ่ายคลังสินค้า, ฝ่ายบัญชี, ฝ่ายทรัพยากรบุคคล, ฝ่ายบริหาร, ฝ่ายไอที | `User.department` |
+| `DOCUMENT_RECIPIENT_DEPARTMENTS` (hardcoded) | Purchase, Project, Factory, Store, Technic, Service, Accounting | Scope of Work's "เอกสารส่งถึง" |
+
+**Not one name overlaps.** Scope of Work never hit this because it routes to *user ids*. Checked
+against the database: there is no ฝ่ายผลิต and no ฝ่ายโปรเจกต์ row at all, and the existing users hold
+legacy values (`"Purchase"`, `"Technic"`) matching no row — so department routing would currently
+reach **nobody**.
+
+This is a data-setup problem, not a code one, and it is the owner's to fix (add the real departments,
+reassign staff). What the code does about it: the send route returns `recipientCount`, and the UI
+shows an explicit warning when it is `0` rather than a success toast — otherwise the feature fails
+completely silently, which is its worst possible behaviour.
+
+### What was built
+
+`DeliveryOrder.sentToDepartmentIds` (optional, so existing documents are unaffected) + `POST
+/api/delivery-orders/:id/send-to-departments`. It stores department **ids** but matches on **names**
+resolved at query time — storing names would break every document the moment an admin renames a
+department. The route is deliberately not `Draft`-locked, since Sales forwards documents after
+approval and routing changes no content (same reasoning as Scope of Work's PO chasing).
+
+Recipients get **view + print only**, per the owner. That is enforced by a single guard covering
+every mutating sub-route in the dispatcher — one choke point, so a route added later cannot bypass
+it — and it holds even when the recipient's role holds `:edit`/`:finalize`/`:delete`. A test grants
+exactly those and asserts 403, because the rule is about document ownership, not role configuration.
+
+`deliveryOrder` now also appears in the โปรเจกต์ and ผลิต sidebar groups — the same module and page,
+not a copy.
+
+### Verification worth recording
+
+The 8 tests initially written all passed against a deliberately introduced `$or`-overwrite bug — the
+exact leak class fixed hours earlier in `2026-08-20i`. The reason: no recipient in those tests owned
+a document, so dropping the ownership half of the clause was unobservable. A ninth test was added
+where the recipient **also owns** a delivery order; re-running the same mutation then failed it
+correctly. The recipient-only guard was verified the same way.
+
+**Verified**: `tsc` (both configs) / `lint` (0 errors) / `build` / **261 tests** (up from 252); i18n
+parity 2,139 keys each way. Not click-tested in a browser.
+
+---
+
+## 2026-08-20i — Code review of the Production module: 4 critical fixes, one of them a real permission leak
 
 **Review**: The owner's instruction for the Production work was *"หลังจากเสร็จงานให้รีวิวโค้ดด้วยและแก้"*
 — review it afterwards and fix what's found. This entry covers reviewing `3352c4e`…`bf6cb76` and the

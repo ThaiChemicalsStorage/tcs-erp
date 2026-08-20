@@ -4,7 +4,52 @@
 
 ---
 
-## Session — 2026-08-20 (continued, absolute latest), reviewing the Production module and fixing what it found
+## Session — 2026-08-20 (continued, absolute latest), Delivery Order department routing
+
+### The most useful thing that happened: not writing code
+The owner opened with *"ใบเบิกและคืนวัสดุ ใบขอซื้อ แผนกโปรเจกต์กับผลิตจะใช้ร่วมกัน"* — which reads
+naturally as "the two departments share one pool of records, so remove the `ownerDepartment`
+separation you just built and committed." They then added *"อย่าพึ่งเริ่มทำอะไรนะถามก่อน"*. Asking
+turned out to matter: what they meant by ใช้ร่วมกัน was *"ฟอร์มเหมือนกันแต่แบบออกใครออกมัน"* — same
+form, each department issues its own — which is precisely what already shipped. **No MR/PR code
+changed.** Acting on the first reading would have torn out a correct feature.
+
+### The finding that shaped the whole feature
+"Tick a department, everyone in it sees the document" needs to match a document's department against
+`User.department`. Doing that surfaced something no previous feature had to confront: this app has
+**two department lists that share not a single value** — `DOCUMENT_RECIPIENT_DEPARTMENTS`
+(hardcoded, behind Scope of Work's "เอกสารส่งถึง") and the real `departments` collection (behind
+`User.department`). Scope of Work escaped the problem entirely because it routes to *user ids*.
+
+Checking the actual database made it concrete: no ฝ่ายผลิต row, no ฝ่ายโปรเจกต์ row, and both existing
+users hold legacy free-text (`"Purchase"`, `"Technic"`) matching nothing. Department routing would
+reach nobody, and would look like it worked.
+
+That is a data problem the owner has to fix, not something to code around. What the code does is
+refuse to fail quietly: the send route returns `recipientCount` and the UI warns outright when it is
+zero, instead of a success toast that means nothing.
+
+### Verification worth remembering
+The first 8 tests all passed against a deliberately reintroduced `$or`-overwrite bug — the exact leak
+class fixed only hours earlier in the previous entry. The tests were blind to it because no recipient
+in them owned a document of their own, so dropping the ownership half of the clause changed nothing
+observable. A ninth test where the recipient **also owns** a delivery order catches it. Lesson worth
+carrying: a mutation test that passes is information about the *test*, not the code.
+
+### Design notes
+Department **ids** are stored on the document but matched by **name** at query time — storing names
+would break every document the moment an admin renames a department. The view+print-only rule lives
+in one dispatcher-level guard rather than sprinkled per handler, so a route added later can't bypass
+it, and it holds even against a role holding `:edit`/`:finalize`/`:delete` — the rule is about who
+owns the document, not how a role happens to be configured.
+
+### Still outstanding
+Unchanged and still top of the list: **nothing in this or the previous two entries has been clicked
+in a browser.** Plus the new setup dependency above, which only the owner can do.
+
+---
+
+## Session — 2026-08-20 (continued), reviewing the Production module and fixing what it found
 
 ### What happened
 The owner's instruction with the Production work was *"หลังจากเสร็จงานให้รีวิวโค้ดด้วยและแก้"* — review it

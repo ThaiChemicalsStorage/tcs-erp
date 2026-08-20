@@ -5,7 +5,7 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildOwnershipClause } from "./visibility.js";
 import {
   deliveryOrdersCollection, scopeOfWorksCollection, auditLogCollection,
-  usersCollection, rolesCollection, notificationsCollection,
+  usersCollection, rolesCollection, notificationsCollection, departmentsCollection,
   toObjectId, withStringId, type DeliveryOrderFields, type ScopeOfWorkFields,
 } from "./collections.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
@@ -62,6 +62,44 @@ function isOwnerOf(ctx: AuthContext, doc: { createdBy: string }): boolean {
 function canEditDeliveryOrder(ctx: AuthContext, doc: { createdBy: string }): boolean {
   if (!roleHasPermission(ctx.role, "deliveryOrder:edit")) return false;
   return isOwnerOf(ctx, doc) || roleHasPermission(ctx.role, "deliveryOrder:finalize");
+}
+
+// ── การส่งใบส่งมอบงานถึงแผนก (2026-08-20) ────────────────────────────────────────────────
+/**
+ * แปลง "แผนกของผู้ใช้คนนี้" เป็น id ของ Department
+ *
+ * `User.department` เก็บเป็น **ชื่อ** แผนก ส่วนเอกสารเก็บเป็น **id** จึงต้องแปลงตรงนี้ทุกครั้ง
+ * (แปลงทางนี้ ไม่ใช่ทางกลับ เพราะแปลง id→ชื่อ แล้วเทียบ จะพังทันทีที่แอดมินเปลี่ยนชื่อแผนก
+ * ส่วนทางนี้อ่านชื่อปัจจุบันจากตารางเสมอ เปลี่ยนชื่อแล้วยังจับคู่ได้เหมือนเดิม)
+ *
+ * คืน null เมื่อผู้ใช้ไม่ได้ตั้งแผนก หรือตั้งเป็นค่าที่ไม่มีในตาราง `departments` — ซึ่ง **เกิดขึ้นจริง**
+ * กับข้อมูลปัจจุบัน (ผู้ใช้ถือค่าเก่าอย่าง "Purchase"/"Technic" ที่ไม่มีในตารางเลย) คนกลุ่มนี้จะไม่เห็น
+ * เอกสารที่ส่งถึงแผนก จนกว่าจะตั้งแผนกให้ตรงกับตารางจริง ดู docs/MODULES/DeliveryOrder.md
+ */
+async function departmentIdForUser(ctx: AuthContext): Promise<string | null> {
+  const name = (ctx.user.department ?? "").trim();
+  if (!name) return null;
+  const departments = await departmentsCollection();
+  const match = await departments.findOne({ name });
+  return match ? match._id.toString() : null;
+}
+
+/**
+ * เอกสารที่ "ถูกส่งมา" ให้แผนกนี้ — ผู้รับดูและพิมพ์ได้อย่างเดียว แก้/อนุมัติ/ลบไม่ได้ (เจ้าของยืนยัน
+ * 2026-08-20) บังคับตรงนี้ต่อให้ role ของผู้รับจะเผลอมีสิทธิ์ `:edit`/`:finalize` ก็ตาม เพราะเอกสาร
+ * เป็นของฝ่ายที่ออก ไม่ใช่ของแผนกผู้รับ — ไม่ได้ปล่อยให้ขึ้นกับการตั้ง role ให้ถูกอย่างเดียว
+ *
+ * ผู้สร้างเอกสารเองไม่ติดกฎนี้ แม้จะบังเอิญอยู่ในแผนกที่ถูกติ๊ก
+ */
+async function assertNotDepartmentRecipientOnly(ctx: AuthContext, id: string): Promise<void> {
+  const doc = await loadDeliveryOrderOrThrow(id);
+  if (isOwnerOf(ctx, doc)) return;
+  const ids = doc.sentToDepartmentIds ?? [];
+  if (ids.length === 0) return;
+  const myDepartmentId = await departmentIdForUser(ctx);
+  if (myDepartmentId !== null && ids.includes(myDepartmentId)) {
+    throw new HttpError(403, "เอกสารนี้ถูกส่งมาให้แผนกของคุณเพื่อดูและพิมพ์เท่านั้น ไม่สามารถแก้ไขได้");
+  }
 }
 
 /** A non-priced divider row (`isSectionHeader`) copied from a Quotation Template has no
@@ -191,7 +229,16 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   // documented there (an existence check must never hide a colleague's already-created record and
   // risk a duplicate).
   if (!scopeOfWorkId) {
-    const ownershipMatch = await buildOwnershipClause(ctx, "deliveryOrder", "createdBy");
+    const ownershipClause = await buildOwnershipClause(ctx, "deliveryOrder", "createdBy");
+    // เอกสารที่ถูกส่งมาให้แผนกของผู้ใช้ ต้องโผล่ในรายการของเขาด้วย แม้จะไม่ได้เป็นคนสร้าง (2026-08-20)
+    // รวมเข้าไปใน `$or` เดิม ไม่ใช่ spread ทับ — เพราะ buildOwnershipClause() ก็คืน `$or` เหมือนกัน
+    // การ spread ทั้งสองอันจะทำให้อันหลังลบอันแรกทิ้งเงียบ ๆ (บั๊กแบบเดียวกับที่เพิ่งแก้ใน MR/PR
+    // เมื่อ 2026-08-20i) ถ้า clause เดิมเป็น {} แปลว่าผู้ใช้เห็นทุกใบอยู่แล้ว ไม่ต้องรวมอะไร
+    const myDepartmentId = await departmentIdForUser(ctx);
+    const ownershipMatch: Record<string, unknown> =
+      myDepartmentId !== null && "$or" in ownershipClause
+        ? { $or: [...(ownershipClause.$or as Record<string, unknown>[]), { sentToDepartmentIds: myDepartmentId }] }
+        : ownershipClause;
     const docs = await deliveryOrders.find({ isDeleted: false, ...ownershipMatch }).sort({ updatedAt: -1 }).toArray();
     res.status(200).json({ deliveryOrders: docs.map(toListItem) });
     return;
@@ -304,6 +351,72 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
     scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
   });
   res.status(200).json({ deliveryOrder: toClient(updated) });
+}
+
+/**
+ * ส่งใบส่งมอบงานถึงแผนก — ทุกคนในแผนกที่ติ๊กจะเห็นเอกสารนี้ในรายการของตัวเอง + ได้แจ้งเตือน
+ *
+ * **จงใจไม่ล็อกที่สถานะ Draft** ต่างจาก PATCH ปกติ เพราะในความเป็นจริงเซลล์ส่งเอกสารต่อให้แผนกอื่น
+ * *หลัง* เอกสารอนุมัติแล้ว และการส่งต่อไม่ได้แก้เนื้อหาเอกสารเลย — แนวเดียวกับ PO chasing ของ
+ * Scope of Work ที่ยกเว้นล็อก Final ด้วยเหตุผลเดียวกัน (ดู MODULES/ScopeOfWork.md "PO Chasing")
+ */
+async function handleSendToDepartments(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "deliveryOrder:edit");
+  const doc = await loadDeliveryOrderOrThrow(id);
+  if (!canEditDeliveryOrder(ctx, doc)) throw new HttpError(403, "Forbidden");
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const raw = Array.isArray(body.departmentIds) ? body.departmentIds : [];
+  const requested = [...new Set(raw.filter((v): v is string => typeof v === "string" && v.trim() !== "").map((v) => v.trim()))];
+
+  // รับเฉพาะ id ที่มีอยู่จริงและยังไม่ถูกปิดใช้งาน — กัน id มั่วจาก client และกันเอกสารค้างชี้ไปยัง
+  // แผนกที่ถูกลบไปแล้ว (ซึ่งจะไม่มีใครเห็นตลอดไปโดยไม่มีสัญญาณอะไรบอก)
+  const departments = await departmentsCollection();
+  const found = requested.length > 0
+    ? await departments.find({ _id: { $in: requested.map(toObjectId) }, isActive: true }).toArray()
+    : [];
+  const validIds = found.map((d) => d._id.toString());
+  if (validIds.length !== requested.length) throw new HttpError(400, "มีแผนกที่เลือกไม่มีอยู่จริงหรือถูกปิดใช้งานแล้ว");
+
+  const deliveryOrders = await deliveryOrdersCollection();
+  await deliveryOrders.updateOne({ _id: doc._id }, {
+    $set: { sentToDepartmentIds: validIds, updatedAt: nowIso(), updatedBy: ctx.user.id },
+  });
+
+  // แจ้งเตือนเฉพาะแผนกที่ "เพิ่งถูกเพิ่มเข้ามา" — กดบันทึกซ้ำโดยไม่เปลี่ยนอะไรต้องไม่ยิงแจ้งเตือนซ้ำ
+  const before = new Set(doc.sentToDepartmentIds ?? []);
+  const newlyAdded = found.filter((d) => !before.has(d._id.toString()));
+  if (newlyAdded.length > 0) {
+    const users = await usersCollection();
+    const recipients = await users
+      .find({ department: { $in: newlyAdded.map((d) => d.name) }, status: "active" })
+      .toArray();
+    const recipientIds = recipients.map((u) => u._id.toString()).filter((uid) => uid !== ctx.user.id);
+    // ใช้ helper เดิมของโมดูลนี้ เพราะมันแนบ relatedDeliveryOrderId ให้ด้วย — กดที่กระดิ่งแล้วเปิด
+    // เอกสารใบนั้นได้เลย ถ้าเขียน insert เองจะได้แจ้งเตือนที่กดแล้วไม่ไปไหน
+    await notifyDeliveryOrderApprovalEvent(
+      recipientIds, "delivery_order_sent_to_department",
+      "มีใบส่งมอบงานส่งถึงแผนกคุณ",
+      `${ctx.user.fullName} ส่งใบส่งมอบงานของงาน ${doc.scopeNumber} (${doc.customerCompanyName}) ถึง${newlyAdded.map((d) => d.name).join(", ")}`,
+      id, doc.scopeNumber,
+    );
+  }
+
+  // จำนวนคนที่จะเห็นเอกสารนี้จริง ๆ — ส่งกลับไปให้ UI บอกผู้ใช้ ถ้าเป็น 0 แปลว่าแผนกที่เลือกยังไม่มี
+  // พนักงานถูกตั้งชื่อแผนกให้ตรงกัน ซึ่งเป็นสภาพของข้อมูลตอนนี้จริง ๆ และถ้าไม่บอก ผู้ใช้จะกดส่งแล้ว
+  // คิดว่าเรียบร้อยทั้งที่ไม่มีใครได้รับเลย — ความล้มเหลวแบบเงียบที่แย่ที่สุดของฟีเจอร์นี้
+  const usersForCount = await usersCollection();
+  const recipientCount = validIds.length === 0 ? 0 : await usersForCount.countDocuments({
+    department: { $in: found.map((d) => d.name) }, status: "active",
+  });
+
+  const updated = await deliveryOrders.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบใบส่งมอบสินค้า");
+  await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Sent To Departments",
+    `ส่งใบส่งมอบสินค้าของ Scope of Work ${updated.scopeNumber} ถึง ${found.map((d) => d.name).join(", ") || "(ไม่มีแผนก)"}`,
+    { scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId });
+  res.status(200).json({ deliveryOrder: toClient(updated), recipientCount });
 }
 
 async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string) {
@@ -528,7 +641,18 @@ export async function handleDeliveryOrder(req: VercelRequest, res: VercelRespons
     if (req.method === "POST") return handleCreate(req, res);
     return handleList(req, res);
   }
+  // ด่านเดียวคุมทุก route ที่แก้ข้อมูล — ผู้รับจากการส่งถึงแผนกต้องดู/พิมพ์ได้อย่างเดียว (2026-08-20)
+  // วางไว้ตรงนี้จุดเดียวแทนที่จะไปโรยตาม handler ทีละตัว จะได้ไม่มี route ใหม่หลุดด่านนี้ในอนาคต
+  const isMutation = parts.length === 2
+    ? ["refresh", "finalize", "submit-approval", "reject", "withdraw-approval", "rewrite", "send-to-departments"].includes(parts[1])
+    : parts.length === 1 && (req.method === "PATCH" || req.method === "DELETE");
+  if (isMutation) {
+    const ctx = await requireUser(req);
+    await assertNotDepartmentRecipientOnly(ctx, parts[0]);
+  }
+
   if (parts.length === 1) return handleOne(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "send-to-departments") return handleSendToDepartments(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "finalize") return handleFinalize(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "submit-approval") return handleSubmitApproval(req, res, parts[0]);

@@ -201,8 +201,11 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
   { labelKey: "nav.group.accounting", keys: ["accountingDashboard", "accounting", "arDeposit", "arBilling", "arReceipt", "arTaxInvoice", "arMonthly"] },
-  { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest"] },
-  { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "productionPurchase"] },
+  // ใบส่งมอบสินค้าโผล่ใน 3 หมวด (ขาย/โปรเจกต์/ผลิต) โดยตั้งใจ — เป็นโมดูลเดียวกันและข้อมูลชุดเดียวกัน
+  // ไม่ได้ก๊อปมาสร้างใหม่ เพราะทั้งสามแผนกใช้เอกสารใบเดียวกัน (เจ้าของยืนยัน 2026-08-20) แค่ให้แต่ละ
+  // แผนกเข้าถึงได้จากหมวดของตัวเองแทนที่จะต้องไปหาใต้ "ขาย"
+  { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest", "deliveryOrder"] },
+  { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "productionPurchase", "deliveryOrder"] },
   { labelKey: "nav.group.inventory", keys: ["products", "stock"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
