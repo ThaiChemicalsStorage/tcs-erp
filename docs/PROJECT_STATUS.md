@@ -14,8 +14,22 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
-- 🟡 **[2026-08-19] Work Handover Note (ใบส่งมอบงาน) — the 4th Project-module document type,
-  first-draft/unverified.** Direct instruction to build the previously-deferred document Accounting's
+- ❌ **[2026-08-20] Work Handover Note module removed — confirmed redundant with Delivery Order.**
+  Direct confirmation from two people on the business side: the document this module built
+  (ใบส่งมอบงาน) is the same document the pre-existing **Delivery Order** module (FM-SL-05) already
+  produces, not a distinct 4th Project-module document type. Removed cleanly: `src/lib/workHandover.ts`,
+  `api/_lib/workHandoverHandler.ts` + its mount point, `src/pages/workHandover/`, the entry-point
+  button on `ProjectDocument.tsx`, all 7 `workHandover:*` RBAC permissions, all i18n keys, the guided
+  tour, and `tests/api/workHandover.test.ts` are all gone; the `work_handover_notes` MongoDB
+  collection is left alone (empty/unused, no destructive DB cleanup). **One real gap surfaced by
+  this review, worth tracking**: Delivery Order's print document only ever prints a blank signature
+  line for wet-ink signing — unlike Work Handover Note, it does not capture/embed a real digital
+  customer signature via `SignaturePad`. Not addressed as part of this removal; revisit if digital
+  signature capture on delivery documents becomes a real requirement. See CHANGELOG.md, TODO.md, and
+  [MODULES/Project.md](./MODULES/Project.md) "Work Handover Note — removed 2026-08-20".
+
+- 🟡 **[2026-08-19, removed 2026-08-20 — see entry above] Work Handover Note (ใบส่งมอบงาน) — the 4th
+  Project-module document type, first-draft/unverified.** Direct instruction to build the previously-deferred document Accounting's
   milestone-billing gate is waiting on (see `docs/MODULES/Accounting.md`). ⚠️ **Unlike Material
   Requisition/Job Order/Purchase Request, no reference PDF exists for this document** — the structure
   (customer/site/work-completed-date header, free-typed work-delivered lines, preparer + customer

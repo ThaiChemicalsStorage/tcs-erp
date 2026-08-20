@@ -15,12 +15,9 @@ export function ProjectPage({
   canCreateMaterialRequisition,
   canCreateJobOrder,
   canCreatePurchaseRequest,
-  canViewWorkHandover,
-  canCreateWorkHandover,
   onOpenMaterialRequisition,
   onOpenJobOrder,
   onOpenPurchaseRequest,
-  onOpenWorkHandover,
   initialProjectId,
   onProjectIdConsumed,
 }: {
@@ -30,12 +27,9 @@ export function ProjectPage({
   canCreateMaterialRequisition: boolean;
   canCreateJobOrder: boolean;
   canCreatePurchaseRequest: boolean;
-  canViewWorkHandover: boolean;
-  canCreateWorkHandover: boolean;
   onOpenMaterialRequisition: (id: string) => void;
   onOpenJobOrder: (id: string) => void;
   onOpenPurchaseRequest: (id: string) => void;
-  onOpenWorkHandover: (id: string) => void;
   initialProjectId?: string | null;
   onProjectIdConsumed?: () => void;
 }) {
@@ -94,13 +88,10 @@ export function ProjectPage({
           canCreateMaterialRequisition={canCreateMaterialRequisition}
           canCreateJobOrder={canCreateJobOrder}
           canCreatePurchaseRequest={canCreatePurchaseRequest}
-          canViewWorkHandover={canViewWorkHandover}
-          canCreateWorkHandover={canCreateWorkHandover}
           onBack={backToList}
           onOpenMaterialRequisition={onOpenMaterialRequisition}
           onOpenJobOrder={onOpenJobOrder}
           onOpenPurchaseRequest={onOpenPurchaseRequest}
-          onOpenWorkHandover={onOpenWorkHandover}
           onDeleted={backToList}
           showToast={toast.show}
         />

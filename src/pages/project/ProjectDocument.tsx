@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, RotateCw, Trash2, Loader2, AlertTriangle, FileSignature } from "lucide-react";
+import { ChevronRight, RotateCw, Trash2, Loader2, AlertTriangle } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import {
   type Project, type ProjectStatus,
   fetchProject, updateProjectStatus, refreshProjectFromScope, deleteProject,
 } from "../../lib/project";
-import { type WorkHandoverSummary, fetchWorkHandoversByProject, createWorkHandoverFromProject } from "../../lib/workHandover";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -30,12 +29,9 @@ export function ProjectDocument({
   canCreateMaterialRequisition,
   canCreateJobOrder,
   canCreatePurchaseRequest,
-  canViewWorkHandover,
-  canCreateWorkHandover,
   onOpenMaterialRequisition,
   onOpenJobOrder,
   onOpenPurchaseRequest,
-  onOpenWorkHandover,
   onBack,
   backLabel,
   onDeleted,
@@ -48,14 +44,11 @@ export function ProjectDocument({
   canCreateMaterialRequisition: boolean;
   canCreateJobOrder: boolean;
   canCreatePurchaseRequest: boolean;
-  canViewWorkHandover: boolean;
-  canCreateWorkHandover: boolean;
   onBack: () => void;
   backLabel?: string;
   onOpenMaterialRequisition: (id: string) => void;
   onOpenJobOrder: (id: string) => void;
   onOpenPurchaseRequest: (id: string) => void;
-  onOpenWorkHandover: (id: string) => void;
   onDeleted: () => void;
   showToast: (msg: string) => void;
 }) {
@@ -72,8 +65,6 @@ export function ProjectDocument({
   const [statusSaving, setStatusSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [existingWorkHandover, setExistingWorkHandover] = useState<WorkHandoverSummary | null>(null);
-  const [workHandoverBusy, setWorkHandoverBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,17 +76,6 @@ export function ProjectDocument({
       });
     return () => { cancelled = true; };
   }, [projectId, reloadKey, t]);
-
-  // ตรวจสอบว่าโครงการนี้มีใบส่งมอบงานอยู่แล้วหรือไม่ (ใช้ตัดสินใจว่าปุ่มจะ "สร้าง" หรือ "เปิด")
-  // Checks whether this Project already has a Work Handover Note — decides the entry-point button's "Create" vs "Open" label
-  useEffect(() => {
-    if (!canViewWorkHandover) return;
-    let cancelled = false;
-    fetchWorkHandoversByProject(projectId)
-      .then((list) => { if (!cancelled) setExistingWorkHandover(list[0] ?? null); })
-      .catch(() => { if (!cancelled) setExistingWorkHandover(null); });
-    return () => { cancelled = true; };
-  }, [projectId, canViewWorkHandover]);
 
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="projectdoc-actions"]', popover: { title: t("tour.projectdoc.actions.title"), description: t("tour.projectdoc.actions.desc"), side: "bottom" } },
@@ -128,23 +108,6 @@ export function ProjectDocument({
       showToast(err instanceof ApiError ? err.message : t("project.doc.errorRefresh"));
     } finally {
       setRefreshing(false);
-    }
-  };
-
-  const handleWorkHandoverClick = async () => {
-    if (!project || workHandoverBusy) return;
-    if (existingWorkHandover) {
-      onOpenWorkHandover(existingWorkHandover.id);
-      return;
-    }
-    setWorkHandoverBusy(true);
-    try {
-      const created = await createWorkHandoverFromProject(project.id);
-      onOpenWorkHandover(created.id);
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("project.doc.errorWorkHandover"));
-    } finally {
-      setWorkHandoverBusy(false);
     }
   };
 
@@ -224,11 +187,6 @@ export function ProjectDocument({
           {canEdit && (
             <button onClick={handleRefresh} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {refreshing ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />} {t("project.doc.refresh")}
-            </button>
-          )}
-          {canViewWorkHandover && canCreateWorkHandover && (
-            <button onClick={handleWorkHandoverClick} disabled={workHandoverBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
-              {workHandoverBusy ? <Loader2 size={13} className="animate-spin" /> : <FileSignature size={13} />} {existingWorkHandover ? t("project.doc.workHandoverOpen") : t("project.doc.workHandoverCreate")}
             </button>
           )}
           {canDelete && (

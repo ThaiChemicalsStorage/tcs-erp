@@ -43,7 +43,6 @@ const API_ROUTES: Record<string, ApiHandler> = {
   "material-requisitions": quotesHandler,
   "job-orders": quotesHandler,
   "purchase-requests": quotesHandler,
-  "work-handovers": quotesHandler,
   jobtypes: jobtypesHandler,
   "quotation-templates": jobtypesHandler,
   customers: customersHandler,

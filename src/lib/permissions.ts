@@ -96,14 +96,7 @@ export type Permission =
   | "purchaseRequest:edit"
   | "purchaseRequest:finalize"
   | "purchaseRequest:print"
-  | "purchaseRequest:delete"
-  | "workHandover:view"
-  | "workHandover:viewAll"
-  | "workHandover:create"
-  | "workHandover:edit"
-  | "workHandover:sign"
-  | "workHandover:print"
-  | "workHandover:delete";
+  | "purchaseRequest:delete";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -202,13 +195,6 @@ export const ALL_PERMISSIONS: Permission[] = [
   "purchaseRequest:finalize",
   "purchaseRequest:print",
   "purchaseRequest:delete",
-  "workHandover:view",
-  "workHandover:viewAll",
-  "workHandover:create",
-  "workHandover:edit",
-  "workHandover:sign",
-  "workHandover:print",
-  "workHandover:delete",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -308,13 +294,6 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "purchaseRequest:finalize": "ยืนยันสถานะ Final ของใบขอซื้อ",
   "purchaseRequest:print": "พิมพ์ / ส่งออกใบขอซื้อ",
   "purchaseRequest:delete": "ลบใบขอซื้อ",
-  "workHandover:view": "ดูใบส่งมอบงาน",
-  "workHandover:viewAll": "ดูใบส่งมอบงานของผู้อื่น",
-  "workHandover:create": "สร้างใบส่งมอบงาน",
-  "workHandover:edit": "แก้ไขใบส่งมอบงาน",
-  "workHandover:sign": "ยืนยันลูกค้าเซ็นรับงาน",
-  "workHandover:print": "พิมพ์ / ส่งออกใบส่งมอบงาน",
-  "workHandover:delete": "ลบใบส่งมอบงาน",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -414,13 +393,6 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "purchaseRequest:finalize": "permission.purchaseRequestFinalize",
   "purchaseRequest:print": "permission.purchaseRequestPrint",
   "purchaseRequest:delete": "permission.purchaseRequestDelete",
-  "workHandover:view": "permission.workHandoverView",
-  "workHandover:viewAll": "permission.workHandoverViewAll",
-  "workHandover:create": "permission.workHandoverCreate",
-  "workHandover:edit": "permission.workHandoverEdit",
-  "workHandover:sign": "permission.workHandoverSign",
-  "workHandover:print": "permission.workHandoverPrint",
-  "workHandover:delete": "permission.workHandoverDelete",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -532,13 +504,6 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "purchaseRequest:finalize",
       "purchaseRequest:print",
       "purchaseRequest:delete",
-      "workHandover:view",
-      "workHandover:viewAll",
-      "workHandover:create",
-      "workHandover:edit",
-      "workHandover:sign",
-      "workHandover:print",
-      "workHandover:delete",
     ],
   },
   {

@@ -4,7 +4,59 @@
 
 ---
 
-## 2026-08-19c (absolute latest) — Work Handover Note (ใบส่งมอบงาน), first-draft/unverified, the 4th Project-module document type previously deferred
+## 2026-08-20 (absolute latest) — Work Handover Note module removed, confirmed redundant with Delivery Order (FM-SL-05)
+
+Direct confirmation from two people on the business side: the document the Work Handover Note
+module (built the previous day, 2026-08-19c below) was meant to fill a gap for — ใบส่งมอบงาน — is the
+same document the pre-existing **Delivery Order** module already produces (FM-SL-05), not a distinct
+4th Project-module document type. Removed cleanly, end to end:
+
+- **`src/lib/workHandover.ts`** — deleted.
+- **`api/_lib/workHandoverHandler.ts`** — deleted, along with its mount point/import in
+  `api/handlers/quotes.ts`, its route-table entry in `server/app.ts`, and its rewrite rules in
+  `vercel.json`.
+- **`api/_lib/collections.ts`** — `WorkHandoverFields` type, `workHandoverNotesCollection()`, and its
+  wiring into `ensureIndexes()` (the parallel collection fetch + the 4 `work_handover_notes`
+  indexes) all removed. **The `work_handover_notes` MongoDB collection itself is left alone** —
+  empty/unused is harmless, no destructive DB cleanup performed.
+- **`src/pages/workHandover/`** (`Page`/`List`/`Document`/`PrintDocument.tsx`) — deleted entirely.
+- **Entry point removed from `src/pages/project/ProjectDocument.tsx`**: the import, the
+  `canViewWorkHandover`/`canCreateWorkHandover`/`onOpenWorkHandover` props, the existing-note
+  existence-check effect, the click handler, and the toolbar button — all gone. Threaded back out
+  through `src/pages/project/ProjectPage.tsx` and `src/App.tsx` (lazy import, `NavKey`, sidebar nav
+  entry + nav group membership, nav-label map, deep-link state, `navigateToWorkHandover()`, the 6
+  permission-derived `can*` booleans, the `ProjectPage` props, and the route-render branch — plus the
+  now-unused `FileSignature` icon import).
+- **RBAC**: all 7 `workHandover:view`/`viewAll`/`create`/`edit`/`sign`/`print`/`delete` permissions
+  removed from `src/lib/permissions.ts` (the `Permission` union, `ALL_PERMISSIONS`, the Thai label
+  map, the i18n-key map, and the Project-module permission group) and from `src/lib/roles.ts`
+  (the default-role grant block). **28 permissions remain in the Project module** (down from 35).
+- **i18n**: all ~40 key pairs (80 dictionary entries th+en) removed from `src/lib/i18n.tsx` —
+  `nav.workHandover`, `project.doc.workHandover*`, `workHandover.*`, `workHandoverDoc.*`,
+  `permission.workHandover*`, `tour.wh.*`/`tour.whdoc.*`.
+- **Guided tour**: the inline `DriveStep[]` tour content in `WorkHandoverList.tsx`/
+  `WorkHandoverDocument.tsx` went with those files; no separate tour-config file existed to clean up.
+- **`tests/api/workHandover.test.ts`** — deleted.
+
+**One real gap surfaced by this review, worth tracking (not addressed as part of this removal)**:
+Delivery Order's print document (`DeliveryOrderPrintDocument.tsx`) only ever prints a blank
+signature line for wet-ink signing — no `<canvas>`, no signature-pad, no captured image, unlike the
+now-removed Work Handover Note, which embedded real captured signature images via the shared
+`SignaturePad` component. Delivery Order simply never adopted that pattern. Revisit if digital
+signature capture on delivery documents becomes a real requirement.
+
+Docs updated: `MODULES/Project.md` (Work Handover Note section replaced with a short removal note,
+Status/RBAC/Files/Known-Limitations reverted to the 4-document-type/28-permission state),
+`CLAUDE.md` (coordination note + Current Modules table row), `PROJECT_STATUS.md` (new ❌ removal
+entry, old 🟡 entry annotated), `TODO.md` (the High-Priority coordination-risk entry moved to
+Completed, rewritten to record the resolution).
+
+`npx tsc --noEmit` (both configs), `npm run lint`, `npm run build`, and `npm test` all verified
+clean after the removal.
+
+---
+
+## 2026-08-19c — Work Handover Note (ใบส่งมอบงาน), first-draft/unverified, the 4th Project-module document type previously deferred (superseded — see 2026-08-20 above; this entire module was removed the next day)
 
 Direct instruction to build the document deliberately scoped out of Stages 1–6 (see the coordination
 note at the top of `docs/CLAUDE.md` and the High-Priority coordination-risk entry in `docs/TODO.md`).

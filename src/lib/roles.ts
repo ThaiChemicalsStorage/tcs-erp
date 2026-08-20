@@ -115,18 +115,6 @@ export const defaultRoles: Role[] = [
       "purchaseRequest:finalize",
       "purchaseRequest:print",
       "purchaseRequest:delete",
-      // Work Handover Note (added 2026-08-19) — the 4th Project-module document type, previously
-      // deferred. Same "Administrator/Super Admin only by default" reasoning as the rest of this
-      // block; "sign" replaces "finalize" here since customer acceptance, not internal approval, is
-      // the meaningful state transition (see src/lib/workHandover.ts). NO reference PDF exists for
-      // this document — first-draft structure, see docs/MODULES/Project.md.
-      "workHandover:view",
-      "workHandover:viewAll",
-      "workHandover:create",
-      "workHandover:edit",
-      "workHandover:sign",
-      "workHandover:print",
-      "workHandover:delete",
     ],
     isSuperAdmin: false,
     isSystem: true,

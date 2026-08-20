@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench, Receipt, Briefcase, Package2, Hammer, ShoppingCart, FileSignature,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench, Receipt, Briefcase, Package2, Hammer, ShoppingCart,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -51,7 +51,6 @@ const ProjectPage = lazy(() => import("./pages/project/ProjectPage").then((m) =>
 const MaterialRequisitionPage = lazy(() => import("./pages/materialRequisition/MaterialRequisitionPage").then((m) => ({ default: m.MaterialRequisitionPage })));
 const JobOrderPage = lazy(() => import("./pages/jobOrder/JobOrderPage").then((m) => ({ default: m.JobOrderPage })));
 const PurchaseRequestPage = lazy(() => import("./pages/purchaseRequest/PurchaseRequestPage").then((m) => ({ default: m.PurchaseRequestPage })));
-const WorkHandoverPage = lazy(() => import("./pages/workHandover/WorkHandoverPage").then((m) => ({ default: m.WorkHandoverPage })));
 const ServicePage = lazy(() => import("./pages/service/ServicePage").then((m) => ({ default: m.ServicePage })));
 const ServiceTemplateManagement = lazy(() => import("./pages/service/ServiceTemplateManagement").then((m) => ({ default: m.ServiceTemplateManagement })));
 const AccountingPage = lazy(() => import("./pages/accounting/AccountingPage").then((m) => ({ default: m.AccountingPage })));
@@ -126,7 +125,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "workHandover" | "products" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "products" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -169,7 +168,6 @@ const navItems: NavItem[] = [
   { key: "materialRequisition", icon: Package2, labelKey: "nav.materialRequisition", permission: "materialRequisition:view" },
   { key: "jobOrder", icon: Hammer, labelKey: "nav.jobOrder", permission: "jobOrder:view" },
   { key: "purchaseRequest", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
-  { key: "workHandover", icon: FileSignature, labelKey: "nav.workHandover", permission: "workHandover:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -183,7 +181,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
   { labelKey: "nav.group.accounting", keys: ["accounting"] },
-  { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest", "workHandover"] },
+  { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest"] },
   { labelKey: "nav.group.inventory", keys: ["products"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
@@ -201,7 +199,6 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   materialRequisition: "nav.materialRequisition",
   jobOrder: "nav.jobOrder",
   purchaseRequest: "nav.purchaseRequest",
-  workHandover: "nav.workHandover",
   products: "nav.products",
   customers: "nav.customers",
   users: "nav.users",
@@ -277,7 +274,6 @@ export default function App() {
   const [materialRequisitionDeepLinkId, setMaterialRequisitionDeepLinkId] = useState<string | null>(null);
   const [jobOrderDeepLinkId, setJobOrderDeepLinkId] = useState<string | null>(null);
   const [purchaseRequestDeepLinkId, setPurchaseRequestDeepLinkId] = useState<string | null>(null);
-  const [workHandoverDeepLinkId, setWorkHandoverDeepLinkId] = useState<string | null>(null);
   const [serviceReportDeepLinkId, setServiceReportDeepLinkId] = useState<string | null>(null);
   const [templateCreateForJobType, setTemplateCreateForJobType] = useState<{ jobTypeCode: string; jobTypeName: string; seq: number } | null>(null);
   const templateCreateSeq = useRef(0);
@@ -463,10 +459,6 @@ export default function App() {
   const navigateToPurchaseRequest = (purchaseRequestId: string) => {
     setPurchaseRequestDeepLinkId(purchaseRequestId);
     setActiveNav("purchaseRequest");
-  };
-  const navigateToWorkHandover = (workHandoverId: string) => {
-    setWorkHandoverDeepLinkId(workHandoverId);
-    setActiveNav("workHandover");
   };
   const navigateToServiceReport = (serviceReportId: string) => {
     setServiceReportDeepLinkId(serviceReportId);
@@ -667,12 +659,6 @@ export default function App() {
   const canFinalizePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:finalize");
   const canPrintPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:print");
   const canDeletePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:delete");
-  const canViewWorkHandover = hasPermission(currentUser, roles, "workHandover:view");
-  const canCreateWorkHandover = hasPermission(currentUser, roles, "workHandover:create");
-  const canEditWorkHandover = hasPermission(currentUser, roles, "workHandover:edit");
-  const canSignWorkHandover = hasPermission(currentUser, roles, "workHandover:sign");
-  const canPrintWorkHandover = hasPermission(currentUser, roles, "workHandover:print");
-  const canDeleteWorkHandover = hasPermission(currentUser, roles, "workHandover:delete");
   const canCreateService = hasPermission(currentUser, roles, "service:create");
   const canEditService = hasPermission(currentUser, roles, "service:edit");
   const canCompleteService = hasPermission(currentUser, roles, "service:complete");
@@ -880,15 +866,13 @@ export default function App() {
               : effectiveNav === "deliveryOrder"
               ? <DeliveryOrderPage company={company} currentUserId={currentUser.id} canEdit={canEditDeliveryOrder} canFinalize={canFinalizeDeliveryOrder} canPrint={canPrintDeliveryOrder} canDelete={canDeleteDeliveryOrder} canCreate={canCreateDeliveryOrder} initialDeliveryOrderId={deliveryOrderDeepLinkId} onDeliveryOrderIdConsumed={() => setDeliveryOrderDeepLinkId(null)} />
               : effectiveNav === "project"
-              ? <ProjectPage currentUserId={currentUser.id} canEdit={canEditProject} canDelete={canDeleteProject} canCreateMaterialRequisition={canCreateMaterialRequisition} canCreateJobOrder={canCreateJobOrder} canCreatePurchaseRequest={canCreatePurchaseRequest} canViewWorkHandover={canViewWorkHandover} canCreateWorkHandover={canCreateWorkHandover} onOpenMaterialRequisition={navigateToMaterialRequisition} onOpenJobOrder={navigateToJobOrder} onOpenPurchaseRequest={navigateToPurchaseRequest} onOpenWorkHandover={navigateToWorkHandover} initialProjectId={projectDeepLinkId} onProjectIdConsumed={() => setProjectDeepLinkId(null)} />
+              ? <ProjectPage currentUserId={currentUser.id} canEdit={canEditProject} canDelete={canDeleteProject} canCreateMaterialRequisition={canCreateMaterialRequisition} canCreateJobOrder={canCreateJobOrder} canCreatePurchaseRequest={canCreatePurchaseRequest} onOpenMaterialRequisition={navigateToMaterialRequisition} onOpenJobOrder={navigateToJobOrder} onOpenPurchaseRequest={navigateToPurchaseRequest} initialProjectId={projectDeepLinkId} onProjectIdConsumed={() => setProjectDeepLinkId(null)} />
               : effectiveNav === "materialRequisition"
               ? <MaterialRequisitionPage currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
               : effectiveNav === "jobOrder"
               ? <JobOrderPage currentUserId={currentUser.id} canEdit={canEditJobOrder} canFinalize={canFinalizeJobOrder} canPrint={canPrintJobOrder} canDelete={canDeleteJobOrder} initialJobOrderId={jobOrderDeepLinkId} onJobOrderIdConsumed={() => setJobOrderDeepLinkId(null)} />
               : effectiveNav === "purchaseRequest"
               ? <PurchaseRequestPage currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
-              : effectiveNav === "workHandover"
-              ? <WorkHandoverPage currentUserId={currentUser.id} canEdit={canEditWorkHandover} canSign={canSignWorkHandover} canPrint={canPrintWorkHandover} canDelete={canDeleteWorkHandover} initialWorkHandoverId={workHandoverDeepLinkId} onWorkHandoverIdConsumed={() => setWorkHandoverDeepLinkId(null)} />
               : effectiveNav === "service"
               ? <ServicePage currentUserId={currentUser.id} company={company} canCreate={canCreateService} canEdit={canEditService} canComplete={canCompleteService} canDelete={canDeleteService} canPrint={canPrintService} initialServiceReportId={serviceReportDeepLinkId} onServiceReportIdConsumed={() => setServiceReportDeepLinkId(null)} />
               : effectiveNav === "serviceTemplates"
