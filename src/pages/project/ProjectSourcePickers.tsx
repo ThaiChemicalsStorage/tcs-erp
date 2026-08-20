@@ -5,6 +5,7 @@ import {
   fetchAllProjects, fetchProject, fetchProjectsByScope,
   type ProjectListItem, type ProjectItem, type ProjectItemSourcingMethod,
 } from "../../lib/project";
+import { fetchAllProductionOrders, type ProductionOrderSummary } from "../../lib/productionOrder";
 import { EmptyState } from "../../components/EmptyState";
 import { useI18n } from "../../lib/i18n";
 
@@ -258,6 +259,81 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * เลือกใบสั่งผลิตต้นทาง — ใช้บนหน้าใบเบิก-คืนวัสดุ/ใบขอซื้อ "ของฝ่ายผลิต"
+ *
+ * ฝ่ายผลิตออกเอกสารจากใบสั่งผลิต ไม่ใช่จากรายการในโครงการ จึงเลือกแค่ขั้นเดียว (ไม่มีขั้นเลือกรายการ)
+ * — ดู handleCreate() ใน materialRequisitionHandler.ts/purchaseRequestHandler.ts ที่รับ
+ * `{ productionOrderId }` เป็นต้นทางทางเลือกแทน `{ projectId, itemId }`
+ */
+export function ProductionOrderSourcePickerDialog({ title, onClose, onSelect }: {
+  title: string;
+  onClose: () => void;
+  onSelect: (productionOrderId: string) => void;
+}) {
+  const { t } = useI18n();
+  const [orders, setOrders] = useState<ProductionOrderSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [search, setSearch] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAllProductionOrders()
+      .then((list) => { if (!cancelled) { setOrders(list); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, []);
+
+  const q = search.trim().toLowerCase();
+  const filtered = orders.filter((o) => !q
+    || o.id.toLowerCase().includes(q)
+    || o.jobCode.toLowerCase().includes(q)
+    || o.customerCompanyName.toLowerCase().includes(q)
+    || o.productName.toLowerCase().includes(q));
+
+  return (
+    <div className={dialogShell}>
+      <div className={dialogPanel}>
+        <div className="flex items-center justify-between">
+          <h2 className={dialogHeading} style={headingFont}>{title}</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("project.picker.close")}>
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">{t("project.picker.productionOrder.description")}</p>
+
+        <div className={searchBox}>
+          <Search size={14} className="text-muted-foreground flex-shrink-0" />
+          <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("productionOrder.searchPlaceholder")} className={searchInput} />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {loading ? <SkeletonRows />
+            : loadError ? <p className="text-sm text-muted-foreground text-center py-6">{t("project.picker.loadError")}</p>
+            : filtered.length === 0 ? (
+              <EmptyState icon={FileText} title={t("project.picker.productionOrder.emptyTitle")} description={t("project.picker.productionOrder.emptyDescription")} compact />
+            ) : (
+              <div className="space-y-1.5">
+                {filtered.map((o) => (
+                  <button key={o.id} onClick={() => { setBusy(true); onSelect(o.id); }} disabled={busy} className={rowButton}>
+                    <div className="min-w-0">
+                      <p className="text-sm font-mono font-medium text-foreground truncate">{o.id}</p>
+                      <p className="text-xs text-muted-foreground truncate">{o.jobCode} · {o.customerCompanyName}{o.productName ? ` · ${o.productName}` : ""}</p>
+                    </div>
+                    {busy && <Loader2 size={14} className="animate-spin text-muted-foreground flex-shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+        </div>
       </div>
     </div>
   );

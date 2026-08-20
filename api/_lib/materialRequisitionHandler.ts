@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { Collection } from "mongodb";
+import type { Collection, Filter } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
-  materialRequisitionsCollection, jobOrdersCollection, productsCollection, countersCollection, auditLogCollection,
+  materialRequisitionsCollection, productionOrdersCollection, jobOrdersCollection, productsCollection, countersCollection, auditLogCollection,
   toObjectId, withStringId, type MaterialRequisitionFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
@@ -128,7 +128,17 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   // modes are scoped by materialRequisition:viewAll via buildSimpleOwnershipClause().
   const ownershipMatch = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "materialRequisition:viewAll"), "createdBy");
   const materialRequisitions = await materialRequisitionsCollection();
-  const filter = projectId ? { projectId, isDeleted: false, ...ownershipMatch } : { isDeleted: false, ...ownershipMatch };
+  // แยกเอกสารตามแผนกเจ้าของ — ฝ่ายโครงการกับฝ่ายผลิตใช้เอกสารชนิดเดียวกันแต่ไม่เห็นของกันและกัน
+  // (ยืนยันกับเจ้าของ 2026-08-20). เอกสารเก่าที่ไม่มีฟิลด์นี้ถือเป็นของฝ่ายโครงการ จึงต้องรับทั้ง
+  // ค่า "project" และกรณีที่ยังไม่มีฟิลด์เลย — ไม่ได้ทำ migration
+  const ownerDepartment = req.query.ownerDepartment === "production" ? "production" : "project";
+  const departmentClause: Filter<MaterialRequisitionFields & { _id: string }> = ownerDepartment === "production"
+    ? { ownerDepartment: "production" }
+    : { $or: [{ ownerDepartment: "project" }, { ownerDepartment: { $exists: false } }] };
+  // เวลาระบุ projectId คือเช็คของโครงการนั้นโดยตรง ไม่ต้องกรองแผนกซ้ำ
+  const filter = projectId
+    ? { projectId, isDeleted: false, ...ownershipMatch }
+    : { isDeleted: false, ...ownershipMatch, ...departmentClause };
   const docs = await materialRequisitions.find(filter).sort({ updatedAt: -1 }).toArray();
   res.status(200).json({ materialRequisitions: docs.map(toSummary) });
 }
@@ -141,22 +151,48 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
   const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
-  if (!projectId || !itemId) throw new HttpError(400, "กรุณาระบุโครงการและรายการ");
+  const productionOrderId = typeof body.productionOrderId === "string" ? body.productionOrderId.trim() : "";
 
-  // Validates the item exists and is still "pending" BEFORE anything is inserted — see
-  // loadPendingProjectItemOrThrow()'s own doc comment for why this ordering is what makes the
-  // create-then-link sequence below safe without a real multi-document transaction.
-  const { project, item } = await loadPendingProjectItemOrThrow(projectId, itemId);
-  const jobOrderLink = await resolveJobOrderLink(projectId, body.jobOrderId);
+  /**
+   * เอกสารใบนี้ออกได้จาก 2 ต้นทาง (ยืนยันกับเจ้าของ 2026-08-20 ว่าสองแผนกแยกข้อมูลกัน):
+   *   - รายการในโครงการ  → ของฝ่ายโครงการ, ผูกกับ ProjectItem และอัปเดตสถานะรายการนั้น
+   *   - ใบสั่งผลิต        → ของฝ่ายผลิต, ไม่มีรายการให้ผูก จึงข้าม item-link ทั้งหมด
+   */
+  const fromProduction = Boolean(productionOrderId);
+  if (!fromProduction && (!projectId || !itemId)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+
+  let source: { projectId: string; scopeOfWorkId: string; jobCode: string; customerName: string; productName: string };
+  let item: { name: string } | null = null;
+  let jobOrderLink = { jobOrderId: null as string | null, jobOrderCode: "" };
+
+  if (fromProduction) {
+    const productionOrders = await productionOrdersCollection();
+    const po = await productionOrders.findOne({ _id: productionOrderId });
+    if (!po || po.isDeleted) throw new HttpError(404, "ไม่พบใบสั่งผลิต");
+    source = { projectId: "", scopeOfWorkId: po.scopeOfWorkId, jobCode: po.jobCode, customerName: po.customerCompanyName, productName: po.productName };
+  } else {
+    // Validates the item exists and is still "pending" BEFORE anything is inserted — see
+    // loadPendingProjectItemOrThrow()'s own doc comment for why this ordering is what makes the
+    // create-then-link sequence below safe without a real multi-document transaction.
+    const loaded = await loadPendingProjectItemOrThrow(projectId, itemId);
+    item = loaded.item;
+    jobOrderLink = await resolveJobOrderLink(projectId, body.jobOrderId);
+    source = {
+      projectId, scopeOfWorkId: loaded.project.scopeOfWorkId, jobCode: loaded.project.scopeNumber,
+      customerName: loaded.project.customerCompanyName, productName: loaded.item.name,
+    };
+  }
 
   const counters = await countersCollection();
   const id = await nextMaterialRequisitionId(counters);
   const now = nowIso();
   const doc: MaterialRequisitionFields = {
-    projectId, scopeOfWorkId: project.scopeOfWorkId, jobCode: project.scopeNumber,
-    customerName: project.customerCompanyName,
+    projectId: source.projectId, scopeOfWorkId: source.scopeOfWorkId, jobCode: source.jobCode,
+    customerName: source.customerName,
+    ownerDepartment: fromProduction ? "production" : "project",
+    productionOrderId: fromProduction ? productionOrderId : "",
     jobOrderId: jobOrderLink.jobOrderId, jobOrderCode: jobOrderLink.jobOrderCode,
-    productName: item.name, responsibleEmployee: "", productionStartDate: "",
+    productName: source.productName, responsibleEmployee: "", productionStartDate: "",
     lines: [], status: "Draft",
     // preparedAt seeds from a date-only slice of `now`, not the full ISO timestamp — see
     // jobOrderHandler.ts's identical fix/comment on requestedAt for why (validateIsoDateOrEmpty
@@ -174,9 +210,18 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   // CRITICAL invariant: the parent ProjectItem is updated atomically (in the sense described in
   // linkProjectItemToSubDocument()'s doc comment) immediately after the insert succeeds — never
   // trusting any client-sent sourcingMethod/itemStatus/materialRequisitionId value.
-  await linkProjectItemToSubDocument(projectId, itemId, "requisition", "materialRequisitionId", id);
+  // ฝ่ายผลิตออกจากใบสั่งผลิต ไม่มีรายการในโครงการให้ผูก จึงข้ามขั้นตอนนี้ไป
+  if (!fromProduction) {
+    await linkProjectItemToSubDocument(projectId, itemId, "requisition", "materialRequisitionId", id);
+  }
 
-  await writeAuditEntry(ctx, "Material Requisition Created", `สร้างใบเบิกและใบคืนวัสดุ ${id} สำหรับรายการ "${item.name}"`, { scopeOfWorkId: project.scopeOfWorkId });
+  await writeAuditEntry(
+    ctx, "Material Requisition Created",
+    fromProduction
+      ? `สร้างใบเบิกและใบคืนวัสดุ ${id} จากใบสั่งผลิต ${productionOrderId}`
+      : `สร้างใบเบิกและใบคืนวัสดุ ${id} สำหรับรายการ "${item?.name ?? ""}"`,
+    { scopeOfWorkId: source.scopeOfWorkId },
+  );
   res.status(201).json({ materialRequisition: toClient({ ...doc, _id: id }) });
 }
 

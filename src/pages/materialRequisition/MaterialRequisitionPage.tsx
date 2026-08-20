@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import { type MaterialRequisitionSummary, fetchAllMaterialRequisitions, createMaterialRequisition } from "../../lib/materialRequisition";
+import { type MaterialRequisitionSummary, fetchAllMaterialRequisitions, createMaterialRequisition, createMaterialRequisitionFromProductionOrder } from "../../lib/materialRequisition";
 import { MaterialRequisitionList } from "./MaterialRequisitionList";
 import { MaterialRequisitionDocument } from "./MaterialRequisitionDocument";
-import { ProjectItemSourcePickerDialog } from "../project/ProjectSourcePickers";
+import { ProjectItemSourcePickerDialog, ProductionOrderSourcePickerDialog } from "../project/ProjectSourcePickers";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
@@ -19,6 +19,7 @@ export function MaterialRequisitionPage({
   canPrint,
   canDelete,
   canCreate,
+  ownerDepartment = "project",
   initialMaterialRequisitionId,
   onMaterialRequisitionIdConsumed,
 }: {
@@ -28,6 +29,9 @@ export function MaterialRequisitionPage({
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
+  /** แผนกเจ้าของ — หน้านี้ถูกเมาต์ 2 ครั้ง (โครงการ/ผลิต) และเห็นคนละชุดข้อมูล (2026-08-20).
+   *  ฝั่งผลิตออกเอกสารจากใบสั่งผลิต ส่วนฝั่งโครงการออกจากรายการในโครงการ */
+  ownerDepartment?: "project" | "production";
   initialMaterialRequisitionId?: string | null;
   onMaterialRequisitionIdConsumed?: () => void;
 }) {
@@ -42,6 +46,18 @@ export function MaterialRequisitionPage({
 
   // สร้างใบเบิก-คืนวัสดุจากหน้านี้ได้เลย โดยเลือกโครงการและรายการต้นทางเอง (เดิมสร้างได้จากในหน้าโครงการ
   // เท่านั้น) — ตามคำขอ 2026-08-20; API ยังต้องการทั้ง projectId และ itemId เหมือนเดิมทุกประการ
+  // ฝ่ายผลิตออกจากใบสั่งผลิต — ไม่มีรายการในโครงการให้เลือก
+  const handleCreateFromProductionOrder = async (productionOrderId: string) => {
+    try {
+      const created = await createMaterialRequisitionFromProductionOrder(productionOrderId);
+      setPickerOpen(false);
+      openMaterialRequisition(created.id);
+    } catch (err) {
+      setPickerOpen(false);
+      toast.show(err instanceof ApiError ? err.message : t("materialRequisition.loadError"));
+    }
+  };
+
   const handleCreate = async (projectId: string, itemId: string) => {
     try {
       const created = await createMaterialRequisition(projectId, itemId);
@@ -56,18 +72,18 @@ export function MaterialRequisitionPage({
   const loadList = () => {
     setLoading(true);
     setLoadError(false);
-    fetchAllMaterialRequisitions()
+    fetchAllMaterialRequisitions(ownerDepartment)
       .then((list) => { setMaterialRequisitions(list); setLoading(false); })
       .catch(() => { setLoadError(true); setLoading(false); });
   };
 
   useEffect(() => {
     let cancelled = false;
-    fetchAllMaterialRequisitions()
+    fetchAllMaterialRequisitions(ownerDepartment)
       .then((list) => { if (!cancelled) { setMaterialRequisitions(list); setLoading(false); } })
       .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
     return () => { cancelled = true; };
-  }, []);
+  }, [ownerDepartment]);
 
   const openMaterialRequisition = (id: string) => {
     setSelectedId(id);
@@ -150,14 +166,20 @@ export function MaterialRequisitionPage({
           </button>
         ) : undefined}
       />
-      {pickerOpen && (
+      {pickerOpen && (ownerDepartment === "production" ? (
+        <ProductionOrderSourcePickerDialog
+          title={t("materialRequisition.createBtn")}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(productionOrderId) => void handleCreateFromProductionOrder(productionOrderId)}
+        />
+      ) : (
         <ProjectItemSourcePickerDialog
           title={t("materialRequisition.createBtn")}
           description={t("project.picker.project.description")}
           onClose={() => setPickerOpen(false)}
           onSelect={(projectId, itemId) => void handleCreate(projectId, itemId)}
         />
-      )}
+      ))}
       <Toast message={toast.message} />
     </>
   );

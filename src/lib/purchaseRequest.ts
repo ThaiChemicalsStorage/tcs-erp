@@ -47,6 +47,14 @@ export interface PurchaseRequest {
    * (source/meaning of "ED" unconfirmed — see Stage 1 open questions in conversation). */
   id: string;
   projectId: string;
+  /**
+   * แผนกเจ้าของเอกสาร — ฝ่ายโครงการกับฝ่ายผลิตใช้เอกสารชนิดเดียวกันแต่ต่างคนต่างเห็นของตัวเอง
+   * (ยืนยันกับเจ้าของ 2026-08-20). optional เพราะเอกสารที่บันทึกก่อนหน้านั้นไม่มีฟิลด์นี้ — อ่านแล้ว
+   * normalize เป็น "project" เสมอ ไม่ได้ทำ migration
+   */
+  ownerDepartment?: "project" | "production";
+  /** ใบสั่งผลิตต้นทาง — มีค่าเฉพาะเอกสารของฝ่ายผลิต (ฝั่งโครงการใช้ projectId แทน) */
+  productionOrderId?: string;
   scopeOfWorkId: string;
   /** "หมายเหตุ" on the real example carried the job code (e.g. "PQ202605-120-SC-SK") — modeled here
    * as a real field rather than free-text remark. */
@@ -107,9 +115,17 @@ export async function fetchPurchaseRequestsByProject(projectId: string): Promise
   const { purchaseRequests } = await apiFetch<{ purchaseRequests: PurchaseRequestSummary[] }>(`/purchase-requests?projectId=${encodeURIComponent(projectId)}`);
   return purchaseRequests;
 }
-export async function fetchAllPurchaseRequests(): Promise<PurchaseRequestSummary[]> {
-  const { purchaseRequests } = await apiFetch<{ purchaseRequests: PurchaseRequestSummary[] }>("/purchase-requests");
+export async function fetchAllPurchaseRequests(ownerDepartment: "project" | "production" = "project"): Promise<PurchaseRequestSummary[]> {
+  const { purchaseRequests } = await apiFetch<{ purchaseRequests: PurchaseRequestSummary[] }>(`/purchase-requests?ownerDepartment=${ownerDepartment}`);
   return purchaseRequests;
+}
+
+/** สร้างจากใบสั่งผลิต — เอกสารฝั่งฝ่ายผลิต (ฝั่งโครงการใช้ createPurchaseRequest(projectId, itemId)) */
+export async function createPurchaseRequestFromProductionOrder(productionOrderId: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>("/purchase-requests", {
+    method: "POST", body: JSON.stringify({ productionOrderId }),
+  });
+  return purchaseRequest;
 }
 export async function fetchPurchaseRequest(id: string): Promise<PurchaseRequest> {
   const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}`);

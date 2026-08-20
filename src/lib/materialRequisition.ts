@@ -53,6 +53,14 @@ export interface MaterialRequisition {
    * the API layer mints it (Stage 3) — same convention as service_reports' SR-{year}-{seq}. */
   id: string;
   projectId: string;
+  /**
+   * แผนกเจ้าของเอกสาร — ฝ่ายโครงการกับฝ่ายผลิตใช้เอกสารชนิดเดียวกันแต่ต่างคนต่างเห็นของตัวเอง
+   * (ยืนยันกับเจ้าของ 2026-08-20). optional เพราะเอกสารที่บันทึกก่อนหน้านั้นไม่มีฟิลด์นี้ — อ่านแล้ว
+   * normalize เป็น "project" เสมอ ไม่ได้ทำ migration
+   */
+  ownerDepartment?: "project" | "production";
+  /** ใบสั่งผลิตต้นทาง — มีค่าเฉพาะเอกสารของฝ่ายผลิต (ฝั่งโครงการใช้ projectId แทน) */
+  productionOrderId?: string;
   scopeOfWorkId: string;
   /** "รหัสงาน" — snapshot of Project.scopeNumber / ScopeOfWork.scopeNumber. */
   jobCode: string;
@@ -146,9 +154,17 @@ export async function fetchMaterialRequisitionsByProject(projectId: string): Pro
 }
 // ดึงรายการใบเบิกและใบคืนวัสดุทั้งหมดในระบบ สำหรับหน้ารายการแบบแยกต่างหาก (ไม่ผูกกับโครงการใดโครงการหนึ่ง)
 // Fetches every Material Requisition company-wide, for the standalone management page's list
-export async function fetchAllMaterialRequisitions(): Promise<MaterialRequisitionSummary[]> {
-  const { materialRequisitions } = await apiFetch<{ materialRequisitions: MaterialRequisitionSummary[] }>("/material-requisitions");
+export async function fetchAllMaterialRequisitions(ownerDepartment: "project" | "production" = "project"): Promise<MaterialRequisitionSummary[]> {
+  const { materialRequisitions } = await apiFetch<{ materialRequisitions: MaterialRequisitionSummary[] }>(`/material-requisitions?ownerDepartment=${ownerDepartment}`);
   return materialRequisitions;
+}
+
+/** สร้างจากใบสั่งผลิต — เอกสารฝั่งฝ่ายผลิต (ฝั่งโครงการใช้ createMaterialRequisition(projectId, itemId)) */
+export async function createMaterialRequisitionFromProductionOrder(productionOrderId: string): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>("/material-requisitions", {
+    method: "POST", body: JSON.stringify({ productionOrderId }),
+  });
+  return materialRequisition;
 }
 export async function fetchMaterialRequisition(id: string): Promise<MaterialRequisition> {
   const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}`);

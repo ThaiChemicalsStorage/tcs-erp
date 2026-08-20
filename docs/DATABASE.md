@@ -41,6 +41,7 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `material_requisitions` | business ID string (e.g. `"MR-2569-0001"`, atomic per-Buddhist-year counter) | `MaterialRequisitionFields` (`src/lib/materialRequisition.ts` minus `id`) | **API routes added Stage 3, 2026-08-18** — see "Project module" below and [API.md](./API.md) "Project." No UI yet. |
 | `job_orders` | business ID string (e.g. `"JO-2569-0001"`) | `JobOrderFields` (`src/lib/jobOrder.ts` minus `id`) | **API routes added Stage 3, 2026-08-18** — see "Project module" below and [API.md](./API.md) "Project." No UI yet. |
 | `purchase_requests` | business ID string (e.g. `"PR-2569-0001"`) | `PurchaseRequestFields` (`src/lib/purchaseRequest.ts` minus `id`) | **API routes added Stage 3, 2026-08-18** — see "Project module" below and [API.md](./API.md) "Project." No UI yet. |
+| `production_orders` | business ID string (e.g. `"SC-2026-08-009"`, atomic per-**Gregorian**-year+month counter) | `ProductionOrderFields` (`src/lib/productionOrder.ts` minus `id`) | **Added 2026-08-20** — ใบสั่งผลิต (FM-PD-02) for the Production department. Unlike the three documents above it is generated **directly from an approved Scope of Work**, not a Project item, so it has no `projectId`. Its numbering deliberately uses the Gregorian year to match the real form, unlike every other document in this database — see [MODULES/Production.md](./MODULES/Production.md). |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
 
@@ -1037,3 +1038,21 @@ This section originally described a hypothetical future Prisma/PostgreSQL migrat
 4. `User`/`Role`/`Permission`: `passwordHash` is now a real bcrypt hash (cost 10), closing the biggest gap this section flagged in advance. `Role.permissions: Permission[]` stayed an array field on the `roles` document rather than becoming a `RolePermission` many-to-many join table — MongoDB's document model made the join-table normalization unnecessary; the array-on-document shape works fine for a role count in the tens. The 6-role client-side set was kept as-is; the 9-role `RoleKey` enum from the superseded Prisma proposal was never adopted.
 5. `ApprovalHistoryEntry[]` on `Quote` stayed a JSON array field on the `quotes` document rather than becoming a separate `QuotationApproval` table — same reasoning as `Role.permissions` above; MongoDB's embedded-document model made a normalized join table unnecessary for this access pattern (approval history is always read together with its parent quote).
 6. `Notification` and `AuditLogEntry` mapped close to 1:1 onto their own MongoDB collections, as predicted.
+
+## Approval + department fields added 2026-08-20
+
+`material_requisitions`, `purchase_requests`, `job_orders` and `production_orders` all gained the
+shared approval workflow (see [MODULES/Production.md](./MODULES/Production.md)). Every field below is
+**optional** and normalized on read — **no migration was run**, so documents stored earlier simply
+lack them:
+
+| Field | On | Meaning |
+|---|---|---|
+| `status` | all four | Gained `"PendingApproval"` between the existing `"Draft"` and `"Final"`. |
+| `approvedByUserId` | all four | The user who actually pressed Approve. Kept **separate** from the printed `approvedBy` name because that one is a free-text form field staff can edit. |
+| `rejectionComment` | all four | Why an approver sent it back. Cleared on resubmission. |
+| `ownerDepartment` | `material_requisitions`, `purchase_requests` | `"project"` \| `"production"`. **Absent ⇒ treated as `"project"`**, which is what keeps pre-2026-08-20 records visible to the Project department. |
+| `productionOrderId` | `material_requisitions`, `purchase_requests` | Set only on Production-owned documents (which have `projectId: ""` instead). |
+
+Production Order stores its approver as an `approver: { name, date }` signatory block rather than a
+plain string, matching its printed form — which is why `ApprovalConfig` has an `approvalStamp` hook.

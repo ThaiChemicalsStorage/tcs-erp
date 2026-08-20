@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { Collection } from "mongodb";
+import type { Collection, Filter } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
-  purchaseRequestsCollection, productsCollection, countersCollection, auditLogCollection,
+  purchaseRequestsCollection, productionOrdersCollection, productsCollection, countersCollection, auditLogCollection,
   toObjectId, withStringId, type PurchaseRequestFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
@@ -110,7 +110,17 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   // page (Stage 5).
   const ownershipMatch = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "purchaseRequest:viewAll"), "createdBy");
   const purchaseRequests = await purchaseRequestsCollection();
-  const filter = projectId ? { projectId, isDeleted: false, ...ownershipMatch } : { isDeleted: false, ...ownershipMatch };
+  // แยกเอกสารตามแผนกเจ้าของ — ฝ่ายโครงการกับฝ่ายผลิตใช้เอกสารชนิดเดียวกันแต่ไม่เห็นของกันและกัน
+  // (ยืนยันกับเจ้าของ 2026-08-20). เอกสารเก่าที่ไม่มีฟิลด์นี้ถือเป็นของฝ่ายโครงการ จึงต้องรับทั้ง
+  // ค่า "project" และกรณีที่ยังไม่มีฟิลด์เลย — ไม่ได้ทำ migration
+  const ownerDepartment = req.query.ownerDepartment === "production" ? "production" : "project";
+  const departmentClause: Filter<PurchaseRequestFields & { _id: string }> = ownerDepartment === "production"
+    ? { ownerDepartment: "production" }
+    : { $or: [{ ownerDepartment: "project" }, { ownerDepartment: { $exists: false } }] };
+  // เวลาระบุ projectId คือเช็คของโครงการนั้นโดยตรง ไม่ต้องกรองแผนกซ้ำ
+  const filter = projectId
+    ? { projectId, isDeleted: false, ...ownershipMatch }
+    : { isDeleted: false, ...ownershipMatch, ...departmentClause };
   const docs = await purchaseRequests.find(filter).sort({ updatedAt: -1 }).toArray();
   res.status(200).json({ purchaseRequests: docs.map(toSummary) });
 }
@@ -123,15 +133,36 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
   const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
-  if (!projectId || !itemId) throw new HttpError(400, "กรุณาระบุโครงการและรายการ");
+  const productionOrderId = typeof body.productionOrderId === "string" ? body.productionOrderId.trim() : "";
 
-  const { project, item } = await loadPendingProjectItemOrThrow(projectId, itemId);
+  /**
+   * ออกได้จาก 2 ต้นทาง (ยืนยันกับเจ้าของ 2026-08-20 ว่าสองแผนกแยกข้อมูลกัน):
+   *   - รายการในโครงการ → ของฝ่ายโครงการ ผูกกับ ProjectItem
+   *   - ใบสั่งผลิต       → ของฝ่ายผลิต ไม่มีรายการให้ผูก จึงข้าม item-link
+   */
+  const fromProduction = Boolean(productionOrderId);
+  if (!fromProduction && (!projectId || !itemId)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+
+  let source: { projectId: string; scopeOfWorkId: string; jobCode: string };
+  let item: { name: string } | null = null;
+  if (fromProduction) {
+    const productionOrders = await productionOrdersCollection();
+    const po = await productionOrders.findOne({ _id: productionOrderId });
+    if (!po || po.isDeleted) throw new HttpError(404, "ไม่พบใบสั่งผลิต");
+    source = { projectId: "", scopeOfWorkId: po.scopeOfWorkId, jobCode: po.jobCode };
+  } else {
+    const loaded = await loadPendingProjectItemOrThrow(projectId, itemId);
+    item = loaded.item;
+    source = { projectId, scopeOfWorkId: loaded.project.scopeOfWorkId, jobCode: loaded.project.scopeNumber };
+  }
 
   const counters = await countersCollection();
   const id = await nextPurchaseRequestId(counters);
   const now = nowIso();
   const doc: PurchaseRequestFields = {
-    projectId, scopeOfWorkId: project.scopeOfWorkId, jobCode: project.scopeNumber,
+    projectId: source.projectId, scopeOfWorkId: source.scopeOfWorkId, jobCode: source.jobCode,
+    ownerDepartment: fromProduction ? "production" : "project",
+    productionOrderId: fromProduction ? productionOrderId : "",
     vendorName: "", neededByDate: "", creditDays: null, shippingMethod: "", deliveryLocation: "",
     lines: [], status: "Draft",
     // requestedAt seeds from a date-only slice of `now`, not the full ISO timestamp — see
@@ -146,9 +177,18 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   await purchaseRequests.insertOne({ ...doc, _id: id });
 
   // CRITICAL invariant — see materialRequisitionHandler.ts's identical comment on this same step.
-  await linkProjectItemToSubDocument(projectId, itemId, "purchaseRequest", "purchaseRequestId", id);
+  // ฝ่ายผลิตออกจากใบสั่งผลิต ไม่มีรายการในโครงการให้ผูก จึงข้ามขั้นตอนนี้
+  if (!fromProduction) {
+    await linkProjectItemToSubDocument(projectId, itemId, "purchaseRequest", "purchaseRequestId", id);
+  }
 
-  await writeAuditEntry(ctx, "Purchase Request Created", `สร้างใบขอซื้อ ${id} สำหรับรายการ "${item.name}"`, { scopeOfWorkId: project.scopeOfWorkId });
+  await writeAuditEntry(
+    ctx, "Purchase Request Created",
+    fromProduction
+      ? `สร้างใบขอซื้อ ${id} จากใบสั่งผลิต ${productionOrderId}`
+      : `สร้างใบขอซื้อ ${id} สำหรับรายการ "${item?.name ?? ""}"`,
+    { scopeOfWorkId: source.scopeOfWorkId },
+  );
   res.status(201).json({ purchaseRequest: toClient({ ...doc, _id: id }) });
 }
 

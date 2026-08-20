@@ -4,7 +4,91 @@
 
 ---
 
-## 2026-08-20g (absolute latest) — Tax invoice lines gain sub-details, and manual creation gains document remarks
+## 2026-08-20h (absolute latest) — Production (ผลิต) department: new ใบสั่งผลิต, approval workflow on four documents, per-department record separation
+
+**Feature**: The owner supplied the Production department's spec and its reference form and asked for
+the module to be built, for the documents needing approval to get real approve buttons, and for the
+permissions to go with it. Delivered across four commits (this entry covers all of them).
+
+### 1. Approval workflow — ร่าง → รออนุมัติ → อนุมัติ (`3352c4e`)
+
+ใบเบิก-คืนวัสดุ / ใบขอซื้อ / ใบสั่งงาน previously jumped Draft → Final on one button with **no
+approval step at all**. New shared `api/_lib/documentApproval.ts` implements the same four
+transitions Scope of Work already uses — `submit-approval`, `approve`, `reject` (reason required),
+`withdraw-approval` — generically over a collection, per the owner's "เหมือน Scope of Work เป๊ะ".
+
+Scope of Work itself is deliberately **not** migrated onto the helper: it carries its own validation
+gates and notification fan-out, and rewriting a live, heavily-used workflow to share code is more
+risk than value.
+
+Details worth keeping: it reuses each form's existing printed `approvedBy`/`approvedAt` fields
+rather than adding parallel ones, filling the name **only when blank** so it never overwrites what
+staff typed; `approvedByUserId` is separate and server-written because `approvedBy` is a free-text
+form field a user can edit; the three new fields are optional and normalized on read via
+`withApprovalDefaults()`, so documents stored earlier simply lack them and **no migration ran**; and
+a rejection reason is cleared on resubmission so a stale reason can't linger on a fixed document.
+The old `/finalize` route is kept as an alias of `/approve` but now enforces passing through
+PendingApproval.
+
+### 2. ใบสั่งผลิต (Production Order, FM-PD-02) — backend (`376439e`) + UI (`472917d`)
+
+The one genuinely new document type. The reference PDF is a **scanned image**, so it was decoded by
+extracting and rendering the embedded bitmap before transcribing; `src/lib/productionOrder.ts`'s doc
+comment is now the durable record of the form's structure, since the PDF is gitignored.
+
+Two owner-confirmed differences from the other Project-family documents:
+- Created **directly from an approved Scope of Work**, not a Project item — no `projectId`, no
+  item-link bookkeeping.
+- Numbered `SC-{Gregorian year}-{month}-{seq}` to match the form's own `SC-2026-08-009`, where every
+  other document here uses a Buddhist year. **A test pins this** so a later "consistency" refactor
+  can't quietly change it.
+
+The line model matches what the form actually shows: section-header rows (the bold product line, the
+"ชิ้นส่วน" divider) that carry no qty/unit and are skipped when numbering, plus per-line sub-details
+for the indented continuation lines. The server strips qty/unit from header rows rather than trusting
+the client, so toggling a row's type leaves nothing stale behind.
+
+Approval reuse needed one extension: this form stores its approver as a `{ name, date }` signatory
+block, not a plain string, so `ApprovalConfig` gained an optional `approvalStamp` hook instead of
+forcing a redundant field onto the document. The ผู้อนุมัติ block is **read-only in the editor** — the
+server stamps it, so a typed-in name can't stand in for a real approval.
+
+### 3. Per-department separation + the ผลิต nav group (this commit)
+
+The owner confirmed the two departments **share document types but not records**. `ownerDepartment`
+(`"project" | "production"`) and `productionOrderId` were added to Material Requisition and Purchase
+Request; both are optional, and the list query treats *a missing field* as Project-owned so the
+documents already in the database keep appearing where they always did — **there is a test for
+exactly that**, since silently hiding existing records would be the worst failure here.
+
+Creation now accepts either parent: `{projectId, itemId}` (Project, unchanged, still does the atomic
+item-link) or `{productionOrderId}` (Production, which has no item to link and skips that step
+entirely). `MaterialRequisitionPage`/`PurchaseRequestPage` take an `ownerDepartment` prop and are
+mounted twice from `App.tsx` with distinct `key`s, so switching between the two copies remounts
+rather than showing the other department's stale list — the same multi-mount pattern
+`ArDocumentListPage` already uses.
+
+`nav.group.production` contains ใบสั่งผลิต + the Production department's own ใบเบิก-คืนวัสดุ and
+ใบขอซื้อ. ใบส่งมอบงาน is **not** duplicated — it is the existing Delivery Order module, per the
+2026-08-20 confirmation recorded in CLAUDE.md's coordination note.
+
+### 4. Permissions
+
+7 new `productionOrder:*` permissions with a "ผลิต" group in Role Management, granted to
+Administrator/Super Admin only by default — the same precedent the rest of the Project module set.
+
+**Also fixed along the way**: the test harness's `makeReqRes()` never populated `req.query`, so any
+handler reading a query string crashed under test while working fine in both real runtimes. Found by
+the new department-separation test; fixed by parsing the URL in the mock.
+
+**Verified**: `tsc` (both configs) / `lint` (0 errors) / `build` / **251 tests** (up from 245), i18n
+parity 2,129 keys each way. **Not click-tested in a real browser** — the automated browser still
+cannot reach this machine's dev server (see 2026-08-20e), so the ผลิต pages, the approve buttons and
+the FM-PD-02 print layout all need a manual pass.
+
+---
+
+## 2026-08-20g — Tax invoice lines gain sub-details, and manual creation gains document remarks
 
 **Feature**: Owner sent two photos of a real tax invoice showing what the system could not produce:
 a **sub-detail line under the main item** (`For Installation` beneath `(งวดที่1/4)30%DownPayment`) and

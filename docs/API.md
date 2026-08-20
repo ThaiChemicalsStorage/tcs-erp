@@ -458,3 +458,39 @@ Every route funnels exceptions through `withErrorHandling()` (`api/_lib/http.ts`
 ## Superseded: the old proposed Next.js API design — NOT what got built
 
 If/when a hypothetical Next.js migration happened (the "Phase 2" plan, see [ARCHITECTURE.md](./ARCHITECTURE.md) "Superseded" section), the plan had been: an Auth.js route handler, Server Actions (not REST/JSON) for most mutations, Server Components/`queries/*.ts` for reads, and a coarse `middleware.ts` session check. **None of this was built.** The real API that shipped 2026-07-09 is a plain REST/JSON API over Vercel Serverless Functions, documented in full above. This paragraph is kept only as a historical record — do not write code against the old proposal.
+
+## Production Order + shared document approval (added 2026-08-20)
+
+### Production Order (`api/_lib/productionOrderHandler.ts`, mounted at `/api/production-orders` via `api/handlers/quotes.ts`)
+
+Same 12/12 function-slot sharing convention as the other Project-family documents. Full design:
+[MODULES/Production.md](./MODULES/Production.md). Client wrapper: `src/lib/productionOrder.ts`.
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/production-orders?scopeOfWorkId=` | `productionOrder:view` | With `scopeOfWorkId`: existence check for one job, unfiltered by owner. Without: company-wide list scoped by `productionOrder:viewAll`. |
+| `POST /api/production-orders` | `productionOrder:create` + `scopeOfWork:view` | Body `{ scopeOfWorkId }`. **`400` unless the Scope of Work is `status: "Final"`** — same approved-only gate Project's own create uses. Mints `SC-{YYYY}-{MM}-{NNN}` from an atomic per-month counter — **Gregorian year, deliberately unlike every other document here** (matches the real FM-PD-02 form; pinned by a test). Returns `201`. |
+| `GET /api/production-orders/:id` | `productionOrder:view` | Full document. |
+| `PATCH /api/production-orders/:id` | `productionOrder:edit` + (owner **or** `:finalize`) | `400` once `Final`. Section-header rows have their `qty`/`unit` forced empty server-side. The `approver` signatory is **not** accepted here — only the approve route writes it. |
+| `DELETE /api/production-orders/:id` | `productionOrder:delete` + (owner **or** `:finalize`) | Soft delete. |
+| `POST /api/production-orders/:id/print` | `productionOrder:print` | Writes an audit entry. |
+
+### Shared approval routes (`api/_lib/documentApproval.ts`)
+
+Applied identically to `material-requisitions`, `purchase-requests`, `job-orders` and
+`production-orders` (`X` below). Mirrors Scope of Work's existing workflow.
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `POST /api/X/:id/submit-approval` | edit rights on the document | `Draft` → `PendingApproval`. Clears any previous `rejectionComment`, so a stale reason can't linger on a resubmitted document. |
+| `POST /api/X/:id/approve` | `{doc}:finalize` | `PendingApproval` → `Final`. `400` from any other state — a straight Draft→Final jump is refused. Stamps the approver: fills the printed `approvedBy`/`approvedAt` (or Production Order's `approver` block) **only when blank**, never overwriting a typed name, and always records `approvedByUserId` server-side. |
+| `POST /api/X/:id/reject` | `{doc}:finalize` | `PendingApproval` → `Draft`. Body `{ comment }` — **required**, `400` without it. |
+| `POST /api/X/:id/withdraw-approval` | edit rights on the document | `PendingApproval` → `Draft`, for the submitter to take it back. No approve permission needed. |
+| `POST /api/X/:id/finalize` | `{doc}:finalize` | Kept as an **alias of `/approve`** for backward compatibility; now enforces the PendingApproval step like `/approve` does. |
+
+### Department separation on Material Requisition / Purchase Request
+
+| Change | Notes |
+|---|---|
+| `GET /api/{material-requisitions,purchase-requests}?ownerDepartment=` | `project` (default) or `production`. **A document with no `ownerDepartment` field counts as `project`**, so records created before 2026-08-20 keep appearing where they always did — no migration was run. Ignored when `projectId` is supplied (that mode is already scoped to one project). |
+| `POST /api/{material-requisitions,purchase-requests}` | Now accepts **either** `{ projectId, itemId }` (Project-owned; still performs the atomic ProjectItem link) **or** `{ productionOrderId }` (Production-owned; no item to link, so that step is skipped entirely). |

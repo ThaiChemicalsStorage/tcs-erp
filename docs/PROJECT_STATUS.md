@@ -14,6 +14,24 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-20h] Production (ผลิต) department module + approval workflow on four documents.**
+  Built the new **ใบสั่งผลิต** (Production Order, FM-PD-02 — transcribed from a scanned form by
+  extracting and rendering its embedded bitmap, since the PDF has no text layer), gave **ใบเบิก-คืนวัสดุ
+  / ใบขอซื้อ / ใบสั่งงาน / ใบสั่งผลิต** a real ร่าง→รออนุมัติ→อนุมัติ workflow with approve / reject
+  (reason required) / withdraw buttons behaving exactly like Scope of Work, and separated the two
+  departments' records via `ownerDepartment` so Project and Production share document *types* but
+  never see each other's data. ใบส่งมอบงาน was deliberately **not** rebuilt — it is the existing
+  Delivery Order module, per the 2026-08-20 business-side confirmation. 7 new `productionOrder:*`
+  permissions with their own Role Management group. Documents stored before this change keep working:
+  every new field is optional and a missing `ownerDepartment` counts as Project-owned, with a test
+  pinning exactly that (silently hiding existing records would have been the worst failure here).
+  Also fixed a test-harness gap found along the way — `makeReqRes()` never populated `req.query`, so
+  any handler reading a query string crashed under test while working fine in both real runtimes.
+  `tsc` (both configs) / `lint` (0 errors) / `build` / **251 tests** all clean; i18n parity 2,129.
+  **Not click-tested in a browser** — the automated browser cannot reach this machine's dev server,
+  so the ผลิต pages, the approve buttons and the FM-PD-02 print layout need a manual pass (TODO.md).
+  See [MODULES/Production.md](./MODULES/Production.md) and CHANGELOG.md 2026-08-20h.
+
 - ✅ **[2026-08-20e] Audited Accounting + Project against the owner's real spec; Project gained its own
   "+ สร้าง" flows.** The owner supplied both departments' full business specs for the first time and
   asked whether what was built matches. **Confirmed correct**: all 4 accounting document types and

@@ -29,10 +29,14 @@ interface CapturedResponse {
 
 function makeReqRes(method: string, url: string, body?: unknown): { req: VercelRequest; res: VercelResponse; captured: CapturedResponse } {
   const captured: CapturedResponse = { statusCode: 0, body: undefined, headers: {} };
+  // Both real runtimes (Vercel and the Express server) always populate `req.query`; handlers read it
+  // directly, so the mock has to as well or a query-string route crashes here but works in prod.
+  const query = Object.fromEntries(new URLSearchParams(url.split("?")[1] ?? ""));
   const req = {
     method,
     url,
     body,
+    query,
     headers: { "x-forwarded-for": "10.0.0.1", cookie: sessionCookie },
     socket: { remoteAddress: "10.0.0.1" },
   } as unknown as VercelRequest;
@@ -445,5 +449,66 @@ describe("Production Order", () => {
     await call("POST", `/api/production-orders/${po.id}/approve`);
     const res = await call("PATCH", `/api/production-orders/${po.id}`, { productName: "changed" });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+/**
+ * แยกเอกสารตามแผนกเจ้าของ — ฝ่ายโครงการกับฝ่ายผลิตใช้ใบเบิก-คืนวัสดุ/ใบขอซื้อ "ชนิดเดียวกัน" แต่
+ * ต่างคนต่างเห็นของตัวเอง (ยืนยันกับเจ้าของ 2026-08-20)
+ *
+ * The important half is the back-compat one: documents created before ownerDepartment existed have
+ * no such field at all, and must keep showing up for the Project department rather than vanishing.
+ */
+describe("Material Requisition / Purchase Request are separated by owning department", () => {
+  it("a production-owned requisition is invisible to the project list and vice versa, and legacy rows stay with Project", async () => {
+    const db = client.db("tcs_erp");
+
+    // ของฝ่ายโครงการ (ผ่านรายการในโครงการตามปกติ)
+    const project = await createProject();
+    const projectMr = await call("POST", "/api/material-requisitions", { projectId: project.id, itemId: project.items[0].id });
+    expect(projectMr.statusCode, JSON.stringify(projectMr.body)).toBe(201);
+    const projectMrId = (projectMr.body as { materialRequisition: { id: string } }).materialRequisition.id;
+
+    // ของฝ่ายผลิต (ออกจากใบสั่งผลิต)
+    const po = await call("POST", "/api/production-orders", { scopeOfWorkId });
+    const poId = (po.body as { productionOrder: { id: string } }).productionOrder.id;
+    const prodMr = await call("POST", "/api/material-requisitions", { productionOrderId: poId });
+    expect(prodMr.statusCode, JSON.stringify(prodMr.body)).toBe(201);
+    const prodMrDoc = (prodMr.body as { materialRequisition: { id: string; ownerDepartment: string; projectId: string; productionOrderId: string } }).materialRequisition;
+    expect(prodMrDoc.ownerDepartment).toBe("production");
+    expect(prodMrDoc.projectId, "a production requisition has no project item to hang off").toBe("");
+    expect(prodMrDoc.productionOrderId).toBe(poId);
+
+    // เอกสารเก่าที่ไม่มีฟิลด์ ownerDepartment เลย — ต้องยังนับเป็นของฝ่ายโครงการ
+    await db.collection("material_requisitions").insertOne({
+      _id: "MR-LEGACY-0001", projectId: project.id, scopeOfWorkId, jobCode: "TEST-SOW-01",
+      customerName: "Test Co.", jobOrderId: null, jobOrderCode: "", productName: "legacy",
+      responsibleEmployee: "", productionStartDate: "", lines: [], status: "Draft",
+      preparedBy: "", preparedAt: "", approvedBy: "", approvedAt: "", storeDeptBy: "", storeDeptAt: "",
+      costDeptBy: "", costDeptAt: "", returnedBy: "", returnReceivedBy: "", returnedAt: "",
+      createdAt: "", updatedAt: "", createdBy: "", updatedBy: "", isDeleted: false,
+    } as never);
+
+    const projectList = await call("GET", "/api/material-requisitions?ownerDepartment=project");
+    const projectIds = (projectList.body as { materialRequisitions: { id: string }[] }).materialRequisitions.map((m) => m.id);
+    expect(projectIds).toContain(projectMrId);
+    expect(projectIds, "a pre-ownerDepartment document must not disappear").toContain("MR-LEGACY-0001");
+    expect(projectIds, "production documents must not leak into the project list").not.toContain(prodMrDoc.id);
+
+    const productionList = await call("GET", "/api/material-requisitions?ownerDepartment=production");
+    const productionIds = (productionList.body as { materialRequisitions: { id: string }[] }).materialRequisitions.map((m) => m.id);
+    expect(productionIds).toContain(prodMrDoc.id);
+    expect(productionIds).not.toContain(projectMrId);
+    expect(productionIds).not.toContain("MR-LEGACY-0001");
+  });
+
+  it("a purchase request can also be raised straight from a production order", async () => {
+    const po = await call("POST", "/api/production-orders", { scopeOfWorkId });
+    const poId = (po.body as { productionOrder: { id: string } }).productionOrder.id;
+    const res = await call("POST", "/api/purchase-requests", { productionOrderId: poId });
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+    const doc = (res.body as { purchaseRequest: { ownerDepartment: string; productionOrderId: string } }).purchaseRequest;
+    expect(doc.ownerDepartment).toBe("production");
+    expect(doc.productionOrderId).toBe(poId);
   });
 });

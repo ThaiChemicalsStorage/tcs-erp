@@ -131,7 +131,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "productionOrder" | "products" | "stock" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "productionOrder" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -185,6 +185,8 @@ const navItems: NavItem[] = [
   { key: "jobOrder", icon: Hammer, labelKey: "nav.jobOrder", permission: "jobOrder:view" },
   { key: "purchaseRequest", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "productionOrder", icon: Factory, labelKey: "nav.productionOrder", permission: "productionOrder:view" },
+  { key: "productionRequisition", icon: Package2, labelKey: "nav.materialRequisition", permission: "materialRequisition:view" },
+  { key: "productionPurchase", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "stock", icon: Boxes, labelKey: "nav.stock", permission: "stock:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
@@ -200,7 +202,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
   { labelKey: "nav.group.accounting", keys: ["accountingDashboard", "accounting", "arDeposit", "arBilling", "arReceipt", "arTaxInvoice", "arMonthly"] },
   { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest"] },
-  { labelKey: "nav.group.production", keys: ["productionOrder"] },
+  { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "productionPurchase"] },
   { labelKey: "nav.group.inventory", keys: ["products", "stock"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
@@ -225,6 +227,8 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   jobOrder: "nav.jobOrder",
   purchaseRequest: "nav.purchaseRequest",
   productionOrder: "nav.productionOrder",
+  productionRequisition: "nav.materialRequisition",
+  productionPurchase: "nav.purchaseRequest",
   products: "nav.products",
   stock: "nav.stock",
   customers: "nav.customers",
@@ -909,6 +913,10 @@ export default function App() {
               ? <JobOrderPage currentUserId={currentUser.id} canEdit={canEditJobOrder} canFinalize={canFinalizeJobOrder} canPrint={canPrintJobOrder} canDelete={canDeleteJobOrder} canCreate={canCreateJobOrder} initialJobOrderId={jobOrderDeepLinkId} onJobOrderIdConsumed={() => setJobOrderDeepLinkId(null)} />
               : effectiveNav === "purchaseRequest"
               ? <PurchaseRequestPage currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
+              : effectiveNav === "productionRequisition"
+              ? <MaterialRequisitionPage key="mr-production" ownerDepartment="production" currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} />
+              : effectiveNav === "productionPurchase"
+              ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} />
               : effectiveNav === "productionOrder"
               ? <ProductionOrderPage canEdit={canEditProductionOrder} canApprove={canApproveProductionOrder} canPrint={canPrintProductionOrder} canDelete={canDeleteProductionOrder} canCreate={canCreateProductionOrder} initialProductionOrderId={productionOrderDeepLinkId} onProductionOrderIdConsumed={() => setProductionOrderDeepLinkId(null)} />
               : effectiveNav === "service"

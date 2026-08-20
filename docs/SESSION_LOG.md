@@ -4,6 +4,65 @@
 
 ---
 
+## Session — 2026-08-20 (continued, absolute latest), Production department module end to end
+
+### What was implemented
+The owner supplied the Production (ผลิต) department's spec plus a list of which documents need
+approval, and asked for it all to be built in one go. Two design questions were resolved with
+`AskUserQuestion` **before** any code, because both were expensive to get wrong: whether the two
+departments share records (answer: separate) and what shape the approval workflow should take
+(answer: identical to Scope of Work). Two more were confirmed before Stage 2: the Gregorian-year
+numbering and that a Production Order is raised straight from an approved Scope of Work.
+
+Delivered in four commits so each stage stayed reviewable:
+1. `3352c4e` — the shared ร่าง→รออนุมัติ→อนุมัติ workflow for Material Requisition / Purchase Request
+   / Job Order, as one generic server helper rather than three near-copies.
+2. `376439e` — Production Order backend + 7 permissions.
+3. `472917d` — Production Order UI (list/editor/FM-PD-02 print), the ผลิต nav group, and the shared
+   approval buttons wired into all four documents.
+4. (this commit) — per-department record separation and the two shared documents under ผลิต.
+
+**Reading the reference form was its own problem**: `ใบสั่งผลิต(Production Order).pdf` is a scanned
+image with no text layer, and no PDF tooling was installed. Extracted the embedded FlateDecode
+bitmap from the PDF byte stream, re-encoded it as a downscaled PNG by hand, and read the form
+visually — which is how the field list, the three row types and the five signatory blocks were
+transcribed accurately rather than guessed.
+
+### Problems found/fixed
+- **The new approval gate broke an existing test immediately** ("finalizing a Job Order advances the
+  parent item to fulfilled"), because a straight Draft→Final jump is now refused. That is the point
+  of the change, so the test was rewritten to walk the real workflow *and* to assert the early
+  finalize is rejected.
+- **A real test-harness gap**: `makeReqRes()` never populated `req.query`, so any handler reading a
+  query string crashed under test while working correctly in both real runtimes. Surfaced by the new
+  department-separation test; fixed in the mock rather than worked around in the handler.
+- **Scripted edits repeatedly failed silently on CRLF files** — multi-line `String.replace` anchors
+  don't match when the file uses `\r\n`. Cost several cycles before switching to line-based edits.
+  A related mistake: one generated block referenced a helper that didn't exist and landed in
+  `purchaseRequestHandler.ts`; caught by `tsc`, removed, and redone surgically.
+- Two genuine `react-hooks/exhaustive-deps` warnings introduced by new props were fixed properly
+  (adding the dependency) rather than silenced.
+
+### Verification
+`tsc` (both configs) / `lint` (0 errors) / `build` / **251 tests**, up from 245. i18n parity checked
+both directions at 2,129 keys. New tests cover: the approval state machine (approve/reject/withdraw,
+and that a rejection reason clears on resubmit), Production Order numbering + the not-approved
+refusal + header-row sanitising + approver stamping + edit-lock-after-approval, and department
+separation **including that documents with no `ownerDepartment` stay visible to Project** — the
+back-compat case that would have been the worst thing to get wrong.
+
+**No live browser check.** The automated browser still cannot reach this machine's dev server (proven
+in the 2026-08-20e entry), so nothing here has been clicked.
+
+### Next steps
+- **Manual browser pass is the main outstanding item**: the ผลิต pages, the approve buttons on all
+  four documents, and especially the FM-PD-02 print layout against the physical form.
+- **Cost Control remains unmodelled** for both Project and Production. Both specs name it as a
+  precondition; it cannot be designed without the owner defining what it is as data.
+- The Production Order print layout has never been compared to real paper.
+
+---
+
 ## Session — 2026-08-20 (continued, absolute latest), spec audit of both modules + Project create flows
 
 ### What was implemented

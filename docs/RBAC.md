@@ -847,3 +847,29 @@ A few pieces of the old Next.js/Prisma design were never built and have no equiv
 - **9-role `RoleKey` enum** and any notion of per-department role splits — the 6-role set was kept as-is (see the comparison table above).
 
 None of the above exists in this repo. Do not write code that assumes a `Department` collection, a `manifest.ts`/`module-registry.ts` pattern, or a 9-role enum exists. `hasPermission()`/`userIsSuperAdmin()`/`roleNameFor()`/`roleHasPermission()` in `src/lib/roles.ts` are the real, working, shared-client-and-server implementation for everything RBAC-related today.
+
+## Production Order + document approval (added 2026-08-20)
+
+**7 new permissions**, `productionOrder:` `view` / `viewAll` / `create` / `edit` / `finalize` /
+`print` / `delete`, shown under a **"ผลิต"** group in Role Management. Granted to
+Administrator/Super Admin only by default — the same precedent the Project module set, since the
+Production department has no existing default role either. A real production role should be created
+via Role Management.
+
+**`:finalize` is now the approve/reject permission**, not just a "mark it Final" one. Across
+Material Requisition, Purchase Request, Job Order and Production Order the workflow is:
+
+| Action | Who |
+|---|---|
+| ส่งขออนุมัติ (`submit-approval`) | anyone who can edit the document (`:edit` + owner, or `:finalize`) |
+| อนุมัติ (`approve`) / ไม่อนุมัติ (`reject`) | `{document}:finalize` |
+| ถอนกลับมาแก้ (`withdraw-approval`) | anyone who can edit the document — deliberately **not** gated on `:finalize`, so a submitter can always retract their own request |
+
+The approving user is recorded server-side in `approvedByUserId`; the printed `approvedBy` name field
+is only auto-filled when blank, so it never overwrites what staff typed on the form. This means the
+audit trail cannot be forged by editing the form field.
+
+**Per-department visibility**: Material Requisition and Purchase Request are additionally split by
+`ownerDepartment`, so the Project and Production departments never see each other's records even
+with `:viewAll`. This is a *data-scoping* filter in the list query, layered on top of the existing
+`buildSimpleOwnershipClause()` own-vs-viewAll check — not a permission of its own.

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import { type PurchaseRequestSummary, fetchAllPurchaseRequests, createPurchaseRequest } from "../../lib/purchaseRequest";
+import { type PurchaseRequestSummary, fetchAllPurchaseRequests, createPurchaseRequest, createPurchaseRequestFromProductionOrder } from "../../lib/purchaseRequest";
 import { PurchaseRequestList } from "./PurchaseRequestList";
 import { PurchaseRequestDocument } from "./PurchaseRequestDocument";
-import { ProjectItemSourcePickerDialog } from "../project/ProjectSourcePickers";
+import { ProjectItemSourcePickerDialog, ProductionOrderSourcePickerDialog } from "../project/ProjectSourcePickers";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
@@ -19,6 +19,7 @@ export function PurchaseRequestPage({
   canPrint,
   canDelete,
   canCreate,
+  ownerDepartment = "project",
   initialPurchaseRequestId,
   onPurchaseRequestIdConsumed,
 }: {
@@ -28,6 +29,9 @@ export function PurchaseRequestPage({
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
+  /** แผนกเจ้าของ — หน้านี้ถูกเมาต์ 2 ครั้ง (โครงการ/ผลิต) และเห็นคนละชุดข้อมูล (2026-08-20).
+   *  ฝั่งผลิตออกเอกสารจากใบสั่งผลิต ส่วนฝั่งโครงการออกจากรายการในโครงการ */
+  ownerDepartment?: "project" | "production";
   initialPurchaseRequestId?: string | null;
   onPurchaseRequestIdConsumed?: () => void;
 }) {
@@ -42,6 +46,18 @@ export function PurchaseRequestPage({
 
   // สร้างใบขอซื้อจากหน้านี้ได้เลย โดยเลือกโครงการและรายการต้นทางเอง (เดิมสร้างได้จากในหน้าโครงการเท่านั้น)
   // ตามคำขอ 2026-08-20; API ยังต้องการทั้ง projectId และ itemId เหมือนเดิมทุกประการ
+  // ฝ่ายผลิตออกจากใบสั่งผลิต — ไม่มีรายการในโครงการให้เลือก
+  const handleCreateFromProductionOrder = async (productionOrderId: string) => {
+    try {
+      const created = await createPurchaseRequestFromProductionOrder(productionOrderId);
+      setPickerOpen(false);
+      openPurchaseRequest(created.id);
+    } catch (err) {
+      setPickerOpen(false);
+      toast.show(err instanceof ApiError ? err.message : t("purchaseRequest.loadError"));
+    }
+  };
+
   const handleCreate = async (projectId: string, itemId: string) => {
     try {
       const created = await createPurchaseRequest(projectId, itemId);
@@ -56,18 +72,18 @@ export function PurchaseRequestPage({
   const loadList = () => {
     setLoading(true);
     setLoadError(false);
-    fetchAllPurchaseRequests()
+    fetchAllPurchaseRequests(ownerDepartment)
       .then((list) => { setPurchaseRequests(list); setLoading(false); })
       .catch(() => { setLoadError(true); setLoading(false); });
   };
 
   useEffect(() => {
     let cancelled = false;
-    fetchAllPurchaseRequests()
+    fetchAllPurchaseRequests(ownerDepartment)
       .then((list) => { if (!cancelled) { setPurchaseRequests(list); setLoading(false); } })
       .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
     return () => { cancelled = true; };
-  }, []);
+  }, [ownerDepartment]);
 
   const openPurchaseRequest = (id: string) => {
     setSelectedId(id);
@@ -150,14 +166,20 @@ export function PurchaseRequestPage({
           </button>
         ) : undefined}
       />
-      {pickerOpen && (
+      {pickerOpen && (ownerDepartment === "production" ? (
+        <ProductionOrderSourcePickerDialog
+          title={t("purchaseRequest.createBtn")}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(productionOrderId) => void handleCreateFromProductionOrder(productionOrderId)}
+        />
+      ) : (
         <ProjectItemSourcePickerDialog
           title={t("purchaseRequest.createBtn")}
           description={t("project.picker.project.description")}
           onClose={() => setPickerOpen(false)}
           onSelect={(projectId, itemId) => void handleCreate(projectId, itemId)}
         />
-      )}
+      ))}
       <Toast message={toast.message} />
     </>
   );
