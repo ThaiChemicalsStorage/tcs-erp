@@ -56,6 +56,7 @@ export function ArDocumentListPage({
   const [receiptTarget, setReceiptTarget] = useState<ArDocument | null>(null);
   const [detailDoc, setDetailDoc] = useState<ArDocument | null>(null);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [receiptPickerOpen, setReceiptPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const toast = useToast();
 
@@ -141,6 +142,18 @@ export function ArDocumentListPage({
     for (const [invoiceId, re] of Object.entries(receiptByInvoiceId)) map[invoiceId] = re.netTotal;
     return map;
   }, [receiptByInvoiceId]);
+
+  // เฉพาะหน้า RE เอง — `documents` ที่โหลดไว้แล้วคือรายการใบเสร็จทั้งหมด ใช้หาว่าใบกำกับภาษีไหน (id)
+  // มีใบเสร็จ (ยังใช้งาน) แล้วบ้าง เพื่อกรองออกจาก ReceiptSourcePickerDialog — ไม่ต้อง fetch ซ้ำ
+  const invoiceIdsWithReceipt = useMemo(() => {
+    if (docType !== "RE") return new Set<string>();
+    const ids = new Set<string>();
+    for (const d of documents) {
+      if (d.status !== "issued") continue;
+      for (const line of d.lines) if (line.linkedArDocumentId) ids.add(line.linkedArDocumentId);
+    }
+    return ids;
+  }, [documents, docType]);
 
   const normalizedSearch = search.trim().toLowerCase();
   const filtered = documents
@@ -235,6 +248,7 @@ export function ArDocumentListPage({
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">
             {t("accounting.list.subtitle.before")} {docType} {t("accounting.list.subtitle.after")}
             {isTaxInvoicePage && canCreate && canIssue ? ` ${t("accounting.list.subtitle.orManual")}` : ""}
+            {docType === "RE" && canIssue ? ` ${t("accounting.list.subtitle.orReceiptHere")}` : ""}
           </p>
         </div>
         {isTaxInvoicePage && canCreate && canIssue && (
@@ -243,6 +257,14 @@ export function ArDocumentListPage({
             className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
           >
             <Plus size={15} /> {t("accounting.list.btn.createManual")}
+          </button>
+        )}
+        {docType === "RE" && canIssue && (
+          <button
+            onClick={() => setReceiptPickerOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+          >
+            <Plus size={15} /> {t("accounting.list.btn.createReceipt")}
           </button>
         )}
       </div>
@@ -466,6 +488,13 @@ export function ArDocumentListPage({
           }}
         />
       )}
+      {receiptPickerOpen && (
+        <ReceiptSourcePickerDialog
+          excludeIds={invoiceIdsWithReceipt}
+          onClose={() => setReceiptPickerOpen(false)}
+          onSelect={(doc) => { setReceiptTarget(doc); setReceiptPickerOpen(false); }}
+        />
+      )}
       <Toast message={toast.message} />
     </div>
     )}
@@ -532,6 +561,106 @@ function NcrSettingsDialog({ settings, onSave, onTestPrint, onClose }: {
               {t("accounting.list.ncr.save")}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Dialog เปิดจากปุ่ม "+ ออกใบเสร็จ" บนหน้า RE เอง — ให้เลือกใบกำกับภาษี (AR/IV) ที่ออกแล้วและยังไม่มี
+// ใบเสร็จมาออกได้ตรงนี้เลย (เดิมต้องไปกดปุ่ม "ออกใบเสร็จ" ที่แถวเอกสารในหน้า AR/IV เท่านั้น) — เหมือน
+// action "Register Payment" ของ Odoo ที่อยู่บนตัวเอกสารต้นทาง เพียงแต่เพิ่มทางเข้าอีกทางจากหน้า RE เอง
+function ReceiptSourcePickerDialog({ excludeIds, onClose, onSelect }: {
+  excludeIds: Set<string>;
+  onClose: () => void;
+  onSelect: (doc: ArDocument) => void;
+}) {
+  const { t } = useI18n();
+  const [invoices, setInvoices] = useState<ArDocument[]>([]);
+  const [scopeNumbers, setScopeNumbers] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetchArDocuments({ docType: "AR", status: "issued" }),
+      fetchArDocuments({ docType: "IV", status: "issued" }),
+      fetchAllScopeOfWorks().catch(() => []),
+    ])
+      .then(([ar, iv, scopes]) => {
+        if (cancelled) return;
+        setInvoices([...ar, ...iv]);
+        setScopeNumbers(Object.fromEntries(scopes.map((s) => [s.id, s.scopeNumber])));
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, []);
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filtered = invoices
+    .filter((d) => !excludeIds.has(d.id))
+    .filter((d) => !normalizedSearch
+      || d.docNo.toLowerCase().includes(normalizedSearch)
+      || d.customerSnapshot.companyName.toLowerCase().includes(normalizedSearch)
+      || (scopeNumbers[d.scopeOfWorkId] ?? "").toLowerCase().includes(normalizedSearch));
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col p-5 gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+            {t("accounting.list.receiptPicker.title")}
+          </h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.manual.close")}>
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">{t("accounting.list.receiptPicker.description")}</p>
+
+        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 flex-shrink-0">
+          <Search size={14} className="text-muted-foreground flex-shrink-0" />
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("accounting.list.search.placeholder")}
+            className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />)}
+            </div>
+          ) : loadError ? (
+            <p className="text-sm text-muted-foreground text-center py-6">{t("accounting.list.error.loadFailed")}</p>
+          ) : filtered.length === 0 ? (
+            <EmptyState icon={FileText} title={t("accounting.list.receiptPicker.empty.title")} description={t("accounting.list.receiptPicker.empty.description")} compact />
+          ) : (
+            <div className="space-y-1.5">
+              {filtered.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => onSelect(d)}
+                  className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 hover:bg-secondary/40 hover:border-[#c9a84c]/40 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-mono font-medium text-foreground truncate">
+                      {d.docNo} <span className="text-muted-foreground font-sans">· {t(DOC_TYPE_LABEL_KEY[d.docType])}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {d.customerSnapshot.companyName} · {scopeNumbers[d.scopeOfWorkId] ?? "—"}
+                    </p>
+                  </div>
+                  <span className="font-mono text-xs text-foreground flex-shrink-0">฿{d.netTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

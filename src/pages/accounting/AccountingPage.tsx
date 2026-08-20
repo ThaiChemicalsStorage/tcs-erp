@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Receipt, ClipboardCheck, ChevronLeft, Loader2, Upload, Printer, CheckCircle2, AlertTriangle } from "lucide-react";
+import { FileText, Receipt, ClipboardCheck, ChevronLeft, Loader2, Upload, Printer, CheckCircle2, AlertTriangle, Plus, Search, X } from "lucide-react";
 import { fetchAllScopeOfWorks, fetchScopeOfWork, type ScopeOfWorkListItem, type ScopeOfWork } from "../../lib/scopeOfWork";
 import {
   openArMilestone, updateArMilestone, uploadArAttachment, issueArDocuments, issueArReceipt,
@@ -41,16 +41,63 @@ export function AccountingPage({
   canIssue: boolean;
 }) {
   const [view, setView] = useState<"list" | "detail">("list");
-  const [scopeOfWorks, setScopeOfWorks] = useState<ScopeOfWorkListItem[]>([]);
-  // เลขที่บิลมัดจำ (AR) ที่ยังใช้งาน ต่อ Scope of Work — ใช้แจ้งเตือนในทุกงานว่าออกบิลมัดจำแล้วหรือยัง
-  // ตามที่บัญชีขอไว้ ("ให้มีการแจ้งเตือนทุกครั้งว่างานนั้นๆ มีการออกบิลมัดจำไปแล้วหรือยัง")
-  const [depositDocByScope, setDepositDocByScope] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const toast = useToast();
+  const { t } = useI18n();
+
+  const openScope = (id: string) => { setSelectedId(id); setView("detail"); setPickerOpen(false); };
+  const backToList = () => setView("list");
+
+  if (view === "detail" && selectedId) {
+    return (
+      <>
+        <ScopeBillingDetail scopeOfWorkId={selectedId} canCreate={canCreate} canIssue={canIssue} onBack={backToList} showToast={toast.show} />
+        <Toast message={toast.message} />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-y-auto p-6 gap-6">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accounting.jobBilling.title")}</h1>
+          <p className="text-sm text-muted-foreground font-mono mt-1">{t("accounting.jobBilling.subtitle")}</p>
+        </div>
+        {canCreate && (
+          <button
+            onClick={() => setPickerOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors flex-shrink-0"
+          >
+            <Plus size={15} /> {t("accounting.jobBilling.createBtn")}
+          </button>
+        )}
+      </div>
+
+      <EmptyState
+        icon={FileText}
+        title={t("accounting.jobBilling.landing.title")}
+        description={t("accounting.jobBilling.landing.description")}
+        actionLabel={canCreate ? t("accounting.jobBilling.createBtn") : undefined}
+        onAction={canCreate ? () => setPickerOpen(true) : undefined}
+      />
+
+      {pickerOpen && <ScopeOfWorkPickerDialog onClose={() => setPickerOpen(false)} onSelect={openScope} />}
+    </div>
+  );
+}
+
+// Dialog เปิดจากปุ่ม "+ สร้างวางบิล" — ให้บัญชีค้นหา/เลือก Scope of Work เอง แทนการดึงรายการ SOW
+// ทั้งหมดมาโชว์เป็นตารางอัตโนมัติเหมือนเดิม เพราะบางงานยังวางบิลไม่ได้ (รอ PO ลูกค้า/เอกสารลูกค้ายังไม่ครบ)
+// ข้อมูล SOW+badge บิลมัดจำถูกดึงเฉพาะตอนเปิด dialog นี้เท่านั้น ไม่ดึงตอนโหลดหน้า
+function ScopeOfWorkPickerDialog({ onClose, onSelect }: { onClose: () => void; onSelect: (id: string) => void }) {
+  const { t } = useI18n();
+  const [scopeOfWorks, setScopeOfWorks] = useState<ScopeOfWorkListItem[]>([]);
+  const [depositDocByScope, setDepositDocByScope] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
-  const toast = useToast();
-  const { t } = useI18n();
 
   useEffect(() => {
     let cancelled = false;
@@ -65,18 +112,6 @@ export function AccountingPage({
     return () => { cancelled = true; };
   }, []);
 
-  const openScope = (id: string) => { setSelectedId(id); setView("detail"); };
-  const backToList = () => setView("list");
-
-  if (view === "detail" && selectedId) {
-    return (
-      <>
-        <ScopeBillingDetail scopeOfWorkId={selectedId} canCreate={canCreate} canIssue={canIssue} onBack={backToList} showToast={toast.show} />
-        <Toast message={toast.message} />
-      </>
-    );
-  }
-
   const filtered = scopeOfWorks.filter((s) =>
     !search.trim()
     || s.scopeNumber.toLowerCase().includes(search.toLowerCase())
@@ -84,72 +119,65 @@ export function AccountingPage({
     || s.quotationNumber.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto p-6 gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("accounting.jobBilling.title")}</h1>
-        <p className="text-sm text-muted-foreground font-mono mt-1">{t("accounting.jobBilling.subtitle")}</p>
-      </div>
-
-      <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 w-full max-w-md">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("accounting.jobBilling.search.placeholder")}
-          className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
-        />
-      </div>
-
-      {loading ? (
-        <div className="space-y-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />)}
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col p-5 gap-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+            {t("accounting.jobBilling.createDialog.title")}
+          </h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" title={t("accounting.manual.close")}>
+            <X size={18} />
+          </button>
         </div>
-      ) : loadError ? (
-        <div className="text-sm text-muted-foreground">{t("accounting.jobBilling.error.loadFailed")}</div>
-      ) : filtered.length === 0 ? (
-        <EmptyState icon={FileText} title={t("accounting.jobBilling.empty.title")} description={t("accounting.jobBilling.empty.description")} />
-      ) : (
-        <div className="bg-card border border-border rounded-xl overflow-hidden overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr className="text-[10px] font-mono font-semibold uppercase tracking-wider text-muted-foreground">
-                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.scopeNumber")}</th>
-                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.customer")}</th>
-                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.quotation")}</th>
-                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.depositBill")}</th>
-                <th className="text-left px-4 py-2.5">{t("accounting.jobBilling.col.status")}</th>
-              </tr>
-            </thead>
-            <tbody>
+        <p className="text-xs text-muted-foreground">{t("accounting.jobBilling.createDialog.description")}</p>
+
+        <div className="flex items-center gap-2 bg-secondary border border-border rounded-lg px-3 py-2 flex-shrink-0">
+          <Search size={14} className="text-muted-foreground flex-shrink-0" />
+          <input
+            autoFocus
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("accounting.jobBilling.search.placeholder")}
+            className="bg-transparent text-sm text-foreground placeholder-muted-foreground outline-none w-full"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(4)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />)}
+            </div>
+          ) : loadError ? (
+            <p className="text-sm text-muted-foreground text-center py-6">{t("accounting.jobBilling.error.loadFailed")}</p>
+          ) : filtered.length === 0 ? (
+            <EmptyState icon={FileText} title={t("accounting.jobBilling.empty.title")} description={t("accounting.jobBilling.empty.description")} compact />
+          ) : (
+            <div className="space-y-1.5">
               {filtered.map((s) => (
-                <tr
+                <button
                   key={s.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openScope(s.id)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openScope(s.id); } }}
-                  className="border-b border-border/50 hover:bg-secondary/30 cursor-pointer"
+                  onClick={() => onSelect(s.id)}
+                  className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 hover:bg-secondary/40 hover:border-[#c9a84c]/40 transition-colors"
                 >
-                  <td className="px-4 py-3 font-mono text-foreground">{s.scopeNumber}</td>
-                  <td className="px-4 py-3 text-foreground">{s.customerName}</td>
-                  <td className="px-4 py-3 font-mono text-muted-foreground">{s.quotationNumber}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {depositDocByScope[s.id] ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20">
-                        <CheckCircle2 size={12} /> {depositDocByScope[s.id]}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
-                        <AlertTriangle size={12} /> {t("accounting.jobBilling.depositNotIssued")}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{s.status}</td>
-                </tr>
+                  <div className="min-w-0">
+                    <p className="text-sm font-mono font-medium text-foreground truncate">{s.scopeNumber}</p>
+                    <p className="text-xs text-muted-foreground truncate">{s.customerName} · {s.quotationNumber}</p>
+                  </div>
+                  {depositDocByScope[s.id] ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20 flex-shrink-0">
+                      <CheckCircle2 size={12} /> {depositDocByScope[s.id]}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20 flex-shrink-0">
+                      <AlertTriangle size={12} /> {t("accounting.jobBilling.depositNotIssued")}
+                    </span>
+                  )}
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -14,6 +14,40 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-20c] Home-screen icon ("Add to Home Screen") — no app store needed.** Direct request
+  for a phone home-screen icon that opens the app without going through the App Store/Play Store. Added
+  a Web App Manifest (`public/manifest.webmanifest`, navy `#0b1d3a` theme, `display: "standalone"`) +
+  generated icon set (`public/icons/`, from the existing logo re-composited onto a solid navy
+  background so it reads cleanly on any launcher) + the matching `index.html` `<link>`/meta tags.
+  Deliberately **no service worker/offline caching** — this is a live, frequently-updated internal ERP,
+  and stale cached data would be a worse failure mode than requiring a network connection. Purely
+  static-asset changes, no code/data changes; `npm run build` confirmed clean. See
+  [ARCHITECTURE.md](./ARCHITECTURE.md) "Home-screen icon" and CHANGELOG.md 2026-08-20c.
+
+- ✅ **[2026-08-20] วางบิลตามงาน becomes a create flow, no more auto-pulled job table.** Direct
+  owner request: every accounting document should be click-to-create-yourself, never auto-pulled — a
+  job showing up in a list doesn't mean it's actually billable yet (still waiting on the customer's
+  PO, or the customer's documents aren't complete). `AccountingPage.tsx`'s landing view used to fetch
+  and render every Scope of Work as a clickable table on page load; that table is gone, replaced by a
+  "+ สร้างวางบิล" button opening a search-and-pick `ScopeOfWorkPickerDialog` (same visual pattern as
+  `ManualTaxInvoiceDialog.tsx`'s own "+ สร้าง" dialogs) — the job list is now fetched only when this
+  dialog opens, not on page mount. Clarified with the owner first (`AskUserQuestion`): replace the
+  auto-list entirely, and keep the existing PO-copy/delivery-note issuing checklist unchanged.
+  `tsc`/`lint`/`build`/`test` all pass clean. See [MODULES/Accounting.md](./MODULES/Accounting.md)
+  "2026-08-20 — วางบิลตามงาน becomes a create flow" and CHANGELOG.md 2026-08-20a.
+
+- ✅ **[2026-08-20b] RE (ใบเสร็จรับเงิน) page gains its own "+ ออกใบเสร็จ" create entry point.** Direct
+  follow-up: owner asked why the BI list page has no create button, pointing to how other ERPs (Odoo)
+  let you pick a source document to generate a new one. Researched Odoo's actual pattern before
+  building: the "create from another document" action lives on the *source* document (SO → "Create
+  Invoice"; Invoice → "Register Payment"), not as a picker on the target's own create button — and this
+  codebase already implements that for receipts via the per-row "ออกใบเสร็จ" button that's existed on
+  every AR/IV list row since Phase 1.5. BI genuinely can't fit the pattern (always issued together with
+  its AR/IV, never standalone), but the RE page itself had no matching entry point, so added a
+  "+ ออกใบเสร็จ" button there that opens a search-and-pick dialog over unpaid AR/IV invoices, reusing
+  the existing `issueArReceipt()` flow — no backend changes. `tsc`/`lint`/`build`/accounting tests all
+  pass clean. See CHANGELOG.md 2026-08-20b.
+
 - ✅ **[2026-08-18] Accounting/Stock i18n gap closed.** Owner-reported: switching to English left the
   entire Accounting section on-screen in Thai (sidebar nav translated, page content didn't — the
   module was simply never wired to `useI18n()`/`t()` when built). Fixed across all 8 on-screen

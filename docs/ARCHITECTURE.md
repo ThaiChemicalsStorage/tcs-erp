@@ -26,6 +26,20 @@ src/
 - **Code-splitting**: all page-level components (`SetupWizardPage`, `SignInPage`, `SettingsPage`, `ProductsPage`, `QuotationPage`, `DashboardPage`, `UserManagementPage`, `RoleManagementPage`, `AuditLogPage`, `ScopeOfWorkPage`) are `React.lazy()`-loaded from `App.tsx`, wrapped in `<Suspense>` with a skeleton fallback (`PageLoading`). This keeps `recharts` (Dashboard-only) out of the main bundle. `NotificationBell` is a small, always-mounted header component and is imported eagerly, not lazy.
 - **Error boundary** (added 2026-07-22, `src/components/ErrorBoundary.tsx`): wraps the page-content `<Suspense>` in `App.tsx`, keyed by `key={effectiveNav}`. Before this, the app had **no error boundary anywhere** — a real incident confirmed the cost: an uncaught render error in the new Scope of Work page (an unguarded `undefined` field from a genuine MongoDB document) blanked the entire app white with no way to recover short of a manual reload, since React unmounts the whole tree on an uncaught render error with nothing to catch it. The boundary sits as a sibling to the sidebar/header (not wrapping them), so a crash in one page's content degrades to an in-place, reload-prompting error screen without taking the surrounding shell down too. **The `key={effectiveNav}` is load-bearing, not decorative**: a same-day self-review caught that without it, React error boundaries never auto-reset when their children's content changes — the fallback screen would stick forever, even after clicking a different, perfectly fine sidebar item, since only a changed `key` forces the boundary to unmount/remount fresh. This is a blast-radius reduction, not a substitute for fixing the underlying cause of any given crash — see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) for the specific bug it was written in response to.
 - **Styling**: Tailwind v4 via `@tailwindcss/vite`, design tokens as CSS custom properties in `src/styles/theme.css` (see [UI_GUIDELINES.md](./UI_GUIDELINES.md)). No component library (no shadcn/Radix/MUI) — every component is hand-built from Tailwind utility classes, intentionally, to match a specific navy/gold editorial look ported from the original Figma design.
+- **Home-screen icon / "Add to Home Screen" (added 2026-08-20)** — direct request for a way to open
+  the app from a phone home-screen icon without going through an app store. `public/manifest.webmanifest`
+  (name/icons/`display: "standalone"`/navy theme+background color) + `public/icons/` (192/512/512-maskable/
+  180 PNGs, generated from `public/logo.png` with a solid navy `#0b1d3a` background and safe-zone padding
+  so it reads cleanly on any home-screen launcher, since the source logo has a transparent background) +
+  `index.html` `<link rel="manifest">` + `apple-touch-icon`/`theme-color`/`apple-mobile-web-app-*` meta
+  tags. Android Chrome's "Add to Home Screen"/install-banner and iOS Safari's "Add to Home Screen" both
+  pick this up — the icon opens the live site in a standalone window (no browser address bar/tabs),
+  same as any other web app one level down. **Deliberately no service worker** — this app has real,
+  frequently-changing server data (quotations, accounting documents, dashboards); an offline-caching
+  service worker risks serving stale data or a stale app shell after a deploy, which is a worse failure
+  mode for an internal ERP than "no offline support." Purely additive, static-asset-only — no code
+  changes needed elsewhere, `express.static` already serves `dist/` (`.webmanifest` gets the correct
+  `application/manifest+json` content type from the underlying `mime-types` package).
 
 ## Backend Architecture
 

@@ -4,6 +4,134 @@
 
 ---
 
+## Session — 2026-08-20 (continued further, absolute latest), Home-screen icon ("Add to Home Screen")
+
+### What was implemented
+Direct request, unrelated to the Accounting work above: a way to open the app from a phone home-screen
+icon without publishing through the App Store/Play Store — standard web functionality (a Web App
+Manifest), no store submission needed. Checked `index.html` and `public/` first: no manifest/PWA setup
+existed yet, `public/logo.png` (500×500, transparent background) was the only branding asset, and
+neither `sharp` nor Python were available in this environment to resize it. Used a one-off PowerShell
+`System.Drawing` script instead — generated 192/512/512-maskable/180px PNGs, each re-composited onto a
+solid navy `#0b1d3a` background with safe-zone padding (the source logo's transparency would otherwise
+render as an ugly black or white square behind the icon on most home-screen launchers). Added
+`public/manifest.webmanifest` (navy theme/background, `display: "standalone"`) and wired it into
+`index.html` along with `apple-touch-icon`/`theme-color`/`apple-mobile-web-app-*` meta tags so iOS
+Safari's "Add to Home Screen" also opens standalone, not just Android Chrome's native install banner.
+
+Deliberately did **not** add a service worker — this is a live, frequently-updated internal ERP
+(quotations, accounting documents, dashboards); caching the app shell or API responses risks serving
+stale data or a stale build after a deploy, a worse failure mode for this kind of app than simply
+requiring a network connection. Scoped this pass to exactly what was asked: a proper home-screen icon
+and standalone window, nothing more.
+
+### Problems found/fixed
+Only a mechanical one: the first icon-resize pass failed with a GDI+ "generic error" — turned out to be
+`Bitmap.Save()` failing because the target `public/icons/` directory didn't exist yet; fixed by creating
+it first.
+
+### Verification
+`npm run build` — confirmed `dist/manifest.webmanifest` and all 4 `dist/icons/*.png` files are present
+after build (Vite copies `public/` as-is). Visually inspected the generated 512px and 512px-maskable
+icons (read back as images) to confirm the navy background + padding renders cleanly, not cropped or
+washed out. No frontend/backend code changed, so `tsc`/lint were unaffected (confirmed anyway, clean).
+**Not verified on an actual phone** — no Android/iOS device available in this environment; worth a real
+"Add to Home Screen" check on both platforms before calling this fully confirmed.
+
+### Next steps
+- Manually verify on a real Android phone (Chrome install banner or menu → "Add to Home Screen" /
+  "Install app") and a real iPhone (Safari → Share → "Add to Home Screen") that the icon looks correct
+  and the launched window has no browser address bar.
+
+---
+
+## Session — 2026-08-20 (continued, absolute latest), RE page gains its own "+ ออกใบเสร็จ" create entry point
+
+### What was implemented
+Direct follow-up in the same conversation: after the "วางบิลตามงาน becomes a create flow" pass above,
+the owner looked at the BI (ใบแจ้งหนี้/ใบวางบิล) list page and asked why it has no create button,
+pointing to how other ERPs — named Odoo — let you pick a source document to generate a new one from.
+Rather than guessing, researched Odoo's real pattern via `WebSearch` before responding: the
+"create-this-from-that" action in Odoo lives on the *source* document (a Sales Order has "Create
+Invoice"; an Invoice has "Register Payment"), not as a picker attached to the target document's own
+create button. Re-reading `ArDocumentListPage.tsx` turned up that this codebase already implements
+that exact pattern for receipts — every AR/IV list row has had an inline "ออกใบเสร็จ" button since
+Phase 1.5. Explained to the owner: BI genuinely can't get this treatment (it's always issued together
+with its AR/IV in one action, a real business rule from the "Flow งานบัญชี" reference, not a gap), but
+the RE page itself was missing a matching entry point — you could issue a receipt from the AR/IV page's
+row, but not by starting from the RE page and picking which invoice. Confirmed via `AskUserQuestion`
+that this specific addition was wanted before building it.
+
+Implemented a "+ ออกใบเสร็จ" button on the RE page (`docType === "RE"` only) that opens
+`ReceiptSourcePickerDialog` — fetches issued AR+IV documents, filters out ones that already have an
+active receipt (computed from the RE page's own already-loaded `documents` via a new
+`invoiceIdsWithReceipt` memo, no extra fetch), search-and-pick UI matching the `ScopeOfWorkPickerDialog`
+built earlier the same session. Selecting an invoice reuses the exact existing `receiptTarget` →
+`ConfirmDialog` → `issueArReceipt()` flow the per-row AR/IV button already used — zero backend changes.
+
+### Problems found/fixed
+None — pure additive front-end feature reusing an existing, already-tested API route.
+
+### Verification
+`npx tsc --noEmit` clean, `npm run lint` 0 errors (same 3 pre-existing unrelated warnings), `npm run
+build` clean, the 2 accounting-specific test files (`arCalculations.test.ts`/`arNumbering.test.ts`,
+32/32) pass. No live browser session this pass (same sandboxed-environment limitation noted above) —
+folded into the same manual-verification note as the earlier entry.
+
+### Next steps
+- Manually verify both of today's Accounting changes together in a real browser: "วางบิลตามงาน"'s new
+  create flow, and the RE page's new "+ ออกใบเสร็จ" picker (confirm it correctly excludes invoices that
+  already have a receipt, and that issuing via this new path produces the identical result as issuing
+  via the AR/IV row button).
+
+---
+
+## Session — 2026-08-20 (absolute latest), วางบิลตามงาน becomes a create flow
+
+### What was implemented
+Owner asked (Thai, colloquial): every accounting document should be click-to-create-yourself, never
+auto-pulled — clicking to create a billing note should let accounting choose which SOW to bill,
+because sometimes a job can't actually be billed yet (customer PO not received, customer documents
+incomplete). Before touching anything, read `docs/MODULES/Accounting.md`'s existing job-centric design
+writeup and the current `AccountingPage.tsx` implementation, then asked two clarifying questions via
+`AskUserQuestion` (matching this codebase's own established pattern of pausing on ambiguous Accounting
+UX asks rather than guessing — see the 2026-08-17 "UI structure PAUSED" precedent in Accounting.md):
+(1) should the auto-pulled Scope of Work table be replaced entirely by a "+ create" picker, or kept
+with a create button added alongside it, and (2) should the existing PO-copy/delivery-note issuing
+checklist stay mandatory. Owner answered: replace the auto-list entirely; keep the checklist mandatory.
+
+Implemented by removing `AccountingPage.tsx`'s mount-time `fetchAllScopeOfWorks()` call and its
+always-rendered table, replacing the landing view with a "+ สร้างวางบิล" button (plus an `EmptyState`
+prompt with the same action) that opens a new `ScopeOfWorkPickerDialog` — a search-and-pick modal
+matching `ManualTaxInvoiceDialog.tsx`'s existing "+ สร้าง" visual pattern. The Scope-of-Work list and
+deposit-billed-badge lookup now fetch only when that dialog opens. `ScopeBillingDetail` (the
+milestone/checklist/issuing view reached after picking a job) is untouched. Also removed the now-dead
+`accounting.jobBilling.col.*` i18n keys (both `th`/`en`) that only backed the removed table headers,
+and added the new create-flow keys.
+
+### Problems found/fixed
+None — this was a straightforward UI restructure on top of an already-working backend/data layer, no
+API or data-model changes needed.
+
+### Verification
+`npx tsc --noEmit` clean, `npm run lint` 0 errors (3 pre-existing unrelated Fast Refresh warnings),
+`npm run build` clean, `npm test` — the 2 accounting-specific suites (`arCalculations.test.ts`,
+`arNumbering.test.ts`, 32 tests) pass clean in isolation; a full `npm test` run separately showed 6
+unrelated suites failing on `mongodb-memory-server` instance-startup timeouts (a known environment
+flakiness on this machine, already called out in the 2026-08-18p entry above as "one transient
+single-file failure on a concurrent full run") — none of the 6 failing suites touch Accounting. No
+live browser session this pass (no sandboxed network path to the dev server in this environment,
+consistent with prior sessions' Known Risks note) — worth a manual click-through before calling this
+fully done: open "วางบิลตามงาน", confirm the landing view shows no auto-list, click "+ สร้างวางบิล",
+search/select a job, confirm it opens the same milestone/checklist view as before.
+
+### Next steps
+- Manually verify in a real browser per the note above.
+- No other Accounting pages were touched — the 4 per-doc-type list pages already only show real
+  issued documents (not speculative auto-pulled data), so they were correctly left out of scope.
+
+---
+
 ## Session — 2026-08-18 (continued, absolute latest), Accounting/Stock i18n gap closed
 
 ### What was implemented

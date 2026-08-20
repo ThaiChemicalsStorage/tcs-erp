@@ -478,6 +478,37 @@ left unaddressed, deliberately out of scope for a "fix Critical/High" pass:
   signature line for wet-ink signing — it does not capture/embed a real digital customer signature
   the way the now-removed Work Handover Note did via `SignaturePad`. Worth a future pass if digital
   signature capture on delivery documents becomes a real requirement.
+
+- [x] **[2026-08-20] Home-screen icon ("Add to Home Screen") — no app store needed.** Direct request
+  for a phone home-screen icon that opens the app without App Store/Play Store distribution. Added a
+  Web App Manifest + generated icon set (navy background, re-composited from the existing logo) +
+  matching `index.html` meta tags. Deliberately no service worker/offline caching, given this is a
+  live, frequently-updated internal ERP. `npm run build` confirmed the manifest/icons land in `dist/`.
+  See [ARCHITECTURE.md](./ARCHITECTURE.md) "Home-screen icon" and CHANGELOG.md 2026-08-20c. Not yet
+  verified on a real phone (no device in this environment) — worth a real Android + iOS check.
+
+- [x] **[2026-08-20] วางบิลตามงาน becomes a create flow — no more auto-pulled job table.** Direct
+  owner request: every accounting document should be click-to-create-yourself, never auto-pulled,
+  because a job appearing in a list isn't necessarily billable yet (still waiting on the customer's
+  PO, or the customer's documents aren't complete). Replaced `AccountingPage.tsx`'s always-rendered
+  Scope of Work table with a "+ สร้างวางบิล" button opening a search-and-pick
+  `ScopeOfWorkPickerDialog`; the job list now fetches only when that dialog opens. Clarified with the
+  owner first (`AskUserQuestion`) that this should replace the auto-list entirely and that the
+  existing PO-copy/delivery-note issuing checklist stays mandatory. `tsc`/`lint`/`build`/`test` clean.
+  See [MODULES/Accounting.md](./MODULES/Accounting.md) "2026-08-20 — วางบิลตามงาน becomes a create
+  flow" and CHANGELOG.md 2026-08-20a.
+
+- [x] **[2026-08-20] RE page gains its own "+ ออกใบเสร็จ" create entry point.** Follow-up: owner asked
+  why the BI list page has no create button, referencing how other ERPs (Odoo) let you pick a source
+  document to generate a new one. Researched Odoo's real pattern first: the action lives on the
+  *source* document (SO → "Create Invoice", Invoice → "Register Payment"), not as a picker on the
+  target's create button — already implemented here for receipts via the per-row "ออกใบเสร็จ" button on
+  every AR/IV list row since Phase 1.5. BI can't fit the pattern (always issued together with its
+  AR/IV, never standalone), but the RE page itself had no equivalent entry point — added a
+  "+ ออกใบเสร็จ" button + search-and-pick dialog there, reusing the existing `issueArReceipt()` flow, no
+  backend changes. `tsc`/`lint`/`build`/accounting tests clean. See
+  [MODULES/Accounting.md](./MODULES/Accounting.md) and CHANGELOG.md 2026-08-20b.
+
 - [x] **[2026-08-06] Express migration step B — standalone server shell** (owner's go-ahead:
   "ให้ย้ายจาก vercel มาเป็น express เดี่ยวๆเลย"): `server/` Express runtime mounting the unchanged
   `api/` handlers, `.env.example`, [DEPLOYMENT.md](./DEPLOYMENT.md), `npm run dev` full local

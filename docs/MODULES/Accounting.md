@@ -1,6 +1,60 @@
 # Module: Accounting
 
-## Status: 🟢 Phase 1.5 built (2026-08-18) — per-document-type pages + RE receipt + deposit alert + monthly summary; UI restructure UNPAUSED and done. Same day, also gained IV stock-cutting (see "Stock") and Manual Tax Invoice creation for AR/IV (see "Manual Tax Invoice Creation") — both same-day follow-ups, not part of the original Phase 1.5 plan.
+## Status: 🟢 Phase 1.5 built (2026-08-18) — per-document-type pages + RE receipt + deposit alert + monthly summary; UI restructure UNPAUSED and done. Same day, also gained IV stock-cutting (see "Stock") and Manual Tax Invoice creation for AR/IV (see "Manual Tax Invoice Creation") — both same-day follow-ups, not part of the original Phase 1.5 plan. **2026-08-20**: "วางบิลตามงาน" (`AccountingPage.tsx`) changed from an always-rendered auto-pulled Scope of Work table to a "+ สร้างวางบิล" create-and-pick flow — see "2026-08-20 — วางบิลตามงาน becomes a create flow" below.
+
+## 2026-08-20 — วางบิลตามงาน becomes a create flow, no more auto-pulled job table
+
+Direct owner request: every accounting document should be **click-to-create-yourself, never
+auto-pulled** — a job appearing in a list doesn't mean it's actually billable yet (still waiting on
+the customer's PO, or the customer's documents aren't complete). Clarified before building
+(`AskUserQuestion`): replace the auto-list entirely, don't just add a create button alongside it; keep
+the existing PO-copy/delivery-note checklist gate on issuing unchanged (the "can't bill yet" cases are
+handled by accounting simply not selecting that job yet, not by loosening the checklist).
+
+`AccountingPage.tsx`'s landing view used to `fetchAllScopeOfWorks()` on mount and render **every**
+Scope of Work as a clickable table (plus a deposit-billed badge column) the instant the page loaded.
+That table is gone. The landing view is now just a "+ สร้างวางบิล" button (and an `EmptyState` prompt
+with the same action) that opens `ScopeOfWorkPickerDialog` — a search-and-pick modal, same visual
+pattern as `ManualTaxInvoiceDialog.tsx`'s own "+ สร้าง" dialogs — where accounting types to find and
+deliberately select the specific job they intend to bill. The Scope of Work list + deposit-billed
+badge lookup is fetched only when this dialog is opened, not on page mount. Selecting a job in the
+dialog opens the same `ScopeBillingDetail` view (milestone list, checklist, issuing) as before —
+unchanged by this pass.
+
+Deliberately scoped to just this page: the 4 per-doc-type list pages (AR/BI/RE/IV,
+`ArDocumentListPage.tsx`) already only show real *issued* documents (not speculative auto-pulled
+data) and already have their own "+ create" button for AR/IV (Manual Tax Invoice, no Scope of Work —
+see "Manual Tax Invoice Creation" below), so they were left as-is.
+
+Verified via `npx tsc --noEmit`, `npm run lint` (0 errors), `npm run build`, `npm test`.
+
+## 2026-08-20 (same day, follow-up) — RE page gains its own "+ ออกใบเสร็จ" create entry point
+
+Owner pushed back after seeing the BI (ใบแจ้งหนี้/ใบวางบิล) list page: why doesn't it have a create
+button too, "ไปศึกษาโปรแกรม ERP ของคนอื่นมาดู เช่นพวกของ Odoo" (go look at how other ERPs, like Odoo,
+do it). Researched Odoo's actual pattern (WebSearch + re-reading this codebase's own
+`ArDocumentListPage.tsx`/`arHandler.ts`) before building anything: the "create-this-from-that" action
+in Odoo lives **on the source document**, not as a picker attached to the target's own create button —
+a Sales Order has a "Create Invoice" button; an Invoice has a "Register Payment" button. This codebase
+already implements exactly that pattern for receipts: every row on the AR and IV list pages has had an
+inline "ออกใบเสร็จ" button since Phase 1.5, letting you issue a receipt directly off a specific invoice
+row without leaving that page.
+
+**BI genuinely doesn't fit this pattern** — it's a real business-process rule (from the "Flow งานบัญชี"
+reference), not a technical gap: BI is always issued *together with* its AR/IV in one action, so there
+is no "pick an AR/IV to generate its BI" case — every AR/IV that exists already has one.
+
+**What was actually missing**: the RE page itself had no create entry point at all — issuing a receipt
+required leaving the RE page to find the invoice on the AR/IV list (or drill into a job via "วางบิลตามงาน").
+Confirmed with the owner (`AskUserQuestion`) before building. Added a "+ ออกใบเสร็จ" button on the RE
+page (`docType === "RE"`) that opens `ReceiptSourcePickerDialog` — fetches issued AR+IV documents,
+excludes ones that already have an active receipt (derived from the RE page's own already-loaded
+`documents`, no extra fetch needed), search-and-pick same visual pattern as `ScopeOfWorkPickerDialog`.
+Selecting a row reuses the exact same `receiptTarget` → `ConfirmDialog` → `issueArReceipt()` flow the
+per-row AR/IV button already used — no backend/API changes at all.
+
+Verified via `npx tsc --noEmit`, `npm run lint` (0 errors), `npm run build`, and the 2
+accounting-specific test files (32/32).
 
 Phase 1 (milestone billing: Customer extension, ar_milestones/ar_documents, atomic AR/IV/BI
 numbering, the calculation engine, checklist/attachments, issuing, basic cancel, RBAC) is
@@ -547,10 +601,14 @@ committed/deployed by accident. This doc is the durable, safe-to-commit summary 
 
 ## Pages / Components / APIs / Permissions / Database Tables / Current Features
 
-- **Pages** (`src/pages/accounting/`): `AccountingPage.tsx` (วางบิลตามงาน — job-centric issuing +
-  deposit-billed column/banner + inline "ออกใบเสร็จ"), `ArDocumentListPage.tsx` (shared per-docType
+- **Pages** (`src/pages/accounting/`): `AccountingPage.tsx` (วางบิลตามงาน — job-centric issuing via a
+  "+ สร้างวางบิล" create-and-pick-a-Scope-of-Work flow, no auto-pulled job table, see "2026-08-20 —
+  วางบิลตามงาน becomes a create flow" above; deposit-billed banner + inline "ออกใบเสร็จ" live inside the
+  per-job detail view), `ArDocumentListPage.tsx` (shared per-docType
   list page, mounted 4× from `App.tsx` as arDeposit/arBilling/arReceipt/arTaxInvoice with
-  `key={docType}`), `ArMonthlyReportPage.tsx` (สรุปเอกสารประจำเดือน),
+  `key={docType}` — the RE instance also gets its own "+ ออกใบเสร็จ" create button/picker, see
+  "2026-08-20 (same day, follow-up)" above; AR/IV instances keep their existing per-row "ออกใบเสร็จ"
+  button too, both reach the same `issueArReceipt()` flow), `ArMonthlyReportPage.tsx` (สรุปเอกสารประจำเดือน),
   `AccountingDashboardPage.tsx` + `AccountingDashboardCharts.tsx` (แดชบอร์ดบัญชี, 2026-08-18),
   `ArDocumentPrintDocument.tsx` (multi-copy print frame for all 4 doc types),
   `ArDocumentNcrPrintDocument.tsx` (data-only NCR print mode),

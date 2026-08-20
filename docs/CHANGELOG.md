@@ -4,6 +4,117 @@
 
 ---
 
+## 2026-08-20c (absolute latest) — Home-screen icon ("Add to Home Screen") — a Web App Manifest, no app store needed
+
+**Feature**: Direct request: a way to open the app from a phone home-screen icon without publishing to
+the App Store/Play Store, so users don't have to open Chrome/Safari and navigate to the site every
+time. This is a standard web feature (a Web App Manifest, sometimes loosely called a "PWA") — no store
+submission or native app build required.
+
+**Files Added**: `public/manifest.webmanifest` (name/short_name/icons/`display: "standalone"`/navy
+`theme_color`+`background_color` `#0b1d3a`/`start_url: "/"`), `public/icons/{icon-192,icon-512,
+icon-512-maskable,apple-touch-icon}.png` — generated from the existing `public/logo.png` (500×500,
+transparent background) via a one-off PowerShell `System.Drawing` resize script (no image-processing
+package was in the repo), each re-composited onto a solid navy `#0b1d3a` background with safe-zone
+padding so the icon reads cleanly on any home-screen launcher instead of showing an ugly transparent
+or auto-filled-black square.
+
+**Files Modified**: `index.html` (`<link rel="manifest">`, `<link rel="apple-touch-icon">` now points
+at the new 180×180 PNG instead of the raw 500×500 `logo.png`, `<meta name="theme-color">`, and the
+`mobile-web-app-capable`/`apple-mobile-web-app-capable`/`apple-mobile-web-app-status-bar-style`/
+`apple-mobile-web-app-title` meta tags that make iOS Safari's "Add to Home Screen" open in a
+standalone window instead of a normal browser tab).
+
+**Reason**: Direct owner request for phone-home-screen convenience access, explicitly not wanting
+app-store distribution.
+
+**Notes**: **Deliberately no service worker / offline caching.** This app is a live, frequently-updated
+internal ERP (quotations, accounting documents, dashboards) — a caching service worker risks serving
+stale data or a stale app shell after a deploy, a worse failure mode here than simply requiring a
+network connection. What this pass adds is exactly "a nicer bookmark": Android Chrome's native "Add to
+Home Screen"/install-banner and iOS Safari's "Add to Home Screen" both now produce a proper branded
+icon that opens the live site with no browser chrome, always hitting the real server — nothing more.
+Purely static-asset + `index.html` changes; no frontend code, backend, or database changes, so no
+`tsc`/lint impact — verified via `npm run build` (confirmed `dist/manifest.webmanifest` and
+`dist/icons/*` are present) plus a visual check of both generated icon files. See
+[ARCHITECTURE.md](./ARCHITECTURE.md) "Home-screen icon" for the full write-up. Not yet verified on an
+actual phone (no device available in this environment) — worth a real Android + iOS check before
+calling this fully confirmed.
+
+---
+
+## 2026-08-20b — RE (ใบเสร็จรับเงิน) page gains its own "+ ออกใบเสร็จ" create entry point
+
+**Feature**: Follow-up to the 2026-08-20 "วางบิลตามงาน becomes a create flow" pass. Owner pushed back
+on why the BI (ใบแจ้งหนี้/ใบวางบิล) list page has no create button, citing how other ERPs (named: Odoo)
+let you pick a source document to generate a new one from. Researched Odoo's actual pattern (WebSearch
++ re-reading `arHandler.ts`/`ArDocumentListPage.tsx`): the "create from another document" action lives
+**on the source document** (a Sales Order has "Create Invoice"; an Invoice has "Register Payment"), not
+as a picker on the target's own create button — and this codebase already implements that for
+receipts, via the per-row "ออกใบเสร็จ" button that's existed on every AR/IV list row since Phase 1.5.
+BI genuinely doesn't fit the pattern (it's always issued together with its AR/IV in one action, never
+standalone — a real business rule, not a gap), but the RE list page itself had no matching entry
+point — issuing a receipt required leaving the RE page to go find the invoice on the AR/IV list (or
+drill into a job). Confirmed with the owner (`AskUserQuestion`) before building: add it.
+
+**Files Modified**: `src/pages/accounting/ArDocumentListPage.tsx` (new `receiptPickerOpen` state, a
+"+ ออกใบเสร็จ" button shown only on `docType === "RE"`, a new `invoiceIdsWithReceipt` memo derived from
+the already-loaded RE `documents` list — no extra fetch needed to know which invoices already have a
+receipt — and a new `ReceiptSourcePickerDialog` component: fetches issued AR+IV documents on open,
+excludes ones already in `invoiceIdsWithReceipt`, search-and-pick same visual pattern as the
+`ScopeOfWorkPickerDialog` added earlier the same day; selecting a row reuses the exact same
+`receiptTarget`/`ConfirmDialog`/`issueArReceipt()` flow the per-row AR/IV button already used — no new
+API call), `src/lib/i18n.tsx` (added `accounting.list.btn.createReceipt` /
+`.receiptPicker.title` / `.description` / `.empty.title` / `.empty.description` /
+`.subtitle.orReceiptHere`, both `th`/`en`; reworded `accounting.list.empty.descRE` to point at the new
+on-page button instead of "see the tax invoice list page").
+
+**Reason**: Direct owner follow-up question, resolved by researching how Odoo actually implements this
+pattern rather than guessing, then confirming the specific gap (RE page, not BI) before building.
+
+**Notes**: No backend changes — this reuses `POST /api/ar-documents/:id/receipt` exactly as the
+existing AR/IV row buttons already do, just adds a second front-end entry point. Verified via
+`npx tsc --noEmit`, `npm run lint` (0 errors), `npm run build`, and the 2 accounting-specific test
+files (32/32).
+
+---
+
+## 2026-08-20a — วางบิลตามงาน: replaced the auto-pulled job list with a "+ สร้างวางบิล" create flow
+
+**Feature**: Direct owner request: every accounting document should be **click-to-create-yourself**,
+never auto-pulled — because a job showing up in a list doesn't mean it's actually billable yet (still
+waiting on the customer's PO, or the customer's documents aren't complete). `AccountingPage.tsx`
+("วางบิลตามงาน") used to fetch and render **every** Scope of Work as a clickable table the moment the
+page loaded. That table is now gone entirely — the landing view is a "+ สร้างวางบิล" button (plus an
+`EmptyState` prompt with the same action) that opens a new `ScopeOfWorkPickerDialog`: a search-and-pick
+modal (same visual pattern as `ManualTaxInvoiceDialog.tsx`'s "+ สร้าง" dialogs) where accounting types
+to find and deliberately select the specific job they intend to bill. The Scope of Work list + deposit-
+billed badge data is now fetched only when this dialog is opened, not on page mount.
+
+**Files Modified**: `src/pages/accounting/AccountingPage.tsx` (removed the always-rendered table +
+its mount-time fetch; added `pickerOpen` state, the create button, and the new
+`ScopeOfWorkPickerDialog` component — `ScopeBillingDetail` and the milestone/checklist/issuing flow
+underneath it are unchanged), `src/lib/i18n.tsx` (dropped the now-unused `accounting.jobBilling.col.*`
+table-header keys in both `th`/`en`, added `accounting.jobBilling.createBtn` /
+`.landing.title` / `.landing.description` / `.createDialog.title` / `.createDialog.description`).
+
+**Reason**: User (Thai, verbatim): "อยากให้ทุกอันของบัญชีคือกดสร้างเองไม่ต้องดึงข้อมูลมาอัตโนมัติ เวลากดสร้างวางบิล...
+สามารถเลือกได้ว่าจะเอา SOW ใบไหนมาวางบิลเพราะว่าบางทียังไม่สามารถวางบิลได้เลยนะตอนนั้น...ยังไม่ได้ PO จากลูกค้าบ้าง
+เอกสารลูกค้ายังไม่ครบบ้าง". Clarified with the owner before building (`AskUserQuestion`): replace the
+auto-list entirely (not just add a create button alongside it), and keep the existing PO-copy/delivery-
+note checklist gate on issuing unchanged — the "can't bill yet" cases they described are handled by
+accounting simply not selecting/opening that job yet, not by loosening the checklist.
+
+**Notes**: Scope deliberately limited to the job-centric "วางบิลตามงาน" page — the 4 per-doc-type list
+pages (AR/BI/RE/IV, `ArDocumentListPage.tsx`) already only display real *issued* documents (not
+speculative auto-pulled data) and already have their own "+ create" button for AR/IV (Manual Tax
+Invoice, no Scope of Work) from the 2026-08-18 pass, so they were left as-is. `ScopeBillingDetail`
+(the per-job milestone/checklist/issuing view reached after picking a SOW) is untouched — same
+required PO-copy/delivery-note checklist before "ออกเอกสาร" is enabled. Verified via `npx tsc --noEmit`,
+`npm run lint` (0 errors), `npm run build`, `npm test`.
+
+---
+
 ## 2026-08-18p (absolute latest) — Accounting/Stock i18n gap closed: full English translation for every on-screen page
 
 **Feature**: Owner-reported live (screenshot): switching the UI language to English (Settings →
