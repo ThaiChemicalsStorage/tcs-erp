@@ -29,7 +29,7 @@ export interface ApprovableFields {
   status: ApprovableStatus;
   /** ชื่อผู้อนุมัติที่พิมพ์ลงในฟอร์ม — มีอยู่ก่อนแล้วในทุกเอกสาร (ช่อง "ผู้อนุมัติ") ระบบจะเติมให้
    * อัตโนมัติตอนอนุมัติ ถ้ายังว่างอยู่ แต่ไม่ทับค่าที่เจ้าหน้าที่พิมพ์เองไว้ */
-  approvedBy: string;
+  approvedBy?: string;
   /** ผู้กดอนุมัติจริงในระบบ — เก็บแยกจาก `approvedBy` เพราะช่องนั้นเป็นข้อความพิมพ์อิสระ แก้ได้
    * ส่วนช่องนี้เซิร์ฟเวอร์เขียนเท่านั้น ใช้ตรวจสอบย้อนหลังได้ */
   approvedByUserId?: string;
@@ -71,6 +71,12 @@ export interface ApprovalConfig<TDoc extends ApprovableFields> {
   /** ทำงานเพิ่มหลังอนุมัติสำเร็จ เช่น อัปเดตสถานะรายการใน Project ให้เป็น fulfilled */
   onApproved?: (ctx: AuthContext, doc: TDoc) => Promise<void>;
   /** ส่งผลลัพธ์กลับ — แต่ละเอกสารใช้ชื่อ key ไม่เหมือนกัน (materialRequisition/jobOrder/...) */
+  /**
+   * ฟิลด์เพิ่มเติมที่จะเขียนตอนอนุมัติ — ใช้เมื่อเอกสารเก็บผู้อนุมัติคนละรูปแบบ
+   * (ใบสั่งผลิตใช้ object approver { name, date } ส่วนอีก 3 ใบใช้ approvedBy เป็น string)
+   * ไม่ระบุ = helper เติม approvedBy ให้ตามค่าเริ่มต้น
+   */
+  approvalStamp?: (ctx: AuthContext, doc: TDoc) => Record<string, unknown>;
   respond: (res: VercelResponse, doc: TDoc) => void;
 }
 
@@ -113,12 +119,14 @@ export async function handleApprove<TDoc extends ApprovableFields>(
   if (doc.status === "Final") throw new HttpError(400, `${cfg.label}นี้อนุมัติแล้ว`);
   if (doc.status !== "PendingApproval") throw new HttpError(400, `ต้องส่งขออนุมัติก่อน จึงจะอนุมัติ${cfg.label}ได้`);
 
+  const stamp = cfg.approvalStamp
+    ? cfg.approvalStamp(ctx, doc)
+    // ไม่ทับชื่อที่เจ้าหน้าที่พิมพ์ไว้เองในช่องผู้อนุมัติของฟอร์ม เติมให้เฉพาะตอนที่ยังว่าง
+    : { approvedBy: doc.approvedBy?.trim() ? doc.approvedBy : ctx.user.fullName, approvedAt: nowIso().slice(0, 10) };
   const updated = await applyStatusChange(cfg, id, ctx, {
     status: "Final",
-    // ไม่ทับชื่อที่เจ้าหน้าที่พิมพ์ไว้เองในช่องผู้อนุมัติของฟอร์ม เติมให้เฉพาะตอนที่ยังว่าง
-    approvedBy: doc.approvedBy?.trim() ? doc.approvedBy : ctx.user.fullName,
     approvedByUserId: ctx.user.id,
-    approvedAt: nowIso().slice(0, 10),
+    ...stamp,
   });
   await cfg.onApproved?.(ctx, updated);
   await cfg.writeAudit(ctx, `${cfg.label} Approved`, `อนุมัติ${cfg.label} ${id}`, updated);

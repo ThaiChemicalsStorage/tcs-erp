@@ -98,7 +98,14 @@ export type Permission =
   | "purchaseRequest:edit"
   | "purchaseRequest:finalize"
   | "purchaseRequest:print"
-  | "purchaseRequest:delete";
+  | "purchaseRequest:delete"
+  | "productionOrder:view"
+  | "productionOrder:viewAll"
+  | "productionOrder:create"
+  | "productionOrder:edit"
+  | "productionOrder:finalize"
+  | "productionOrder:print"
+  | "productionOrder:delete";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -199,6 +206,13 @@ export const ALL_PERMISSIONS: Permission[] = [
   "purchaseRequest:finalize",
   "purchaseRequest:print",
   "purchaseRequest:delete",
+  "productionOrder:view",
+  "productionOrder:viewAll",
+  "productionOrder:create",
+  "productionOrder:edit",
+  "productionOrder:finalize",
+  "productionOrder:print",
+  "productionOrder:delete",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -300,6 +314,13 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "purchaseRequest:finalize": "ยืนยันสถานะ Final ของใบขอซื้อ",
   "purchaseRequest:print": "พิมพ์ / ส่งออกใบขอซื้อ",
   "purchaseRequest:delete": "ลบใบขอซื้อ",
+  "productionOrder:view": "ดูใบสั่งผลิต",
+  "productionOrder:viewAll": "ดูใบสั่งผลิตของผู้อื่น",
+  "productionOrder:create": "สร้างใบสั่งผลิต",
+  "productionOrder:edit": "แก้ไขใบสั่งผลิต",
+  "productionOrder:finalize": "อนุมัติ/ไม่อนุมัติใบสั่งผลิต",
+  "productionOrder:print": "พิมพ์ / ส่งออกใบสั่งผลิต",
+  "productionOrder:delete": "ลบใบสั่งผลิต",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -401,6 +422,13 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "purchaseRequest:finalize": "permission.purchaseRequestFinalize",
   "purchaseRequest:print": "permission.purchaseRequestPrint",
   "purchaseRequest:delete": "permission.purchaseRequestDelete",
+  "productionOrder:view": "permission.productionOrderView",
+  "productionOrder:viewAll": "permission.productionOrderViewAll",
+  "productionOrder:create": "permission.productionOrderCreate",
+  "productionOrder:edit": "permission.productionOrderEdit",
+  "productionOrder:finalize": "permission.productionOrderFinalize",
+  "productionOrder:print": "permission.productionOrderPrint",
+  "productionOrder:delete": "permission.productionOrderDelete",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -513,6 +541,11 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "purchaseRequest:print",
       "purchaseRequest:delete",
     ],
+  },
+  {
+    label: "ผลิต",
+    labelKey: "nav.group.production",
+    permissions: ["productionOrder:view", "productionOrder:viewAll", "productionOrder:create", "productionOrder:edit", "productionOrder:finalize", "productionOrder:print", "productionOrder:delete"],
   },
   {
     label: "ระบบ",

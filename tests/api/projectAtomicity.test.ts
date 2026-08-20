@@ -376,3 +376,74 @@ describe("shared document approval workflow (Draft -> PendingApproval -> Final)"
     expect(again.statusCode).toBe(400);
   });
 });
+
+/**
+ * ใบสั่งผลิต (Production Order, FM-PD-02) — เพิ่ม 2026-08-20 สำหรับฝ่ายผลิต
+ *
+ * Differs from the other three Project-family documents: created straight from an approved Scope of
+ * Work (no Project item), and numbered SC-{Gregorian year}-{month}-{seq} per the real form rather
+ * than the Buddhist-year scheme everything else uses. Both pinned here so a future "consistency"
+ * refactor can't quietly change them.
+ */
+describe("Production Order", () => {
+  const createPo = async (): Promise<{ id: string; jobCode: string }> => {
+    const res = await call("POST", "/api/production-orders", { scopeOfWorkId });
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+    return (res.body as { productionOrder: { id: string; jobCode: string } }).productionOrder;
+  };
+
+  it("is created from an approved Scope of Work and numbered SC-YYYY-MM-NNN", async () => {
+    const po = await createPo();
+    expect(po.id).toMatch(/^SC-\d{4}-\d{2}-\d{3}$/);
+    // Gregorian year, deliberately NOT the Buddhist year the other documents use
+    expect(po.id.slice(3, 7)).toBe(String(new Date().getFullYear()));
+    expect(po.jobCode).toBe("TEST-SOW-01");
+  });
+
+  it("refuses a Scope of Work that is not approved", async () => {
+    const db = client.db("tcs_erp");
+    const draft = await db.collection("scope_of_works").insertOne({
+      scopeNumber: "PO-GATE-DRAFT", quotationId: "", quotationNumber: "", jobTypeCode: "", jobTypeName: "",
+      customerSnapshot: { companyName: "X", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" },
+      items: [], checklistGroups: [], paymentConditions: { installments: [], description: "", notes: "" },
+      documentRecipients: {}, seller: { name: "", userId: "", date: "" }, approver: { name: "", userId: "", date: "" },
+      status: "Draft", isDeleted: false, createdAt: "", updatedAt: "", createdBy: "", updatedBy: "",
+    });
+    const res = await call("POST", "/api/production-orders", { scopeOfWorkId: draft.insertedId.toString() });
+    expect(res.statusCode).toBe(400);
+    expect(String((res.body as { error?: string }).error)).toContain("ยังไม่ได้รับการอนุมัติ");
+  });
+
+  it("keeps section-header rows free of qty/unit, and stamps the approver signatory on approval", async () => {
+    const po = await createPo();
+    const patched = await call("PATCH", `/api/production-orders/${po.id}`, {
+      productName: "FRP Vertical Tank 8 Cu.m.",
+      lines: [
+        // a header row that wrongly carries qty/unit — the server must strip them
+        { isSectionHeader: true, description: "ชิ้นส่วน", qty: 99, unit: "ชุด" },
+        { isSectionHeader: false, description: "ก้นถัง(Bottom) Dia.2,000 mm.", subDetails: ["หนา 7 mm. 1(V)+2(M4)/S901", "   "], qty: 1, unit: "ก้น" },
+      ],
+    });
+    expect(patched.statusCode, JSON.stringify(patched.body)).toBe(200);
+    const lines = (patched.body as { productionOrder: { lines: { isSectionHeader: boolean; qty: number | null; unit: string; subDetails: string[] }[] } }).productionOrder.lines;
+    expect(lines[0].qty, "a header row cannot carry a quantity").toBeNull();
+    expect(lines[0].unit).toBe("");
+    expect(lines[1].subDetails, "blank sub-details are dropped").toEqual(["หนา 7 mm. 1(V)+2(M4)/S901"]);
+
+    await call("POST", `/api/production-orders/${po.id}/submit-approval`);
+    const approved = await call("POST", `/api/production-orders/${po.id}/approve`);
+    expect(approved.statusCode, JSON.stringify(approved.body)).toBe(200);
+    const doc = (approved.body as { productionOrder: { status: string; approver: { name: string; date: string } } }).productionOrder;
+    expect(doc.status).toBe("Final");
+    expect(doc.approver.name).toBe("Admin");
+    expect(doc.approver.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("cannot be edited once approved", async () => {
+    const po = await createPo();
+    await call("POST", `/api/production-orders/${po.id}/submit-approval`);
+    await call("POST", `/api/production-orders/${po.id}/approve`);
+    const res = await call("PATCH", `/api/production-orders/${po.id}`, { productName: "changed" });
+    expect(res.statusCode).toBe(400);
+  });
+});
