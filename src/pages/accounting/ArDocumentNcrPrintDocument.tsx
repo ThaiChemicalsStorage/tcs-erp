@@ -119,14 +119,22 @@ interface NcrRow {
 /** แปลงรายการ + หมายเหตุของเอกสารเป็นแถวบนฟอร์ม — หมายเหตุ (**PQ...** ฯลฯ) พิมพ์เป็นแถวต่อท้าย
  * ในคอลัมน์รายการ แบบเดียวกับที่ฟอร์มจริงจาก Express ทำ */
 function buildRows(doc: ArDocument): NcrRow[] {
-  const lineRows: NcrRow[] = doc.lines.map((l) => ({
-    seq: String(l.seq),
-    description: l.description,
-    qty: doc.docType === "RE" ? "" : l.qty.toLocaleString("th-TH", { minimumFractionDigits: 2 }),
-    unit: doc.docType === "RE" ? "" : l.unit,
-    unitPrice: doc.docType === "RE" ? "" : money(l.unitPrice),
-    amount: money(l.amount),
-  }));
+  // บรรทัดรายละเอียดย่อยกลายเป็นแถวของตัวเองใต้รายการหลัก (คอลัมน์อื่นเว้นว่าง) ตรงกับฟอร์มจริง
+  // ที่พิมพ์ "For Installation" เป็นอีกบรรทัดใต้ "(งวดที่1/4)30%DownPayment" — ใช้ flatMap เพื่อให้
+  // การแบ่งหน้า (rowsPerPage ด้านล่าง) นับแถวย่อยเหล่านี้ด้วย ไม่ให้ล้นออกนอกกรอบฟอร์ม
+  const lineRows: NcrRow[] = doc.lines.flatMap((l) => [
+    {
+      seq: String(l.seq),
+      description: l.description,
+      qty: doc.docType === "RE" ? "" : l.qty.toLocaleString("th-TH", { minimumFractionDigits: 2 }),
+      unit: doc.docType === "RE" ? "" : l.unit,
+      unitPrice: doc.docType === "RE" ? "" : money(l.unitPrice),
+      amount: money(l.amount),
+    },
+    ...(l.subDetails ?? []).map((sd) => ({
+      seq: "", description: sd, qty: "", unit: "", unitPrice: "", amount: "",
+    })),
+  ]);
   const remarkRows: NcrRow[] = doc.remarks.map((r) => ({
     seq: "", description: r, qty: "", unit: "", unitPrice: "", amount: "",
   }));

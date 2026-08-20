@@ -4,7 +4,49 @@
 
 ---
 
-## 2026-08-20f (absolute latest) — A project can only be opened from an APPROVED (Final) Scope of Work
+## 2026-08-20g (absolute latest) — Tax invoice lines gain sub-details, and manual creation gains document remarks
+
+**Feature**: Owner sent two photos of a real tax invoice showing what the system could not produce:
+a **sub-detail line under the main item** (`For Installation` beneath `(งวดที่1/4)30%DownPayment`) and
+a block of **document remarks** below the item table (`PQ202512-292-SC-SK`, `PO:PO6812017`,
+`เป็นค่าบริการหักภาษี ณ ที่จ่ายได้`). Report: *"หน้ากดสร้างใบกำกับภาษีมันไม่มีให้ใส่รายละเอียดย่อย
+ทำเพิ่มให้ด้วย มันมีแต่เพิ่มแบบ[รายการหลัก]แค่อันนี้อย่างเดียว"*.
+
+**Two separate gaps, both closed**:
+1. `ArDocumentLine` had **no sub-detail field at all** — and `buildDocumentLines()` was silently
+   dropping `QuoteLine.subDetails`, so even job-derived invoices lost them. Added
+   `ArDocumentLine.subDetails?: string[]`, **optional** so the 9 documents already in production
+   (stored without it) keep reading correctly — every consumer treats `undefined` as "none".
+2. `ArDocument.remarks` already existed and already printed, but the manual-creation dialog had no
+   way to enter it, so a manually created invoice could never carry those lines.
+
+**Files Modified**: `src/lib/accounting.ts` (`ArDocumentLine.subDetails`, `ManualArDocumentPayload`
+gains `subDetails`/`remarks`), `api/_lib/arHandler.ts` (`buildDocumentLines()` now carries
+`QuoteLine.subDetails` through, trimmed and blank-filtered; `handleManualIssue()` sanitizes both new
+inputs — remarks land on the tax invoice only, **not** on its companion billing note),
+`src/pages/accounting/ManualTaxInvoiceDialog.tsx` (per-line "เพิ่มรายละเอียดย่อย" rows with an
+indent + corner arrow so they read as belonging to their parent line, plus a remarks textarea, one
+line per remark), `src/pages/accounting/ArDocumentPrintDocument.tsx` (sub-details render indented and
+one step smaller under the description; the qty cell moves to `verticalAlign: top` so a multi-line
+row still aligns), `src/pages/accounting/ArDocumentNcrPrintDocument.tsx`
+(`buildRows()` switched from `map` to `flatMap` so each sub-detail becomes **its own form row** —
+matching how the real Express-printed form does it, and, importantly, so the existing
+`rowsPerPage` chunking counts them and long documents still paginate inside the pre-printed frame
+instead of overflowing it), `src/lib/i18n.tsx` (+5 key pairs, parity verified at 2,041 each).
+
+**Test**: `tests/api/arReceiptWorkflow.test.ts` gains a round-trip case — sub-details and remarks
+survive a create-then-re-read, blank/whitespace entries are dropped rather than stored as empty
+printed rows, and the companion BI's remarks stay empty. **Verified it genuinely fails against the
+pre-fix code** (`expected [] to deeply equal [ Array(2) ]`) before being kept. 242 tests, up from 241.
+
+**Verified**: `tsc` (both configs) / `lint` (0 errors) / `build` / `test` (242/242) clean. **Print
+layout not visually checked** — the automated browser still cannot reach this machine (see
+2026-08-20e), so the sub-detail row rendering on both the plain-paper and NCR layouts needs a real
+print preview before the next real print run.
+
+---
+
+## 2026-08-20f — A project can only be opened from an APPROVED (Final) Scope of Work
 
 **Feature**: Direct request — *"ให้ scope of work อนุมัติผ่านก่อนถึงจะกดสร้างโครงการได้ที่ขึ้นมาในหน้าสร้างโครงการ"*.
 Until now a Draft or PendingApproval Scope of Work could spawn a Project; this gap was flagged by the

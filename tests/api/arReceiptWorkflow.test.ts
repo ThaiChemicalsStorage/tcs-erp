@@ -215,3 +215,41 @@ describe("deposit milestones are exempt from the signed-delivery-note checklist 
     expect((result.body as { code?: string }).code).toBe("CHECKLIST_INCOMPLETE");
   });
 });
+
+/**
+ * รายละเอียดย่อยใต้รายการ + หมายเหตุท้ายเอกสาร ต้องบันทึกจริงตอนสร้างใบกำกับภาษีแบบ Manual
+ * (เพิ่ม 2026-08-20 — ใบกำกับภาษีจริงมีบรรทัดย่อยใต้รายการหลัก เช่น "For Installation")
+ *
+ * Guards the round-trip specifically: the dialog can send them, but nothing proves the server keeps
+ * them without asserting on a re-read. Also pins that blank/whitespace entries are dropped rather
+ * than stored as empty printed rows, and that remarks land on the tax invoice but NOT on its
+ * companion billing note.
+ */
+describe("manual tax invoice keeps line sub-details and document remarks", () => {
+  it("stores non-empty sub-details and remarks, drops blank ones, and leaves the companion BI's remarks empty", async () => {
+    const res = await call("POST", "/api/ar-documents/manual", {
+      docType: "IV",
+      customer: { companyName: "Sub Detail Co.", address: "", taxId: "", branch: "", contactName: "", phone: "", email: "" },
+      paymentType: "Cash", days: null,
+      lines: [{
+        description: "(งวดที่1/4)30%DownPayment",
+        subDetails: ["For Installation", "   ", ""],
+        qty: 1, unit: "งวด", unitPrice: 30000,
+      }],
+      remarks: ["PQ202512-292-SC-SK", "  ", "PO:PO6812017"],
+    });
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+    const docs = (res.body as { documents: { docType: string; id: string; remarks: string[] }[] }).documents;
+
+    const principal = docs.find((d) => d.docType === "IV")!;
+    const reread = await call("GET", `/api/ar-documents/${principal.id}`);
+    expect(reread.statusCode).toBe(200);
+    const stored = (reread.body as { document: { lines: { subDetails?: string[] }[]; remarks: string[] } }).document;
+
+    expect(stored.lines[0].subDetails, "blank/whitespace sub-details must be dropped").toEqual(["For Installation"]);
+    expect(stored.remarks).toEqual(["PQ202512-292-SC-SK", "PO:PO6812017"]);
+
+    const bi = docs.find((d) => d.docType === "BI")!;
+    expect(bi.remarks, "remarks belong to the tax invoice, not its billing note").toEqual([]);
+  });
+});

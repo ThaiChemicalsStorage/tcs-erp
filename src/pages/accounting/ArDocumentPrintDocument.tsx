@@ -115,8 +115,15 @@ function DocumentPage({ document, copyLabel }: { document: ArDocument; copyLabel
           {document.lines.map((l) => (
             <tr key={l.seq} style={{ borderBottom: "1px solid #ddd" }}>
               <td style={{ padding: "4px" }}>{l.seq}</td>
-              <td style={{ padding: "4px" }}>{l.description}</td>
-              <td style={{ textAlign: "right", padding: "4px" }}>{l.qty.toLocaleString("th-TH")}</td>
+              <td style={{ padding: "4px" }}>
+                {l.description}
+                {/* บรรทัดรายละเอียดย่อยใต้คำอธิบายหลัก (เช่น "For Installation") — ย่อหน้าเล็กน้อยและ
+                    ตัวเล็กกว่า ตามใบกำกับภาษีจริง */}
+                {(l.subDetails ?? []).map((sd, i) => (
+                  <p key={i} style={{ margin: "1px 0 0 10px", fontSize: "10px" }}>{sd}</p>
+                ))}
+              </td>
+              <td style={{ textAlign: "right", padding: "4px", verticalAlign: "top" }}>{l.qty.toLocaleString("th-TH")}</td>
               <td style={{ padding: "4px" }}>{l.unit}</td>
               <td style={{ textAlign: "right", padding: "4px" }}>{money(l.unitPrice)}</td>
               <td style={{ textAlign: "right", padding: "4px" }}>{money(l.amount)}</td>

@@ -634,3 +634,32 @@ committed/deployed by accident. This doc is the durable, safe-to-commit summary 
   live-verified — see CHANGELOG.md 2026-08-18b).
 - Print layout is verified for structure/content via emulation, not yet pixel-compared against the
   reference PDFs in `reference/accounting/` — do that before the NCR/dot-matrix phase.
+
+## Line sub-details + document remarks (added 2026-08-20)
+
+The owner sent photos of a real tax invoice showing two things the system could not reproduce: a
+**sub-detail line under the main item** ("For Installation" beneath "(งวดที่1/4)30%DownPayment") and a
+block of **remarks** under the item table ("PQ202512-292-SC-SK", "PO:PO6812017", "เป็นค่าบริการหักภาษี
+ณ ที่จ่ายได้"). Two distinct gaps:
+
+- **`ArDocumentLine` had no sub-detail field**, and `buildDocumentLines()` was silently dropping
+  `QuoteLine.subDetails` — so even job-derived invoices lost them. Added
+  `ArDocumentLine.subDetails?: string[]`, deliberately **optional**: every document issued before
+  this date is stored without the field, so readers must treat `undefined` as "no sub-details"
+  rather than assuming an array. No migration was run.
+- **`remarks` already existed and already printed**, but `ManualTaxInvoiceDialog` had no input for
+  it, so a manually created invoice could never carry those lines. Now editable (one remark per
+  line); it lands on the tax invoice only, never on the companion BI.
+
+**Print rendering differs by layout, on purpose**:
+- Plain paper (`ArDocumentPrintDocument.tsx`) — sub-details render indented and one step smaller
+  inside the description cell; the qty cell moved to `verticalAlign: top` so multi-line rows align.
+- NCR (`ArDocumentNcrPrintDocument.tsx`) — each sub-detail becomes **its own form row** with the
+  other columns blank, which is how the real Express-printed form does it. `buildRows()` changed from
+  `map` to `flatMap` specifically so the existing `rowsPerPage` chunking counts these extra rows;
+  otherwise a document with many sub-details would overflow the pre-printed frame instead of
+  paginating.
+
+Covered by a round-trip test in `tests/api/arReceiptWorkflow.test.ts` (survives create-then-re-read,
+blank entries dropped, companion BI's remarks stay empty), confirmed to fail against the pre-fix
+code. **The printed output itself has not been visually checked** — see TODO.md.

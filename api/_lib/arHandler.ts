@@ -365,6 +365,9 @@ async function buildDocumentLines(
     .map((l, i) => ({
       seq: i + 1,
       description: l.description,
+      // บรรทัดย่อยจากใบเสนอราคา ยกมาด้วย (เดิมถูกตัดทิ้ง) — ใบกำกับภาษีจริงมีบรรทัดย่อยใต้รายการหลัก
+      // เช่น "For Installation" ใต้ "(งวดที่1/4)30%DownPayment"
+      subDetails: (l.subDetails ?? []).map((sd) => sd.text.trim()).filter(Boolean),
       qty: l.qty,
       unit: l.unit,
       unitPrice: l.unitPrice,
@@ -528,10 +531,17 @@ async function handleManualIssue(req: VercelRequest, res: VercelResponse) {
     .map((l, i) => {
       const qty = typeof l.qty === "number" ? l.qty : NaN;
       const unitPrice = typeof l.unitPrice === "number" ? l.unitPrice : NaN;
-      return { seq: i + 1, description: str(l.description), qty, unit: str(l.unit), unitPrice, amount: round2(qty * unitPrice) };
+      // บรรทัดรายละเอียดย่อยใต้รายการหลัก — ตัดช่องว่างและบรรทัดว่างทิ้ง ไม่จำกัดจำนวน
+      const subDetails = (Array.isArray(l.subDetails) ? l.subDetails : [])
+        .map((sd) => str(sd)).filter(Boolean);
+      return { seq: i + 1, description: str(l.description), subDetails, qty, unit: str(l.unit), unitPrice, amount: round2(qty * unitPrice) };
     })
     .filter((l) => l.description && Number.isFinite(l.qty) && l.qty > 0 && Number.isFinite(l.unitPrice) && l.unitPrice >= 0);
   if (lines.length === 0) throw new HttpError(400, "กรุณาระบุรายการอย่างน้อย 1 รายการ (คำอธิบาย จำนวน และราคาต่อหน่วยที่ถูกต้อง)");
+
+  // หมายเหตุท้ายเอกสาร (พิมพ์ใต้ตารางรายการ) — ใบจริงใช้ใส่ข้อความอย่างเลขที่ PQ/PO หรือ
+  // "เป็นค่าบริการหักภาษี ณ ที่จ่ายได้" ซึ่งเดิมกรอกจากหน้าสร้างแบบ Manual ไม่ได้เลย
+  const remarks = (Array.isArray(body.remarks) ? body.remarks : []).map((r) => str(r)).filter(Boolean);
 
   const paymentType: "" | "Cash" | "Credit" = body.paymentType === "Cash" || body.paymentType === "Credit" ? body.paymentType : "";
   const days = typeof body.days === "number" && Number.isFinite(body.days) ? body.days : null;
@@ -558,7 +568,8 @@ async function handleManualIssue(req: VercelRequest, res: VercelResponse) {
     ...totals,
     vatRate: 7,
     amountTextTh: bahtText(totals.netTotal),
-    remarks: [],
+    // หมายเหตุอยู่บนใบกำกับภาษีเท่านั้น ไม่ยกไปใบวางบิลคู่ (BI ด้านล่างยังเป็น [] เหมือนเดิม)
+    remarks,
     stockDeducted: false,
     isManual: true,
     status: "issued",

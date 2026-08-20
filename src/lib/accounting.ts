@@ -47,6 +47,15 @@ export type ArDocumentStatus = "issued" | "cancelled";
 export interface ArDocumentLine {
   seq: number;
   description: string;
+  /**
+   * บรรทัดรายละเอียดย่อยใต้คำอธิบายหลัก (เช่น "For Installation" ใต้ "(งวดที่1/4)30%DownPayment") —
+   * เพิ่ม 2026-08-20 ตามใบกำกับภาษีจริงที่เจ้าของส่งมา ซึ่งมีบรรทัดย่อยใต้รายการหลัก
+   *
+   * Optional because every document issued before 2026-08-20 was stored without it — readers must
+   * treat `undefined` as "no sub-details", never assume the array exists. Carried through from
+   * `QuoteLine.subDetails` for job-derived invoices, and enterable directly in the manual dialog.
+   */
+  subDetails?: string[];
   qty: number;
   unit: string;
   unitPrice: number;
@@ -165,7 +174,9 @@ export interface ManualArDocumentPayload {
   };
   paymentType: "" | "Cash" | "Credit";
   days: number | null;
-  lines: { description: string; qty: number; unit: string; unitPrice: number }[];
+  lines: { description: string; subDetails?: string[]; qty: number; unit: string; unitPrice: number }[];
+  /** หมายเหตุท้ายเอกสาร พิมพ์ใต้ตารางรายการ — เพิ่ม 2026-08-20 พร้อมกับ subDetails */
+  remarks?: string[];
 }
 
 /** Freestanding AR/IV creation with no Scope of Work/milestone — issues the principal doc plus a
