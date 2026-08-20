@@ -17,7 +17,7 @@ import type { ChecklistGroup, ChecklistOption } from "./documentRequirements.js"
 
 export type { ChecklistGroup, ChecklistOption };
 
-export type JobOrderStatus = "Draft" | "Final";
+export type JobOrderStatus = "Draft" | "PendingApproval" | "Final";
 
 export interface JobOrderLine {
   id: string;
@@ -56,6 +56,12 @@ export interface JobOrder {
   requestedAt: string;
   /** "ผู้อนุมัติ" */
   approvedBy: string;
+  /** ผู้กดอนุมัติจริงในระบบ — เซิร์ฟเวอร์เขียนเท่านั้น แยกจาก `approvedBy`/`approvedAt` ซึ่งเป็นช่อง
+   *  บนฟอร์มที่เจ้าหน้าที่พิมพ์/แก้เองได้ optional เพราะเอกสารที่บันทึกก่อน 2026-08-20 ไม่มีฟิลด์นี้
+   *  — normalize ตอนอ่านด้วย withApprovalDefaults() ไม่ได้ทำ migration */
+  approvedByUserId?: string;
+  /** เหตุผลที่ผู้อนุมัติตีกลับ ล้างทุกครั้งที่ส่งขออนุมัติใหม่ */
+  rejectionComment?: string;
   approvedAt: string;
   /** "ผู้รับเอกสาร" — Production acknowledging receipt. */
   documentRecipientBy: string;
@@ -157,4 +163,29 @@ export function buildJobOrderChecklistGroups(): ChecklistGroup[] {
       ],
     },
   ];
+}
+
+// ── ขั้นตอนอนุมัติ (ร่าง → รออนุมัติ → อนุมัติ) เพิ่ม 2026-08-20 ──────────────────────────────
+// รูปแบบเดียวกับ Scope of Work ทุกประการ ดู api/_lib/documentApproval.ts
+/** ส่งขออนุมัติ — ผู้ที่แก้เอกสารได้เป็นผู้ส่ง */
+export async function submitJobOrderApproval(id: string): Promise<JobOrder> {
+  const { jobOrder } = await apiFetch<{ jobOrder: JobOrder }>(`/job-orders/${encodeURIComponent(id)}/submit-approval`, { method: "POST" });
+  return jobOrder;
+}
+/** อนุมัติ — ต้องมีสิทธิ์ :finalize */
+export async function approveJobOrder(id: string): Promise<JobOrder> {
+  const { jobOrder } = await apiFetch<{ jobOrder: JobOrder }>(`/job-orders/${encodeURIComponent(id)}/approve`, { method: "POST" });
+  return jobOrder;
+}
+/** ไม่อนุมัติ (ตีกลับเป็นฉบับร่าง) — ต้องระบุเหตุผล */
+export async function rejectJobOrder(id: string, comment: string): Promise<JobOrder> {
+  const { jobOrder } = await apiFetch<{ jobOrder: JobOrder }>(`/job-orders/${encodeURIComponent(id)}/reject`, {
+    method: "POST", body: JSON.stringify({ comment }),
+  });
+  return jobOrder;
+}
+/** ถอนการขออนุมัติกลับมาแก้เอง */
+export async function withdrawJobOrderApproval(id: string): Promise<JobOrder> {
+  const { jobOrder } = await apiFetch<{ jobOrder: JobOrder }>(`/job-orders/${encodeURIComponent(id)}/withdraw-approval`, { method: "POST" });
+  return jobOrder;
 }

@@ -19,7 +19,7 @@ import type { Product } from "./products.js";
  * note is an earlier name for today's Job Order (FM-PJ-01), not a separate document.
  */
 
-export type MaterialRequisitionStatus = "Draft" | "Final";
+export type MaterialRequisitionStatus = "Draft" | "PendingApproval" | "Final";
 
 /** Matches the 4 category groupings the reference PDF's catalog is printed under. */
 export type MaterialRequisitionCategory = "chemical" | "consumable" | "hardware" | "other";
@@ -78,6 +78,12 @@ export interface MaterialRequisition {
   preparedBy: string;
   preparedAt: string;
   approvedBy: string;
+  /** ผู้กดอนุมัติจริงในระบบ — เซิร์ฟเวอร์เขียนเท่านั้น แยกจาก `approvedBy`/`approvedAt` ซึ่งเป็นช่อง
+   *  บนฟอร์มที่เจ้าหน้าที่พิมพ์/แก้เองได้ optional เพราะเอกสารที่บันทึกก่อน 2026-08-20 ไม่มีฟิลด์นี้
+   *  — normalize ตอนอ่านด้วย withApprovalDefaults() ไม่ได้ทำ migration */
+  approvedByUserId?: string;
+  /** เหตุผลที่ผู้อนุมัติตีกลับ ล้างทุกครั้งที่ส่งขออนุมัติใหม่ */
+  rejectionComment?: string;
   approvedAt: string;
   /** "แผนกสโตร์" sign-off. */
   storeDeptBy: string;
@@ -181,4 +187,29 @@ export async function logMaterialRequisitionPrinted(id: string): Promise<void> {
 }
 export async function deleteMaterialRequisition(id: string): Promise<void> {
   await apiFetch<void>(`/material-requisitions/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+// ── ขั้นตอนอนุมัติ (ร่าง → รออนุมัติ → อนุมัติ) เพิ่ม 2026-08-20 ──────────────────────────────
+// รูปแบบเดียวกับ Scope of Work ทุกประการ ดู api/_lib/documentApproval.ts
+/** ส่งขออนุมัติ — ผู้ที่แก้เอกสารได้เป็นผู้ส่ง */
+export async function submitMaterialRequisitionApproval(id: string): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}/submit-approval`, { method: "POST" });
+  return materialRequisition;
+}
+/** อนุมัติ — ต้องมีสิทธิ์ :finalize */
+export async function approveMaterialRequisition(id: string): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}/approve`, { method: "POST" });
+  return materialRequisition;
+}
+/** ไม่อนุมัติ (ตีกลับเป็นฉบับร่าง) — ต้องระบุเหตุผล */
+export async function rejectMaterialRequisition(id: string, comment: string): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}/reject`, {
+    method: "POST", body: JSON.stringify({ comment }),
+  });
+  return materialRequisition;
+}
+/** ถอนการขออนุมัติกลับมาแก้เอง */
+export async function withdrawMaterialRequisitionApproval(id: string): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}/withdraw-approval`, { method: "POST" });
+  return materialRequisition;
 }

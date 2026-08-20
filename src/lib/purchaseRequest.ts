@@ -9,7 +9,7 @@ import { apiFetch } from "./apiClient.js";
  * job code (e.g. "PQ202605-120-SC-SK"), confirming the job-code tie shown here.
  */
 
-export type PurchaseRequestStatus = "Draft" | "Final";
+export type PurchaseRequestStatus = "Draft" | "PendingApproval" | "Final";
 
 export interface PurchaseRequestLine {
   id: string;
@@ -68,6 +68,12 @@ export interface PurchaseRequest {
   requestedAt: string;
   /** "ผู้อนุมัติ" */
   approvedBy: string;
+  /** ผู้กดอนุมัติจริงในระบบ — เซิร์ฟเวอร์เขียนเท่านั้น แยกจาก `approvedBy`/`approvedAt` ซึ่งเป็นช่อง
+   *  บนฟอร์มที่เจ้าหน้าที่พิมพ์/แก้เองได้ optional เพราะเอกสารที่บันทึกก่อน 2026-08-20 ไม่มีฟิลด์นี้
+   *  — normalize ตอนอ่านด้วย withApprovalDefaults() ไม่ได้ทำ migration */
+  approvedByUserId?: string;
+  /** เหตุผลที่ผู้อนุมัติตีกลับ ล้างทุกครั้งที่ส่งขออนุมัติใหม่ */
+  rejectionComment?: string;
   approvedAt: string;
   /** "ฝ่ายจัดซื้อ" */
   purchasingDeptBy: string;
@@ -132,4 +138,29 @@ export function blankPurchaseRequestLine(product?: { id: string; code: string; n
     return { id: newId, productId: product.id, productCode: product.code, description: product.name, unit: product.unit, warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "", estimatedCost: null };
   }
   return { id: newId, productId: "", productCode: "", description: "", unit: "", warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "", estimatedCost: null };
+}
+
+// ── ขั้นตอนอนุมัติ (ร่าง → รออนุมัติ → อนุมัติ) เพิ่ม 2026-08-20 ──────────────────────────────
+// รูปแบบเดียวกับ Scope of Work ทุกประการ ดู api/_lib/documentApproval.ts
+/** ส่งขออนุมัติ — ผู้ที่แก้เอกสารได้เป็นผู้ส่ง */
+export async function submitPurchaseRequestApproval(id: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}/submit-approval`, { method: "POST" });
+  return purchaseRequest;
+}
+/** อนุมัติ — ต้องมีสิทธิ์ :finalize */
+export async function approvePurchaseRequest(id: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}/approve`, { method: "POST" });
+  return purchaseRequest;
+}
+/** ไม่อนุมัติ (ตีกลับเป็นฉบับร่าง) — ต้องระบุเหตุผล */
+export async function rejectPurchaseRequest(id: string, comment: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}/reject`, {
+    method: "POST", body: JSON.stringify({ comment }),
+  });
+  return purchaseRequest;
+}
+/** ถอนการขออนุมัติกลับมาแก้เอง */
+export async function withdrawPurchaseRequestApproval(id: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}/withdraw-approval`, { method: "POST" });
+  return purchaseRequest;
 }

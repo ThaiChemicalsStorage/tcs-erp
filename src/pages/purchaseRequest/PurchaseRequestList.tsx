@@ -12,6 +12,7 @@ const FILTER_ALL = "all";
 
 const statusStyle: Record<PurchaseRequestStatus, string> = {
   Draft: "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
+  PendingApproval: "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20",
   Final: "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20",
 };
 
@@ -30,7 +31,7 @@ export function PurchaseRequestList({
   headerAction?: ReactNode;
 }) {
   const { t } = useI18n();
-  const statusLabel: Record<PurchaseRequestStatus, string> = { Draft: t("materialRequisition.status.draft"), Final: t("materialRequisition.status.final") };
+  const statusLabel: Record<PurchaseRequestStatus, string> = { Draft: t("materialRequisition.status.draft"), PendingApproval: t("materialRequisition.status.pendingApproval"), Final: t("materialRequisition.status.final") };
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="pr-filters"]', popover: { title: t("tour.pr.filters.title"), description: t("tour.pr.filters.desc"), side: "bottom" } },
     { element: '[data-tour="pr-table"]', popover: { title: t("tour.pr.table.title"), description: t("tour.pr.table.desc"), side: "top" } },
@@ -75,7 +76,7 @@ export function PurchaseRequestList({
           )}
         </div>
         <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {([FILTER_ALL, "Draft", "Final"] as const).map((s) => (
+          {([FILTER_ALL, "Draft", "PendingApproval", "Final"] as const).map((s) => (
             <button key={s} onClick={() => setFilterStatus(s)}
               className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
               {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as PurchaseRequestStatus]}

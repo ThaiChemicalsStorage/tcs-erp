@@ -183,7 +183,7 @@ describe("Project item <-> sub-document atomic link", () => {
     expect(itemAfter.materialRequisitionId).toBe("");
   });
 
-  it("finalizing a Job Order advances the parent item to fulfilled", async () => {
+  it("approving a Job Order advances the parent item to fulfilled", async () => {
     const project = await createProject();
     const itemId = project.items[0].id;
 
@@ -191,7 +191,13 @@ describe("Project item <-> sub-document atomic link", () => {
     expect(joRes.statusCode, JSON.stringify(joRes.body)).toBe(201);
     const jobOrder = (joRes.body as { jobOrder: { id: string } }).jobOrder;
 
-    const fin = await call("POST", `/api/job-orders/${jobOrder.id}/finalize`);
+    // As of 2026-08-20 approval is a two-step workflow (Draft -> PendingApproval -> Final), so a
+    // straight finalize on a Draft is refused — the item only becomes fulfilled on real approval.
+    const tooEarly = await call("POST", `/api/job-orders/${jobOrder.id}/finalize`);
+    expect(tooEarly.statusCode, "cannot approve straight from Draft").toBe(400);
+
+    expect((await call("POST", `/api/job-orders/${jobOrder.id}/submit-approval`)).statusCode).toBe(200);
+    const fin = await call("POST", `/api/job-orders/${jobOrder.id}/approve`);
     expect(fin.statusCode, JSON.stringify(fin.body)).toBe(200);
 
     const after = await call("GET", `/api/projects/${project.id}`);
@@ -300,5 +306,73 @@ describe("a project can only be opened from an approved (Final) Scope of Work", 
     const id = await insertScopeWithStatus("Final", "GATE-FINAL-01");
     const res = await call("POST", "/api/projects", { scopeOfWorkId: id });
     expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+  });
+});
+
+/**
+ * ขั้นตอนอนุมัติร่วม (ร่าง → รออนุมัติ → อนุมัติ) เพิ่ม 2026-08-20 ตามคำสั่งเจ้าของ
+ * "ใบที่ต้องมีการอนุมัติต้องมีปุ่มอนุมัติด้วย" — ทำงานเหมือน Scope of Work ทุกประการ
+ *
+ * Exercised through Material Requisition; Job Order and Purchase Request share the exact same
+ * generic helper (api/_lib/documentApproval.ts), so this pins the shared semantics rather than
+ * triplicating near-identical cases.
+ */
+describe("shared document approval workflow (Draft -> PendingApproval -> Final)", () => {
+  const createMr = async (): Promise<string> => {
+    const project = await createProject();
+    const res = await call("POST", "/api/material-requisitions", { projectId: project.id, itemId: project.items[0].id });
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+    return (res.body as { materialRequisition: { id: string } }).materialRequisition.id;
+  };
+  const statusOf = async (id: string): Promise<string> => {
+    const res = await call("GET", `/api/material-requisitions/${id}`);
+    return (res.body as { materialRequisition: { status: string } }).materialRequisition.status;
+  };
+
+  it("submit -> approve stamps the approver and reaches Final", async () => {
+    const id = await createMr();
+    expect(await statusOf(id)).toBe("Draft");
+
+    expect((await call("POST", `/api/material-requisitions/${id}/submit-approval`)).statusCode).toBe(200);
+    expect(await statusOf(id)).toBe("PendingApproval");
+
+    const approved = await call("POST", `/api/material-requisitions/${id}/approve`);
+    expect(approved.statusCode, JSON.stringify(approved.body)).toBe(200);
+    const doc = (approved.body as { materialRequisition: { status: string; approvedBy: string; approvedByUserId: string; approvedAt: string } }).materialRequisition;
+    expect(doc.status).toBe("Final");
+    // approvedBy was blank, so the approving user's name fills the printed form field
+    expect(doc.approvedBy).toBe("Admin");
+    expect(doc.approvedByUserId, "the real approver is recorded server-side").not.toBe("");
+    expect(doc.approvedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("reject requires a reason, sends it back to Draft, and the reason clears on resubmit", async () => {
+    const id = await createMr();
+    await call("POST", `/api/material-requisitions/${id}/submit-approval`);
+
+    const noReason = await call("POST", `/api/material-requisitions/${id}/reject`, {});
+    expect(noReason.statusCode, "a rejection must say why").toBe(400);
+
+    const rejected = await call("POST", `/api/material-requisitions/${id}/reject`, { comment: "จำนวนไม่ตรงกับหน้างาน" });
+    expect(rejected.statusCode, JSON.stringify(rejected.body)).toBe(200);
+    const back = (rejected.body as { materialRequisition: { status: string; rejectionComment: string } }).materialRequisition;
+    expect(back.status).toBe("Draft");
+    expect(back.rejectionComment).toBe("จำนวนไม่ตรงกับหน้างาน");
+
+    const resubmitted = await call("POST", `/api/material-requisitions/${id}/submit-approval`);
+    expect((resubmitted.body as { materialRequisition: { rejectionComment: string } }).materialRequisition.rejectionComment,
+      "a stale rejection reason must not linger after resubmission").toBe("");
+  });
+
+  it("withdraw returns it to Draft, and an already-approved document cannot be re-approved", async () => {
+    const id = await createMr();
+    await call("POST", `/api/material-requisitions/${id}/submit-approval`);
+    expect((await call("POST", `/api/material-requisitions/${id}/withdraw-approval`)).statusCode).toBe(200);
+    expect(await statusOf(id)).toBe("Draft");
+
+    await call("POST", `/api/material-requisitions/${id}/submit-approval`);
+    await call("POST", `/api/material-requisitions/${id}/approve`);
+    const again = await call("POST", `/api/material-requisitions/${id}/approve`);
+    expect(again.statusCode).toBe(400);
   });
 });

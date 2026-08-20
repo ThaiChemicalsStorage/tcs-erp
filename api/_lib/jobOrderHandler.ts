@@ -7,6 +7,7 @@ import {
   jobOrdersCollection, countersCollection, auditLogCollection,
   withStringId, type JobOrderFields, type CounterFields,
 } from "./collections.js";
+import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
 import { loadPendingProjectItemOrThrow, linkProjectItemToSubDocument, markProjectItemFulfilled, unlinkProjectItem, findProjectItemIdByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
@@ -89,7 +90,7 @@ function sanitizeChecklist(raw: unknown, current: ChecklistGroup[]): ChecklistGr
 }
 
 function toClient(doc: JobOrderFields & { _id: string }) {
-  return withStringId(doc);
+  return withStringId(withApprovalDefaults(doc));
 }
 function toSummary(doc: JobOrderFields & { _id: string }): JobOrderSummary {
   const full = withStringId(doc);
@@ -205,20 +206,27 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   res.status(200).json({ jobOrder: toClient(updated) });
 }
 
-async function handleFinalize(req: VercelRequest, res: VercelResponse, id: string) {
-  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
-  const ctx = await requirePermission(req, "jobOrder:finalize");
-  const doc = await loadOrThrow(id);
-  if (doc.status === "Final") throw new HttpError(400, "เอกสารนี้อนุมัติแล้ว (Final)");
-
-  const jobOrders = await jobOrdersCollection();
-  await jobOrders.updateOne({ _id: id }, { $set: { status: "Final", updatedAt: nowIso(), updatedBy: ctx.user.id } });
-  const updated = await loadOrThrow(id);
-  const itemId = await findProjectItemIdByLink(doc.projectId, "jobOrderId", id);
-  if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
-  await writeAuditEntry(ctx, "Job Order Finalized", `ยืนยันสถานะ Final ของใบสั่งงาน ${id}`, { scopeOfWorkId: updated.scopeOfWorkId });
-  res.status(200).json({ jobOrder: toClient(updated) });
-}
+/**
+ * ขั้นตอนอนุมัติ (ร่าง → รออนุมัติ → อนุมัติ) เพิ่ม 2026-08-20 — ใช้ helper ร่วมใน documentApproval.ts
+ * ที่ทำตามกลไกของ Scope of Work ทุกประการ ตามที่เจ้าของสั่ง ("เหมือน Scope of Work เป๊ะ")
+ *
+ * `finalize` เดิมที่กระโดดจากร่างไป Final ตรงๆ ถูกแทนที่ด้วย `approve` ซึ่งบังคับให้ผ่าน
+ * PendingApproval ก่อน — route ชื่อเดิมยังคงไว้เป็น alias เพื่อไม่ให้ของเดิมที่เรียกอยู่พัง
+ */
+const approvalConfig: ApprovalConfig<JobOrderFields & { _id: string }> = {
+  label: "ใบสั่งงาน",
+  approvePermission: "jobOrder:finalize",
+  collection: async () => (await jobOrdersCollection()) as unknown as Collection<JobOrderFields & { _id: string }>,
+  load: loadOrThrow,
+  canEdit,
+  writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
+  // อนุมัติแล้วถือว่ารายการใน Project ต้นทางถูกจัดหาเรียบร้อย (เดิมทำตอน finalize)
+  onApproved: async (_ctx, doc) => {
+    const itemId = await findProjectItemIdByLink(doc.projectId, "jobOrderId", doc._id);
+    if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
+  },
+  respond: (res, doc) => res.status(200).json({ jobOrder: toClient(doc) }),
+};
 
 async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
@@ -257,7 +265,11 @@ export async function handleJobOrder(req: VercelRequest, res: VercelResponse): P
     return handleList(req, res);
   }
   if (parts.length === 1) return handleOne(req, res, parts[0]);
-  if (parts.length === 2 && parts[1] === "finalize") return handleFinalize(req, res, parts[0]);
+  // finalize คงไว้เป็น alias ของ approve เพื่อความเข้ากันได้ย้อนหลัง
+  if (parts.length === 2 && (parts[1] === "approve" || parts[1] === "finalize")) return handleApprove(req, res, parts[0], approvalConfig);
+    if (parts.length === 2 && parts[1] === "submit-approval") return handleSubmitApproval(req, res, parts[0], approvalConfig);
+    if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);
+    if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
   throw new HttpError(404, "Not found");
 }
