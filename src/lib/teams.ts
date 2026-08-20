@@ -38,6 +38,6 @@ export async function createTeam(fields: CreateTeamFields): Promise<Team> {
 // แก้ไข/เก็บถาวรทีม
 // Updates (rename/archive) an existing team.
 export async function updateTeam(id: string, fields: UpdateTeamFields): Promise<Team> {
-  const { team } = await apiFetch<{ team: Team }>(`/teams/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { team } = await apiFetch<{ team: Team }>(`/teams/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return team;
 }

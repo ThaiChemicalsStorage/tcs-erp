@@ -39,11 +39,17 @@ export function sendError(res: VercelResponse, err: unknown) {
  * query param — the query key for a `[...segments]` route turned out to be the literal
  * `"...segments"` string (dots included) on Vercel's plain Functions runtime, not `segments` as
  * in Next.js. Parsing the URL directly sidesteps that (undocumented, surprising) convention.
+ *
+ * Each segment is `decodeURIComponent`-ed — document ids/business keys (e.g. a quotation's
+ * `Q#260817-0001`, which contains a literal `#`) must be percent-encoded by the client to survive
+ * the browser's URL fragment stripping (see `apiClient.ts` callers), so the server must undo that
+ * encoding before matching against a stored `_id`. A plain alphanumeric segment decodes to itself,
+ * so this is a no-op for every id that didn't need encoding in the first place.
  */
 export function getPathSegments(req: VercelRequest, prefix: string): string[] {
   const pathname = (req.url ?? "").split("?")[0];
   const trimmed = pathname.startsWith(prefix) ? pathname.slice(prefix.length) : pathname;
-  return trimmed.split("/").filter(Boolean);
+  return trimmed.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment));
 }
 
 export async function withErrorHandling(

@@ -37,6 +37,6 @@ export async function createDepartment(fields: CreateDepartmentFields): Promise<
 // แก้ไข/เก็บถาวรแผนก
 // Updates (rename/archive) an existing department.
 export async function updateDepartment(id: string, fields: UpdateDepartmentFields): Promise<Department> {
-  const { department } = await apiFetch<{ department: Department }>(`/departments/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { department } = await apiFetch<{ department: Department }>(`/departments/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return department;
 }

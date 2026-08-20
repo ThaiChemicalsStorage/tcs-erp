@@ -1,0 +1,254 @@
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { Collection } from "mongodb";
+import { HttpError, getPathSegments } from "./http.js";
+import { requireUser, requirePermission, type AuthContext } from "./auth.js";
+import { buildSimpleOwnershipClause } from "./visibility.js";
+import {
+  purchaseRequestsCollection, productsCollection, countersCollection, auditLogCollection,
+  toObjectId, withStringId, type PurchaseRequestFields, type CounterFields,
+} from "./collections.js";
+import { loadPendingProjectItemOrThrow, linkProjectItemToSubDocument, markProjectItemFulfilled, unlinkProjectItem, findProjectItemIdByLink } from "./projectHandler.js";
+import { roleHasPermission } from "../../src/lib/roles.js";
+import { nowIso, newId } from "../../src/lib/products.js";
+import { sanitizeShortText, validateIsoDateOrEmpty } from "./quoteValidation.js";
+import { sanitizeNullableNumber } from "./projectValidation.js";
+import type { PurchaseRequestLine, PurchaseRequestSummary } from "../../src/lib/purchaseRequest.js";
+
+/**
+ * Purchase Request API (added 2026-08-18, Stage 3) — mounted from `api/handlers/quotes.ts` alongside
+ * Project/Material Requisition/Job Order. See src/lib/purchaseRequest.ts for the full domain-shape
+ * doc comment and the FMPU05/"-ED6908027.pdf" PDF-to-field mapping.
+ */
+
+const MAX_LINES = 100;
+
+async function nextPurchaseRequestId(counters: Collection<CounterFields>): Promise<string> {
+  const buddhistYear = new Date().getFullYear() + 543;
+  const counterId = `purchase_request_${buddhistYear}`;
+  const result = await counters.findOneAndUpdate({ _id: counterId }, { $inc: { seq: 1 } }, { returnDocument: "after", upsert: true });
+  const seq = result?.seq ?? 1;
+  return `PR-${buddhistYear}-${String(seq).padStart(4, "0")}`;
+}
+
+async function writeAuditEntry(ctx: AuthContext, action: string, details: string, related: { scopeOfWorkId?: string }): Promise<void> {
+  const auditLog = await auditLogCollection();
+  await auditLog.insertOne({
+    userId: ctx.user.id, userName: ctx.user.fullName, roleName: ctx.role?.name ?? ctx.user.roleKey,
+    module: "ใบขอซื้อ", action, details, createdAt: nowIso(),
+    ...(related.scopeOfWorkId ? { relatedScopeId: related.scopeOfWorkId } : {}),
+  });
+}
+
+function isOwnerOf(ctx: AuthContext, doc: { createdBy: string }): boolean {
+  return !doc.createdBy || doc.createdBy === ctx.user.id;
+}
+function canEdit(ctx: AuthContext, doc: { createdBy: string }): boolean {
+  if (!roleHasPermission(ctx.role, "purchaseRequest:edit")) return false;
+  return isOwnerOf(ctx, doc) || roleHasPermission(ctx.role, "purchaseRequest:finalize");
+}
+
+/** Unlike Material Requisition, `productId` is optional here — a real filled example
+ * (RM-1915 in "-ED6908027.pdf") shows a PR line CAN reference the same catalog Material
+ * Requisition uses, but a PR line can also be a one-off item with no catalog entry at all. When
+ * `productId` IS given it's resolved/verified server-side exactly like Material Requisition's lines
+ * (never trusting a client-sent `productCode`/`description` for a linked line); when it's absent,
+ * `description`/`unit` are taken as free-typed input instead. */
+async function sanitizeLines(raw: unknown): Promise<PurchaseRequestLine[]> {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลรายการไม่ถูกต้อง");
+  if (raw.length > MAX_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_LINES} รายการ`);
+  const rows = raw as Record<string, unknown>[];
+
+  const productIds = [...new Set(rows.map((r) => (typeof r.productId === "string" ? r.productId : "")).filter(Boolean))];
+  const products = await productsCollection();
+  const productDocs = productIds.length > 0 ? await products.find({ _id: { $in: productIds.map((pid) => toObjectId(pid)) } }).toArray() : [];
+  const productById = new Map(productDocs.map((p) => [p._id.toString(), p]));
+
+  return rows.map((r, idx) => {
+    const productId = typeof r.productId === "string" ? r.productId : "";
+    const product = productId ? productById.get(productId) : undefined;
+    if (productId && !product) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: ไม่พบสินค้าที่ระบุ`);
+    return {
+      id: typeof r.id === "string" && r.id ? r.id : newId("prline"),
+      productId,
+      productCode: product ? product.code : sanitizeShortText(r.productCode, `รหัสสินค้าลำดับที่ ${idx + 1}`),
+      description: product ? product.name : sanitizeShortText(r.description, `รายละเอียดลำดับที่ ${idx + 1}`, true),
+      unit: product ? product.unit : sanitizeShortText(r.unit, `หน่วยลำดับที่ ${idx + 1}`),
+      warehouseRemainingQty: sanitizeShortText(r.warehouseRemainingQty, `คลัง คงเหลือลำดับที่ ${idx + 1}`),
+      qtyRequested: sanitizeNullableNumber(r.qtyRequested, `จำนวนขอซื้อลำดับที่ ${idx + 1}`),
+      neededByDate: validateIsoDateOrEmpty(r.neededByDate, `วันต้องการลำดับที่ ${idx + 1}`),
+      departmentCode: sanitizeShortText(r.departmentCode, `แผนกลำดับที่ ${idx + 1}`),
+      costCode: sanitizeShortText(r.costCode, `รหัสต้นทุนลำดับที่ ${idx + 1}`),
+      estimatedCost: sanitizeNullableNumber(r.estimatedCost, `ราคาประเมินลำดับที่ ${idx + 1}`),
+    };
+  });
+}
+
+function toClient(doc: PurchaseRequestFields & { _id: string }) {
+  return withStringId(doc);
+}
+function toSummary(doc: PurchaseRequestFields & { _id: string }): PurchaseRequestSummary {
+  const full = withStringId(doc);
+  return { id: full.id, projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, updatedAt: full.updatedAt };
+}
+
+async function loadOrThrow(id: string) {
+  const purchaseRequests = await purchaseRequestsCollection();
+  const doc = await purchaseRequests.findOne({ _id: id });
+  if (!doc || doc.isDeleted) throw new HttpError(404, "ไม่พบใบขอซื้อ");
+  return doc;
+}
+
+async function handleList(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:view");
+  const projectId = typeof req.query.projectId === "string" ? req.query.projectId : "";
+
+  // Omitting projectId switches to "list every Purchase Request company-wide" — same Stage 4/5
+  // addition materialRequisitionHandler.ts got, needed for Purchase Request's own standalone list
+  // page (Stage 5).
+  const ownershipMatch = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "purchaseRequest:viewAll"), "createdBy");
+  const purchaseRequests = await purchaseRequestsCollection();
+  const filter = projectId ? { projectId, isDeleted: false, ...ownershipMatch } : { isDeleted: false, ...ownershipMatch };
+  const docs = await purchaseRequests.find(filter).sort({ updatedAt: -1 }).toArray();
+  res.status(200).json({ purchaseRequests: docs.map(toSummary) });
+}
+
+async function handleCreate(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:create");
+  if (!roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
+  const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
+  if (!projectId || !itemId) throw new HttpError(400, "กรุณาระบุโครงการและรายการ");
+
+  const { project, item } = await loadPendingProjectItemOrThrow(projectId, itemId);
+
+  const counters = await countersCollection();
+  const id = await nextPurchaseRequestId(counters);
+  const now = nowIso();
+  const doc: PurchaseRequestFields = {
+    projectId, scopeOfWorkId: project.scopeOfWorkId, jobCode: project.scopeNumber,
+    vendorName: "", neededByDate: "", creditDays: null, shippingMethod: "", deliveryLocation: "",
+    lines: [], status: "Draft",
+    // requestedAt seeds from a date-only slice of `now`, not the full ISO timestamp — see
+    // jobOrderHandler.ts's identical fix/comment on requestedAt for why (validateIsoDateOrEmpty
+    // requires strict YYYY-MM-DD; the full timestamp made every save after creation fail with 400).
+    requestedBy: ctx.user.fullName, requestedAt: now.slice(0, 10),
+    approvedBy: "", approvedAt: "",
+    purchasingDeptBy: "", purchasingDeptAt: "",
+    createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
+  };
+  const purchaseRequests = await purchaseRequestsCollection();
+  await purchaseRequests.insertOne({ ...doc, _id: id });
+
+  // CRITICAL invariant — see materialRequisitionHandler.ts's identical comment on this same step.
+  await linkProjectItemToSubDocument(projectId, itemId, "purchaseRequest", "purchaseRequestId", id);
+
+  await writeAuditEntry(ctx, "Purchase Request Created", `สร้างใบขอซื้อ ${id} สำหรับรายการ "${item.name}"`, { scopeOfWorkId: project.scopeOfWorkId });
+  res.status(201).json({ purchaseRequest: toClient({ ...doc, _id: id }) });
+}
+
+async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
+  await requirePermission(req, "purchaseRequest:view");
+  const doc = await loadOrThrow(id);
+  res.status(200).json({ purchaseRequest: toClient(doc) });
+}
+
+const SHORT_TEXT_FIELDS: { key: keyof PurchaseRequestFields; label: string }[] = [
+  { key: "vendorName", label: "ผู้จำหน่าย" },
+  { key: "shippingMethod", label: "ขนส่งโดย" },
+  { key: "deliveryLocation", label: "สถานที่ส่งของ" },
+  { key: "requestedBy", label: "ผู้ขอซื้อ" },
+  { key: "approvedBy", label: "ผู้อนุมัติ" },
+  { key: "purchasingDeptBy", label: "ฝ่ายจัดซื้อ" },
+];
+const DATE_FIELDS: { key: keyof PurchaseRequestFields; label: string }[] = [
+  { key: "neededByDate", label: "วันที่รับของ" },
+  { key: "requestedAt", label: "วันที่ขอซื้อ" },
+  { key: "approvedAt", label: "วันที่อนุมัติ" },
+  { key: "purchasingDeptAt", label: "วันที่ฝ่ายจัดซื้อ" },
+];
+
+async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadOrThrow(id);
+  if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (doc.status === "Final") throw new HttpError(400, "เอกสารนี้อนุมัติแล้ว (Final) ไม่สามารถแก้ไขได้");
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const update: Partial<PurchaseRequestFields> = {};
+  if ("lines" in body) update.lines = await sanitizeLines(body.lines);
+  if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)");
+  for (const f of SHORT_TEXT_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = sanitizeShortText(body[f.key], f.label);
+  for (const f of DATE_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = validateIsoDateOrEmpty(body[f.key], f.label);
+
+  update.updatedAt = nowIso();
+  update.updatedBy = ctx.user.id;
+  const purchaseRequests = await purchaseRequestsCollection();
+  await purchaseRequests.updateOne({ _id: id }, { $set: update });
+  const updated = await loadOrThrow(id);
+  await writeAuditEntry(ctx, "Purchase Request Updated", `แก้ไขใบขอซื้อ ${id}`, { scopeOfWorkId: updated.scopeOfWorkId });
+  res.status(200).json({ purchaseRequest: toClient(updated) });
+}
+
+async function handleFinalize(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:finalize");
+  const doc = await loadOrThrow(id);
+  if (doc.status === "Final") throw new HttpError(400, "เอกสารนี้อนุมัติแล้ว (Final)");
+
+  const purchaseRequests = await purchaseRequestsCollection();
+  await purchaseRequests.updateOne({ _id: id }, { $set: { status: "Final", updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const updated = await loadOrThrow(id);
+  const itemId = await findProjectItemIdByLink(doc.projectId, "purchaseRequestId", id);
+  if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
+  await writeAuditEntry(ctx, "Purchase Request Finalized", `ยืนยันสถานะ Final ของใบขอซื้อ ${id}`, { scopeOfWorkId: updated.scopeOfWorkId });
+  res.status(200).json({ purchaseRequest: toClient(updated) });
+}
+
+async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:print");
+  const doc = await loadOrThrow(id);
+  await writeAuditEntry(ctx, "Purchase Request Printed", `พิมพ์ใบขอซื้อ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
+  res.status(200).json({ ok: true });
+}
+
+async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:delete");
+  const doc = await loadOrThrow(id);
+  if (!isOwnerOf(ctx, doc) && !roleHasPermission(ctx.role, "purchaseRequest:finalize")) throw new HttpError(403, "Forbidden");
+
+  const purchaseRequests = await purchaseRequestsCollection();
+  await purchaseRequests.updateOne({ _id: id }, { $set: { isDeleted: true, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const itemId = await findProjectItemIdByLink(doc.projectId, "purchaseRequestId", id);
+  if (itemId) await unlinkProjectItem(doc.projectId, itemId, "purchaseRequestId");
+  await writeAuditEntry(ctx, "Purchase Request Deleted", `ลบใบขอซื้อ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
+  res.status(200).json({ ok: true });
+}
+
+async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method === "GET") return handleGetOne(req, res, id);
+  if (req.method === "PATCH") return handleUpdate(req, res, id);
+  if (req.method === "DELETE") return handleDelete(req, res, id);
+  throw new HttpError(405, "Method not allowed");
+}
+
+export async function handlePurchaseRequest(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const parts = getPathSegments(req, "/api/purchase-requests");
+
+  if (parts.length === 0) {
+    if (req.method === "POST") return handleCreate(req, res);
+    return handleList(req, res);
+  }
+  if (parts.length === 1) return handleOne(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "finalize") return handleFinalize(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
+  throw new HttpError(404, "Not found");
+}

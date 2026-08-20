@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing, Briefcase } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import {
@@ -13,6 +13,7 @@ import {
   chaseScopeOfWorkPo,
 } from "../../lib/scopeOfWork";
 import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOrderFromScope } from "../../lib/deliveryOrder";
+import { type ProjectSummary, fetchProjectsByScope, createProjectFromScope } from "../../lib/project";
 import { getRevisionPredecessorId, getRevisionNumber, generateScopeOfWorkRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import { compressImageFile, isCompressibleImage } from "../../lib/imageCompression";
 import { ApiError } from "../../lib/apiClient";
@@ -226,6 +227,9 @@ export function ScopeOfWorkDocument({
   canViewDeliveryOrder,
   canCreateDeliveryOrder,
   onOpenDeliveryOrder,
+  canViewProject,
+  canCreateProject,
+  onOpenProject,
   onBack,
   backLabel,
   onDuplicated,
@@ -245,6 +249,9 @@ export function ScopeOfWorkDocument({
   canViewDeliveryOrder: boolean;
   canCreateDeliveryOrder: boolean;
   onOpenDeliveryOrder: (deliveryOrderId: string) => void;
+  canViewProject: boolean;
+  canCreateProject: boolean;
+  onOpenProject: (projectId: string) => void;
   onBack: () => void;
   backLabel?: string;
   onDuplicated: (newId: string) => void;
@@ -284,6 +291,17 @@ export function ScopeOfWorkDocument({
       .catch(() => { if (!cancelled) setExistingDeliveryOrder(null); });
     return () => { cancelled = true; };
   }, [scopeOfWorkId, canViewDeliveryOrder]);
+
+  const [existingProject, setExistingProject] = useState<ProjectSummary | null>(null);
+  const [projectBusy, setProjectBusy] = useState(false);
+  useEffect(() => {
+    if (!canViewProject) return;
+    let cancelled = false;
+    fetchProjectsByScope(scopeOfWorkId)
+      .then((list) => { if (!cancelled) setExistingProject(list[0] ?? null); })
+      .catch(() => { if (!cancelled) setExistingProject(null); });
+    return () => { cancelled = true; };
+  }, [scopeOfWorkId, canViewProject]);
 
   useEffect(() => {
     let cancelled = false;
@@ -498,6 +516,25 @@ export function ScopeOfWorkDocument({
     }
   };
 
+  // เปิดโครงการที่มีอยู่แล้ว หรือสร้างใหม่จาก Scope of Work นี้แล้วเปิดขึ้นมา
+  // Opens the existing Project, or creates a new one from this Scope of Work and opens it
+  const handleProjectClick = async () => {
+    if (!scope || projectBusy) return;
+    if (existingProject) {
+      onOpenProject(existingProject.id);
+      return;
+    }
+    setProjectBusy(true);
+    try {
+      const created = await createProjectFromScope(scope.id);
+      onOpenProject(created.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "ไม่สามารถสร้างโครงการได้");
+    } finally {
+      setProjectBusy(false);
+    }
+  };
+
   // ตรวจสอบความครบถ้วน บันทึกการพิมพ์ที่เซิร์ฟเวอร์ แล้วเปิดหน้าต่างพิมพ์ของเบราว์เซอร์
   // Validates completeness, logs the print on the server, then opens the browser print dialog
   const handlePrint = async () => {
@@ -670,6 +707,11 @@ export function ScopeOfWorkDocument({
           {canViewDeliveryOrder && canCreateDeliveryOrder && (
             <button onClick={handleDeliveryOrderClick} disabled={deliveryOrderBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <Truck size={13} /> {existingDeliveryOrder ? t("scopeOfWorkDoc.openDeliveryOrder") : t("scopeOfWorkDoc.createDeliveryOrder")}
+            </button>
+          )}
+          {canViewProject && canCreateProject && (
+            <button onClick={handleProjectClick} disabled={projectBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              <Briefcase size={13} /> {existingProject ? "เปิดโครงการ" : "สร้างโครงการ"}
             </button>
           )}
           {editable && (

@@ -42,6 +42,15 @@ export function ChecklistGroupCard({
               className={`${group.selectionType === "single" ? "w-3.5 h-3.5" : "w-3.5 h-3.5 rounded"} border-border accent-[#c9a84c] disabled:opacity-60 flex-shrink-0`}
             />
             {opt.label}
+            {opt.value !== undefined && (
+              <input
+                disabled={disabled}
+                value={opt.value}
+                onClick={(e) => e.preventDefault()}
+                onChange={(e) => onChange({ ...group, options: group.options.map((o) => (o.key === opt.key ? { ...o, value: e.target.value } : o)) })}
+                className="flex-1 min-w-0 text-xs text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+              />
+            )}
           </label>
         ))}
       </div>

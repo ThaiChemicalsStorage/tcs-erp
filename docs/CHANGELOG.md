@@ -570,6 +570,337 @@ pass — the manual checks (duplicate-guard 400, milestone close/reopen, deposit
 primed `PQ202608-01-LI-SK`, monthly totals, RE print layout) are itemized in TODO.md High Priority.
 Deliberate limitation carried forward: receipts always equal the invoice net (WHT/bank-fee
 reconciliation remains Phase 2).
+## 2026-08-20 (absolute latest) — Work Handover Note module removed, confirmed redundant with Delivery Order (FM-SL-05)
+
+Direct confirmation from two people on the business side: the document the Work Handover Note
+module (built the previous day, 2026-08-19c below) was meant to fill a gap for — ใบส่งมอบงาน — is the
+same document the pre-existing **Delivery Order** module already produces (FM-SL-05), not a distinct
+4th Project-module document type. Removed cleanly, end to end:
+
+- **`src/lib/workHandover.ts`** — deleted.
+- **`api/_lib/workHandoverHandler.ts`** — deleted, along with its mount point/import in
+  `api/handlers/quotes.ts`, its route-table entry in `server/app.ts`, and its rewrite rules in
+  `vercel.json`.
+- **`api/_lib/collections.ts`** — `WorkHandoverFields` type, `workHandoverNotesCollection()`, and its
+  wiring into `ensureIndexes()` (the parallel collection fetch + the 4 `work_handover_notes`
+  indexes) all removed. **The `work_handover_notes` MongoDB collection itself is left alone** —
+  empty/unused is harmless, no destructive DB cleanup performed.
+- **`src/pages/workHandover/`** (`Page`/`List`/`Document`/`PrintDocument.tsx`) — deleted entirely.
+- **Entry point removed from `src/pages/project/ProjectDocument.tsx`**: the import, the
+  `canViewWorkHandover`/`canCreateWorkHandover`/`onOpenWorkHandover` props, the existing-note
+  existence-check effect, the click handler, and the toolbar button — all gone. Threaded back out
+  through `src/pages/project/ProjectPage.tsx` and `src/App.tsx` (lazy import, `NavKey`, sidebar nav
+  entry + nav group membership, nav-label map, deep-link state, `navigateToWorkHandover()`, the 6
+  permission-derived `can*` booleans, the `ProjectPage` props, and the route-render branch — plus the
+  now-unused `FileSignature` icon import).
+- **RBAC**: all 7 `workHandover:view`/`viewAll`/`create`/`edit`/`sign`/`print`/`delete` permissions
+  removed from `src/lib/permissions.ts` (the `Permission` union, `ALL_PERMISSIONS`, the Thai label
+  map, the i18n-key map, and the Project-module permission group) and from `src/lib/roles.ts`
+  (the default-role grant block). **28 permissions remain in the Project module** (down from 35).
+- **i18n**: all ~40 key pairs (80 dictionary entries th+en) removed from `src/lib/i18n.tsx` —
+  `nav.workHandover`, `project.doc.workHandover*`, `workHandover.*`, `workHandoverDoc.*`,
+  `permission.workHandover*`, `tour.wh.*`/`tour.whdoc.*`.
+- **Guided tour**: the inline `DriveStep[]` tour content in `WorkHandoverList.tsx`/
+  `WorkHandoverDocument.tsx` went with those files; no separate tour-config file existed to clean up.
+- **`tests/api/workHandover.test.ts`** — deleted.
+
+**One real gap surfaced by this review, worth tracking (not addressed as part of this removal)**:
+Delivery Order's print document (`DeliveryOrderPrintDocument.tsx`) only ever prints a blank
+signature line for wet-ink signing — no `<canvas>`, no signature-pad, no captured image, unlike the
+now-removed Work Handover Note, which embedded real captured signature images via the shared
+`SignaturePad` component. Delivery Order simply never adopted that pattern. Revisit if digital
+signature capture on delivery documents becomes a real requirement.
+
+Docs updated: `MODULES/Project.md` (Work Handover Note section replaced with a short removal note,
+Status/RBAC/Files/Known-Limitations reverted to the 4-document-type/28-permission state),
+`CLAUDE.md` (coordination note + Current Modules table row), `PROJECT_STATUS.md` (new ❌ removal
+entry, old 🟡 entry annotated), `TODO.md` (the High-Priority coordination-risk entry moved to
+Completed, rewritten to record the resolution).
+
+`npx tsc --noEmit` (both configs), `npm run lint`, `npm run build`, and `npm test` all verified
+clean after the removal.
+
+---
+
+## 2026-08-19c — Work Handover Note (ใบส่งมอบงาน), first-draft/unverified, the 4th Project-module document type previously deferred (superseded — see 2026-08-20 above; this entire module was removed the next day)
+
+Direct instruction to build the document deliberately scoped out of Stages 1–6 (see the coordination
+note at the top of `docs/CLAUDE.md` and the High-Priority coordination-risk entry in `docs/TODO.md`).
+⚠️ **Unlike Material Requisition/Job Order/Purchase Request, no reference PDF exists for this
+document** — the structure below is a first-draft guess based purely on the document's known
+*purpose* (per `docs/MODULES/Accounting.md`'s "Flow งานบัญชี" summary: prepared by Project staff once
+work is complete, signed by the customer on-site as acceptance, and the signed copy is what tells
+Accounting the next payment installment can be billed), not transcribed from a real form. See
+[MODULES/Project.md](./MODULES/Project.md) "Work Handover Note (first draft, unverified)" for the full
+writeup; summary:
+
+- **`src/lib/workHandover.ts`** (new) — `WorkHandoverNote` type: generated from a `Project` directly
+  (not a `ProjectItem`, unlike the other 3), with denormalized `scopeOfWorkId`/`jobCode` snapshot;
+  `documentCode: string | null` deliberately always `null` — **never invent a form code**, per
+  explicit scope limits; free-typed `lines` (same shape/reasoning as Job Order's own lines, no fixed
+  catalog); a preparer signature block and a customer-acceptance signature block, both via the
+  existing `SignaturePad` component (Settings/Service's own precedent), not plain typed-name fields.
+- **No Draft/Final lock.** `isSigned: boolean` + `signedAt: string | null` are the sole state — no
+  separate `status` field. Signing (customer acceptance) is the real state transition here, not an
+  internal "finalize" approval, hence a new `workHandover:sign` permission replacing `:finalize`.
+  `POST /:id/sign` requires the customer's signature to already be saved via a prior `PATCH` (same
+  "save draft, then act" two-step flow the other 3 document types use for their own transition), and
+  rejects further edits once signed.
+- **`api/_lib/workHandoverHandler.ts`** (new) — mounted from `api/handlers/quotes.ts`, same
+  12-function-slot sharing as the other 3 sub-document types; reuses `loadProjectOrThrow()` from
+  `projectHandler.ts` (no `loadPendingProjectItemOrThrow()` — there's no `ProjectItem` involved). New
+  `work_handover_notes` MongoDB collection + 4 indexes (`api/_lib/collections.ts`).
+- **7 new permissions** (`workHandover:view`/`viewAll`/`create`/`edit`/`sign`/`print`/`delete`),
+  granted to Administrator/Super Admin only by default — same reasoning as the other 28. No automatic
+  RBAC migration added (matches the original 4 document types' own precedent, not the Service/AR
+  auto-backfill pattern) — a manual Role Management pass is needed on an already-provisioned database.
+- **`src/pages/workHandover/`** (new: `Page`/`List`/`Document`/`PrintDocument.tsx`) — standalone
+  sidebar module, same pattern as Material Requisition/Job Order/Purchase Request. Entry point via a
+  new "สร้าง/เปิดใบส่งมอบงาน" button on `ProjectDocument.tsx` (`canViewWorkHandover`/
+  `canCreateWorkHandover`/`onOpenWorkHandover` props, same create-or-open UX as Scope of Work's own
+  "Create/Open Project" button) — **but unlike that button, no existence-check is enforced
+  server-side**: multiple Work Handover Notes can exist per Project (confirmed by test), a deliberate
+  simplification given the real business process ties billing to a specific *installment's* note and
+  this data model has no installment linkage yet (tracked in TODO.md).
+  `WorkHandoverPrintDocument.tsx` embeds the actual captured signature images when present — unlike
+  the other 3 print documents, which only ever print a blank line for wet-ink signing, since this
+  document's signatures are captured digitally in-app.
+- **`src/App.tsx`** — new `workHandover` `NavKey`, sidebar entry (added to the existing "Project" nav
+  group), deep-link state + `navigateToWorkHandover()`, 6 new permission-derived `can*` booleans.
+- **i18n**: 40 new key pairs (80 dictionary entries th+en), verified 1:1 parity by direct key-count
+  comparison. The print document stays fixed-Thai (no `useI18n`), matching the other 3's precedent.
+- **Guided tour**: same `useModuleTour()` pattern as every other page — `WorkHandoverList.tsx`
+  (tourKey `workHandover`, 2 steps) and `WorkHandoverDocument.tsx` (tourKey `workHandoverDoc`, 3
+  steps: actions, the free-typed line editor, the preparer/customer signature blocks — explicitly
+  states signing does not auto-update any billing status).
+- **`tests/api/workHandover.test.ts`** (new, 8 tests) — `documentCode` stays `null`; `preparedAt`
+  seeds as date-only (the exact bug class Stage 6 found and fixed in the other 3 document types, so
+  it was tested here from the start rather than found live); signing rejected without a saved
+  customer signature; signing succeeds once one is saved; editing rejected once signed; signing
+  twice rejected; multiple notes can exist per Project. Found and fixed one real test-harness gap
+  along the way: the shared `makeReqRes()` mock never populated `req.query` (the real Express server
+  does, via its "simple" query parser) — a genuine gap in the test harness, not a bug in the handler
+  (which mirrors `jobOrderHandler.ts`'s identical `req.query.projectId` pattern exactly), fixed
+  locally in the new test file's own harness rather than touching the shared pattern.
+- **Deliberately does NOT auto-update Scope of Work / Accounting.** `handleSign()` only ever writes
+  to the Work Handover Note itself — the Accounting module's UI is paused and has no code path
+  reading `WorkHandoverNote.isSigned` yet (`docs/MODULES/Accounting.md` decision #6 still gates
+  milestone billing on a plain checklist item). Wiring that link is explicitly future work, updated
+  in the coordination note at the top of `docs/CLAUDE.md` and the High-Priority entry in `docs/TODO.md`.
+- Docs updated: `MODULES/Project.md` (new major section + updated Status/RBAC/Files/Known
+  Limitations), `CLAUDE.md` (coordination note + Current Modules table row), `PROJECT_STATUS.md`
+  (new 🟡 entry — marked first-draft, not ✅), `TODO.md` (coordination-risk entry rewritten to
+  reflect what's actually still open).
+- `tsc --noEmit` (both configs)/`npm run lint` (0 errors, same 3 pre-existing warnings)/`npm run
+  build`/`npm test` (219/219, up from 211) all pass clean.
+
+---
+
+## 2026-08-19b — "Show page tips" button on the 3 remaining Project-module list pages
+
+Direct follow-up request: "add show page tips button on all material requisitions, job orders and
+purchase requests" — closing the exact gap the previous entry below deliberately left open
+(`MaterialRequisitionList.tsx`/`JobOrderList.tsx`/`PurchaseRequestList.tsx`, the 3 standalone list
+pages, had no tour at all). Same `useModuleTour()` + `TourReplayButton.tsx` infra as every other
+tour in the app:
+
+- **`MaterialRequisitionList.tsx`** (tourKey `materialRequisition`, 2 steps): search/status filters
+  → the table (row-click to open; states new requisitions are created from a Project's item table —
+  the 3-branch sourcing buttons — not from this page).
+- **`JobOrderList.tsx`** (tourKey `jobOrder`, 2 steps): same shape, Job Order copy.
+- **`PurchaseRequestList.tsx`** (tourKey `purchaseRequest`, 2 steps): same shape, Purchase Request
+  copy.
+- Only 2 steps each (vs. `ProjectList`'s 3) because these 3 lists have no summary-card row — matches
+  the existing shorter precedent (`AuditLogPage`/`RoleManagementPage`) for similarly minimal list
+  pages, rather than inventing a summary card that doesn't exist just to hit a step count.
+- List-level tourKeys (`materialRequisition`/`jobOrder`/`purchaseRequest`) are deliberately distinct
+  from their document-level tourKeys (`materialRequisitionDoc`/`jobOrderDoc`/`purchaseRequestDoc`,
+  added in the previous entry) — same `*Doc`-suffix convention every other module
+  (`scopeOfWork`/`scopeOfWorkDoc`, `deliveryOrder`/`deliveryOrderDoc`) already uses, so completing
+  one tour never marks the other as seen.
+- `currentUserId` was already threaded to all 3 `*Page.tsx` wrappers in the previous entry (for
+  their Document children) — this pass reused the same prop, just passed one level further into the
+  List components.
+- 8 new i18n keys × 2 languages = 16 new dictionary entries (`tour.mr.*`/`tour.jo.*`/`tour.pr.*`),
+  verified 1:1 th/en parity by direct key-count comparison, same as every other tour pass.
+- `tsc --noEmit` (both configs)/`npm run lint` (0 errors, same 3 pre-existing warnings)/
+  `npm run build`/`npm test` (211/211) all pass clean.
+
+---
+
+## 2026-08-19 — Guided-tour coverage for the 4 Project-module pages
+
+Direct instruction, following the exact `useModuleTour()` pattern already used everywhere else
+(`src/components/GuidedTour.tsx` + `TourReplayButton.tsx`) — the Project module's 4 document types
+postdated the 2026-07-29 tour-rollout sessions, so they showed no popup at all until now. See
+[MODULES/Project.md](./MODULES/Project.md) "Guided Tours" for the full writeup; summary:
+
+- **`ProjectList.tsx`** (tourKey `project`, 3 steps): summary cards → search/status filters → the
+  table (row-click to open; explicitly notes creation happens from the "Create Project" button on a
+  finalized Scope of Work, not here — same "creation happens elsewhere" copy pattern as
+  `ScopeOfWorkList`/`DeliveryOrderList`'s own table steps).
+- **`ProjectDocument.tsx`** (tourKey `projectDoc`, 3 steps, `autoStart: !!project`): actions
+  (refresh/delete) → the read-only customer/snapshot header → `ProjectItemsEditor`'s 3-branch
+  sourcing table.
+- **`MaterialRequisitionDocument.tsx`** (tourKey `materialRequisitionDoc`, 4 steps,
+  `autoStart: !!doc`): actions → the "Add from Catalog" product picker → the
+  withdrawal-1/withdrawal-2/return columns (states the return column stays editable even once
+  Final) → the separate Material Return card.
+- **`JobOrderDocument.tsx`** (tourKey `jobOrderDoc`, 3 steps, `autoStart: !!doc`): actions → the
+  free-typed line editor (not tied to the product catalog) → the scope-of-work checklist
+  (`ChecklistGroupCard`, shared with Scope of Work).
+- **`PurchaseRequestDocument.tsx`** (tourKey `purchaseRequestDoc`, 3 steps, `autoStart: !!doc`):
+  actions → the "Add from Catalog"/"Add Custom Line" entry point → the line table (catalog lines
+  lock description/unit, custom lines stay fully editable).
+- **`currentUserId` threaded** the same way `ScopeOfWorkPage`/`DeliveryOrderPage` already do:
+  `App.tsx` → `ProjectPage`/`MaterialRequisitionPage`/`JobOrderPage`/`PurchaseRequestPage` (all 4
+  gained a new required prop) → down into `ProjectList`/`ProjectDocument`/`MaterialRequisitionDocument`/
+  `JobOrderDocument`/`PurchaseRequestDocument`.
+- **All 5 document/list tours pass `autoStart: !!doc` (or `!!project`)** — the same load-race guard
+  `ScopeOfWorkDocument`/`DeliveryOrderDocument`/`ServiceReportEditor` already use, so the one-time
+  auto-fire waits for the real record instead of firing over the loading spinner.
+- **Every new tour step uses real `t()` keys, never hardcoded Thai** — this module had that exact
+  bug once already (Stage 4 shipped Project/Material Requisition Thai-hardcoded, retrofitted in
+  Stage 5), so all 32 new keys (× th/en = 64 dictionary entries) were added as pairs from the start
+  and verified by direct key-count comparison, not just `tsc` (which only proves a key exists in the
+  Thai dictionary — a missing English entry silently falls back to Thai at runtime with no compile
+  error).
+- **Deliberately out of scope**: `MaterialRequisitionList.tsx`/`JobOrderList.tsx`/
+  `PurchaseRequestList.tsx` did not get their own tours this pass — only the 4 pages/surfaces
+  explicitly requested (`ProjectPage`/`ProjectList`, and the 3 document editors) were covered.
+- `tsc --noEmit` (both `tsconfig.json` and `tsconfig.api.json`)/`npm run lint` (0 errors, the same
+  3 pre-existing warnings)/`npm run build`/`npm test` (211/211) all pass clean.
+
+---
+
+## 2026-08-18b — Project module Stage 6: live browser verification, 3 real bugs found and fixed
+
+Explicit instruction: walk through creating/viewing all 4 Project-module document types in a real
+browser, in both Thai and English, watching specifically for text overflow/truncation/layout breaks
+from English strings being longer than Thai ones — the class of bug static type-checks can't catch —
+and fix anything found, then commit Stage 2 through the i18n fix as one commit if everything checked
+out clean.
+
+**Found and fixed 3 real bugs, none of them theoretical**, all confirmed via actual browser
+reproduction (network traces, not just code reading) before being fixed:
+
+1. **Every quotation save was silently broken app-wide** — not a Project-module bug, but discovered
+   while trying to give a test Scope of Work real line items to test with, and severe enough to
+   report and fix immediately rather than defer. `Quote.id` always contains a literal `#` (e.g.
+   `"Q#260817-0001"`); `src/lib/quotes.tsx`'s id-taking functions
+   (`updateQuote`/`duplicateQuote`/`rewriteQuote`/`printQuote`/`performWorkflowAction`) interpolated
+   it unencoded into the request URL, and browsers strip everything from `#` onward as a URL
+   *fragment* before `fetch()` ever sends the request — so every save/duplicate/rewrite/print-log/
+   workflow-action on an existing quotation actually hit e.g. `/api/quotes/Q` and 404'd. A quotation
+   could never be edited after creation. Fixed by auditing and wrapping every id-shaped URL path
+   segment in `encodeURIComponent()` across all 18 affected `src/lib/*.ts` files (not just
+   Quotation), and by making the shared `getPathSegments()` helper (`api/_lib/http.ts`)
+   `decodeURIComponent()` each segment so the server resolves the id back to its literal form.
+2. **Every Material Requisition/Job Order/Purchase Request was permanently unsavable after
+   creation** — `handleCreate()` in all 3 `api/_lib/*Handler.ts` files seeded the signatory timestamp
+   (`preparedAt`/`requestedAt`) from the full ISO datetime `nowIso()` returns, but the frontend
+   editors round-trip that same value on every save, and the server's own `validateIsoDateOrEmpty()`
+   requires strict `YYYY-MM-DD` — so the first save after creation always 400'd, permanently, for
+   every document of all 3 types (confirmed live: a Material Requisition finalized this way ended up
+   Final with **empty lines**, since Finalize doesn't touch `lines` and the document had never
+   actually saved). Scope of Work's own equivalent fields already established the correct
+   `nowIso().slice(0, 10)` precedent; Stage 3 just didn't follow it. Fixed in all 3 handlers.
+3. **A free-typed Purchase Request/Job Order line description could silently clip mid-word in
+   English mode** — no minimum width on the description `<input>` in a table where other
+   English-mode column headers (`WAREHOUSE REMAINING`, `QTY REQUESTED`, ...) are much longer than
+   their Thai originals and squeeze the flexible column; `<input>` elements never wrap, so text just
+   clipped with no ellipsis. Fixed with `min-w-[200px]` on both files, relying on the existing
+   `overflow-x-auto` wrapper (the app's own documented wide-table convention) for scroll.
+
+**Also found, NOT fixed this pass (documented instead)**: `ScopeOfWorkItem.id` is regenerated fresh
+on every Scope-of-Work-side "refresh from quotation," so Project's own "keeps sub-document links on
+refresh" promise rarely holds in practice — confirmed live (a finalized Material Requisition and a
+finalized Job Order both got silently orphaned after refreshing the Scope of Work). Root cause and
+proper fix belong to the Scope of Work module, not Project; see TODO.md's new entry and
+[MODULES/Project.md](./MODULES/Project.md).
+
+**Regression tests added**: `tests/api/pathSegments.test.ts` (new, 4 tests — `getPathSegments()`
+decodes percent-encoded id segments including ones containing literal `#`) and 3 new tests appended
+to `tests/api/projectAtomicity.test.ts` ("immediate re-save after creation" for all 3 sub-document
+types — would have failed before the date-field fix). `tsc`/`lint`/`build`/`test` all pass clean
+(211/211, up from 204).
+
+**Live-verified beyond the 3 bugs above**: the atomic parent-child link invariant end-to-end via real
+creates/deletes/finalizes; Material Requisition's Return column stays editable post-Final; Job
+Order's checklist per-option fill-in inputs render/save correctly; Purchase Request's dual
+catalog/free-typed line UI; every other English-mode label/button/table header checked; print
+documents and catalog/checklist content correctly staying fixed-Thai in English mode (`window.print()`
+itself fires correctly for all 3 new print documents, but the native print dialog blocks browser
+automation — same standing limitation this app's session history has hit before — so the visual print
+layout itself still needs a manual look, unchanged from the Stage 5 known-limitation).
+
+See [MODULES/Project.md](./MODULES/Project.md) (updated with the full Stage 6 writeup and a corrected
+"Refresh from Scope of Work" claim) and [TODO.md](./TODO.md) (new `ScopeOfWorkItem.id` entry).
+
+---
+
+## 2026-08-18 — Project module Stage 5: Job Order + Purchase Request frontend, plus i18n retrofit for the whole module
+
+Combined pass, per direct instruction: build Job Order and Purchase Request's frontend (Stage 5,
+backend already existed from Stage 3), and fix Project + Material Requisition's Stage-4-shipped
+hardcoded-Thai UI — one pass, so Job Order/Purchase Request were built with real i18n from the start
+instead of being translated after the fact.
+
+**Investigated first, per instruction, before writing any UI**: (1) confirmed
+`materialRequisitionHandler.ts`'s `handleList()` already correctly gated the standalone company-wide
+list behind `materialRequisition:viewAll` — no bug found; (2) read `src/lib/i18n.tsx` and how
+Quotation/Scope of Work/Delivery Order consume it (`useI18n()`'s `t()`, dotted key convention,
+`TranslationKey = keyof typeof translations.th` — meaning TS validates keys exist in `th` but never
+checks `en` has matching keys, a real silent-fallback risk closed later via a dedicated verification
+script); (3) confirmed via direct grep that neither `ScopeOfWorkPrintDocument.tsx` nor
+`DeliveryOrderPrintDocument.tsx` import `useI18n` — printed documents in this app always render in a
+fixed language regardless of the preparer's UI toggle — and applied the same treatment to all 4 print
+documents in this module.
+
+**Built**: full CRUD wrapper sets added to `src/lib/jobOrder.ts`/`purchaseRequest.ts`; standalone
+sidebar modules `src/pages/jobOrder/` and `src/pages/purchaseRequest/` (`Page`/`List`/`Document`/
+`PrintDocument.tsx` each) — Job Order's `Document.tsx` embeds the existing `ChecklistGroupCard`
+(shared with Scope of Work) for its ~23-item scope-of-work checklist plus 3 signatory blocks;
+Purchase Request's `Document.tsx` supports both catalog-linked lines (`ProductPickerModal`, filtered
+to the 4 material categories) and free-typed lines side by side. `ChecklistGroupCard.tsx` gained one
+small additive change: it now renders an inline fill-in `<input>` next to any `ChecklistOption` whose
+`value !== undefined` (Job Order's HYDRO-TEST ___ BAR-style fields), a pure addition with no behavior
+change for Scope of Work's own existing options (which never set `value`). `App.tsx` wired both as
+new nav items + deep-link navigation from `ProjectItemsEditor.tsx`'s "Create Job Order"/"Create
+Purchase Request" buttons (previously a Stage 4 placeholder toast). Backend: `jobOrderHandler.ts`/
+`purchaseRequestHandler.ts`'s `handleList()` gained the same company-wide list mode (omit
+`projectId`) Material Requisition's own handler already had from Stage 4, needed for the new
+standalone list pages.
+
+**i18n retrofit**: `ProjectList/Page/ItemsEditor/Document.tsx` and all of
+`materialRequisition/*.tsx` (except its print document) rewritten to route every string through
+`t()`; 232 new key/value pairs added to `src/lib/i18n.tsx` as real th+en pairs (not placeholders).
+Deliberately left untranslated, matching established precedent: all 4 print documents; the 4 seeded
+`ProductCategory` names + 82 catalog item names (real business data, not UI chrome); `"Draft"`/
+`"Final"` status literals (kept as literal English in both languages, matching Delivery Order's own
+precedent); and `buildJobOrderChecklistGroups()` (`src/lib/jobOrder.ts`) — left completely untouched,
+both because Scope of Work's equivalent checklist builder also never uses i18n (persisted content,
+not chrome) and because this file is value-imported into `api/_lib/jobOrderHandler.ts` (the Node
+server bundle) — importing `i18n.tsx` there would break every API route the same way the documented
+2026-07-09 incident did.
+
+**Verified**: `npx tsc -b`/`npx tsc --noEmit -p tsconfig.api.json`/`npm run lint`/`npm run build`/
+`npm test` all pass clean (204/204 tests, up from 197). i18n completeness verified three independent
+ways, not just trusting tsc's 0 errors: (1) TypeScript's own key-existence check at every `t()` call
+site; (2) a one-off Node script comparing `th`/`en` key sets directly — 1623 keys each, 0 missing
+either direction, only 6 of the 232 new keys intentionally identical between languages (form codes
+like `"FM-ST-04"`, the `"Draft"`/`"Final"` literals); (3) a manual grep audit for stray Thai
+characters across all 4 module folders' `.tsx` files outside print documents/comments — none found.
+**Not verified**: no live browser walkthrough of the actual English-mode UI was possible this
+session (same standing sandboxed-session limitation as prior passes) — the static/code-level checks
+above stand in for it; a real click-through in English mode across all 4 document types is still
+recommended before calling this module fully done.
+
+See [MODULES/Project.md](./MODULES/Project.md) (fully rewritten to reflect Stage 5), and the updated
+Project-module coordination note at the top of [CLAUDE.md](./CLAUDE.md) and in
+[TODO.md](./TODO.md) High Priority — ใบส่งมอบงาน (Job/Work Delivery Note), the 4th document type
+originally flagged alongside these 3, was deliberately scoped out of this workstream back in Stage 1
+and remains unbuilt; it's still what Accounting's milestone-billing gate is waiting on.
 
 ---
 

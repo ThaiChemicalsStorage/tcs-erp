@@ -68,13 +68,13 @@ export async function createProduct(fields: ProductFields): Promise<Product> {
 // แก้ไขข้อมูลสินค้าที่มีอยู่ตาม id
 // Updates an existing product identified by id
 export async function updateProduct(id: string, fields: Partial<ProductFields & { archived: boolean }>): Promise<Product> {
-  const { product } = await apiFetch<{ product: Product }>(`/products/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { product } = await apiFetch<{ product: Product }>(`/products/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return product;
 }
 // ลบสินค้าตาม id
 // Deletes a product identified by id
 export async function deleteProduct(id: string): Promise<void> {
-  await apiFetch<void>(`/products/${id}`, { method: "DELETE" });
+  await apiFetch<void>(`/products/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 // ดึงรายการหมวดหมู่สินค้าทั้งหมดจากเซิร์ฟเวอร์
@@ -92,6 +92,6 @@ export async function createCategory(name: string): Promise<ProductCategory> {
 // แก้ไขข้อมูลหมวดหมู่สินค้าที่มีอยู่ตาม id
 // Updates an existing product category identified by id
 export async function updateCategory(id: string, fields: { name?: string; archived?: boolean }): Promise<ProductCategory> {
-  const { category } = await apiFetch<{ category: ProductCategory }>(`/categories/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { category } = await apiFetch<{ category: ProductCategory }>(`/categories/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return category;
 }

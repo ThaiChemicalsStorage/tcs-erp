@@ -47,6 +47,9 @@ export function QuotationPage({
   canViewDeliveryOrder,
   canCreateDeliveryOrder,
   onOpenDeliveryOrder,
+  canViewProject,
+  canCreateProject,
+  onOpenProject,
 }: {
   quotes: Quote[];
   setQuotes: React.Dispatch<React.SetStateAction<Quote[]>>;
@@ -72,6 +75,9 @@ export function QuotationPage({
   canViewDeliveryOrder: boolean;
   canCreateDeliveryOrder: boolean;
   onOpenDeliveryOrder: (deliveryOrderId: string) => void;
+  canViewProject: boolean;
+  canCreateProject: boolean;
+  onOpenProject: (projectId: string) => void;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<"list" | "wizard" | "new" | "detail" | "scopeOfWork">("list");
@@ -258,6 +264,9 @@ export function QuotationPage({
           canViewDeliveryOrder={canViewDeliveryOrder}
           canCreateDeliveryOrder={canCreateDeliveryOrder}
           onOpenDeliveryOrder={onOpenDeliveryOrder}
+          canViewProject={canViewProject}
+          canCreateProject={canCreateProject}
+          onOpenProject={onOpenProject}
           onBack={() => setView("detail")}
           onDuplicated={(newId) => setScopeOfWorkId(newId)}
           onRewritten={(newId) => setScopeOfWorkId(newId)}

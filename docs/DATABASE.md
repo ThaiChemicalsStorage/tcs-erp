@@ -37,6 +37,10 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `ar_documents` | MongoDB `ObjectId` | `ArDocumentFields` (`api/_lib/collections.ts`) | **Added 2026-08-17, `docType` `"RE"` added 2026-08-18** — one row per issued accounting document, discriminated by `docType` `AR\|IV\|BI\|RE`; **never deleted** — `status: "cancelled"` (+reason/by/at) is the only exit, and cancelled rows stay visible/auditable forever. `docNo` = atomic Buddhist-year `{PREFIX}{YY}{MM}{SEQ}` (see `counters` below); `docDate` Gregorian ISO (the `month=` API filter matches its prefix); an RE's line carries `linkedArDocumentId` → its AR/IV tax invoice (the once-per-invoice duplicate guard). `stockDeducted: boolean` (added 2026-08-18, IV only in practice) tracks whether any `stock_movements` row has been cut against it. `isManual: boolean` (added 2026-08-18) marks a freestanding AR/IV (+ companion BI) created with `scopeOfWorkId`/`milestoneId` both `""` via `POST /api/ar-documents/manual` — see [MODULES/Accounting.md](./MODULES/Accounting.md) "Manual Tax Invoice Creation". |
 | `ar_attachment_files` | MongoDB `ObjectId` | `{milestoneId, attachmentId, checklistKey, fileName, contentType, size, data: Binary, createdAt, createdBy}` | **Added 2026-08-17** — checklist-evidence uploads per billing milestone (≤2 MB × ≤5), deliberately separate from `scope_attachment_files` (different cap/permission model; session+`ar:view`-gated download, not a capability URL). |
 | `stock_movements` | MongoDB `ObjectId` | `StockMovementFields` (`api/_lib/collections.ts`) | **Added 2026-08-18** — append-only ledger of every `Product.stockQty` change (`kind: "receive"\|"deduct"\|"adjust"`, signed `delta`, `balanceAfter` snapshot). Deliberately **shared, document-agnostic infrastructure** (`sourceType: "manual"\|"ar_document"`, optional `sourceId`/`sourceLabel`) — not an Accounting-only private stock number, so a future ใบเบิกของ (Material Requisition)/PR module (the "Project" department's parallel workstream, see the coordination note at the top of [CLAUDE.md](./CLAUDE.md)) can write into this same collection instead of inventing a second, competing stock-quantity system. `applyStockMovement()` (`api/_lib/stockHandler.ts`) is the **only** code path allowed to change `Product.stockQty` — an atomic `findOneAndUpdate` with `stockQty: {$gte: -delta}` on deductions rejects an over-deduction in the same query (no separate read-then-write race window, no Mongo transaction needed). Indexes: `{productId:1, createdAt:-1}`, `{sourceType:1, sourceId:1}`. See [MODULES/Product.md](./MODULES/Product.md) "Stock" and [MODULES/Accounting.md](./MODULES/Accounting.md). |
+| `projects` | MongoDB `ObjectId` | `ProjectFields` (`src/lib/project.ts` minus `id`) | **API routes added Stage 3, 2026-08-18** — see "Project module" below and [API.md](./API.md) "Project." No UI yet. |
+| `material_requisitions` | business ID string (e.g. `"MR-2569-0001"`, atomic per-Buddhist-year counter) | `MaterialRequisitionFields` (`src/lib/materialRequisition.ts` minus `id`) | **API routes added Stage 3, 2026-08-18** — see "Project module" below and [API.md](./API.md) "Project." No UI yet. |
+| `job_orders` | business ID string (e.g. `"JO-2569-0001"`) | `JobOrderFields` (`src/lib/jobOrder.ts` minus `id`) | **API routes added Stage 3, 2026-08-18** — see "Project module" below and [API.md](./API.md) "Project." No UI yet. |
+| `purchase_requests` | business ID string (e.g. `"PR-2569-0001"`) | `PurchaseRequestFields` (`src/lib/purchaseRequest.ts` minus `id`) | **API routes added Stage 3, 2026-08-18** — see "Project module" below and [API.md](./API.md) "Project." No UI yet. |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
 
@@ -903,6 +907,109 @@ list per category. Key data-model notes:
 **Relationships**: `Product.categoryId → ProductCategory.id`. `QuoteLine` has **no** reference back to `Product` — picking a product from the library copies its `name`/`unit`/`defaultPrice` into a new, independent `QuoteLine` at selection time. This is deliberate: editing or archiving a `Product` must never change historical quotes (see [MODULES/Product.md](./MODULES/Product.md) and [MODULES/Quotation.md](./MODULES/Quotation.md)). `Quote.createdByUserId → User.id` and `ApprovalHistoryEntry.userId → User.id` are cross-domain references — plain string IDs looked up at query/render time (e.g. for signature images), not enforced foreign keys (MongoDB doesn't enforce referential integrity; nothing prevents a dangling reference if a user is deleted). `User.roleKey → Role.key`, `Notification.recipientUserId → User.id`, `AuditLogEntry.userId → User.id` are the same pattern.
 
 **Update 2026-07-09**: `ensureIndexes()` (`api/_lib/collections.ts`, called once from the Setup Wizard's first-run path) now creates real indexes across every collection — see the per-collection Indexes column in the schema-prep table above, plus the additions called out inline for `products`/`categories`/`quotes`/`notifications`/`audit_log`. `users.username`/`users.email` uniqueness was already a real unique index before this pass (not newly added) — the paragraph that previously said "no explicit indexes exist" was stale and has been corrected.
+
+### Project module (`src/lib/project.ts` / `materialRequisition.ts` / `jobOrder.ts` / `purchaseRequest.ts`) — added 2026-08-18, Stage 2 data layer + Stage 3 API routes
+
+**Status: types, MongoDB collections/indexes, RBAC permissions (Stage 2), full CRUD/workflow API
+routes + a wired-in Product-catalog seed trigger (Stage 3) all exist and are covered by
+`tests/api/projectAtomicity.test.ts`. No UI yet (Stage 4+).** See [API.md](./API.md) "Project" for
+the full route table. Manages the workflow a Project follows once its Scope of Work + Cost Control
+are finalized: sourcing materials from the store, having items fabricated in-house, or purchasing
+items externally. Generated from an existing `ScopeOfWork` record, the same relationship shape as
+`DeliveryOrder` → `ScopeOfWork` (snapshot, not live reference).
+
+```ts
+type ProjectStatus = "Planning" | "InProgress" | "Completed";
+type ProjectItemSourcingMethod = "unassigned" | "requisition" | "jobOrder" | "purchaseRequest";
+type ProjectItemStatus = "pending" | "documentCreated" | "fulfilled" | "cancelled";
+interface ProjectItem {
+  id: string; // mirrors the source ScopeOfWorkItem's id
+  name: string; specifications: string[]; quantity: number | null; unit: string;
+  sourcingMethod: ProjectItemSourcingMethod; itemStatus: ProjectItemStatus;
+  materialRequisitionId: string; jobOrderId: string; purchaseRequestId: string; // "" = none yet
+}
+interface Project {
+  id: string; scopeOfWorkId: string; scopeNumber: string; quotationId: string;
+  customerCompanyName: string; items: ProjectItem[]; status: ProjectStatus;
+  createdAt: string; updatedAt: string; createdBy: string; updatedBy: string; isDeleted: boolean;
+}
+```
+
+`ProjectItem` is one row per Scope of Work item, each assigned to exactly one of the 3 sourcing
+branches, each branch pointing at the real sub-document once created (Stage 3 will set these
+server-side, atomically with the sub-document's own creation — never client-invented).
+
+Three sub-document types, each reproducing a real reference form in `public/reference/` (see
+conversation history for the full PDF-to-field mapping — not yet written up as a MODULES doc since
+the module isn't functional yet, per the standing "hold off until functional" instruction):
+
+- **`MaterialRequisition`** (`material_requisitions`, FM-ST-04 Rev.02) — withdraws items from the
+  store catalog. Lines reference an existing `Product` by id (see "Products-catalog-reuse" below)
+  rather than a duplicate parallel catalog; each line tracks `plannedQty`/`withdrawal1Qty`/
+  `withdrawal2Qty`/`returnQty`/`actualUsedQty`. `returnQty` (and the document-level `returnedBy`/
+  `returnReceivedBy`/`returnedAt`) is intended to stay editable even after `status: "Final"` at the
+  API layer (Stage 3) — same "follow-up fields survive Final" pattern Scope of Work's PO-chasing
+  fields established (see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "PO Chasing") — since
+  leftover material is returned via the same original document, after issuance. `jobOrderId: string |
+  null` (**changed 2026-08-18, same day**: originally modeled as a free-typed external reference
+  string — superseded once "ใบส่งผลิต/Production Order" in TODO.md's coordination note was confirmed
+  to be an earlier name for this same module's `JobOrder`, not a separate concept) is a real, nullable
+  FK to `JobOrder`, with `jobOrderCode: string` as a denormalized display snapshot kept in sync
+  whenever it's set — `null`/`""` when a requisition pulls straight from store stock with no
+  fabrication job behind it at all, which is the common case, not an edge case.
+- **`JobOrder`** (`job_orders`, FM-PJ-01 Rev.01) — sent to Production when an item isn't in the store
+  catalog but can be fabricated in-house. Lines are free-typed (not catalog-referenced, unlike
+  Material Requisition — fabrication work varies per job). `scopeChecklist: ChecklistGroup[]` reuses
+  the exact type Scope of Work uses (`src/lib/documentRequirements.ts`) — see "ChecklistOption.value"
+  below for the one shape addition this required. `buildJobOrderChecklistGroups()` (`src/lib/
+  jobOrder.ts`) seeds the reference form's 23-item scope-of-work checklist (design/drawing/
+  fabrication/testing/painting spec/transportation/installation/etc.), transcribed in the source
+  PDF's own reading order — deliberately one flat group, not split into the PDF's two visual columns,
+  since the source gives those columns no explicit title of their own.
+- **`PurchaseRequest`** (`purchase_requests`, form FMPU05 Rev.02, printed footer "FM-PU-05") — sent to
+  Procurement when an item isn't in the catalog and can't be made in-house. A real filled example
+  (`public/reference/-ED6908027.pdf`) confirmed this is requested BY the Project department (header
+  explicitly labeled "(ฝ่ายโครงการ)") and carries the job code in its remark field — modeled here as
+  a real `jobCode` field. Lines optionally reference a `Product` (`productId`, unlike Material
+  Requisition's line this is optional — a PR line can be a one-off item with no catalog entry) plus
+  an `estimatedCost`, since a PR is a list of individually-priced items tied to a job code.
+
+**Numbering** (implemented Stage 3): `MR-{buddhistYear}-{seq}` / `JO-{buddhistYear}-{seq}` /
+`PR-{buddhistYear}-{seq}`, an atomic per-Buddhist-year counter (`nextMaterialRequisitionId()`/
+`nextJobOrderId()`/`nextPurchaseRequestId()`, each in its own handler file) — same convention as
+`service_reports`' `SR-{year}-{seq}`. Deliberately a clean new prefix scheme, not an attempt to
+replicate the real filled Purchase Request example's legacy `"ED"` numbering (`ED6908027`) — the
+meaning/source of that prefix is unconfirmed. `Project` itself stays `ObjectId`-keyed (no printed
+document number of its own).
+
+**`ChecklistOption.value` addition** (`src/lib/documentRequirements.ts`): an optional `value?: string`
+field added to the existing `ChecklistOption` interface — backward-compatible (Scope of Work's
+existing options never set it) — to hold Job Order's fill-in text/number for options that aren't a
+pure yes/no toggle (e.g. "HYDRO-TEST ___ BAR", "PRIMER COAT: ___ / ___ MICRON").
+
+**`DOCUMENT_RECIPIENT_DEPARTMENTS` gained a `"store"` entry** (`src/lib/documentRequirements.ts`),
+separate from `"factory"` — the Material Requisition reference form has a distinct "แผนกสโตร์" (Store
+dept) sign-off. **This is an unconfirmed assumption**, not verified against real org structure — it
+also affects Scope of Work's `documentsToSend` checklist and User Management's department dropdown,
+which share this same constant. Revisit if Store turns out to just be a function within Factory.
+
+**Products-catalog-reuse decision**: Material Requisition/Purchase Request lines reference an existing
+`Product` by id rather than a new parallel catalog — the real filled Purchase Request example proved
+the same code (`RM-1915`) is used across both document types already, in the real paper process, so
+one shared item master is correct. `Product.defaultPrice` accommodates `0` for these non-priced
+internal items with no schema change. `api/_lib/materialCatalogSeedData.ts` transcribes all 82 real
+catalog rows from `public/reference/FM-ST-04_-_Rev.02_1.pdf` through `_4.pdf` into 4 new
+`ProductCategory` rows (เคมี/เรซิ่น, วัสดุสิ้นเปลือง, น็อตและสกรู, อื่นๆ (คลัง)) plus their products —
+`seedMaterialCatalogIfEmpty()` is idempotent (find-by-`code`/`name`, insert if missing, same pattern
+`upsertQuotationTemplates()` uses) and **wired in as of Stage 3** via `ensureMaterialCatalogSeeded()`
+(one-per-process in-memory guard, same convention as `bootstrapRbac()`), called from
+`handleMaterialRequisition()`'s entry point. **Not yet run against a real database** — this session
+has no live MongoDB credentials, the standing limitation noted throughout this file's history.
+
+**RBAC**: 28 new permissions (`project`/`materialRequisition`/`jobOrder`/`purchaseRequest`, each
+`:view/:viewAll/:create/:edit/:finalize/:print/:delete` — mirroring Scope of Work/Delivery Order's own
+7-permission shape), granted to Administrator/Super Admin only by default. See
+[RBAC.md](./RBAC.md) "Project module".
 
 ## Superseded: the old proposed Prisma/PostgreSQL schema — NOT what got built
 

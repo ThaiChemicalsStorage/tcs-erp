@@ -85,7 +85,7 @@ export async function fetchServiceTemplates(): Promise<ServiceTemplateSummary[]>
 // ดึงข้อมูล Template ตรวจเช็คแบบเต็มตาม id
 // Fetches a single checklist template's full content by id
 export async function fetchServiceTemplate(id: string): Promise<ServiceTemplate> {
-  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${id}`);
+  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${encodeURIComponent(id)}`);
   return serviceTemplate;
 }
 
@@ -102,7 +102,7 @@ export async function createServiceTemplate(draft: ServiceTemplateDraft): Promis
 // แก้ไข Template ตรวจเช็คที่มีอยู่
 // Updates an existing checklist template
 export async function updateServiceTemplate(id: string, fields: Partial<ServiceTemplateDraft>): Promise<ServiceTemplate> {
-  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${id}`, {
+  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(fields),
   });
@@ -112,7 +112,7 @@ export async function updateServiceTemplate(id: string, fields: Partial<ServiceT
 // ทำสำเนา Template ตรวจเช็ค
 // Duplicates a checklist template
 export async function duplicateServiceTemplate(id: string, templateName: string): Promise<ServiceTemplate> {
-  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${id}/duplicate`, {
+  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${encodeURIComponent(id)}/duplicate`, {
     method: "POST",
     body: JSON.stringify({ templateName }),
   });
@@ -122,7 +122,7 @@ export async function duplicateServiceTemplate(id: string, templateName: string)
 // เก็บถาวร/กู้คืน Template ตรวจเช็ค
 // Archives or restores a checklist template
 export async function setServiceTemplateArchived(id: string, isDeleted: boolean): Promise<ServiceTemplate> {
-  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${id}/archive`, {
+  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${encodeURIComponent(id)}/archive`, {
     method: "POST",
     body: JSON.stringify({ isDeleted }),
   });
@@ -132,7 +132,7 @@ export async function setServiceTemplateArchived(id: string, isDeleted: boolean)
 // เปิด/ปิดใช้งาน Template ตรวจเช็ค
 // Activates or deactivates a checklist template
 export async function setServiceTemplateActive(id: string, isActive: boolean): Promise<ServiceTemplate> {
-  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${id}`, {
+  const { serviceTemplate } = await apiFetch<{ serviceTemplate: ServiceTemplate }>(`/service-templates/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({ isActive }),
   });

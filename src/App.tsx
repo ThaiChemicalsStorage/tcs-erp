@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, Briefcase, Package2, Hammer, ShoppingCart,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -48,6 +48,10 @@ const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then(
 const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateManagementPage").then((m) => ({ default: m.TemplateManagementPage })));
 const ScopeOfWorkPage = lazy(() => import("./pages/scopeOfWork/ScopeOfWorkPage").then((m) => ({ default: m.ScopeOfWorkPage })));
 const DeliveryOrderPage = lazy(() => import("./pages/deliveryOrder/DeliveryOrderPage").then((m) => ({ default: m.DeliveryOrderPage })));
+const ProjectPage = lazy(() => import("./pages/project/ProjectPage").then((m) => ({ default: m.ProjectPage })));
+const MaterialRequisitionPage = lazy(() => import("./pages/materialRequisition/MaterialRequisitionPage").then((m) => ({ default: m.MaterialRequisitionPage })));
+const JobOrderPage = lazy(() => import("./pages/jobOrder/JobOrderPage").then((m) => ({ default: m.JobOrderPage })));
+const PurchaseRequestPage = lazy(() => import("./pages/purchaseRequest/PurchaseRequestPage").then((m) => ({ default: m.PurchaseRequestPage })));
 const ServicePage = lazy(() => import("./pages/service/ServicePage").then((m) => ({ default: m.ServicePage })));
 const ServiceTemplateManagement = lazy(() => import("./pages/service/ServiceTemplateManagement").then((m) => ({ default: m.ServiceTemplateManagement })));
 const AccountingPage = lazy(() => import("./pages/accounting/AccountingPage").then((m) => ({ default: m.AccountingPage })));
@@ -126,7 +130,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "products" | "stock" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "products" | "stock" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -175,6 +179,10 @@ const navItems: NavItem[] = [
   { key: "arReceipt", icon: Wallet, labelKey: "nav.arReceipt", permission: "ar:view" },
   { key: "arTaxInvoice", icon: FileText, labelKey: "nav.arTaxInvoice", permission: "ar:view" },
   { key: "arMonthly", icon: CalendarDays, labelKey: "nav.arMonthly", permission: "ar:view" },
+  { key: "project", icon: Briefcase, labelKey: "nav.project", permission: "project:view" },
+  { key: "materialRequisition", icon: Package2, labelKey: "nav.materialRequisition", permission: "materialRequisition:view" },
+  { key: "jobOrder", icon: Hammer, labelKey: "nav.jobOrder", permission: "jobOrder:view" },
+  { key: "purchaseRequest", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "stock", icon: Boxes, labelKey: "nav.stock", permission: "stock:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
@@ -189,6 +197,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
   { labelKey: "nav.group.accounting", keys: ["accountingDashboard", "accounting", "arDeposit", "arBilling", "arReceipt", "arTaxInvoice", "arMonthly"] },
+  { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest"] },
   { labelKey: "nav.group.inventory", keys: ["products", "stock"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
@@ -208,6 +217,10 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   arTaxInvoice: "nav.arTaxInvoice",
   arMonthly: "nav.arMonthly",
   accountingDashboard: "nav.accountingDashboard",
+  project: "nav.project",
+  materialRequisition: "nav.materialRequisition",
+  jobOrder: "nav.jobOrder",
+  purchaseRequest: "nav.purchaseRequest",
   products: "nav.products",
   stock: "nav.stock",
   customers: "nav.customers",
@@ -280,6 +293,10 @@ export default function App() {
   const [scopeOfWorkDeepLink, setScopeOfWorkDeepLink] = useState<{ quotationId: string; scopeOfWorkId: string } | null>(null);
   const [scopeOfWorkDeepLinkId, setScopeOfWorkDeepLinkId] = useState<string | null>(null);
   const [deliveryOrderDeepLinkId, setDeliveryOrderDeepLinkId] = useState<string | null>(null);
+  const [projectDeepLinkId, setProjectDeepLinkId] = useState<string | null>(null);
+  const [materialRequisitionDeepLinkId, setMaterialRequisitionDeepLinkId] = useState<string | null>(null);
+  const [jobOrderDeepLinkId, setJobOrderDeepLinkId] = useState<string | null>(null);
+  const [purchaseRequestDeepLinkId, setPurchaseRequestDeepLinkId] = useState<string | null>(null);
   const [serviceReportDeepLinkId, setServiceReportDeepLinkId] = useState<string | null>(null);
   const [templateCreateForJobType, setTemplateCreateForJobType] = useState<{ jobTypeCode: string; jobTypeName: string; seq: number } | null>(null);
   const templateCreateSeq = useRef(0);
@@ -449,6 +466,22 @@ export default function App() {
   const navigateToDeliveryOrder = (deliveryOrderId: string) => {
     setDeliveryOrderDeepLinkId(deliveryOrderId);
     setActiveNav("deliveryOrder");
+  };
+  const navigateToProject = (projectId: string) => {
+    setProjectDeepLinkId(projectId);
+    setActiveNav("project");
+  };
+  const navigateToMaterialRequisition = (materialRequisitionId: string) => {
+    setMaterialRequisitionDeepLinkId(materialRequisitionId);
+    setActiveNav("materialRequisition");
+  };
+  const navigateToJobOrder = (jobOrderId: string) => {
+    setJobOrderDeepLinkId(jobOrderId);
+    setActiveNav("jobOrder");
+  };
+  const navigateToPurchaseRequest = (purchaseRequestId: string) => {
+    setPurchaseRequestDeepLinkId(purchaseRequestId);
+    setActiveNav("purchaseRequest");
   };
   const navigateToServiceReport = (serviceReportId: string) => {
     setServiceReportDeepLinkId(serviceReportId);
@@ -630,6 +663,25 @@ export default function App() {
   const canFinalizeDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:finalize");
   const canPrintDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:print");
   const canDeleteDeliveryOrder = hasPermission(currentUser, roles, "deliveryOrder:delete");
+  const canViewProject = hasPermission(currentUser, roles, "project:view");
+  const canCreateProject = hasPermission(currentUser, roles, "project:create");
+  const canEditProject = hasPermission(currentUser, roles, "project:edit");
+  const canDeleteProject = hasPermission(currentUser, roles, "project:delete");
+  const canCreateMaterialRequisition = hasPermission(currentUser, roles, "materialRequisition:create");
+  const canEditMaterialRequisition = hasPermission(currentUser, roles, "materialRequisition:edit");
+  const canFinalizeMaterialRequisition = hasPermission(currentUser, roles, "materialRequisition:finalize");
+  const canPrintMaterialRequisition = hasPermission(currentUser, roles, "materialRequisition:print");
+  const canDeleteMaterialRequisition = hasPermission(currentUser, roles, "materialRequisition:delete");
+  const canCreateJobOrder = hasPermission(currentUser, roles, "jobOrder:create");
+  const canEditJobOrder = hasPermission(currentUser, roles, "jobOrder:edit");
+  const canFinalizeJobOrder = hasPermission(currentUser, roles, "jobOrder:finalize");
+  const canPrintJobOrder = hasPermission(currentUser, roles, "jobOrder:print");
+  const canDeleteJobOrder = hasPermission(currentUser, roles, "jobOrder:delete");
+  const canCreatePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:create");
+  const canEditPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:edit");
+  const canFinalizePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:finalize");
+  const canPrintPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:print");
+  const canDeletePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:delete");
   const canCreateService = hasPermission(currentUser, roles, "service:create");
   const canEditService = hasPermission(currentUser, roles, "service:edit");
   const canCompleteService = hasPermission(currentUser, roles, "service:complete");
@@ -836,9 +888,17 @@ export default function App() {
               : effectiveNav === "auditLog"
               ? <AuditLogPage currentUserId={currentUser.id} />
               : effectiveNav === "scopeOfWork"
-              ? <ScopeOfWorkPage company={company} users={users} currentUserId={currentUser.id} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canChasePo={canChasePoScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
+              ? <ScopeOfWorkPage company={company} users={users} currentUserId={currentUser.id} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canChasePo={canChasePoScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} canViewProject={canViewProject} canCreateProject={canCreateProject} onOpenProject={navigateToProject} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
               : effectiveNav === "deliveryOrder"
               ? <DeliveryOrderPage company={company} currentUserId={currentUser.id} canEdit={canEditDeliveryOrder} canFinalize={canFinalizeDeliveryOrder} canPrint={canPrintDeliveryOrder} canDelete={canDeleteDeliveryOrder} canCreate={canCreateDeliveryOrder} initialDeliveryOrderId={deliveryOrderDeepLinkId} onDeliveryOrderIdConsumed={() => setDeliveryOrderDeepLinkId(null)} />
+              : effectiveNav === "project"
+              ? <ProjectPage currentUserId={currentUser.id} canEdit={canEditProject} canDelete={canDeleteProject} canCreateMaterialRequisition={canCreateMaterialRequisition} canCreateJobOrder={canCreateJobOrder} canCreatePurchaseRequest={canCreatePurchaseRequest} onOpenMaterialRequisition={navigateToMaterialRequisition} onOpenJobOrder={navigateToJobOrder} onOpenPurchaseRequest={navigateToPurchaseRequest} initialProjectId={projectDeepLinkId} onProjectIdConsumed={() => setProjectDeepLinkId(null)} />
+              : effectiveNav === "materialRequisition"
+              ? <MaterialRequisitionPage currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
+              : effectiveNav === "jobOrder"
+              ? <JobOrderPage currentUserId={currentUser.id} canEdit={canEditJobOrder} canFinalize={canFinalizeJobOrder} canPrint={canPrintJobOrder} canDelete={canDeleteJobOrder} initialJobOrderId={jobOrderDeepLinkId} onJobOrderIdConsumed={() => setJobOrderDeepLinkId(null)} />
+              : effectiveNav === "purchaseRequest"
+              ? <PurchaseRequestPage currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "service"
               ? <ServicePage currentUserId={currentUser.id} company={company} canCreate={canCreateService} canEdit={canEditService} canComplete={canCompleteService} canDelete={canDeleteService} canPrint={canPrintService} initialServiceReportId={serviceReportDeepLinkId} onServiceReportIdConsumed={() => setServiceReportDeepLinkId(null)} />
               : effectiveNav === "serviceTemplates"
@@ -860,7 +920,7 @@ export default function App() {
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} initialScopeOfWorkDeepLink={scopeOfWorkDeepLink} onScopeOfWorkDeepLinkConsumed={() => setScopeOfWorkDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} initialScopeOfWorkDeepLink={scopeOfWorkDeepLink} onScopeOfWorkDeepLinkConsumed={() => setScopeOfWorkDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} canViewProject={canViewProject} canCreateProject={canCreateProject} onOpenProject={navigateToProject} />
               : effectiveNav === "quotationTemplates"
               ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} currentUserId={currentUser.id} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "customers"

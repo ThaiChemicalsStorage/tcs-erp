@@ -23,6 +23,9 @@ export function ScopeOfWorkPage({
   canViewDeliveryOrder,
   canCreateDeliveryOrder,
   onOpenDeliveryOrder,
+  canViewProject,
+  canCreateProject,
+  onOpenProject,
   initialScopeOfWorkId,
   onScopeOfWorkIdConsumed,
 }: {
@@ -38,6 +41,9 @@ export function ScopeOfWorkPage({
   canViewDeliveryOrder: boolean;
   canCreateDeliveryOrder: boolean;
   onOpenDeliveryOrder: (deliveryOrderId: string) => void;
+  canViewProject: boolean;
+  canCreateProject: boolean;
+  onOpenProject: (projectId: string) => void;
   initialScopeOfWorkId?: string | null;
   onScopeOfWorkIdConsumed?: () => void;
 }) {
@@ -108,6 +114,9 @@ export function ScopeOfWorkPage({
           canViewDeliveryOrder={canViewDeliveryOrder}
           canCreateDeliveryOrder={canCreateDeliveryOrder}
           onOpenDeliveryOrder={onOpenDeliveryOrder}
+          canViewProject={canViewProject}
+          canCreateProject={canCreateProject}
+          onOpenProject={onOpenProject}
           onBack={backToList}
           backLabel={t("scopeOfWorkDoc.backToList")}
           onDuplicated={(newId) => setSelectedId(newId)}

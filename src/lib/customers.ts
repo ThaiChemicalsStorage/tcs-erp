@@ -86,7 +86,7 @@ export async function fetchCustomers(): Promise<Customer[]> {
   return customers;
 }
 export async function fetchCustomer(id: string): Promise<Customer> {
-  const { customer } = await apiFetch<{ customer: Customer }>(`/customers/${id}`);
+  const { customer } = await apiFetch<{ customer: Customer }>(`/customers/${encodeURIComponent(id)}`);
   return customer;
 }
 export async function createCustomer(draft: CustomerDraft): Promise<Customer> {
@@ -94,11 +94,11 @@ export async function createCustomer(draft: CustomerDraft): Promise<Customer> {
   return customer;
 }
 export async function updateCustomer(id: string, fields: Partial<CustomerDraft>): Promise<Customer> {
-  const { customer } = await apiFetch<{ customer: Customer }>(`/customers/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { customer } = await apiFetch<{ customer: Customer }>(`/customers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return customer;
 }
 export async function setCustomerArchived(id: string, isDeleted: boolean): Promise<Customer> {
-  const { customer } = await apiFetch<{ customer: Customer }>(`/customers/${id}/archive`, {
+  const { customer } = await apiFetch<{ customer: Customer }>(`/customers/${encodeURIComponent(id)}/archive`, {
     method: "POST",
     body: JSON.stringify({ isDeleted }),
   });
@@ -108,5 +108,5 @@ export async function setCustomerArchived(id: string, isDeleted: boolean): Promi
 // ออกรหัสจับคู่ LINE อายุ 24 ชม. — เจ้าหน้าที่บอกรหัสให้ลูกค้าพิมพ์ในแชท LINE OA ของบริษัท
 // Issues a 24-hour LINE pairing code — staff tell the customer to type it in the company OA chat
 export async function createLinePairingCode(customerId: string): Promise<{ code: string; expiresAt: string }> {
-  return apiFetch(`/customers/${customerId}/line-pairing`, { method: "POST" });
+  return apiFetch(`/customers/${encodeURIComponent(customerId)}/line-pairing`, { method: "POST" });
 }

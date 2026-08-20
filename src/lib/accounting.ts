@@ -116,17 +116,17 @@ export async function openArMilestone(scopeOfWorkId: string, installmentId: stri
 }
 
 export async function updateArMilestone(id: string, fields: Partial<Pick<ArMilestone, "workClassification" | "retentionPct" | "checklistState">>): Promise<ArMilestone> {
-  const { milestone } = await apiFetch<{ milestone: ArMilestone }>(`/ar-milestones/${id}`, { method: "PATCH", body: JSON.stringify(fields) });
+  const { milestone } = await apiFetch<{ milestone: ArMilestone }>(`/ar-milestones/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return milestone;
 }
 
 export async function refreshArMilestone(id: string): Promise<ArMilestone> {
-  const { milestone } = await apiFetch<{ milestone: ArMilestone }>(`/ar-milestones/${id}/refresh`, { method: "POST" });
+  const { milestone } = await apiFetch<{ milestone: ArMilestone }>(`/ar-milestones/${encodeURIComponent(id)}/refresh`, { method: "POST" });
   return milestone;
 }
 
 export async function uploadArAttachment(milestoneId: string, checklistKey: ArChecklistKey, file: { fileName: string; contentType: string; dataBase64: string }): Promise<ArMilestone> {
-  const { milestone } = await apiFetch<{ milestone: ArMilestone }>(`/ar-milestones/${milestoneId}/attachments`, {
+  const { milestone } = await apiFetch<{ milestone: ArMilestone }>(`/ar-milestones/${encodeURIComponent(milestoneId)}/attachments`, {
     method: "POST",
     body: JSON.stringify({ checklistKey, ...file }),
   });
@@ -134,12 +134,12 @@ export async function uploadArAttachment(milestoneId: string, checklistKey: ArCh
 }
 
 export async function deleteArAttachment(milestoneId: string, attachmentId: string): Promise<ArMilestone> {
-  const { milestone } = await apiFetch<{ milestone: ArMilestone }>(`/ar-milestones/${milestoneId}/attachments/${attachmentId}`, { method: "DELETE" });
+  const { milestone } = await apiFetch<{ milestone: ArMilestone }>(`/ar-milestones/${encodeURIComponent(milestoneId)}/attachments/${encodeURIComponent(attachmentId)}`, { method: "DELETE" });
   return milestone;
 }
 
 export function arAttachmentDownloadUrl(milestoneId: string, attachmentId: string): string {
-  return `/api/ar-milestones/${milestoneId}/attachments/${attachmentId}`;
+  return `/api/ar-milestones/${encodeURIComponent(milestoneId)}/attachments/${encodeURIComponent(attachmentId)}`;
 }
 
 /** Issues the milestone's principal document (AR for a down-payment milestone, IV otherwise) plus a
@@ -205,12 +205,12 @@ export async function deductArDocumentStock(id: string, lines: { productId: stri
 }
 
 export async function fetchArDocument(id: string): Promise<ArDocument> {
-  const { document } = await apiFetch<{ document: ArDocument }>(`/ar-documents/${id}`);
+  const { document } = await apiFetch<{ document: ArDocument }>(`/ar-documents/${encodeURIComponent(id)}`);
   return document;
 }
 
 export async function cancelArDocument(id: string, reason: string): Promise<ArDocument> {
-  const { document } = await apiFetch<{ document: ArDocument }>(`/ar-documents/${id}/cancel`, {
+  const { document } = await apiFetch<{ document: ArDocument }>(`/ar-documents/${encodeURIComponent(id)}/cancel`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });

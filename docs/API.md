@@ -241,6 +241,60 @@ Work/Delivery Order). Full design: [MODULES/Accounting.md](./MODULES/Accounting.
 Numbering: atomic Buddhist-year `{PREFIX}{YY}{MM}{SEQ}` per prefix per month
 (`api/_lib/documentNumbering.ts`, counters `ar_/iv_/bi_/re_{yy}{mm}`), matching the company's real
 "Express" software numbering. Issue/cancel write audit entries (module `"บัญชีลูกหนี้"`).
+## Project (`api/_lib/projectHandler.ts` + `materialRequisitionHandler.ts` + `jobOrderHandler.ts` + `purchaseRequestHandler.ts`, mounted at `/api/projects`, `/api/material-requisitions`, `/api/job-orders`, `/api/purchase-requests` via `api/handlers/quotes.ts` — added 2026-08-18, Stage 3)
+
+Same 12/12-slot-sharing convention as Scope of Work/Delivery Order/AR above (`api/handlers/` is
+exactly 9 files + 3 plain-route files, no headroom — confirmed before this pass). A Project is
+generated from an existing Scope of Work and distributes every item across one of 3 sourcing
+branches, each branch spawning a real sub-document. See [DATABASE.md](./DATABASE.md) "Project
+module" for the full domain-shape writeup and PDF-to-field mapping. **No UI yet** (Stage 4+) — no
+`src/lib` wrapper functions (`fetch*`/`create*`/etc.) exist yet either, unlike every route table
+below this line in the file.
+
+### Project
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/projects?scopeOfWorkId=` | `project:view` | Lists (summary shape) non-deleted Projects for one Scope of Work — an existence check, deliberately unfiltered by `project:viewAll`, same reasoning as Scope of Work's/Delivery Order's identical by-source lookups. |
+| `GET /api/projects` (no `scopeOfWorkId`) | `project:view` | "List every Project company-wide" mode, scoped by `project:viewAll` (own-created-only without it) via `buildSimpleOwnershipClause()` (`api/_lib/visibility.ts`, new — a binary own-vs-viewAll filter, since Stage 2 deliberately gave this module no `:viewTeam`/`:viewDepartment` tiers). Returns `ProjectListItem[]`. |
+| `POST /api/projects` | `project:create` + `scopeOfWork:view` | Body `{ scopeOfWorkId }`. Builds `items: ProjectItem[]` 1:1 from the Scope of Work's non-header items, each starting `sourcingMethod: "unassigned"`/`itemStatus: "pending"`. `404` if the Scope of Work doesn't exist. Returns `201 { project }`. |
+| `GET /api/projects/:id` | `project:view` | Full document. `404` if missing/soft-deleted. |
+| `PATCH /api/projects/:id` | `project:edit` + (owner **or** `project:finalize`) | Top-level fields only — currently just `status` (`"Planning" \| "InProgress" \| "Completed"`). Item-level sourcing assignment is a separate route (below), never this one. |
+| `PATCH /api/projects/:id/items/:itemId` | `project:edit` + (owner **or** `project:finalize`) | Branch pre-assignment only — sets `sourcingMethod` on one item. Does **not** create the sub-document itself. `400` if the item already has one (`itemStatus !== "pending"`) — reassigning here would silently orphan a real sub-document's back-link, so the client must delete/cancel it first. |
+| `POST /api/projects/:id/refresh` | `project:edit` + (owner **or** `project:finalize`) + `scopeOfWork:view` | Reconciles `items` against the Scope of Work's *current* items by id — an item whose id still exists keeps its `sourcingMethod`/`itemStatus`/sub-document links (only the descriptive snapshot refreshes); a new item starts `"unassigned"`/`"pending"`; a removed item simply stops appearing (any sub-document already created against it is left in place, orphaned but harmless — no destructive cleanup). |
+| `DELETE /api/projects/:id` | `project:delete` + (owner **or** `project:finalize`) | Soft delete. No restore endpoint. |
+
+### Material Requisition, Job Order, Purchase Request
+
+All 3 share one route shape (`X` = `material-requisitions` / `job-orders` / `purchase-requests`):
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/X?projectId=` | `{materialRequisition,jobOrder,purchaseRequest}:view` | Lists (summary shape) non-deleted sub-documents for one Project, scoped by the matching `:viewAll` via `buildSimpleOwnershipClause()`. **Material Requisition only (Stage 4 addition)**: omitting `projectId` switches to "list every Material Requisition company-wide" — the standalone list page's own entry point, same dual-mode shape Project's own `GET` uses. Job Order/Purchase Request still require `projectId` (`400` if omitted) — no standalone list page exists for them yet (Stage 5). |
+| `POST /api/X` | `{...}:create` + `project:view` | Body `{ projectId, itemId }` (Material Requisition also accepts an optional `jobOrderId`, resolved/verified server-side against the same Project — see below). **CRITICAL invariant**: validates the target `ProjectItem` exists and is still `"pending"` (`loadPendingProjectItemOrThrow()`, `api/_lib/projectHandler.ts`) *before* inserting anything, then — immediately after the sub-document's own `insertOne()` succeeds — atomically sets that item's `sourcingMethod`/`itemStatus: "documentCreated"`/link field via `linkProjectItemToSubDocument()`, server-derived, never trusting any client-sent value for the link. No multi-document transaction wraps the two writes (this codebase's Mongo deployment/tests are single-node); the validate-before-insert ordering is what makes the sequence safe in practice — see `linkProjectItemToSubDocument()`'s own doc comment. Covered by `tests/api/projectAtomicity.test.ts` (creation link, rejected double-claim, delete-unlinks, finalize-fulfills, reassign-after-claimed rejected). Lines start empty (`[]`) — filled in via a subsequent `PATCH`. Returns `201`. |
+| `GET /api/X/:id` | `{...}:view` | Full document. `404` if missing/soft-deleted. |
+| `PATCH /api/X/:id` | `{...}:edit` + (owner **or** `:finalize`) | `400` if `status === "Final"` (Draft-only, like every other document type in this app). Material Requisition's line sanitizer *requires* a resolvable `productId` per line (rebuilds `productCode`/`productName`/`unit` server-side from the real `Product` record — never trusted from client input, same integrity rule Quotation Templates' product links established); Purchase Request's `productId` is optional (a line can be a one-off item with no catalog entry); Job Order's lines are free-typed (no catalog). Job Order's `scopeChecklist` update only recognizes group/option `key`s the server itself generated and only ever toggles `checked`/a new optional per-option `value` (added to `ChecklistOption`, `src/lib/documentRequirements.ts`) — same "toggle state, never inject structure" rule Scope of Work's `sanitizeChecklistGroups()` enforces. |
+| `POST /api/material-requisitions/:id/return` | `materialRequisition:edit` + (owner **or** `:finalize`) | **Material Requisition only.** Body `{ lines: [{ id, returnQty }], returnedBy?, returnReceivedBy? }` — updates each line's `returnQty` plus the document-level returner/receiver signatures. Deliberately **not** gated by the `status === "Final"` lock the plain `PATCH` above enforces — leftover material is returned via the same original document, after issuance, same "follow-up fields survive Final" exemption Scope of Work's PO-chasing fields use (see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md) "PO Chasing"). |
+| `POST /api/X/:id/finalize` | `{...}:finalize` | `400` if already `"Final"`. Direct Draft → Final (no `PendingApproval` stage, unlike Scope of Work/Delivery Order's full approval workflow — deliberately simpler for this first Stage 3 pass, matching Delivery Order's own original "deliberately simpler" precedent). Also advances the parent `ProjectItem.itemStatus` to `"fulfilled"` (best-effort — resolved via `findProjectItemIdByLink()`, never throws if the link can't be found). |
+| `POST /api/X/:id/print` | `{...}:print` | Writes an audit entry (called right before `window.print()`, once a frontend exists). No required-field validation gate this pass. |
+| `DELETE /api/X/:id` | `{...}:delete` + (owner **or** `:finalize`) | Soft delete. Also resets the parent `ProjectItem` back to `"unassigned"`/`"pending"` and clears the link (best-effort, via `unlinkProjectItem()`) — closes the loop `PATCH /api/projects/:id/items/:itemId`'s own error message points users toward. |
+
+**Numbering**: `MR-{buddhistYear}-{seq}` / `JO-{buddhistYear}-{seq}` / `PR-{buddhistYear}-{seq}`, an
+atomic per-Buddhist-year counter in the shared `counters` collection — same shape as
+`service_reports`' `SR-{year}-{seq}` (`nextServiceReportId()`), deliberately not the real Purchase
+Request reference example's legacy `"ED"` scheme.
+
+**Material catalog seeding**: `ensureMaterialCatalogSeeded()` (`api/_lib/materialCatalogSeedData.ts`)
+is called defensively from `handleMaterialRequisition()`'s entry point — same "seed on first request
+to this resource" pattern `seedJobTypesIfEmpty()`/`seedQuotationTemplatesIfEmpty()` already
+established, guarded by an in-memory one-per-process flag (same convention as `bootstrapRbac()` in
+`rbacSeed.ts`). Inserts the 4 category rows + 82 real catalog items transcribed from
+`public/reference/FM-ST-04_-_Rev.02_1.pdf` through `_4.pdf` into the existing `products`/`categories`
+collections, idempotently.
+
+**RBAC**: 28 permissions (`project`/`materialRequisition`/`jobOrder`/`purchaseRequest`, each
+`:view`/`:viewAll`/`:create`/`:edit`/`:finalize`/`:print`/`:delete`), granted to Administrator/Super
+Admin only by default. See [RBAC.md](./RBAC.md) "Project module".
 
 ## Service Templates + Service Reports (`api/_lib/serviceTemplateHandler.ts` + `api/_lib/serviceReportHandler.ts`, mounted at `/api/service-templates` and `/api/service-reports` via `api/handlers/customers.ts` — added 2026-08-06, Phase 1)
 

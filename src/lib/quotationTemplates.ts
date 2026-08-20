@@ -110,7 +110,7 @@ export async function fetchQuotationTemplates(opts?: { jobTypeCode?: string; inc
 // ดึงข้อมูลเต็มของ Template ใบเสนอราคารายการเดียวตาม id
 // Fetches the full content of a single quotation template by id
 export async function fetchQuotationTemplate(id: string): Promise<QuotationTemplate> {
-  const res = await apiFetch<{ template: QuotationTemplate }>(`/quotation-templates/${id}`);
+  const res = await apiFetch<{ template: QuotationTemplate }>(`/quotation-templates/${encodeURIComponent(id)}`);
   return res.template;
 }
 
@@ -123,7 +123,7 @@ export async function importQuotationTemplates(): Promise<TemplateImportReport> 
 // เปิด/ปิดใช้งาน Template ใบเสนอราคา
 // Activates or deactivates a quotation template
 export async function setQuotationTemplateActive(id: string, isActive: boolean): Promise<QuotationTemplateSummary> {
-  const res = await apiFetch<{ template: QuotationTemplateSummary }>(`/quotation-templates/${id}`, {
+  const res = await apiFetch<{ template: QuotationTemplateSummary }>(`/quotation-templates/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({ isActive }),
   });
@@ -133,7 +133,7 @@ export async function setQuotationTemplateActive(id: string, isActive: boolean):
 // เก็บถาวร/กู้คืน Template ใบเสนอราคา (soft-delete)
 // Archives or restores a quotation template (soft-delete)
 export async function setQuotationTemplateArchived(id: string, isDeleted: boolean): Promise<QuotationTemplateSummary> {
-  const res = await apiFetch<{ template: QuotationTemplateSummary }>(`/quotation-templates/${id}`, {
+  const res = await apiFetch<{ template: QuotationTemplateSummary }>(`/quotation-templates/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify({ isDeleted }),
   });
@@ -153,7 +153,7 @@ export async function createQuotationTemplate(draft: TemplateContentDraft): Prom
 // แก้ไขเนื้อหาทั้งหมดของ Template ใบเสนอราคาที่มีอยู่
 // Updates the full content of an existing quotation template
 export async function updateQuotationTemplate(id: string, draft: TemplateContentDraft): Promise<QuotationTemplate> {
-  const res = await apiFetch<{ template: QuotationTemplate }>(`/quotation-templates/${id}`, {
+  const res = await apiFetch<{ template: QuotationTemplate }>(`/quotation-templates/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(draft),
   });
@@ -163,7 +163,7 @@ export async function updateQuotationTemplate(id: string, draft: TemplateContent
 // ทำสำเนา Template ใบเสนอราคาด้วยรหัสใหม่ (จะไม่เปิดใช้งานทันที)
 // Duplicates a quotation template under a new code (created inactive)
 export async function duplicateQuotationTemplate(id: string, newTemplateCode: string): Promise<QuotationTemplate> {
-  const res = await apiFetch<{ template: QuotationTemplate }>(`/quotation-templates/${id}/duplicate`, {
+  const res = await apiFetch<{ template: QuotationTemplate }>(`/quotation-templates/${encodeURIComponent(id)}/duplicate`, {
     method: "POST",
     body: JSON.stringify({ newTemplateCode }),
   });

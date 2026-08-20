@@ -89,6 +89,71 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
   test page; first-draft coordinates from the owner's photos of the real forms, physical
   calibration still pending — CHANGELOG.md 2026-08-18c). See
   [MODULES/Accounting.md](./MODULES/Accounting.md).
+- ❌ **[2026-08-20] Work Handover Note module removed — confirmed redundant with Delivery Order.**
+  Direct confirmation from two people on the business side: the document this module built
+  (ใบส่งมอบงาน) is the same document the pre-existing **Delivery Order** module (FM-SL-05) already
+  produces, not a distinct 4th Project-module document type. Removed cleanly: `src/lib/workHandover.ts`,
+  `api/_lib/workHandoverHandler.ts` + its mount point, `src/pages/workHandover/`, the entry-point
+  button on `ProjectDocument.tsx`, all 7 `workHandover:*` RBAC permissions, all i18n keys, the guided
+  tour, and `tests/api/workHandover.test.ts` are all gone; the `work_handover_notes` MongoDB
+  collection is left alone (empty/unused, no destructive DB cleanup). **One real gap surfaced by
+  this review, worth tracking**: Delivery Order's print document only ever prints a blank signature
+  line for wet-ink signing — unlike Work Handover Note, it does not capture/embed a real digital
+  customer signature via `SignaturePad`. Not addressed as part of this removal; revisit if digital
+  signature capture on delivery documents becomes a real requirement. See CHANGELOG.md, TODO.md, and
+  [MODULES/Project.md](./MODULES/Project.md) "Work Handover Note — removed 2026-08-20".
+
+- 🟡 **[2026-08-19, removed 2026-08-20 — see entry above] Work Handover Note (ใบส่งมอบงาน) — the 4th
+  Project-module document type, first-draft/unverified.** Direct instruction to build the previously-deferred document Accounting's
+  milestone-billing gate is waiting on (see `docs/MODULES/Accounting.md`). ⚠️ **Unlike Material
+  Requisition/Job Order/Purchase Request, no reference PDF exists for this document** — the structure
+  (customer/site/work-completed-date header, free-typed work-delivered lines, preparer + customer
+  signature blocks via the existing `SignaturePad` component) is inferred purely from the document's
+  known *purpose*, not transcribed from a real paper form; `documentCode` is deliberately left `null`
+  (never invented) pending the real form. Signing (`isSigned`/`signedAt`) — not a Draft/Final
+  "finalize" lock — is the meaningful state transition, matching customer acceptance rather than
+  internal approval; a new `workHandover:sign` permission replaces the `:finalize` every other
+  Project-module document has. **Deliberately does NOT auto-update any Scope of Work billing status**
+  — the Accounting module doesn't exist yet, so this stays a manual signal a human checks. Full stack:
+  `src/lib/workHandover.ts`, `api/_lib/workHandoverHandler.ts` (mounted from `api/handlers/quotes.ts`,
+  same 12-function-slot sharing as the other 3), new `work_handover_notes` collection, 7 new
+  `workHandover:*` permissions (Administrator/Super Admin only by default, same precedent as the rest
+  of the module), standalone `src/pages/workHandover/` page + list + document + print, entry point via
+  a "Create/Open Work Handover Note" button on `ProjectDocument.tsx`, full i18n from the start
+  (40 new key pairs), and a `useModuleTour()` guided tour. 8 new integration tests
+  (`tests/api/workHandover.test.ts`) covering the no-invented-documentCode guarantee, the
+  sign-requires-signature gate, the edit-locked-after-sign rule, and that multiple notes can exist per
+  Project. `tsc` (both configs)/`lint`/`build`/`test` all pass clean (219/219, up from 211). See
+  [MODULES/Project.md](./MODULES/Project.md) "Work Handover Note (first draft, unverified)",
+  CHANGELOG.md. **Marked 🟡, not ✅** — the structure genuinely needs verification against the real
+  paper form once available, and has not had a live-browser walkthrough this session.
+
+- ✅ **[2026-08-18] Project module Stage 6: live browser verification, 3 real bugs found and fixed.**
+  Actually clicked through creating/viewing all 4 document types in a real browser, Thai and English.
+  Found and fixed: (1) every quotation save/duplicate/rewrite/print/workflow-action was silently
+  broken app-wide — `Quote.id` always contains a literal `#`, stripped by browsers as a URL fragment
+  before every id-taking `fetch()` call ever reached the network; fixed across all 18 affected
+  `src/lib/*.ts` files plus the shared server-side `getPathSegments()` decoder. (2) Material
+  Requisition/Job Order/Purchase Request were all permanently unsavable after creation — a
+  full-ISO-timestamp field seeded at creation always failed its own `YYYY-MM-DD`-only validator on
+  save; fixed in all 3 handlers. (3) a free-typed line description could silently clip mid-word in
+  English mode; fixed with a minimum column width. Also found and documented (not fixed — belongs to
+  the Scope of Work module): `ScopeOfWorkItem.id` regenerates on every quotation refresh, so
+  Project's own item-link-preservation promise rarely holds in practice. 7 new regression tests
+  (`tests/api/pathSegments.test.ts` + 3 in `projectAtomicity.test.ts`). `tsc`/`lint`/`build`/`test`
+  all pass clean (211/211, up from 204). See [MODULES/Project.md](./MODULES/Project.md), CHANGELOG.md.
+
+- ✅ **[2026-08-18] Project module Stage 5: Job Order + Purchase Request frontend, plus a full i18n
+  retrofit of the whole module.** Job Order (FM-PJ-01) and Purchase Request (FMPU05) gained full
+  CRUD wrappers + standalone sidebar pages (backend already existed from Stage 3), and Project +
+  Material Requisition — shipped Thai-hardcoded in Stage 4 — were retrofitted onto the app's real
+  `useI18n()`/`t()` system alongside them (232 new th+en key pairs, verified for full key parity via
+  a dedicated script, not just tsc's key-existence check). All 4 print documents and the seeded
+  catalog/checklist content deliberately stay fixed-Thai, matching confirmed precedent from Scope of
+  Work/Delivery Order. All 4 document types (Project, Material Requisition, Job Order, Purchase
+  Request) are now frontend-complete. `tsc`/`lint`/`build`/`test` (204/204, up from 197) all pass
+  clean; no live-browser English-mode walkthrough was possible this session (standing sandboxed
+  limitation). See [MODULES/Project.md](./MODULES/Project.md), CHANGELOG.md.
 
 - ✅ **[2026-08-14] Departments (manageable) + Sales Teams + tiered visibility (own/team/department/
   all).** Direct business request: Sales has 2 teams, each with its own team lead who should only

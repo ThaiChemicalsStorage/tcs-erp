@@ -13,6 +13,10 @@ import type { ScopeOfWork } from "../../src/lib/scopeOfWork.js";
 import type { DeliveryOrder } from "../../src/lib/deliveryOrder.js";
 import type { ServiceTemplate } from "../../src/lib/serviceTemplates.js";
 import type { ServiceReport } from "../../src/lib/serviceReports.js";
+import type { Project } from "../../src/lib/project.js";
+import type { MaterialRequisition } from "../../src/lib/materialRequisition.js";
+import type { JobOrder } from "../../src/lib/jobOrder.js";
+import type { PurchaseRequest } from "../../src/lib/purchaseRequest.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits.
  * (`emailAppPasswordEnc` existed briefly on 2026-08-07 for the since-removed Gmail sending feature;
@@ -737,6 +741,44 @@ export async function stockMovementsCollection() {
   return db.collection<StockMovementFields>("stock_movements");
 }
 
+// ─── Project module (added 2026-08-18, Stage 2 — data layer only, no API routes/UI yet) ──────────
+// See src/lib/project.ts / materialRequisition.ts / jobOrder.ts / purchaseRequest.ts for the full
+// domain-shape doc comments and the PDF-to-field mapping (public/reference/FM-PJ-01, FM-ST-04 x4,
+// -ED6908027). Generated from an existing ScopeOfWork record, same relationship shape as
+// DeliveryOrder — see deliveryOrdersCollection() above.
+
+/** ObjectId-keyed, like scope_of_works/delivery_orders — a Project has no printed document number of
+ * its own (it's an internal grouping record, not a printed document like its 3 sub-document types
+ * below). No uniqueness constraint on scopeOfWorkId, same non-enforced "usually just one" convention
+ * every other Scope-of-Work-derived collection uses. */
+export type ProjectFields = Omit<Project, "id">;
+export async function projectsCollection() {
+  const db = await getDb();
+  return db.collection<ProjectFields>("projects");
+}
+
+/** Business-id-keyed (e.g. "MR-2569-0001"), same convention as quotes/service_reports — the atomic
+ * per-Buddhist-year counter that mints this id is API-layer code, not built yet (Stage 3). */
+export type MaterialRequisitionFields = Omit<MaterialRequisition, "id">;
+export async function materialRequisitionsCollection() {
+  const db = await getDb();
+  return db.collection<MaterialRequisitionFields & { _id: string }>("material_requisitions");
+}
+
+/** Business-id-keyed (e.g. "JO-2569-0001"), same convention as MaterialRequisitionFields above. */
+export type JobOrderFields = Omit<JobOrder, "id">;
+export async function jobOrdersCollection() {
+  const db = await getDb();
+  return db.collection<JobOrderFields & { _id: string }>("job_orders");
+}
+
+/** Business-id-keyed (e.g. "PR-2569-0001"), same convention as MaterialRequisitionFields above. */
+export type PurchaseRequestFields = Omit<PurchaseRequest, "id">;
+export async function purchaseRequestsCollection() {
+  const db = await getDb();
+  return db.collection<PurchaseRequestFields & { _id: string }>("purchase_requests");
+}
+
 /** Creates required indexes across every collection. Idempotent — safe to call repeatedly, but only worth calling from setup/cold paths, not every request. */
 export async function ensureIndexes() {
   const [
@@ -746,6 +788,7 @@ export async function ensureIndexes() {
     notificationTypes, jobTypes, quotationTemplates, scopeOfWorks, deliveryOrders,
     scopeAttachmentFiles, serviceTemplates, serviceReports, serviceChecklistPhotoFiles,
     arMilestones, arAttachmentFiles, arDocuments, stockMovements,
+    projects, materialRequisitions, jobOrders, purchaseRequests,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -758,6 +801,7 @@ export async function ensureIndexes() {
     serviceChecklistPhotoFilesCollection(),
     arMilestonesCollection(), arAttachmentFilesCollection(), arDocumentsCollection(),
     stockMovementsCollection(),
+    projectsCollection(), materialRequisitionsCollection(), jobOrdersCollection(), purchaseRequestsCollection(),
   ]);
 
   await Promise.all([
@@ -842,6 +886,23 @@ export async function ensureIndexes() {
     // Product Stock (added 2026-08-18)
     stockMovements.createIndex({ productId: 1, createdAt: -1 }),
     stockMovements.createIndex({ sourceType: 1, sourceId: 1 }),
+
+    // Project module (added 2026-08-18, Stage 2).
+    projects.createIndex({ scopeOfWorkId: 1 }),
+    projects.createIndex({ status: 1 }),
+    projects.createIndex({ isDeleted: 1 }),
+    materialRequisitions.createIndex({ projectId: 1 }),
+    materialRequisitions.createIndex({ scopeOfWorkId: 1 }),
+    materialRequisitions.createIndex({ status: 1 }),
+    materialRequisitions.createIndex({ isDeleted: 1 }),
+    jobOrders.createIndex({ projectId: 1 }),
+    jobOrders.createIndex({ scopeOfWorkId: 1 }),
+    jobOrders.createIndex({ status: 1 }),
+    jobOrders.createIndex({ isDeleted: 1 }),
+    purchaseRequests.createIndex({ projectId: 1 }),
+    purchaseRequests.createIndex({ scopeOfWorkId: 1 }),
+    purchaseRequests.createIndex({ status: 1 }),
+    purchaseRequests.createIndex({ isDeleted: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)
