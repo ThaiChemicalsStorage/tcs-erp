@@ -4,7 +4,52 @@
 
 ---
 
-## 2026-08-20j (absolute latest) — Delivery Order can be routed to departments; the two department lists are found to be disconnected
+## 2026-08-20k (absolute latest) — Quotation's product picker now excludes the 4 internal-only store categories
+
+> Developed in parallel by the other workstream (Iggy14, committed 14:24) and merged in after
+> 2026-08-20j. Relabelled from its original "2026-08-20b" — that letter was already taken by the
+> RE create-entry-point entry below; content otherwise unchanged.
+
+Direct decision: resolve the "internal-only SKUs leaking into Quotation's picker" TODO item via a
+**category-level filter**, not a per-product `customer-facing`/`internal-only` flag on `Product`.
+
+- **Investigated first**: confirmed `ProductPickerModal` is a dumb, presentational component (just
+  `products: Product[]` + `categories: ProductCategory[]` props, no fetching or filtering of its
+  own) shared by 4 call sites — `LineItemsEditor.tsx` (Quotation, the only one unfiltered),
+  `MaterialRequisitionDocument.tsx`/`PurchaseRequestDocument.tsx` (already filtered *to* the 4
+  material categories since Project module Stage 2), and `TemplateEditorView.tsx` (Quotation
+  Templates admin editor — untouched by this pass, out of the scope that was decided). Also
+  confirmed a reusable constant already existed for exactly this purpose:
+  `MATERIAL_CATEGORY_NAMES` (`src/lib/materialRequisition.ts`), the same one Material
+  Requisition/Purchase Request already filter their own pickers with — reused here inverted, rather
+  than inventing a second source of truth for which categories are internal-only.
+- **`src/pages/quotation/LineItemsEditor.tsx`** — the only Quotation-module caller of
+  `ProductPickerModal` (confirmed via `LineItemsEditor`'s own single caller, `QuoteDocument.tsx`).
+  Added a `quotationProducts` filter, computed right before the picker's render, that excludes any
+  product whose category name is in `MATERIAL_CATEGORY_NAMES` (เคมี/เรซิ่น, วัสดุสิ้นเปลือง,
+  น็อตและสกรู, อื่นๆ (คลัง)) — passed to `ProductPickerModal` in place of the raw `products` prop.
+  A code comment at the filter site records *why* and the known limitation (see below).
+- **Scoped narrowly, on purpose**: the filter lives inside `LineItemsEditor.tsx`, not in
+  `App.tsx`'s shared `products`/`categories` state (also consumed by the Products admin page and
+  Quotation Templates) and not in `QuoteDocument.tsx` — so nothing else that reads that shared state
+  changes behavior. Material Requisition/Purchase Request are structurally unaffected either way:
+  both fetch their own `products`/`categories` independently (`fetchProducts()`/`fetchCategories()`
+  inside their own `Document.tsx`, not from `App.tsx`'s state) and keep their own existing
+  include-filter unchanged.
+- **Known limitation, recorded in both the code comment and TODO.md**: this is a **category-level**
+  assumption, not a per-product flag. If a future product added to one of these 4 categories should
+  actually be customer-facing, or a product in an existing customer-facing category becomes
+  internal-only, this filter won't catch it — revisit then, or at that point it may be worth adding
+  a real per-product flag instead.
+- Docs updated: `TODO.md` (the High-Priority deferred-risk item moved to Completed, rewritten to
+  record the resolution and the known limitation).
+
+`npx tsc --noEmit` (both configs), `npm run lint`, `npm run build`, and `npm test` all verified
+clean after the change.
+
+---
+
+## 2026-08-20j — Delivery Order can be routed to departments; the two department lists are found to be disconnected
 
 **Feature**: The owner corrected an assumption from the Production pass and asked for department
 routing on ใบส่งมอบงาน: *"ทำให้แผนกที่เกี่ยวข้องมีโมดูลทำใบส่งมอบงานเป็นของตัวเอง เวลาเซลล์ติ๊กส่งมาให้
@@ -584,7 +629,7 @@ required PO-copy/delivery-note checklist before "ออกเอกสาร" is
 
 ---
 
-## 2026-08-18p (absolute latest) — Accounting/Stock i18n gap closed: full English translation for every on-screen page
+## 2026-08-18p — Accounting/Stock i18n gap closed: full English translation for every on-screen page
 
 **Feature**: Owner-reported live (screenshot): switching the UI language to English (Settings →
 Profile) correctly translated the sidebar nav labels but left the entire "บัญชี" (Accounting) section
@@ -1150,7 +1195,7 @@ pass — the manual checks (duplicate-guard 400, milestone close/reopen, deposit
 primed `PQ202608-01-LI-SK`, monthly totals, RE print layout) are itemized in TODO.md High Priority.
 Deliberate limitation carried forward: receipts always equal the invoice net (WHT/bank-fee
 reconciliation remains Phase 2).
-## 2026-08-20 (absolute latest) — Work Handover Note module removed, confirmed redundant with Delivery Order (FM-SL-05)
+## 2026-08-20 — Work Handover Note module removed, confirmed redundant with Delivery Order (FM-SL-05)
 
 Direct confirmation from two people on the business side: the document the Work Handover Note
 module (built the previous day, 2026-08-19c below) was meant to fill a gap for — ใบส่งมอบงาน — is the
