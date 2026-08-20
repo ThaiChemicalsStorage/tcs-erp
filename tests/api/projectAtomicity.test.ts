@@ -103,7 +103,10 @@ beforeAll(async () => {
     paymentConditions: { installments: [], description: "", notes: "" },
     documentRecipients: {}, documentRecipientMessage: "", revisionNote: "", remarks: "",
     seller: { name: "", userId: "", date: "" }, approver: { name: "", userId: "", date: "" },
-    status: "Draft", version: 1,
+    // "Final" (อนุมัติแล้ว) is required by handleCreate() as of 2026-08-20 — a Draft/PendingApproval
+    // scope can no longer open a project. These tests are about the item<->sub-document link, not
+    // the approval gate (which has its own test below), so the fixture starts already approved.
+    status: "Final", version: 1,
     createdAt: "2026-08-18T00:00:00.000Z", updatedAt: "2026-08-18T00:00:00.000Z", createdBy: "", updatedBy: "", isDeleted: false,
   });
   scopeOfWorkId = result.insertedId.toString();
@@ -250,5 +253,52 @@ describe("Material Requisition/Job Order/Purchase Request: immediate re-save aft
 
     const saved = await call("PATCH", `/api/purchase-requests/${purchaseRequest.id}`, { lines: [] });
     expect(saved.statusCode, JSON.stringify(saved.body)).toBe(200);
+  });
+});
+
+/**
+ * เปิดโครงการได้เฉพาะ Scope of Work ที่อนุมัติแล้ว (Final) — ตามคำสั่งเจ้าของ 2026-08-20
+ * "ให้ scope of work อนุมัติผ่านก่อนถึงจะกดสร้างโครงการได้"
+ *
+ * The picker (ProjectSourcePickers.tsx) also disables non-Final rows, but that is presentation
+ * only — this asserts the server-side gate, which is what actually holds.
+ */
+describe("a project can only be opened from an approved (Final) Scope of Work", () => {
+  const insertScopeWithStatus = async (status: string, scopeNumber: string): Promise<string> => {
+    const db = client.db("tcs_erp");
+    const { insertedId } = await db.collection("scope_of_works").insertOne({
+      scopeNumber, yearMonth: "", jobSequence: 0, secondaryCode: "",
+      quotationId: "Q-GATE-01", quotationNumber: "Q-GATE-01", jobTypeCode: "LI", jobTypeName: "FRP Lining",
+      quotationSalesperson: "", issueDate: "2026-08-20", deliveryDate: "", drawingCode: "", customerPoNumber: "",
+      customerSnapshot: { companyName: "Gate Co.", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" },
+      deliveryLocation: "", shippingContact: "", shippingPhone: "", billingContact: "", billingPhone: "",
+      checklistGroups: [],
+      items: [{ id: "g-1", name: "Item", specifications: [], quantity: 1, unit: "ชุด", isSectionHeader: false }],
+      paymentConditions: { installments: [], description: "", notes: "" },
+      documentRecipients: {}, documentRecipientMessage: "", revisionNote: "", remarks: "",
+      seller: { name: "", userId: "", date: "" }, approver: { name: "", userId: "", date: "" },
+      status, version: 1,
+      createdAt: "2026-08-20T00:00:00.000Z", updatedAt: "2026-08-20T00:00:00.000Z", createdBy: "", updatedBy: "", isDeleted: false,
+    });
+    return insertedId.toString();
+  };
+
+  it("refuses a Draft Scope of Work", async () => {
+    const id = await insertScopeWithStatus("Draft", "GATE-DRAFT-01");
+    const res = await call("POST", "/api/projects", { scopeOfWorkId: id });
+    expect(res.statusCode).toBe(400);
+    expect(String((res.body as { error?: string }).error)).toContain("ยังไม่ได้รับการอนุมัติ");
+  });
+
+  it("refuses a PendingApproval Scope of Work", async () => {
+    const id = await insertScopeWithStatus("PendingApproval", "GATE-PENDING-01");
+    const res = await call("POST", "/api/projects", { scopeOfWorkId: id });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("allows a Final Scope of Work", async () => {
+    const id = await insertScopeWithStatus("Final", "GATE-FINAL-01");
+    const res = await call("POST", "/api/projects", { scopeOfWorkId: id });
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
   });
 });

@@ -4,7 +4,42 @@
 
 ---
 
-## 2026-08-20e (absolute latest) — Audited both modules against the owner's real spec; Project gets its own "+ สร้าง" flows
+## 2026-08-20f (absolute latest) — A project can only be opened from an APPROVED (Final) Scope of Work
+
+**Feature**: Direct request — *"ให้ scope of work อนุมัติผ่านก่อนถึงจะกดสร้างโครงการได้ที่ขึ้นมาในหน้าสร้างโครงการ"*.
+Until now a Draft or PendingApproval Scope of Work could spawn a Project; this gap was flagged by the
+2026-08-20e spec audit and is now closed.
+
+**Why it matters beyond tidiness**: a non-Final scope can still have its items edited. Opening a
+project early means the Material Requisitions / Job Orders / Purchase Requests already issued against
+those items can end up referencing things the job no longer contains — and worse, a Scope of Work
+refresh regenerates every `ScopeOfWorkItem.id`, which silently orphans the sub-document links (see
+[MODULES/Project.md](./MODULES/Project.md)). Gating on Final removes the window where that happens.
+
+**Files Modified**: `api/_lib/projectHandler.ts` — `handleCreate()` now rejects any scope whose
+`status !== "Final"` with a Thai 400, checked right after the scope loads. **This is the real
+enforcement**; the UI changes below are presentation only.
+`src/pages/project/ProjectSourcePickers.tsx` — non-Final rows render **disabled with a "ยังไม่อนุมัติ"
+label rather than hidden**, matching the sibling "มีโครงการแล้ว" treatment already in the same dialog,
+so the user can see *why* a job isn't selectable instead of wondering where it went.
+`src/pages/quotation/ScopeOfWorkDocument.tsx` — the "สร้างโครงการ" button is disabled with an
+explanatory tooltip when the open scope isn't Final, but **stays enabled when a project already
+exists**, since it's then just an "open project" shortcut rather than a create action.
+`src/lib/i18n.tsx` (+3 key pairs), `tests/api/projectAtomicity.test.ts`.
+
+**Tests**: the new gate immediately broke 8 existing tests in `projectAtomicity.test.ts`, whose
+fixture scope was `status: "Draft"` — good evidence the gate actually bites. Those tests are about the
+item-to-sub-document atomic link, not approval, so the fixture moved to `"Final"` (with a comment
+explaining why) and a dedicated 3-case block was added for the gate itself: Draft refused,
+PendingApproval refused, Final accepted. **241 tests total, up from 238.**
+
+**Verified**: `tsc` (both configs) / `lint` (0 errors) / `build` / `test` (241/241) all clean. Not yet
+click-tested in a live browser — the automated browser still cannot reach this machine's dev server
+(proven in 2026-08-20e).
+
+---
+
+## 2026-08-20e — Audited both modules against the owner's real spec; Project gets its own "+ สร้าง" flows
 
 **Why**: The owner supplied the full business spec for both live workstreams for the first time —
 the 4 accounting documents + "Flow การทำงานของบัญชี-รับ" (3 cases) + 2 Express improvement requests,

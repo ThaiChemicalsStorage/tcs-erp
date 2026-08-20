@@ -17,8 +17,10 @@ no `status === "Final"` lock (the plain `PATCH` does), so returns still work aft
 - **The module gives no pointer to ใบส่งมอบงาน.** Correctly not rebuilt (it's the Delivery Order
   module — see the removal note below), but nothing inside the Project pages links to it, so a user
   following the spec's workflow has no path there.
-- **`POST /api/projects` does not require the Scope of Work to be finalized** — a Draft scope can
-  spawn a project.
+- ~~**`POST /api/projects` does not require the Scope of Work to be finalized**~~ — **closed
+  2026-08-20**: `handleCreate()` now rejects any scope whose `status !== "Final"`, and both entry
+  points (the create picker and the Scope of Work document's own button) surface why. See "Approval
+  gate" below.
 - **`POST /:id/return` has no test coverage and no quantity validation** — a return larger than what
   was withdrawn is accepted, and nothing reconciles it against the withdrawal quantities.
 - **Reference-PDF fidelity is unverifiable from this repo** — all 6 named PDFs live under the
@@ -432,3 +434,29 @@ still goes through the same `POST /api/{material-requisitions,job-orders,purchas
 
 Verified via `tsc` (both configs)/`lint`/`build`/`test` (238/238). **Not yet click-tested in a real
 browser** — tracked in [`../TODO.md`](../TODO.md).
+
+## Approval gate: only a Final Scope of Work can open a project (added 2026-08-20)
+
+Direct instruction: *"ให้ scope of work อนุมัติผ่านก่อนถึงจะกดสร้างโครงการได้"*. `handleCreate()`
+(`api/_lib/projectHandler.ts`) rejects any source scope whose `status !== "Final"` with a Thai 400,
+checked immediately after `loadScopeOrThrow()`.
+
+**Why this is a correctness fix, not just policy**: a Draft/PendingApproval scope can still have its
+items edited. Opening a project against one means sub-documents (Material Requisition / Job Order /
+Purchase Request) can be issued for items the job later drops or changes — and because a Scope of
+Work refresh regenerates every `ScopeOfWorkItem.id` (see the Business Flow section above), those
+sub-document links get silently orphaned rather than updated. Gating on Final closes that window.
+
+**Both entry points reflect it, but neither enforces it** — the server check is the only thing that
+actually holds:
+- The create picker (`ProjectSourcePickers.tsx`) renders a non-Final scope **disabled with a
+  "ยังไม่อนุมัติ" label rather than hiding it**, the same treatment its sibling "มีโครงการแล้ว" case
+  already used, so a user can see why their job isn't selectable.
+- `ScopeOfWorkDocument.tsx`'s "สร้างโครงการ" button is disabled with an explanatory tooltip when the
+  open scope isn't Final — but **stays enabled when a project already exists**, because it is then an
+  "open project" shortcut, not a create action.
+
+Covered by `tests/api/projectAtomicity.test.ts`: Draft refused, PendingApproval refused, Final
+accepted. Adding the gate also broke 8 pre-existing tests whose fixture was `status: "Draft"`,
+confirming it genuinely bites; that fixture is now `"Final"` since those tests target the
+item-to-sub-document link rather than approval.

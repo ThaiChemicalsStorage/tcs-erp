@@ -101,13 +101,17 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect }: {
               <div className="space-y-1.5">
                 {filtered.map((s) => {
                   const taken = Boolean(existingByScope[s.id]);
+                  // เฉพาะงานที่อนุมัติแล้ว (Final) เท่านั้นที่เปิดโครงการได้ — ตรงกับด่านฝั่งเซิร์ฟเวอร์ใน
+                  // handleCreate() (api/_lib/projectHandler.ts) ซึ่งเป็นตัวบังคับจริง
+                  const notApproved = s.status !== "Final";
                   return (
-                    <button key={s.id} onClick={() => { setBusyId(s.id); onSelect(s.id); }} disabled={taken || busyId !== null} className={rowButton}>
+                    <button key={s.id} onClick={() => { setBusyId(s.id); onSelect(s.id); }} disabled={taken || notApproved || busyId !== null} className={rowButton}>
                       <div className="min-w-0">
                         <p className="text-sm font-mono font-medium text-foreground truncate">{s.scopeNumber}</p>
                         <p className="text-xs text-muted-foreground truncate">{s.customerName} · {s.quotationNumber}</p>
                       </div>
                       {busyId === s.id ? <Loader2 size={14} className="animate-spin text-muted-foreground flex-shrink-0" />
+                        : notApproved ? <span className="text-xs text-[#a75d1a] flex-shrink-0">{t("project.picker.scope.notApproved")}</span>
                         : taken ? <span className="text-xs text-muted-foreground flex-shrink-0">{t("project.picker.scope.alreadyHasProject")}</span>
                         : null}
                     </button>

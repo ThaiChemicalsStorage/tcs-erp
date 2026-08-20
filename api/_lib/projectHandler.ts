@@ -256,6 +256,16 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const scopeOfWorkId = typeof body.scopeOfWorkId === "string" ? body.scopeOfWorkId.trim() : "";
   if (!scopeOfWorkId) throw new HttpError(400, "กรุณาระบุ Scope of Work");
   const scope = await loadScopeOrThrow(scopeOfWorkId);
+  // เปิดโครงการได้เฉพาะงานที่อนุมัติแล้ว (Final) เท่านั้น — งานที่ยังเป็นฉบับร่างหรือรออนุมัติ ยังแก้ไข
+  // รายการได้อยู่ ถ้าเปิดโครงการไปก่อนแล้วรายการเปลี่ยนทีหลัง ใบเบิก/ใบสั่งงาน/ใบขอซื้อที่ออกไปแล้วจะอ้าง
+  // ของที่ไม่ตรงกับงานจริง (ซ้ำร้ายกว่านั้น การ refresh ฝั่ง Scope of Work สร้าง item id ใหม่ทุกครั้ง ทำให้
+  // ลิงก์ของเอกสารลูกหลุดไปเลย — ดู docs/MODULES/Project.md)
+  //
+  // Server-side gate, not just a UI filter: the picker in ProjectSourcePickers.tsx disables
+  // non-Final rows, but that is presentation only and this is the check that actually holds.
+  if (scope.status !== "Final") {
+    throw new HttpError(400, "Scope of Work นี้ยังไม่ได้รับการอนุมัติ (ต้องเป็นสถานะ Final ก่อนจึงจะเปิดโครงการได้)");
+  }
 
   const now = nowIso();
   const doc: ProjectFields = {

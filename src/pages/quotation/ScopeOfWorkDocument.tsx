@@ -710,7 +710,14 @@ export function ScopeOfWorkDocument({
             </button>
           )}
           {canViewProject && canCreateProject && (
-            <button onClick={handleProjectClick} disabled={projectBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button
+              onClick={handleProjectClick}
+              // เปิดโครงการใหม่ได้เฉพาะงานที่อนุมัติแล้ว (Final) — ตรงกับด่านฝั่งเซิร์ฟเวอร์ใน handleCreate()
+              // ถ้ามีโครงการอยู่แล้ว ปุ่มนี้เป็นแค่ทางลัด "เปิดโครงการ" จึงกดได้เสมอไม่ว่าสถานะใด
+              disabled={projectBusy || (!existingProject && scope.status !== "Final")}
+              title={!existingProject && scope.status !== "Final" ? t("scopeOfWorkDoc.createProjectNeedsFinal") : undefined}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            >
               <Briefcase size={13} /> {existingProject ? t("scopeOfWorkDoc.openProject") : t("scopeOfWorkDoc.createProject")}
             </button>
           )}
