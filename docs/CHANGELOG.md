@@ -4,7 +4,187 @@
 
 ---
 
-## 2026-08-20k (absolute latest) — Quotation's product picker now excludes the 4 internal-only store categories
+## 2026-08-21b (absolute latest) — Service: attaching a photo now saves the draft first, instead of 404-ing on a just-added checklist item
+
+User report: *"หน้าเซอร์วิสเวลากดเพิ่มอะไรไปแล้วจะเพิ่มรูป มันเพิ่มไม่ได้ มันต้องกดบันทึกร่างก่อน"*.
+Investigated before building (owner asked to be consulted first), which turned up **two different
+causes** behind the same symptom — worth separating, because only one of them was a bug:
+
+**Case B — the actual defect (fixed).** On a saved Draft, adding a checklist item puts it in
+`ServiceReportEditor`'s local state only. `handlePhotoUpload()` resolves its target with
+`findChecklistItemPath(doc.checklist, …)` against the **saved** document, so attaching a photo to
+that item returned **404 "ไม่พบรายการตรวจเช็ค"** — the photo button was not disabled, so the user
+got what looks like a broken feature, with no hint that pressing "บันทึกร่าง" first would fix it.
+
+`handleUploadPhoto()` now PATCHes the draft before uploading — the same save-then-act shape
+`handleSendApproval()` already used. Saving *before* the upload is what keeps this compatible with
+the 2026-08-07 rule that a photo **response** must never go through `applyServerReport()`: that
+response is still applied photos-only, so the upload itself cannot clobber unsaved edits.
+
+**Case A — not a bug, and not fixed by this pass.** On a brand-new report (`serviceReportId ===
+"new"`) the checklist is a deliberate read-only preview of the master template: the whole control is
+disabled (`disabled={!isEditable || isNew}`), `structureEditable` is false, and `displayChecklist`
+discards local edits. The photo strip only renders once an item has a status, so on a new report
+**there is no photo button to press at all** — the "แนบรูปภาพได้หลังสร้างรายงานร่างแล้ว" copy
+describes a control that never appears. Auto-saving cannot fix this without first making the
+checklist editable pre-create, which is a real redesign of that flow rather than a bug fix. Left
+alone and raised with the owner; see [TODO.md](./TODO.md).
+
+**Test**: `tests/api/serviceReportPhotoUnsavedItem.test.ts` (new, 3 cases) pins the *server* contract
+the client fix depends on, in both directions — upload to an unsaved item key 404s, the same upload
+succeeds once a PATCH has persisted the item, and an item key that never existed still 404s. Writing
+it corrected a wrong assumption: the upload route returns **200**, not 201, since the photo is a
+field on the report rather than a new addressable resource.
+
+**Verified live in a browser**, end to end, against the local dev DB: added a checklist item to
+Draft SR-2569-0003, marked it ผิดปกติ, attached a photo without ever pressing "บันทึกร่าง" — upload
+succeeded, 0 console errors, and MongoDB showed the new item persisted with its photo attached. The
+test data was then removed through the UI, which also confirmed the documented orphaned-photo-bytes
+cleanup: the `service_checklist_photo_files` row for the deleted item's photo is gone, and the
+report's pre-existing photo is untouched.
+
+Verified: `tsc --noEmit` clean, `npm run lint` 0 errors, `npm run build` clean, `npm test` 264/264.
+
+### Same day, second Service defect: photos attached to a **ปกติ** item never printed
+
+Reported right after the above: *"เวลากดปริ้น ถ้ากดปกติแล้วแนบรูปไป รูปมันไม่ขึ้น"*. A different bug
+with the same shape — the editor accepts something the rest of the system then throws away.
+
+`ServiceReportPrintDocument.tsx` built its detail section from `status === "abnormal"` alone. But the
+editor renders the photo strip for `isAbnormal || isNormal`, so a photo could be attached to a Normal
+item, uploaded, and stored — and then silently omitted from the printed report, the one artifact the
+customer actually receives.
+
+- The filter is now **"abnormal, or carries photos at all"**, keyed off `photos.length` rather than
+  off `status === "normal"` so a status added later cannot re-open the same hole (a measurement item
+  with a photo prints too).
+- Because the section now mixes both kinds, each entry carries an explicit **ปกติ / NORMAL** or
+  **ผิดปกติ / ABNORMAL** marker, and the heading changed from "รายละเอียดรายการที่พบความผิดปกติ /
+  Abnormal Findings" to "รายละเอียดรายการตรวจเช็คและรูปภาพประกอบ / Inspection Details & Photos"
+  (or "รูปภาพประกอบการตรวจเช็ค" when nothing abnormal was found). Not decoration: this document goes
+  to the customer, and listing a passed item under an "Abnormal Findings" heading with nothing to
+  distinguish it would misrepresent the inspection.
+- The detail line is now omitted when empty, instead of printing a bare "ผลการตรวจ / สิ่งที่พบ:".
+
+**Shipped as a hotfix** at the owner's request ("แผนกเซอร์วิสบัค"): committed and pushed on its own,
+ahead of the manual work sitting in the same working tree. `tsc --noEmit` clean. **The printed output
+was not visually confirmed** — clicking the real พิมพ์ button opened Chrome's native print dialog,
+which blocks all further browser automation; verification is pending and tracked in
+[TODO.md](./TODO.md). The CHANGELOG/TODO/SESSION_LOG entries for the manual work follow in the next
+commit.
+
+---
+
+## 2026-08-21 — User manual brought up to date: 5 new chapters, restructured to mirror the sidebar, real screenshots, + 6 manual-toolchain bugs fixed
+
+The live manual (`public/manual.html`) had been frozen at its 2026-08-14 edition and was missing
+**every module shipped since**: Accounting, Project, Production, Product Stock, Departments & Teams,
+and Delivery Order's department routing. It documented 15 chapters against an app that now has 8 nav
+groups and 28 nav entries.
+
+**⚠️ Correction to a standing claim repeated across TODO.md and several CHANGELOG entries since
+2026-08-20e: "the automated browser cannot reach this machine's dev server" is FALSE.** Playwright
+drove `localhost:3000` without any trouble this session — and `.playwright-mcp/` already held
+transcripts from 2026-08-18, so it had worked before that claim was written. Every "verified by
+tests/typecheck only, no live session was possible" item in TODO.md rests on this premise and should
+be re-read as "not yet attempted", not "not possible".
+
+### Manual content
+
+- **Restructured from 15 to 20 chapters, reordered to match the app's actual sidebar groups.**
+  A scripted reorder (old→new: 8→10, 9→15, 10→8, 11→9, 12→17, 13→18, 14→19, 15→20) moved sections
+  and rewrote every `id`/`.ch-no`/`href="#chN"`/"บทที่ N" token together, so the 20 prose
+  cross-references still resolve. The `<!-- ═══ N ═══ -->` markers were realigned afterwards (they
+  travel with the *previous* block when splitting on `<section`, so they all pointed one chapter off).
+- **5 new chapters**: 11 บัญชี-รับ (4 document types + numbering scheme, the create-and-pick วางบิล
+  flow, the RE entry point, why BI has no create button, the dashboard's deliberate filter
+  asymmetry, monthly summary, NCR printing), 12 โครงการ, 13 ใบเบิก/ใบสั่งงาน/ใบขอซื้อ (incl. the
+  shared 4-document approval workflow and the same-document return rule), 14 ใบสั่งผลิต (3 row
+  types, the 5 signatory blocks and their 3 different signing times), 16 สต๊อกสินค้า.
+- **Chapter 2 rewritten** against the real `navItems`/`NAV_GROUPS` — all 8 groups, a "ดูบทที่" column,
+  and an explicit note that ใบส่งมอบสินค้า appearing in 3 groups is intentional, not a bug.
+- **Chapter 7** gained the department-routing section, including the prerequisite that departments
+  and per-user department values must be set up first or the feature reaches nobody.
+- **Chapter 17** gained แผนกและทีม, and its user-department list was corrected — it still named the
+  hardcoded `DOCUMENT_RECIPIENT_DEPARTMENTS` values, but that form has sourced from the real
+  `departments` collection since 2026-08-14.
+- **7 new FAQ rows** covering the failure modes most likely to be mistaken for breakage.
+
+### Screenshots
+
+12 new captures from a real signed-in session (`1536×782`, matching the existing set): accounting
+dashboard, วางบิลตามงาน, BI list, monthly summary, project, material requisition, job order,
+purchase request, production order, stock, departments, plus a full-height `sidebar.png`.
+`15-service-create.jpg` — on disk since 2026-08-14 but **never referenced by any chapter** — is now
+placed in chapter 10.
+
+### Layout
+
+- **Group dividers** (`.part`) between chapter blocks and a **grouped side nav**, both labelled with
+  the same group names the app's sidebar uses, so the manual's structure maps onto what the reader
+  sees on screen. A flat list of 20 was the alternative.
+- **Every `<img>` now carries real `width`/`height`.** They were `loading="lazy"` with no intrinsic
+  size, so the browser reserved zero height for unfetched images and the page grew underneath the
+  scroll position — jumping to `#ch11` actually landed on chapter 7. Verified fixed in-browser.
+- **Scrollspy rewritten.** The old callback let "whichever entry came last in this batch" win, but
+  `IntersectionObserver` does not guarantee document order, and nothing removed `active` when a
+  section left the band. It now tracks the visible set and always highlights the topmost one.
+- **Favicon declared** — the manual opens in its own tab and was 404-ing on `/favicon.ico`.
+
+### `docs/manual/generate-pdf.mjs` — three bugs, one of them a security regression
+
+1. **It rendered the superseded source.** It read `docs/manual/user-manual.html` (frozen 2026-08-07),
+   not the maintained `public/manual.html`. The documented one-command path produced a stale PDF.
+2. **It wrote into `public/`.** Its output path was `public/คู่มือการใช้งาน TCS ERP.pdf` — a file
+   deliberately **moved out of `public/`** by `c2f91b5` ("Move real customer/company documents out of public/ —
+   data-exposure fix") because `public/` is served with no authentication. Running the script as
+   documented would have silently restored a PDF of real customer names and amounts to an
+   unauthenticated URL. Output now defaults to gitignored `dist-manual/`, and writing anywhere under
+   `public/` is refused outright.
+3. **It loaded over `file://`**, where the manual's absolute `/manual-images/…` paths resolve to the
+   filesystem root — every figure would have printed blank. It now loads over HTTP from the running
+   app, forces the lazy images eager, waits for them, and **fails loudly** if any did not load.
+
+Comments in `src/App.tsx` and `docs/manual/user-manual.html` describing that PDF as "kept on disk but
+no longer linked" were made specific rather than corrected — that wording was accurate, just vague
+about *where*. `c2f91b5` moved the file, it did not destroy it: it is untracked and gitignored at
+`reference/company/คู่มือการใช้งาน TCS ERP.pdf`, the same place that commit put the other real
+customer/company documents it pulled out of `public/`. An earlier draft of this entry claimed the
+file was "deleted … gone, not merely unlinked"; that was wrong and is corrected here before it could
+be quoted onward. What is true is that it is no longer *served* — nothing under `public/` points at
+it and nothing in the app links to it.
+
+### Follow-up the same day: the superseded manual was deleted outright
+
+With `generate-pdf.mjs` repointed, **nothing in the repo read `docs/manual/user-manual.html` any
+more**. Confirmed with the owner, then deleted it along with `docs/manual/images/` (14 screenshots,
+868 KB, referenced by that file and nothing else — verified before removing). `docs/manual/` now
+holds only `generate-pdf.mjs`. Git history keeps both.
+
+This removes the hazard `SERVER_MIGRATION_PLAN.md` had been warning about since 2026-08-14e — that
+two files were each plausibly "the user manual" and the wrong one was nearly edited. There is now
+exactly one. References updated in `public/manual.html`, `src/App.tsx`, `generate-pdf.mjs`, and
+`SERVER_MIGRATION_PLAN.md`; the append-only history in CHANGELOG/SESSION_LOG was left alone, since
+those entries correctly describe the state at the time they were written.
+
+Also confirmed with the owner: **design review is now disabled for `public/manual.html`**
+(`detector.ignoreFiles` in `.impeccable/config.json`). The manual is deliberately a standalone
+document — its own dark palette, its own type scale, and a system Thai font stack because it must
+load with zero external requests (DESIGN.md's Playfair/Inter are Latin webfonts with no Thai
+coverage). A note explaining this now sits at the top of the file so the exception is discoverable
+from the file itself, not only from config. Before disabling, the genuinely loose part was fixed
+rather than waved through: the type ramp had **12 steps**, including three used exactly once
+(11px — introduced by this pass — plus 12.5px and 15.5px). Those were consolidated onto existing
+neighbours, leaving 9 steps, verified in-browser as visually unchanged.
+
+Verified: `tsc --noEmit` clean, `npm run lint` 0 errors, `npm run build` clean, `npm test` 261/261,
+plus a scripted integrity check over the manual (anchors resolve, no missing or orphaned images,
+`id`/`.ch-no` agree, chapters run 1–20 with no gaps, nav and TOC each list every chapter once) and a
+live browser pass over the rendered page.
+
+---
+
+## 2026-08-20k — Quotation's product picker now excludes the 4 internal-only store categories
 
 > Developed in parallel by the other workstream (Iggy14, committed 14:24) and merged in after
 > 2026-08-20j. Relabelled from its original "2026-08-20b" — that letter was already taken by the

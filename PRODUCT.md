@@ -57,8 +57,8 @@ Purpose-built around TCS's actual document and approval chain (Quotation → Sco
 
 - `public/logo.png` — real company logo.
 - `public/Scope of work new template for air pollution control_Technic.xlsx` — real source template the Scope of Work document format is built from.
-- `public/Scope Of Work PQ202607-174-LI-SK บริษัท เค ไทย ไฮดรอลิค จำกัด.pdf` and `public/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf` — real reference PDFs that the Scope of Work and Delivery Order print layouts are visually verified against.
-- `public/คู่มือการใช้งาน TCS ERP.pdf` — existing real user manual.
+- `reference/company/Scope Of Work PQ202607-174-LI-SK บริษัท เค ไทย ไฮดรอลิค จำกัด.pdf` and `reference/company/ใบส่งมอบสินค้าและบริการ PQ202607-175-SC-WM บริษัท อีจ.pdf` — real reference PDFs that the Scope of Work and Delivery Order print layouts are visually verified against. **Moved out of `public/` in commit c2f91b5** ("Move real customer/company documents out of public/ — data-exposure fix"): everything under `public/` is served with no authentication, and these carry real customer names and amounts. Never put a document like this back under `public/`.
+- `public/manual.html` — the real user manual, and the only one (served at `/manual.html`, opened from the topbar's gold "คู่มือการใช้งาน" button). It replaced `public/คู่มือการใช้งาน TCS ERP.pdf`, which the same c2f91b5 fix moved to `reference/company/คู่มือการใช้งาน TCS ERP.pdf` (still on disk there, gitignored — removed from `public/` and from git, not destroyed), and `docs/manual/user-manual.html`, deleted 2026-08-21. Render a PDF of it — outside `public/` — with `docs/manual/generate-pdf.mjs`.
 - No fabricated testimonials, customer names, pricing, or benchmarks exist in the product and none should be invented; any customer/company data shown in the running app today is disposable demo data (see Capabilities and Constraints), not evidence of real customers to reference in design work.
 
 ## Product Principles

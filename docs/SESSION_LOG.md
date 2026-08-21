@@ -4,7 +4,61 @@
 
 ---
 
-## Session — 2026-08-20 (continued, absolute latest), Delivery Order department routing
+## Session — 2026-08-21 (absolute latest), User manual brought current + manual-toolchain bugs
+
+### The finding that matters most: a blocker that was never real
+TODO.md carries ~40 items reading "verified via tsc/lint/build/test only — the automated browser
+cannot reach this machine's dev server." **That premise is false.** Playwright connected to
+`localhost:3000` on the first try, logged in, navigated every module, and captured 12 screenshots.
+`.playwright-mcp/` even held transcripts dated 2026-08-18 — *before* the claim was first written into
+CHANGELOG.md 2026-08-20e. A self-imposed constraint became a documented fact by repetition, and a
+large backlog accumulated behind it. Those items are "not attempted", not "not possible", and could
+be cleared in one focused session. Logged at the top of TODO.md High Priority.
+
+### What was asked, and what it turned into
+The ask was "update the manual, take screenshots, fix the layout, review the code." The manual was
+frozen at 2026-08-14 and documented 15 chapters against an app that had grown to 8 nav groups and 28
+entries — Accounting, Project, Production, Stock, and Departments & Teams were entirely absent.
+Rather than appending 5 chapters after the FAQ, the chapter order was restructured to mirror the
+app's real sidebar groups (15 → 20 chapters), via a scripted reorder that rewrote every
+`id`/`.ch-no`/`href`/"บทที่ N" token in one pass. Doing it by hand across 20 cross-references would
+have been the obvious way to introduce silent breakage.
+
+### The code review found one thing that was worse than a bug
+`docs/manual/generate-pdf.mjs` — the committed, documented "one-command path" for regenerating the
+manual PDF — wrote its output to `public/คู่มือการใช้งาน TCS ERP.pdf`. That file had been
+**deliberately deleted** in `c2f91b5`, a commit whose entire purpose was moving real customer
+documents out of `public/` because that directory is served with no authentication. Anyone following
+the documented instructions would have silently restored a PDF of real customer names and amounts to
+a public URL. The script also read the superseded source and loaded over `file://` (where the
+manual's absolute image paths resolve to the filesystem root, so every figure would have printed
+blank). Three bugs, none of which would surface until someone actually ran it — and the comments in
+`src/App.tsx` and `user-manual.html` still described the deleted PDF as "kept on disk."
+
+### Two smaller things worth remembering
+- **`loading="lazy"` without `width`/`height` breaks deep anchors.** Jumping to `#ch11` landed on
+  chapter 7, because unfetched images reserved no height and the page grew under the scroll
+  position. Caught only by actually clicking through in a browser — no test would have.
+- **The scrollspy had been wrong since it was written**: it let whichever `IntersectionObserver`
+  entry came last in a batch win, though entry order is not document order, and nothing cleared
+  `active` when a section left the band.
+
+### Facts corrected in TODO.md
+`departments` now holds **9** rows including ฝ่ายผลิต and ฝ่ายโปรเจกต์ — the "only 7 seeded, both
+missing" item is half-stale. What genuinely remains is per-user department values (`admin` is still
+`"Technic"`, matching no row).
+
+### Recommended next
+1. The RBAC migration for `project:*` (TODO High Priority #1) — still the only item actively broken
+   for real users, and still a single-file fix.
+2. One browser session to clear the ~40 "never click-tested" items now that the blocker is known to
+   be imaginary.
+3. Decide whether the manual belongs behind auth — it is public and now contains 29 screenshots of
+   the real UI.
+
+---
+
+## Session — 2026-08-20 (continued), Delivery Order department routing
 
 ### The most useful thing that happened: not writing code
 The owner opened with *"ใบเบิกและคืนวัสดุ ใบขอซื้อ แผนกโปรเจกต์กับผลิตจะใช้ร่วมกัน"* — which reads

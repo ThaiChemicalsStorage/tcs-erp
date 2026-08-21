@@ -150,10 +150,14 @@ was not walked point-by-point in this doc-only pass:
   content update the same day (2026-08-14e, a new Service module chapter).
 - **⚠️ The live, in-app manual is `public/manual.html`** (served at `/manual.html`, linked from
   the topbar's gold "คู่มือการใช้งาน" button in `src/App.tsx`) — **edit that file directly for any
-  future content update.** `docs/manual/generate-pdf.mjs` + `docs/manual/user-manual.html` are the
-  *old*, superseded PDF-generation pipeline (see that file's own header comment) — running
-  `generate-pdf.mjs` does **not** update the manual users actually see in the app. This was
-  nearly gotten backwards during the 2026-08-14e update; kept here so it doesn't happen again.
+  future content update.** **Updated 2026-08-21**: this warning is now largely moot — the superseded
+  `docs/manual/user-manual.html` (and its `docs/manual/images/` folder) were **deleted**, and
+  `docs/manual/generate-pdf.mjs` was repointed at `public/manual.html`, so there is no longer a
+  second file that can be edited by mistake. `generate-pdf.mjs` now only renders the real manual to
+  a PDF **outside** `public/` (see its header for why that matters). The original warning, kept
+  because the confusion it describes actually happened during the 2026-08-14e update: the two files
+  were both plausibly "the user manual", and running `generate-pdf.mjs` did **not** update what
+  users saw in the app.
 
 ### H. Decommission the demo — ✅ DONE
 

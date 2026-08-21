@@ -5,13 +5,23 @@
      (src/App.tsx) opens this page. Self-contained: system Thai font stack, no external requests,
      always the DARK theme (2026-08-10, direct user request — not tied to the OS color scheme),
      print-friendly (พิมพ์เป็น PDF ได้จากเบราว์เซอร์ — printing overrides back to light).
-     Content superseded docs/manual/user-manual.html (the old PDF source) — update THIS file going
-     forward. -->
+     THIS IS THE ONLY user manual. It superseded docs/manual/user-manual.html (the old PDF source)
+     on 2026-08-07; that file and its docs/manual/images/ folder were DELETED 2026-08-21 once
+     nothing read them any more (git history keeps them). Render a PDF from this file with
+     docs/manual/generate-pdf.mjs. -->
+<!-- Design-system note: this page deliberately does NOT follow docs/DESIGN.md. It is a standalone
+     document with its own dark palette and its own type scale, and it uses a system Thai font
+     stack because it must load with zero external requests (DESIGN.md's Playfair/Inter are Latin
+     webfonts with no Thai coverage). Design review is disabled for this file in .impeccable —
+     confirmed with the owner 2026-08-21. -->
 <html lang="th">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>คู่มือการใช้งานระบบ TCS ERP</title>
+<!-- คู่มือเปิดในแท็บใหม่ ถ้าไม่ประกาศไอคอนไว้ เบราว์เซอร์จะยิงหา /favicon.ico แล้วได้ 404
+     (ไฟล์นั้นไม่มีในโปรเจกต์) — ใช้โลโก้ตัวเดียวกับ index.html ให้แท็บคู่มือหน้าตาตรงกับตัวระบบ -->
+<link rel="icon" href="/logo.png" type="image/png" />
 <style>
   /* 2026-08-10: always the DARK palette, per direct user request ("แก้หน้าคู่มือให้หน่อยเป็น
      ธีมมืดเหมือนเดิม") — these are the same dark values the page's old prefers-color-scheme
@@ -72,6 +82,22 @@
     font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums;
   }
   h3 { font-size: 16.5px; color: var(--navy); font-weight: 700; margin: 26px 0 8px; }
+
+  /* ── ตัวคั่นหมวด ──
+     คู่มือโตจาก 15 เป็น 20 บท จึงแบ่งเป็นหมวดตามกลุ่มเมนูจริงในระบบ (งานขาย/บริการ/บัญชี/โปรเจกต์/
+     ผลิต/คลังสินค้า/ผู้ดูแลระบบ) ผู้อ่านจะได้เทียบกับแถบเมนูซ้ายที่เห็นอยู่ได้ตรง ๆ */
+  .part {
+    display: flex; align-items: center; gap: 14px;
+    margin: 64px 0 -20px; padding-top: 8px;
+  }
+  .part::after {
+    content: ""; flex: 1; height: 1px; background: var(--line);
+  }
+  .part span {
+    font-size: 12px; letter-spacing: 2.5px; text-transform: uppercase;
+    color: var(--gold-ink); font-weight: 700; white-space: nowrap;
+  }
+  .part:first-of-type { margin-top: 44px; }
   p { margin: 0 0 12px; }
   ul, ol { margin: 6px 0 14px; padding-left: 24px; }
   li { margin-bottom: 6px; }
@@ -124,7 +150,7 @@
     display: flex; align-items: center; justify-content: center;
     font-weight: 700; font-size: 16px; margin-top: 2px; font-variant-numeric: tabular-nums;
   }
-  .step h4 { margin: 0 0 5px; font-size: 15.5px; color: var(--navy); font-weight: 700; }
+  .step h4 { margin: 0 0 5px; font-size: 15px; color: var(--navy); font-weight: 700; }
   .step p, .step li { font-size: 14.5px; }
   .step p { margin: 0 0 6px; }
   .step p:last-child, .step ul:last-child, .step ol:last-child { margin-bottom: 0; }
@@ -143,7 +169,7 @@
   table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 14.5px; background: var(--card); }
   th {
     text-align: left; padding: 10px 16px; color: var(--muted);
-    font-size: 12.5px; letter-spacing: 0.6px; font-weight: 700;
+    font-size: 12px; letter-spacing: 0.6px; font-weight: 700;
     border-bottom: 1px solid var(--line); background: var(--gold-soft);
   }
   td { padding: 11px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -175,6 +201,15 @@
       font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
       color: var(--gold-ink); font-weight: 700; margin: 0 0 12px; padding-left: 10px;
     }
+    /* หัวข้อหมวดในสารบัญด้านข้าง — ชื่อเดียวกับกลุ่มเมนูในระบบจริง */
+    .side-nav .nav-group {
+      font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase;
+      color: var(--muted); font-weight: 700;
+      margin: 14px 0 4px; padding-left: 10px;
+    }
+    /* ไม่ใช้ :first-of-type — .nav-title เป็น <p> ตัวแรกของ .side-nav อยู่แล้ว กฎนี้จึงจะไปตกที่
+       .nav-title แทนและไม่มีผลกับ .nav-group เลย ใช้ตัวเลือกแบบต่อท้าย .nav-title ตรง ๆ */
+    .side-nav .nav-title + .nav-group { margin-top: 2px; }
     .side-nav a {
       display: flex; gap: 9px; align-items: baseline;
       color: var(--muted); text-decoration: none;
@@ -210,7 +245,10 @@
     body { background: #fff; padding-left: 0 !important; }
     .wrap { padding: 0; max-width: none; }
     .step, table, .callout, .toc { break-inside: avoid; }
-    h2 { break-after: avoid; }
+    /* รูปกับคำบรรยายต้องไม่ถูกตัดคนละหน้า — ยกเว้น sidebar.png ที่สูง 1700px ซึ่งสูงเกินหนึ่งหน้า A4
+       อยู่แล้ว เบราว์เซอร์จะตัดให้เองไม่ว่าจะสั่งอะไร */
+    figure { break-inside: avoid; }
+    h2, .part { break-after: avoid; }
     .top-link, .side-nav { display: none !important; }
   }
 </style>
@@ -218,29 +256,43 @@
 <body>
 <nav class="side-nav" aria-label="สารบัญด้านข้าง">
   <p class="nav-title">สารบัญ</p>
+  <p class="nav-group">เริ่มต้นใช้งาน</p>
   <a href="#ch1"><span class="no">1</span>การเข้าสู่ระบบ</a>
   <a href="#ch2"><span class="no">2</span>ภาพรวมหน้าจอและเมนู</a>
   <a href="#ch3"><span class="no">3</span>แดชบอร์ด</a>
+  <p class="nav-group">งานขาย</p>
   <a href="#ch4"><span class="no">4</span>ใบเสนอราคา</a>
   <a href="#ch5"><span class="no">5</span>Scope of Work</a>
   <a href="#ch6"><span class="no">6</span>การส่งเอกสารถึงผู้รับ</a>
   <a href="#ch7"><span class="no">7</span>ใบส่งมอบสินค้า</a>
-  <a href="#ch8"><span class="no">8</span>งานบริการ (Service)</a>
-  <a href="#ch9"><span class="no">9</span>คลังสินค้า</a>
-  <a href="#ch10"><span class="no">10</span>ลูกค้า</a>
-  <a href="#ch11"><span class="no">11</span>Template ใบเสนอราคา</a>
-  <a href="#ch12"><span class="no">12</span>ส่วนผู้ดูแลระบบ</a>
-  <a href="#ch13"><span class="no">13</span>ตั้งค่า (Settings)</a>
-  <a href="#ch14"><span class="no">14</span>การพิมพ์เอกสารเป็น PDF</a>
-  <a href="#ch15"><span class="no">15</span>คำถามพบบ่อย (FAQ)</a>
+  <a href="#ch8"><span class="no">8</span>ลูกค้า</a>
+  <a href="#ch9"><span class="no">9</span>Template ใบเสนอราคา</a>
+  <p class="nav-group">บริการ</p>
+  <a href="#ch10"><span class="no">10</span>งานบริการ (Service)</a>
+  <p class="nav-group">บัญชี</p>
+  <a href="#ch11"><span class="no">11</span>บัญชี-รับ (วางบิล/ใบกำกับภาษี)</a>
+  <p class="nav-group">โครงการ</p>
+  <a href="#ch12"><span class="no">12</span>โครงการ</a>
+  <a href="#ch13"><span class="no">13</span>ใบเบิก / ใบสั่งงาน / ใบขอซื้อ</a>
+  <p class="nav-group">ผลิต</p>
+  <a href="#ch14"><span class="no">14</span>ใบสั่งผลิต</a>
+  <p class="nav-group">คลังสินค้า</p>
+  <a href="#ch15"><span class="no">15</span>คลังสินค้า</a>
+  <a href="#ch16"><span class="no">16</span>สต๊อกสินค้า</a>
+  <p class="nav-group">ผู้ดูแลระบบ</p>
+  <a href="#ch17"><span class="no">17</span>ส่วนผู้ดูแลระบบ</a>
+  <a href="#ch18"><span class="no">18</span>ตั้งค่า (Settings)</a>
+  <p class="nav-group">อื่น ๆ</p>
+  <a href="#ch19"><span class="no">19</span>การพิมพ์เอกสารเป็น PDF</a>
+  <a href="#ch20"><span class="no">20</span>คำถามพบบ่อย (FAQ)</a>
   <div class="nav-top"><a href="#top">↑ ขึ้นบนสุด</a></div>
 </nav>
 <div class="wrap">
   <header id="top">
     <p class="eyebrow">TCS ERP · Thai Chemicals Storage</p>
     <h1>คู่มือการใช้งานระบบ TCS ERP</h1>
-    <p class="sub">สำหรับพนักงานทุกตำแหน่ง — ตั้งแต่การเข้าสู่ระบบ ใบเสนอราคา Scope of Work ใบส่งมอบสินค้า งานบริการ ไปจนถึงส่วนผู้ดูแลระบบ</p>
-    <p class="doc-meta">ฉบับวันที่ 14 สิงหาคม 2026 · สั่งพิมพ์เป็น PDF ได้จากเบราว์เซอร์ (Ctrl+P)</p>
+    <p class="sub">สำหรับพนักงานทุกตำแหน่ง — ตั้งแต่การเข้าสู่ระบบ ใบเสนอราคา Scope of Work ใบส่งมอบสินค้า งานบริการ บัญชี-รับ งานโครงการและงานผลิต ไปจนถึงส่วนผู้ดูแลระบบ</p>
+    <p class="doc-meta">ฉบับวันที่ 21 สิงหาคม 2026 · สั่งพิมพ์เป็น PDF ได้จากเบราว์เซอร์ (Ctrl+P)</p>
   </header>
 
   <nav class="toc" aria-label="สารบัญ">
@@ -253,17 +305,24 @@
       <li><a href="#ch5">Scope of Work</a></li>
       <li><a href="#ch6">การส่งเอกสารถึงผู้รับ</a></li>
       <li><a href="#ch7">ใบส่งมอบสินค้า (Delivery Orders)</a></li>
-      <li><a href="#ch8">งานบริการ (Service)</a></li>
-      <li><a href="#ch9">คลังสินค้า (Products)</a></li>
-      <li><a href="#ch10">ลูกค้า (Customers)</a></li>
-      <li><a href="#ch11">Template ใบเสนอราคา</a></li>
-      <li><a href="#ch12">ส่วนผู้ดูแลระบบ</a></li>
-      <li><a href="#ch13">ตั้งค่า (Settings)</a></li>
-      <li><a href="#ch14">การพิมพ์เอกสารเป็น PDF</a></li>
-      <li><a href="#ch15">คำถามพบบ่อย (FAQ)</a></li>
+      <li><a href="#ch8">ลูกค้า (Customers)</a></li>
+      <li><a href="#ch9">Template ใบเสนอราคา</a></li>
+      <li><a href="#ch10">งานบริการ (Service)</a></li>
+      <li><a href="#ch11">บัญชี-รับ (วางบิล / ใบกำกับภาษี)</a></li>
+      <li><a href="#ch12">โครงการ</a></li>
+      <li><a href="#ch13">ใบเบิก / ใบสั่งงาน / ใบขอซื้อ</a></li>
+      <li><a href="#ch14">ใบสั่งผลิต (ฝ่ายผลิต)</a></li>
+      <li><a href="#ch15">คลังสินค้า (Products)</a></li>
+      <li><a href="#ch16">สต๊อกสินค้า</a></li>
+      <li><a href="#ch17">ส่วนผู้ดูแลระบบ</a></li>
+      <li><a href="#ch18">ตั้งค่า (Settings)</a></li>
+      <li><a href="#ch19">การพิมพ์เอกสารเป็น PDF</a></li>
+      <li><a href="#ch20">คำถามพบบ่อย (FAQ)</a></li>
     </ol>
   </nav>
   <div class="callout"><b>หมายเหตุ:</b> เมนูที่แต่ละคนมองเห็นขึ้นอยู่กับ <b>สิทธิ์ (Permission)</b> ของบทบาทที่ผู้ดูแลระบบกำหนดให้ หากไม่เห็นเมนูใดตามคู่มือ แปลว่าบัญชีของคุณไม่มีสิทธิ์ส่วนนั้น — ติดต่อผู้ดูแลระบบ</div>
+
+  <p class="part"><span>เริ่มต้นใช้งาน</span></p>
 
   <!-- ═══ 1 ═══ -->
   <section id="ch1">
@@ -279,7 +338,7 @@
     <h3>การออกจากระบบ</h3>
     <p>คลิกรูปโปรไฟล์มุมขวาบน แล้วเลือก <span class="btn-ref">ออกจากระบบ</span></p>
     <figure>
-      <img src="/manual-images/01-signin.jpg" alt="หน้าเข้าสู่ระบบ" loading="lazy" />
+      <img src="/manual-images/01-signin.jpg" width="1536" height="782" alt="หน้าเข้าสู่ระบบ" loading="lazy" />
       <figcaption>หน้าเข้าสู่ระบบของ TCS ERP</figcaption>
     </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
@@ -290,18 +349,26 @@
     <h2><span class="ch-no">2</span>ภาพรวมหน้าจอและเมนู</h2>
     <h3>แถบเมนูด้านซ้าย (Sidebar)</h3>
     <div class="tbl-scroll"><table>
-      <tr><th style="width:26%">กลุ่มเมนู</th><th>เมนู</th></tr>
-      <tr><td>หลัก</td><td>แดชบอร์ด</td></tr>
-      <tr><td>งานขาย</td><td>ใบเสนอราคา · Scope of Work · ใบส่งมอบสินค้า · Template ใบเสนอราคา · ลูกค้า</td></tr>
-      <tr><td>คลังสินค้า</td><td>คลังสินค้า (สินค้าและหมวดหมู่)</td></tr>
-      <tr><td>บริการ</td><td>บริการ (รายงานตรวจเช็ค/บริการภาคสนาม)</td></tr>
-      <tr><td>การจัดการระบบ</td><td>จัดการผู้ใช้งาน · บทบาทและสิทธิ์ · บันทึกการใช้งาน</td></tr>
-      <tr><td>ล่างสุด</td><td>ตั้งค่า</td></tr>
+      <tr><th style="width:26%">กลุ่มเมนู</th><th>เมนู</th><th style="width:14%">ดูบทที่</th></tr>
+      <tr><td>หลัก</td><td>แดชบอร์ด</td><td>3</td></tr>
+      <tr><td>งานขาย</td><td>ใบเสนอราคา · Template ใบเสนอราคา · Scope of Work · ใบส่งมอบสินค้า · ลูกค้า</td><td>4–9</td></tr>
+      <tr><td>บริการ</td><td>บริการ · Template รายงานบริการ</td><td>10</td></tr>
+      <tr><td>บัญชี</td><td>แดชบอร์ดบัญชี · วางบิลตามงาน · ใบรับเงินมัดจำ/ใบกำกับภาษี · ใบแจ้งหนี้/ใบวางบิล · ใบเสร็จรับเงิน · ใบกำกับภาษี/ใบส่งสินค้า · สรุปเอกสารประจำเดือน</td><td>11</td></tr>
+      <tr><td>โครงการ</td><td>ใบส่งมอบสินค้า · โครงการ · ใบเบิกและใบคืนวัสดุ · ใบสั่งงาน · ใบขอซื้อ</td><td>12–13</td></tr>
+      <tr><td>ผลิต</td><td>ใบส่งมอบสินค้า · ใบสั่งผลิต · ใบเบิกและใบคืนวัสดุ · ใบขอซื้อ</td><td>14</td></tr>
+      <tr><td>คลังสินค้า</td><td>คลังสินค้า (สินค้าและหมวดหมู่) · สต๊อกสินค้า</td><td>15–16</td></tr>
+      <tr><td>การจัดการระบบ</td><td>จัดการผู้ใช้งาน · บทบาทและสิทธิ์ · แผนกและทีม · บันทึกการใช้งาน</td><td>17</td></tr>
+      <tr><td>ล่างสุด</td><td>ตั้งค่า</td><td>18</td></tr>
     </table></div>
+    <figure>
+      <img src="/manual-images/sidebar.png" width="240" height="1700" alt="แถบเมนูด้านซ้ายทั้งหมด" loading="lazy" style="max-width:240px;margin:0 auto;" />
+      <figcaption>แถบเมนูด้านซ้ายของบัญชีที่เห็นครบทุกกลุ่ม — คนทั่วไปจะเห็นน้อยกว่านี้ตามสิทธิ์ที่ได้รับ</figcaption>
+    </figure>
+    <div class="callout"><b>"ใบส่งมอบสินค้า" โผล่ 3 ที่ ไม่ใช่ระบบพัง:</b> เมนูนี้อยู่ทั้งในหมวดงานขาย โครงการ และผลิต โดยตั้งใจ เพราะทั้งสามแผนกใช้<b>เอกสารใบเดียวกันและข้อมูลชุดเดียวกัน</b> ไม่ได้แยกเป็นคนละระบบ กดจากหมวดไหนก็เข้าหน้าเดียวกัน</div>
     <p>ปุ่มลูกศรด้านบนของแถบเมนูใช้ย่อ/ขยายแถบได้ บนมือถือให้กดปุ่มเมนู (☰) มุมซ้ายบน</p>
     <h3>แถบด้านบน (Topbar)</h3>
     <figure>
-      <img src="/manual-images/topbar.png" alt="แถบด้านบน" loading="lazy" />
+      <img src="/manual-images/topbar.png" width="1568" height="63" alt="แถบด้านบน" loading="lazy" />
       <figcaption>แถบด้านบน: ช่องค้นหา · ปุ่มคู่มือการใช้งาน (สีทอง) · มีอะไรใหม่ · กระดิ่งแจ้งเตือน · เมนูผู้ใช้</figcaption>
     </figure>
     <div class="tbl-scroll"><table>
@@ -322,7 +389,7 @@
     <h2><span class="ch-no">3</span>แดชบอร์ด</h2>
     <p>หน้าแรกของระบบ สรุปภาพรวมงานขายทั้งบริษัทแบบเรียลไทม์จากข้อมูลจริง</p>
     <figure>
-      <img src="/manual-images/02-dashboard.jpg" alt="หน้าแดชบอร์ด" loading="lazy" />
+      <img src="/manual-images/02-dashboard.jpg" width="1536" height="782" alt="หน้าแดชบอร์ด" loading="lazy" />
       <figcaption>หน้าแดชบอร์ด — การ์ดสรุป ตัวกรอง และสถิติสถานะใบเสนอราคา</figcaption>
     </figure>
     <ul>
@@ -337,6 +404,8 @@
     <div class="callout"><b>เคล็ดลับ:</b> ใบเสนอราคาที่ถูกกด "แก้ไข (Rewrite)" หลายรอบ ระบบนับเป็นงานเดียว (ฉบับล่าสุด) ตัวเลขบนแดชบอร์ดจึงไม่นับซ้ำ</div>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
+
+  <p class="part"><span>งานขาย</span></p>
 
   <!-- ═══ 4 ═══ -->
   <section id="ch4">
@@ -378,11 +447,11 @@
     </ul>
     <div class="callout"><b>สิทธิ์การมองเห็น:</b> หากบัญชีของคุณไม่มีสิทธิ์ "ดูใบเสนอราคาของผู้อื่น" หน้ารายการจะแสดงเฉพาะใบที่คุณสร้างเองเท่านั้น</div>
     <figure>
-      <img src="/manual-images/03-quotations.jpg" alt="หน้ารายการใบเสนอราคา" loading="lazy" />
+      <img src="/manual-images/03-quotations.jpg" width="1536" height="782" alt="หน้ารายการใบเสนอราคา" loading="lazy" />
       <figcaption>หน้ารายการใบเสนอราคา — การ์ดสรุป ตัวกรองสถานะ และปุ่มสร้างใบเสนอราคา (มุมขวาบน)</figcaption>
     </figure>
     <figure>
-      <img src="/manual-images/11-quotation-detail.jpg" alt="หน้ารายละเอียดใบเสนอราคา" loading="lazy" />
+      <img src="/manual-images/11-quotation-detail.jpg" width="1536" height="782" alt="หน้ารายละเอียดใบเสนอราคา" loading="lazy" />
       <figcaption>หน้ารายละเอียดใบเสนอราคา — ข้อมูลลูกค้า รายละเอียดเอกสาร และแถบเครื่องมือด้านบน (พิมพ์ / คัดลอก / แก้ไข / สร้าง Scope of Work / บันทึก)</figcaption>
     </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
@@ -421,11 +490,11 @@
     </ul>
     <p>เมนู <span class="btn-ref">Scope of Work</span> ในแถบซ้ายใช้เปิดดูรายการทั้งหมด (การสร้างยังทำจากหน้าใบเสนอราคาเท่านั้น)</p>
     <figure>
-      <img src="/manual-images/04-scope-of-work.jpg" alt="หน้ารายการ Scope of Work" loading="lazy" />
+      <img src="/manual-images/04-scope-of-work.jpg" width="1536" height="782" alt="หน้ารายการ Scope of Work" loading="lazy" />
       <figcaption>หน้ารายการ Scope of Work</figcaption>
     </figure>
     <figure>
-      <img src="/manual-images/12-sow-detail.jpg" alt="หน้ารายละเอียด Scope of Work" loading="lazy" />
+      <img src="/manual-images/12-sow-detail.jpg" width="1536" height="782" alt="หน้ารายละเอียด Scope of Work" loading="lazy" />
       <figcaption>หน้ารายละเอียด Scope of Work — ข้อมูลงาน/ลูกค้า และแถบเครื่องมือ (พิมพ์ / ทำสำเนา / แก้ไข / ทวงเลข PO / เปิดใบส่งมอบสินค้า / อัปเดตข้อมูลจากใบเสนอราคา / ส่งขออนุมัติ)</figcaption>
     </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
@@ -500,18 +569,27 @@
       <li>แต่ละการ์ดงวดมีปุ่ม <span class="btn-ref">พิมพ์ใบส่งมอบงวดนี้</span> ของตัวเอง — เอกสารที่ได้มีเฉพาะข้อมูลงวดนั้น</li>
       <li>ต้องติ๊กสินค้าอย่างน้อย 1 รายการในงวดนั้นก่อน จึงพิมพ์ได้</li>
     </ul>
+    <h3>ส่งใบส่งมอบถึงแผนกที่เกี่ยวข้อง</h3>
+    <p>ฝ่ายขายติ๊กได้ว่าใบส่งมอบใบนี้ต้องส่งถึงแผนกไหนบ้าง เมื่อติ๊กแล้ว ใบนั้นจะไปโผล่ในรายการ "ใบส่งมอบสินค้า" ของหมวดแผนกนั้น (โครงการ / ผลิต) ให้คนในแผนกเปิดดูได้เอง</p>
+    <ul>
+      <li>ส่ง<b>ถึงทั้งแผนก</b> ไม่ใช่รายบุคคล — ทุกคนที่ถูกตั้งแผนกไว้ตรงกันจะเห็น (ต่างจาก "เอกสารส่งถึง" ของ Scope of Work ที่เลือกเป็นรายชื่อคน — ดูบทที่ 6)</li>
+      <li>ฝั่งผู้รับ <b>ดูและพิมพ์ได้อย่างเดียว</b> แก้ไข อนุมัติ หรือลบไม่ได้</li>
+    </ul>
+    <div class="callout warn"><b>ต้องตั้งค่าข้อมูลให้ครบก่อน ไม่งั้นติ๊กไปก็ไม่มีใครได้รับ:</b> ผู้ดูแลระบบต้อง (1) เพิ่มแผนกจริงของบริษัทให้ครบที่หน้า <span class="path">แผนกและทีม</span> และ (2) เข้าหน้า <span class="path">จัดการผู้ใช้งาน</span> ตั้งแผนกให้พนักงานทุกคน<b>ให้ตรงกับรายชื่อแผนกในตารางนั้น</b> พนักงานที่แผนกยังเป็นค่าเก่าหรือว่างอยู่จะไม่เห็นเอกสารที่ส่งมา ระบบจะเตือนตอนกดส่งถ้าไม่พบผู้รับ — ดูบทที่ 17</div>
+
     <h3>อื่นๆ</h3>
     <ul>
       <li><span class="btn-ref">อัปเดตข้อมูลจาก Scope of Work</span> — ดึงรายการ/งวดล่าสุดมาใหม่ โดยคงสิ่งที่ติ๊ก/กรอกไว้ของงวดเดิม</li>
       <li>ขั้นตอนขออนุมัติ → อนุมัติ (Final) / ปฏิเสธพร้อมเหตุผล — เหมือน Scope of Work</li>
-      <li>เมนู <span class="btn-ref">ใบส่งมอบสินค้า</span> ในแถบซ้ายใช้เปิดดูรายการทั้งหมด</li>
+      <li>เมนู <span class="btn-ref">ใบส่งมอบสินค้า</span> ในแถบซ้ายใช้เปิดดูรายการทั้งหมด (กดจากหมวดงานขาย โครงการ หรือผลิต ก็เข้าหน้าเดียวกัน)</li>
+      <li>เอกสารนี้คือใบเดียวกับที่ฝ่ายโครงการและฝ่ายผลิตเรียกว่า <b>"ใบส่งมอบงาน"</b> — ไม่ใช่คนละเอกสาร</li>
     </ul>
     <figure>
-      <img src="/manual-images/05-delivery-order.jpg" alt="หน้ารายการใบส่งมอบสินค้า" loading="lazy" />
+      <img src="/manual-images/05-delivery-order.jpg" width="1536" height="782" alt="หน้ารายการใบส่งมอบสินค้า" loading="lazy" />
       <figcaption>หน้ารายการใบส่งมอบสินค้า</figcaption>
     </figure>
     <figure>
-      <img src="/manual-images/13-do-detail.jpg" alt="หน้ารายละเอียดใบส่งมอบสินค้า" loading="lazy" />
+      <img src="/manual-images/13-do-detail.jpg" width="1536" height="782" alt="หน้ารายละเอียดใบส่งมอบสินค้า" loading="lazy" />
       <figcaption>หน้ารายละเอียดใบส่งมอบสินค้า — การ์ดแยกตามงวดชำระเงิน แต่ละงวดมีช่องติ๊กรายการสินค้า เลขที่/วันที่/Remark และปุ่ม "พิมพ์ใบส่งมอบงวดนี้" ของตัวเอง</figcaption>
     </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
@@ -519,10 +597,42 @@
 
   <!-- ═══ 8 ═══ -->
   <section id="ch8">
-    <h2><span class="ch-no">8</span>งานบริการ (Service)</h2>
+    <h2><span class="ch-no">8</span>ลูกค้า (Customers)</h2>
+    <ul>
+      <li>เก็บข้อมูลลูกค้า: ชื่อบริษัท ผู้ติดต่อ โทรศัพท์ อีเมล ที่อยู่ เลขผู้เสียภาษี ข้อมูลการจัดส่ง/โครงการ</li>
+      <li>กด <span class="btn-ref">เพิ่มลูกค้า</span> เพื่อสร้าง คลิกรายการเพื่อแก้ไข ลูกค้าเลิกติดต่อใช้ Archive</li>
+      <li>ในฟอร์มใบเสนอราคา ใช้ช่อง "เลือกลูกค้า" ดึงข้อมูลจากหน้านี้มาเติมอัตโนมัติ</li>
+    </ul>
+    <figure>
+      <img src="/manual-images/07-customers.jpg" width="1536" height="782" alt="หน้าลูกค้า" loading="lazy" />
+      <figcaption>หน้าจัดการข้อมูลลูกค้า</figcaption>
+    </figure>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 9 ═══ -->
+  <section id="ch9">
+    <h2><span class="ch-no">9</span>Template ใบเสนอราคา</h2>
+    <ul>
+      <li>เก็บ "แม่แบบ" รายการสินค้า/สเปค/เงื่อนไขมาตรฐานของงานแต่ละประเภท ใช้ตอนสร้างใบเสนอราคาผ่าน Wizard</li>
+      <li>ผู้มีสิทธิ์สามารถ สร้าง แก้ไข ทำสำเนา เปิด-ปิดใช้งาน (เฉพาะ Template ที่ "ใช้งาน" จึงปรากฏใน Wizard)</li>
+      <li>การแก้ Template ไม่กระทบใบเสนอราคาที่สร้างไปแล้ว (ระบบคัดลอกเนื้อหา ณ ตอนสร้าง)</li>
+    </ul>
+    <figure>
+      <img src="/manual-images/06-templates.jpg" width="1536" height="782" alt="หน้า Template ใบเสนอราคา" loading="lazy" />
+      <figcaption>หน้าจัดการ Template ใบเสนอราคา</figcaption>
+    </figure>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <p class="part"><span>บริการ</span></p>
+
+  <!-- ═══ 10 ═══ -->
+  <section id="ch10">
+    <h2><span class="ch-no">10</span>งานบริการ (Service)</h2>
     <p>เมนู <span class="path">บริการ</span> ใช้สร้างรายงานตรวจเช็ค/บริการภาคสนาม (Service Report) — สร้างตรงจาก<b>ลูกค้า</b> ไม่ต้องผ่านใบเสนอราคาก่อนเหมือนเอกสารกลุ่มอื่น</p>
     <figure>
-      <img src="/manual-images/14-service.jpg" alt="หน้ารายการงานบริการ" loading="lazy" />
+      <img src="/manual-images/14-service.jpg" width="1536" height="782" alt="หน้ารายการงานบริการ" loading="lazy" />
       <figcaption>หน้ารายการงานบริการ — การ์ดสรุปจำนวนตามสถานะ และปุ่มสร้างรายงานบริการ (มุมขวาบน)</figcaption>
     </figure>
 
@@ -550,10 +660,14 @@
         </div>
       </div>
     </div>
+    <figure>
+      <img src="/manual-images/15-service-create.jpg" width="1536" height="782" alt="หน้าสร้างรายงานบริการใหม่" loading="lazy" />
+      <figcaption>หน้าสร้างรายงานบริการใหม่ — เลือก Template ตรวจเช็ค เลือกลูกค้า แล้วกรอกรายละเอียดงาน</figcaption>
+    </figure>
 
     <h3>รายการตรวจเช็ค (Checklist)</h3>
     <figure>
-      <img src="/manual-images/16-service-checklist.jpg" alt="รายการตรวจเช็คในรายงานบริการ" loading="lazy" />
+      <img src="/manual-images/16-service-checklist.jpg" width="1536" height="782" alt="รายการตรวจเช็คในรายงานบริการ" loading="lazy" />
       <figcaption>รายการตรวจเช็ค — แต่ละอุปกรณ์ติ๊ก "ปกติ" หรือ "ผิดปกติ" บางรายการเป็นช่องกรอกค่าที่วัดได้แทน</figcaption>
     </figure>
     <ul>
@@ -569,13 +683,202 @@
       <li>บันทึกเป็น <b>ฉบับร่าง</b> ได้เรื่อย ๆ ระหว่างตรวจงาน กด <span class="btn-ref">เสร็จสิ้น</span> เมื่อตรวจครบและผ่านเงื่อนไขรายการผิดปกติแล้ว (ยกเลิกรายงานได้เช่นกันถ้าจำเป็น)</li>
       <li>ปุ่ม <span class="btn-ref">พิมพ์ / ส่งออก</span> ออกรายงานฉบับพิมพ์ครบชุด: ตารางรายการตรวจเช็ค, รายละเอียดรายการผิดปกติพร้อมรูปถ่าย, ช่องลายเซ็นผู้ตรวจสอบและลูกค้า</li>
     </ul>
-    <div class="callout"><b>สำหรับผู้ดูแลระบบ:</b> เมนู "บริการ" จะไม่ปรากฏจนกว่าจะไปติ๊กสิทธิ์กลุ่ม <b>"บริการ"</b> ให้บทบาทที่ต้องการในหน้า <a href="#ch12">บทบาทและสิทธิ์ (บทที่ 12)</a> ก่อน — เช่นเดียวกับทุกโมดูลใหม่ที่เพิ่มเข้ามาทีหลัง</div>
+    <div class="callout"><b>สำหรับผู้ดูแลระบบ:</b> เมนู "บริการ" จะไม่ปรากฏจนกว่าจะไปติ๊กสิทธิ์กลุ่ม <b>"บริการ"</b> ให้บทบาทที่ต้องการในหน้า <a href="#ch17">บทบาทและสิทธิ์ (บทที่ 17)</a> ก่อน — เช่นเดียวกับทุกโมดูลใหม่ที่เพิ่มเข้ามาทีหลัง</div>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
-  <!-- ═══ 9 ═══ -->
-  <section id="ch9">
-    <h2><span class="ch-no">9</span>คลังสินค้า (Products)</h2>
+  <p class="part"><span>บัญชี</span></p>
+
+  <!-- ═══ 11 ═══ (เพิ่ม 2026-08-21: โมดูลบัญชี-รับ ขึ้นระบบ 2026-08-17/18) -->
+  <section id="ch11">
+    <h2><span class="ch-no">11</span>บัญชี-รับ (วางบิล / ใบกำกับภาษี)</h2>
+    <p>หมวด <b>บัญชี</b> ในแถบเมนูซ้ายใช้ออกเอกสารบัญชีลูกหนี้ทั้งชุด โดยอ้างอิงจากงวดชำระเงินของ Scope of Work ที่อนุมัติแล้ว ทุกเมนูในหมวดนี้ต้องมีสิทธิ์กลุ่ม "บัญชี" จึงจะมองเห็น</p>
+
+    <h3>เอกสาร 4 ประเภท</h3>
+    <div class="tbl-scroll"><table>
+      <tr><th>เมนู</th><th>เอกสาร</th><th>เลขที่ขึ้นต้น</th><th>ใช้เมื่อไร</th></tr>
+      <tr><td>ใบรับเงินมัดจำ/ใบกำกับภาษี</td><td>AR</td><td><code>AR6908001</code></td><td>เก็บเงินมัดจำหรือเก็บเงินตามงวด พร้อมเป็นใบกำกับภาษีในตัว</td></tr>
+      <tr><td>ใบแจ้งหนี้/ใบวางบิล</td><td>BI</td><td><code>BI6908001</code></td><td>ใบวางบิลของงวดนั้น — ระบบออกให้พร้อมกับ AR/IV ในการกดครั้งเดียว</td></tr>
+      <tr><td>ใบเสร็จรับเงิน</td><td>RE</td><td><code>RE6908001</code></td><td>ออกเมื่อลูกค้าชำระเงินเข้ามาจริง</td></tr>
+      <tr><td>ใบกำกับภาษี/ใบส่งสินค้า</td><td>IV</td><td><code>IV6908001</code></td><td>งวดที่ส่งมอบสินค้าจริง (ตัดสต๊อกได้จากหน้านี้)</td></tr>
+    </table></div>
+    <p class="note">รูปแบบเลขที่: ตัวอักษรนำหน้า + ปี พ.ศ. 2 หลัก + เดือน 2 หลัก + ลำดับ 3 หลัก — <code>AR6908001</code> คือ AR ของเดือน 08 ปี 2569 ลำดับที่ 001 ระบบออกเลขให้อัตโนมัติแบบกันเลขชนกัน แก้ด้วยมือไม่ได้</p>
+
+    <h3>ขั้นตอนวางบิลตามงาน</h3>
+    <div class="steps">
+      <div class="step"><div class="step-no">1</div><div>
+        <h4>เปิดเมนู "วางบิลตามงาน" แล้วกด "+ สร้างวางบิล"</h4>
+        <p>หน้านี้<b>ไม่ดึงงานขึ้นมาให้เองแล้ว</b> (เปลี่ยน 2026-08-20) เพราะงานที่ค้างอยู่ในระบบไม่ได้แปลว่าวางบิลได้จริง — อาจยังรอ PO หรือเอกสารลูกค้ายังไม่ครบ บัญชีต้องเลือกงานที่ตั้งใจจะวางบิลเองทุกครั้ง</p>
+      </div></div>
+      <div class="step"><div class="step-no">2</div><div>
+        <h4>ค้นหาและเลือกงาน (Scope of Work)</h4>
+        <p>พิมพ์เลขที่งานหรือชื่อลูกค้าในช่องค้นหา แล้วเลือกงานที่ต้องการ ระบบจะเปิดหน้ารายละเอียดงวดของงานนั้น</p>
+      </div></div>
+      <div class="step"><div class="step-no">3</div><div>
+        <h4>ตรวจรายการตรวจสอบ (Checklist) ของงวด</h4>
+        <p>แต่ละงวดมีรายการที่ต้องติ๊กก่อนออกเอกสารได้ เช่น สำเนา PO ลูกค้า และใบส่งมอบงาน พร้อมช่องแนบไฟล์ — ถ้ายังติ๊กไม่ครบ ปุ่มออกเอกสารจะยังกดไม่ได้</p>
+      </div></div>
+      <div class="step"><div class="step-no">4</div><div>
+        <h4>กดออกเอกสาร</h4>
+        <p>ระบบออก AR (หรือ IV ถ้าเป็นงวดส่งมอบสินค้า) <b>พร้อมกับ BI ของงวดนั้นในการกดครั้งเดียว</b> แล้วล็อกเลขที่ทันที</p>
+      </div></div>
+      <div class="step"><div class="step-no">5</div><div>
+        <h4>เมื่อลูกค้าชำระเงิน — ออกใบเสร็จ (RE)</h4>
+        <p>กดปุ่ม <span class="btn-ref">ออกใบเสร็จ</span> ที่ท้ายแถวของ AR/IV ใบนั้นได้เลย หรือเข้าหน้า "ใบเสร็จรับเงิน" แล้วกด <span class="btn-ref">+ ออกใบเสร็จ</span> เพื่อค้นหาใบที่ยังไม่มีใบเสร็จ</p>
+      </div></div>
+    </div>
+    <div class="callout"><b>ทำไมหน้า "ใบแจ้งหนี้/ใบวางบิล" ไม่มีปุ่มสร้าง:</b> เพราะ BI ออกพร้อม AR/IV เสมอ ทุกใบที่มีอยู่จึงมี BI ของตัวเองแล้ว ไม่มีกรณี "เลือก AR/IV มาสร้าง BI"</div>
+
+    <figure>
+      <img src="/manual-images/18-accounting-milestones.jpg" width="1536" height="782" alt="หน้าวางบิลตามงาน" loading="lazy" />
+      <figcaption>หน้า "วางบิลตามงาน" — เริ่มจากปุ่ม "+ สร้างวางบิล" แล้วค้นหางานที่ต้องการวางบิล ไม่มีตารางงานขึ้นมาให้เองอีกต่อไป</figcaption>
+    </figure>
+    <figure>
+      <img src="/manual-images/19-ar-billing.jpg" width="1536" height="782" alt="หน้ารายการใบแจ้งหนี้/ใบวางบิล" loading="lazy" />
+      <figcaption>หน้ารายการเอกสารบัญชี (ตัวอย่าง: ใบแจ้งหนี้/ใบวางบิล) — การ์ดสรุปจำนวนด้านบน ค้นหา/กรองตามเดือน และปุ่มพิมพ์ / NCR / ยกเลิก ท้ายแต่ละแถว</figcaption>
+    </figure>
+
+    <h3>แดชบอร์ดบัญชี</h3>
+    <p>เมนูแรกของหมวด ใช้ดูภาพรวมก่อนไล่เข้าเอกสารรายใบ — การ์ดสรุป 5 ใบ (ยอดออกใบกำกับภาษี, VAT ขาย, ยอดค้างชำระ, งานที่ยังไม่ออกบิลมัดจำ, เอกสารที่ยกเลิก), กราฟแนวโน้ม 12 เดือน, สัดส่วนประเภทเอกสาร, สถานะการวางบิลของงวดงาน, อายุหนี้คงค้าง และตารางลูกค้ารายใหญ่</p>
+    <div class="callout"><b>อ่านตัวเลขให้ถูก:</b> ตัวกรอง <b>ช่วงเวลา</b> มีผลเฉพาะยอดที่ออกในช่วงนั้น (ยอดใบกำกับภาษี/VAT/สัดส่วนเอกสาร/ยอดขายรายลูกค้า) ส่วน <b>อายุหนี้คงค้าง สถานะการวางบิล และงานที่ยังไม่ออกบิลมัดจำ เป็นภาพ ณ ปัจจุบันเสมอ</b> ไม่ถูกกรองตามช่วงเวลา — เพราะรายงานหนี้ค้างที่ถูกตัดด้วยช่วงวันที่จะซ่อนใบที่ยังไม่จ่ายซึ่งออกก่อนหน้านั้น ส่วนตัวกรอง <b>พนักงานขาย</b> มีผลกับทุกส่วนรวมถึงส่วนที่เป็นภาพปัจจุบัน</div>
+    <figure>
+      <img src="/manual-images/17-accounting-dashboard.jpg" width="1536" height="782" alt="แดชบอร์ดบัญชี" loading="lazy" />
+      <figcaption>แดชบอร์ดบัญชี — การ์ดสรุป กราฟแนวโน้มใบกำกับภาษี และสัดส่วนประเภทเอกสาร</figcaption>
+    </figure>
+
+    <h3>สรุปเอกสารประจำเดือน</h3>
+    <p>เมนูสุดท้ายของหมวด รวมเอกสารบัญชีทุกประเภทที่ออกในเดือนที่เลือก แยกเป็นตารางต่อประเภท พร้อมยอดรวมมูลค่าก่อนภาษี / VAT / ยอดสุทธิ และแถบสรุป <b>ยอดรวมใบกำกับภาษี (AR + IV)</b> ด้านบนสำหรับกระทบยอดยื่นภาษีขาย กดปุ่ม <span class="btn-ref">พิมพ์สรุป</span> เพื่อพิมพ์ทั้งหน้า</p>
+    <figure>
+      <img src="/manual-images/20-ar-monthly.jpg" width="1536" height="782" alt="หน้าสรุปเอกสารประจำเดือน" loading="lazy" />
+      <figcaption>สรุปเอกสารประจำเดือน — แยกตารางตามประเภทเอกสาร พร้อมยอดรวมสำหรับกระทบยอดภาษีขาย</figcaption>
+    </figure>
+
+    <h3>สิ่งที่ทำได้อีกจากหน้ารายการเอกสาร</h3>
+    <ul>
+      <li><b>พิมพ์ลงฟอร์ม NCR</b> — ปุ่ม <span class="btn-ref">NCR</span> ท้ายแถวพิมพ์เฉพาะข้อมูลลงบนฟอร์มกระดาษต่อเนื่องที่พิมพ์หัวไว้แล้ว ตั้งค่าระยะขอบได้ที่ <span class="btn-ref">ตั้งค่าฟอร์ม NCR</span> ด้านบนขวา</li>
+      <li><b>ตัดสต๊อกสินค้า</b> — เฉพาะหน้า "ใบกำกับภาษี/ใบส่งสินค้า (IV)" กดที่แถวเพื่อเปิดแผงตัดสต๊อกตามใบนั้น (ดูบทที่ 16)</li>
+      <li><b>สร้างใบกำกับภาษีเอง</b> — หน้า AR และ IV มีปุ่มสร้างเอกสารที่ไม่ผูกกับ Scope of Work สำหรับงานขายที่ไม่ได้ผ่านระบบใบเสนอราคา</li>
+      <li><b>ยกเลิกเอกสาร</b> — เอกสารที่ออกแล้วแก้ไม่ได้ ทำได้แค่ยกเลิก ซึ่งยังคงเลขที่ไว้ในระบบเพื่อให้เลขไม่ขาดช่วง</li>
+    </ul>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <p class="part"><span>โครงการ</span></p>
+
+  <!-- ═══ 12 ═══ (เพิ่ม 2026-08-21: โมดูลโครงการ ขึ้นระบบ 2026-08-18) -->
+  <section id="ch12">
+    <h2><span class="ch-no">12</span>โครงการ</h2>
+    <p>โมดูล <b>โครงการ</b> ใช้จัดการว่าแต่ละรายการในงานที่ขายไปแล้ว จะได้ของมาด้วยวิธีไหน — เบิกจากสโตร์ สั่งผลิตเอง หรือสั่งซื้อจากข้างนอก</p>
+
+    <h3>การสร้างโครงการ</h3>
+    <ol>
+      <li>เปิด Scope of Work ที่ <b>อนุมัติแล้ว (Final)</b> แล้วกด <span class="btn-ref">สร้างโครงการ</span> (ถ้ามีอยู่แล้วปุ่มเปลี่ยนเป็น "เปิดโครงการ")</li>
+      <li>หรือเข้าเมนู <span class="btn-ref">โครงการ</span> แล้วกด <span class="btn-ref">+ สร้างโครงการ</span> เพื่อเลือกงานจากรายการ</li>
+      <li>ระบบคัดลอกทุกรายการจาก Scope of Work มาตั้งต้นเป็นสถานะ <b>ยังไม่กำหนด</b></li>
+    </ol>
+    <div class="callout warn"><b>ต้องอนุมัติงานก่อน:</b> Scope of Work ที่ยังไม่ Final สร้างโครงการไม่ได้ — ในหน้าเลือกงานจะขึ้นเป็นแถวจาง กดไม่ได้ พร้อมป้าย "ยังไม่อนุมัติ"</div>
+
+    <h3>การเลือกวิธีจัดหาของแต่ละรายการ</h3>
+    <p>ในหน้ารายละเอียดโครงการ แต่ละรายการมีปุ่ม 3 ปุ่มให้เลือก กดปุ่มไหน <b>ระบบสร้างเอกสารใบนั้นให้ทันทีและเปิดหน้าแก้ไขให้เลย</b> ไม่มีขั้นตอน "เลือกวิธีก่อน แล้วค่อยสร้าง" แยกต่างหาก</p>
+    <div class="tbl-scroll"><table>
+      <tr><th>ปุ่ม</th><th>ได้เอกสาร</th><th>ใช้เมื่อ</th></tr>
+      <tr><td>สร้างใบเบิกวัสดุ</td><td>ใบเบิกและใบคืนวัสดุ</td><td>ของมีอยู่ในสโตร์แล้ว เบิกมาใช้</td></tr>
+      <tr><td>สร้างใบสั่งงาน</td><td>ใบสั่งงาน</td><td>ต้องผลิต/ประกอบเองภายใน</td></tr>
+      <tr><td>สร้างใบขอซื้อ</td><td>ใบขอซื้อ</td><td>ต้องซื้อจากผู้ขายภายนอก</td></tr>
+    </table></div>
+    <ul>
+      <li>ถ้าเลือกผิด ให้เข้าไป<b>ลบเอกสารใบนั้น</b>จากหน้าของมันเอง รายการจะกลับเป็น "ยังไม่กำหนด" แล้วเลือกใหม่ได้</li>
+      <li>สถานะโครงการ (วางแผน / กำลังดำเนินการ / เสร็จสิ้น) เป็นช่องที่ตั้งเอง ระบบไม่เปลี่ยนให้อัตโนมัติ</li>
+    </ul>
+    <div class="callout warn"><b>ข้อควรระวังเรื่อง "อัปเดตข้อมูลจาก Scope of Work":</b> ถ้าฝั่ง Scope of Work เพิ่งกด "อัปเดตข้อมูลจากใบเสนอราคา" มา การกดอัปเดตในโครงการอาจทำให้ทุกรายการถูกมองเป็นรายการใหม่ และ<b>หลุดการเชื่อมกับเอกสารที่สร้างไปแล้ว</b> เอกสารเดิมไม่หายไปไหน แต่จะไม่ผูกกับรายการอีก — ตรวจหน้าโครงการทุกครั้งหลังกดอัปเดต</div>
+    <figure>
+      <img src="/manual-images/21-project.jpg" width="1536" height="782" alt="หน้ารายการโครงการ" loading="lazy" />
+      <figcaption>หน้ารายการโครงการ — การ์ดสรุปตามสถานะ ค้นหาด้วยรหัสงานหรือชื่อลูกค้า</figcaption>
+    </figure>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <!-- ═══ 13 ═══ (เพิ่ม 2026-08-21) -->
+  <section id="ch13">
+    <h2><span class="ch-no">13</span>ใบเบิก / ใบสั่งงาน / ใบขอซื้อ</h2>
+    <p>เอกสารลูก 3 ประเภทของโครงการ แต่ละประเภทมีเมนูของตัวเองในแถบซ้ายสำหรับดูรายการทั้งหมด และมีปุ่ม <span class="btn-ref">+ สร้าง</span> ของตัวเองด้วย (เลือกโครงการ/รายการต้นทางจากหน้าต่างที่เปิดขึ้นมา)</p>
+    <div class="tbl-scroll"><table>
+      <tr><th>เอกสาร</th><th>ฟอร์ม</th><th>เลขที่</th><th>จุดต่าง</th></tr>
+      <tr><td>ใบเบิกและใบคืนวัสดุ</td><td>FM-ST-04</td><td><code>MR-2569-0001</code></td><td>เลือกสินค้าจากคลังเท่านั้น พิมพ์ชื่อเองไม่ได้</td></tr>
+      <tr><td>ใบสั่งงาน</td><td>FM-PJ-01</td><td><code>JO-2569-0001</code></td><td>พิมพ์รายการเองได้อิสระ มีรายการตรวจเช็คขอบเขตงานในตัว</td></tr>
+      <tr><td>ใบขอซื้อ</td><td>FMPU05</td><td><code>PR-2569-0001</code></td><td>เลือกจากคลังก็ได้ พิมพ์เองก็ได้ มีช่องผู้ขาย/เครดิต/วันที่ต้องการของ</td></tr>
+    </table></div>
+
+    <h3>การเบิกและการคืนของ</h3>
+    <p>ใบเบิกวัสดุใบเดียวใช้ทั้ง<b>เบิก</b>และ<b>คืน</b> — ไม่ต้องเปิดใบใหม่ตอนคืนของ แต่ละบรรทัดมีช่องจำนวนแผน / เบิกครั้งที่ 1 / เบิกครั้งที่ 2 / <b>จำนวนคืน</b> / จำนวนที่ใช้จริง</p>
+    <div class="callout"><b>คืนของได้แม้ใบจะอนุมัติแล้ว:</b> ช่องจำนวนคืนไม่ถูกล็อกตามสถานะเอกสาร เพราะของมักเหลือหลังใบถูกอนุมัติไปแล้ว</div>
+    <div class="callout warn"><b>ระบบยังไม่ตรวจจำนวนคืน:</b> ตอนนี้กรอกจำนวนคืนมากกว่าที่เบิกไปก็ยังบันทึกได้ ต้องอาศัยคนตรวจเอง</div>
+
+    <h3>ขั้นตอนอนุมัติ (เหมือนกันทั้ง 4 เอกสาร รวมใบสั่งผลิต)</h3>
+    <div class="flow"><span>Draft</span><span class="arr">→</span><span>ส่งขออนุมัติ</span><span class="arr">→</span><span>รออนุมัติ</span><span class="arr">→</span><span>อนุมัติ (Final)</span></div>
+    <ul>
+      <li>คนส่งกด <span class="btn-ref">ถอนคำขอ</span> ดึงกลับมาแก้เองได้ ตราบใดที่ยังไม่มีใครอนุมัติ</li>
+      <li>ผู้อนุมัติกด <span class="btn-ref">ไม่อนุมัติ</span> ต้องระบุเหตุผล เอกสารกลับเป็น Draft พร้อมแถบแจ้งเหตุผลให้คนแก้เห็น</li>
+      <li>ส่งขออนุมัติใหม่อีกครั้ง <b>เหตุผลเดิมจะถูกล้างทิ้ง</b> ไม่ค้างอยู่บนใบที่แก้แล้ว</li>
+      <li>อนุมัติแล้ว (Final) แก้เนื้อหาไม่ได้อีก</li>
+    </ul>
+    <figure>
+      <img src="/manual-images/22-material-requisition.jpg" width="1536" height="782" alt="หน้ารายการใบเบิกและใบคืนวัสดุ" loading="lazy" />
+      <figcaption>หน้ารายการใบเบิกและใบคืนวัสดุ — กรองตามสถานะ Draft / รออนุมัติ / Final ได้จากแถบด้านบน</figcaption>
+    </figure>
+    <figure>
+      <img src="/manual-images/23-job-order.jpg" width="1536" height="782" alt="หน้ารายการใบสั่งงาน" loading="lazy" />
+      <figcaption>หน้ารายการใบสั่งงาน</figcaption>
+    </figure>
+    <figure>
+      <img src="/manual-images/24-purchase-request.jpg" width="1536" height="782" alt="หน้ารายการใบขอซื้อ" loading="lazy" />
+      <figcaption>หน้ารายการใบขอซื้อ</figcaption>
+    </figure>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <p class="part"><span>ผลิต</span></p>
+
+  <!-- ═══ 14 ═══ (เพิ่ม 2026-08-21: โมดูลฝ่ายผลิต ขึ้นระบบ 2026-08-20) -->
+  <section id="ch14">
+    <h2><span class="ch-no">14</span>ใบสั่งผลิต (ฝ่ายผลิต)</h2>
+    <p>หมวด <b>ผลิต</b> ทำงานคล้ายหมวดโครงการ แต่<b>เก็บเอกสารคนละชุดกัน</b> — ใบเบิกวัสดุและใบขอซื้อของฝ่ายผลิตจะไม่ปนกับของฝ่ายโครงการ ถึงจะเป็นฟอร์มเดียวกันก็ตาม</p>
+
+    <h3>ใบสั่งผลิต (FM-PD-02)</h3>
+    <ul>
+      <li>สร้างจาก <b>Scope of Work ที่อนุมัติแล้วโดยตรง</b> ไม่ต้องผ่านโครงการ</li>
+      <li>งานหนึ่งงานออกใบสั่งผลิตได้<b>หลายใบ</b> (ใบละหนึ่งชิ้นงานที่ต้องผลิต)</li>
+      <li>เลขที่รูปแบบ <code>SC-2026-08-009</code> — ใช้ <b>ปี ค.ศ.</b> ตามฟอร์มกระดาษจริง ต่างจากเอกสารอื่นในระบบที่ใช้ปี พ.ศ.</li>
+    </ul>
+
+    <h3>รายการในใบสั่งผลิต — 3 แบบ</h3>
+    <ol>
+      <li><b>หัวข้อสินค้า</b> (ตัวหนา) และแถบคั่น "ชิ้นส่วน" — ใส่หมายเหตุได้ แต่ไม่มีจำนวน/หน่วย และ<b>ไม่ถูกนับเลข</b> แทรกเพิ่มกี่อันเลขรายการข้างล่างก็ไม่เลื่อน</li>
+      <li><b>รายการหลัก</b> — มีเลขกำกับ จำนวน และหน่วย</li>
+      <li><b>บรรทัดย่อย</b> — บรรทัดย่อหน้าใต้รายการหลัก เช่น "หนา 7 mm." หรือ "สเต็ปที่ 1 …"</li>
+    </ol>
+
+    <h3>ช่องลงนาม 5 ช่อง — เซ็นคนละเวลากัน</h3>
+    <div class="tbl-scroll"><table>
+      <tr><th>ช่อง</th><th>ลงเมื่อไร</th><th>แก้ได้ตอนไหน</th></tr>
+      <tr><td>ผู้สั่งผลิต</td><td>ตอนเขียนใบ</td><td>เฉพาะสถานะ Draft</td></tr>
+      <tr><td>ผู้อนุมัติ</td><td>ตอนกดอนุมัติ</td><td><b>พิมพ์เองไม่ได้เลย</b> ระบบเติมให้ตอนอนุมัติ</td></tr>
+      <tr><td>ผู้ส่งมอบงาน / ผู้ตรวจรับงาน / แผนกต้นทุน</td><td>หลังงานเสร็จ</td><td>ทุกสถานะ รวมถึงหลังอนุมัติแล้ว</td></tr>
+    </table></div>
+    <div class="callout"><b>ทำไม 3 ช่องล่างยังแก้ได้หลังอนุมัติ:</b> เพราะงานยังไม่เสร็จตอนอนุมัติใบ ถ้าล็อกไปด้วยทั้งใบ 3 ช่องนี้จะพิมพ์ออกมาว่างตลอด — ช่องกลุ่มนี้จึงมี<b>ปุ่มบันทึกของตัวเอง</b>อยู่ในการ์ดลายเซ็น</div>
+    <div class="callout warn"><b>ต้องอนุมัติใบสั่งผลิตก่อน จึงเบิกของได้:</b> ใบสั่งผลิตที่ยังเป็น Draft จะออกใบเบิกวัสดุหรือใบขอซื้อต่อไม่ได้</div>
+    <figure>
+      <img src="/manual-images/25-production-order.jpg" width="1536" height="782" alt="หน้ารายการใบสั่งผลิต" loading="lazy" />
+      <figcaption>หน้ารายการใบสั่งผลิต — เริ่มจากปุ่ม "สร้างใบสั่งผลิต" แล้วเลือก Scope of Work ที่อนุมัติแล้ว</figcaption>
+    </figure>
+    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
+  </section>
+
+  <p class="part"><span>คลังสินค้า</span></p>
+
+  <!-- ═══ 15 ═══ -->
+  <section id="ch15">
+    <h2><span class="ch-no">15</span>คลังสินค้า (Products)</h2>
     <ul>
       <li><b>เพิ่มสินค้า</b> — กด <span class="btn-ref">เพิ่มสินค้า</span> กรอกชื่อ รหัส หมวดหมู่ หน่วย ราคา รายละเอียด</li>
       <li><b>หมวดหมู่</b> — จัดการได้จากปุ่มจัดการหมวดหมู่ในหน้าเดียวกัน</li>
@@ -585,50 +888,55 @@
     </ul>
     <div class="callout"><b>เชื่อมกับใบเสนอราคา:</b> ข้อมูลที่ดึงไปใช้เป็น "สำเนา ณ ตอนนั้น" — แก้สินค้าในคลังภายหลังไม่กระทบใบเสนอราคาที่ออกไปแล้ว</div>
     <figure>
-      <img src="/manual-images/08-products.jpg" alt="หน้าคลังสินค้า" loading="lazy" />
+      <img src="/manual-images/08-products.jpg" width="1536" height="782" alt="หน้าคลังสินค้า" loading="lazy" />
       <figcaption>หน้าคลังสินค้า — รายการสินค้า ค้นหา/กรอง และปุ่มจัดการหมวดหมู่</figcaption>
     </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
-  <!-- ═══ 10 ═══ -->
-  <section id="ch10">
-    <h2><span class="ch-no">10</span>ลูกค้า (Customers)</h2>
-    <ul>
-      <li>เก็บข้อมูลลูกค้า: ชื่อบริษัท ผู้ติดต่อ โทรศัพท์ อีเมล ที่อยู่ เลขผู้เสียภาษี ข้อมูลการจัดส่ง/โครงการ</li>
-      <li>กด <span class="btn-ref">เพิ่มลูกค้า</span> เพื่อสร้าง คลิกรายการเพื่อแก้ไข ลูกค้าเลิกติดต่อใช้ Archive</li>
-      <li>ในฟอร์มใบเสนอราคา ใช้ช่อง "เลือกลูกค้า" ดึงข้อมูลจากหน้านี้มาเติมอัตโนมัติ</li>
-    </ul>
+  <!-- ═══ 16 ═══ (เพิ่ม 2026-08-21: โมดูลสต๊อกสินค้า ขึ้นระบบ 2026-08-18) -->
+  <section id="ch16">
+    <h2><span class="ch-no">16</span>สต๊อกสินค้า</h2>
+    <p>เมนู <b>สต๊อกสินค้า</b> (ในหมวดคลังสินค้า) แสดงจำนวนคงเหลือปัจจุบันของแต่ละสินค้า พร้อมประวัติการรับเข้า/ตัดออก/ปรับยอดทุกครั้ง</p>
+
+    <h3>การปรับสต๊อก</h3>
+    <p>กดปุ่ม <span class="btn-ref">ปรับสต๊อก</span> ท้ายแถวสินค้า แล้วเลือกประเภทรายการ</p>
+    <div class="tbl-scroll"><table>
+      <tr><th>ประเภท</th><th>ใช้เมื่อ</th></tr>
+      <tr><td>รับเข้า</td><td>ของเข้าคลัง — ตั้งยอดตั้งต้น หรือรับของที่ซื้อมา</td></tr>
+      <tr><td>ตัดออก</td><td>จ่ายของออกจากคลัง</td></tr>
+      <tr><td>ปรับยอด</td><td>แก้ยอดให้ตรงกับที่นับได้จริง</td></tr>
+    </table></div>
+    <div class="callout"><b>ยอดคงเหลือแก้ตรง ๆ ไม่ได้:</b> หน้าคลังสินค้า (บทที่ 15) แก้ชื่อ/รหัส/ราคาได้ แต่แก้ยอดคงเหลือไม่ได้ — ยอดเปลี่ยนได้ทางเดียวคือผ่านการปรับสต๊อกหรือการตัดสต๊อกจากใบกำกับภาษี เพื่อให้ทุกการเปลี่ยนแปลงมีประวัติเสมอ</div>
+    <div class="callout warn"><b>ตัดออกเกินจำนวนที่มีไม่ได้:</b> ระบบปฏิเสธทันทีถ้ายอดคงเหลือไม่พอ</div>
+
+    <h3>การตัดสต๊อกจากใบกำกับภาษี</h3>
+    <p>เข้าเมนู <b>ใบกำกับภาษี/ใบส่งสินค้า (IV)</b> ในหมวดบัญชี แล้วกดที่แถวเอกสาร จะมีแผง <span class="btn-ref">ตัดสต๊อกสินค้า</span> ให้เลือกสินค้าและจำนวนที่ตัดตามใบนั้น ประวัติจะอ้างอิงกลับไปที่เลขที่เอกสารได้</p>
+
+    <div class="callout warn"><b>ข้อจำกัดที่ต้องรู้:</b>
+      <ul>
+        <li><b>ไม่มีปุ่มยกเลิกรายการที่บันทึกไปแล้ว</b> — ถ้าตัดผิด ต้องสร้างรายการ "รับเข้า" จำนวนเท่ากันกลับเข้าไปเอง ประวัติจะเห็นทั้งสองรายการ</li>
+        <li><b>ยังนำเข้ายอดตั้งต้นเป็นไฟล์ไม่ได้</b> — ต้องกรอกทีละสินค้าผ่านปุ่มปรับสต๊อก</li>
+        <li>ตัวเลข "คงเหลือ" ในช่องเลือกสินค้าของแผงตัดสต๊อก <b>อาจไม่อัปเดตทันที</b>หลังตัดไปแล้วในรอบเดียวกัน ปิดแล้วเปิดแผงใหม่จะเห็นเลขที่ถูกต้อง (ยอดจริงในระบบถูกต้องเสมอ)</li>
+      </ul>
+    </div>
     <figure>
-      <img src="/manual-images/07-customers.jpg" alt="หน้าลูกค้า" loading="lazy" />
-      <figcaption>หน้าจัดการข้อมูลลูกค้า</figcaption>
+      <img src="/manual-images/26-stock.jpg" width="1536" height="782" alt="หน้าสต๊อกสินค้า" loading="lazy" />
+      <figcaption>หน้าสต๊อกสินค้า — จำนวนคงเหลือต่อสินค้า พร้อมปุ่มประวัติและปุ่มปรับสต๊อกท้ายแต่ละแถว</figcaption>
     </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
-  <!-- ═══ 11 ═══ -->
-  <section id="ch11">
-    <h2><span class="ch-no">11</span>Template ใบเสนอราคา</h2>
-    <ul>
-      <li>เก็บ "แม่แบบ" รายการสินค้า/สเปค/เงื่อนไขมาตรฐานของงานแต่ละประเภท ใช้ตอนสร้างใบเสนอราคาผ่าน Wizard</li>
-      <li>ผู้มีสิทธิ์สามารถ สร้าง แก้ไข ทำสำเนา เปิด-ปิดใช้งาน (เฉพาะ Template ที่ "ใช้งาน" จึงปรากฏใน Wizard)</li>
-      <li>การแก้ Template ไม่กระทบใบเสนอราคาที่สร้างไปแล้ว (ระบบคัดลอกเนื้อหา ณ ตอนสร้าง)</li>
-    </ul>
-    <figure>
-      <img src="/manual-images/06-templates.jpg" alt="หน้า Template ใบเสนอราคา" loading="lazy" />
-      <figcaption>หน้าจัดการ Template ใบเสนอราคา</figcaption>
-    </figure>
-    <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
-  </section>
+  <p class="part"><span>ผู้ดูแลระบบ</span></p>
 
-  <!-- ═══ 12 ═══ -->
-  <section id="ch12">
-    <h2><span class="ch-no">12</span>ส่วนผู้ดูแลระบบ</h2>
+  <!-- ═══ 17 ═══ -->
+  <section id="ch17">
+    <h2><span class="ch-no">17</span>ส่วนผู้ดูแลระบบ</h2>
     <h3>จัดการผู้ใช้งาน</h3>
     <ul>
-      <li><span class="btn-ref">เพิ่มผู้ใช้</span> — กรอกชื่อ อีเมล ชื่อผู้ใช้ รหัสผ่านเริ่มต้น เลือก <b>บทบาท</b> <b>แผนก</b> (Purchase / Project / Factory / Technic / Service / Accounting) และตำแหน่ง</li>
+      <li><span class="btn-ref">เพิ่มผู้ใช้</span> — กรอกชื่อ อีเมล ชื่อผู้ใช้ รหัสผ่านเริ่มต้น เลือก <b>บทบาท</b> <b>แผนก</b> <b>ทีม</b> และตำแหน่ง</li>
       <li>แก้ไขข้อมูล รีเซ็ตรหัสผ่าน และ <b>ปิดใช้งาน</b> บัญชีพนักงานที่พ้นสภาพ (ปิดแล้วถูกล็อกออกทันทีในการใช้งานถัดไป)</li>
-      <li>แผนกของผู้ใช้ถูกใช้เป็นรายชื่อผู้รับใน "เอกสารส่งถึง" ของ Scope of Work — เลือกแผนกให้ถูกต้อง</li>
+      <li>ช่อง <b>แผนก</b> เลือกจากรายชื่อแผนกจริงที่สร้างไว้ในหน้า "แผนกและทีม" (ช่อง <b>ทีม</b> จะขึ้นให้เลือกเมื่อแผนกนั้นมีทีมย่อย) — <b>ตั้งให้ถูกต้องทุกคน</b> เพราะแผนกคือสิ่งที่ระบบใช้ตัดสินว่าใครได้รับใบส่งมอบที่ฝ่ายขายติ๊กส่งมา (ดูบทที่ 7) และใช้กำหนดขอบเขตการมองเห็นเอกสารระดับทีม/แผนก</li>
       <li><b>อีเมลของผู้ใช้</b> — ใช้สำหรับเข้าสู่ระบบและเป็นข้อมูลติดต่อ (ระบบไม่ส่งอีเมลออกภายนอก — การแจ้งเอกสารใช้แจ้งเตือนในระบบ ดูบทที่ 6)</li>
     </ul>
     <h3>บทบาทและสิทธิ์ (เฉพาะ Super Admin)</h3>
@@ -636,21 +944,35 @@
       <li>ระบบมีบทบาทมาตรฐาน เช่น Super Admin, Administrator, Approver, Sales User, Viewer</li>
       <li>สร้างบทบาทใหม่และกำหนดสิทธิ์รายข้อได้จากตารางสิทธิ์ (ดู/สร้าง/แก้ไข/อนุมัติ/พิมพ์ ของแต่ละโมดูล)</li>
       <li>สิทธิ์สำคัญ: "ดู...ของผู้อื่น (viewAll)" — ถ้าไม่ติ๊ก ผู้ใช้เห็นเฉพาะเอกสารที่ตัวเองสร้าง</li>
-      <li>โมดูล <a href="#ch8">งานบริการ (บทที่ 8)</a> มีกลุ่มสิทธิ์ "บริการ" แยกต่างหาก — ต้องติ๊กให้บทบาทที่ต้องการก่อน ทีมจึงจะเห็นเมนูนี้</li>
+      <li>โมดูล <a href="#ch10">งานบริการ (บทที่ 10)</a> มีกลุ่มสิทธิ์ "บริการ" แยกต่างหาก — ต้องติ๊กให้บทบาทที่ต้องการก่อน ทีมจึงจะเห็นเมนูนี้</li>
     </ul>
     <div class="callout warn"><b>ข้อควรระวัง:</b> เมื่อระบบอัปเดตและมี "สิทธิ์ตัวใหม่" เพิ่มเข้ามา บทบาทที่มีอยู่แล้วจะยังไม่ได้สิทธิ์นั้นโดยอัตโนมัติ — Super Admin ต้องเข้าไปติ๊กเพิ่มในหน้าบทบาทและสิทธิ์เอง มิฉะนั้นผู้ใช้จะไม่เห็นเมนู/ปุ่มใหม่</div>
+    <h3>แผนกและทีม (เฉพาะ Super Admin)</h3>
+    <p>ใช้สร้างและจัดการ<b>แผนก</b>ของบริษัท และ<b>ทีมย่อย</b>ภายในแต่ละแผนก เป็นรายชื่อกลางที่หน้าจัดการผู้ใช้งานดึงไปใช้</p>
+    <ul>
+      <li>กด <span class="btn-ref">+ เพิ่มแผนก</span> เพื่อสร้างแผนกใหม่ (กรอกแค่ชื่อ) และกดที่ลูกศรหน้าชื่อแผนกเพื่อกาง<b>ทีม</b>ข้างในออกมาจัดการ</li>
+      <li>เปลี่ยนชื่อได้จากไอคอนดินสอ — ชื่อที่เปลี่ยนมีผลกับเอกสารเดิมทันที ไม่ต้องตามแก้</li>
+      <li>ไอคอนถังขยะคือ <b>เก็บเข้าคลัง (archive)</b> ไม่ใช่ลบถาวร แผนกที่เก็บแล้วจะหายจากช่องเลือกในหน้าจัดการผู้ใช้งาน แต่พนักงานที่ตั้งค่าไว้แล้วยังคงค่าเดิม</li>
+      <li>ชื่อทีมซ้ำกันข้ามแผนกได้ ขอแค่ไม่ซ้ำภายในแผนกเดียวกัน</li>
+    </ul>
+    <div class="callout"><b>ทำไมต้องตั้งให้ครบ:</b> ฟีเจอร์ส่งใบส่งมอบถึงแผนก (บทที่ 7) และการมองเห็นเอกสารแบบเฉพาะทีม/เฉพาะแผนก อาศัยข้อมูลนี้ทั้งหมด ถ้าแผนกในระบบยังไม่ครบ หรือพนักงานยังไม่ได้ตั้งแผนก ฟีเจอร์เหล่านี้จะเงียบ ไม่มีใครได้รับอะไร</div>
+
     <h3>บันทึกการใช้งาน (Audit Log)</h3>
     <p>บันทึกเหตุการณ์สำคัญทั้งหมด (ใครทำอะไรเมื่อไร) แบบอ่านอย่างเดียว แก้ไขหรือลบไม่ได้ — ใช้ตรวจสอบย้อนหลัง เช่น ใครแก้ใบเสนอราคา ใครอนุมัติ ใครส่งแจ้งเตือนเอกสาร</p>
     <figure>
-      <img src="/manual-images/09-users.jpg" alt="หน้าจัดการผู้ใช้งาน" loading="lazy" />
+      <img src="/manual-images/09-users.jpg" width="1536" height="782" alt="หน้าจัดการผู้ใช้งาน" loading="lazy" />
       <figcaption>หน้าจัดการผู้ใช้งาน</figcaption>
+    </figure>
+    <figure>
+      <img src="/manual-images/27-departments.jpg" width="1536" height="782" alt="หน้าแผนกและทีม" loading="lazy" />
+      <figcaption>หน้าแผนกและทีม — หนึ่งการ์ดต่อหนึ่งแผนก กดลูกศรเพื่อกางทีมย่อยข้างใน</figcaption>
     </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
-  <!-- ═══ 13 ═══ -->
-  <section id="ch13">
-    <h2><span class="ch-no">13</span>ตั้งค่า (Settings)</h2>
+  <!-- ═══ 18 ═══ -->
+  <section id="ch18">
+    <h2><span class="ch-no">18</span>ตั้งค่า (Settings)</h2>
     <div class="tbl-scroll"><table>
       <tr><th style="width:26%">แท็บ</th><th>ใช้ทำอะไร</th></tr>
       <tr><td>โปรไฟล์</td><td>แก้ชื่อ อัปโหลดรูปโปรไฟล์ และ <b>รูปลายเซ็น</b> (แสดงบนเอกสาร เช่น ใบเสนอราคา/Scope of Work) รวมถึงเปลี่ยนภาษาไทย/อังกฤษ</td></tr>
@@ -659,15 +981,17 @@
       <tr><td>การแจ้งเตือน</td><td>เปิด/ปิดชนิดการแจ้งเตือนที่ต้องการรับ</td></tr>
     </table></div>
     <figure>
-      <img src="/manual-images/10-settings.jpg" alt="หน้าตั้งค่า" loading="lazy" />
+      <img src="/manual-images/10-settings.jpg" width="1536" height="782" alt="หน้าตั้งค่า" loading="lazy" />
       <figcaption>หน้าตั้งค่า</figcaption>
     </figure>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
-  <!-- ═══ 14 ═══ -->
-  <section id="ch14">
-    <h2><span class="ch-no">14</span>การพิมพ์เอกสารเป็น PDF</h2>
+  <p class="part"><span>อื่น ๆ</span></p>
+
+  <!-- ═══ 19 ═══ -->
+  <section id="ch19">
+    <h2><span class="ch-no">19</span>การพิมพ์เอกสารเป็น PDF</h2>
     <ol>
       <li>เปิดเอกสารที่ต้องการ แล้วกดปุ่ม <span class="btn-ref">พิมพ์ / PDF</span> (ใบส่งมอบสินค้า: กดปุ่มพิมพ์ของงวดที่ต้องการ)</li>
       <li>ในหน้าต่างพิมพ์ของเบราว์เซอร์ เลือกเครื่องพิมพ์จริง หรือ <b>"Save as PDF"</b> เพื่อบันทึกเป็นไฟล์</li>
@@ -677,9 +1001,9 @@
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
-  <!-- ═══ 15 ═══ -->
-  <section id="ch15">
-    <h2><span class="ch-no">15</span>คำถามพบบ่อย (FAQ)</h2>
+  <!-- ═══ 20 ═══ -->
+  <section id="ch20">
+    <h2><span class="ch-no">20</span>คำถามพบบ่อย (FAQ)</h2>
     <div class="tbl-scroll"><table>
       <tr><th style="width:40%">อาการ / คำถาม</th><th>วิธีแก้</th></tr>
       <tr><td>เข้าสู่ระบบไม่ได้ / ลืมรหัสผ่าน</td><td>ติดต่อผู้ดูแลระบบเพื่อรีเซ็ตรหัสผ่าน — ระบบไม่มีปุ่มลืมรหัสผ่านด้วยตนเอง</td></tr>
@@ -687,37 +1011,72 @@
       <tr><td>ไม่เห็นเมนู/ปุ่มที่คู่มือบอก</td><td>บัญชีของคุณไม่มีสิทธิ์ส่วนนั้น — แจ้งผู้ดูแลระบบตรวจบทบาทและสิทธิ์ (โดยเฉพาะหลังอัปเดตใหญ่ อาจต้องติ๊กสิทธิ์ใหม่เพิ่ม)</td></tr>
       <tr><td>แก้ไขเอกสารไม่ได้ ปุ่มจาง</td><td>เอกสารอยู่ในสถานะล็อก (Final หรือรออนุมัติ) หรือคุณไม่ใช่เจ้าของและไม่มีสิทธิ์แก้ของผู้อื่น</td></tr>
       <tr><td>ส่งแจ้งเตือนเอกสารไม่ได้ / ผู้รับไม่เห็นแจ้งเตือน</td><td>ดูบทที่ 6 "การส่งเอกสารถึงผู้รับ" — ตารางแก้ปัญหาครบทุกกรณี</td></tr>
-      <tr><td>บันทึกรายงานบริการเป็นฉบับสมบูรณ์ไม่ได้</td><td>มีรายการที่ติ๊ก "ผิดปกติ" แต่ยังไม่ได้ระบุรายละเอียดหรือแนบรูป — ทุกรายการผิดปกติต้องมีทั้งรายละเอียดและรูปอย่างน้อย 1 รูปก่อนเสร็จสิ้นได้ (ดูบทที่ 8)</td></tr>
-      <tr><td>ไม่เห็นเมนู "บริการ"</td><td>บัญชียังไม่มีสิทธิ์กลุ่ม "บริการ" — แจ้งผู้ดูแลระบบไปติ๊กให้ในหน้าบทบาทและสิทธิ์ (ดูบทที่ 8 และ 12)</td></tr>
+      <tr><td>บันทึกรายงานบริการเป็นฉบับสมบูรณ์ไม่ได้</td><td>มีรายการที่ติ๊ก "ผิดปกติ" แต่ยังไม่ได้ระบุรายละเอียดหรือแนบรูป — ทุกรายการผิดปกติต้องมีทั้งรายละเอียดและรูปอย่างน้อย 1 รูปก่อนเสร็จสิ้นได้ (ดูบทที่ 10)</td></tr>
+      <tr><td>ไม่เห็นเมนู "บริการ"</td><td>บัญชียังไม่มีสิทธิ์กลุ่ม "บริการ" — แจ้งผู้ดูแลระบบไปติ๊กให้ในหน้าบทบาทและสิทธิ์ (ดูบทที่ 10 และ 17)</td></tr>
       <tr><td>พิมพ์ใบส่งมอบสินค้าแล้วไม่มีรายการสินค้า</td><td>ยังไม่ได้ติ๊กสินค้าในงวดนั้น — ติ๊กอย่างน้อย 1 รายการ บันทึกร่าง แล้วพิมพ์ใหม่</td></tr>
       <tr><td>ใบส่งมอบสินค้าไม่มีงวด Down Payment</td><td>ตั้งใจไว้เช่นนั้น — เงินมัดจำเป็นการชำระล่วงหน้า ไม่ใช่การส่งมอบสินค้า</td></tr>
       <tr><td>แก้ใบเสนอราคาแล้ว Scope of Work / ใบส่งมอบไม่เปลี่ยนตาม</td><td>เอกสารปลายทางเก็บสำเนาของตัวเอง — เปิดเอกสารนั้นแล้วกด "อัปเดตข้อมูลจาก..." เพื่อดึงข้อมูลล่าสุด</td></tr>
       <tr><td>ตัวเลขแดชบอร์ดไม่ตรงกับยอดรวมในใบเสนอราคา</td><td>แดชบอร์ดแสดงมูลค่า "ก่อนภาษี" ส่วนใบเสนอราคาแสดงยอดสุทธิ (รวม VAT)</td></tr>
+      <tr><td>ไม่เห็นเมนู โครงการ / ใบเบิก-คืนวัสดุ / ใบสั่งงาน / ใบขอซื้อ ทั้งที่เป็น Administrator</td><td>บทบาทเดิมในฐานข้อมูลยังไม่ได้รับสิทธิ์กลุ่มนี้ — Super Admin ต้องเข้าหน้าบทบาทและสิทธิ์แล้วติ๊กสิทธิ์กลุ่ม "โครงการ" ให้ก่อน (ดูข้อควรระวังในบทที่ 17)</td></tr>
+      <tr><td>เมนู "ใบส่งมอบสินค้า" โผล่ 3 ที่ ผิดปกติไหม</td><td>ไม่ผิด ตั้งใจให้อยู่ทั้งหมวดงานขาย โครงการ และผลิต เพราะเป็นเอกสารใบเดียวกัน กดจากหมวดไหนก็เข้าหน้าเดียวกัน (ดูบทที่ 2)</td></tr>
+      <tr><td>ติ๊กส่งใบส่งมอบถึงแผนกแล้ว แต่ปลายทางไม่เห็น</td><td>แผนกในระบบยังไม่ครบ หรือพนักงานปลายทางยังไม่ได้ตั้งแผนกให้ตรงกับรายชื่อในหน้า "แผนกและทีม" — ดูบทที่ 7 และ 17</td></tr>
+      <tr><td>สร้างโครงการ / ใบสั่งผลิต จากงานนี้ไม่ได้ แถวเป็นสีจาง</td><td>Scope of Work ใบนั้นยังไม่ได้อนุมัติ (Final) — ต้องอนุมัติงานก่อน (ดูบทที่ 12 และ 14)</td></tr>
+      <tr><td>ตัดสต๊อกผิด อยากยกเลิกรายการ</td><td>ยังไม่มีปุ่มยกเลิก — สร้างรายการ "รับเข้า" จำนวนเท่ากันกลับเข้าไปแทน ประวัติจะเห็นทั้งสองรายการ (ดูบทที่ 16)</td></tr>
+      <tr><td>หน้า "ใบแจ้งหนี้/ใบวางบิล" ไม่มีปุ่มสร้าง</td><td>ปกติ — BI ออกพร้อม AR/IV ในการกดครั้งเดียวเสมอ จึงไม่มีกรณีต้องสร้างแยก (ดูบทที่ 11)</td></tr>
+      <tr><td>ตัวเลขอายุหนี้ในแดชบอร์ดบัญชีไม่เปลี่ยนตามช่วงเวลาที่เลือก</td><td>ตั้งใจไว้เช่นนั้น — อายุหนี้ สถานะการวางบิล และงานที่ยังไม่ออกบิลมัดจำ เป็นภาพ ณ ปัจจุบันเสมอ ไม่ถูกกรองตามช่วงเวลา (ดูบทที่ 11)</td></tr>
       <tr><td>อยากรู้ว่าระบบอัปเดตอะไรใหม่บ้าง</td><td>คลิกไอคอน ✦ "มีอะไรใหม่" ที่แถบด้านบน</td></tr>
     </table></div>
     <div class="callout"><b>ติดปัญหาอื่น:</b> ติดต่อผู้ดูแลระบบ พร้อมแจ้งหน้าจอ/เมนูที่ใช้อยู่ และข้อความแจ้งเตือนที่เห็น (ถ้ามี) เพื่อให้ช่วยตรวจสอบได้เร็วขึ้น</div>
     <p class="top-link"><a href="#top">↑ กลับไปสารบัญ</a></p>
   </section>
 
-  <footer>คู่มือการใช้งานระบบ TCS ERP · ฉบับวันที่ 14 สิงหาคม 2026 — เปิดจากปุ่ม "คู่มือการใช้งาน" บนแถบด้านบนของระบบได้ตลอดเวลา</footer>
+  <footer>คู่มือการใช้งานระบบ TCS ERP · ฉบับวันที่ 21 สิงหาคม 2026 — เปิดจากปุ่ม "คู่มือการใช้งาน" บนแถบด้านบนของระบบได้ตลอดเวลา</footer>
 </div>
 <script>
   // ไฮไลต์บทที่กำลังอ่านอยู่ในสารบัญด้านข้าง
+  //
+  // เดิมโค้ดนี้ไล่ entries แล้วให้ "ตัวที่เข้ามาท้ายสุดของรอบนั้น" ชนะ ซึ่งผิดสองทาง:
+  // IntersectionObserver ไม่รับประกันว่า entries จะเรียงตามลำดับในหน้า (เลื่อนเร็ว ๆ
+  // หรือเลื่อนขึ้นแล้วมีหลายบทเข้าแถบพร้อมกัน จะไฮไลต์บทที่ไม่ได้อ่านอยู่) และตอนบทหลุด
+  // ออกจากแถบก็ไม่มีใครลบ active ให้ ไฮไลต์จึงค้าง ตอนนี้เก็บเป็นเซ็ตของบทที่อยู่ในแถบ
+  // แล้วเลือก "บทที่อยู่บนสุดในหน้า" เสมอ ซึ่งเป็นบทที่ผู้อ่านกำลังอ่านจริง
   (function () {
     var links = document.querySelectorAll(".side-nav a[href^='#ch']");
-    if (!links.length || !("IntersectionObserver" in window)) return;
+    var sections = document.querySelectorAll("section[id^='ch']");
+    if (!links.length || !sections.length || !("IntersectionObserver" in window)) return;
+
     var byId = {};
     links.forEach(function (a) { byId[a.getAttribute("href").slice(1)] = a; });
+
+    var order = {};
+    sections.forEach(function (s, i) { order[s.id] = i; });
+
+    var visible = {};
     var current = null;
+
+    function render() {
+      var bestId = null;
+      for (var id in visible) {
+        if (bestId === null || order[id] < order[bestId]) bestId = id;
+      }
+      // ไม่มีบทไหนอยู่ในแถบ (เช่น อยู่บนหัวเรื่อง/สารบัญ) — คงไฮไลต์เดิมไว้ ดีกว่าไม่ไฮไลต์อะไรเลย
+      if (bestId === null) return;
+      var next = byId[bestId];
+      if (!next || next === current) return;
+      if (current) current.classList.remove("active");
+      next.classList.add("active");
+      current = next;
+    }
+
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
-        if (!e.isIntersecting) return;
-        if (current) current.classList.remove("active");
-        current = byId[e.target.id];
-        if (current) current.classList.add("active");
+        if (e.isIntersecting) visible[e.target.id] = true;
+        else delete visible[e.target.id];
       });
+      render();
     }, { rootMargin: "-15% 0px -70% 0px" });
-    document.querySelectorAll("section[id^='ch']").forEach(function (s) { io.observe(s); });
+
+    sections.forEach(function (s) { io.observe(s); });
   })();
 </script>
 </body>

@@ -816,10 +816,12 @@ export default function App() {
             onNavigateToTemplate={navigateToTemplate}
             onNavigateToScopeOfWork={navigateToScopeOfWork}
           />
-          {/* 2026-08-07: opens the web manual page (public/manual.html) — replaced the PDF
-              (public/คู่มือการใช้งาน TCS ERP.pdf, kept on disk but no longer linked) per direct
-              user request for the new document-style manual. Update public/manual.html directly;
-              docs/manual/user-manual.html (the old PDF source) is superseded. */}
+          {/* 2026-08-07: opens the web manual page (public/manual.html) — replaced the old PDF per
+              direct user request for the new document-style manual. That PDF is no longer served:
+              c2f91b5 moved it out of public/ as a data-exposure fix (public/ is served
+              unauthenticated) to reference/company/คู่มือการใช้งาน TCS ERP.pdf, where it still sits
+              on disk, gitignored. public/manual.html is now the ONLY live manual — edit it directly;
+              the old docs/manual/user-manual.html PDF source was deleted 2026-08-21. */}
           <a
             href="/manual.html"
             target="_blank"

@@ -14,6 +14,22 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-21] User manual brought back in sync with the app, and its toolchain fixed.**
+  `public/manual.html` had been frozen at its 2026-08-14 edition against an app that had since grown
+  5 modules. Restructured 15 → 20 chapters, regrouped to mirror the real sidebar, 12 new screenshots,
+  7 new FAQ rows. No product code changed, so the ~42% / ~98% figures above are unmoved — this is
+  documentation catching up, not new scope. Three real bugs in `docs/manual/generate-pdf.mjs` were
+  fixed alongside it (it rendered the superseded `docs/manual/user-manual.html`, wrote its output
+  back into unauthenticated `public/`, and loaded over `file://` so every figure printed blank);
+  that superseded source and its `docs/manual/images/` folder were then deleted, leaving exactly one
+  manual. **Two claims to be careful with**, both corrected during review: the old
+  `คู่มือการใช้งาน TCS ERP.pdf` was *moved* by `c2f91b5` to gitignored
+  `reference/company/`, not destroyed; and the long-repeated "the automated browser cannot reach
+  this machine's dev server" premise is **false** — Playwright drove `localhost:3000` fine, so the
+  ~40 TODO.md items resting on it mean "not yet attempted", not "not possible". Still unverified:
+  `generate-pdf.mjs` has not been run end-to-end (needs `npm install --no-save puppeteer-core`).
+  See CHANGELOG.md 2026-08-21 and TODO.md.
+
 - ✅ **[2026-08-20j] Delivery Order can be routed to departments — and the department master data
   turns out to be unusable as-is.** Sales ticks which departments a delivery note goes to; everyone
   in those departments sees it on their own list (view + print only, enforced by a single
