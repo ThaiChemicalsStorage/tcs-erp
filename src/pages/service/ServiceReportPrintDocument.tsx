@@ -56,7 +56,27 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
   engineerUser?: User;
 }) {
   const r = serviceReport;
-  const abnormalItems: { sectionTitle: string; groupTitle: string; label: string; abnormalDetail: string; photos: typeof r.checklist[number]["groups"][number]["items"][number]["photos"] }[] = [];
+  // รายการที่ยกมาแสดงรายละเอียด: ผิดปกติทุกใบ + ใบที่ "ปกติ" แต่มีรูปแนบ
+  /**
+   * Detail entries are collected for every abnormal item **plus any item carrying photos at all**,
+   * whatever its status (reported 2026-08-21: "กดปกติแล้วแนบรูปไป รูปมันไม่ขึ้น").
+   *
+   * The editor lets a photo be attached to a Normal item — the photo strip renders for
+   * `isAbnormal || isNormal` — but this section used to filter on `status === "abnormal"` alone, so
+   * those photos were accepted, stored, and then silently dropped from the printed report. Keying
+   * the second branch off `photos.length` rather than off `status === "normal"` keeps that from
+   * recurring for any status added later (a measurement item with a photo prints too).
+   *
+   * `status` is carried through because these entries now mix Normal and Abnormal: this is a
+   * customer-facing document, so an item that passed inspection must never be presented under an
+   * "Abnormal Findings" heading with nothing to distinguish it.
+   */
+  type DetailEntry = {
+    sectionTitle: string; groupTitle: string; label: string; detail: string;
+    isAbnormal: boolean;
+    photos: typeof r.checklist[number]["groups"][number]["items"][number]["photos"];
+  };
+  const detailItems: DetailEntry[] = [];
   for (const section of r.templateSnapshot.sections) {
     const sectionValue = r.checklist.find((s) => s.key === section.key);
     if (section.isOptionalAddon && !(sectionValue?.included ?? false)) continue;
@@ -64,12 +84,18 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
       const groupValue = sectionValue?.groups.find((g) => g.key === group.key);
       for (const item of group.items) {
         const itemValue = groupValue?.items.find((it) => it.key === item.key);
-        if (itemValue?.status === "abnormal") {
-          abnormalItems.push({ sectionTitle: section.title, groupTitle: group.title, label: item.label, abnormalDetail: itemValue.abnormalDetail, photos: itemValue.photos ?? [] });
-        }
+        if (!itemValue) continue;
+        const photos = itemValue.photos ?? [];
+        const isAbnormal = itemValue.status === "abnormal";
+        if (!isAbnormal && photos.length === 0) continue;
+        detailItems.push({
+          sectionTitle: section.title, groupTitle: group.title, label: item.label,
+          detail: itemValue.abnormalDetail, isAbnormal, photos,
+        });
       }
     }
   }
+  const hasAbnormal = detailItems.some((it) => it.isAbnormal);
   let serviceItemNumber = 0;
 
   return (
@@ -203,7 +229,7 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
           })}
 
         <tbody>
-          {abnormalItems.map((it) => {
+          {detailItems.map((it) => {
             serviceItemNumber += 1;
             return (
               <tr key={`${it.sectionTitle}-${it.groupTitle}-${it.label}-${serviceItemNumber}`} style={{ breakInside: "avoid" }}>
@@ -211,12 +237,24 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
                   {/* Heading lives inside the first item's cell (not its own row) so breakInside:avoid
                       can never strand it alone at the bottom of a page while the item jumps to the next. */}
                   {serviceItemNumber === 1 && (
-                    <p className="text-[10.5px] font-bold pt-3 pb-1.5">รายละเอียดรายการที่พบความผิดปกติ / Abnormal Findings</p>
+                    <p className="text-[10.5px] font-bold pt-3 pb-1.5">
+                      {hasAbnormal
+                        ? "รายละเอียดรายการตรวจเช็คและรูปภาพประกอบ / Inspection Details & Photos"
+                        : "รูปภาพประกอบการตรวจเช็ค / Inspection Photos"}
+                    </p>
                   )}
-                  <div className="bg-[#1a3a6b] text-white px-2 py-1 text-[10px] font-semibold">SERVICE ITEM {serviceItemNumber} / {it.label}</div>
+                  <div className="bg-[#1a3a6b] text-white px-2 py-1 text-[10px] font-semibold flex items-center justify-between gap-2">
+                    <span>SERVICE ITEM {serviceItemNumber} / {it.label}</span>
+                    {/* ปกติ/ผิดปกติ ต้องแยกให้ชัดบนเอกสารที่ส่งลูกค้า — รายการที่ผ่านการตรวจต้องไม่ถูกอ่านว่าเป็นข้อบกพร่อง */}
+                    <span className="text-[9px] font-bold whitespace-nowrap">{it.isAbnormal ? "ผิดปกติ / ABNORMAL" : "ปกติ / NORMAL"}</span>
+                  </div>
                   <div className="border border-[#0b1d3a]/20 border-t-0 px-2 py-2 space-y-1.5">
                     <p className="text-[9.5px]"><span className="text-[#5a7299]">หมวด: </span>{it.sectionTitle} — {it.groupTitle}</p>
-                    <p className="text-[9.5px] whitespace-pre-line"><span className="font-semibold">ผลการตรวจ / สิ่งที่พบ: </span>{it.abnormalDetail}</p>
+                    {it.detail.trim() && (
+                      <p className="text-[9.5px] whitespace-pre-line">
+                        <span className="font-semibold">{it.isAbnormal ? "ผลการตรวจ / สิ่งที่พบ: " : "รายละเอียดเพิ่มเติม: "}</span>{it.detail}
+                      </p>
+                    )}
                     {it.photos.length > 0 && (
                       <div className={`grid ${photoGridClass(it.photos.length)} gap-1.5 pt-1`}>
                         {it.photos.map((p) => (

@@ -202,6 +202,34 @@ detail.
 
 ## Photos (added 2026-08-06, pulled forward from the Phase 2 roadmap)
 
+> **Uploading saves the draft first (2026-08-21).** `handleUploadPhoto()` PATCHes the report before
+> it uploads — the same save-then-act shape `handleSendApproval()` uses. This is not optional
+> politeness: a checklist item added on screen exists only in `ServiceReportEditor`'s local state,
+> while `handlePhotoUpload()` resolves its target with `findChecklistItemPath(doc.checklist, …)`
+> against the **saved** document, so attaching a photo to a just-added item returned
+> `404 ไม่พบรายการตรวจเช็ค` — reported by a user as "กดเพิ่มอะไรไปแล้วจะเพิ่มรูป มันเพิ่มไม่ได้".
+> Saving *before* the upload is also what keeps this compatible with the rule below that a photo
+> **response** is applied photos-only: the response still never goes through `applyServerReport()`,
+> so the upload itself cannot clobber unsaved edits. Pinned by
+> `tests/api/serviceReportPhotoUnsavedItem.test.ts`.
+>
+> **Still open — a brand-new report has no photo button at all.** While `serviceReportId === "new"`
+> the checklist is a deliberate read-only preview of the master template (`disabled={!isEditable ||
+> isNew}`, `structureEditable` false, and `displayChecklist` discards local edits), and the photo
+> strip only renders once an item has a status — so the "แนบรูปภาพได้หลังสร้างรายงานร่างแล้ว" copy
+> describes a control that never appears. Auto-saving cannot fix that without first making the
+> checklist editable pre-create, which is a redesign of the create flow rather than a bug fix. See
+> [TODO.md](../TODO.md).
+>
+> **Photos print for Normal items too (2026-08-21).** `ServiceReportPrintDocument.tsx` built its
+> detail section from `status === "abnormal"` alone, so a photo attached to a **ปกติ** item was
+> accepted, stored, and then silently dropped from the printed report (reported: "กดปกติแล้วแนบรูปไป
+> รูปมันไม่ขึ้น"). The filter is now "abnormal **or** carries photos" — keyed off `photos.length`
+> rather than off `status === "normal"`, so any status added later prints its photos too. Because
+> the section now mixes both, each entry carries an explicit **ปกติ / NORMAL** or **ผิดปกติ /
+> ABNORMAL** marker and the heading reads "รายละเอียดรายการตรวจเช็คและรูปภาพประกอบ" — on a
+> customer-facing document an item that passed inspection must never read as a defect.
+
 Attached per checklist item, only while `status === "abnormal"` and the report is `Draft`. Same
 Binary-in-Mongo + unauthenticated capability-URL pattern as Scope of Work's document attachments,
 sized for camera photos rather than documents: **4 MB/photo, 6 photos/item** (vs. Scope of Work's

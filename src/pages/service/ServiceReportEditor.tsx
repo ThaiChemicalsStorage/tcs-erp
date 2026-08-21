@@ -422,13 +422,35 @@ export function ServiceReportEditor({
     setChecklist((prev) => mergeServerPhotosIntoChecklist(prev, updated.checklist));
   };
 
+  // บันทึกร่างให้อัตโนมัติก่อนอัปโหลดเสมอ แล้วค่อยแนบรูป
+  /**
+   * Saves the draft first, then uploads — the same save-then-act shape handleSendApproval uses.
+   *
+   * Why it has to: a checklist item added on screen (or a group added around it) exists only in
+   * this component's state until the draft is saved. The upload route resolves its target with
+   * `findChecklistItemPath(doc.checklist, …)` against the **saved** document, so attaching a photo
+   * to a just-added item used to 404 with "ไม่พบรายการตรวจเช็ค" — an error that looked like
+   * breakage and gave no hint that pressing "บันทึกร่าง" would fix it. Saving first means the item
+   * is always on the server before the photo needs it.
+   *
+   * Saving here is safe precisely because it happens BEFORE the upload: the 2026-08-07 rule that a
+   * photo *response* must never go through applyServerReport() still holds — that response is
+   * applied photos-only, below, so unsaved edits can't be clobbered by the upload itself.
+   */
   const handleUploadPhoto = async (sectionKey: string, groupKey: string, itemKey: string, file: File) => {
     if (!report) return;
+    setSaving(true);
     try {
+      if (isEditable) {
+        const saved = await updateServiceReport(report.id, { ...draftBody(), templateSections: sections });
+        applyServerReport(saved);
+      }
       const updated = await uploadServiceReportPhoto(report.id, { sectionKey, groupKey, itemKey }, file);
       applyServerPhotos(updated);
     } catch (err) {
       applyApiError(err, t("service.toast.photoUploadFailed"));
+    } finally {
+      setSaving(false);
     }
   };
 
