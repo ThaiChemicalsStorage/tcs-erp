@@ -4,7 +4,39 @@
 
 ---
 
-## 2026-08-21c (absolute latest) — 🔴 Production outage: the Docker image shipped without `tsconfig.json`, crash-looping on every boot
+## 2026-08-21d (absolute latest) — Service photos: cropped in every view, and invisible to the customer on Normal items
+
+Two owner reports in one pass: *"บางรูปก็เห็นไม่ครบ"* and *"ในหน้าเวลาเอาลิงก์ส่งให้ลูกค้า กดปกติมีรูป
+แต่มันไม่เห็นรูป"*.
+
+**The customer approval page had the same defect fixed in the print document earlier that day, and
+it was missed.** `CustomerApprovalPage.tsx` gated both the detail text and the photo grid on
+`status === "abnormal"`, so a photo attached to a **ปกติ** item was never shown to the customer —
+on the one page the customer actually sees before signing off. Fixing only the print view left the
+customer-facing half broken. Both now render whenever the data exists, with the detail text keeping
+its amber styling for abnormal items and going muted otherwise.
+
+**Photos were cropped, not fitted, in all three views.** Every photo used `object-cover`, which
+scales an image to fill its box and discards the overflow. Site photos are mostly portrait — taken
+on a phone held upright — so covering them into a short, wide box cut the top and bottom away,
+usually the part worth photographing. Changed to `object-contain` (letterboxed, nothing lost) in:
+
+- `ServiceReportPrintDocument.tsx` — the printed report, `h-[42mm]` boxes
+- `CustomerApprovalPage.tsx` — the customer's approval page, `h-20` boxes
+- `ServiceChecklistItemControl.tsx` — the editor's 64×64 thumbnail. This one matters beyond
+  aesthetics: with `object-cover` the engineer previewed a cropped square while the report printed
+  something different, so there was no way to tell what the customer would end up seeing.
+
+Swept the rest of the codebase for both patterns: no remaining photo rendering filters on
+`abnormal`, and the only surviving `object-cover` calls are the two round profile avatars
+(`App.tsx`, `SettingsPage.tsx`), where cropping to a circle is correct.
+
+Verified: `tsc --noEmit` clean, `npm run lint` 0 errors, `npm run build` clean, `npm test` 264/264.
+Not yet confirmed in a live browser — see [TODO.md](./TODO.md).
+
+---
+
+## 2026-08-21c — 🔴 Production outage: the Docker image shipped without `tsconfig.json`, crash-looping on every boot
 
 Owner reported the container restarting forever right after a Docker deploy:
 

@@ -258,7 +258,10 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
                     {it.photos.length > 0 && (
                       <div className={`grid ${photoGridClass(it.photos.length)} gap-1.5 pt-1`}>
                         {it.photos.map((p) => (
-                          <img key={p.id} src={p.url} alt={p.fileName} className="w-full h-[42mm] object-cover border border-[#0b1d3a]/15" style={{ breakInside: "avoid" }} />
+                          // object-contain, not cover: site photos are mostly portrait (taken on a
+                          // phone held upright), and covering them into a short wide box cropped the
+                          // top and bottom away — usually the part worth photographing.
+                          <img key={p.id} src={p.url} alt={p.fileName} className="w-full h-[42mm] object-contain bg-white border border-[#0b1d3a]/15" style={{ breakInside: "avoid" }} />
                         ))}
                       </div>
                     )}

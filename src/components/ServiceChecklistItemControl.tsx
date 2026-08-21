@@ -245,7 +245,11 @@ function PhotoAttachments({
       <div className="flex flex-wrap gap-2">
         {photos.map((p) => (
           <div key={p.id} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-muted group">
-            <img src={p.url} alt={p.fileName} className="w-full h-full object-cover" />
+            {/* object-contain so the thumbnail matches what the printed report and the customer's
+                approval page actually show. With cover, a portrait photo previewed as a cropped
+                square here while printing as something different — the engineer had no way to see
+                what the customer would end up looking at. */}
+            <img src={p.url} alt={p.fileName} className="w-full h-full object-contain" />
             {onDelete && !disabled && (
               <button
                 type="button"

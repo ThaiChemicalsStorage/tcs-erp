@@ -160,14 +160,18 @@ export default function CustomerApprovalPage() {
                                 <span className="text-muted-foreground text-xs whitespace-nowrap">-</span>
                               )}
                             </div>
-                            {status === "abnormal" && value?.abnormalDetail && (
-                              <p className="text-xs text-[#a75d1a] mt-1">{value.abnormalDetail}</p>
+                            {/* รายละเอียด/รูป แสดงทุกสถานะ ไม่ใช่เฉพาะ "ผิดปกติ" — ช่างแนบรูปกับรายการที่
+                                ติ๊ก "ปกติ" ได้ ถ้ากรองด้วย status ลูกค้าจะไม่มีวันเห็นรูปพวกนั้นเลย */}
+                            {value?.abnormalDetail && (
+                              <p className={`text-xs mt-1 ${status === "abnormal" ? "text-[#a75d1a]" : "text-muted-foreground"}`}>{value.abnormalDetail}</p>
                             )}
-                            {status === "abnormal" && (value?.photos ?? []).length > 0 && (
+                            {(value?.photos ?? []).length > 0 && (
                               <div className="grid grid-cols-3 gap-1.5 mt-2">
                                 {value!.photos.map((p) => (
                                   <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
-                                    <img src={p.url} alt={p.fileName} loading="lazy" className="rounded border border-border w-full h-20 object-cover" />
+                                    {/* object-contain ไม่ใช่ cover — รูปถ่ายหน้างานส่วนใหญ่เป็นแนวตั้ง
+                                        พอ cover ลงกรอบเตี้ยกว้าง หัวกับท้ายรูปจะโดนเฉือนทิ้ง */}
+                                    <img src={p.url} alt={p.fileName} loading="lazy" className="rounded border border-border w-full h-20 object-contain bg-secondary" />
                                   </a>
                                 ))}
                               </div>
