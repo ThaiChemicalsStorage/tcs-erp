@@ -4,7 +4,50 @@
 
 ---
 
-## 2026-08-21b (absolute latest) — Service: attaching a photo now saves the draft first, instead of 404-ing on a just-added checklist item
+## 2026-08-21c (absolute latest) — 🔴 Production outage: the Docker image shipped without `tsconfig.json`, crash-looping on every boot
+
+Owner reported the container restarting forever right after a Docker deploy:
+
+```
+/app/src/lib/quotes.tsx:181
+  "ร่าง": <FilePen size={10} />,
+ReferenceError: React is not defined
+```
+
+**Not caused by the code in that file.** The JSX on that line has been there since 2026-07-09 and
+neither of the day's two commits touched `src/lib/quotes.tsx`. What changed was *how it was run*.
+
+**The chain:**
+1. `src/lib/quotes.tsx` carries JSX (per-status icons) **and** is value-imported by `api/` for its
+   shared amount helpers — so the server loads a `.tsx` file at boot. This is the exact hazard
+   [CLAUDE.md](./CLAUDE.md)'s "check whether it's reachable from `api/`" rule warns about.
+2. The container's `CMD` runs those TypeScript sources through **tsx**, which handles JSX fine — but
+   reads `tsconfig.json` to decide *which* JSX transform to apply.
+3. `tsconfig.json` sets `"jsx": "react-jsx"` — the **automatic** runtime, which is what lets a `.tsx`
+   file use JSX without importing React.
+4. **The Dockerfile's `app` stage never copied `tsconfig.json`.** It copied `package.json`,
+   `node_modules`, `server/`, `api/`, `src/`, `public/` — and nothing else.
+5. With no tsconfig to find, tsx fell back to the **classic** runtime and emitted
+   `React.createElement(...)`. `quotes.tsx` does not import React, so the module threw on
+   evaluation — at boot, every boot.
+
+Confirmed by transforming the real file both ways with esbuild: `jsx: "transform"` emits
+`React.createElement` (and the file has no React import), `jsx: "automatic"` emits
+`react/jsx-runtime`. Host/PM2 deploys never hit this because the repo checkout already has
+`tsconfig.json` sitting beside the sources — only the Docker image was missing it.
+
+**Fix**: the `app` stage now copies `tsconfig.json` and `tsconfig.api.json`, with a comment saying
+plainly that dropping them crash-loops the container. Verified `.dockerignore` excludes neither, and
+that `tsconfig.json` has no `references` needing further files. `react` is already a real
+`dependency`, so it survives `npm prune --omit=dev` and `react/jsx-runtime` resolves at runtime.
+
+**Left deliberately unfixed**: JSX still lives in `src/lib/quotes.tsx`, a file the server imports.
+Copying the tsconfig makes that safe, but the underlying fragility — presentation code inside a
+module the API loads — remains, and is now tracked in [TODO.md](./TODO.md).
+
+---
+
+## 2026-08-21b — Service: attaching a photo now saves the draft first, instead of 404-ing on a just-added checklist item
 
 User report: *"หน้าเซอร์วิสเวลากดเพิ่มอะไรไปแล้วจะเพิ่มรูป มันเพิ่มไม่ได้ มันต้องกดบันทึกร่างก่อน"*.
 Investigated before building (owner asked to be consulted first), which turned up **two different
