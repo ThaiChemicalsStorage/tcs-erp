@@ -152,7 +152,7 @@ function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
               key={preset.label}
               type="button"
               onClick={() => applyPreset(preset)}
-              className="px-2.5 py-1 text-[11px] border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
+              className="px-2.5 py-1 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all"
             >
               {preset.label}
             </button>
@@ -209,7 +209,7 @@ function PaymentInstallmentsEditor({ installments, onChange, disabled }: {
         </div>
       )}
       {!disabled && (
-        <button onClick={addRow} className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
+        <button onClick={addRow} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
           <Plus size={11} /> {t("scopeOfWorkDoc.addInstallment")}
         </button>
       )}
@@ -1073,7 +1073,7 @@ export function ScopeOfWorkDocument({
                 {generatingRevisionNote ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />} {t("scopeOfWorkDoc.generateRevisionNote")}
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground mb-2">
+            <p className="text-xs text-muted-foreground mb-2">
               {t("scopeOfWorkDoc.revisionNoteHelp").replace("{predecessor}", revisionPredecessorScopeNumber)}
             </p>
             <textarea

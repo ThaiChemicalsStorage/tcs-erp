@@ -34,11 +34,11 @@ export function TemplatePreview({ template, compact = false }: { template: Quota
             {template.sections.map((section) => (
               <div key={section.id}>
                 <p className="text-xs font-semibold text-foreground">{section.title}</p>
-                <p className="text-[11px] text-muted-foreground">{section.items.length} {t("quotation.wizard.items")}</p>
+                <p className="text-xs text-muted-foreground">{section.items.length} {t("quotation.wizard.items")}</p>
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground mb-1">{t("quotation.wizard.includedItemsPreview")}</p>
+          <p className="text-xs text-muted-foreground mb-1">{t("quotation.wizard.includedItemsPreview")}</p>
           <ul className="text-xs text-foreground list-disc list-inside space-y-0.5">
             {allItems.slice(0, 6).map((item) => (
               <li key={item.id} className="truncate">{item.name}</li>
@@ -58,7 +58,7 @@ export function TemplatePreview({ template, compact = false }: { template: Quota
                       {item.quantity != null && item.unit ? <span className="text-muted-foreground"> — {item.quantity} {item.unit}</span> : null}
                     </p>
                     {item.subDetails.length > 0 && (
-                      <ul className="text-[11px] text-muted-foreground list-disc list-inside ml-3">
+                      <ul className="text-xs text-muted-foreground list-disc list-inside ml-3">
                         {item.subDetails.map((s, i) => <li key={i}>{s}</li>)}
                       </ul>
                     )}
@@ -76,8 +76,8 @@ export function TemplatePreview({ template, compact = false }: { template: Quota
                 if (lines.length === 0) return null;
                 return (
                   <div key={type} className="mb-1.5">
-                    <p className="text-[11px] font-medium text-muted-foreground">{termLabel(type)}</p>
-                    <ul className="text-[11px] text-foreground list-disc list-inside">
+                    <p className="text-xs font-medium text-muted-foreground">{termLabel(type)}</p>
+                    <ul className="text-xs text-foreground list-disc list-inside">
                       {lines.map((l, i) => <li key={i}>{l.text}</li>)}
                     </ul>
                   </div>

@@ -781,7 +781,7 @@ export default function App() {
             return (
               <div key={group.labelKey} className="space-y-0.5">
                 {navExpanded && (
-                  <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/70">{t(group.labelKey)}</p>
+                  <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">{t(group.labelKey)}</p>
                 )}
                 {items.map(({ key, icon: Icon, labelKey }) => (
                   <button

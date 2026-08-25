@@ -48,7 +48,7 @@ function DiscountModeToggle({
           onClick={() => onChange(o.mode)}
           aria-pressed={value === o.mode}
           title={label}
-          className={`px-1.5 py-0.5 text-[11px] font-mono leading-none transition-colors ${
+          className={`px-1.5 py-0.5 text-xs font-mono leading-none transition-colors ${
             value === o.mode ? "bg-[#c9a84c]/15 text-[#c9a84c] font-semibold" : "text-muted-foreground hover:text-foreground"
           }`}
         >
@@ -405,7 +405,7 @@ export function LineItemsEditor({
                         />
                         {lineDiscountMode === "percent"
                           ? <Percent size={10} className="text-muted-foreground flex-shrink-0" />
-                          : <span className="text-[11px] font-mono text-muted-foreground flex-shrink-0">฿</span>}
+                          : <span className="text-xs font-mono text-muted-foreground flex-shrink-0">฿</span>}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-mono text-right font-semibold text-foreground align-top">{fmt(lineSubtotal(line))}</td>
@@ -484,7 +484,7 @@ export function LineItemsEditor({
                 />
                 {discountMode === "percent"
                   ? <Percent size={10} className="text-muted-foreground" />
-                  : <span className="text-[11px] font-mono text-muted-foreground">฿</span>}
+                  : <span className="text-xs font-mono text-muted-foreground">฿</span>}
               </span>
               <DiscountModeToggle
                 value={discountMode}

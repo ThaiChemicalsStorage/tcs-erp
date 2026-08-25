@@ -881,7 +881,7 @@ export function QuoteDocument({
                 <Wand2 size={13} /> สร้างสรุปการแก้ไขอัตโนมัติ
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground mb-2">
+            <p className="text-xs text-muted-foreground mb-2">
               กดปุ่มด้านบนเพื่อให้ระบบตรวจสอบและสรุปว่าใบนี้แก้ไขอะไรไปจากต้นฉบับ ({revisionPredecessorId || "-"}) เป็นข้อความอัตโนมัติ — แก้ไข/เพิ่มเติมข้อความเองได้ตามต้องการก่อนบันทึก
             </p>
             <textarea

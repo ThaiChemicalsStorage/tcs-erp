@@ -142,7 +142,7 @@ function SummaryCard({ title, value, sub, icon: Icon, accent, help }: {
       </div>
       <p className="text-xl font-bold text-foreground font-mono">{value}</p>
       <p className="text-xs text-muted-foreground mt-0.5">{title}</p>
-      {sub && <p className="text-[11px] text-muted-foreground font-mono mt-1">{sub}</p>}
+      {sub && <p className="text-xs text-muted-foreground font-mono mt-1">{sub}</p>}
     </div>
   );
 }
@@ -215,7 +215,7 @@ function AgingTable({ invoices }: { invoices: ArDashboardStats["aging"]["invoice
                   <td className="px-4 py-2.5 text-sm text-foreground max-w-[220px] truncate" title={inv.customerName}>{inv.customerName}</td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{fmtDateShort(inv.dueDate, "th")}</td>
                   <td className="px-4 py-2.5 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ background: `${AGING_BUCKET_COLORS[inv.bucketKey]}1a`, color: AGING_BUCKET_COLORS[inv.bucketKey] }}>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: `${AGING_BUCKET_COLORS[inv.bucketKey]}1a`, color: AGING_BUCKET_COLORS[inv.bucketKey] }}>
                       {inv.daysOverdue <= 0 ? t("accountingDashboard.agingTable.notYetDue") : `${inv.daysOverdue} ${t("accountingDashboard.unit.days")}`}
                     </span>
                   </td>

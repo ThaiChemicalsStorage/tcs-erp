@@ -159,6 +159,8 @@ When a chart or donut legend needs more than 2-3 categories (job type distributi
 - **Chrome / Label** (weight 500, 12px floor, `text-xs`): buttons, form labels, status pills, secondary/fine-print text. **Never below 12px for a real form label** — `text-[10px]` is reserved only for uppercase-tracking-wide "section eyebrows" (table header cells, sidebar group labels), a distinct, deliberately-tiny reading mode.
 - **Numbers / Codes** (JetBrains Mono, weight 400/500): quotation numbers, document numbers, currency amounts, dates, product codes — anything that must be scanned character-by-character.
 
+**What the ramp actually computes to.** `html` is set to `--font-size: 15px`, and the Tailwind steps are rem-based, so the rendered sizes are **`text-xs` 11.25px**, `text-sm` 13.125px, `text-base` 15px — not the 12/14/16 the class names suggest. The "12px floor" above is the *token* floor (`text-xs`), not a literal pixel measurement. Never hard-code a raw `text-[Npx]` to chase a number: it pins one element while every other size moves with the root, which is exactly how 68 stray `text-[11px]` values accumulated before the 2026-08-25 sweep.
+
 ### Named Rules
 **The Two-Tier Density Rule.** On dense working pages (e.g. the Quotation editor), chrome — labels, buttons, badges, pills — sits at `text-xs` (12px) while actual content — input values, table data, totals — sits at `text-sm` (14px). Bumping everything to the same size erases the hierarchy and reads as heavier, not more readable; when a page genuinely needs bigger text, apply this two-tier split deliberately per element rather than a single mechanical size bump.
 

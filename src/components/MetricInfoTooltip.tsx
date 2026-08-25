@@ -20,7 +20,7 @@ export function MetricInfoTooltip({ label, text }: { label: string; text: string
       {open && (
         <span
           role="tooltip"
-          className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-lg bg-[#0b1d3a] text-white text-[11px] leading-relaxed p-2.5 shadow-xl"
+          className="absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-lg bg-[#0b1d3a] text-white text-xs leading-relaxed p-2.5 shadow-xl"
         >
           {text}
           <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-[#0b1d3a] rotate-45" />

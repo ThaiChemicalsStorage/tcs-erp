@@ -260,7 +260,7 @@ export function GlobalSearch({
       ) : !hasAnyResults && !loading ? (
         <div className="text-center py-8 px-4">
           <p className="text-xs text-foreground">{t("search.noResults").replace("{query}", trimmedQuery)}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">{t("search.noResultsHelper")}</p>
+          <p className="text-xs text-muted-foreground mt-1">{t("search.noResultsHelper")}</p>
         </div>
       ) : !hasAnyResults && loading ? (
         <div className="flex items-center justify-center gap-2 py-8">
@@ -276,15 +276,15 @@ export function GlobalSearch({
               </div>
               <p className="text-xs text-muted-foreground truncate"><Highlight text={item.client} query={trimmedQuery} /> {item.project && `· ${item.project}`}</p>
               <div className="flex items-center justify-between gap-2 mt-0.5">
-                <span className="text-[11px] text-muted-foreground">{t(statusLabelKey[item.status as keyof typeof statusLabelKey] ?? "quotation.status.draft")} · {item.salesperson}</span>
-                <span className="text-[11px] font-mono text-foreground flex-shrink-0">฿{item.amount.toLocaleString("th-TH")}</span>
+                <span className="text-xs text-muted-foreground">{t(statusLabelKey[item.status as keyof typeof statusLabelKey] ?? "quotation.status.draft")} · {item.salesperson}</span>
+                <span className="text-xs font-mono text-foreground flex-shrink-0">฿{item.amount.toLocaleString("th-TH")}</span>
               </div>
             </button>
           ))}
           {renderGroup<SearchCustomerResult>(idPrefix, t("search.group.customers"), <Contact size={11} />, results?.customers ?? [], groupOffsets.customers, (item, isActive, id, onClick) => (
             <button id={id} role="option" aria-selected={isActive} className={rowCls(isActive)} onClick={onClick}>
               <p className="text-sm font-medium text-foreground truncate"><Highlight text={item.companyName} query={trimmedQuery} /></p>
-              <p className="text-[11px] text-muted-foreground truncate">
+              <p className="text-xs text-muted-foreground truncate">
                 {item.contactName && <Highlight text={item.contactName} query={trimmedQuery} />}
                 {item.phone && ` · ${item.phone}`}{item.email && ` · ${item.email}`}
               </p>
@@ -296,7 +296,7 @@ export function GlobalSearch({
                 <p className="text-sm font-medium text-foreground truncate"><Highlight text={item.name} query={trimmedQuery} /></p>
                 <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0"><Highlight text={item.code} query={trimmedQuery} /></span>
               </div>
-              <p className="text-[11px] text-muted-foreground truncate">{item.categoryName} · {item.unit}</p>
+              <p className="text-xs text-muted-foreground truncate">{item.categoryName} · {item.unit}</p>
             </button>
           ))}
           {renderGroup<SearchTemplateResult>(idPrefix, t("search.group.templates"), <Layers size={11} />, results?.templates ?? [], groupOffsets.templates, (item, isActive, id, onClick) => (
@@ -305,7 +305,7 @@ export function GlobalSearch({
                 <p className="text-sm font-medium text-foreground truncate"><Highlight text={item.templateName} query={trimmedQuery} /></p>
                 <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0"><Highlight text={item.jobTypeCode} query={trimmedQuery} /></span>
               </div>
-              <p className="text-[11px] text-muted-foreground truncate">{item.jobTypeName}{item.description && ` · ${item.description}`}</p>
+              <p className="text-xs text-muted-foreground truncate">{item.jobTypeName}{item.description && ` · ${item.description}`}</p>
             </button>
           ))}
           {renderGroup<SearchScopeOfWorkResult>(idPrefix, t("search.group.scopeOfWorks"), <ClipboardList size={11} />, results?.scopeOfWorks ?? [], groupOffsets.scopeOfWorks, (item, isActive, id, onClick) => (
@@ -315,7 +315,7 @@ export function GlobalSearch({
                 <span className="text-[10px] font-mono text-muted-foreground flex-shrink-0">{item.status}</span>
               </div>
               <p className="text-xs text-muted-foreground truncate"><Highlight text={item.customerName} query={trimmedQuery} /> · <Highlight text={item.quotationNumber} query={trimmedQuery} /></p>
-              <p className="text-[11px] text-muted-foreground truncate">{item.jobTypeCode} — {item.jobTypeName}</p>
+              <p className="text-xs text-muted-foreground truncate">{item.jobTypeCode} — {item.jobTypeName}</p>
             </button>
           ))}
           {renderGroup<SearchPageResult>(idPrefix, t("search.group.pages"), <MenuIcon size={11} />, results?.pages ?? [], groupOffsets.pages, (item, isActive, id, onClick) => (
@@ -328,7 +328,7 @@ export function GlobalSearch({
           {renderGroup<SearchUserResult>(idPrefix, t("search.group.users"), <UsersIcon size={11} />, results?.users ?? [], groupOffsets.users, (item, isActive, id, onClick) => (
             <button id={id} role="option" aria-selected={isActive} className={rowCls(isActive)} onClick={onClick}>
               <p className="text-sm font-medium text-foreground truncate"><Highlight text={item.fullName} query={trimmedQuery} /></p>
-              <p className="text-[11px] text-muted-foreground truncate">{item.roleName} · {item.department || "—"} · {item.email}</p>
+              <p className="text-xs text-muted-foreground truncate">{item.roleName} · {item.department || "—"} · {item.email}</p>
             </button>
           ))}
         </>

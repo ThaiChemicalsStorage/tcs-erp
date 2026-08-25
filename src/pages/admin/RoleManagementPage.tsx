@@ -171,7 +171,7 @@ export function RoleManagementPage({
               <div className="space-y-3">
                 {PERMISSION_GROUPS.map((group) => (
                   <div key={group.label} className="border border-border rounded-lg p-3">
-                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">{t(group.labelKey)}</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{t(group.labelKey)}</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {group.permissions.map((p) => {
                         const locked = isPermissionLockedToSuperAdmin(p);
@@ -266,7 +266,7 @@ export function RoleManagementPage({
               </div>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed mb-3">{r.description || t("common.dash")}</p>
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <span>{r.isSuperAdmin ? t("roles.allPermissions") : t("roles.permissionCount").replace("{n}", String(r.permissions.length))}</span>
               <span>·</span>
               <span>{t("roles.userCount").replace("{n}", String(usersWithRole(r.key)))}</span>

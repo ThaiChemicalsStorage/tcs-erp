@@ -101,7 +101,7 @@ export function SalesActivityAnalytics({ data, anchorDate, dateFiltered }: { dat
           </div>
 
           <div className="mt-5 pt-4 border-t border-border">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("dashboard.salesActivity.bySalesperson.title")}</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("dashboard.salesActivity.bySalesperson.title")}</p>
             {bySalespersonRows.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-4">{t("dashboard.salesActivity.bySalesperson.empty")}</p>
             ) : (

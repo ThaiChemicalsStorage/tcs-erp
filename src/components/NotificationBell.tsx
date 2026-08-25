@@ -135,7 +135,7 @@ export function NotificationBell({
                         {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-[#c9a84c] flex-shrink-0" />}
                         <p className={`text-xs truncate ${n.read ? "text-foreground" : "font-semibold text-foreground"}`} title={n.title}>{n.title}</p>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{n.description}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.description}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] font-mono text-muted-foreground">{n.module}</span>
                         <span className="text-[10px] text-muted-foreground">·</span>

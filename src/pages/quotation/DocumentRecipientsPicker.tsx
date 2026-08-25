@@ -68,7 +68,7 @@ export function DocumentRecipientsPicker({
       <h2 className="text-sm font-semibold text-foreground mb-1" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
         ผู้รับเอกสาร
       </h2>
-      <p className="text-[11px] text-muted-foreground mb-3">
+      <p className="text-xs text-muted-foreground mb-3">
         ติ๊กเลือกพนักงานในแต่ละแผนกที่เลือกไว้ใน "เอกสารส่งถึง" ด้านบน หรือเลือกพนักงานคนใดก็ได้ใน "{ADDITIONAL_RECIPIENT_LABEL}" ด้านล่าง —
         เมื่อกดปุ่ม "ส่งแจ้งเตือนผู้รับเอกสาร" พนักงานที่ติ๊กเลือกไว้จะได้รับแจ้งเตือนที่กระดิ่งในระบบเป็นรายคน และเปิดดูเอกสารนี้ได้ทันที
       </p>
@@ -92,7 +92,7 @@ export function DocumentRecipientsPicker({
                 )}
               </div>
               {candidates.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground italic">
+                <p className="text-xs text-muted-foreground italic">
                   ยังไม่มีพนักงานที่ตั้งค่าแผนกเป็น "{dept.label}" — ตั้งค่าได้ที่หน้าจัดการผู้ใช้งาน
                 </p>
               ) : (
@@ -133,7 +133,7 @@ export function DocumentRecipientsPicker({
               )}
             </span>
           </div>
-          <p className="text-[11px] text-muted-foreground mb-2">
+          <p className="text-xs text-muted-foreground mb-2">
             เลือกพนักงานคนใดก็ได้จากทุกแผนก — ผู้รับในส่วนนี้จะได้รับแจ้งเตือนเสมอ ไม่ขึ้นกับแผนกที่ติ๊กไว้ใน "เอกสารส่งถึง"
           </p>
           {!disabled && (
@@ -150,7 +150,7 @@ export function DocumentRecipientsPicker({
             </div>
           )}
           {additionalCandidates.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground italic">ไม่พบพนักงานที่ตรงกับคำค้นหา</p>
+            <p className="text-xs text-muted-foreground italic">ไม่พบพนักงานที่ตรงกับคำค้นหา</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
               {additionalCandidates.map((u) => {
@@ -205,11 +205,11 @@ export function DocumentRecipientsPicker({
             }}
           />
         </div>
-        <p className="text-[11px] text-muted-foreground mb-2">
+        <p className="text-xs text-muted-foreground mb-2">
           ผู้รับเอกสารเปิดดูไฟล์ที่แนบได้จากหน้าเอกสารนี้ — ระบบจำกัดขนาดและจำนวนไฟล์ไว้เพื่อประหยัดพื้นที่จัดเก็บ
         </p>
         {attachments.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground italic">ยังไม่มีไฟล์แนบ</p>
+          <p className="text-xs text-muted-foreground italic">ยังไม่มีไฟล์แนบ</p>
         ) : (
           <div className="border border-border/70 rounded-lg divide-y divide-border/60">
             {attachments.map((a) => (
@@ -245,7 +245,7 @@ export function DocumentRecipientsPicker({
         <label htmlFor="recipientMessage" className="block text-xs font-semibold text-foreground mb-1">
           ข้อความเพิ่มเติมถึงผู้รับ <span className="font-normal text-muted-foreground">(ไม่บังคับ)</span>
         </label>
-        <p className="text-[11px] text-muted-foreground mb-2">
+        <p className="text-xs text-muted-foreground mb-2">
           ข้อความนี้จะบันทึกไว้กับเอกสารให้ผู้รับเห็นเมื่อเปิดดู เช่น ระบุกำหนดเวลา หรือคำแนะนำเพิ่มเติมสำหรับผู้รับ
         </p>
         <textarea

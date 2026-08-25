@@ -13,7 +13,7 @@ export function PageHeader({
   return (
     <div className="flex items-end justify-between flex-wrap gap-3">
       <div>
-        {path && <p className="text-[11px] text-muted-foreground font-mono mb-1">{path}</p>}
+        {path && <p className="text-xs text-muted-foreground font-mono mb-1">{path}</p>}
         <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{title}</h1>
         {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
       </div>

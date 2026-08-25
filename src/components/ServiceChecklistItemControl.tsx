@@ -141,7 +141,7 @@ export function ServiceChecklistItemControl({
       </tr>
       {error && (
         <tr>
-          <td colSpan={totalCols} className="pl-5 pr-5 pb-1.5"><p className="text-[11px] text-[#e05252]">{error}</p></td>
+          <td colSpan={totalCols} className="pl-5 pr-5 pb-1.5"><p className="text-xs text-[#e05252]">{error}</p></td>
         </tr>
       )}
       {(isAbnormal || isNormal) && (
@@ -239,7 +239,7 @@ function PhotoAttachments({
 
   return (
     <div>
-      <p className="text-[11px] font-medium text-[#a75d1a] mb-1.5">
+      <p className="text-xs font-medium text-[#a75d1a] mb-1.5">
         {t("service.checklist.photosLabel")} {required && photos.length === 0 && <span className="text-[#e05252]">*{t("service.checklist.photoRequired")}</span>}
       </p>
       <div className="flex flex-wrap gap-2">

@@ -207,7 +207,7 @@ export function ScopeOfWorkItemsEditor({
                               ))}
                             </div>
                             {!disabled && (
-                              <button onClick={() => addSpecLine(item.id)} className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 text-[11px] bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
+                              <button onClick={() => addSpecLine(item.id)} className="flex items-center gap-1.5 mt-2 px-2.5 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
                                 <Plus size={11} /> เพิ่มข้อกำหนด
                               </button>
                             )}

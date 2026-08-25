@@ -180,7 +180,7 @@ export function DepartmentManagementPage({
                     {!d.isActive && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">{t("departments.archivedBadge")}</span>
                     )}
-                    {deptTeams.length > 0 && <span className="text-[11px] text-muted-foreground">· {deptTeams.length}</span>}
+                    {deptTeams.length > 0 && <span className="text-xs text-muted-foreground">· {deptTeams.length}</span>}
                   </div>
                 )}
 
@@ -202,10 +202,10 @@ export function DepartmentManagementPage({
               {expanded && (
                 <div className="border-t border-border bg-secondary/30 p-4">
                   <div className="flex items-center justify-between mb-2.5">
-                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{t("departments.teamsTitle")}</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("departments.teamsTitle")}</p>
                     <button
                       onClick={() => { setCreatingTeamFor(d.id); setNewTeamName(""); setError(""); }}
-                      className="flex items-center gap-1 text-[11px] text-[#c9a84c] hover:text-[#f0c040] transition-colors"
+                      className="flex items-center gap-1 text-xs text-[#c9a84c] hover:text-[#f0c040] transition-colors"
                     >
                       <Plus size={12} /> {t("departments.addTeam")}
                     </button>

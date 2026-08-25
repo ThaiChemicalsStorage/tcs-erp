@@ -366,7 +366,7 @@ export function TemplateEditorView({
             <div key={type} className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{termLabel(type)}</p>
-                <button onClick={() => addTerm(type)} className="text-[11px] text-[#c9a84c] hover:text-[#f0c040] transition-colors">+ {t("common.add")}</button>
+                <button onClick={() => addTerm(type)} className="text-xs text-[#c9a84c] hover:text-[#f0c040] transition-colors">+ {t("common.add")}</button>
               </div>
               <div className="space-y-1.5">
                 {termsOfType(type).map(({ term, i }) => (
@@ -375,7 +375,7 @@ export function TemplateEditorView({
                     <button onClick={() => deleteTerm(i)} title={t("common.delete")} aria-label={t("common.delete")} className="p-1 text-muted-foreground hover:text-[#e05252] transition-colors"><Trash2 size={13} /></button>
                   </div>
                 ))}
-                {termsOfType(type).length === 0 && <p className="text-[11px] text-muted-foreground/70">—</p>}
+                {termsOfType(type).length === 0 && <p className="text-xs text-muted-foreground/70">—</p>}
               </div>
             </div>
           ))}
@@ -386,7 +386,7 @@ export function TemplateEditorView({
         <label htmlFor={internalNotesId} className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1.5" style={SERIF}>
           <StickyNote size={13} className="text-[#e08a3c]" /> {t("templates.form.internalNotes")}
         </label>
-        <p className="text-[11px] text-muted-foreground mb-1.5">{t("templates.form.internalNotesHint")}</p>
+        <p className="text-xs text-muted-foreground mb-1.5">{t("templates.form.internalNotesHint")}</p>
         <textarea
           id={internalNotesId}
           value={draft.internalNotes.join("\n")}
@@ -451,7 +451,7 @@ function ItemEditor({
           <select
             value={item.itemType}
             onChange={(e) => onChange((it) => ({ ...it, itemType: e.target.value as TemplateItem["itemType"] }))}
-            className="w-full text-[11px] text-muted-foreground bg-transparent border border-border rounded px-1.5 py-1 outline-none appearance-none"
+            className="w-full text-xs text-muted-foreground bg-transparent border border-border rounded px-1.5 py-1 outline-none appearance-none"
           >
             <option value="item">{t("templates.itemType.item")}</option>
             <option value="subItem">{t("templates.itemType.subItem")}</option>
@@ -515,7 +515,7 @@ function ItemEditor({
                 value={text}
                 onChange={(e) => updateSubDetail(subIndex, e.target.value)}
                 placeholder={t("quotation.lineItems.subDetailsPlaceholder")}
-                className="flex-1 text-[11px] text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
+                className="flex-1 text-xs text-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/50"
               />
               <button onClick={() => removeSubDetail(subIndex)} title={t("common.delete")} aria-label={t("common.delete")} className="text-muted-foreground hover:text-[#e05252] transition-colors opacity-50 group-hover/pin:opacity-100 group-focus-within/pin:opacity-100 flex-shrink-0">
                 <Trash2 size={11} />

@@ -898,30 +898,30 @@ export function ServiceReportEditor({
                 onChange={(e) => setForm((f) => ({ ...f, customerSnapshot: { ...f.customerSnapshot, address: e.target.value } }))} className={inputClass} />
             </div>
           )}
-          {fieldErrors["customerSnapshot.companyName"] && <p className="text-[11px] text-[#e05252] mt-1">{fieldErrors["customerSnapshot.companyName"]}</p>}
+          {fieldErrors["customerSnapshot.companyName"] && <p className="text-xs text-[#e05252] mt-1">{fieldErrors["customerSnapshot.companyName"]}</p>}
         </div>
 
         <div><label className={labelClass}>{t("service.form.serviceLocation")}</label>
           <input value={form.serviceLocation} disabled={!isEditable} onChange={(e) => setField("serviceLocation", e.target.value)} className={inputClass} />
-          {fieldErrors.serviceLocation && <p className="text-[11px] text-[#e05252] mt-1">{fieldErrors.serviceLocation}</p>}
+          {fieldErrors.serviceLocation && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.serviceLocation}</p>}
         </div>
         <div><label className={labelClass}>{t("service.form.projectOrJobCode")}</label>
           <input value={form.projectOrJobCode} disabled={!isEditable} onChange={(e) => setField("projectOrJobCode", e.target.value)} className={inputClass} />
         </div>
         <div><label className={labelClass}>{t("service.form.serviceSystemName")}</label>
           <input value={form.serviceSystemName} disabled={!isEditable} onChange={(e) => setField("serviceSystemName", e.target.value)} className={inputClass} />
-          {fieldErrors.serviceSystemName && <p className="text-[11px] text-[#e05252] mt-1">{fieldErrors.serviceSystemName}</p>}
+          {fieldErrors.serviceSystemName && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.serviceSystemName}</p>}
         </div>
         <div><label className={labelClass}>{t("service.form.serviceType")}</label>
           <input value={form.serviceType} disabled={!isEditable} onChange={(e) => setField("serviceType", e.target.value)} className={inputClass} />
         </div>
         <div><label className={labelClass}>{t("service.form.inspectionDate")}</label>
           <input type="date" value={form.inspectionDate} disabled={!isEditable} onChange={(e) => setField("inspectionDate", e.target.value)} className={inputClass} />
-          {fieldErrors.inspectionDate && <p className="text-[11px] text-[#e05252] mt-1">{fieldErrors.inspectionDate}</p>}
+          {fieldErrors.inspectionDate && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.inspectionDate}</p>}
         </div>
         <div><label className={labelClass}>{t("service.form.reportDate")}</label>
           <input type="date" value={form.reportDate} disabled={!isEditable} onChange={(e) => setField("reportDate", e.target.value)} className={inputClass} />
-          {fieldErrors.reportDate && <p className="text-[11px] text-[#e05252] mt-1">{fieldErrors.reportDate}</p>}
+          {fieldErrors.reportDate && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.reportDate}</p>}
         </div>
         <div><label className={labelClass}>{t("service.form.nextPmDate")}</label>
           <input type="date" value={form.nextPmDate} disabled={!isEditable} onChange={(e) => setField("nextPmDate", e.target.value)} className={inputClass} />
@@ -931,7 +931,7 @@ export function ServiceReportEditor({
             <option value="">{t("service.form.selectEngineer")}</option>
             {users.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
           </select>
-          {fieldErrors.assignedServiceEngineerId && <p className="text-[11px] text-[#e05252] mt-1">{fieldErrors.assignedServiceEngineerId}</p>}
+          {fieldErrors.assignedServiceEngineerId && <p className="text-xs text-[#e05252] mt-1">{fieldErrors.assignedServiceEngineerId}</p>}
         </div>
         <div className="md:col-span-2"><label className={labelClass}>{t("service.form.additionalInspectors")}</label>
           <input value={form.additionalInspectorNamesText} disabled={!isEditable} onChange={(e) => setField("additionalInspectorNamesText", e.target.value)} placeholder={t("service.form.additionalInspectorsPlaceholder")} className={inputClass} />
@@ -970,7 +970,7 @@ export function ServiceReportEditor({
               control per row would crowd it), so the gesture is stated once here — otherwise it's
               undiscoverable. Text, not a button: it competes with nothing. */}
           {structureEditable && (
-            <p className="px-5 pt-3 text-[11px] text-muted-foreground">{t("service.checklist.renameHint")}</p>
+            <p className="px-5 pt-3 text-xs text-muted-foreground">{t("service.checklist.renameHint")}</p>
           )}
           {displaySections.map((sectionDef) => {
             const sectionValue = previewChecklist.find((s) => s.key === sectionDef.key);
@@ -1128,7 +1128,7 @@ export function ServiceReportEditor({
                   {engineerUser?.signatureDataUrl ? (
                     <img src={engineerUser.signatureDataUrl} alt="" className="max-h-full max-w-full object-contain" />
                   ) : (
-                    <p className="text-[11px] text-muted-foreground px-3 text-center">
+                    <p className="text-xs text-muted-foreground px-3 text-center">
                       {engineerUser ? t("service.signature.noProfileSignature") : t("service.signature.noEngineerAssigned")}
                     </p>
                   )}
@@ -1173,19 +1173,19 @@ export function ServiceReportEditor({
               รายงาน เซ็นชื่อ และกดอนุมัติ/ไม่อนุมัติจากมือถือได้เอง */}
           <div className="flex flex-wrap items-center justify-between gap-3 mt-5 pt-4 border-t border-border">
             <div className="min-w-0">
-              <p className="text-[11px] text-muted-foreground">{t("service.signature.optionalNote")}</p>
+              <p className="text-xs text-muted-foreground">{t("service.signature.optionalNote")}</p>
               {report?.customerApproval?.status === "pending" && (
-                <p className="text-[11px] text-[#866d28] mt-0.5">
+                <p className="text-xs text-[#866d28] mt-0.5">
                   ส่งให้ลูกค้าอนุมัติแล้ว{report.customerApproval.sentViaLine ? " (ผ่าน LINE)" : ""} — รอคำตอบ ลิงก์หมดอายุ {report.customerApproval.expiresAt.slice(0, 10)}
                 </p>
               )}
               {report?.customerApproval?.status === "approved" && (
-                <p className="text-[11px] text-[#207e52] mt-0.5">
+                <p className="text-xs text-[#207e52] mt-0.5">
                   ลูกค้าอนุมัติแล้ว{report.customerApproval.signedName ? ` โดย ${report.customerApproval.signedName}` : ""} ({(report.customerApproval.respondedAt ?? "").slice(0, 10)})
                 </p>
               )}
               {report?.customerApproval?.status === "rejected" && (
-                <p className="text-[11px] text-[#d22626] mt-0.5">
+                <p className="text-xs text-[#d22626] mt-0.5">
                   ลูกค้าไม่อนุมัติ — เหตุผล: {report.customerApproval.rejectReason || "-"}
                 </p>
               )}

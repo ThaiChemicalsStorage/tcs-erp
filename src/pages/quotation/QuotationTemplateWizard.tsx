@@ -325,7 +325,7 @@ export function QuotationTemplateWizard({
                         <FileText size={14} className="text-[#c9a84c]" /> {tpl.templateName}
                       </span>
                       <span className="text-xs text-muted-foreground line-clamp-2">{tpl.description}</span>
-                      <span className="text-[11px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {tpl.sectionCount} {t("quotation.wizard.sections")} · {tpl.itemCount} {t("quotation.wizard.items")}
                       </span>
                     </button>

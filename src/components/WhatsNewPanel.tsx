@@ -64,7 +64,7 @@ export function WhatsNewPanel({ currentUserId }: { currentUserId: string }) {
                     <p className="text-[10px] font-mono text-muted-foreground mt-0.5 ml-3">{formatThaiDate(entry.date)}</p>
                     <ul className="mt-1.5 ml-3 space-y-1">
                       {entry.bullets.map((b, i) => (
-                        <li key={i} className="text-[11px] text-muted-foreground leading-relaxed flex gap-1.5">
+                        <li key={i} className="text-xs text-muted-foreground leading-relaxed flex gap-1.5">
                           <span className="flex-shrink-0">•</span>
                           <span>{b}</span>
                         </li>
