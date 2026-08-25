@@ -333,10 +333,12 @@ export function ServiceReportEditor({
     setSaving(true);
     setFieldErrors({});
     try {
-      const updated = await updateServiceReport(report.id, { ...draftBody(), templateSections: sections });
+      const saved = { ...draftBody(), templateSections: sections };
+      const updated = await updateServiceReport(report.id, saved);
       applyServerReport(updated);
-      // ตั้งฐานเทียบของ auto-save ใหม่ ไม่งั้นจะยิงบันทึกซ้ำด้วยข้อมูลเดิมอีกรอบ
-      autoSave.markSaved();
+      // ตั้งฐานเทียบของ auto-save ใหม่ ไม่งั้นจะยิงบันทึกซ้ำด้วยข้อมูลเดิมอีกรอบ — ใช้ payload ที่ส่งไปจริง
+      // เพื่อไม่ให้สิ่งที่ผู้ใช้พิมพ์เพิ่มระหว่างรอผลบันทึกถูกนับว่า "บันทึกแล้ว" ทั้งที่ยังไม่ได้ส่ง
+      autoSave.markSaved(saved);
       draftBackup.clear();
       showToast(t("service.toast.saved"));
     } catch (err) {

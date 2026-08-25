@@ -92,6 +92,10 @@ genuinely nothing to report). States map to `มีการแก้ไขท�
 `role="status" aria-live="polite"` so a screen reader announces the change without stealing focus.
 `localOnly` swaps in a `CloudOff` icon and "เก็บร่างไว้ในเครื่องให้อัตโนมัติ" for a document that has
 no server record yet — never show the green "saved" state for that case; it would be a lie.
+**`localOnly` means "no server record exists", not "auto-save is off."** Gate it on the document
+being new, never on `!canAutoSaveToServer`: an approved/sent quotation is still editable (Quotation
+`permissions.canEdit` is status-independent) and doesn't auto-save, but its tooltip — "เอกสารนี้ยัง
+ไม่ถูกสร้างในระบบ" — would then be false. Show no chip at all in that case.
 
 **`<DraftRecoveryBanner>`** is the first child of the document's content column, above the
 validation summary. Gold-tinted (`border-[#c9a84c]/35 bg-[#c9a84c]/10`) rather than red — a

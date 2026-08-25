@@ -524,7 +524,18 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
     : " (ลบลายเซ็นลูกค้า)";
   // การบันทึกอัตโนมัติไม่เขียน audit log — ดู isAutoSaveRequest() ใน api/_lib/http.ts
   // An auto-save writes no audit entry; the Draft-only guard above already applied to it too.
-  if (!autoSave) {
+  //
+  // **ยกเว้นการเซ็น/ลบลายเซ็นลูกค้า**: ลายเซ็นคือหลักฐาน และการบันทึกอัตโนมัติคือคำขอ *แรก* ที่พา
+  // ลายเซ็นขึ้นมา (ยิงหลังลูกค้าเซ็นเสร็จไม่กี่วินาที ก่อนผู้ใช้จะกดบันทึกเอง) — พอถึงตอนกดบันทึกเอง
+  // ลายเซ็นบนเซิร์ฟเวอร์เท่าเดิมแล้ว `customerSignedAt` จึงไม่ถูกแตะ และรายการ audit ก็หายไปตลอดกาล
+  //
+  // **Except a signature capture/clear.** The signature is evidence, and the auto-save is now the
+  // *first* request carrying it (it fires seconds after the customer signs, before anyone presses
+  // Save); by the time a manual Save arrives the stored signature already matches, so
+  // `customerSignedAt` stays untouched and the entry would never be written by anyone. This is not
+  // audit noise: it fires only on the one write where the signature actually changed.
+  const signatureChanged = update.customerSignedAt !== undefined;
+  if (!autoSave || signatureChanged) {
     await writeServiceAuditEntry(
       ctx, "Service Report Updated",
       `แก้ไขรายงานบริการ ${id}${update.templateSnapshot ? " (ปรับโครงสร้างรายการตรวจเช็ค)" : ""}${signatureNote}`,

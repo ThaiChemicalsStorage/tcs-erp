@@ -72,7 +72,7 @@ export function isWorkflowActionAllowed(action: ApprovalAction, isOwner: boolean
   }
 }
 
-/** Duplicated from src/lib/quotes.tsx's `approvalActionLabel` (see file header) — used to build server-authoritative audit-log entries for workflow actions. */
+/** Duplicated from src/lib/quotes.ts's `approvalActionLabel` (see file header) — used to build server-authoritative audit-log entries for workflow actions. */
 export const approvalActionLabel: Record<ApprovalAction, string> = {
   submitted: "ส่งขออนุมัติ",
   approved: "อนุมัติ",

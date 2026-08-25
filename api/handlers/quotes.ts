@@ -124,7 +124,7 @@ async function loadTemplateMaster(): Promise<TemplateMasterEntry[]> {
 }
 
 /** Fetches the one full template document needed to freeze `Quote.templateSnapshot` (see
- * src/lib/quotes.tsx) — only called when `validateQuotationTemplate()` above already confirmed
+ * src/lib/quotes.ts) — only called when `validateQuotationTemplate()` above already confirmed
  * `quotationTemplateId` matches a real, non-deleted record, so this should never come back empty in
  * practice; a `null` here (e.g. a genuinely lost race with a hard delete) just means the quote is
  * created without a snapshot rather than failing the whole request — the 3 provenance strings
@@ -228,8 +228,9 @@ function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<Quot
   // `discountMode` must be read before `discount`, because it decides which bound `discount` is
   // checked against (percent ≤ 100 vs. a baht amount). A PATCH that sends only `discount` keeps
   // whatever unit the stored document already uses — the caller sends both together in practice.
-  if ("discountMode" in body) update.discountMode = sanitizeDiscountMode(body.discountMode, "หน่วยส่วนลดรวม");
-  if ("discount" in body) update.discount = sanitizeDiscountPct(body.discount, sanitizeDiscountMode(body.discountMode, "หน่วยส่วนลดรวม"));
+  const discountMode = "discountMode" in body ? sanitizeDiscountMode(body.discountMode, "หน่วยส่วนลดรวม") : undefined;
+  if ("discountMode" in body) update.discountMode = discountMode;
+  if ("discount" in body) update.discount = sanitizeDiscountPct(body.discount, discountMode);
   if ("contactName" in body) update.contactName = sanitizeShortText(body.contactName, "ชื่อผู้ติดต่อ");
   if ("contactPhone" in body) update.contactPhone = sanitizeShortText(body.contactPhone, "เบอร์โทรผู้ติดต่อ");
   if ("contactEmail" in body) update.contactEmail = sanitizeShortText(body.contactEmail, "อีเมลผู้ติดต่อ");
@@ -448,9 +449,18 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   // would produce dozens of identical "แก้ไขใบเสนอราคา" rows and bury the deliberate actions the
   // log exists for. The write itself went through exactly the same permission/validation path as a
   // manual save, and `updatedBy`/`amount` are updated identically.
+  //
+  // **ยกเว้นการเปลี่ยนลูกค้าที่ผูกไว้**: เอกสารฝั่งหน้าจอส่ง `customerId` มาเฉพาะตอนที่ "เปลี่ยนจากของเดิม"
+  // เท่านั้น พอการบันทึกอัตโนมัติเขียนไปแล้ว ค่าเดิมบนหน้าจอก็ขยับตาม การกดบันทึกเองครั้งถัดไปจึงไม่ส่ง
+  // `customerId` มาอีกเลย — รายการ "เปลี่ยนลูกค้าของใบเสนอราคา" จะหายไปตลอดกาลถ้าไม่เขียนตรงนี้
+  //
+  // **Except a customer-link change.** The client sends `customerId` only while it differs from the
+  // loaded quote; once an auto-save has written it, that baseline moves with it and no later manual
+  // Save sends the field at all — so this dedicated entry would never be written by anyone. It
+  // fires only on the one write that actually re-linked the customer, so it adds no noise.
   const bodyKeys = Object.keys(body);
   const isInterestOnlyUpdate = bodyKeys.length > 0 && bodyKeys.every((k) => k === "interest");
-  if (!isInterestOnlyUpdate && !autoSave) {
+  if (!isInterestOnlyUpdate && (!autoSave || customerLinkChanged)) {
     // A dedicated action name when the linked customer specifically changed — one audit entry per
     // PATCH call either way, not a second entry stacked on top of "Quotation Updated".
     if (customerLinkChanged) {
@@ -491,7 +501,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
     createdByUserId: ctx.user.id,
     updatedBy: ctx.user.id,
     approvalHistory: [],
-    // Never inherited from the source — see `Quote.revisionNote`'s doc comment (src/lib/quotes.tsx).
+    // Never inherited from the source — see `Quote.revisionNote`'s doc comment (src/lib/quotes.ts).
     revisionNote: "",
   };
   await quotes.insertOne(doc);
@@ -537,7 +547,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
       createdByUserId: ctx.user.id,
       updatedBy: ctx.user.id,
       approvalHistory: [],
-      // Never inherited from the source — see `Quote.revisionNote`'s doc comment (src/lib/quotes.tsx).
+      // Never inherited from the source — see `Quote.revisionNote`'s doc comment (src/lib/quotes.ts).
       revisionNote: "",
     };
     try {

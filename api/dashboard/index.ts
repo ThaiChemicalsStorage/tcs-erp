@@ -309,7 +309,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // an oversight. An independent 2026-07-14 Codex review flagged the *absence* of one as a High
     // Priority risk ("unsafe if archived/imported quotations obtain isDeleted: true"), but also
     // confirmed no such field exists on `Quote`/`QuoteFields` today (grep confirms: neither the
-    // type in src/lib/quotes.tsx nor api/_lib/collections.ts defines one; quotations are removed
+    // type in src/lib/quotes.ts nor api/_lib/collections.ts defines one; quotations are removed
     // from "active" only via the `ยกเลิก`/Cancelled status, not a soft-delete flag). Filtering on a
     // field that can never be set today would be dead code implying a deletion feature that
     // doesn't exist — the review's own suggested alternative resolution ("formally update the

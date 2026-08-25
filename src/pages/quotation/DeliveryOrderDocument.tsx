@@ -269,8 +269,9 @@ export function DeliveryOrderDocument({
       setSaving(true);
       const updated = await updateDeliveryOrder(deliveryOrder.id, toUpdateFields(deliveryOrder));
       setDeliveryOrder(updated);
-      // ตั้งฐานเทียบของ auto-save ใหม่ ไม่งั้นจะยิงบันทึกซ้ำด้วยข้อมูลเดิมอีกรอบ
-      autoSave.markSaved();
+      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
+      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
+      autoSave.markSaved(toUpdateFields(updated));
       draftBackup.clear();
       showToast("บันทึกร่างแล้ว");
     } catch (err) {

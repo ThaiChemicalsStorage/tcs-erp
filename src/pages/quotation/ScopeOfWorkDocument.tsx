@@ -398,8 +398,9 @@ export function ScopeOfWorkDocument({
       setSaving(true);
       const updated = await updateScopeOfWork(scope.id, isDraft ? toUpdateFields(scope) : toFollowUpFields(scope));
       setScope(updated);
-      // ตั้งฐานเทียบของ auto-save ใหม่ ไม่งั้นจะยิงบันทึกซ้ำด้วยข้อมูลเดิมอีกรอบ
-      autoSave.markSaved();
+      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
+      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
+      autoSave.markSaved(toUpdateFields(updated));
       draftBackup.clear();
       showToast(isDraft ? "บันทึกร่างแล้ว" : "บันทึกเลข PO / ผู้รับเอกสารแล้ว");
     } catch (err) {
@@ -705,8 +706,10 @@ export function ScopeOfWorkDocument({
 
         <div data-tour="sowdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
+          {/* นอก data-tour="sowdoc-completion" — ไม่งั้นกรอบไฮไลต์ของทัวร์ "ความครบถ้วนของเอกสาร"
+              จะกินป้ายบันทึกอัตโนมัติเข้าไปด้วย และวางไม่ตรงกับหน้าเอกสารอื่นทุกหน้า */}
+          {scopeEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
           <div data-tour="sowdoc-completion">
-            {scopeEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
             <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={finalizeValidation.missingCount} />
           </div>
           {canPrint && (

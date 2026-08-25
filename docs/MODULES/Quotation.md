@@ -216,6 +216,14 @@ see [../CHANGELOG.md](../CHANGELOG.md) 2026-08-25 for the cross-module descripti
   snapshotted to `localStorage` instead and the toolbar reads "เก็บร่างไว้ในเครื่องให้อัตโนมัติ".
   Reopening "สร้างใบเสนอราคา" offers it back through the gold recovery banner. The snapshot is
   dropped the moment the quotation is actually created, so the next new quotation starts clean.
+  That "เก็บร่างไว้ในเครื่อง" chip belongs to **new mode only** — `permissions.canEdit` is
+  status-independent, so an approved/sent/won quotation still renders an editable form, and showing
+  the chip there would claim a saved document does not exist yet. Those statuses show no chip.
+- **Changing the linked customer still writes its audit entry even when the auto-save is what
+  carried it** (2026-08-25b). `QuoteDocument` sends `customerId` only while it differs from the
+  loaded quote, so once an auto-save has written it no later manual Save sends the field at all —
+  without the exception in `api/handlers/quotes.ts`, `"Quotation Customer Changed"` would be
+  written by nobody. See [../API.md](../API.md) "Auto-save writes".
 
 ## Signature Integration
 

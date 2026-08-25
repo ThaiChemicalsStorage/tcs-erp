@@ -420,13 +420,16 @@ export function QuoteDocument({
     if (savingBusy) return;
     setSavingBusy(true);
     try {
-      await onSave(currentDraft());
+      const saved = currentDraft();
+      await onSave(saved);
       // สำเนาในเครื่องหมดหน้าที่แล้ว — โดยเฉพาะคีย์ "quotation:new" ที่ต้องลบทิ้งทันทีที่สร้างเอกสารสำเร็จ
       // The local snapshot has served its purpose. This matters most for the "quotation:new" key:
       // once the record actually exists, leaving it behind would greet the next brand-new
       // quotation with a recovery offer for work that is already saved.
       draftBackup.clear();
-      autoSave.markSaved();
+      // ส่ง payload ที่บันทึกไปจริง ไม่ใช่สิ่งที่อยู่บนจอตอนนี้ — ถ้าผู้ใช้พิมพ์ต่อระหว่างรอผลบันทึก
+      // ตัวอักษรที่พิมพ์เพิ่มยังไม่เคยขึ้นเซิร์ฟเวอร์ และต้องถูกบันทึกอัตโนมัติต่อไป
+      autoSave.markSaved(saved);
       showToast(message);
     } catch {
       // caller already surfaced the error toast; nothing further to do
@@ -499,11 +502,13 @@ export function QuoteDocument({
 
         <div data-tour="qdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
-          {!disabled && (
-            canAutoSaveToServer
-              ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />
-              : <AutoSaveIndicator state="idle" lastSavedAt={null} localOnly />
-          )}
+          {/* ป้าย "เก็บร่างไว้ในเครื่อง" ใช้ได้เฉพาะใบที่ยังไม่มีอยู่จริงในระบบเท่านั้น — ใบที่บันทึกแล้วแต่
+              พ้นสถานะร่างไปแล้ว (อนุมัติ/ส่งลูกค้า/ปิดการขาย) ยังแก้ไขได้ แต่ข้อความนั้นจะกลายเป็นคำโกหก
+              The localOnly chip means "no server record exists yet", so it belongs to `mode === "new"`
+              alone. `permissions.canEdit` is status-independent, so an approved/sent/won quotation is
+              still editable — showing it there would claim the document does not exist in the system. */}
+          {!disabled && canAutoSaveToServer && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
+          {!disabled && !isDetail && <AutoSaveIndicator state="idle" lastSavedAt={null} localOnly />}
           <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={validation.missingCount} />
           {permissions.canExport && (
             <button

@@ -300,7 +300,7 @@ export async function positionsCollection() {
  * a "Company Profiles" / issuer-company selector into the Quotation form instead). A Customer is
  * who a quotation is issued *to*, saved once and reused across quotations via the Customer
  * selector (`src/pages/quotation/CustomerSelector.tsx`) — see `Quote.customerId`/
- * `customerSnapshot` in `src/lib/quotes.tsx` and docs/MODULES/Customer.md. Shape intentionally
+ * `customerSnapshot` in `src/lib/quotes.ts` and docs/MODULES/Customer.md. Shape intentionally
  * matches the fields the Quotation form's Customer Information section actually collects
  * (companyName/contactName/phone/email/address/taxId/deliveryMethod/projectName/deliveryAddress)
  * rather than the earlier CRM-flavored draft (position/source/salesOwnerId/notes/status) — no live

@@ -40,6 +40,10 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
  * `export type { … } from`, and a braced clause whose every named specifier carries its own
  * inline `type ` prefix (`import { type A, type B } from "x"`) — TypeScript elides that import
  * entirely, so it never reaches the runtime graph either.
+ *
+ * Two forms carry no clause at all and are therefore *always* runtime edges, so they are matched
+ * separately: a bare side-effect import (`import "./x.js"`) and a dynamic one (`await import("./x.js")`).
+ * Both would drag a `.tsx` in exactly as invisibly as a named import does.
  */
 function runtimeSpecifiers(source: string): string[] {
   const specifiers: string[] = [];
@@ -55,6 +59,8 @@ function runtimeSpecifiers(source: string): string[] {
     }
     specifiers.push(specifier);
   }
+  for (const match of source.matchAll(/(?:^|\n)\s*import\s*["']([^"']+)["']/g)) specifiers.push(match[1]);
+  for (const match of source.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g)) specifiers.push(match[1]);
   return specifiers;
 }
 
@@ -68,10 +74,16 @@ function resolveLocal(fromFile: string, specifier: string): string | null {
   return null;
 }
 
-/** ทุกไฟล์ที่เซิร์ฟเวอร์จะโหลดจริงตอนรัน โดยเริ่มจากทุกไฟล์ใน api/ */
+/**
+ * ทุกไฟล์ที่เซิร์ฟเวอร์จะโหลดจริงตอนรัน โดยเริ่มจากทุกไฟล์ใน api/ และ server/
+ *
+ * `server/` is seeded too, not just `api/`: since the 2026-08-07 VPS cutover `server/index.ts` is
+ * the actual production entrypoint, and a `.tsx` reached from there would crash-loop the container
+ * exactly the same way — being one directory outside `api/` makes no difference at boot.
+ */
 function serverRuntimeGraph(): Set<string> {
   const seen = new Set<string>();
-  const queue = collectSourceFiles(path.join(ROOT, "api"));
+  const queue = [...collectSourceFiles(path.join(ROOT, "api")), ...collectSourceFiles(path.join(ROOT, "server"))];
   queue.forEach((f) => seen.add(f));
   while (queue.length > 0) {
     const file = queue.pop()!;

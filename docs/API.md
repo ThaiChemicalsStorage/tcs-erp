@@ -457,6 +457,19 @@ The flag changes exactly two things, both server-enforced (not UI-only):
 1. **No audit-log entry is written.** Auto-save fires every few seconds while someone types; dozens
    of identical "แก้ไขเอกสาร X" rows per editing session would bury the deliberate actions the log
    exists to record.
+   **Two exceptions, both added 2026-08-25b — an entry that no other write could ever produce.**
+   Suppressing the generic entry is the point; suppressing a *specific* one that only the auto-save
+   is in a position to write silently deletes it from the record:
+   - **Service Report — customer signature captured/cleared.** `customerSignedAt` is stamped by the
+     first write carrying the new signature, which is now the auto-save (it fires seconds after the
+     customer signs, before anyone presses Save). By the time a manual Save arrives the stored
+     signature already matches, so the "(ลูกค้าเซ็นรับงาน: …)" entry would never be written by
+     anyone. `api/_lib/serviceReportHandler.ts` therefore writes it even on an auto-save, gated on
+     `update.customerSignedAt !== undefined` — the one write where the signature actually changed.
+   - **Quotation — linked customer changed.** The client sends `customerId` only while it differs
+     from the loaded quote; once an auto-save has written it, that baseline moves with it and no
+     later manual Save sends the field at all. `api/handlers/quotes.ts` writes
+     `"Quotation Customer Changed"` even on an auto-save, gated on `customerLinkChanged`.
 2. **Draft-only.** A `409` is returned if the target is past ร่าง/Draft. Quotation and Scope of Work
    add this check explicitly (both allow certain edits after that point — the latter's PO-number
    /document-recipient follow-up fields — and those must keep requiring a real Save); the other five

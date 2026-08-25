@@ -426,6 +426,16 @@ server rejects `?autoSave=1` past Draft (409) and writes no audit-log entry for 
 
 **Module-specific:**
 
+- **The customer sign-off audit entry is the one exception to "auto-saves write no audit entry"**
+  (2026-08-25b). `customerSignatureDataUrl` is an ordinary form field, so the auto-save is now the
+  *first* request carrying a freshly drawn signature — it fires seconds after the customer signs,
+  before anyone presses Save. `handleUpdate()` stamps `customerSignedAt` only when the signature
+  image actually changes, so by the time a manual Save arrives the stored signature already matches
+  and the "(ลูกค้าเซ็นรับงาน: …)" entry would be written by nobody. `serviceReportHandler.ts`
+  therefore writes that entry even on an auto-save, gated on `update.customerSignedAt !== undefined`
+  — a signature is evidence and must always leave a trail. Clearing a signature is covered the same
+  way.
+
 - A **brand-new report** (`serviceReportId === "new"`) has no server record, so it gets the local
   layer only; the toolbar reads "เก็บร่างไว้ในเครื่องให้อัตโนมัติ". Its snapshot deliberately carries
   `selectedTemplateId` alongside the form and checklist values — without the template choice, restored

@@ -140,6 +140,35 @@ Two deliberate constraints on the server layer, both enforced server-side, not j
   validation, status gates, `updatedBy`, server-recomputed `amount` — is identical to a manual save,
   so an auto-save can never do something a manual save could not.
 
+**Same-day review pass** (findings from a review of the above, fixed before the feature shipped):
+
+- **Two audit entries must survive an auto-save, or they are lost forever.** Blanket suppression
+  turned out to delete two *specific* entries that only an auto-save is ever in a position to write.
+  A Service Report's customer signature is stamped by the first write carrying it — the auto-save —
+  so by the time a manual Save arrives the stored signature matches and the "(ลูกค้าเซ็นรับงาน: …)"
+  entry is written by nobody; the same shape applies to a Quotation's linked-customer change, which
+  the client only sends while it differs from the loaded record. Both handlers now write those two
+  entries even on an auto-save, each gated on the field having actually changed, so no noise is
+  added. See API.md "Auto-save writes".
+- **Flush on unmount and on `pagehide`.** Both layers debounced their write and cleared the pending
+  timer on teardown — so clicking to another page or closing the tab mid-edit dropped the very write
+  the feature exists to make (up to 2.5 s of typing server-side, 700 ms locally). Both now flush
+  what is pending: `useAutoSave()` fires the save on unmount when there is a real unsaved change,
+  and `useDraftBackup()` writes its snapshot on unmount and on `pagehide` (`localStorage` is
+  synchronous, so it still lands). The local flush is skipped after `clear()` until the user edits
+  again, so pressing Save and leaving can't resurrect the `…:new` snapshot that Save just removed.
+- **`markSaved()` now takes the payload that was actually sent.** It used to adopt whatever was on
+  screen at call time, which is *newer* than what the server received if the user kept typing during
+  the save's round trip — those extra keystrokes were marked "saved" and never sent, under a chip
+  reading "บันทึกอัตโนมัติแล้ว". Editors that replace their buffer with the response pass
+  `toUpdateFields(updated)`; Quotation and Service Report pass the exact payload they sent.
+- Quotation's "เก็บร่างไว้ในเครื่อง" chip no longer appears on saved-but-non-Draft quotations
+  (`permissions.canEdit` is status-independent, so an approved/sent/won quotation still renders the
+  editor — and the chip's tooltip claims the document does not exist in the system yet).
+- `tests/serverImportGraph.test.ts` now also seeds from `server/` (the real production entrypoint
+  since the VPS cutover) and follows bare side-effect imports (`import "./x.js"`) and dynamic
+  `import("./x.js")` — three ways a `.tsx` could have re-entered the graph unnoticed.
+
 ### 2. Discounts in baht, not just percent
 
 `Quote` and `QuoteLine` gained an optional `discountMode: "percent" | "amount"`. **Absent means
