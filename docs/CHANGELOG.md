@@ -4,7 +4,46 @@
 
 ---
 
-## 2026-08-25c (absolute latest) — Retraction: the "header dropdowns don't close on an outside click" defect was not real
+## 2026-08-25d (absolute latest) — A second `npm run dev` could eat the machine; two one-line guards
+
+**The incident.** A second dev stack was started while one was already running, and the machine
+stopped being able to open sockets — every request failed with `ENOBUFS`, ~24,000 TCP connections
+were open (12,937 of them to port 3001 alone) and a Node process was pegged at 100% CPU.
+
+**The mechanism, which is entirely a configuration foot-gun and not a bug in any feature:**
+
+1. Vite's `server.port` was `3000` with `strictPort` left at its default (`false`), so when 3000 was
+   already taken Vite **incremented to 3001**.
+2. 3001 is the API's port — and it is also the target of Vite's own `/api` proxy
+   (`proxy: { "/api": "http://localhost:3001" }`).
+3. That stack's API therefore could not bind 3001 and died, silently: `server/index.ts` called
+   `listen()` with no `error` handler, so the failure surfaced as an unhandled stack trace.
+4. Vite was now proxying `/api/*` to `http://localhost:3001` — **itself**. Every API request
+   recursed into the proxy again, forever, until the OS ran out of sockets.
+
+Either guard alone would have prevented it; both are now in place:
+
+- **`vite.config.ts`: `strictPort: true`.** The next port up from Vite's is the one its own proxy
+  points at, so incrementing is never the safe fallback here — failing loudly is. Verified: a second
+  `npm run dev` now stops with `Port 3000 is already in use` instead of starting.
+- **`server/index.ts`: a real `EADDRINUSE` handler.** Prints which port is taken, how to find and
+  stop the process holding it (with the Windows command, since that is what this project is
+  developed on), and exits 1 — instead of a raw stack trace that is easy to scroll past while Vite
+  keeps running in the same terminal.
+
+Verified by reproducing the exact scenario: one stack up (`api` on 3001, `web` on 3000), then a
+second `npm run dev` — Vite refuses to start and the API prints the new message. Afterwards: 0
+connections to 3001, 195 total sockets (from 24,255), `/api` reachable through the proxy again,
+273/273 tests still green.
+
+Worth stating plainly: **no application code caused this and no feature was broken by it.** The
+auto-save work committed earlier the same day was the initial suspect — it does make background
+requests — but the connection storm was Vite talking to itself, and it reproduces with an untouched
+checkout.
+
+---
+
+## 2026-08-25c — Retraction: the "header dropdowns don't close on an outside click" defect was not real
 
 Entry 2026-08-25b below closes with "Also logged, found while browser-verifying: the What's New and
 notification dropdowns never close on an outside click." **That was wrong, and nothing was broken.**
