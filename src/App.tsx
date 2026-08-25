@@ -11,7 +11,8 @@ import { type JobType, fetchJobTypes } from "./lib/jobTypes";
 import { type Customer, fetchCustomers } from "./lib/customers";
 import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes";
 import { type User, fetchUsers, initials } from "./lib/users";
-import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor, isNavHiddenForUser } from "./lib/roles";
+import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
+import { resolveNav } from "./lib/navResolution";
 import { type Department, fetchDepartments } from "./lib/departments";
 import { type Team, fetchTeams } from "./lib/teams";
 import type { Permission } from "./lib/permissions";
@@ -591,20 +592,21 @@ export default function App() {
     setActiveNav("dashboard");
   };
 
-  // Two independent filters: permission (can this user reach the page at all) and per-role nav
-  // hiding (should this role be *offered* it — see isNavHiddenForRole, presentation only).
-  const visibleNavItems = navItems.filter((item) =>
-    (!item.permission || hasPermission(currentUser, roles, item.permission))
-    && !isNavHiddenForUser(currentUser, roles, item.key));
-  // Whichever nav item this role actually sees first — the landing page and the fallback both use
-  // it instead of a hardcoded "dashboard", so a role without Dashboard in its sidebar can never end
-  // up sitting on a page it has no way to navigate back to.
-  const homeNav: NavKey = visibleNavItems[0]?.key ?? "settings";
-  const activeNavItem = navItems.find((n) => n.key === activeNav);
-  const activeNavAllowed = activeNav === "settings"
-    || ((!activeNavItem?.permission || hasPermission(currentUser, roles, activeNavItem.permission))
-      && !isNavHiddenForUser(currentUser, roles, activeNav));
-  const effectiveNav = activeNavAllowed ? activeNav : homeNav;
+  // การตัดสินว่าจะแสดงหน้าไหน ย้ายไป src/lib/navResolution.ts แล้ว เพื่อให้เขียนเทสต์ตรง ๆ ได้
+  // — กฎสำคัญคือ "ยังไม่รู้สิทธิ์ = ยังไม่ตัดสิน" (`decided: false`) ซึ่งเป็นต้นเหตุของอาการเด้งไปหน้าตั้งค่า
+  //
+  // The decision lives in src/lib/navResolution.ts so it can be tested directly — see the doc
+  // comment there for why. `decided` is false while `roles` is still loading; nothing may be
+  // rendered from a guess made in that window.
+  const rolesReady = resourceStatus.roles !== "loading";
+  const { visibleNavItems, effectiveNav, decided: navDecided } = resolveNav({
+    activeNav,
+    navItems,
+    currentUser,
+    roles,
+    rolesReady,
+    settingsKey: "settings",
+  });
 
   // Mirrors the *rendered* page into the hash, not the requested one — so a role landing on (or
   // deep-linking to) a nav item hidden from it ends up with a URL matching what it's actually
@@ -621,6 +623,11 @@ export default function App() {
   // resourceStatus.roles to leave "loading" (ready or error) closes that window too. This was a
   // real, ~always-reproducible bug: a refresh on any page other than Settings landed back on
   // Settings every time.
+  //
+  // **2026-08-25**: gating only this effect fixed the URL but not the screen. `effectiveNav` is
+  // recomputed every render and fell back to Settings during the same window, so a refresh still
+  // *rendered* Settings for a moment before snapping back — reported as "กดรีเฟรชแล้วมันเด้งไป
+  // ตั้งค่าแล้วกลับมา". The `rolesReady` guard on `activeNavAllowed` above is the other half.
   useEffect(() => {
     if (bootStatus !== "ready" || resourceStatus.roles === "loading") return;
     const target = `#${effectiveNav}`;
@@ -902,7 +909,14 @@ export default function App() {
         <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden outline-none print:overflow-visible print:block">
           <ErrorBoundary key={`${effectiveNav}-${navBump}`}>
           <Suspense fallback={<PageLoading />}>
-            {effectiveNav === "dashboard"
+            {/* ยังไม่รู้สิทธิ์ = ยังไม่ควรวาดหน้าไหนทั้งนั้น ไม่งั้นหน้านั้นจะถูกวาดด้วย roles ว่าง แล้วปุ่ม/
+                เมนูที่ต้องมีสิทธิ์จะกะพริบโผล่ทีหลัง — รอไม่กี่ร้อยมิลลิวินาทีตรงนี้ตรงไปตรงมากว่า
+                Rendering any page before `roles` resolve means rendering it against an empty
+                permission set: gated buttons and empty states appear wrong, then pop. A brief,
+                honest loading state is better than a page that lies for 200ms. */}
+            {!navDecided
+              ? <SectionLoading error={false} onRetry={loadDomainData} />
+              : effectiveNav === "dashboard"
               ? <DashboardPage currentUserId={currentUser.id} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
               : effectiveNav === "auditLog"
               ? <AuditLogPage currentUserId={currentUser.id} />

@@ -4,7 +4,53 @@
 
 ---
 
-## 2026-08-25d (absolute latest) — A second `npm run dev` could eat the machine; two one-line guards
+## 2026-08-25e (absolute latest) — Refresh really does flash Settings; the 2026-08-17 fix only did half of it
+
+Reported: *"กดรีเฟรชละมันยังเห็นไปตั้งค่าละเด้งกลับมาหน้าเดิมอยู่เลย"* — refreshing on any page still
+shows Settings for a moment before snapping back.
+
+**This was signed off as fixed twice, and the sign-off was wrong both times.** The 2026-08-17c fix
+addressed the same symptom by gating `App.tsx`'s hash-mirroring effect on
+`resourceStatus.roles !== "loading"`. That is correct as far as it goes — it stops the *URL* being
+rewritten during boot. But `effectiveNav` is recomputed on **every render**, and it was not gated:
+
+- `bootStatus` flips to `"ready"` as soon as the session check resolves; `loadDomainData()` (which
+  includes `fetchRoles()`) only *starts* then.
+- In that window `roles` is `[]`, so every `hasPermission()` answers "no" — not because the user
+  lacks access, but because the answer isn't known yet.
+- `visibleNavItems` is therefore empty, `homeNav` falls back to `"settings"`, `activeNavAllowed` is
+  false, and `effectiveNav` becomes `"settings"`. **The Settings page renders**, for one network
+  round trip, then the real answer arrives and it snaps back.
+
+It was also verified as passing earlier on 2026-08-25 in a browser sweep — by sampling the page
+*after* boot settled, which is exactly when the evidence is gone.
+
+**The fix, in two parts.** The nav decision moved out of `App.tsx` into a new pure
+`src/lib/navResolution.ts`, so it can be asserted on directly instead of squinted at:
+
+- `resolveNav()` returns `decided: false` while `rolesReady` is false, and holds `effectiveNav` at
+  whatever the URL asked for — it decides nothing from answers it does not have yet.
+- `App.tsx` renders `SectionLoading` while `decided` is false, rather than any page. Rendering a
+  page against an empty permission set is its own smaller lie: gated buttons and empty states show
+  the wrong thing for a moment, then pop.
+
+**`tests/navResolution.test.ts`** (7 tests) encodes the rule, including that every page is held
+equally (not just the one that happened to be reported), that Settings stays reachable for a role
+with no permissions at all, and that a *failed* roles fetch still counts as decided so the loading
+state cannot hang forever. **Verified by breaking it**: disabling the guard turns three of them red;
+restoring it turns them green.
+
+Not verified in a live browser this time, and the reason is worth recording: Chrome resolves
+`localhost` to `::1` while Vite's `--host` binds IPv4 only, so the extension-driven browser gets
+`ERR_CONNECTION_REFUSED`; the LAN address works but is a different origin and therefore signed out,
+and signing in on the user's behalf is out of bounds. The regression test is stronger evidence than
+the screenshot that got this wrong twice, but the final visual confirmation is the user's to make.
+
+Verified: `tsc` both projects, lint 0 errors, build clean, `npm test` **280/280** (+7).
+
+---
+
+## 2026-08-25d — A second `npm run dev` could eat the machine; two one-line guards
 
 **The incident.** A second dev stack was started while one was already running, and the machine
 stopped being able to open sockets — every request failed with `ENOBUFS`, ~24,000 TCP connections
