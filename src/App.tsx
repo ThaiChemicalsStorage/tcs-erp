@@ -13,6 +13,8 @@ import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes"
 import { type User, fetchUsers, initials } from "./lib/users";
 import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
 import { resolveNav } from "./lib/navResolution";
+import { NavigationGuardContext, useNavigationGuardHost } from "./hooks/useNavigationGuard";
+import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { type Department, fetchDepartments } from "./lib/departments";
 import { type Team, fetchTeams } from "./lib/teams";
 import type { Permission } from "./lib/permissions";
@@ -286,6 +288,14 @@ export default function App() {
   // remounts and drops back to its list view — activeNav alone doesn't change when re-clicking
   // the same nav item, so the ErrorBoundary/page key below needs this to force a reset.
   const [navBump, setNavBump] = useState(0);
+  // ทุกทางที่พาผู้ใช้ออกจากหน้าปัจจุบันต้องผ่านตัวนี้ — รวมถึงการกดเมนูเดิมซ้ำ เพราะ navBump สั่ง remount
+  // ทำให้หน้าเอกสารที่เปิดค้างอยู่ถูกถอดทิ้งเหมือนกัน ถ้าไม่มีอะไรค้าง proceed() จะถูกเรียกทันทีใน tick เดิม
+  //
+  // Every path that takes the user off the current page routes through this, including re-clicking
+  // the already-active nav item: `navBump` remounts the page and destroys an open editor just the
+  // same. With nothing at risk it calls `proceed()` synchronously, exactly as before.
+  const navGuard = useNavigationGuardHost();
+  const guardedNav = navGuard.requestLeave;
 
   useEffect(() => {
     const onHashChange = () => {
@@ -444,77 +454,79 @@ export default function App() {
     setUsers((prev) => prev.map((u) => (u.id === next.id ? next : u)));
   };
 
-  const navigateToQuotations = (filter: QuotationListFilter) => {
+  const navigateToQuotations = (filter: QuotationListFilter) => guardedNav(() => {
     setQuotationListFilter(filter);
     setActiveNav("quotations");
-  };
-  const navigateToQuotation = (quoteId: string) => {
+  });
+  const navigateToQuotation = (quoteId: string) => guardedNav(() => {
     setQuotationDeepLinkId(quoteId);
     setActiveNav("quotations");
-  };
-  const navigateToCustomer = (customerId: string) => {
+  });
+  const navigateToCustomer = (customerId: string) => guardedNav(() => {
     setCustomerDeepLinkId(customerId);
     setActiveNav("customers");
-  };
-  const navigateToProduct = (productId: string) => {
+  });
+  const navigateToProduct = (productId: string) => guardedNav(() => {
     setProductDeepLinkId(productId);
     setActiveNav("products");
-  };
-  const navigateToUser = (userId: string) => {
+  });
+  const navigateToUser = (userId: string) => guardedNav(() => {
     setUserDeepLinkId(userId);
     setActiveNav("users");
-  };
-  const navigateToTemplate = (jobTypeCode: string, templateId: string) => {
+  });
+  const navigateToTemplate = (jobTypeCode: string, templateId: string) => guardedNav(() => {
     setQuotationTemplateDeepLink({ jobTypeCode, templateId });
     setActiveNav("quotations");
-  };
-  const navigateToScopeOfWork = (quotationId: string, scopeOfWorkId: string) => {
+  });
+  const navigateToScopeOfWork = (quotationId: string, scopeOfWorkId: string) => guardedNav(() => {
     setScopeOfWorkDeepLink({ quotationId, scopeOfWorkId });
     setActiveNav("quotations");
-  };
-  const navigateToScopeOfWorkStandalone = (scopeOfWorkId: string) => {
+  });
+  const navigateToScopeOfWorkStandalone = (scopeOfWorkId: string) => guardedNav(() => {
     setScopeOfWorkDeepLinkId(scopeOfWorkId);
     setActiveNav("scopeOfWork");
-  };
-  const navigateToDeliveryOrder = (deliveryOrderId: string) => {
+  });
+  const navigateToDeliveryOrder = (deliveryOrderId: string) => guardedNav(() => {
     setDeliveryOrderDeepLinkId(deliveryOrderId);
     setActiveNav("deliveryOrder");
-  };
-  const navigateToProject = (projectId: string) => {
+  });
+  const navigateToProject = (projectId: string) => guardedNav(() => {
     setProjectDeepLinkId(projectId);
     setActiveNav("project");
-  };
-  const navigateToMaterialRequisition = (materialRequisitionId: string) => {
+  });
+  const navigateToMaterialRequisition = (materialRequisitionId: string) => guardedNav(() => {
     setMaterialRequisitionDeepLinkId(materialRequisitionId);
     setActiveNav("materialRequisition");
-  };
-  const navigateToJobOrder = (jobOrderId: string) => {
+  });
+  const navigateToJobOrder = (jobOrderId: string) => guardedNav(() => {
     setJobOrderDeepLinkId(jobOrderId);
     setActiveNav("jobOrder");
-  };
-  const navigateToPurchaseRequest = (purchaseRequestId: string) => {
+  });
+  const navigateToPurchaseRequest = (purchaseRequestId: string) => guardedNav(() => {
     setPurchaseRequestDeepLinkId(purchaseRequestId);
     setActiveNav("purchaseRequest");
-  };
-  const navigateToServiceReport = (serviceReportId: string) => {
+  });
+  const navigateToServiceReport = (serviceReportId: string) => guardedNav(() => {
     setServiceReportDeepLinkId(serviceReportId);
     setActiveNav("service");
-  };
-  const navigateToCreateTemplateForJobType = (jobTypeCode: string, jobTypeName: string) => {
+  });
+  const navigateToCreateTemplateForJobType = (jobTypeCode: string, jobTypeName: string) => guardedNav(() => {
     templateCreateSeq.current += 1;
     setTemplateCreateForJobType({ jobTypeCode, jobTypeName, seq: templateCreateSeq.current });
     setActiveNav("quotationTemplates");
-  };
+  });
   // ไปยังหน้าที่ระบุ (มาจากผลค้นหา) พร้อมตรวจสอบว่าเป็น NavKey ที่ถูกต้องก่อน
   // Navigates to the given page (from a search result), validating it as a real NavKey first
   const navigateToPage = (navKey: string, action?: "create" | "categories") => {
     if (!navItems.some((n) => n.key === navKey) && navKey !== "settings") return;
     const key = navKey as NavKey;
-    if (action) {
-      pageActionSeq.current += 1;
-      setPageAction({ nav: key, action, seq: pageActionSeq.current });
-    }
-    setActiveNav(key);
+    guardedNav(() => {
+      if (action) {
+        pageActionSeq.current += 1;
+        setPageAction({ nav: key, action, seq: pageActionSeq.current });
+      }
+      setActiveNav(key);
+    });
   };
   const clearPageAction = () => setPageAction(null);
 
@@ -733,7 +745,9 @@ export default function App() {
   const closeMobileNav = () => setMobileNavOpen(false);
 
   return (
+    <NavigationGuardContext.Provider value={navGuard.contextValue}>
     <div className="flex h-screen bg-background overflow-hidden font-sans text-foreground print:h-auto print:overflow-visible print:block">
+      <UnsavedChangesDialog {...navGuard.dialog} />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[#c9a84c] focus:text-[#0b1d3a] focus:rounded-lg focus:font-semibold focus:shadow-xl"
@@ -772,7 +786,7 @@ export default function App() {
                 {items.map(({ key, icon: Icon, labelKey }) => (
                   <button
                     key={key}
-                    onClick={() => { setActiveNav(key); setNavBump((n) => n + 1); closeMobileNav(); }}
+                    onClick={() => guardedNav(() => { setActiveNav(key); setNavBump((n) => n + 1); closeMobileNav(); })}
                     title={navExpanded ? undefined : t(labelKey)}
                     aria-label={navExpanded ? undefined : t(labelKey)}
                     aria-current={activeNav === key ? "page" : undefined}
@@ -788,7 +802,7 @@ export default function App() {
         </nav>
         <div className="px-2 py-3 border-t border-sidebar-border">
           <button
-            onClick={() => { setActiveNav("settings"); setNavBump((n) => n + 1); closeMobileNav(); }}
+            onClick={() => guardedNav(() => { setActiveNav("settings"); setNavBump((n) => n + 1); closeMobileNav(); })}
             title={navExpanded ? undefined : t("nav.settings")}
             aria-label={navExpanded ? undefined : t("nav.settings")}
             aria-current={activeNav === "settings" ? "page" : undefined}
@@ -883,19 +897,19 @@ export default function App() {
                 <div className="fixed inset-0 z-10" onClick={() => setUserMenuOpen(false)} />
                 <div className="absolute right-0 top-full mt-2 w-48 bg-card border border-border rounded-lg shadow-xl z-20 overflow-hidden py-1">
                   <button
-                    onClick={() => { setActiveNav("settings"); setUserMenuOpen(false); }}
+                    onClick={() => guardedNav(() => { setActiveNav("settings"); setUserMenuOpen(false); })}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-foreground hover:bg-secondary/60 transition-colors"
                   >
                     <Settings size={14} className="text-muted-foreground" /> {t("nav.settings")}
                   </button>
                   <button
-                    onClick={() => { setUserMenuOpen(false); setActiveNav("dashboard"); setTimeout(() => tour.start(), 150); }}
+                    onClick={() => guardedNav(() => { setUserMenuOpen(false); setActiveNav("dashboard"); setTimeout(() => tour.start(), 150); })}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-foreground hover:bg-secondary/60 transition-colors"
                   >
                     <HelpCircle size={14} className="text-muted-foreground" /> {t("topbar.help")}
                   </button>
                   <button
-                    onClick={handleLogout}
+                    onClick={() => guardedNav(handleLogout)}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[#e05252] hover:bg-[#e05252]/10 transition-colors"
                   >
                     <LogOut size={14} /> {t("topbar.logout")}
@@ -995,7 +1009,7 @@ export default function App() {
               {t("onboarding.welcome.skip")}
             </button>
             <button
-              onClick={() => { setActiveNav("dashboard"); setShowTourPrompt(false); setTimeout(() => tour.start(), 150); }}
+              onClick={() => guardedNav(() => { setActiveNav("dashboard"); setShowTourPrompt(false); setTimeout(() => tour.start(), 150); })}
               className="px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
             >
               {t("onboarding.welcome.start")}
@@ -1004,5 +1018,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </NavigationGuardContext.Provider>
   );
 }

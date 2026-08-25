@@ -16,6 +16,9 @@ import { useI18n } from "../../lib/i18n";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
+import { useDirtyTracker } from "../../hooks/useDirtyTracker";
+import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
+import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DeliveryOrderPrintDocument } from "./DeliveryOrderPrintDocument";
 import { DeliveryOrderDepartmentRouting } from "./DeliveryOrderDepartmentRouting";
 
@@ -181,16 +184,20 @@ export function DeliveryOrderDocument({
     return () => window.removeEventListener("afterprint", reset);
   }, [printInstallmentId]);
 
+  // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — ประกาศเหนือ effect โหลดข้อมูล เพื่อตั้งฐานเทียบใหม่ทุกครั้งที่ดึงเอกสาร
+  // หน้านี้ใช้ state เดียวเป็นทั้งข้อมูลที่โหลดมาและบัฟเฟอร์แก้ไข ทุกจุดที่รับคำตอบจากเซิร์ฟเวอร์จึงต้องตั้งฐานเทียบใหม่
+  const dirty = useDirtyTracker(deliveryOrder && canEdit && deliveryOrder.status === "Draft" ? toUpdateFields(deliveryOrder) : null);
+
   useEffect(() => {
     let cancelled = false;
     fetchDeliveryOrder(deliveryOrderId)
-      .then((d) => { if (!cancelled) setDeliveryOrder(d); })
+      .then((d) => { if (!cancelled) { setDeliveryOrder(d); dirty.markSaved(toUpdateFields(d)); } })
       .catch((err) => {
         if (cancelled) return;
         setLoadError(err instanceof ApiError ? err.message : "ไม่สามารถโหลดข้อมูลใบส่งมอบสินค้าได้");
       });
     return () => { cancelled = true; };
-  }, [deliveryOrderId, reloadKey]);
+  }, [deliveryOrderId, reloadKey, dirty]);
 
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="dodoc-actions"]', popover: { title: t("tour.dodoc.actions.title"), description: t("tour.dodoc.actions.desc"), side: "bottom" } },
@@ -218,11 +225,51 @@ export function DeliveryOrderDocument({
     onSave: async (fields) => { await updateDeliveryOrder(deliveryOrderId, fields, { autoSave: true }); },
   });
 
+  // บันทึกใบส่งมอบสินค้าฉบับร่างไปยังเซิร์ฟเวอร์
+  // Saves the draft delivery order to the server.
+  const save = async (): Promise<boolean> => {
+    if (!deliveryOrder) return false;
+    try {
+      setSaving(true);
+      const updated = await updateDeliveryOrder(deliveryOrder.id, toUpdateFields(deliveryOrder));
+      setDeliveryOrder(updated);
+      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
+      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
+      autoSave.markSaved(toUpdateFields(updated));
+      dirty.markSaved(toUpdateFields(updated));
+      draftBackup.clear();
+      showToast("บันทึกร่างแล้ว");
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // การ์ด "ยังไม่ได้บันทึก" — save() ต้องประกาศเหนือ early return เพราะ hook เรียกแบบมีเงื่อนไขไม่ได้
+  const { requestLeave } = useUnsavedChangesGuard(
+    deliveryOrder && canEdit
+      ? {
+          getRisk: () => assessUnsavedRisk({
+            isDirty: dirty.isDirtyNow(),
+            hasServerRecord: true,
+            autoSaveEnabled: autoSaveEditable,
+            autoSaveState: autoSave.state,
+          }),
+          documentLabel: deliveryOrder.id,
+          save,
+          discard: draftBackup.clear,
+        }
+      : null,
+  );
+
   if (loadError) {
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {backLabel}
           </button>
         </div>
@@ -240,7 +287,7 @@ export function DeliveryOrderDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {backLabel}
           </button>
         </div>
@@ -261,26 +308,6 @@ export function DeliveryOrderDocument({
     setDeliveryOrder((prev) => (prev ? { ...prev, installments: prev.installments.map((i) => (i.id === id ? next : i)) } : prev));
   };
 
-  // บันทึกใบส่งมอบสินค้าฉบับร่างไปยังเซิร์ฟเวอร์
-  // Saves the draft delivery order to the server.
-  const save = async () => {
-    if (!deliveryOrder) return;
-    try {
-      setSaving(true);
-      const updated = await updateDeliveryOrder(deliveryOrder.id, toUpdateFields(deliveryOrder));
-      setDeliveryOrder(updated);
-      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
-      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
-      autoSave.markSaved(toUpdateFields(updated));
-      draftBackup.clear();
-      showToast("บันทึกร่างแล้ว");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   // เตรียมพิมพ์ใบส่งมอบสินค้าเฉพาะงวดที่เลือก โดยต้องมีรายการสินค้าอย่างน้อย 1 รายการ
   // Prepares to print the delivery note for one installment; requires at least one selected item.
   const handlePrintInstallment = (installment: DeliveryOrderInstallment) => {
@@ -299,6 +326,7 @@ export function DeliveryOrderDocument({
     try {
       const updated = await rejectDeliveryOrder(deliveryOrder.id, comment);
       setDeliveryOrder(updated);
+      dirty.markSaved(toUpdateFields(updated));
       showToast("ตีกลับเป็นฉบับร่างแล้ว");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "ปฏิเสธไม่สำเร็จ");
@@ -314,14 +342,17 @@ export function DeliveryOrderDocument({
       if (confirmAction === "submit") {
         const updated = await submitDeliveryOrderApproval(deliveryOrder.id);
         setDeliveryOrder(updated);
+        dirty.markSaved(toUpdateFields(updated));
         showToast("ส่งขออนุมัติแล้ว");
       } else if (confirmAction === "finalize") {
         const updated = await finalizeDeliveryOrder(deliveryOrder.id);
         setDeliveryOrder(updated);
+        dirty.markSaved(toUpdateFields(updated));
         showToast("อนุมัติแล้ว (Final)");
       } else if (confirmAction === "withdraw") {
         const updated = await withdrawDeliveryOrderApproval(deliveryOrder.id);
         setDeliveryOrder(updated);
+        dirty.markSaved(toUpdateFields(updated));
         showToast("ถอนคำขออนุมัติแล้ว กลับเป็นฉบับร่าง");
       } else if (confirmAction === "rewrite") {
         const created = await rewriteDeliveryOrder(deliveryOrder.id);
@@ -331,6 +362,7 @@ export function DeliveryOrderDocument({
         setRefreshing(true);
         const updated = await refreshDeliveryOrderFromScope(deliveryOrder.id);
         setDeliveryOrder(updated);
+        dirty.markSaved(toUpdateFields(updated));
         showToast("อัปเดตข้อมูลจาก Scope of Work แล้ว");
       } else if (confirmAction === "delete") {
         await deleteDeliveryOrder(deliveryOrder.id);
@@ -356,7 +388,7 @@ export function DeliveryOrderDocument({
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {backLabel}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -453,7 +485,7 @@ export function DeliveryOrderDocument({
         <DeliveryOrderDepartmentRouting
           deliveryOrder={deliveryOrder}
           canEdit={canEdit}
-          onUpdated={setDeliveryOrder}
+          onUpdated={(updated) => { setDeliveryOrder(updated); dirty.markSaved(toUpdateFields(updated)); }}
           showToast={showToast}
         />
 

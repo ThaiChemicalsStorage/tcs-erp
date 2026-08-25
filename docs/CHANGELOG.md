@@ -4,7 +4,124 @@
 
 ---
 
-## 2026-08-25e (absolute latest) — Refresh really does flash Settings; the 2026-08-17 fix only did half of it
+## 2026-08-25f (absolute latest) — "ยังไม่ได้บันทึก": a confirmation before leaving an editor with unsaved work
+
+Requested: *"ถ้าแบบจะกดออกหรือจะกดอะไรเวลาแก้ไขข้อมูลในใบอยู่ อยากให้ขึ้นแจ้งเตือนมาว่ายังไม่ได้บันทึก
+อะไรแบบนี้ กันไปอีกชั้นนึง มีปุ่มให้กดว่าบันทึกกับไม่บันทึก"* — a second layer on top of the auto-save
+shipped earlier the same day.
+
+Two scope decisions were the owner's, taken before any code was written:
+
+1. **Guard every in-app exit path**, not just the editor's own back button. Browser Back, refresh
+   and tab-close were offered and **declined** — they remain unguarded, see TODO.md.
+2. **Only prompt when work is genuinely at risk.** A healthy Draft whose 2.5 s auto-save debounce
+   merely happens to be in flight must not interrupt anyone; `useAutoSave` flushes on unmount, so
+   that work lands whether or not we ask.
+
+### Where the risk actually is
+
+Auto-save covers Drafts that already exist on the server. It cannot cover:
+
+- **A document with no server record yet** — a new quotation or service report. There is no id to
+  `PATCH`; only the localStorage snapshot exists.
+- **An editable document past Draft**, where the server rejects `?autoSave=1`. This is **four of the
+  eight editors**, not just Quotation: Scope of Work's follow-up fields (`toFollowUpFields`),
+  Production Order's signatories (`saveSignatories`), Material Requisition's return fields
+  (`saveReturn`), and any approved/sent/won Quotation — `permissions.canEdit` is status-independent.
+- **A failed auto-save** (`state === "error"`), where some edits never reached the server.
+
+`assessUnsavedRisk()` returns exactly one of `"none" | "new" | "notAutoSaved" | "autoSaveFailed"`,
+and the dialog's wording follows from which.
+
+### What was built
+
+- **`src/lib/unsavedChanges.ts`** (new, React-free) — `assessUnsavedRisk()`, `isPayloadDirty()`,
+  `safeStringify()` (moved out of `useAutoSave.ts`, which now imports it back so the two can never
+  disagree about whether two payloads are the same), plus `createGuardRegistry()` and
+  `runGuardedSave()`. `isPayloadDirty` **fails open**: an unseeded baseline or an unserializable
+  payload reads as clean, because trapping someone on a page over a stringify failure would be
+  worse than the loss this feature prevents.
+- **`src/hooks/useDirtyTracker.ts`** (new) — a baseline separate from `useAutoSave`'s, which is only
+  seeded while auto-save is *enabled* (`useAutoSave.ts:127`) and is fed `null` by six editors in
+  exactly the states this feature targets. Dirtiness is **pulled** via `isDirtyNow()` rather than
+  returned as a boolean: reading a ref during render trips `react-hooks/refs`, and holding it in
+  state would re-render the editor on every keystroke to maintain a value nobody displays.
+- **`src/hooks/useNavigationGuard.ts`** (new) — a context whose `register` the editors call and
+  whose `requestLeave(proceed)` every navigation initiator calls. With nothing at risk, `proceed()`
+  runs **synchronously in the same tick it always did**. A host *hook* rather than a provider
+  component because `App` is both the provider and the biggest consumer (~16 call sites) and cannot
+  consume a context it provides in the same render; wrapping would have meant splitting App's
+  ~700-line body — a large diff in the file that has already produced two user-visible nav bugs.
+- **`src/components/UnsavedChangesDialog.tsx`** (new) — three actions. Not an extra action on
+  `ConfirmDialog`: that has 18 call sites and a two-button contract, and the semantics invert here
+  (the *middle* action is destructive, the *primary* is safe), which its `danger` prop cannot
+  express. Gold caution icon rather than red — this is a pause before an ordinary action, and red
+  would compete with the ไม่บันทึก button. Focus opens on **บันทึก**, so Enter does the safe thing
+  and the destructive option is never one keystroke away.
+- **`src/App.tsx`** — the `navigateTo*` family (~16 handlers) now routes through the guard. Wrapping
+  those functions is what covers **global search, the notification bell and cross-document links
+  inside editors** without touching `GlobalSearch.tsx`, `NotificationBell.tsx` or any editor's link
+  buttons — they already call them. Sidebar, user menu, logout and the onboarding prompt are
+  wrapped directly, including **re-clicking the already-active nav item**, which `navBump` turns
+  into a full page remount that destroys an open editor just the same.
+- **All eight editors** register a guard and route their breadcrumb Back through it. Each `save()`
+  now returns `Promise<boolean>`; the dialog's บันทึก calls the editor's **real** Save, with its
+  validation and its error toast. For a new document that means `createQuote` /
+  `createServiceReport` — "save" is "create". A failed save leaves the dialog open with an inline
+  error and **does not navigate**. The two programmatic post-delete `onBack()` calls
+  (`ScopeOfWorkDocument`, `DeliveryOrderDocument`) stay unguarded.
+- **ไม่บันทึก clears the local snapshot** (`draftBackup.clear()`). Otherwise reopening the document —
+  or the *next* new one, since new documents share the `quotation:new` / `serviceReport:new` keys —
+  would greet the user with a gold recovery banner offering back the work they just discarded.
+
+### Two traps found while wiring it
+
+- **`QuoteDocument`'s draft payload contains `status`**, which moves through the approval workflow
+  rather than through the form. Left in the comparison, every approved quotation would have looked
+  permanently dirty and nagged on every navigation. Excluded via `toGuardPayload()`.
+- **`MaterialRequisition.toUpdateFields` omits `returnedBy` / `returnReceivedBy`** (`returnQty` rides
+  inside `lines`). Those are editable after approval with auto-save off — the exact case the guard
+  exists for — so it builds its own payload.
+
+Every place that resyncs from a server response re-seeds the baseline (load, save, finalize,
+`DocumentApprovalActions.onUpdated`, `saveReturn` / `saveSignatories`, the workflow actions). Missing
+one leaves a document permanently "dirty"; the draft-recovery **restore** deliberately does not
+re-seed, because restoring recovered work genuinely does make the form dirty.
+
+### The `beforeunload` on QuoteDocument was repaired, not removed
+
+Its baseline was captured once at mount and never re-seeded, so it warned on refresh even on a
+saved, untouched quotation — which teaches people to click straight through the warning. It now
+reads the same signal as the in-app dialog. It was **not** deleted: removing a warning is a
+user-visible removal nobody asked for. The browser owns that dialog's buttons, so Save/Don't-save
+cannot be offered there — the in-app dialog is the only place three real choices exist.
+
+Superseded and deleted: the orphan i18n key `quotation.unsavedChangesWarning`, referenced nowhere,
+whose wording was accurate only for the `"new"` case. New keys are `common.unsaved.*` in both
+dictionaries.
+
+### Verification — and what is honestly missing
+
+`npm test` **304/304** (280 → 304; 24 new in `tests/unsavedChanges.test.ts`), `npm run lint` 0
+errors, `npm run build` clean, `tsc` clean on both projects.
+
+The tests were **proved to bite** twice, per the `navResolution` precedent: flipping the
+`autoSaveState === "error"` check to `!== "saved"` turned the four healthy-Draft cases red, and
+dropping the token check in `createGuardRegistry` turned the late-unmount case red. Both were
+restored.
+
+**Not verified in a live browser, and the reason is recorded rather than glossed.** The app was
+loaded at `127.0.0.1:3000` under Playwright and boots clean with the guard provider mounted (0
+console errors), but it stops at the login screen and signing in as the owner is out of bounds. The
+extension's Chrome, which does hold a session, is blocked on this origin (the server answers 200 to
+`curl`). So the interactive path — dialog opens, บันทึก saves then navigates, a failed save stays
+put — is covered by unit tests over the extracted rules, **not** by watching it happen. That is
+precisely why the guard registry and the save outcome were pulled out into plain functions instead
+of being left inside the hook. The remaining browser checklist is in TODO.md.
+
+---
+
+## 2026-08-25e — Refresh really does flash Settings; the 2026-08-17 fix only did half of it
 
 Reported: *"กดรีเฟรชละมันยังเห็นไปตั้งค่าละเด้งกลับมาหน้าเดิมอยู่เลย"* — refreshing on any page still
 shows Settings for a moment before snapping back.

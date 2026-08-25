@@ -18,6 +18,9 @@ import { ProductPickerModal } from "../products/ProductPickerModal";
 import { MaterialRequisitionPrintDocument } from "./MaterialRequisitionPrintDocument";
 import { useI18n } from "../../lib/i18n";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
+import { useDirtyTracker } from "../../hooks/useDirtyTracker";
+import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
+import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 
@@ -37,6 +40,11 @@ function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields
     costDeptBy: m.costDeptBy,
     costDeptAt: m.costDeptAt,
   };
+}
+
+/** ทุกช่องที่ผู้ใช้แก้ได้จริงบนหน้านี้ รวมช่องคืนวัสดุที่ toUpdateFields ไม่ได้ครอบคลุม (returnQty อยู่ใน lines แล้ว) */
+function toGuardPayload(m: MaterialRequisition) {
+  return { ...toUpdateFields(m), returnedBy: m.returnedBy, returnReceivedBy: m.returnReceivedBy };
 }
 
 // หน้าแก้ไขใบเบิกและใบคืนวัสดุ: ข้อมูลหัวเรื่อง ตารางรายการจากแคตตาล็อก และการคืนวัสดุ
@@ -79,6 +87,9 @@ export function MaterialRequisitionDocument({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
 
+  // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — ประกาศเหนือ effect โหลดข้อมูล เพื่อตั้งฐานเทียบใหม่ทุกครั้งที่ดึงเอกสาร
+  const dirty = useDirtyTracker(draft && canEdit ? toGuardPayload(draft) : null);
+
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetchMaterialRequisition(materialRequisitionId), fetchProducts(), fetchCategories()])
@@ -88,7 +99,7 @@ export function MaterialRequisitionDocument({
         setLoadError(err instanceof ApiError ? err.message : t("materialRequisitionDoc.loadError"));
       });
     return () => { cancelled = true; };
-  }, [materialRequisitionId, reloadKey, t]);
+  }, [materialRequisitionId, reloadKey, t, dirty]);
 
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="mrdoc-actions"]', popover: { title: t("tour.mrdoc.actions.title"), description: t("tour.mrdoc.actions.desc"), side: "bottom" } },
@@ -121,6 +132,68 @@ export function MaterialRequisitionDocument({
     },
   });
 
+  const save = async (): Promise<boolean> => {
+    if (!draft) return false;
+    setSaving(true);
+    try {
+      const updated = await updateMaterialRequisition(draft.id, toUpdateFields(draft));
+      setDoc(updated);
+      setDraft(updated);
+      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
+      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
+      autoSave.markSaved(toUpdateFields(updated));
+      dirty.markSaved(toGuardPayload(updated));
+      draftBackup.clear();
+      showToast(t("materialRequisitionDoc.saved"));
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorSave"));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveReturn = async (): Promise<boolean> => {
+    if (!draft) return false;
+    setSavingReturn(true);
+    try {
+      const updated = await recordMaterialRequisitionReturn(draft.id, {
+        lines: draft.lines.map((l) => ({ id: l.id, returnQty: l.returnQty })),
+        returnedBy: draft.returnedBy,
+        returnReceivedBy: draft.returnReceivedBy,
+      });
+      setDoc(updated);
+      setDraft(updated);
+      dirty.markSaved(toGuardPayload(updated));
+      showToast(t("materialRequisitionDoc.returnSaved"));
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorSaveReturn"));
+      return false;
+    } finally {
+      setSavingReturn(false);
+    }
+  };
+
+  // การ์ด "ยังไม่ได้บันทึก" — ยังทำงานหลังอนุมัติด้วย เพราะช่องคืนวัสดุยังแก้ได้ และตอนนั้น auto-save ปิดอยู่
+  // ปุ่ม "บันทึก" ในกล่องจึงต้องเลือกให้ตรงเฟส: ฉบับร่างใช้ save() ส่วนหลังอนุมัติใช้ saveReturn()
+  const { requestLeave } = useUnsavedChangesGuard(
+    draft && canEdit
+      ? {
+          getRisk: () => assessUnsavedRisk({
+            isDirty: dirty.isDirtyNow(),
+            hasServerRecord: true,
+            autoSaveEnabled: autoSaveEditable,
+            autoSaveState: autoSave.state,
+          }),
+          documentLabel: draft.id,
+          save: draft.status === "Draft" ? save : saveReturn,
+          discard: draftBackup.clear,
+        }
+      : null,
+  );
+
   const docTour = useModuleTour("materialRequisitionDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
   useEffect(() => {
@@ -135,7 +208,7 @@ export function MaterialRequisitionDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("materialRequisitionDoc.backToList")}
           </button>
         </div>
@@ -154,7 +227,7 @@ export function MaterialRequisitionDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("materialRequisitionDoc.backToList")}
           </button>
         </div>
@@ -180,50 +253,13 @@ export function MaterialRequisitionDocument({
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankMaterialRequisitionLine(product, categoryName)] });
   };
 
-  const save = async () => {
-    if (!draft) return;
-    setSaving(true);
-    try {
-      const updated = await updateMaterialRequisition(draft.id, toUpdateFields(draft));
-      setDoc(updated);
-      setDraft(updated);
-      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
-      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
-      autoSave.markSaved(toUpdateFields(updated));
-      draftBackup.clear();
-      showToast(t("materialRequisitionDoc.saved"));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorSave"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const saveReturn = async () => {
-    if (!draft) return;
-    setSavingReturn(true);
-    try {
-      const updated = await recordMaterialRequisitionReturn(draft.id, {
-        lines: draft.lines.map((l) => ({ id: l.id, returnQty: l.returnQty })),
-        returnedBy: draft.returnedBy,
-        returnReceivedBy: draft.returnReceivedBy,
-      });
-      setDoc(updated);
-      setDraft(updated);
-      showToast(t("materialRequisitionDoc.returnSaved"));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorSaveReturn"));
-    } finally {
-      setSavingReturn(false);
-    }
-  };
-
   const finalize = async () => {
     setFinalizing(true);
     try {
       const updated = await finalizeMaterialRequisition(doc.id);
       setDoc(updated);
       setDraft(updated);
+      dirty.markSaved(toGuardPayload(updated));
       setConfirmFinalize(false);
       showToast(t("materialRequisitionDoc.finalized"));
     } catch (err) {
@@ -265,7 +301,7 @@ export function MaterialRequisitionDocument({
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("materialRequisitionDoc.backToList")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -295,7 +331,7 @@ export function MaterialRequisitionDocument({
             onApprove={() => approveMaterialRequisition(doc.id)}
             onReject={(c) => rejectMaterialRequisition(doc.id, c)}
             onWithdraw={() => withdrawMaterialRequisitionApproval(doc.id)}
-            onUpdated={(updated) => { setDoc(updated); setDraft(updated); }}
+            onUpdated={(updated) => { setDoc(updated); setDraft(updated); dirty.markSaved(toGuardPayload(updated)); }}
             showToast={showToast}
           />
           {canDelete && (

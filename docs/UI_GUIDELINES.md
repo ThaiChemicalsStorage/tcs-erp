@@ -108,6 +108,68 @@ Both format their timestamps with the **app's** language (`useI18n().lang` → `
 not the browser's — a fully Thai page rendering "Aug 25, 09:25 AM" reads as a bug. Follow that rule
 for any new user-visible date/time, not just these two.
 
+### Unsaved-Changes Guard (`src/components/UnsavedChangesDialog.tsx` + `src/hooks/useNavigationGuard.ts`, added 2026-08-25)
+
+The second layer over auto-save: a three-action dialog shown when the user tries to leave an editor
+that is holding work auto-save cannot protect.
+
+**It is silent on the common path, by instruction.** `assessUnsavedRisk()` in
+`src/lib/unsavedChanges.ts` prompts only for `"new"` (no server record yet), `"notAutoSaved"`
+(editable but past Draft, where the server refuses `?autoSave=1`) or `"autoSaveFailed"`. A healthy
+Draft whose 2.5 s debounce merely happens to be in flight must **not** interrupt anyone — the hook
+flushes on unmount, so that work lands whether or not we ask. If you ever find yourself "fixing" the
+guard to also fire on `pending`, four tests in `tests/unsavedChanges.test.ts` will go red on purpose.
+
+**Three actions, and the middle one is the destructive one** — which is why this is not an extra
+action bolted onto `ConfirmDialog` (18 call sites, two-button contract, and its `danger` prop
+colours the *confirm* button, so it cannot express "safe primary, destructive secondary"). Order is
+กลับไปแก้ต่อ (outline) · ไม่บันทึก (danger **outline** `#e05252`) · บันทึก (gold primary).
+
+- **Solid `#e05252` stays reserved for the primary/confirm slot.** Here the primary is gold, and two
+  solid fills side by side would fight for the eye.
+- **The caution icon is gold, not red.** This is a pause before an ordinary action, not a delete
+  confirmation; red here would compete with the ไม่บันทึก button.
+- **Initial focus is on บันทึก**, so Enter does the safe thing and the destructive option is never
+  one keystroke away.
+- `busy` disables **all three** — a mis-click on ไม่บันทึก mid-save is unrecoverable.
+- `print:hidden` on the overlay (copy this from `WorkflowActionDialog`; `ConfirmDialog` lacks it): a
+  dialog stuck open over a printable document must not reach the paper.
+
+**Wiring rules for a new document editor** (all eight existing ones follow these):
+
+- Register with `useUnsavedChangesGuard(...)`, and pass `null` whenever there is nothing to protect.
+  It returns `requestLeave`, which the editor's own breadcrumb Back must be wrapped in. A
+  *programmatic* `onBack()` — after a delete, say — stays unwrapped: there is nothing left to save.
+- `getRisk` is a **function**, read at the moment the user tries to leave. Dirtiness is never a
+  rendered boolean: reading a ref during render trips `react-hooks/refs`, and holding it in state
+  would re-render the editor on every keystroke to maintain a value nobody displays.
+- `save` must be the editor's **real** Save — same validation, same error toast — returning
+  `Promise<boolean>`. For a document with no record yet, that means *create*. Returning `false`
+  keeps the user on the page with an inline error; it must never navigate away.
+- `discard` must call `draftBackup.clear()`. Otherwise reopening the document — or the *next* new
+  one, since new documents share the `quotation:new` / `serviceReport:new` keys — greets the user
+  with a recovery banner offering back the work they just chose to throw away.
+- **Feed the dirty tracker only what the user can actually change.** Two live traps: Quotation's
+  draft payload carries `status`, which moves through the approval workflow rather than the form
+  (left in, every approved quotation looks permanently dirty); and Material Requisition's
+  `toUpdateFields` omits `returnedBy` / `returnReceivedBy`, which stay editable after approval with
+  auto-save off — exactly the case the guard exists for.
+- **Re-seed the baseline at every point a server response lands** — load, save, finalize,
+  `DocumentApprovalActions.onUpdated`, and each workflow action. Miss one and the document nags on
+  every navigation. The draft-recovery **restore** deliberately does not re-seed: restoring
+  recovered work genuinely does make the form dirty.
+
+**Navigation is guarded at the initiator, not at the route.** There is no router; every navigation
+is a `setActiveNav(...)` in `App.tsx`, so each one is wrapped in `guardedNav(() => { ... })`.
+Wrapping the `navigateTo*` family is what covers global search, the notification bell and
+cross-document links inside editors without touching those components at all. Re-clicking the
+**already-active** nav item is guarded too — `navBump` turns it into a full page remount that
+destroys an open editor just the same. A missed call site fails **open** (navigates without asking),
+never closed.
+
+**Known gap, shared with every other dialog here:** `useDialogA11y` does not restore focus to the
+trigger on close. Tracked in TODO.md; don't fix it in one dialog only.
+
 ### Global Search (`src/components/GlobalSearch.tsx`, added 2026-07-14, fixed against an
 independent Codex review the same day)
 Replaces the previously decorative, non-functional topbar search input (a bare `<input>` with no
@@ -275,6 +337,8 @@ Header row: `bg-muted/40` (or `/20`, `/30`), cells `text-[10px] font-mono font-s
 Use `src/components/ConfirmDialog.tsx` for any destructive confirmation and `src/components/PromptDialog.tsx` (added 2026-07-29) for any single-value text prompt (a rejection reason, a document number) — don't build a one-off, and **never use `window.prompt()`** (unstyled browser chrome, no Thai font, awkward on mobile; the three usages that existed were all migrated 2026-07-29). Shared pattern: fixed inset overlay (`bg-[#0b1d3a]/40`), centered card (`max-w-sm`), title + message, Cancel (outline) + Confirm (primary, or danger via ConfirmDialog's `danger` prop) buttons. PromptDialog supports `multiline` (reasons), `mono` (codes/numbers), and `requiredMessage` (inline blank-value error).
 
 **Dialog semantics + busy-guard (2026-07-30 accessibility hardening pass).** Both `ConfirmDialog` and `PromptDialog` now use the shared `src/hooks/useDialogA11y.ts` hook: `role="dialog"`, `aria-modal="true"`, `aria-labelledby` on a real `<h2>` title, Escape-to-close, and a Tab focus trap confined to the dialog panel — previously plain unlabeled `<div>`s with no keyboard dismissal. Both also take a `busy?: boolean` prop that disables Cancel/Confirm while the confirmed action is still in flight — pass it whenever `onConfirm` kicks off an async request, so a double-click can't fire an irreversible action (finalize, delete) twice. `PromptDialog` additionally takes an `error?: string` prop for a server-side rejection (e.g. a 409 uniqueness conflict) shown below the input without closing the dialog or losing what the user typed — distinct from `requiredMessage`'s client-side blank check. Every quotation/Scope of Work/Delivery Order dialog was updated to wire `busy`; see `CHANGELOG.md`.
+
+A **third** action (Save / Don't save / Keep editing) is `src/components/UnsavedChangesDialog.tsx`, added 2026-08-25 — again a new component rather than a prop on `ConfirmDialog`, because a third button changes button order, focus order and focus-trap membership for all 18 of its call sites, and because its `danger` prop colours the *confirm* button and so cannot express a safe primary beside a destructive secondary. See the Unsaved-Changes Guard section above.
 
 For an action that needs a **free-text comment** attached (not just a yes/no confirm) — e.g. the quotation workflow's reject/cancel/approve actions — `QuoteDocument.tsx`'s `WorkflowActionDialog` (extracted 2026-07-30 into its own component so it can call `useDialogA11y` safely) is the pattern to copy: same overlay/card treatment as `ConfirmDialog`, a `<textarea>` for the comment (label indicates "(จำเป็น)" required or "(ไม่บังคับ)" optional depending on the action), inline error text if required-and-empty, Cancel (outline) + Confirm (danger-red for destructive actions like reject/cancel, gold for everything else) buttons, both disabled while the action is in flight. It isn't built on `PromptDialog` directly — the dynamic required/optional label and danger-vs-gold Confirm color aren't things `PromptDialog` models, and forcing them in risked a regression in the approval workflow — but it gets the identical accessibility treatment via the same `useDialogA11y` hook.
 

@@ -281,6 +281,9 @@ real requirement; not pursued as part of this removal.
 
 ## Auto-save (added 2026-08-25)
 
+**การเตือน "ยังไม่ได้บันทึก" (2026-08-25).** ใช้กับเอกสารสามใบในโมดูลนี้เท่านั้น (ใบเบิก-คืนวัสดุ, ใบสั่งงาน, ใบขอซื้อ) — หน้าโครงการเองไม่มีปุ่มบันทึก มีแต่ช่องสถานะที่บันทึกทันทีที่เลือก จึงไม่มีงานค้างให้เตือน เอกสารทั้งสามลงทะเบียนการ์ดไว้กับ `src/hooks/useNavigationGuard.ts` — ถ้าผู้ใช้จะออกจากหน้าไปทั้งที่ยังมีงานที่บันทึกอัตโนมัติช่วยไม่ได้ จะมีกล่องถามก่อนพร้อมปุ่ม บันทึก / ไม่บันทึก / กลับไปแก้ต่อ ปุ่ม "บันทึก" ในกล่องคือปุ่มบันทึกจริงของหน้านี้ (validation ครบเหมือนเดิม) และถ้าบันทึกไม่สำเร็จจะค้างอยู่หน้าเดิม ดักไว้ทุกทางในแอป — ปุ่มย้อนกลับ เมนูซ้าย เมนูผู้ใช้ ผลค้นหา กระดิ่งแจ้งเตือน และลิงก์ข้ามเอกสาร กล่องนี้จะ**ไม่**เด้งถ้าเอกสารยังเป็นฉบับร่างที่บันทึกอัตโนมัติดูแลอยู่ตามปกติ ดู [UI_GUIDELINES.md](../UI_GUIDELINES.md) หัวข้อ Unsaved-Changes Guard
+
+
 This module's document editor auto-saves like every other one — shared
 `src/hooks/useAutoSave.ts`, rendered through `AutoSaveIndicator` (toolbar chip, next to Save) and
 `DraftRecoveryBanner` (the "พบร่างที่ยังไม่ได้บันทึก" offer). Two layers: a `localStorage` snapshot

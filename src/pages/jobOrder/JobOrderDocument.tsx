@@ -15,6 +15,9 @@ import { ChecklistGroupCard } from "../quotation/ChecklistGroupCard";
 import { JobOrderPrintDocument } from "./JobOrderPrintDocument";
 import { useI18n } from "../../lib/i18n";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
+import { useDirtyTracker } from "../../hooks/useDirtyTracker";
+import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
+import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 
@@ -73,16 +76,21 @@ export function JobOrderDocument({
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
 
+  // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) ─────────────────────────────────────────────────────
+  // ประกาศเหนือ effect โหลดข้อมูล เพราะทุกครั้งที่ดึงเอกสารจากเซิร์ฟเวอร์ต้องตั้งฐานเทียบใหม่ ไม่งั้นเอกสารจะ
+  // ค้างสถานะ "ยังไม่บันทึก" ตลอดไปแล้วเด้งถามทุกครั้งที่เปลี่ยนหน้า
+  const dirty = useDirtyTracker(draft && canEdit && draft.status === "Draft" ? toUpdateFields(draft) : null);
+
   useEffect(() => {
     let cancelled = false;
     fetchJobOrder(jobOrderId)
-      .then((j) => { if (!cancelled) { setDoc(j); setDraft(j); } })
+      .then((j) => { if (!cancelled) { setDoc(j); setDraft(j); dirty.markSaved(toUpdateFields(j)); } })
       .catch((err) => {
         if (cancelled) return;
         setLoadError(err instanceof ApiError ? err.message : t("jobOrderDoc.loadError"));
       });
     return () => { cancelled = true; };
-  }, [jobOrderId, reloadKey, t]);
+  }, [jobOrderId, reloadKey, t, dirty]);
 
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="jodoc-actions"]', popover: { title: t("tour.jodoc.actions.title"), description: t("tour.jodoc.actions.desc"), side: "bottom" } },
@@ -114,6 +122,47 @@ export function JobOrderDocument({
     },
   });
 
+  const save = async (): Promise<boolean> => {
+    if (!draft) return false;
+    setSaving(true);
+    try {
+      const updated = await updateJobOrder(draft.id, toUpdateFields(draft));
+      setDoc(updated);
+      setDraft(updated);
+      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
+      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
+      autoSave.markSaved(toUpdateFields(updated));
+      dirty.markSaved(toUpdateFields(updated));
+      draftBackup.clear();
+      showToast(t("jobOrderDoc.saved"));
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("jobOrderDoc.errorSave"));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // การ์ด "ยังไม่ได้บันทึก" — ปุ่ม "บันทึก" ในกล่องคือ save() ตัวจริงของหน้านี้ ผ่าน validation และรายงาน
+  // ข้อผิดพลาดเหมือนกดปุ่มบันทึกเอง; save จึงต้องประกาศเหนือ early return เพราะ hook เรียกแบบมีเงื่อนไขไม่ได้
+  const { requestLeave } = useUnsavedChangesGuard(
+    draft && canEdit
+      ? {
+          getRisk: () => assessUnsavedRisk({
+            isDirty: dirty.isDirtyNow(),
+            hasServerRecord: true,
+            autoSaveEnabled: autoSaveEditable,
+            autoSaveState: autoSave.state,
+          }),
+          documentLabel: draft.id,
+          save,
+          // ทิ้งสำเนาในเครื่องด้วย ไม่งั้นเปิดเอกสารนี้อีกครั้งจะถูกเสนอให้กู้คืนงานที่เพิ่งสั่งไม่บันทึกไป
+          discard: draftBackup.clear,
+        }
+      : null,
+  );
+
   const docTour = useModuleTour("jobOrderDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
   useEffect(() => {
@@ -128,7 +177,7 @@ export function JobOrderDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
           </button>
         </div>
@@ -147,7 +196,7 @@ export function JobOrderDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
           </button>
         </div>
@@ -172,31 +221,13 @@ export function JobOrderDocument({
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankJobOrderLine()] });
   };
 
-  const save = async () => {
-    if (!draft) return;
-    setSaving(true);
-    try {
-      const updated = await updateJobOrder(draft.id, toUpdateFields(draft));
-      setDoc(updated);
-      setDraft(updated);
-      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
-      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
-      autoSave.markSaved(toUpdateFields(updated));
-      draftBackup.clear();
-      showToast(t("jobOrderDoc.saved"));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("jobOrderDoc.errorSave"));
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const finalize = async () => {
     setFinalizing(true);
     try {
       const updated = await finalizeJobOrder(doc.id);
       setDoc(updated);
       setDraft(updated);
+      dirty.markSaved(toUpdateFields(updated));
       setConfirmFinalize(false);
       showToast(t("jobOrderDoc.finalized"));
     } catch (err) {
@@ -233,7 +264,7 @@ export function JobOrderDocument({
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("jobOrderDoc.backToList")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -263,7 +294,7 @@ export function JobOrderDocument({
             onApprove={() => approveJobOrder(doc.id)}
             onReject={(c) => rejectJobOrder(doc.id, c)}
             onWithdraw={() => withdrawJobOrderApproval(doc.id)}
-            onUpdated={(updated) => { setDoc(updated); setDraft(updated); }}
+            onUpdated={(updated) => { setDoc(updated); setDraft(updated); dirty.markSaved(toUpdateFields(updated)); }}
             showToast={showToast}
           />
           {canDelete && (

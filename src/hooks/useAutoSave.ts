@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { safeStringify } from "../lib/unsavedChanges";
 
 /**
  * บันทึกอัตโนมัติสำหรับแบบฟอร์มเอกสารทุกโมดูล (เพิ่ม 2026-08-25)
@@ -36,15 +37,6 @@ const BACKUP_DELAY_MS = 700;
 const BACKUP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const BACKUP_KEY_PREFIX = "tcs_erp_draft_backup_v1";
-
-/** `JSON.stringify` ที่ไม่ throw — ข้อมูลร่างอาจมีค่าที่ serialize ไม่ได้ */
-function safeStringify(value: unknown): string | null {
-  try {
-    return JSON.stringify(value) ?? null;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * บันทึกร่างขึ้นเซิร์ฟเวอร์อัตโนมัติเมื่อผู้ใช้หยุดแก้ไข

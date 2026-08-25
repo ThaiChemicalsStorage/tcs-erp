@@ -15,6 +15,9 @@ import { useI18n } from "../../lib/i18n";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
+import { useDirtyTracker } from "../../hooks/useDirtyTracker";
+import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
+import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
 
@@ -49,13 +52,17 @@ export function ProductionOrderDocument({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
 
+  // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — ประกาศเหนือ effect โหลดข้อมูล เพื่อตั้งฐานเทียบใหม่ทุกครั้งที่ดึงเอกสาร
+  // toUpdateFields ครอบคลุมช่องผู้ลงนามหลังอนุมัติอยู่แล้ว จึงใช้ payload เดียวกันได้ทั้งสองเฟส
+  const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
+
   useEffect(() => {
     let cancelled = false;
     fetchProductionOrder(productionOrderId)
-      .then((d) => { if (!cancelled) { setDoc(d); setDraft(d); setLoading(false); } })
+      .then((d) => { if (!cancelled) { setDoc(d); setDraft(d); setLoading(false); dirty.markSaved(toUpdateFields(d)); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [productionOrderId]);
+  }, [productionOrderId, dirty]);
 
   useEffect(() => {
     if (!showPrint) return;
@@ -89,6 +96,60 @@ export function ProductionOrderDocument({
     },
   });
 
+  const save = async (): Promise<boolean> => {
+    if (!draft) return false;
+    setSaving(true);
+    try {
+      const updated = await updateProductionOrder(draft.id, toUpdateFields(draft));
+      setDoc(updated); setDraft(updated);
+      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
+      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
+      autoSave.markSaved(toUpdateFields(updated));
+      dirty.markSaved(toUpdateFields(updated));
+      draftBackup.clear();
+      showToast(t("productionOrderDoc.saved"));
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorSave"));
+      return false;
+    } finally { setSaving(false); }
+  };
+
+  const saveSignatories = async (): Promise<boolean> => {
+    if (!draft) return false;
+    setSaving(true);
+    try {
+      const updated = await updateProductionOrderSignatories(draft.id, {
+        deliveredBy: draft.deliveredBy, receivedBy: draft.receivedBy, costDeptBy: draft.costDeptBy,
+      });
+      setDoc(updated); setDraft(updated);
+      dirty.markSaved(toUpdateFields(updated));
+      showToast(t("productionOrderDoc.saved"));
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorSave"));
+      return false;
+    } finally { setSaving(false); }
+  };
+
+  // การ์ด "ยังไม่ได้บันทึก" — ยังทำงานหลังอนุมัติด้วย เพราะช่องผู้ลงนาม (ผู้ส่งมอบ/ผู้รับ/ฝ่ายต้นทุน) ยังแก้ได้
+  // และตอนนั้น auto-save ปิดอยู่ ปุ่ม "บันทึก" ในกล่องจึงต้องเลือกให้ตรงเฟส
+  const { requestLeave } = useUnsavedChangesGuard(
+    draft && canEdit
+      ? {
+          getRisk: () => assessUnsavedRisk({
+            isDirty: dirty.isDirtyNow(),
+            hasServerRecord: true,
+            autoSaveEnabled: autoSaveEditable,
+            autoSaveState: autoSave.state,
+          }),
+          documentLabel: draft.id,
+          save: draft.status === "Draft" ? save : saveSignatories,
+          discard: draftBackup.clear,
+        }
+      : null,
+  );
+
   if (loading) {
     return <div className="flex-1 flex items-center justify-center p-6"><Loader2 className="animate-spin text-muted-foreground" size={20} /></div>;
   }
@@ -96,7 +157,7 @@ export function ProductionOrderDocument({
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6">
         <p className="text-sm text-muted-foreground">{t("productionOrder.loadError")}</p>
-        <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">{t("productionOrderDoc.backToList")}</button>
+        <button onClick={() => requestLeave(onBack)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">{t("productionOrderDoc.backToList")}</button>
       </div>
     );
   }
@@ -107,21 +168,6 @@ export function ProductionOrderDocument({
     setDraft((prev) => prev && { ...prev, lines: fn(prev.lines) });
   const updateLine = (id: string, patch: Partial<ProductionOrderLine>) =>
     setLines((lines) => lines.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const updated = await updateProductionOrder(draft.id, toUpdateFields(draft));
-      setDoc(updated); setDraft(updated);
-      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
-      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
-      autoSave.markSaved(toUpdateFields(updated));
-      draftBackup.clear();
-      showToast(t("productionOrderDoc.saved"));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorSave"));
-    } finally { setSaving(false); }
-  };
 
   const handlePrint = async () => {
     setPrinting(true);
@@ -136,7 +182,7 @@ export function ProductionOrderDocument({
     catch (err) { showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorDelete")); setDeleting(false); }
   };
 
-  const applyUpdated = (d: ProductionOrder) => { setDoc(d); setDraft(d); };
+  const applyUpdated = (d: ProductionOrder) => { setDoc(d); setDraft(d); dirty.markSaved(toUpdateFields(d)); };
 
   const statusPill = doc.status === "Draft"
     ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20"
@@ -174,23 +220,10 @@ export function ProductionOrderDocument({
     );
   };
 
-  const saveSignatories = async () => {
-    setSaving(true);
-    try {
-      const updated = await updateProductionOrderSignatories(draft.id, {
-        deliveredBy: draft.deliveredBy, receivedBy: draft.receivedBy, costDeptBy: draft.costDeptBy,
-      });
-      setDoc(updated); setDraft(updated);
-      showToast(t("productionOrderDoc.saved"));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorSave"));
-    } finally { setSaving(false); }
-  };
-
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("productionOrderDoc.backToList")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -360,7 +393,7 @@ export function ProductionOrderDocument({
           {/* หลังอนุมัติแล้วปุ่ม "บันทึกฉบับร่าง" ด้านบนหายไป สามช่องล่างจึงต้องมีปุ่มบันทึกของตัวเอง */}
           {!editable && canEdit && (
             <div className="pt-1">
-              <button onClick={() => void saveSignatories()} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+              <button onClick={() => { void saveSignatories(); }} disabled={saving} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
                 {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("productionOrderDoc.saveSignatories")}
               </button>
               <p className="text-xs text-muted-foreground mt-1.5">{t("productionOrderDoc.saveSignatoriesHint")}</p>

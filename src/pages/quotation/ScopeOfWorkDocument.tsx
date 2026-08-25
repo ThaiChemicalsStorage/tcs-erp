@@ -34,6 +34,9 @@ import { DocumentCompletionIndicator } from "../../components/DocumentCompletion
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
+import { useDirtyTracker } from "../../hooks/useDirtyTracker";
+import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
+import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS, ADDITIONAL_RECIPIENT_KEY } from "../../lib/documentRequirements";
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint, scopeOfWorkRequiredFields } from "../../lib/validation/scopeOfWorkValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
@@ -306,13 +309,20 @@ export function ScopeOfWorkDocument({
     return () => { cancelled = true; };
   }, [scopeOfWorkId, canViewProject]);
 
+  // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) ─────────────────────────────────────────────────────
+  // toFollowUpFields เป็นสับเซ็ตของ toUpdateFields จึงใช้ payload เดียวครอบคลุมได้ทั้งเฟสร่างและเฟสติดตามผล
+  //
+  // `toFollowUpFields` is a subset of `toUpdateFields`, so one payload covers both phases — including
+  // the PO number and document recipients, which stay editable after approval with auto-save off.
+  const dirty = useDirtyTracker(scope && canEdit ? toUpdateFields(scope) : null);
+
   useEffect(() => {
     let cancelled = false;
     fetchScopeOfWork(scopeOfWorkId)
-      .then((s) => { if (!cancelled) setScope(s); })
+      .then((s) => { if (!cancelled) { setScope(s); dirty.markSaved(toUpdateFields(s)); } })
       .catch(() => { if (!cancelled) setLoadError(true); });
     return () => { cancelled = true; };
-  }, [scopeOfWorkId, reloadKey]);
+  }, [scopeOfWorkId, reloadKey, dirty]);
 
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="sowdoc-actions"]', popover: { title: t("tour.sowdoc.actions.title"), description: t("tour.sowdoc.actions.desc"), side: "bottom" } },
@@ -340,11 +350,53 @@ export function ScopeOfWorkDocument({
     onSave: async (fields) => { await updateScopeOfWork(scopeOfWorkId, fields, { autoSave: true }); },
   });
 
+  // บันทึกฉบับร่างเต็มรูปแบบ หรือเฉพาะฟิลด์ติดตามผลถ้าเอกสารผ่านการอนุมัติแล้ว
+  // Saves the full draft, or just the follow-up fields once the record is no longer a Draft
+  const save = async (): Promise<boolean> => {
+    if (!scope) return false;
+    const draftPhase = scope.status === "Draft";
+    try {
+      setSaving(true);
+      const updated = await updateScopeOfWork(scope.id, draftPhase ? toUpdateFields(scope) : toFollowUpFields(scope));
+      setScope(updated);
+      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
+      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
+      autoSave.markSaved(toUpdateFields(updated));
+      dirty.markSaved(toUpdateFields(updated));
+      draftBackup.clear();
+      showToast(draftPhase ? "บันทึกร่างแล้ว" : "บันทึกเลข PO / ผู้รับเอกสารแล้ว");
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // การ์ด "ยังไม่ได้บันทึก" — ครอบคลุมทั้งสองเฟส เพราะเลข PO และรายชื่อผู้รับเอกสารยังแก้ได้หลังอนุมัติ
+  // ซึ่งเป็นช่วงที่ auto-save ปิดอยู่ save() จึงต้องประกาศเหนือ early return (hook เรียกแบบมีเงื่อนไขไม่ได้)
+  const { requestLeave } = useUnsavedChangesGuard(
+    scope && canEdit
+      ? {
+          getRisk: () => assessUnsavedRisk({
+            isDirty: dirty.isDirtyNow(),
+            hasServerRecord: true,
+            autoSaveEnabled: scopeEditable,
+            autoSaveState: autoSave.state,
+          }),
+          documentLabel: scope.scopeNumber || scope.id,
+          save,
+          discard: draftBackup.clear,
+        }
+      : null,
+  );
+
   if (loadError) {
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {resolvedBackLabel}
           </button>
         </div>
@@ -362,7 +414,7 @@ export function ScopeOfWorkDocument({
     return (
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ChevronRight size={14} className="rotate-180" /> {resolvedBackLabel}
           </button>
         </div>
@@ -390,26 +442,6 @@ export function ScopeOfWorkDocument({
   const summaryMessages = [...Object.values(finalizeValidation.fieldErrors), ...Object.values(finalizeValidation.groupErrors).flat()];
   const totalRequiredChecks = Object.values(scopeOfWorkRequiredFields).filter((f) => f.required).length + MANDATORY_CHECKLIST_GROUP_KEYS.length + 1 + 1;
 
-  // บันทึกฉบับร่างเต็มรูปแบบ หรือเฉพาะฟิลด์ติดตามผลถ้าเอกสารผ่านการอนุมัติแล้ว
-  // Saves the full draft, or just the follow-up fields once the record is no longer a Draft
-  const save = async () => {
-    if (!scope) return;
-    try {
-      setSaving(true);
-      const updated = await updateScopeOfWork(scope.id, isDraft ? toUpdateFields(scope) : toFollowUpFields(scope));
-      setScope(updated);
-      // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
-      // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
-      autoSave.markSaved(toUpdateFields(updated));
-      draftBackup.clear();
-      showToast(isDraft ? "บันทึกร่างแล้ว" : "บันทึกเลข PO / ผู้รับเอกสารแล้ว");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   // ส่งการแจ้งเตือนทวงเลข PO ไปยังพนักงานขายของเอกสารนี้
   // Sends a chase-for-PO-number notification to this record's salesperson
   const handleChasePo = async () => {
@@ -433,6 +465,7 @@ export function ScopeOfWorkDocument({
     try {
       const saved = await updateScopeOfWork(scope.id, isDraft ? toUpdateFields(scope) : toFollowUpFields(scope));
       setScope(saved);
+      dirty.markSaved(toUpdateFields(saved));
       const result = await sendScopeOfWorkDocumentNotifications(scope.id);
       showToast(`ส่งแจ้งเตือนผู้รับเอกสารแล้ว (${result.sentCount} คน)`);
     } catch (err) {
@@ -604,6 +637,7 @@ export function ScopeOfWorkDocument({
     try {
       const updated = await rejectScopeOfWork(scope.id, comment);
       setScope(updated);
+      dirty.markSaved(toUpdateFields(updated));
       showToast("ตีกลับเป็นฉบับร่างแล้ว");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "ปฏิเสธไม่สำเร็จ");
@@ -650,18 +684,22 @@ export function ScopeOfWorkDocument({
       if (confirmAction === "submit") {
         const updated = await submitScopeOfWorkApproval(scope.id);
         setScope(updated);
+        dirty.markSaved(toUpdateFields(updated));
         showToast("ส่งขออนุมัติแล้ว");
       } else if (confirmAction === "finalize") {
         const updated = await finalizeScopeOfWork(scope.id);
         setScope(updated);
+        dirty.markSaved(toUpdateFields(updated));
         showToast("อนุมัติแล้ว (Final)");
       } else if (confirmAction === "withdraw") {
         const updated = await withdrawScopeOfWorkApproval(scope.id);
         setScope(updated);
+        dirty.markSaved(toUpdateFields(updated));
         showToast("ถอนคำขออนุมัติแล้ว กลับเป็นฉบับร่าง");
       } else if (confirmAction === "refresh") {
         const updated = await refreshScopeOfWorkFromQuotation(scope.id);
         setScope(updated);
+        dirty.markSaved(toUpdateFields(updated));
         showToast("อัปเดตข้อมูลจากใบเสนอราคาแล้ว");
       } else if (confirmAction === "delete") {
         await deleteScopeOfWork(scope.id);
@@ -691,7 +729,7 @@ export function ScopeOfWorkDocument({
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {resolvedBackLabel}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -976,7 +1014,7 @@ export function ScopeOfWorkDocument({
             <div className="flex-1">
               <p className="text-xs text-foreground font-medium">{t("scopeOfWorkDoc.noSourceItems.message")}</p>
               <div className="flex items-center gap-2 mt-2">
-                <button onClick={onBack} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("scopeOfWorkDoc.noSourceItems.backToQuotation")}</button>
+                <button onClick={() => requestLeave(onBack)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">{t("scopeOfWorkDoc.noSourceItems.backToQuotation")}</button>
                 {editable && (
                   <button onClick={() => updateField("items", [blankScopeOfWorkItem()])} className="px-3 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
                     {t("scopeOfWorkDoc.noSourceItems.addManually")}

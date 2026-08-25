@@ -34,6 +34,9 @@ import { FieldError } from "../../components/FieldError";
 import { ValidationSummary } from "../../components/ValidationSummary";
 import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
+import { useDirtyTracker } from "../../hooks/useDirtyTracker";
+import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
+import { assessUnsavedRisk, type UnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { validateQuotationForFinalization, quotationRequiredFields } from "../../lib/validation/quotationValidation";
@@ -42,6 +45,14 @@ import { useI18n } from "../../lib/i18n";
 
 const BLOCKED_TOOLTIP = "กรุณากรอกข้อมูลและเลือกหัวข้อที่จำเป็นให้ครบก่อนดำเนินการ";
 const VALIDATION_EXEMPT_ACTIONS = new Set<ApprovalAction>(["rejected", "cancelled"]);
+
+// ทุกช่องที่ผู้ใช้แก้เองได้ ตัด status ออก เพราะสถานะมาจาก workflow ไม่ใช่การพิมพ์ ใช้เทียบหา "การแก้ไขที่ยังไม่ได้บันทึก"
+// Everything the user can actually change, minus `status`, which moves through the approval
+// workflow rather than through the form. Used only for the unsaved-changes comparison.
+function toGuardPayload({ status, ...rest }: QuoteDraftFields): Omit<QuoteDraftFields, "status"> {
+  void status;
+  return rest;
+}
 
 const DEFAULT_TERMS = "1. ราคานี้ยังไม่รวมค่าขนส่งและค่าติดตั้ง\n2. ราคามีผลภายใน 30 วันนับจากวันที่ในเอกสาร\n3. การส่งมอบภายใน 45 วันทำการหลังได้รับ PO\n4. การชำระเงินมัดจำ 30% ก่อนเริ่มผลิต";
 
@@ -289,6 +300,13 @@ export function QuoteDocument({
   // quotation must only change when someone presses Save, with the audit entry that comes with it.
   const draftSnapshot = currentDraft();
   const canAutoSaveToServer = !disabled && isDetail && quoteStatus === "ร่าง";
+  // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) ─────────────────────────────────────────────────────
+  // ตัด status ออกจากการเทียบ เพราะสถานะเปลี่ยนจาก workflow (อนุมัติ/ส่งให้ลูกค้า) ไม่ใช่จากการพิมพ์ของผู้ใช้
+  // ถ้านับรวม พออนุมัติเสร็จเอกสารจะค้างสถานะ "ยังไม่บันทึก" แล้วเด้งถามทุกครั้งที่เปลี่ยนหน้า
+  //
+  // `status` is excluded from the comparison: it changes through the approval workflow, not through
+  // anything the user typed. Counting it would leave every approved quotation permanently "dirty".
+  const dirty = useDirtyTracker(disabled ? null : toGuardPayload(draftSnapshot));
   const draftBackup = useDraftBackup<QuoteDraftFields>({
     storageKey: isDetail ? `quotation:${quote!.id}` : "quotation:new",
     data: draftSnapshot,
@@ -298,6 +316,15 @@ export function QuoteDocument({
     data: draftSnapshot,
     enabled: canAutoSaveToServer,
     onSave: onAutoSave,
+  });
+
+  // ใบที่ยังไม่เคยบันทึก (mode === "new") ไม่มีเรคอร์ดบนเซิร์ฟเวอร์ให้ auto-save ยิงไปหา และใบที่พ้นสถานะร่าง
+  // แล้วก็ถูกกันออกจาก auto-save โดยตั้งใจ — สองกรณีนี้คือที่ที่งานหายจริง
+  const guardRisk = (): UnsavedRisk => assessUnsavedRisk({
+    isDirty: dirty.isDirtyNow(),
+    hasServerRecord: isDetail,
+    autoSaveEnabled: canAutoSaveToServer,
+    autoSaveState: autoSave.state,
   });
 
   // นำร่างที่กู้คืนมาใส่กลับลงในแบบฟอร์มทั้งหมด
@@ -394,16 +421,22 @@ export function QuoteDocument({
     }
   };
 
-  const initialDraftJson = useRef(JSON.stringify(currentDraft()));
-  const currentDraftRef = useRef(currentDraft);
+  // คำเตือนตอนรีเฟรช/ปิดแท็บ — เดิมใช้ฐานเทียบที่จับไว้ตอนเปิดหน้าครั้งเดียวและไม่เคยตั้งใหม่หลังบันทึก จึงเตือน
+  // แม้เอกสารจะบันทึกเรียบร้อยแล้ว ซึ่งสอนให้ผู้ใช้กดข้ามคำเตือนไปเฉย ๆ ตอนนี้อ่านสัญญาณเดียวกับกล่องในแอป
+  // จึงพูดเฉพาะตอนที่งานเสี่ยงหายจริง (เบราว์เซอร์ไม่ให้ใส่ปุ่มเองได้ ทางนี้จึงยังเป็นกล่องมาตรฐานของเบราว์เซอร์)
+  //
+  // The refresh/close warning. Its old baseline was captured once at mount and never re-seeded, so
+  // it fired even on a saved, untouched quotation — which teaches people to click straight through
+  // it. It now reads the same signal as the in-app dialog and speaks up only when work is really at
+  // risk. The browser owns this dialog's buttons, so Save/Don't-save cannot be offered here.
+  const guardRiskRef = useRef(guardRisk);
   useEffect(() => {
-    currentDraftRef.current = currentDraft;
+    guardRiskRef.current = guardRisk;
   });
   useEffect(() => {
     if (disabled) return;
     const handler = (e: BeforeUnloadEvent) => {
-      const isDirty = JSON.stringify(currentDraftRef.current()) !== initialDraftJson.current;
-      if (!isDirty) return;
+      if (guardRiskRef.current() === "none") return;
       e.preventDefault();
       e.returnValue = "";
     };
@@ -414,10 +447,10 @@ export function QuoteDocument({
   // บันทึกใบเสนอราคาหลังตรวจข้อมูลจำเป็นเบื้องต้น พร้อมกันบันทึกซ้ำระหว่างกำลังส่งคำขอ
   // Saves the quote after basic required-field checks, guarding against a concurrent duplicate save
   const [savingBusy, setSavingBusy] = useState(false);
-  const save = async (message: string) => {
-    if (!client.trim()) { showToast(t("quotation.errorClientRequired")); return; }
-    if (mode === "new" && !jobTypeCode) { showToast(t("quotation.errorJobTypeRequired")); return; }
-    if (savingBusy) return;
+  const save = async (message: string): Promise<boolean> => {
+    if (!client.trim()) { showToast(t("quotation.errorClientRequired")); return false; }
+    if (mode === "new" && !jobTypeCode) { showToast(t("quotation.errorJobTypeRequired")); return false; }
+    if (savingBusy) return false;
     setSavingBusy(true);
     try {
       const saved = currentDraft();
@@ -430,13 +463,29 @@ export function QuoteDocument({
       // ส่ง payload ที่บันทึกไปจริง ไม่ใช่สิ่งที่อยู่บนจอตอนนี้ — ถ้าผู้ใช้พิมพ์ต่อระหว่างรอผลบันทึก
       // ตัวอักษรที่พิมพ์เพิ่มยังไม่เคยขึ้นเซิร์ฟเวอร์ และต้องถูกบันทึกอัตโนมัติต่อไป
       autoSave.markSaved(saved);
+      dirty.markSaved(toGuardPayload(saved));
       showToast(message);
+      return true;
     } catch {
       // caller already surfaced the error toast; nothing further to do
+      return false;
     } finally {
       setSavingBusy(false);
     }
   };
+
+  // การ์ด "ยังไม่ได้บันทึก" — ปุ่ม "บันทึก" ในกล่องคือปุ่มบันทึกจริงของหน้านี้ ผ่าน validation เดิมทุกข้อ
+  // สำหรับใบใหม่ การ "บันทึก" คือการ "สร้าง" เอกสาร (onSave → createQuote) ไม่ใช่การ PATCH
+  const { requestLeave } = useUnsavedChangesGuard(
+    disabled
+      ? null
+      : {
+          getRisk: guardRisk,
+          documentLabel: isDetail && quote ? quote.id : client.trim(),
+          save: () => save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast")),
+          discard: draftBackup.clear,
+        },
+  );
 
   const commentRequired = pendingAction === "rejected" || pendingAction === "customer_rejected" || pendingAction === "cancelled";
   const openAction = (a: ApprovalAction) => { setPendingAction(a); setActionComment(""); setActionError(""); };
@@ -479,7 +528,7 @@ export function QuoteDocument({
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
           <ChevronRight size={14} className="rotate-180" /> {t("quotation.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
@@ -536,7 +585,7 @@ export function QuoteDocument({
             </button>
           )}
           {!disabled && (
-            <button onClick={() => save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast"))} disabled={savingBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+            <button onClick={() => { void save(mode === "new" ? t("quotation.savedDraftToast") : t("quotation.savedToast")); }} disabled={savingBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <Save size={13} /> {mode === "new" ? t("quotation.saveDraft") : t("common.save")}
             </button>
           )}

@@ -27,6 +27,9 @@ import { useI18n } from "../../lib/i18n";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
+import { useDirtyTracker } from "../../hooks/useDirtyTracker";
+import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
+import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 
 const emptyCustomerSnapshot = { companyName: "", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" };
 
@@ -212,7 +215,16 @@ export function ServiceReportEditor({
   // split as a brand-new quotation. Its snapshot carries `selectedTemplateId` too: without the
   // template choice, restored answers would have no checklist structure to belong to.
   // An existing Draft additionally auto-saves for real. See src/hooks/useAutoSave.ts.
-  const autoSaveBackupData = { form, checklist, selectedTemplateId };
+  // ทุกอย่างที่ผู้ใช้กรอกได้บนหน้านี้ — ใช้ทั้งเป็นสำเนาในเครื่องและเป็นตัวเทียบ "การแก้ไขที่ยังไม่ได้บันทึก"
+  // รับ checklist เข้ามาเป็นพารามิเตอร์ เพราะหลังบันทึกต้องตั้งฐานเทียบด้วย checklist ที่เซิร์ฟเวอร์ตอบกลับมา
+  // ไม่ใช่ค่าที่ยังอยู่ใน state (ซึ่งยังไม่ commit ตอนที่เรียก)
+  //
+  // Takes the checklist as a parameter because after a save the baseline must be seeded from the
+  // server's version, not the state value — which has not committed yet at the point of the call.
+  const toGuardPayload = (checklistValue: typeof checklist) => ({ form, checklist: checklistValue, selectedTemplateId });
+  const autoSaveBackupData = toGuardPayload(checklist);
+  // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — รายงานใหม่คือเคสที่งานหายจริง เพราะยังไม่มีเรคอร์ดบนเซิร์ฟเวอร์
+  const dirty = useDirtyTracker(phase === "ready" && isEditable ? autoSaveBackupData : null);
   const draftBackup = useDraftBackup<typeof autoSaveBackupData>({
     storageKey: isNew ? "serviceReport:new" : `serviceReport:${serviceReportId}`,
     data: phase === "ready" ? autoSaveBackupData : null,
@@ -300,8 +312,8 @@ export function ServiceReportEditor({
     }
   };
 
-  const handleCreate = async () => {
-    if (!selectedTemplateId) { showToast(t("service.form.selectTemplateFirst")); return; }
+  const handleCreate = async (): Promise<boolean> => {
+    if (!selectedTemplateId) { showToast(t("service.form.selectTemplateFirst")); return false; }
     setSaving(true);
     setFieldErrors({});
     try {
@@ -311,10 +323,13 @@ export function ServiceReportEditor({
       // Drops the "serviceReport:new" snapshot: the record exists now, so leaving it behind would
       // greet the next brand-new report with a recovery offer for work that is already saved.
       draftBackup.clear();
+      dirty.markSaved(toGuardPayload(created.checklist));
       showToast(t("service.toast.created"));
       onCreated(created.id);
+      return true;
     } catch (err) {
       applyApiError(err, t("service.toast.createFailed"));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -326,10 +341,13 @@ export function ServiceReportEditor({
     setReport(updated);
     setChecklist(updated.checklist);
     setSections(updated.templateSnapshot.sections);
+    // ทุกคำตอบจากเซิร์ฟเวอร์ผ่านตรงนี้ จึงเป็นที่เดียวที่ต้องตั้งฐานเทียบใหม่ — พลาดที่ไหนที่หนึ่ง เอกสารจะค้าง
+    // สถานะ "ยังไม่บันทึก" แล้วเด้งถามทุกครั้งที่เปลี่ยนหน้า
+    dirty.markSaved(toGuardPayload(updated.checklist));
   };
 
-  const handleSaveDraft = async () => {
-    if (!report) return;
+  const handleSaveDraft = async (): Promise<boolean> => {
+    if (!report) return false;
     setSaving(true);
     setFieldErrors({});
     try {
@@ -341,12 +359,32 @@ export function ServiceReportEditor({
       autoSave.markSaved(saved);
       draftBackup.clear();
       showToast(t("service.toast.saved"));
+      return true;
     } catch (err) {
       applyApiError(err, t("service.toast.saveFailed"));
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  // การ์ด "ยังไม่ได้บันทึก" — ปุ่ม "บันทึก" ในกล่องต้องตรงเฟส: รายงานใหม่คือการ "สร้าง" (createServiceReport)
+  // ส่วนฉบับร่างที่มีอยู่แล้วคือการบันทึกทับ ทั้งคู่ผ่าน validation เดิมและรายงานข้อผิดพลาดเหมือนกดปุ่มเอง
+  const { requestLeave } = useUnsavedChangesGuard(
+    isEditable
+      ? {
+          getRisk: () => assessUnsavedRisk({
+            isDirty: dirty.isDirtyNow(),
+            hasServerRecord: !isNew,
+            autoSaveEnabled: !isNew && !!report && isEditable,
+            autoSaveState: autoSave.state,
+          }),
+          documentLabel: report?.id ?? form.serviceSystemName,
+          save: isNew ? handleCreate : handleSaveDraft,
+          discard: draftBackup.clear,
+        }
+      : null,
+  );
 
   // บันทึกก่อนเสมอ (ถ้ายังแก้ได้) แล้วสร้างลิงก์อนุมัติอายุ 7 วัน — ส่งเข้า LINE ลูกค้าอัตโนมัติถ้าผูกไว้
   // Saves first (when still editable), then creates the 7-day approval link, LINE-pushing it when linked
@@ -665,7 +703,7 @@ export function ServiceReportEditor({
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center" role="alert">
         <p className="text-sm text-muted-foreground">{t("service.loadError")}</p>
-        <button onClick={onBack} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">
+        <button onClick={() => requestLeave(onBack)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground">
           <ArrowLeft size={13} /> {t("scopeOfWorkDoc.backToList")}
         </button>
       </div>
@@ -746,7 +784,7 @@ export function ServiceReportEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={onBack} className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
+          <button onClick={() => requestLeave(onBack)} className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
             <ArrowLeft size={15} />
           </button>
           <div>
