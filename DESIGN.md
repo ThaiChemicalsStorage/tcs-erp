@@ -215,13 +215,15 @@ The compact KPI tile — `ExecutiveSummaryCards.tsx`'s `SummaryCard`, `ActivityF
 - **In-table inline editing:** a distinct, lighter-weight variant — transparent background by default, only gaining the muted-mist background on focus — used for spreadsheet-style editable table cells (e.g. quotation line items) instead of the full bordered field style.
 
 ### Navigation (Sidebar)
-Navy rail; inactive items are pale-blue text (`#a8bed8`) on navy, hover shifts to white with a navy-accent background (`#132540`); the active item gets the tinted-pill treatment (`bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25`) — the sidebar's active state is a direct application of the same pill formula the status system uses elsewhere. Nav items are grouped under small uppercase eyebrow labels (Main/Sales/Inventory/Administration) that hide when the sidebar is collapsed to icon-only.
+Navy rail; inactive items are pale-blue text (`#a8bed8`) on navy, hover shifts to white with a navy-accent background (`#132540`); the active item gets the tinted-pill treatment (`bg-[#c9a84c]/15 text-[#c9a84c] border border-[#c9a84c]/25`) — the sidebar's active state is a direct application of the same pill formula the status system uses elsewhere. Nav items are grouped under small uppercase eyebrow labels that hide when the sidebar is collapsed to icon-only. As of 2026-08-25 there are eight groups (`NAV_GROUPS` in `App.tsx`) — หลัก / งานขาย / บริการ / บัญชี / โครงการ / ผลิต / คลังสินค้า / การจัดการระบบ — and a group renders only when the current role can see at least one item inside it, so two users can see two different sidebars. A new module joins an existing group rather than inventing a ninth.
 
 ### Dropdown Panels (Notifications, What's New, Global Search, User Menu)
 One shared shell reused across all four: `absolute right-0 (or left-0) top-full mt-2`, white card, hairline border, `shadow-xl`, `w-96` (or `w-[26rem]` for search). This is the only place `shadow-xl` belongs — see Elevation & Depth.
 
 ### Dialogs
 Fixed navy-tinted overlay (`bg-[#0b1d3a]/40`), centered white card (`max-w-sm`), title + message, an outline Cancel button + a primary or danger Confirm button depending on the action. `ConfirmDialog` for yes/no destructive confirmation, `PromptDialog` for a single free-text value — never the browser's native `window.prompt()`/`window.confirm()`.
+
+A **three-action** variant exists as of 2026-08-25 (`UnsavedChangesDialog`, the "ยังไม่ได้บันทึก" prompt): กลับไปแก้ต่อ (outline) · ไม่บันทึก (danger **outline**) · บันทึก (gold primary). It is a separate component rather than a third prop on `ConfirmDialog`, because the semantics invert — the *middle* action is the destructive one and the *primary* is the safe one, which `danger` (which colours the confirm button) cannot express. Two rules generalise from it: solid `#e05252` stays reserved for the primary/confirm slot, so a destructive *secondary* uses the red outline instead; and initial focus belongs on the safe action, so Enter never triggers the destructive one.
 
 ## Do's and Don'ts
 
