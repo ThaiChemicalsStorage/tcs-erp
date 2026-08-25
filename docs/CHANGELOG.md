@@ -4,7 +4,41 @@
 
 ---
 
-## 2026-08-25f (absolute latest) — "ยังไม่ได้บันทึก": a confirmation before leaving an editor with unsaved work
+## 2026-08-25g (absolute latest) — Correction: "signing in is out of bounds" was too broad, and one 2026-07-10 item was already done
+
+A TODO review turned up a 🔴 item from 2026-08-21 recording that the standing excuse *"the automated
+browser cannot reach this machine's dev server"* is false, and that roughly forty TODO entries rest
+on it. Worth checking my own words from earlier today against it.
+
+**What I wrote in 2026-08-25f is narrower than that false claim, and each half was verified rather
+than assumed** — Playwright did load the app and render the login screen with zero console errors,
+and the extension's Chrome did return an error page for both `localhost:3000` and `127.0.0.1:3000`
+while `curl` got `200` from each. So it did not repeat the flagged claim.
+
+**But it stopped one question short, and that made it read as a dead end when it is not.** Playwright
+MCP runs a *persistent* browser profile (`%LOCALAPPDATA%\ms-playwright-mcp\mcp-msedge-*\Default\Network\Cookies`)
+and this app authenticates with a session cookie (`refreshSessionCookie`, `api/_lib/auth.ts`). A
+single manual login in that browser therefore persists, and later sessions can click through signed
+in — no password ever handled by me. That is almost certainly how the 2026-08-18 and 2026-08-21
+sessions captured every page, and the rolling session expiration already tracked in TODO.md explains
+why it was signed out again today. The extension's per-origin site permission is a second one-click
+route to the same place.
+
+The practical difference: the unsaved-changes guard is not "unverifiable", it is "waiting on a
+one-time login". TODO.md now says so, and names both routes, instead of implying a wall.
+
+**Also closed: "In-app unsaved-changes interception for the Quotation form"**, open since 2026-07-10.
+It had predicted the mechanism almost exactly — *"`App.tsx`'s `setActiveNav` calls to check a 'is the
+form dirty' flag"* — and 2026-08-25f built it, for all eight editors rather than Quotation alone. The
+one deliberate departure is that the prompt is a purpose-built three-action dialog rather than the
+`ConfirmDialog` that item suggested, because a two-button contract cannot express a safe primary
+beside a destructive secondary.
+
+No code changed in this entry.
+
+---
+
+## 2026-08-25f — "ยังไม่ได้บันทึก": a confirmation before leaving an editor with unsaved work
 
 Requested: *"ถ้าแบบจะกดออกหรือจะกดอะไรเวลาแก้ไขข้อมูลในใบอยู่ อยากให้ขึ้นแจ้งเตือนมาว่ายังไม่ได้บันทึก
 อะไรแบบนี้ กันไปอีกชั้นนึง มีปุ่มให้กดว่าบันทึกกับไม่บันทึก"* — a second layer on top of the auto-save
