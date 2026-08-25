@@ -398,7 +398,7 @@ page.
 
 ## Quote Model Changes
 
-New fields on `Quote`/`QuoteLine` (`src/lib/quotes.tsx`), all **optional/backward-compatible** —
+New fields on `Quote`/`QuoteLine` (`src/lib/quotes.ts`), all **optional/backward-compatible** —
 every quotation created before this feature continues to open/edit/export exactly as before, with
 these fields simply `undefined`:
 

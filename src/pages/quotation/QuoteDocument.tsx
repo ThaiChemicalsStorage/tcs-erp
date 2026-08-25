@@ -15,13 +15,14 @@ import type { User } from "../../lib/users";
 import {
   type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type ApprovalAction, type QuotePermissions,
   type DiscountMode,
-  statusIcon, statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
+  statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
   printQuote, isRevisionQuote,
 } from "../../lib/quotes";
 import { getRevisionPredecessorId, getRevisionNumber, generateQuoteRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import type { Customer } from "../../lib/customers";
 import { fetchScopeOfWorksByQuotation, createScopeOfWorkFromQuotation, type ScopeOfWorkSummary } from "../../lib/scopeOfWork";
 import { ApiError } from "../../lib/apiClient";
+import { statusIcon } from "./statusIcons";
 import { InterestButtons } from "./InterestButtons";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { CustomerSelector } from "./CustomerSelector";

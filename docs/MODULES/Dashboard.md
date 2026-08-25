@@ -462,7 +462,7 @@ other pass in this project (see PROJECT_STATUS.md "Known Risks").
   be a direct DOM child of the row). Both success toasts now name the quotation ID. The 4 stat-tile
   accent colors (gold/green/red for pending/approved/rejected) were also darkened to clear WCAG AA
   4.5:1 contrast against their `bg-secondary/40` background — the original brand hexes measured as
-  low as 2.15:1 there — matching the same fix already applied to `statusStyle` in `src/lib/quotes.tsx`.
+  low as 2.15:1 there — matching the same fix already applied to `statusStyle` in `src/lib/quotes.ts`.
 - `NotificationSummary.tsx` — the caller's own unread count + breakdown by type.
 - `DashboardCharts.tsx` — shared `ChartCard` wrapper (`ChartCard.tsx`, now supports an `actions`
   slot for the Revenue Trend grouping toggle) plus the remaining named charts: `RevenueTrendChart`

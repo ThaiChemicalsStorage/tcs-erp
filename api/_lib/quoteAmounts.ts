@@ -7,9 +7,10 @@
  * this file only re-exports it, the same frontend↔API sharing pattern already used for
  * `src/lib/validation/*` (see `api/handlers/quotes.ts`). That closes the last drift risk — the
  * frontend's on-screen totals and the server's authoritative `amount` are now literally the same
- * code, not two copies of the same formula. `src/lib/quoteMath.ts` is deliberately React/JSX-free
- * so importing it into a Node function costs nothing (unlike `src/lib/quotes.tsx`, which defines
- * `statusIcon` as JSX).
+ * code, not two copies of the same formula. `src/lib/quoteMath.ts` is deliberately dependency-free,
+ * so importing it into a Node function costs nothing — unlike `src/lib/quotes.ts`, which reaches
+ * `apiClient.ts`. (Until 2026-08-25 that file was `quotes.tsx` and importing it also meant the
+ * server had to transpile JSX at boot — the shape that crash-looped production on 2026-08-21.)
  *
  * `Quote` has no stored pre-tax/subtotal field — only the VAT-included grand total (`amount`) is
  * persisted; `lines`/`discount`/`discountMode` are the raw inputs used to compute it. Per the

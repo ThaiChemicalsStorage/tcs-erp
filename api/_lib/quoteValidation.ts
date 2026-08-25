@@ -9,10 +9,11 @@ import { computeQuoteAmountWithVat, type DiscountMode } from "./quoteAmounts.js"
  * `amount`. Every function here is pure (no MongoDB/network calls) except `validateJobType`,
  * which needs the caller to have already fetched the job-type master list.
  *
- * The totals formula itself lives in `./quoteAmounts.ts` (shared with `api/dashboard/index.ts`,
- * so both compute a quote's value the same way) rather than importing `src/lib/quotes.tsx`'s
- * `computeTotals()` — that file also defines JSX (`statusIcon`), and importing it by value into a
- * Node serverless function would drag React/JSX evaluation in for no reason.
+ * The totals formula lives in `src/lib/quoteMath.ts` and reaches this file through
+ * `./quoteAmounts.ts`, which simply re-exports it (2026-08-25) — the frontend's `computeTotals()`
+ * in `src/lib/quotes.ts` is the *same code*, not a second copy. The math was pulled out into its
+ * own dependency-free module rather than imported from `src/lib/quotes.ts` directly so a Node
+ * function doesn't drag `apiClient.ts` in to do arithmetic.
  */
 
 const MAX_LINES = 200;

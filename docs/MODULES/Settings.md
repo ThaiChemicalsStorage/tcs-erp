@@ -48,7 +48,7 @@ Personal account settings (self-service) plus single-company configuration (Supe
 ## Future Improvements
 
 - Persist notification preferences
-- Wire `Company.vatRate` into the actual VAT calculation in `lib/quotes.tsx` (currently stored/editable but unused by `computeTotals()`)
+- Wire `Company.vatRate` into the actual VAT calculation (currently stored/editable but unused by `computeTotals()`; the hardcoded `VAT_RATE` now lives in `src/lib/quoteMath.ts`, which both the frontend and the API compute from)
 
 ## Known Issues
 

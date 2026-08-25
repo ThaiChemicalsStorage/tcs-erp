@@ -4,10 +4,10 @@
 
 ## High Priority
 
+- [ ] **แผง "มีอะไรใหม่" กับกระดิ่งแจ้งเตือน ปิดไม่ได้ด้วยการคลิกข้างนอก (พบตอนทดสอบเบราว์เซอร์จริง 2026-08-25).** ทั้ง `WhatsNewPanel.tsx` และ `NotificationBell.tsx` ดักแค่ปุ่ม Escape อย่างเดียว (มี `keydown` listener ตัวเดียว ไม่มีอย่างอื่น) คลิกที่อื่นบนหน้าจอแผงยังค้างเปิดอยู่ และเปิดค้างพร้อมกันได้ทั้งสองอัน ทับกันเองและทับกับผลค้นหาของ Global Search ด้วย — **ในโค้ดชุดเดียวกันมีวิธีแก้อยู่แล้ว**: `GlobalSearch.tsx` บรรทัด 371 ใช้ฉากคลุม `<div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />` อีกสองตัวแค่ไม่เคยได้รับ ก็อปแพตเทิร์นเดิมมาใส่ได้เลย งานเล็ก
+
 - [ ] **🔴 แจ้งเตือนพนักงานภายในผ่าน LINE เวลาส่งเอกสาร — ยังไม่ได้เริ่มเขียนโค้ด มีแค่ env var scaffold (คุยไว้ 2026-08-24).** เจ้าของขอให้เวลาเอกสาร (ใบเสนอราคา/ใบเบิกวัสดุ/ใบขอซื้อ/ฯลฯ) ถูก "ส่ง" ให้พนักงานที่เกี่ยวข้องได้รับแจ้งเตือนทาง LINE ด้วย ไม่ใช่แค่ Bell notification ในระบบ **แนวทางที่ตกลงกันไว้**: ใช้กลไก pairing เดียวกับที่ Service Report ใช้กับลูกค้าอยู่แล้ว (`api/_lib/lineHandler.ts`) แต่ผูกกับ `users` แทน `customers` และ**ใช้ LINE OA แยกจากตัวลูกค้าคนละบัญชี** (กันรหัส pairing ของพนักงานกับลูกค้าชนกันในเว็บฮุคเดียว) `.env.example` ใส่ช่อง `LINE_STAFF_CHANNEL_ACCESS_TOKEN`/`LINE_STAFF_CHANNEL_SECRET` ไว้ล่วงหน้าแล้ว (คอมเมนต์กำกับว่า "planned, not yet built") **ที่ยังไม่มีเลยสักบรรทัด**: (1) field `lineUserId`/`linePairing` บน `users`, (2) endpoint `POST /api/users/:id/line-pairing`, (3) `handleStaffLineWebhook()` ใน `lineHandler.ts` (ก็อปโครง `handleLineWebhook()` เปลี่ยน collection/secret), (4) route `/api/line/webhook/staff` ใน `customersHandler.ts`, (5) template ข้อความ Flex ต่อประเภทเอกสาร (คล้าย `buildApprovalFlexMessage()`) และ (6) จุด trigger ในแต่ละ document handler ว่า "ส่ง" ของเอกสารนั้นคือ event ไหน — ยังไม่ได้ตัดสินใจ ก่อนเริ่มต้องได้ token/secret ของ LINE OA ตัวที่สองจากเจ้าของก่อน (สร้างที่ developers.line.biz คนละ channel จากของลูกค้า)
 
-- [ ] **🔴 JSX ยังอยู่ใน `src/lib/quotes.tsx` ซึ่งฝั่ง server import ไปด้วย — เคยทำ production ล่มมาแล้ว (2026-08-21).** `statusIcon` (ไอคอนสถานะใบเสนอราคา) เป็น JSX อยู่ในไฟล์ที่ `api/` value-import ไปใช้ helper คำนวณยอดเงิน แปลว่า **server ต้องโหลดไฟล์ `.tsx` ตอน boot** ซึ่งเป็นสิ่งที่ CLAUDE.md เตือนไว้ตรง ๆ ว่าห้ามทำ รอบนี้รอดมาได้ด้วยการ copy `tsconfig.json` เข้า Docker image (ดู CHANGELOG.md 2026-08-21c) แต่เป็นการอุดปลายเหตุ — ตราบใดที่ยังมี JSX อยู่ในนั้น การเปลี่ยน runtime/บิลด์/คอนเทนเนอร์ครั้งไหนก็ทำให้ล่มซ้ำได้อีก **วิธีแก้ที่ต้นเหตุ**: ย้าย `statusIcon` ไปไฟล์ component (เช่น `src/pages/quotation/statusIcons.tsx`) แล้วเปลี่ยน `src/lib/quotes.tsx` → `.ts` ให้เป็น TypeScript ล้วน จะได้ไม่มีทางที่ server ต้องแปลง JSX อีกเลย ต้องไล่แก้ import ทุกที่ที่ใช้ `statusIcon` (งานปานกลาง ไม่ยาก แต่แตะหลายไฟล์)
-- [ ] **ไล่เช็คไฟล์อื่นใน `src/lib/` ว่ามี JSX ปนอยู่อีกไหม (2026-08-21).** CLAUDE.md ระบุว่าไฟล์ที่ `api/` ลากไปด้วยมี `roles.ts`, `users.ts`, `products.ts`, `permissions.ts`, `quotes.tsx`, `storage.ts`, `notifications.ts`, `auditLog.ts` — ตอนนี้มีแค่ `quotes.tsx` ที่ลงท้าย `.tsx` แต่ควรทำเช็คอัตโนมัติ (เทสต์หรือ lint rule) ที่ฟ้องเมื่อมีไฟล์ JSX โผล่ใน chain ที่ server import แทนที่จะรอให้ล่มแล้วค่อยรู้
 
 - [ ] **บันทึกอัตโนมัติ: ยังไม่รองรับ "ฟิลด์ติดตามผล" ของเอกสารที่อนุมัติแล้ว (ตั้งใจไว้ก่อน — 2026-08-25).**
   Scope of Work ยังแก้เลข PO / ผู้รับเอกสารได้แม้อนุมัติแล้ว แต่ช่องพวกนี้ยัง**ไม่**บันทึกอัตโนมัติ ต้องกดบันทึกเอง
@@ -504,6 +504,20 @@ left unaddressed, deliberately out of scope for a "fix Critical/High" pass:
 - [ ] `ApprovalDashboard.tsx`'s `confirmReject()` doesn't reset `busy` to `false` on its success path (only in the `catch` branch) — unlike `approve()`, which uses a `finally`. Noticed 2026-07-29 during the Approve-confirmation hardening pass; not currently observable because a successful reject triggers `onRefresh()`, which removes the row (and thus the component) from the list before the stale `busy=true` could matter. Worth a `finally` for consistency/future-proofing if this component is touched again.
 
 ## Completed
+
+- [x] **[2026-08-25] 🔴 แก้ที่ต้นเหตุแล้ว: ไม่มี JSX เหลืออยู่ใน import chain ที่เซิร์ฟเวอร์โหลดจริง + มีเทสต์กันพลาดถาวร.**
+  ปิดสองข้อพร้อมกัน (ข้อ 🔴 เดิม กับข้อ "ควรทำเช็คอัตโนมัติ"). ตอนไล่ import จริงพบว่าเหลือ **จุดเดียว**
+  ที่ทำให้เซิร์ฟเวอร์ต้องโหลดไฟล์ `.tsx` คือ `api/_lib/arHandler.ts` → `import { bahtText }` ที่เหลือเป็น
+  `import type` ทั้งหมด ซึ่งถูกลบทิ้งตอนคอมไพล์อยู่แล้ว **สิ่งที่ทำ**: ย้าย `statusIcon` ไป
+  `src/pages/quotation/statusIcons.tsx`, ย้าย `bahtText` ไป `src/lib/bahtText.ts` (ไฟล์เปล่า ๆ ไม่ import
+  อะไรเลย), แล้วเปลี่ยน `src/lib/quotes.tsx` → `src/lib/quotes.ts` เป็น TypeScript ล้วน. `quotes.ts`
+  re-export `bahtText` ต่อ ที่เรียกใช้ฝั่งหน้าเว็บจึงไม่ต้องแก้เลย. เพิ่ม `tests/serverImportGraph.test.ts`
+  ที่เดิน import graph จาก `api/` จริง ๆ (ข้าม `import type`) แล้วฟ้องถ้าเจอ `.tsx` หรือการ import แพ็กเกจ
+  React — **ทดสอบแล้วว่ามันจับได้จริง** ด้วยการแกล้งใส่ import กลับเข้าไปแล้วดูว่าเทสต์แดง. ผลพลอยได้:
+  คำเตือน lint ลดจาก 35 เหลือ 3 (กฎ `react-refresh/only-export-components` ไม่จับไฟล์ `.ts`).
+  ตรวจในเบราว์เซอร์จริงแล้วว่าไอคอนสถานะยังขึ้นครบทั้งหน้ารายการและหน้าเอกสาร และคำอ่านจำนวนเงินภาษาไทย
+  ในเอกสารพิมพ์ยังถูกต้อง (`฿1,140,016.41` → "(หนึ่งล้านหนึ่งแสนสี่หมื่นสิบหกบาทสี่สิบเอ็ดสตางค์)") รวมถึงยิง
+  `/api/ar-documents` เพื่อบังคับให้ฝั่งเซิร์ฟเวอร์โหลด `arHandler.ts` จริง → 200. ดู CHANGELOG.md 2026-08-25b
 
 - [x] **[2026-08-25] Auto-save on every document editor + discounts enterable in baht.** Owner
   requests: *"เวลาสร้างใบเสนอราคาแล้วถ้าลืมกดบันทึกร่างแล้วมันหายไปเลย ให้มันบันทึกร่างอัตโนมัติไว้ ทำ auto-save

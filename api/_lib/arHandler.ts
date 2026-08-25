@@ -16,7 +16,7 @@ import { nextArDocNumber } from "./documentNumbering.js";
 import {
   round2, computeDownPaymentLineAmount, computeDepositDeductionLineAmount, computeArDocumentTotals, computeDueDate,
 } from "./arCalculations.js";
-import { bahtText } from "../../src/lib/quotes.js";
+import { bahtText } from "../../src/lib/bahtText.js";
 import { nowIso } from "../../src/lib/products.js";
 import { applyStockMovement, assertProductsHaveStock } from "./stockHandler.js";
 

@@ -4,7 +4,68 @@
 
 ---
 
-## Session — 2026-08-25 (absolute latest), Auto-save everywhere + baht discounts
+## Session — 2026-08-25b (absolute latest), Killed the JSX-in-the-server-graph 🔴 for good
+
+### The item was real, but smaller than it had been written down as
+The TODO read "`statusIcon` is JSX in `src/lib/quotes.tsx`, which `api/` imports" — implying a web
+of coupling. Walking every `import` from `api/` into `src/` found **one** runtime import:
+`arHandler.ts` reaching for `bahtText`. Everything else was `import type`, which is erased. The
+lesson is not that the item was wrong — the risk was genuine and had already taken production down
+once — but that a 🔴 written from memory drifts, and re-deriving the actual graph before starting
+changed the shape of the fix.
+
+### Minimum vs. root, and why root won
+Moving `bahtText` alone would have removed the runtime risk in one line. It would also have left
+JSX sitting in a file that the server is one careless import away from needing again — which is
+precisely how this happened the first time. So both halves came out (`statusIcon` →
+`src/pages/quotation/statusIcons.tsx`, `bahtText` → a dependency-free `src/lib/bahtText.ts`) and
+`quotes.tsx` became `quotes.ts`. `quotes.ts` re-exports `bahtText`, so no frontend call site changed.
+
+### The part that actually matters long-term
+`tests/serverImportGraph.test.ts` walks the real graph from `api/`, follows only imports that
+survive compilation, and fails on any reachable `.tsx` or React-package import. **It was verified by
+breaking it**: re-adding the bad import turned it red and named the file; removing it turned it
+green. A guard test nobody has watched fail is just decoration.
+
+One thing deliberately not built: a content scan for JSX. In a `.ts` file, TypeScript generics
+(`Promise<Quote>`, `Record<QuoteStatus, X>`) are indistinguishable from JSX by regex — the first
+draft failed on twelve innocent files — and TypeScript already rejects real JSX in a `.ts` file, so
+the extension check is exact by itself.
+
+### Two things this surfaced
+- **32 of the 35 lint warnings were an artifact of the same misfiling.**
+  `react-refresh/only-export-components` was firing on `quotes.tsx` for exporting non-components; a
+  `.ts` file is out of that rule's scope. Warnings went 35 → 3 with no rule changes and no
+  suppressions.
+- **Three server-side comments were arguing from a fact that had stopped being true.**
+  `quoteWorkflow.ts`, `quoteValidation.ts` and `quoteAmounts.ts` all justified their design with
+  "quotes.tsx also defines JSX". Left alone, the next reader inherits a reason that no longer holds
+  and treats a now-optional duplication as permanent. Rewritten to state what is actually true now,
+  including that collapsing `quoteWorkflow.ts`'s duplicate is a legitimate option again.
+
+### Also found, while browser-verifying (logged, not fixed)
+Before switching to this task I had started clearing the browser-verification backlog and confirmed
+seven items (see below). One real defect fell out: **the "มีอะไรใหม่" and notification dropdowns
+never close on an outside click** — both only listen for Escape, so they stay open and can overlap
+each other and Global Search. `GlobalSearch.tsx` already solves this in the same codebase with a
+`fixed inset-0` scrim. Logged at the top of TODO.md High Priority.
+
+Verified in that partial sweep: refresh-lands-on-the-right-page (48), sidebar re-click returns to
+the list (49), tour marks on appear not dismissal (64), tour doesn't auto-replay after a reload but
+the ? button still works (65), all three Service tours (68), the What's New panel (92), Global
+Search (122). The remaining ~35 verification items are untouched.
+
+### What's next
+- The 🔴 RBAC gap is still open and is now the most user-visible one: no `RBAC_MIGRATIONS` entry
+  grants `project:*` / `materialRequisition:*` / `jobOrder:*` / `purchaseRequest:*` to
+  `administrator`, so real Administrator-role users still cannot see four modules. Confirmed by
+  reading `api/_lib/rbacSeed.ts` this session — five migrations exist, none for those.
+- The browser-verification backlog is still ~35 items and clears fast now that the "browser can't
+  reach this machine" premise is definitively dead.
+
+---
+
+## Session — 2026-08-25, Auto-save everywhere + baht discounts
 
 ### What was asked
 Two things, in one Thai message: quotations lose everything if you forget to press "บันทึกร่าง", so

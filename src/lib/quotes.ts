@@ -1,4 +1,3 @@
-import { FilePen, Clock, CheckCircle2, Ban, Send, CheckCheck, Trophy, XCircle, Frown } from "lucide-react";
 import type { User } from "./users";
 import { type Role, hasPermission } from "./roles";
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
@@ -194,17 +193,11 @@ export const interestLabelKey: Record<"น่าสนใจ" | "ไม่น่
   "ไม่น่าสนใจ": "quotation.interest.notInterested",
 };
 
-export const statusIcon: Record<QuoteStatus, React.ReactNode> = {
-  "ร่าง": <FilePen size={10} />,
-  "รออนุมัติ": <Clock size={10} />,
-  "อนุมัติแล้ว": <CheckCircle2 size={10} />,
-  "ส่งให้ลูกค้าแล้ว": <Send size={10} />,
-  "ลูกค้ายอมรับ": <CheckCheck size={10} />,
-  "ปิดการขายสำเร็จ": <Trophy size={10} />,
-  "ลูกค้าปฏิเสธ": <XCircle size={10} />,
-  "เสียโอกาส": <Frown size={10} />,
-  "ยกเลิก": <Ban size={10} />,
-};
+// ไอคอนประจำสถานะย้ายไปอยู่ที่ src/pages/quotation/statusIcons.tsx แล้ว (2026-08-25)
+// `statusIcon` moved to src/pages/quotation/statusIcons.tsx on 2026-08-25 — it was the only JSX in
+// this file, and `api/` imports this module at runtime, so the server had to be able to transpile
+// JSX at boot. That is what crash-looped production on 2026-08-21. Import it from there.
+// **Never add JSX (or a React/lucide-react import) back into this file.**
 
 export const workflowTransitions: Record<ApprovalAction, { from: QuoteStatus[]; to: QuoteStatus }> = {
   submitted: { from: ["ร่าง"], to: "รออนุมัติ" },
@@ -272,56 +265,11 @@ export function fmt(n: number): string {
   return n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const THAI_DIGITS = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
-const THAI_POSITIONS = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"];
-
-// แปลงตัวเลขกลุ่มหลักหน่วยถึงแสนให้เป็นคำอ่านภาษาไทย (ใช้ภายใน bahtText)
-// Converts a single digit-group (up to hundred-thousands) into Thai number words (internal helper for bahtText)
-function convertDigitGroup(n: number, hasPrecedingDigits: boolean): string {
-  if (n === 0) return "";
-  const digits = String(n).split("").map(Number);
-  const len = digits.length;
-  let out = "";
-  digits.forEach((d, i) => {
-    const pos = len - i - 1;
-    if (d === 0) return;
-    if (pos === 0 && d === 1 && (len > 1 || hasPrecedingDigits)) out += "เอ็ด";
-    else if (pos === 1 && d === 2) out += "ยี่สิบ";
-    else if (pos === 1 && d === 1) out += "สิบ";
-    else out += THAI_DIGITS[d] + THAI_POSITIONS[pos];
-  });
-  return out;
-}
-
-// แปลงจำนวนเงินบาทเป็นคำอ่านภาษาไทย เช่น 802500 -> "(แปดแสนสองพันห้าร้อยบาทถ้วน)"
-// Converts a THB amount into its Thai-language words form, e.g. 802500 -> "(แปดแสนสองพันห้าร้อยบาทถ้วน)"
-export function bahtText(amount: number): string {
-  const rounded = Math.round(Math.abs(amount) * 100) / 100;
-  const intPart = Math.floor(rounded);
-  const satang = Math.round((rounded - intPart) * 100);
-
-  let intText = "ศูนย์";
-  if (intPart > 0) {
-    const groups: number[] = [];
-    let remaining = intPart;
-    while (remaining > 0) {
-      groups.unshift(remaining % 1000000);
-      remaining = Math.floor(remaining / 1000000);
-    }
-    let hasPrior = false;
-    intText = groups
-      .map((g, i) => {
-        if (g === 0) return "";
-        const text = convertDigitGroup(g, hasPrior) + "ล้าน".repeat(groups.length - 1 - i);
-        hasPrior = true;
-        return text;
-      })
-      .join("");
-  }
-
-  const satangText = satang === 0 ? "ถ้วน" : `${convertDigitGroup(satang, false)}สตางค์`;
-  return `(${intText}บาท${satangText})`;
-}
+// คำอ่านจำนวนเงินภาษาไทยย้ายไปอยู่ที่ ./bahtText.ts แล้ว (2026-08-25) — re-export ไว้เพื่อให้ที่เรียกใช้เดิมไม่ต้องแก้
+// The baht-in-words conversion moved to ./bahtText.ts on 2026-08-25 so that `api/_lib/arHandler.ts`
+// can import it without pulling in this whole module (and, before the same pass, a `.tsx` file).
+// Re-exported here so existing frontend call sites keep working unchanged.
+export { bahtText } from "./bahtText";
 
 // แปลงวันที่เป็นสตริง ISO แบบวันที่เท่านั้น (YYYY-MM-DD)
 // Converts a Date to an ISO date-only string (YYYY-MM-DD)

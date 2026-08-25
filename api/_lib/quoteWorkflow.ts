@@ -1,9 +1,12 @@
 /**
- * Server-side mirror of the pure workflow data in src/lib/quotes.tsx (ApprovalAction,
- * workflowTransitions, the permission rules inside computeQuotePermissions). Duplicated rather
- * than imported because quotes.tsx also defines JSX (statusIcon) — importing it by value here
- * would drag React/JSX evaluation into a Node serverless function for no reason. Keep these two
- * copies in sync if the workflow ever changes.
+ * Server-side mirror of the pure workflow data in src/lib/quotes.ts (ApprovalAction,
+ * workflowTransitions, the permission rules inside computeQuotePermissions). Kept as a duplicate
+ * rather than an import: importing the frontend module by value would pull `apiClient.ts` (and
+ * everything it reaches) into a Node function to get three constants. **The original reason — that
+ * quotes.tsx defined JSX (`statusIcon`) — no longer applies**: that moved to
+ * src/pages/quotation/statusIcons.tsx on 2026-08-25 and the file is now plain TypeScript, so
+ * merging these two copies is a real option if the drift ever costs more than the import would.
+ * Until then, keep them in sync if the workflow changes.
  */
 import type { Permission } from "../../src/lib/permissions.js";
 

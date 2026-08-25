@@ -3,7 +3,8 @@ import { Plus, FileText, Target, X, Search, GitBranch, HelpCircle } from "lucide
 import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
 import { useModuleTour } from "../../components/GuidedTour";
-import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusStyle, statusIcon, statusLabelKey, isRevisionQuote } from "../../lib/quotes";
+import { type Quote, type QuoteStatus, type QuoteInterest, type QuotationListFilter, statusStyle, statusLabelKey, isRevisionQuote } from "../../lib/quotes";
+import { statusIcon } from "./statusIcons";
 import type { JobType } from "../../lib/jobTypes";
 import { initials } from "../../lib/users";
 import { InterestButtons } from "./InterestButtons";

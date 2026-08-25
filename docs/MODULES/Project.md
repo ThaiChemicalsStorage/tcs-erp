@@ -357,7 +357,7 @@ open. Found and fixed 3 real bugs this surfaced, none of them theoretical:
 
 1. **Every quotation save was silently broken app-wide** (not a Project-module bug, but discovered
    while trying to give a test Scope of Work real line items to test with) — `Quote.id` always
-   contains a literal `#` (e.g. `"Q#260817-0001"`), and `src/lib/quotes.tsx`'s `updateQuote()`/
+   contains a literal `#` (e.g. `"Q#260817-0001"`), and `src/lib/quotes.ts`'s `updateQuote()`/
    `duplicateQuote()`/`rewriteQuote()`/`printQuote()`/`performWorkflowAction()` interpolated it
    unencoded into the request URL. Browsers strip everything from `#` onward as a URL *fragment*
    before `fetch()` ever sends the request, so every one of those calls actually hit e.g.

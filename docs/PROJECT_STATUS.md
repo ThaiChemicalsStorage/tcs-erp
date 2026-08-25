@@ -14,6 +14,20 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-25b] The API bundle no longer contains a single line of JSX, and a test keeps it that way.**
+  Closed the 🔴 left over from the 2026-08-21 production crash-loop. Walking the real import graph
+  showed only **one** runtime import forced the server to load a `.tsx`
+  (`api/_lib/arHandler.ts` → `bahtText`); everything else was `import type`, which is erased. Fixed
+  at the root rather than the minimum: `statusIcon` → `src/pages/quotation/statusIcons.tsx`,
+  `bahtText` → a dependency-free `src/lib/bahtText.ts`, and `src/lib/quotes.tsx` → `src/lib/quotes.ts`
+  (re-exporting `bahtText`, so no frontend call site changed). New
+  `tests/serverImportGraph.test.ts` walks the graph from `api/` and fails on any reachable `.tsx` or
+  React-package import — **verified by deliberately breaking it and watching it go red**. Side
+  effect: `npm run lint` warnings 35 → 3, since most were `react-refresh/only-export-components`
+  firing on a file that should never have been `.tsx`. Verified live in a browser (status icons
+  still render in list and detail; the print document's Thai baht-words line is still correct) and
+  by hitting `GET /api/ar-documents` to force the server to actually load `arHandler.ts` at runtime.
+
 - ✅ **[2026-08-25] Auto-save across every document editor, and discounts enterable in baht.**
   Two owner requests. **Auto-save** is shared infrastructure (`src/hooks/useAutoSave.ts` +
   `AutoSaveIndicator`/`DraftRecoveryBanner`) in two layers: a `localStorage` snapshot that survives a
@@ -1484,8 +1498,8 @@ Not yet planned.
 
 - Print/PDF's repeating header is identical on every page rather than shrinking after page 1 (a browser print `<thead>` can't vary content by page number), and "Page X/Y" numbering isn't implemented (no reliable cross-browser way to read total page count from CSS in browser print/PDF) — both accepted simplifications, see [MODULES/Quotation.md](./MODULES/Quotation.md).
 - Company logo/stamp/profile-picture/signature images are stored as base64 data URLs (now inside MongoDB documents rather than `localStorage`), still capped at 1MB each client-side before upload — fine at current scale, but doesn't scale to a real object-storage (e.g. S3/Vercel Blob) approach; revisit if image volume/size grows.
-- `Company.vatRate` is stored and editable but not yet read by `computeTotals()` — the 7% VAT calculation is still the `VAT_RATE` constant in `lib/quotes.tsx`.
-- `quoteWorkflow.ts` (`api/_lib/`) is a deliberately duplicated copy of the workflow state machine in `src/lib/quotes.tsx` (not imported, since the source file has JSX) — the two must be kept in sync by hand if the workflow ever changes; a genuine, documented maintenance burden. See [ARCHITECTURE.md](./ARCHITECTURE.md).
+- `Company.vatRate` is stored and editable but not yet read by `computeTotals()` — the 7% VAT calculation is still the `VAT_RATE` constant re-exported by `lib/quotes.ts` from `lib/quoteMath.ts`.
+- `quoteWorkflow.ts` (`api/_lib/`) is a deliberately duplicated copy of the workflow state machine in `src/lib/quotes.ts` — the two must be kept in sync by hand if the workflow ever changes; a genuine, documented maintenance burden. **The stated reason changed on 2026-08-25**: it used to be "the source file has JSX", which stopped being true when `statusIcon` moved out and `quotes.tsx` became `quotes.ts`. What remains is weaker — importing the frontend module by value would pull `apiClient.ts` into a Node function for three constants — so collapsing the duplicate is now a real option. See [ARCHITECTURE.md](./ARCHITECTURE.md).
 - ~~No explicit MongoDB indexes beyond the default `_id` index~~ — **fixed 2026-07-09**: real indexes now exist across every collection (`ensureIndexes()`, `api/_lib/collections.ts`). See [DATABASE.md](./DATABASE.md).
 - bcrypt cost factor is 10 (bcryptjs's default), not explicitly tuned during migration — worth a conscious revisit against login-latency budget.
 - No sequential two-level approval enforcement (Approver Level 1 → Level 2) — both approver roles can approve independently from "Pending Approval".
