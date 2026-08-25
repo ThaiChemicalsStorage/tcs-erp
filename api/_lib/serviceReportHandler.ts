@@ -1,7 +1,7 @@
 ﻿import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Binary } from "mongodb";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
-import { HttpError, getPathSegments } from "./http.js";
+import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import {
   serviceReportsCollection, serviceTemplatesCollection, customersCollection, usersCollection,
@@ -430,6 +430,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+  const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
   const doc = await loadReportOrThrow(id);
   if (!canEditServiceReport(ctx, doc)) throw new HttpError(403, "Forbidden");
@@ -521,11 +522,15 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const signatureNote = update.customerSignedAt === undefined ? ""
     : update.customerSignedAt ? ` (ลูกค้าเซ็นรับงาน: ${update.customerSignedName || doc.customerSignedName || "ไม่ระบุชื่อ"})`
     : " (ลบลายเซ็นลูกค้า)";
-  await writeServiceAuditEntry(
-    ctx, "Service Report Updated",
-    `แก้ไขรายงานบริการ ${id}${update.templateSnapshot ? " (ปรับโครงสร้างรายการตรวจเช็ค)" : ""}${signatureNote}`,
-    { serviceReportId: id },
-  );
+  // การบันทึกอัตโนมัติไม่เขียน audit log — ดู isAutoSaveRequest() ใน api/_lib/http.ts
+  // An auto-save writes no audit entry; the Draft-only guard above already applied to it too.
+  if (!autoSave) {
+    await writeServiceAuditEntry(
+      ctx, "Service Report Updated",
+      `แก้ไขรายงานบริการ ${id}${update.templateSnapshot ? " (ปรับโครงสร้างรายการตรวจเช็ค)" : ""}${signatureNote}`,
+      { serviceReportId: id },
+    );
+  }
   res.status(200).json({ serviceReport: toServiceReport(updated) });
 }
 

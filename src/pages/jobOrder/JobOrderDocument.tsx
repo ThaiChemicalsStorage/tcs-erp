@@ -14,6 +14,9 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ChecklistGroupCard } from "../quotation/ChecklistGroupCard";
 import { JobOrderPrintDocument } from "./JobOrderPrintDocument";
 import { useI18n } from "../../lib/i18n";
+import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
+import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
+import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 
 function toUpdateFields(j: JobOrder): JobOrderUpdateFields {
   return {
@@ -86,6 +89,31 @@ export function JobOrderDocument({
     { element: '[data-tour="jodoc-lines"]', popover: { title: t("tour.jodoc.lines.title"), description: t("tour.jodoc.lines.desc"), side: "top" } },
     { element: '[data-tour="jodoc-checklist"]', popover: { title: t("tour.jodoc.checklist.title"), description: t("tour.jodoc.checklist.desc"), side: "top" } },
   ];
+
+  // ── บันทึกอัตโนมัติ (2026-08-25) — hook ต้องอยู่ก่อน early return ทุกอันด้านล่าง ────────────────
+  // Auto-save, declared above the loading/error early returns because hooks may not run
+  // conditionally. It sends the exact payload the Save button sends and only while the document is
+  // an editable Draft; the local snapshot alongside it survives a closed tab or a click onto
+  // another page. See src/hooks/useAutoSave.ts.
+  const autoSaveEditable = !!draft && canEdit && draft.status === "Draft";
+  const autoSavePayload = draft && autoSaveEditable ? toUpdateFields(draft) : null;
+  const draftBackup = useDraftBackup({
+    storageKey: draft ? `jobOrder:${draft.id}` : null,
+    data: autoSavePayload,
+    enabled: autoSaveEditable,
+  });
+  const autoSave = useAutoSave({
+    data: autoSavePayload,
+    enabled: autoSaveEditable,
+    onSave: async (fields) => {
+      if (!draft) return;
+      const saved = await updateJobOrder(draft.id, fields, { autoSave: true });
+      // อัปเดตเฉพาะ doc (สถานะ/เวลาแก้ไขล่าสุด) ไม่แตะ draft เพราะผู้ใช้อาจกำลังพิมพ์อยู่
+      // Only `doc` is refreshed — never `draft`, which the user may be typing into right now.
+      setDoc(saved);
+    },
+  });
+
   const docTour = useModuleTour("jobOrderDoc", currentUserId, docTourSteps, { autoStart: !!doc });
 
   useEffect(() => {
@@ -151,6 +179,9 @@ export function JobOrderDocument({
       const updated = await updateJobOrder(draft.id, toUpdateFields(draft));
       setDoc(updated);
       setDraft(updated);
+      // ตั้งฐานเทียบของ auto-save ใหม่ ไม่งั้นจะยิงบันทึกซ้ำด้วยข้อมูลเดิมอีกรอบ
+      autoSave.markSaved();
+      draftBackup.clear();
       showToast(t("jobOrderDoc.saved"));
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : t("jobOrderDoc.errorSave"));
@@ -212,6 +243,7 @@ export function JobOrderDocument({
 
         <div data-tour="jodoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
+          {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
           {canPrint && (
             <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("jobOrderDoc.print")}
@@ -242,6 +274,19 @@ export function JobOrderDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:hidden">
+        {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+          <DraftRecoveryBanner
+            savedAt={draftBackup.recoveredAt}
+            onRestore={() => {
+              const recovered = draftBackup.recovered!;
+              setDraft((prev) => (prev ? { ...prev, ...recovered } : prev));
+              draftBackup.clear();
+              showToast(t("common.draftRecovery.restoredToast"));
+            }}
+            onDiscard={draftBackup.dismiss}
+          />
+        )}
+
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">

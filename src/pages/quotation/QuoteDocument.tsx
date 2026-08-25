@@ -14,6 +14,7 @@ import type { JobType } from "../../lib/jobTypes";
 import type { User } from "../../lib/users";
 import {
   type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type ApprovalAction, type QuotePermissions,
+  type DiscountMode,
   statusIcon, statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
   printQuote, isRevisionQuote,
 } from "../../lib/quotes";
@@ -31,6 +32,9 @@ import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
 import { FieldError } from "../../components/FieldError";
 import { ValidationSummary } from "../../components/ValidationSummary";
 import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
+import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
+import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
+import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { validateQuotationForFinalization, quotationRequiredFields } from "../../lib/validation/quotationValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
 import { useI18n } from "../../lib/i18n";
@@ -73,6 +77,7 @@ export function QuoteDocument({
   onOpenScopeOfWork,
   onBack,
   onSave,
+  onAutoSave,
   onDuplicate,
   onRewrite,
   onInterestChange,
@@ -97,6 +102,8 @@ export function QuoteDocument({
   onOpenScopeOfWork: (scopeOfWorkId: string) => void;
   onBack: () => void;
   onSave: (data: QuoteDraftFields) => Promise<void>;
+  /** บันทึกอัตโนมัติเบื้องหลัง — มีเฉพาะเอกสารที่มีอยู่จริงบนเซิร์ฟเวอร์แล้วเท่านั้น */
+  onAutoSave: (data: QuoteDraftFields) => Promise<void>;
   onDuplicate: () => void;
   onRewrite: () => Promise<void>;
   onInterestChange: (v: QuoteInterest) => void;
@@ -118,6 +125,18 @@ export function QuoteDocument({
 
   const [lines, setLines] = useState<QuoteLine[]>(quote?.lines ?? templateSnapshot?.lines ?? []);
   const [discount, setDiscount] = useState(quote?.discount ?? 0);
+  // หน่วยของส่วนลดพิเศษ — เอกสารเดิมที่ไม่เคยระบุไว้ถือเป็น "%" ส่วนเอกสารใหม่เริ่มต้นเป็นบาท
+  // Unit of the special discount. A stored quotation that never recorded one is percent (that is
+  // what every quotation written before 2026-08-25 meant); a brand-new quotation starts in baht,
+  // which is what the business actually asked for.
+  const [discountMode, setDiscountMode] = useState<DiscountMode>(quote?.discountMode ?? (mode === "new" ? "amount" : "percent"));
+  // หน่วยเริ่มต้นของส่วนลด "ระดับรายการ" — ตั้งครั้งเดียวตอนเปิดเอกสารและไม่ผูกกับปุ่มสลับของส่วนลดพิเศษ
+  // ทั้งสองระดับสลับหน่วยได้อิสระต่อกัน (เช่น ลดรายบรรทัดเป็น % แต่ลดท้ายเอกสารเป็นบาท)
+  // The line-level default, fixed once when the document opens. Deliberately not tied to the
+  // special-discount toggle: the two levels switch units independently, so flipping one must not
+  // silently re-label the other. LineItemsEditor only falls back to this when no line has recorded
+  // a unit of its own yet.
+  const [defaultLineDiscountMode] = useState<DiscountMode>(mode === "new" ? "amount" : "percent");
   const [salesperson, setSalesperson] = useState(quote?.salesperson ?? currentUser.fullName);
   const [contactName, setContactName] = useState(customerSnapshot?.contactName ?? quote?.contactName ?? "");
   const [contactPhone, setContactPhone] = useState(customerSnapshot?.phone ?? quote?.contactPhone ?? "");
@@ -233,7 +252,7 @@ export function QuoteDocument({
   ];
   const docTour = useModuleTour("quotationDoc", currentUser.id, docTourSteps, { autoStart: isDetail });
 
-  const { total } = computeTotals(lines, discount);
+  const { total } = computeTotals(lines, discount, discountMode);
   const jobTypeDisplay = jobTypeCode ? `${jobTypeCode} — ${jobTypeName}` : "";
 
   // เปลี่ยนประเภทงานที่เลือก แล้วอัปเดตชื่อประเภทงานที่แสดงให้ตรงกัน
@@ -246,7 +265,7 @@ export function QuoteDocument({
   // รวบรวมข้อมูลร่างปัจจุบันบนหน้าจอทั้งหมดเป็นก้อนเดียวสำหรับบันทึก/ส่งอนุมัติ
   // Gathers the current on-screen draft into one object for saving or workflow actions
   const currentDraft = (): QuoteDraftFields => ({
-    client, status: quoteStatus, lines, discount, amount: total,
+    client, status: quoteStatus, lines, discount, discountMode, amount: total,
     salesperson, contactName, contactPhone, contactEmail, address, taxId,
     deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate, remarks,
     revisionNote,
@@ -257,6 +276,59 @@ export function QuoteDocument({
     ...(customerChanged ? { customerId } : {}),
     ...(mode === "new" && quotationTemplateId ? { quotationTemplateId } : {}),
   });
+
+  // ── บันทึกอัตโนมัติ (2026-08-25) ───────────────────────────────────────
+  // สองชั้น: สำเนาในเครื่องกันร่างหาย (ใช้ได้แม้ยังไม่เคยกดบันทึกเลย) และบันทึกขึ้นเซิร์ฟเวอร์เงียบ ๆ
+  // สำหรับใบที่มีอยู่แล้วและยังเป็นฉบับร่าง — ดู src/hooks/useAutoSave.ts
+  //
+  // Two layers. The local snapshot is what answers the original complaint: a brand-new quotation
+  // has no server record to save into, so `mode === "new"` gets the local layer only and is offered
+  // its work back when the form is reopened. A quotation that already exists AND is still a Draft
+  // also auto-saves for real. Anything past ร่าง is deliberately excluded — an approved/sent
+  // quotation must only change when someone presses Save, with the audit entry that comes with it.
+  const draftSnapshot = currentDraft();
+  const canAutoSaveToServer = !disabled && isDetail && quoteStatus === "ร่าง";
+  const draftBackup = useDraftBackup<QuoteDraftFields>({
+    storageKey: isDetail ? `quotation:${quote!.id}` : "quotation:new",
+    data: draftSnapshot,
+    enabled: !disabled,
+  });
+  const autoSave = useAutoSave<QuoteDraftFields>({
+    data: draftSnapshot,
+    enabled: canAutoSaveToServer,
+    onSave: onAutoSave,
+  });
+
+  // นำร่างที่กู้คืนมาใส่กลับลงในแบบฟอร์มทั้งหมด
+  // Puts a recovered snapshot back into the form. `status`/`amount` are derived, never restored.
+  const applyRecoveredDraft = (d: QuoteDraftFields) => {
+    setClient(d.client);
+    setLines(d.lines);
+    setDiscount(d.discount);
+    setDiscountMode(d.discountMode ?? "percent");
+    setSalesperson(d.salesperson);
+    setContactName(d.contactName);
+    setContactPhone(d.contactPhone);
+    setContactEmail(d.contactEmail);
+    setAddress(d.address);
+    setTaxId(d.taxId);
+    setDeliveryMethod(d.deliveryMethod);
+    setDeliveryAddress(d.deliveryAddress);
+    setProject(d.project);
+    setPoRef(d.poRef);
+    setPaymentTerms(d.paymentTerms);
+    setIssueDate(d.issueDate);
+    setExpiryDate(d.expiryDate);
+    setRemarks(d.remarks);
+    setRevisionNote(d.revisionNote);
+    setJobTypeCode(d.jobTypeCode);
+    setJobTypeName(d.jobTypeName);
+    setIsPotentialOpportunity(d.isPotentialOpportunity);
+    setFollowUpDate(d.followUpDate);
+    if (canChangeCustomer && d.customerId !== undefined) setCustomerId(d.customerId);
+    draftBackup.clear();
+    showToast(t("common.draftRecovery.restoredToast"));
+  };
 
   const revisionPredecessorId = isDetail && quote ? getRevisionPredecessorId(quote.id) : null;
   // สร้างสรุปการแก้ไขอัตโนมัติโดยเทียบใบต้นฉบับกับร่างปัจจุบัน
@@ -348,6 +420,12 @@ export function QuoteDocument({
     setSavingBusy(true);
     try {
       await onSave(currentDraft());
+      // สำเนาในเครื่องหมดหน้าที่แล้ว — โดยเฉพาะคีย์ "quotation:new" ที่ต้องลบทิ้งทันทีที่สร้างเอกสารสำเร็จ
+      // The local snapshot has served its purpose. This matters most for the "quotation:new" key:
+      // once the record actually exists, leaving it behind would greet the next brand-new
+      // quotation with a recovery offer for work that is already saved.
+      draftBackup.clear();
+      autoSave.markSaved();
       showToast(message);
     } catch {
       // caller already surfaced the error toast; nothing further to do
@@ -420,6 +498,11 @@ export function QuoteDocument({
 
         <div data-tour="qdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
+          {!disabled && (
+            canAutoSaveToServer
+              ? <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />
+              : <AutoSaveIndicator state="idle" lastSavedAt={null} localOnly />
+          )}
           <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={validation.missingCount} />
           {permissions.canExport && (
             <button
@@ -501,6 +584,14 @@ export function QuoteDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
+        {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+          <DraftRecoveryBanner
+            savedAt={draftBackup.recoveredAt}
+            onRestore={() => applyRecoveredDraft(draftBackup.recovered!)}
+            onDiscard={draftBackup.dismiss}
+          />
+        )}
+
         <div ref={summaryRef}>
           <ValidationSummary missingCount={validation.missingCount} messages={validationSummaryMessages} />
         </div>
@@ -669,7 +760,17 @@ export function QuoteDocument({
         </div>
 
         <div data-tour="qdoc-items" className="print:hidden">
-          <LineItemsEditor lines={lines} onChange={setLines} discount={discount} onDiscountChange={setDiscount} products={products} categories={categories} />
+          <LineItemsEditor
+            lines={lines}
+            onChange={setLines}
+            discount={discount}
+            onDiscountChange={setDiscount}
+            discountMode={discountMode}
+            onDiscountModeChange={setDiscountMode}
+            defaultLineDiscountMode={defaultLineDiscountMode}
+            products={products}
+            categories={categories}
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:hidden">
@@ -791,6 +892,7 @@ export function QuoteDocument({
           jobTypeName={jobTypeDisplay}
           lines={lines}
           discount={discount}
+          discountMode={discountMode}
           remarks={remarks}
           preparerUser={preparerUser}
           approverUser={approverUser}

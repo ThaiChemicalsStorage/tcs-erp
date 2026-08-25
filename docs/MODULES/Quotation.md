@@ -168,6 +168,55 @@ snapshot bug, unreachable detail inputs, non-`disabled` buttons, non-semantic da
 server errors, incomplete central-config coverage). All of that was then walked back by the newer
 business decision above. See CHANGELOG.md for both the original pass and this rollback, in full.
 
+## Discount unit (% / ฿) — added 2026-08-25
+
+Owner request: *"เปอร์เซ็นต์ส่วนลดช่วยระบุเป็นจำนวนเงินเลยได้ไหมไม่ต้องเป็นเปอร์เซ็นต์"*.
+
+`Quote.discountMode` and `QuoteLine.discountMode` (`"percent" | "amount"`, both **optional**) say
+which unit the accompanying `discount` number is expressed in. **Absent means percent** — that is
+what every quotation written before 2026-08-25 meant, so historical records compute exactly as they
+always did and no migration was needed or run.
+
+- Two independent toggles: one on the **"ส่วนลด" column header** (stamps the unit onto every line —
+  per-line units inside one table would be unreadable) and one beside **"ส่วนลดพิเศษ"** in the
+  totals block. A line discount in ฿ comes off that line's total (`qty × unitPrice`), not off each
+  unit; the special discount in ฿ comes off the subtotal, before VAT.
+- **A brand-new quotation defaults to ฿** (what the business asked for); an existing one opens in
+  whatever unit it was written in. Line and document units are decided independently — flipping one
+  never re-labels the other.
+- Switching a discount back to `%` **caps any figure above 100**. Without that, ฿500 would silently
+  become 500%, which the server rejects — and the document would stop auto-saving until someone
+  noticed. A ฿ discount larger than the amount it discounts clamps to zero rather than going
+  negative.
+- The math itself lives in **`src/lib/quoteMath.ts`** — React-free, and re-exported by
+  `api/_lib/quoteAmounts.ts`, so the client's on-screen totals and the server's authoritative
+  `Quote.amount` are the same code rather than two mirrored copies (the same frontend↔API sharing
+  pattern as `src/lib/validation/*`). Bounds are per-unit in `api/_lib/quoteValidation.ts`: a
+  percentage can't exceed 100, a baht amount is bounded like any other money field.
+- Everything downstream reads `discountMode`: Dashboard aggregation, Global Search, the print
+  document (its "ส่วนลด/หน่วย" column divides a line's baht discount back down per unit so the
+  printed form keeps its existing layout), the revision-note diff (which names the unit it is
+  comparing), and **Accounting's AR/IV line amounts** — `api/_lib/arHandler.ts` previously
+  hardcoded `(1 - discount/100)` and would have billed the wrong figure for a baht-discounted
+  quotation.
+
+## Auto-save — added 2026-08-25
+
+Owner report: *"เวลาสร้างใบเสนอราคาแล้วถ้าลืมกดบันทึกร่างแล้วมันหายไปเลย"*. Implemented as shared
+infrastructure (`src/hooks/useAutoSave.ts`) used by **every** document module, not just this one —
+see [../CHANGELOG.md](../CHANGELOG.md) 2026-08-25 for the cross-module description and
+[../UI_GUIDELINES.md](../UI_GUIDELINES.md) for the UI pattern. Quotation-specific behaviour:
+
+- **Detail mode, status ร่าง**: silent `PATCH /api/quotes/:id?autoSave=1` 2.5 s after typing stops,
+  status shown in the toolbar next to Save. Anything past ร่าง is excluded — an approved or
+  submitted quotation must only change when someone presses Save, with the audit entry that implies.
+  The server enforces this (409), it is not just a UI gate, and an auto-saved write writes **no**
+  audit-log entry (see `isAutoSaveRequest()` in `api/_lib/http.ts`).
+- **New mode**: nothing exists on the server yet, so there is nothing to PATCH. The draft is
+  snapshotted to `localStorage` instead and the toolbar reads "เก็บร่างไว้ในเครื่องให้อัตโนมัติ".
+  Reopening "สร้างใบเสนอราคา" offers it back through the gold recovery banner. The snapshot is
+  dropped the moment the quotation is actually created, so the next new quotation starts clean.
+
 ## Signature Integration
 
 The preparer's signature is looked up via `quote.createdByUserId`; the approver's via the most recent `"approved"` entry in `approvalHistory`. Both render as an `<img>` (the user's `signatureDataUrl`, uploaded in Settings → Profile) on the document's signature block, falling back to the original blank signature line if the user hasn't uploaded one — never an error.
@@ -219,7 +268,11 @@ Client-side RBAC (see [RBAC.md](../RBAC.md)) via `computeQuotePermissions(quote,
 - List with status filter (all 9 statuses) + summary cards
 - Full create/edit/duplicate flow, persisted to MongoDB via a real REST API (server-enforced permission + ownership checks on every mutation, see [API.md](../API.md))
 - Line items: description/unit/qty/price/discount, auto-computed subtotal
-- Quote-level discount % + 7% VAT, full totals breakdown
+- Quote-level discount + 7% VAT, full totals breakdown
+- **Discounts in percent or baht** (added 2026-08-25, see "Discount unit (% / ฿)" below) — a
+  compact `% / ฿` toggle on the line-items column header and on the "ส่วนลดพิเศษ" totals row
+- **Auto-save** (added 2026-08-25, see "Auto-save" below) — Draft quotations save themselves
+  silently; a brand-new quotation that was never saved is offered back on the next visit
 - Unlimited per-line sub-details (add/edit/delete/drag-reorder, rendered as pinned rows) and tags. **2026-07-21**: per-line notes and specifications were removed entirely (unused feature, see "Per-item sub-details & tags" above)
 - Product Library picker for line items (copies name/unit/price; a product's specifications text becomes an initial pinned sub-detail row), with independent-snapshot guarantee
 - Real per-quote document fields (contact/phone/address/tax ID/PO ref/dates/payment terms/salesperson) — no hardcoded placeholder text

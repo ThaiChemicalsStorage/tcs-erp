@@ -441,7 +441,30 @@ No dedicated `DELETE /api/quotes/:id` route exists — matches the pre-migration
 
 **Correction (2026-07-14)**: the 2026-07-13 "Quotation integration pass" wired an `issuerCompanyId`/`issuerCompanySnapshot` pair (resolved against `company_profiles`) onto every quote-mutating route above — that was built against a misunderstanding of the actual requirement (this ERP only ever has one issuer company) and has been fully replaced by `customerId`/`customerSnapshot` (resolved against `customers`), described in the rows above. `issuerCompanyId`/`issuerCompanySnapshot` are no longer accepted, validated, or returned by any route — quotes saved 2026-07-13–2026-07-14 may still carry stray values for these fields in MongoDB, which are simply ignored (unread, not stripped). See [MODULES/CompanyProfiles.md](./MODULES/CompanyProfiles.md) (the module itself was later removed entirely — see "History" there).
 
-**Server-side quote validation** (`api/_lib/quoteValidation.ts`, added 2026-07-10 per the Codex review's Critical finding that quote writes previously copied raw client fields into MongoDB with no schema validation): every free-text field is length-capped and type-checked (a wrong JSON type, e.g. a number where a string is expected, is a `400`, not a silent coercion); `lines[]` entries are validated per-field (`qty`/`unitPrice` non-negative and bounded, `discount` 0–100, array-length caps on `lines`/`tags`/`subDetails` to bound document size); dates (`issueDate`/`expiryDate`/`followUpDate`) must be `""` or a real `YYYY-MM-DD` calendar date; `amount` is always server-derived (see `PATCH` above) via the shared `computeQuoteAmountWithVat()` (`api/_lib/quoteAmounts.ts`, added 2026-07-14 — also backs the Dashboard's before-VAT figures via its sibling `computeQuoteAmountBeforeVat()`, see DATABASE.md), the same totals formula as `computeTotals()` in `src/lib/quotes.tsx` (duplicated, not imported — same JSX-in-that-file reason `quoteWorkflow.ts` duplicates `workflowTransitions`).
+**Server-side quote validation** (`api/_lib/quoteValidation.ts`, added 2026-07-10 per the Codex review's Critical finding that quote writes previously copied raw client fields into MongoDB with no schema validation): every free-text field is length-capped and type-checked (a wrong JSON type, e.g. a number where a string is expected, is a `400`, not a silent coercion); `lines[]` entries are validated per-field (`qty`/`unitPrice` non-negative and bounded, `discount` bounded **by the unit its own `discountMode` names** — 0–100 for a percentage, money-field bounds for a baht amount, added 2026-08-25 — array-length caps on `lines`/`tags`/`subDetails` to bound document size); dates (`issueDate`/`expiryDate`/`followUpDate`) must be `""` or a real `YYYY-MM-DD` calendar date; `amount` is always server-derived (see `PATCH` above) via the shared `computeQuoteAmountWithVat()` (`api/_lib/quoteAmounts.ts`, added 2026-07-14 — also backs the Dashboard's before-VAT figures via its sibling `computeQuoteAmountBeforeVat()`, see DATABASE.md), **literally the same code** as `computeTotals()` in `src/lib/quotes.tsx`: as of 2026-08-25 both sides import `src/lib/quoteMath.ts`, a React/JSX-free module, so the on-screen totals and the persisted `amount` can no longer drift. (Until then the formula was duplicated for the same JSX-in-that-file reason `quoteWorkflow.ts` still duplicates `workflowTransitions`; `src/lib/quotes.tsx` itself still can't be imported server-side because it defines `statusIcon` as JSX, which is why the math moved out into its own file rather than the import direction being reversed.)
+
+### Auto-save writes (`?autoSave=1`) — added 2026-08-25
+
+Every document module's update route accepts an optional `?autoSave=1` query flag, read by
+`isAutoSaveRequest()` (`api/_lib/http.ts`) and sent by the client through `writeQuery()`
+(`src/lib/apiClient.ts`). It marks a write as coming from the background auto-save rather than a
+person pressing Save. Affected routes: `PATCH /api/quotes/:id`, `/api/scope-of-works/:id`,
+`/api/delivery-orders/:id`, `/api/material-requisitions/:id`, `/api/job-orders/:id`,
+`/api/purchase-requests/:id`, `/api/production-orders/:id`, `/api/service-reports/:id`.
+
+The flag changes exactly two things, both server-enforced (not UI-only):
+
+1. **No audit-log entry is written.** Auto-save fires every few seconds while someone types; dozens
+   of identical "แก้ไขเอกสาร X" rows per editing session would bury the deliberate actions the log
+   exists to record.
+2. **Draft-only.** A `409` is returned if the target is past ร่าง/Draft. Quotation and Scope of Work
+   add this check explicitly (both allow certain edits after that point — the latter's PO-number
+   /document-recipient follow-up fields — and those must keep requiring a real Save); the other five
+   modules already rejected any non-Draft update, so the existing guard covers them.
+
+Everything else is identical to a manual save: the same permission checks, the same field-by-field
+validation, the same status gates, the same `updatedBy`, the same server-recomputed `amount`. An
+auto-save can never do something a manual save could not.
 
 ## Errors
 

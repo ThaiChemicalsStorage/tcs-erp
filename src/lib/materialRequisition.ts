@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiClient.js";
+import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import { newId } from "./products.js";
 import type { Product } from "./products.js";
 
@@ -177,8 +177,8 @@ export async function createMaterialRequisition(projectId: string, itemId: strin
   return materialRequisition;
 }
 export type MaterialRequisitionUpdateFields = Partial<Omit<MaterialRequisition, "id" | "createdAt" | "createdBy" | "isDeleted">>;
-export async function updateMaterialRequisition(id: string, fields: MaterialRequisitionUpdateFields): Promise<MaterialRequisition> {
-  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}`, {
+export async function updateMaterialRequisition(id: string, fields: MaterialRequisitionUpdateFields, options?: WriteOptions): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}${writeQuery(options)}`, {
     method: "PATCH", body: JSON.stringify(fields),
   });
   return materialRequisition;

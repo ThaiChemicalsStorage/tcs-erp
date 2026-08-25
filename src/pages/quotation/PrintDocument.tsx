@@ -3,7 +3,7 @@ import { Pin } from "lucide-react";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import {
-  type Quote, type QuoteLine, fmt, lineSubtotal, computeTotals, bahtText, VAT_RATE,
+  type Quote, type QuoteLine, type DiscountMode, fmt, lineSubtotal, lineDiscountAmount, computeTotals, bahtText, VAT_RATE,
   lineHasDetails, formatQuoteDateThai as fmtThaiDate, formatQuoteDateNumeric as fmtNumericDate,
 } from "../../lib/quotes";
 import { BrandMark } from "../../components/BrandMark";
@@ -38,7 +38,7 @@ export function PrintDocument({
   client, contactName, contactPhone, contactEmail, address, taxId,
   deliveryMethod, deliveryAddress, project,
   poRef, paymentTerms, issueDate, expiryDate, jobTypeName,
-  lines, discount, remarks,
+  lines, discount, discountMode, remarks,
   preparerUser, approverUser, preparerName, preparerDate, approverName, approverDate,
 }: {
   isDetail: boolean;
@@ -61,6 +61,7 @@ export function PrintDocument({
   jobTypeName: string;
   lines: QuoteLine[];
   discount: number;
+  discountMode?: DiscountMode;
   remarks: string;
   preparerUser?: User;
   approverUser?: User;
@@ -69,7 +70,7 @@ export function PrintDocument({
   approverName: string;
   approverDate: string;
 }) {
-  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount);
+  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount, discountMode);
   const quoteId = isDetail ? quote!.id : nextId;
 
   let runningItemNumber = 0;
@@ -191,7 +192,13 @@ export function PrintDocument({
               );
             }
             const hasDetails = lineHasDetails(line);
-            const unitDiscount = line.unitPrice * (line.discount / 100);
+            // คอลัมน์ในเอกสารพิมพ์คือ "ส่วนลด/หน่วย" เสมอ ถ้าผู้ใช้กรอกส่วนลดเป็นจำนวนเงินของทั้งรายการ
+            // จะถูกเฉลี่ยกลับมาเป็นต่อหน่วยเพื่อให้แบบฟอร์มที่พิมพ์ออกมายังคงรูปแบบเดิม
+            // The printed column is always "discount per unit". A line whose discount was entered as
+            // a baht amount is a discount on the whole line, so it is divided back down per unit
+            // here — the printed form keeps the exact layout it has always had either way.
+            const lineDiscount = lineDiscountAmount(line);
+            const unitDiscount = line.qty > 0 ? lineDiscount / line.qty : lineDiscount;
             return (
               <Fragment key={line.id}>
                 <tr className="align-top">
@@ -205,7 +212,11 @@ export function PrintDocument({
                   <td className="px-2 py-1.5 text-center font-mono">{fmt(line.qty)}</td>
                   <td className="px-2 py-1.5 text-center">{line.unit}</td>
                   <td className="px-2 py-1.5 text-right font-mono">{fmt(line.unitPrice)}</td>
-                  <td className="px-2 py-1.5 text-right font-mono">{unitDiscount > 0 ? `${fmt(unitDiscount)} (${line.discount}%)` : fmt(0)}</td>
+                  <td className="px-2 py-1.5 text-right font-mono">
+                    {unitDiscount > 0
+                      ? `${fmt(unitDiscount)}${line.discountMode === "amount" ? "" : ` (${line.discount}%)`}`
+                      : fmt(0)}
+                  </td>
                   <td className="px-2 py-1.5 text-right font-mono font-semibold">{fmt(lineSubtotal(line))}</td>
                 </tr>
                 {hasDetails && (
@@ -231,7 +242,7 @@ export function PrintDocument({
                 <div className="w-64 space-y-1">
                   <div className="flex justify-between text-[11px]"><span>รวมเป็นเงิน</span><span className="font-mono">{fmt(subtotal)}</span></div>
                   <div className="flex justify-between text-[11px]">
-                    <span>ส่วนลดพิเศษ{discount > 0 ? ` (${discount}%)` : ""}</span>
+                    <span>ส่วนลดพิเศษ{discount > 0 && discountMode !== "amount" ? ` (${discount}%)` : ""}</span>
                     <span className="font-mono">{fmt(discountAmt)}</span>
                   </div>
                   <div className="flex justify-between text-[11px] border-t border-[#0b1d3a]/15 pt-1"><span>ยอดหลังหักส่วนลด</span><span className="font-mono">{fmt(afterDiscount)}</span></div>

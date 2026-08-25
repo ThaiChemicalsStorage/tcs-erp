@@ -164,6 +164,17 @@ export function QuotationPage({
     }
   };
 
+  // บันทึกร่างอัตโนมัติเบื้องหลัง (2026-08-25) — เงียบเสมอ ไม่มี toast และไม่เปลี่ยนหน้าจอ
+  // Background auto-save. Deliberately narrower than `handleSave()`: it never creates a record
+  // (a brand-new quotation is protected by the local snapshot instead — see QuoteDocument) and it
+  // never navigates or toasts, so it can't interrupt someone mid-sentence. Errors propagate to
+  // `useAutoSave`, which surfaces them through the quiet status chip rather than a toast.
+  const handleAutoSave = async (data: QuoteDraftFields) => {
+    if (!selectedQuote) return;
+    const updated = await updateQuote(selectedQuote.id, data, { autoSave: true });
+    setQuotes((prev) => prev.map((q) => (q.id === selectedQuote.id ? updated : q)));
+  };
+
   // ทำสำเนาใบเสนอราคาที่เลือกอยู่แล้วเปิดสำเนาใหม่ขึ้นมาแทน
   // Duplicates the currently selected quote and switches to viewing the copy
   const handleDuplicate = async () => {
@@ -315,6 +326,7 @@ export function QuotationPage({
         onOpenScopeOfWork={openScopeOfWork}
         onBack={() => setView("list")}
         onSave={handleSave}
+        onAutoSave={handleAutoSave}
         onDuplicate={handleDuplicate}
         onRewrite={handleRewrite}
         onInterestChange={(v) => selectedQuote && setInterest(selectedQuote.id, v)}

@@ -4,10 +4,60 @@ import {
   GripVertical, StickyNote, Pin, X, ChevronUp, ChevronDown,
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
-import { type QuoteLine, type SubDetail, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
+import { type QuoteLine, type SubDetail, type DiscountMode, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { useI18n } from "../../lib/i18n";
+
+// ปุ่มสลับหน่วยของส่วนลดระหว่างเปอร์เซ็นต์ (%) กับจำนวนเงิน (฿) — เพิ่ม 2026-08-25
+// Compact segmented control switching a discount between percent (%) and a straight baht amount (฿).
+// The number the user typed is kept as-is; only how it is interpreted changes, and the totals right
+// underneath recompute immediately, so the effect of flipping the unit is never hidden.
+/**
+ * ตัวเลขส่วนลดที่ใช้ได้จริงในหน่วยที่เลือก — สลับกลับมาเป็น % ต้องไม่เกิน 100
+ *
+ * A discount figure valid in the unit being switched to. Switching ฿500 back to "%" would otherwise
+ * leave 500% sitting in the field: the totals clamp it harmlessly, but the server rejects any
+ * percentage over 100, so the whole document would silently stop auto-saving until someone noticed.
+ * Capping at the switch keeps every document saveable, and the totals right below update visibly,
+ * so the adjustment is never hidden from the person who made it.
+ */
+function clampForMode(discount: number, mode: DiscountMode): number {
+  return mode === "percent" ? Math.min(discount, 100) : discount;
+}
+
+function DiscountModeToggle({
+  value,
+  onChange,
+  label,
+}: {
+  value: DiscountMode;
+  onChange: (mode: DiscountMode) => void;
+  label: string;
+}) {
+  const options: { mode: DiscountMode; text: string }[] = [
+    { mode: "percent", text: "%" },
+    { mode: "amount", text: "฿" },
+  ];
+  return (
+    <span role="group" aria-label={label} className="inline-flex items-center rounded border border-border overflow-hidden bg-card align-middle">
+      {options.map((o) => (
+        <button
+          key={o.mode}
+          type="button"
+          onClick={() => onChange(o.mode)}
+          aria-pressed={value === o.mode}
+          title={label}
+          className={`px-1.5 py-0.5 text-[11px] font-mono leading-none transition-colors ${
+            value === o.mode ? "bg-[#c9a84c]/15 text-[#c9a84c] font-semibold" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {o.text}
+        </button>
+      ))}
+    </span>
+  );
+}
 
 // แสดงรายการรายละเอียดย่อยแบบ "ปักหมุด" ใต้แถวรายการหลักในตาราง พร้อมลากสลับลำดับได้
 // Renders each sub-detail as a "pinned" row under its parent line item, with drag-to-reorder support
@@ -145,6 +195,9 @@ export function LineItemsEditor({
   onChange,
   discount,
   onDiscountChange,
+  discountMode,
+  onDiscountModeChange,
+  defaultLineDiscountMode,
   products,
   categories,
 }: {
@@ -152,6 +205,10 @@ export function LineItemsEditor({
   onChange: (lines: QuoteLine[]) => void;
   discount: number;
   onDiscountChange: (n: number) => void;
+  discountMode: DiscountMode;
+  onDiscountModeChange: (mode: DiscountMode) => void;
+  /** หน่วยส่วนลดของรายการ ใช้เมื่อยังไม่มีรายการใดระบุไว้ (เอกสารใหม่ = บาท) */
+  defaultLineDiscountMode: DiscountMode;
   products: Product[];
   categories: ProductCategory[];
 }) {
@@ -172,14 +229,28 @@ export function LineItemsEditor({
   const updateLine = <K extends keyof QuoteLine>(id: number, field: K, value: QuoteLine[K]) =>
     onChange(lines.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
 
-  const addLine = () => onChange([...lines, blankLine()]);
-  const addSectionHeader = () => onChange([...lines, { ...blankLine(), isSectionHeader: true }]);
+  // หน่วยส่วนลดระดับรายการ — อ่านจากรายการที่มีอยู่ก่อน ถ้ายังไม่มีเลยจึงใช้ค่าเริ่มต้นของเอกสาร
+  // The line-level discount unit. Read off the existing lines first — each line stores its own
+  // `discountMode`, so a historical quotation always renders in the unit it was written in.
+  // `lineModeOverride` only carries a switch the user made while the table is still empty, so the
+  // choice survives until there is a line to record it on.
+  const [lineModeOverride, setLineModeOverride] = useState<DiscountMode | null>(null);
+  const lineDiscountMode: DiscountMode =
+    lines.find((l) => l.discountMode)?.discountMode ?? lineModeOverride ?? defaultLineDiscountMode;
+  const setLineDiscountMode = (mode: DiscountMode) => {
+    setLineModeOverride(mode);
+    onChange(lines.map((l) => ({ ...l, discountMode: mode, discount: clampForMode(l.discount, mode) })));
+  };
+  const newLine = () => ({ ...blankLine(), discountMode: lineDiscountMode });
+
+  const addLine = () => onChange([...lines, newLine()]);
+  const addSectionHeader = () => onChange([...lines, { ...newLine(), isSectionHeader: true }]);
   // เพิ่มรายการใหม่โดยดึงชื่อ หน่วย ราคา และสเปกจากสินค้าที่เลือกในแคตตาล็อก
   // Adds a new line pre-filled from a picked catalog product (name, unit, price, spec)
   const addLineFromProduct = (product: Product) => {
     const spec = product.specifications.trim();
     onChange([...lines, {
-      ...blankLine(),
+      ...newLine(),
       description: product.name,
       unit: product.unit,
       unitPrice: product.defaultPrice,
@@ -208,7 +279,7 @@ export function LineItemsEditor({
     updateLine(lineId, "subDetails", current);
   };
 
-  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount);
+  const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount, discountMode);
 
   // Excludes the 4 categories seeded for Material Requisition/Purchase Request's internal-only
   // store catalog (เคมี/เรซิ่น, วัสดุสิ้นเปลือง, น็อตและสกรู, อื่นๆ (คลัง)) from the sales-facing quote
@@ -224,9 +295,15 @@ export function LineItemsEditor({
   let itemNumber = 0;
   const itemNumbers = lines.map((l) => (l.isSectionHeader ? null : ++itemNumber));
 
-  const columns = [
+  const columns: React.ReactNode[] = [
     t("quotation.lineItems.col.no"), t("quotation.lineItems.col.description"), t("quotation.lineItems.col.unit"),
-    t("quotation.lineItems.col.qty"), t("quotation.lineItems.col.unitPrice"), t("quotation.lineItems.col.discount"),
+    t("quotation.lineItems.col.qty"), t("quotation.lineItems.col.unitPrice"),
+    (
+      <span className="inline-flex items-center gap-1.5 justify-end normal-case">
+        {t("quotation.lineItems.col.discount")}
+        <DiscountModeToggle value={lineDiscountMode} onChange={setLineDiscountMode} label={t("quotation.discountMode.lineLabel")} />
+      </span>
+    ),
     t("quotation.lineItems.col.amount"), "",
   ];
 
@@ -307,8 +384,28 @@ export function LineItemsEditor({
                     </td>
                     <td className="px-4 py-3 align-top">
                       <div className="flex items-center justify-end gap-0.5">
-                        <input type="number" className="w-16 text-sm text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors" value={line.discount} onChange={(e) => updateLine(line.id, "discount", parseFloat(e.target.value) || 0)} min={0} max={100} />
-                        <Percent size={10} className="text-muted-foreground flex-shrink-0" />
+                        <input
+                          type="number"
+                          className="w-16 text-sm text-right font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1 py-0.5 transition-colors"
+                          value={line.discount}
+                          // ประทับ discountMode ลงบรรทัดที่แก้ด้วยเสมอ ไม่งั้นบรรทัดจากเทมเพลต (ที่ยังไม่มีหน่วย)
+                          // จะแสดงเป็น ฿ แต่คำนวณเป็น % — ตัวเลขที่พิมพ์ต้องหมายถึงหน่วยที่เห็นบนหัวคอลัมน์เสมอ
+                          // Stamps the unit onto the line being edited. Without it, a line that
+                          // carries no `discountMode` yet (a fresh template line, or any pre-
+                          // 2026-08-25 line) would render under a "฿" header while still computing
+                          // as a percentage. The number typed must always mean the unit shown.
+                          onChange={(e) => onChange(lines.map((l) => (
+                            l.id === line.id
+                              ? { ...l, discount: parseFloat(e.target.value) || 0, discountMode: lineDiscountMode }
+                              : l
+                          )))}
+                          min={0}
+                          max={lineDiscountMode === "percent" ? 100 : undefined}
+                          aria-label={lineDiscountMode === "percent" ? t("quotation.discountMode.percentLabel") : t("quotation.discountMode.amountLabel")}
+                        />
+                        {lineDiscountMode === "percent"
+                          ? <Percent size={10} className="text-muted-foreground flex-shrink-0" />
+                          : <span className="text-[11px] font-mono text-muted-foreground flex-shrink-0">฿</span>}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-mono text-right font-semibold text-foreground align-top">{fmt(lineSubtotal(line))}</td>
@@ -364,20 +461,38 @@ export function LineItemsEditor({
       </div>
 
       <div className="flex justify-end p-5 border-t border-border">
-        <div className="w-72 space-y-2">
+        {/* กว้างขึ้นจาก w-72 เป็น w-80 เพราะแถวส่วนลดพิเศษมีปุ่มสลับหน่วย % / ฿ เพิ่มเข้ามา (2026-08-25)
+            Widened from w-72 to fit the % / ฿ unit toggle the special-discount row gained on
+            2026-08-25 — at the old width the label and the amount both wrapped. */}
+        <div className="w-80 space-y-2">
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>{t("quotation.totals.subtotal")}</span>
             <span className="font-mono">฿{fmt(subtotal)}</span>
           </div>
-          <div className="flex justify-between text-sm text-muted-foreground items-center">
-            <span className="flex items-center gap-2">
+          <div className="flex justify-between gap-2 text-sm text-muted-foreground items-center">
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
               {t("quotation.totals.discount")}
               <span className="flex items-center gap-1 bg-secondary border border-border rounded px-2 py-0.5">
-                <input type="number" className="w-10 text-sm font-mono text-foreground bg-transparent outline-none text-right" value={discount} onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)} min={0} max={100} />
-                <Percent size={10} className="text-muted-foreground" />
+                <input
+                  type="number"
+                  className={`${discountMode === "percent" ? "w-10" : "w-16"} text-sm font-mono text-foreground bg-transparent outline-none text-right`}
+                  value={discount}
+                  onChange={(e) => onDiscountChange(parseFloat(e.target.value) || 0)}
+                  min={0}
+                  max={discountMode === "percent" ? 100 : undefined}
+                  aria-label={discountMode === "percent" ? t("quotation.discountMode.percentLabel") : t("quotation.discountMode.amountLabel")}
+                />
+                {discountMode === "percent"
+                  ? <Percent size={10} className="text-muted-foreground" />
+                  : <span className="text-[11px] font-mono text-muted-foreground">฿</span>}
               </span>
+              <DiscountModeToggle
+                value={discountMode}
+                onChange={(mode) => { onDiscountModeChange(mode); onDiscountChange(clampForMode(discount, mode)); }}
+                label={t("quotation.discountMode.totalLabel")}
+              />
             </span>
-            <span className="font-mono text-[#e05252]">-฿{fmt(discountAmt)}</span>
+            <span className="font-mono text-[#e05252] whitespace-nowrap">-฿{fmt(discountAmt)}</span>
           </div>
           <div className="flex justify-between text-sm text-muted-foreground">
             <span>{t("quotation.totals.afterDiscount")}</span>

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { WithId } from "mongodb";
-import { HttpError, getPathSegments } from "./http.js";
+import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildOwnershipClause } from "./visibility.js";
 import {
@@ -324,6 +324,7 @@ function sanitizeInstallmentsUpdate(raw: unknown, current: DeliveryOrderInstallm
 }
 
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+  const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
   const doc = await loadDeliveryOrderOrThrow(id);
   if (!canEditDeliveryOrder(ctx, doc)) throw new HttpError(403, "Forbidden");
@@ -347,9 +348,14 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   await deliveryOrders.updateOne({ _id: doc._id }, { $set: update });
   const updated = await deliveryOrders.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบใบส่งมอบสินค้า");
-  await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Updated", `แก้ไขใบส่งมอบสินค้าของ Scope of Work ${updated.scopeNumber}`, {
-    scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
-  });
+  // การบันทึกอัตโนมัติไม่เขียน audit log — ไม่งั้นการพิมพ์งานครั้งเดียวจะสร้างรายการซ้ำนับสิบรายการ
+  // An auto-save writes no audit entry (see `isAutoSaveRequest()` in api/_lib/http.ts). The write
+  // itself passed the exact same permission, Draft-status and validation checks as a manual Save.
+  if (!autoSave) {
+    await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Updated", `แก้ไขใบส่งมอบสินค้าของ Scope of Work ${updated.scopeNumber}`, {
+      scopeNumber: updated.scopeNumber, scopeOfWorkId: updated.scopeOfWorkId,
+    });
+  }
   res.status(200).json({ deliveryOrder: toClient(updated) });
 }
 

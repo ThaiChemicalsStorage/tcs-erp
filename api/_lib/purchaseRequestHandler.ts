@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { Collection, Filter } from "mongodb";
-import { HttpError, getPathSegments } from "./http.js";
+import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
@@ -222,6 +222,7 @@ const DATE_FIELDS: { key: keyof PurchaseRequestFields; label: string }[] = [
 
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
+  const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
   const doc = await loadOrThrow(id);
   if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
@@ -245,7 +246,12 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const purchaseRequests = await purchaseRequestsCollection();
   await purchaseRequests.updateOne({ _id: id }, { $set: update });
   const updated = await loadOrThrow(id);
-  await writeAuditEntry(ctx, "Purchase Request Updated", `แก้ไขใบขอซื้อ ${id}`, { scopeOfWorkId: updated.scopeOfWorkId });
+  // การบันทึกอัตโนมัติไม่เขียน audit log — ไม่งั้นการพิมพ์งานครั้งเดียวจะสร้างรายการซ้ำนับสิบรายการ
+  // An auto-save writes no audit entry (see `isAutoSaveRequest()` in api/_lib/http.ts). The write
+  // itself passed the exact same permission, Draft-status and validation checks as a manual Save.
+  if (!autoSave) {
+    await writeAuditEntry(ctx, "Purchase Request Updated", `แก้ไขใบขอซื้อ ${id}`, { scopeOfWorkId: updated.scopeOfWorkId });
+  }
   res.status(200).json({ purchaseRequest: toClient(updated) });
 }
 

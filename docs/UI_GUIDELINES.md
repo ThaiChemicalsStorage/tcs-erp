@@ -77,6 +77,33 @@ the newest entry shipped" — clearing on open, not on a per-item click; and **c
 (`WHATS_NEW_ENTRIES` in `src/lib/whatsNew.ts`, hand-authored Thai announcements, not fetched from
 an API) since this is a short end-user-facing update log, not the technical `docs/CHANGELOG.md`.
 
+### Auto-Save Indicator & Draft Recovery (`src/components/AutoSaveIndicator.tsx` + `DraftRecoveryBanner.tsx`, added 2026-08-25)
+Two small shared pieces that every document editor renders. Backed by
+`src/hooks/useAutoSave.ts` — see [MODULES/Quotation.md](./MODULES/Quotation.md) "Auto-save" and
+[API.md](./API.md) "Auto-save writes" for the behaviour; this section is the UI contract.
+
+**`<AutoSaveIndicator>`** goes in the document toolbar, immediately after `TourReplayButton` and
+before the completion/print/save controls — the same slot in every module, so a user who learns to
+look for it once finds it everywhere. It is deliberately **quiet**: a 12px icon + `text-xs` line,
+no toast, no layout shift, and nothing at all in the `"idle"` state (before the first edit there is
+genuinely nothing to report). States map to `มีการแก้ไขที่ยังไม่ได้บันทึก` (muted) →
+`กำลังบันทึกอัตโนมัติ...` (muted, spinning `Loader2`) → `บันทึกอัตโนมัติแล้ว HH:MM` (`#2aa36b`,
+`Check`) → `บันทึกอัตโนมัติไม่สำเร็จ กรุณากดบันทึกเอง` (`#e05252`, `AlertTriangle`). The wrapper is
+`role="status" aria-live="polite"` so a screen reader announces the change without stealing focus.
+`localOnly` swaps in a `CloudOff` icon and "เก็บร่างไว้ในเครื่องให้อัตโนมัติ" for a document that has
+no server record yet — never show the green "saved" state for that case; it would be a lie.
+
+**`<DraftRecoveryBanner>`** is the first child of the document's content column, above the
+validation summary. Gold-tinted (`border-[#c9a84c]/35 bg-[#c9a84c]/10`) rather than red — a
+recovered draft is an offer, not an error. It always states **when** the snapshot was taken and
+gives two explicit choices ("กู้คืนร่างนี้" / "ทิ้งร่างนี้"). **Never auto-apply a recovered draft**:
+silently replacing a freshly-opened form with older abandoned content is worse than losing it, and
+the user has no way to tell it happened.
+
+Both format their timestamps with the **app's** language (`useI18n().lang` → `th-TH` / `en-GB`),
+not the browser's — a fully Thai page rendering "Aug 25, 09:25 AM" reads as a bug. Follow that rule
+for any new user-visible date/time, not just these two.
+
 ### Global Search (`src/components/GlobalSearch.tsx`, added 2026-07-14, fixed against an
 independent Codex review the same day)
 Replaces the previously decorative, non-functional topbar search input (a bare `<input>` with no

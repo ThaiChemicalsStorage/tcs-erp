@@ -13,6 +13,9 @@ import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import type { DriveStep } from "driver.js";
 import { useI18n } from "../../lib/i18n";
+import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
+import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
+import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { DeliveryOrderPrintDocument } from "./DeliveryOrderPrintDocument";
 import { DeliveryOrderDepartmentRouting } from "./DeliveryOrderDepartmentRouting";
 
@@ -197,6 +200,24 @@ export function DeliveryOrderDocument({
     autoStart: !!deliveryOrder && deliveryOrder.installments.length > 0,
   });
 
+  // ── บันทึกอัตโนมัติ (2026-08-25) — hook ต้องอยู่ก่อน early return ทุกอันด้านล่าง ────────────────
+  // Auto-save. Unlike the doc + draft editors, this screen keeps a single `deliveryOrder` state that
+  // is both the loaded record and the edit buffer — so the background save deliberately does NOT
+  // write the server's response back into it: doing so would overwrite whatever the user has typed
+  // since the request went out. See src/hooks/useAutoSave.ts.
+  const autoSaveEditable = !!deliveryOrder && canEdit && deliveryOrder.status === "Draft";
+  const autoSavePayload = deliveryOrder && autoSaveEditable ? toUpdateFields(deliveryOrder) : null;
+  const draftBackup = useDraftBackup({
+    storageKey: `deliveryOrder:${deliveryOrderId}`,
+    data: autoSavePayload,
+    enabled: autoSaveEditable,
+  });
+  const autoSave = useAutoSave({
+    data: autoSavePayload,
+    enabled: autoSaveEditable,
+    onSave: async (fields) => { await updateDeliveryOrder(deliveryOrderId, fields, { autoSave: true }); },
+  });
+
   if (loadError) {
     return (
       <div className="flex-1 overflow-y-auto">
@@ -248,6 +269,9 @@ export function DeliveryOrderDocument({
       setSaving(true);
       const updated = await updateDeliveryOrder(deliveryOrder.id, toUpdateFields(deliveryOrder));
       setDeliveryOrder(updated);
+      // ตั้งฐานเทียบของ auto-save ใหม่ ไม่งั้นจะยิงบันทึกซ้ำด้วยข้อมูลเดิมอีกรอบ
+      autoSave.markSaved();
+      draftBackup.clear();
       showToast("บันทึกร่างแล้ว");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
@@ -346,6 +370,7 @@ export function DeliveryOrderDocument({
 
         <div data-tour="dodoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
+          {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
           {editable && (
             <button onClick={() => setConfirmAction("refresh")} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               <RotateCw size={13} /> อัปเดตข้อมูลจาก Scope of Work
@@ -390,6 +415,19 @@ export function DeliveryOrderDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
+        {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+          <DraftRecoveryBanner
+            savedAt={draftBackup.recoveredAt}
+            onRestore={() => {
+              const recovered = draftBackup.recovered!;
+              setDeliveryOrder((prev) => (prev ? { ...prev, ...recovered } : prev));
+              draftBackup.clear();
+              showToast(t("common.draftRecovery.restoredToast"));
+            }}
+            onDiscard={draftBackup.dismiss}
+          />
+        )}
+
         <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">ใบส่งมอบสินค้าและบริการ</h1>

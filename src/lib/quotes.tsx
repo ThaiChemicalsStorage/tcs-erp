@@ -1,10 +1,14 @@
 import { FilePen, Clock, CheckCircle2, Ban, Send, CheckCheck, Trophy, XCircle, Frown } from "lucide-react";
 import type { User } from "./users";
 import { type Role, hasPermission } from "./roles";
-import { apiFetch } from "./apiClient.js";
+import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import type { TranslationKey } from "./i18n";
 import type { CustomerSnapshot } from "./customers";
 import type { TemplateSection, TemplateTermLine } from "./quotationTemplates";
+import {
+  type DiscountMode, VAT_RATE as SHARED_VAT_RATE, lineSubtotal as sharedLineSubtotal,
+  computeTotals as sharedComputeTotals,
+} from "./quoteMath";
 
 export type QuoteStatus =
   | "ร่าง"
@@ -67,7 +71,14 @@ export interface QuoteLine {
   unit: string;
   qty: number;
   unitPrice: number;
+  /** ตัวเลขส่วนลดของรายการนี้ — ตีความเป็น % หรือบาท ตาม `discountMode` */
   discount: number;
+  /**
+   * หน่วยของส่วนลดรายการนี้ (เพิ่ม 2026-08-25) — ไม่ระบุ = "percent" เหมือนข้อมูลเดิมทั้งหมด
+   * Unit of this line's discount (added 2026-08-25). Absent means "percent", which is what every
+   * line written before 2026-08-25 meant, so old quotations need no migration.
+   */
+  discountMode?: DiscountMode;
   tags: string[];
   subDetails: SubDetail[];
   isSectionHeader?: boolean;
@@ -83,7 +94,10 @@ export interface Quote {
   salesperson: string;
   interest: QuoteInterest;
   lines: QuoteLine[];
+  /** ส่วนลดพิเศษท้ายเอกสาร — ตีความเป็น % หรือบาท ตาม `discountMode` */
   discount: number;
+  /** หน่วยของส่วนลดพิเศษ (เพิ่ม 2026-08-25) — ไม่ระบุ = "percent" (ข้อมูลเดิมทั้งหมด) */
+  discountMode?: DiscountMode;
   contactName: string;
   contactPhone: string;
   contactEmail: string;
@@ -121,7 +135,7 @@ export interface Quote {
 
 export type QuoteDraftFields = Pick<
   Quote,
-  | "client" | "status" | "lines" | "discount" | "salesperson"
+  | "client" | "status" | "lines" | "discount" | "discountMode" | "salesperson"
   | "contactName" | "contactPhone" | "contactEmail" | "address" | "taxId"
   | "deliveryMethod" | "deliveryAddress" | "project"
   | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks" | "revisionNote"
@@ -134,7 +148,10 @@ export type QuoteUpdateFields = Partial<
   Omit<Quote, "id" | "status" | "date" | "valid" | "createdByUserId" | "updatedBy" | "approvalHistory">
 >;
 
-export const VAT_RATE = 7;
+export type { DiscountMode } from "./quoteMath";
+export { lineDiscountAmount, resolveDiscountAmount } from "./quoteMath";
+
+export const VAT_RATE = SHARED_VAT_RATE;
 
 export const statusStyle: Record<QuoteStatus, string> = {
   "ร่าง": "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20",
@@ -342,10 +359,10 @@ export function blankLine(): QuoteLine {
   return { id: newLineId(), description: "", unit: "ชิ้น", qty: 1, unitPrice: 0, discount: 0, tags: [], subDetails: [] };
 }
 
-// คำนวณยอดรวมของรายการเดียว (จำนวน x ราคา หักส่วนลด)
-// Computes the subtotal of a single line (qty x price, minus discount)
+// คำนวณยอดรวมของรายการเดียว (จำนวน x ราคา หักส่วนลดของรายการ ไม่ว่าจะระบุเป็น % หรือบาท)
+// Computes the subtotal of a single line (qty x price, minus that line's discount, percent or baht)
 export function lineSubtotal(l: QuoteLine): number {
-  return l.qty * l.unitPrice * (1 - l.discount / 100);
+  return sharedLineSubtotal(l);
 }
 
 // ตรวจสอบว่ารายการนี้มีรายละเอียดย่อยหรือแท็กที่ควรแสดงในเอกสารพิมพ์หรือไม่
@@ -379,13 +396,8 @@ export function formatQuoteDateNumeric(iso: string): string {
 
 // คำนวณยอดรวมทั้งหมดของใบเสนอราคา (ยอดก่อนลด ส่วนลด ภาษี และยอดสุทธิ)
 // Computes the quote's aggregate totals (subtotal, discount, VAT, and grand total)
-export function computeTotals(lines: QuoteLine[], discountPct: number) {
-  const subtotal = lines.reduce((s, l) => s + lineSubtotal(l), 0);
-  const discountAmt = subtotal * (discountPct / 100);
-  const afterDiscount = subtotal - discountAmt;
-  const vatAmt = afterDiscount * (VAT_RATE / 100);
-  const total = afterDiscount + vatAmt;
-  return { subtotal, discountAmt, afterDiscount, vatAmt, total };
+export function computeTotals(lines: QuoteLine[], discount: number, discountMode?: DiscountMode) {
+  return sharedComputeTotals(lines, discount, discountMode);
 }
 
 // ตรวจสอบว่ารหัสนี้เป็นใบเสนอราคาที่เป็นรีวิชัน (มีส่วนต่อท้าย -R) หรือไม่
@@ -425,8 +437,8 @@ export async function createQuote(fields: QuoteDraftFields): Promise<Quote> {
 }
 // แก้ไขใบเสนอราคาที่มีอยู่ตาม id
 // Updates an existing quote identified by id
-export async function updateQuote(id: string, fields: QuoteUpdateFields): Promise<Quote> {
-  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
+export async function updateQuote(id: string, fields: QuoteUpdateFields, options?: WriteOptions): Promise<Quote> {
+  const { quote } = await apiFetch<{ quote: Quote }>(`/quotes/${encodeURIComponent(id)}${writeQuery(options)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return quote;
 }
 // ทำสำเนาใบเสนอราคา

@@ -12,7 +12,7 @@
  * business meaning of their own, so inventing one would be adding structure the source doesn't have.
  */
 
-import { apiFetch } from "./apiClient.js";
+import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import type { ChecklistGroup, ChecklistOption } from "./documentRequirements.js";
 
 export type { ChecklistGroup, ChecklistOption };
@@ -104,8 +104,8 @@ export async function fetchJobOrder(id: string): Promise<JobOrder> {
   return jobOrder;
 }
 export type JobOrderUpdateFields = Partial<Omit<JobOrder, "id" | "createdAt" | "createdBy" | "isDeleted">>;
-export async function updateJobOrder(id: string, fields: JobOrderUpdateFields): Promise<JobOrder> {
-  const { jobOrder } = await apiFetch<{ jobOrder: JobOrder }>(`/job-orders/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
+export async function updateJobOrder(id: string, fields: JobOrderUpdateFields, options?: WriteOptions): Promise<JobOrder> {
+  const { jobOrder } = await apiFetch<{ jobOrder: JobOrder }>(`/job-orders/${encodeURIComponent(id)}${writeQuery(options)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return jobOrder;
 }
 export async function finalizeJobOrder(id: string): Promise<JobOrder> {

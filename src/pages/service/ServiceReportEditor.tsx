@@ -24,6 +24,9 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
+import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
+import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 
 const emptyCustomerSnapshot = { companyName: "", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" };
 
@@ -203,6 +206,19 @@ export function ServiceReportEditor({
   // ScopeOfWorkDocument/DeliveryOrderDocument, which had this exact race.
   const docTour = useModuleTour("serviceDoc", currentUserId, docTourSteps, { autoStart: !isNew && !!report });
 
+  // ── บันทึกอัตโนมัติ (2026-08-25) ───────────────────────────────────────
+  // รายงานที่ยังไม่ได้สร้าง (isNew) เก็บได้แค่ในเครื่อง เพราะยังไม่มีเรคอร์ดบนเซิร์ฟเวอร์
+  // A brand-new report has no server record yet, so it gets the local snapshot only — the same
+  // split as a brand-new quotation. Its snapshot carries `selectedTemplateId` too: without the
+  // template choice, restored answers would have no checklist structure to belong to.
+  // An existing Draft additionally auto-saves for real. See src/hooks/useAutoSave.ts.
+  const autoSaveBackupData = { form, checklist, selectedTemplateId };
+  const draftBackup = useDraftBackup<typeof autoSaveBackupData>({
+    storageKey: isNew ? "serviceReport:new" : `serviceReport:${serviceReportId}`,
+    data: phase === "ready" ? autoSaveBackupData : null,
+    enabled: isEditable,
+  });
+
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   const draftBody = (): Omit<ServiceReportDraft, "templateId"> & { templateId?: string } => ({
@@ -224,6 +240,21 @@ export function ServiceReportEditor({
     customerSignatureDataUrl: form.customerSignatureDataUrl,
     customerSignedName: form.customerSignedName,
     checklist,
+  });
+
+  // ต้องประกาศหลัง draftBody() เพราะใช้ผลลัพธ์ของมันเป็น payload ที่ส่งขึ้นเซิร์ฟเวอร์
+  // Declared after `draftBody()` because it sends exactly what that function builds — the same
+  // payload the Save button sends, so the two can never diverge.
+  const autoSave = useAutoSave({
+    data: !isNew && report && isEditable ? { ...draftBody(), templateSections: sections } : null,
+    enabled: !isNew && !!report && isEditable,
+    onSave: async (fields) => {
+      if (!report) return;
+      // ไม่เขียนผลลัพธ์กลับลง form/checklist เพราะผู้ใช้อาจกำลังกรอกอยู่ — ต่างจากการกดบันทึกเอง
+      // The response is deliberately not applied back into `form`/`checklist` the way a manual save
+      // does: the user may be mid-entry, and `applyServerReport()` would replace what they typed.
+      await updateServiceReport(report.id, fields, { autoSave: true });
+    },
   });
 
   const copyApprovalLink = async (url: string) => {
@@ -276,6 +307,10 @@ export function ServiceReportEditor({
     try {
       const templateId = selectedTemplateId === NO_TEMPLATE_VALUE ? "" : selectedTemplateId;
       const created = await createServiceReport({ ...draftBody(), templateId } as ServiceReportDraft);
+      // ลบสำเนา "serviceReport:new" ทิ้ง ไม่งั้นการสร้างรายงานใหม่ครั้งหน้าจะถูกเสนอให้กู้คืนงานที่บันทึกไปแล้ว
+      // Drops the "serviceReport:new" snapshot: the record exists now, so leaving it behind would
+      // greet the next brand-new report with a recovery offer for work that is already saved.
+      draftBackup.clear();
       showToast(t("service.toast.created"));
       onCreated(created.id);
     } catch (err) {
@@ -300,6 +335,9 @@ export function ServiceReportEditor({
     try {
       const updated = await updateServiceReport(report.id, { ...draftBody(), templateSections: sections });
       applyServerReport(updated);
+      // ตั้งฐานเทียบของ auto-save ใหม่ ไม่งั้นจะยิงบันทึกซ้ำด้วยข้อมูลเดิมอีกรอบ
+      autoSave.markSaved();
+      draftBackup.clear();
       showToast(t("service.toast.saved"));
     } catch (err) {
       applyApiError(err, t("service.toast.saveFailed"));
@@ -726,6 +764,11 @@ export function ServiceReportEditor({
               or permission, so anchoring the tour to one of those could leave a user with no way
               to replay it. */}
           <TourReplayButton onClick={docTour.start} />
+          {isEditable && (
+            isNew
+              ? <AutoSaveIndicator state="idle" lastSavedAt={null} localOnly />
+              : <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />
+          )}
           {!isNew && report && canPrint && (
             <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
               <Printer size={14} /> {t("service.print")}
@@ -763,6 +806,21 @@ export function ServiceReportEditor({
           )}
         </div>
       </div>
+
+      {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+        <DraftRecoveryBanner
+          savedAt={draftBackup.recoveredAt}
+          onRestore={() => {
+            const recovered = draftBackup.recovered!;
+            setForm(recovered.form);
+            setChecklist(recovered.checklist);
+            if (isNew) setSelectedTemplateId(recovered.selectedTemplateId);
+            draftBackup.clear();
+            showToast(t("common.draftRecovery.restoredToast"));
+          }}
+          onDiscard={draftBackup.dismiss}
+        />
+      )}
 
       {isNew && (
         <div className="bg-card border border-border rounded-xl p-4 space-y-2">

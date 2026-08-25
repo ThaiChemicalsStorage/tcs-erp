@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
+import { withErrorHandling, HttpError, getPathSegments, isAutoSaveRequest } from "../_lib/http.js";
 import { requireUser, requirePermission, type AuthContext } from "../_lib/auth.js";
 import { buildOwnershipClause } from "../_lib/visibility.js";
 import { quotesCollection, usersCollection, rolesCollection, notificationsCollection, jobTypesCollection, quotationTemplatesCollection, countersCollection, auditLogCollection, customersCollection, toObjectId, withStringId, type QuoteFields } from "../_lib/collections.js";
@@ -18,7 +18,7 @@ import { PERMISSION_LABELS } from "../../src/lib/permissions.js";
 import { nowIso } from "../../src/lib/products.js";
 import {
   validateLines, validateIsoDateOrEmpty, validateJobType, validateQuotationTemplate, computeQuoteAmount,
-  sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeBoolean,
+  sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeDiscountMode, sanitizeBoolean,
 } from "../_lib/quoteValidation.js";
 import { validateQuotationForFinalization, validateQuotationForPrint, type QuotationValidationInput } from "../../src/lib/validation/quotationValidation.js";
 import { getRevisionRoot } from "../_lib/quoteRevisions.js";
@@ -225,7 +225,11 @@ function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<Quot
   if ("client" in body) update.client = sanitizeShortText(body.client, "ชื่อลูกค้า", true);
   if ("salesperson" in body) update.salesperson = sanitizeShortText(body.salesperson, "พนักงานขาย");
   if ("lines" in body) update.lines = validateLines(body.lines);
-  if ("discount" in body) update.discount = sanitizeDiscountPct(body.discount);
+  // `discountMode` must be read before `discount`, because it decides which bound `discount` is
+  // checked against (percent ≤ 100 vs. a baht amount). A PATCH that sends only `discount` keeps
+  // whatever unit the stored document already uses — the caller sends both together in practice.
+  if ("discountMode" in body) update.discountMode = sanitizeDiscountMode(body.discountMode, "หน่วยส่วนลดรวม");
+  if ("discount" in body) update.discount = sanitizeDiscountPct(body.discount, sanitizeDiscountMode(body.discountMode, "หน่วยส่วนลดรวม"));
   if ("contactName" in body) update.contactName = sanitizeShortText(body.contactName, "ชื่อผู้ติดต่อ");
   if ("contactPhone" in body) update.contactPhone = sanitizeShortText(body.contactPhone, "เบอร์โทรผู้ติดต่อ");
   if ("contactEmail" in body) update.contactEmail = sanitizeShortText(body.contactEmail, "อีเมลผู้ติดต่อ");
@@ -275,7 +279,8 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     // matched, never for a blank-start quote) gets the full sections/terms/notes/hash to freeze.
     const templateSnapshot = quotationTemplateId ? await loadTemplateSnapshot(quotationTemplateId) : null;
     const lines = validateLines(body.lines);
-    const discount = sanitizeDiscountPct(body.discount);
+    const discountMode = sanitizeDiscountMode(body.discountMode, "หน่วยส่วนลดรวม");
+    const discount = sanitizeDiscountPct(body.discount, discountMode);
     // Optional — a quotation may be created against a saved Customer (selected via
     // `src/pages/quotation/CustomerSelector.tsx`) or fully manually entered; either way the
     // Customer Information fields below are always what actually gets saved and shown.
@@ -299,12 +304,15 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       _id: id,
       date: thaiDate(today),
       valid: thaiDate(new Date(today.getTime() + 30 * 86400000)),
-      amount: computeQuoteAmount(lines, discount),
+      amount: computeQuoteAmount(lines, discount, discountMode),
       status: "ร่าง",
       salesperson: sanitizeShortText(body.salesperson, "พนักงานขาย"),
       interest: null,
       lines,
       discount,
+      // Only written when the client actually chose a unit — an absent `discountMode` keeps
+      // meaning "percent" for every quotation that predates the 2026-08-25 baht-discount option.
+      ...(discountMode ? { discountMode } : {}),
       ...customerFields,
       poRef: sanitizeShortText(body.poRef, "เลขที่ใบสั่งซื้อ"),
       paymentTerms: sanitizeShortText(body.paymentTerms, "เงื่อนไขการชำระเงิน"),
@@ -348,6 +356,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
 async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
 
+  const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
   const quotes = await quotesCollection();
   const target = await quotes.findOne({ _id: id });
@@ -357,6 +366,13 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   const hasEdit = roleHasPermission(ctx.role, "quotations:edit");
   const hasApprove = roleHasPermission(ctx.role, "quotations:approve");
   if (!hasEdit || !(isOwner || hasApprove)) throw new HttpError(403, "Forbidden");
+  // บันทึกอัตโนมัติทำได้เฉพาะฉบับร่างเท่านั้น — เอกสารที่ส่งอนุมัติ/อนุมัติแล้วต้องกดบันทึกเอง
+  // Auto-save is confined to Drafts. Everything past ร่าง is a document someone has acted on, and
+  // it must never change in the background without an audit entry behind it; the manual Save
+  // button (which does write one) still works on those exactly as before.
+  if (autoSave && target.status !== "ร่าง") {
+    throw new HttpError(409, "บันทึกอัตโนมัติได้เฉพาะใบเสนอราคาที่เป็นฉบับร่างเท่านั้น");
+  }
 
   const body: Record<string, unknown> = req.body ?? {};
   const update: Partial<QuoteFields> = sanitizePartialQuoteFields(body);
@@ -414,7 +430,8 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   // particular PATCH touched either of them.
   const effectiveLines = update.lines ?? target.lines;
   const effectiveDiscount = update.discount ?? target.discount;
-  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount);
+  const effectiveDiscountMode = update.discountMode ?? target.discountMode;
+  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount, effectiveDiscountMode);
 
   update.updatedBy = ctx.user.id;
   await quotes.updateOne({ _id: id }, { $set: update });
@@ -425,9 +442,15 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   // mirrors the client's previous behavior exactly (only the full edit form's save called
   // onAudit("Quotation Updated", ...); the interest toggle never did), now enforced server-side
   // instead of trusted from the client.
+  // การบันทึกอัตโนมัติก็ไม่เขียน audit log เช่นกัน (2026-08-25) — ไม่เช่นนั้นการพิมพ์งานหนึ่งครั้ง
+  // จะสร้างรายการ "แก้ไขใบเสนอราคา" นับสิบรายการจนกลบการกระทำจริงที่ต้องการตรวจสอบ
+  // An auto-save writes no audit entry either (2026-08-25) — otherwise a single editing session
+  // would produce dozens of identical "แก้ไขใบเสนอราคา" rows and bury the deliberate actions the
+  // log exists for. The write itself went through exactly the same permission/validation path as a
+  // manual save, and `updatedBy`/`amount` are updated identically.
   const bodyKeys = Object.keys(body);
   const isInterestOnlyUpdate = bodyKeys.length > 0 && bodyKeys.every((k) => k === "interest");
-  if (!isInterestOnlyUpdate) {
+  if (!isInterestOnlyUpdate && !autoSave) {
     // A dedicated action name when the linked customer specifically changed — one audit entry per
     // PATCH call either way, not a second entry stacked on top of "Quotation Updated".
     if (customerLinkChanged) {
@@ -464,7 +487,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
     lines,
     // Recomputed rather than copied from `source.amount` — cheap, and guarantees the invariant
     // holds even if a past write (pre-dating this validation pass) ever left it inconsistent.
-    amount: computeQuoteAmount(lines, source.discount),
+    amount: computeQuoteAmount(lines, source.discount, source.discountMode),
     createdByUserId: ctx.user.id,
     updatedBy: ctx.user.id,
     approvalHistory: [],
@@ -510,7 +533,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
       interest: null,
       lines,
       // Recomputed rather than copied from `source.amount` — same defensive invariant as Duplicate.
-      amount: computeQuoteAmount(lines, source.discount),
+      amount: computeQuoteAmount(lines, source.discount, source.discountMode),
       createdByUserId: ctx.user.id,
       updatedBy: ctx.user.id,
       approvalHistory: [],
@@ -666,7 +689,8 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
 
   const effectiveLines = update.lines ?? target.lines;
   const effectiveDiscount = update.discount ?? target.discount;
-  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount);
+  const effectiveDiscountMode = update.discountMode ?? target.discountMode;
+  update.amount = computeQuoteAmount(effectiveLines, effectiveDiscount, effectiveDiscountMode);
 
   // Required-field/mandatory-selection gate (added 2026-07-16) — every transition except back-to-
   // Draft ("rejected") and abandoning the quote ("cancelled") must leave the document complete.

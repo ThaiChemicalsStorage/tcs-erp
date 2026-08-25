@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { WithId, ObjectId } from "mongodb";
 import { MongoServerError } from "mongodb";
 import { randomUUID, randomBytes } from "node:crypto";
-import { HttpError, getPathSegments } from "./http.js";
+import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildOwnershipClause } from "./visibility.js";
 import {
@@ -617,9 +617,18 @@ async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string)
 const FOLLOW_UP_FIELDS = new Set(["customerPoNumber", "documentRecipients", "documentRecipientMessage"]);
 
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
+  const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
   const doc = await loadScopeOrThrow(id);
   if (!canEditScope(ctx, doc)) throw new HttpError(403, "Forbidden");
+  // บันทึกอัตโนมัติทำได้เฉพาะฉบับร่าง — ฟิลด์ติดตามผล (เลข PO/ผู้รับเอกสาร) ของเอกสารที่อนุมัติแล้ว
+  // ยังต้องกดบันทึกเอง เพื่อให้มี audit log กำกับเสมอ
+  // Auto-save is Draft-only. The follow-up fields still editable after approval (PO number,
+  // document recipients) deliberately keep requiring a real Save, so a change to an approved
+  // document always leaves an audit entry behind it.
+  if (autoSave && doc.status !== "Draft") {
+    throw new HttpError(409, "บันทึกอัตโนมัติได้เฉพาะ Scope of Work ที่เป็นฉบับร่างเท่านั้น");
+  }
   const body = (req.body ?? {}) as Record<string, unknown>;
   // Final is a terminal state — locked against content edits entirely (use "ทำสำเนา"/Rewrite to
   // keep working from a copy), and PendingApproval locks the same way while under review. The ONLY
@@ -682,9 +691,12 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   }
   const updated = await scopeOfWorks.findOne({ _id: doc._id });
   if (!updated) throw new HttpError(404, "ไม่พบ Scope of Work");
-  await writeScopeAuditEntry(ctx, "Scope of Work Updated", `แก้ไข Scope of Work ${updated.scopeNumber}`, {
-    scopeId: id, scopeNumber: updated.scopeNumber, quoteId: updated.quotationId,
-  });
+  // การบันทึกอัตโนมัติไม่เขียน audit log — ดู isAutoSaveRequest() ใน api/_lib/http.ts
+  if (!autoSave) {
+    await writeScopeAuditEntry(ctx, "Scope of Work Updated", `แก้ไข Scope of Work ${updated.scopeNumber}`, {
+      scopeId: id, scopeNumber: updated.scopeNumber, quoteId: updated.quotationId,
+    });
+  }
   res.status(200).json({ scopeOfWork: normalizeScope(withStringId(updated)) });
 }
 

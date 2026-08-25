@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiClient.js";
+import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import type { ChecklistOption, ChecklistGroup } from "./documentRequirements.js";
 
 export type { ChecklistOption, ChecklistGroup };
@@ -281,8 +281,8 @@ export async function createScopeOfWorkFromQuotation(quotationId: string, scopeN
 }
 // แก้ไขข้อมูล Scope of Work ที่มีอยู่ตาม id
 // Updates an existing Scope of Work identified by id
-export async function updateScopeOfWork(id: string, fields: ScopeOfWorkUpdateFields): Promise<ScopeOfWork> {
-  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}`, {
+export async function updateScopeOfWork(id: string, fields: ScopeOfWorkUpdateFields, options?: WriteOptions): Promise<ScopeOfWork> {
+  const { scopeOfWork } = await apiFetch<{ scopeOfWork: ScopeOfWork }>(`/scope-of-works/${encodeURIComponent(id)}${writeQuery(options)}`, {
     method: "PATCH",
     body: JSON.stringify(fields),
   });

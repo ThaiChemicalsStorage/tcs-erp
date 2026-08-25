@@ -31,6 +31,9 @@ import { RequiredFieldLabel } from "../../components/RequiredFieldLabel";
 import { FieldError } from "../../components/FieldError";
 import { ValidationSummary } from "../../components/ValidationSummary";
 import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
+import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
+import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
+import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { validateChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS, ADDITIONAL_RECIPIENT_KEY } from "../../lib/documentRequirements";
 import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint, scopeOfWorkRequiredFields } from "../../lib/validation/scopeOfWorkValidation";
 import { mergeServerValidationErrors } from "../../lib/validation/types";
@@ -319,6 +322,24 @@ export function ScopeOfWorkDocument({
   ];
   const docTour = useModuleTour("scopeOfWorkDoc", currentUserId, docTourSteps, { autoStart: !!scope });
 
+  // ── บันทึกอัตโนมัติ (2026-08-25) — ต้องเรียก hook ก่อน early return ด้านล่างเสมอ ──────────────
+  // Auto-save. Declared here, above the loading/error early returns, because hooks may not run
+  // conditionally. Both layers key off the same payload the Save button sends (`toUpdateFields`),
+  // and both are Draft-only: the follow-up fields still editable after approval keep requiring a
+  // deliberate Save so an approved document never changes without an audit entry.
+  const scopeEditable = !!scope && canEdit && scope.status === "Draft";
+  const autoSavePayload = scope && scopeEditable ? toUpdateFields(scope) : null;
+  const draftBackup = useDraftBackup<ScopeOfWorkUpdateFields>({
+    storageKey: `scopeOfWork:${scopeOfWorkId}`,
+    data: autoSavePayload,
+    enabled: scopeEditable,
+  });
+  const autoSave = useAutoSave<ScopeOfWorkUpdateFields>({
+    data: autoSavePayload,
+    enabled: scopeEditable,
+    onSave: async (fields) => { await updateScopeOfWork(scopeOfWorkId, fields, { autoSave: true }); },
+  });
+
   if (loadError) {
     return (
       <div className="flex-1 overflow-y-auto">
@@ -377,6 +398,9 @@ export function ScopeOfWorkDocument({
       setSaving(true);
       const updated = await updateScopeOfWork(scope.id, isDraft ? toUpdateFields(scope) : toFollowUpFields(scope));
       setScope(updated);
+      // ตั้งฐานเทียบของ auto-save ใหม่ ไม่งั้นจะยิงบันทึกซ้ำด้วยข้อมูลเดิมอีกรอบ
+      autoSave.markSaved();
+      draftBackup.clear();
       showToast(isDraft ? "บันทึกร่างแล้ว" : "บันทึกเลข PO / ผู้รับเอกสารแล้ว");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
@@ -682,6 +706,7 @@ export function ScopeOfWorkDocument({
         <div data-tour="sowdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
           <div data-tour="sowdoc-completion">
+            {scopeEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
             <DocumentCompletionIndicator totalCount={totalRequiredChecks} missingCount={finalizeValidation.missingCount} />
           </div>
           {canPrint && (
@@ -784,6 +809,19 @@ export function ScopeOfWorkDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:p-0 print:max-w-none">
+        {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+          <DraftRecoveryBanner
+            savedAt={draftBackup.recoveredAt}
+            onRestore={() => {
+              const recovered = draftBackup.recovered!;
+              setScope((prev) => (prev ? { ...prev, ...recovered } : prev));
+              draftBackup.clear();
+              showToast(t("common.draftRecovery.restoredToast"));
+            }}
+            onDiscard={draftBackup.dismiss}
+          />
+        )}
+
         <div ref={summaryRef}>
           <ValidationSummary missingCount={finalizeValidation.missingCount} messages={summaryMessages} />
         </div>

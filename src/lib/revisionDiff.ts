@@ -1,4 +1,4 @@
-import type { Quote, QuoteLine } from "./quotes";
+import type { Quote, QuoteLine, DiscountMode } from "./quotes";
 import type { ScopeOfWork, ScopeOfWorkItem, ScopeOfWorkPaymentConditions } from "./scopeOfWork";
 import { formatPaymentMethod } from "./scopeOfWork";
 import type { ChecklistGroup } from "./documentRequirements";
@@ -67,6 +67,13 @@ export function appendRevisionNoteEntry(predecessorRevisionNote: string, revisio
   return predecessorRevisionNote.trim() ? `${predecessorRevisionNote}\n\n${entry}` : entry;
 }
 
+// ป้ายหน่วยของส่วนลดที่ใช้ในข้อความสรุป — ไม่ระบุ = เปอร์เซ็นต์ (ข้อมูลก่อน 2026-08-25)
+// The discount unit as it reads in a summary line. An absent mode is percent, matching every
+// quotation written before the 2026-08-25 baht-discount option.
+function discountUnit(mode: DiscountMode | undefined): string {
+  return mode === "amount" ? "บาท" : "%";
+}
+
 // เปรียบเทียบรายการสินค้าของใบเสนอราคาเก่ากับใหม่ทีละตำแหน่ง
 // Compares old vs new quote line items by array position
 function diffQuoteLines(oldLines: QuoteLine[], newLines: QuoteLine[]): string[] {
@@ -83,7 +90,8 @@ function diffQuoteLines(oldLines: QuoteLine[], newLines: QuoteLine[]): string[] 
     push(out, diffText(`${label} — หน่วย`, o.unit, n.unit));
     push(out, diffNumber(`${label} — จำนวน`, o.qty, n.qty));
     push(out, diffNumber(`${label} — ราคาต่อหน่วย`, o.unitPrice, n.unitPrice));
-    push(out, diffNumber(`${label} — ส่วนลด (%)`, o.discount, n.discount));
+    push(out, diffNumber(`${label} — ส่วนลด (${discountUnit(o.discountMode)})`, o.discount, n.discount));
+    push(out, diffText(`${label} — หน่วยส่วนลด`, discountUnit(o.discountMode), discountUnit(n.discountMode)));
   }
   return out;
 }
@@ -92,7 +100,7 @@ export type QuoteRevisionDiffInput = Pick<
   Quote,
   | "client" | "project" | "address" | "taxId" | "contactName" | "contactPhone" | "contactEmail"
   | "deliveryMethod" | "deliveryAddress" | "poRef" | "paymentTerms" | "issueDate" | "expiryDate"
-  | "salesperson" | "jobTypeCode" | "jobTypeName" | "discount" | "isPotentialOpportunity"
+  | "salesperson" | "jobTypeCode" | "jobTypeName" | "discount" | "discountMode" | "isPotentialOpportunity"
   | "followUpDate" | "remarks" | "lines" | "customerId"
 >;
 
@@ -115,7 +123,8 @@ export function generateQuoteRevisionSummary(source: QuoteRevisionDiffInput, cur
   push(out, diffText("วันหมดอายุ", source.expiryDate, current.expiryDate));
   push(out, diffText("พนักงานขาย", source.salesperson, current.salesperson));
   push(out, diffText("ประเภทงาน", `${source.jobTypeCode} ${source.jobTypeName}`.trim(), `${current.jobTypeCode} ${current.jobTypeName}`.trim()));
-  push(out, diffNumber("ส่วนลดรวม (%)", source.discount, current.discount));
+  push(out, diffNumber(`ส่วนลดรวม (${discountUnit(source.discountMode)})`, source.discount, current.discount));
+  push(out, diffText("หน่วยส่วนลดรวม", discountUnit(source.discountMode), discountUnit(current.discountMode)));
   push(out, diffBool("โอกาสขายที่คาดว่าจะปิดได้ (Potential Opportunity)", source.isPotentialOpportunity, current.isPotentialOpportunity));
   push(out, diffText("วันที่ติดตามงาน", source.followUpDate, current.followUpDate));
   push(out, diffText("หมายเหตุ", source.remarks, current.remarks));

@@ -17,6 +17,23 @@ export class ApiError extends Error {
   }
 }
 
+/** ตัวเลือกที่ทุกฟังก์ชัน update ของโมดูลเอกสารรับได้ เพื่อบอกว่าคำขอนี้มาจากการบันทึกอัตโนมัติ */
+export interface WriteOptions {
+  autoSave?: boolean;
+}
+
+/**
+ * ต่อ `?autoSave=1` ให้คำขอที่มาจากการบันทึกอัตโนมัติ (เพิ่ม 2026-08-25)
+ *
+ * Marks a write as coming from the background auto-save rather than a person pressing Save. The
+ * server reads it via `isAutoSaveRequest()` (api/_lib/http.ts) and reacts identically in every
+ * respect except two: no audit-log entry, and draft documents only. Kept here, in the one module
+ * every domain lib already imports, so the flag can never be spelled differently in two places.
+ */
+export function writeQuery(options?: WriteOptions): string {
+  return options?.autoSave ? "?autoSave=1" : "";
+}
+
 // ตรวจสอบว่าผู้ใช้ตั้งค่าภาษาอังกฤษไว้หรือไม่ (อ่านจาก localStorage โดยตรง)
 // Checks whether the user's chosen language is English (reads localStorage directly)
 function currentLangIsEnglish(): boolean {

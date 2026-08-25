@@ -242,12 +242,12 @@ async function searchQuotations(query: string, ctx: AuthContext): Promise<Search
     },
     {
       projection: {
-        client: 1, customerSnapshot: 1, project: 1, status: 1, salesperson: 1, issueDate: 1, lines: 1, discount: 1,
+        client: 1, customerSnapshot: 1, project: 1, status: 1, salesperson: 1, issueDate: 1, lines: 1, discount: 1, discountMode: 1,
       },
       sort: { issueDate: -1 },
       limit: RESULT_LIMIT,
     },
-  ).toArray() as unknown as (Pick<QuoteFields, "client" | "customerSnapshot" | "project" | "status" | "salesperson" | "issueDate" | "lines" | "discount"> & { _id: string })[];
+  ).toArray() as unknown as (Pick<QuoteFields, "client" | "customerSnapshot" | "project" | "status" | "salesperson" | "issueDate" | "lines" | "discount" | "discountMode"> & { _id: string })[];
 
   return docs.map((q) => ({
     id: q._id,
@@ -256,7 +256,7 @@ async function searchQuotations(query: string, ctx: AuthContext): Promise<Search
     status: q.status,
     salesperson: q.salesperson,
     issueDate: q.issueDate,
-    amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0),
+    amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0, q.discountMode),
   }));
 }
 

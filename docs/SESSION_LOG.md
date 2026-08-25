@@ -4,7 +4,74 @@
 
 ---
 
-## Session — 2026-08-21 (absolute latest), User manual brought current + manual-toolchain bugs
+## Session — 2026-08-25 (absolute latest), Auto-save everywhere + baht discounts
+
+### What was asked
+Two things, in one Thai message: quotations lose everything if you forget to press "บันทึกร่าง", so
+auto-save them — and every other document too; and let the discount be typed as a baht amount
+instead of a percentage.
+
+### The judgement call that shaped the auto-save design
+"Auto-save" splits into two genuinely different problems, and only one of them is a server problem.
+A quotation that already exists can simply be PATCHed in the background. A quotation being created
+for the first time has **no record to PATCH** — and that is precisely the case that was reported. The
+tempting fix, auto-creating the record as soon as the form looks valid, quietly manufactures junk
+drafts (and consumes document numbers) every time someone opens the form and changes their mind. So
+the new-document case got a `localStorage` snapshot with an explicit recovery offer instead, and the
+existing-document case got the real server save. Both layers ship together because they fail
+differently: the local one survives a crash and a dead network, the server one survives a different
+browser.
+
+Two constraints fell out of looking at what a background write actually touches, both enforced
+server-side rather than hidden in the UI:
+
+- **The audit log would have been destroyed.** Every document handler writes an
+  "แก้ไขเอกสาร X" row per update. At one write per 2.5s of typing, a single editing session buries
+  every deliberate action the log exists to record. `?autoSave=1` / `isAutoSaveRequest()` suppresses
+  the entry — and nothing else.
+- **Drafts only.** `canEdit` on a quotation does *not* consider status; an approved quotation is
+  still editable through the form. Auto-saving those would silently mutate approved documents with
+  no audit trail behind them. 409 on anything past ร่าง.
+
+### What the discount work turned up
+The requested change was small. Threading `discountMode` through everything that reads `discount`
+surfaced two things worth more than the feature itself:
+
+1. **`api/_lib/arHandler.ts` had a hardcoded `(1 - discount/100)`** when building invoice line
+   amounts. It would have silently billed the wrong figure for any quotation using a baht line
+   discount. Real defect, fixed.
+2. **The money formula existed twice** — `src/lib/quotes.tsx`'s `computeTotals()` and
+   `api/_lib/quoteAmounts.ts` — with a file-header comment in the latter insisting the two "can never
+   drift apart." They were two copies; the comment was aspiration, not a mechanism. Moved the formula
+   into a React-free `src/lib/quoteMath.ts` that both import, following the pattern
+   `src/lib/validation/*` already established. Now the claim is structurally true.
+
+Also hardened a reachable dead end: switching a ฿500 discount back to `%` would have left 500% in the
+field, which the server rejects — the document would have stopped auto-saving with only a small red
+chip to say so. Switching to `%` now caps at 100, and the totals visibly change so nothing is hidden.
+
+### Verification
+Ran in the real app this time, not just tsc/lint/build/test (the 2026-08-21 session established that
+Playwright reaches `localhost:3000` fine; that held again). Confirmed live: ฿200 line discount +
+฿100 special discount on ฿1,000 → **฿749.00**, matching the server's independently recomputed
+`amount`; the auto-save chip stepping pending → saving → "บันทึกอัตโนมัติแล้ว"; the recovery banner
+appearing, restoring, and being dismissed on a brand-new quotation; **the audit log confirmed to
+have zero new rows** from any of it. Toolbar re-checked at 1440px and 1366px. Every document touched
+during testing was restored to its original values. 270/270 tests (6 new).
+
+### What's next / open
+- `useAutoSave` itself has no unit test — the project has no jsdom/`@testing-library/react` setup, so
+  it is browser-verified only. Logged in TODO.md.
+- Scope of Work's post-approval follow-up fields (PO number, document recipients) deliberately stay
+  manual-save. If the owner wants those auto-saved too, someone has to decide what happens to the
+  audit trail first.
+- The 2026-08-21 Service Report finding ("a never-saved report can't take photos") is **not** fixed
+  by this work — the local snapshot recovers the form, but the checklist is still read-only before
+  the first save. Still needs the owner to pick an option.
+
+---
+
+## Session — 2026-08-21, User manual brought current + manual-toolchain bugs
 
 ### The finding that matters most: a blocker that was never real
 TODO.md carries ~40 items reading "verified via tsc/lint/build/test only — the automated browser

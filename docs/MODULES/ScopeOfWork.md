@@ -803,6 +803,22 @@ See [RBAC.md](../RBAC.md) "Scope of Work" for the 7 permissions and default-role
 type-imported into the API bundle, so (per the standing rule in `docs/CLAUDE.md`) it must never
 gain a *value* import that transitively pulls in JSX/React.
 
+## Auto-save (added 2026-08-25)
+
+This module's document editor auto-saves like every other one — shared
+`src/hooks/useAutoSave.ts`, rendered through `AutoSaveIndicator` (toolbar chip, next to Save) and
+`DraftRecoveryBanner` (the "พบร่างที่ยังไม่ได้บันทึก" offer). Two layers: a `localStorage` snapshot
+~700 ms after typing stops, and a silent `PATCH ...?autoSave=1` 2.5 s after typing stops. The hook is
+fed the exact payload the Save button sends (`toUpdateFields(draft)`), never the whole loaded record.
+
+**Draft-only, and no audit entry.** The server rejects `?autoSave=1` on anything past Draft (409) and
+skips the audit-log row for auto-saved writes — otherwise one editing session would bury the log's
+real, deliberate entries. Permissions, validation and status gates are unchanged. See
+[../API.md](../API.md) "Auto-save writes", [../UI_GUIDELINES.md](../UI_GUIDELINES.md) "Auto-Save
+Indicator & Draft Recovery", and [../CHANGELOG.md](../CHANGELOG.md) 2026-08-25.
+
+**Module-specific**: the follow-up fields still editable after approval (customer PO number, document recipients) are deliberately **excluded** — they change an approved document, so they keep requiring a real Save with the audit entry that comes with it.
+
 ## Files
 
 - `src/lib/scopeOfWork.ts` — types + `apiFetch` wrapper functions.

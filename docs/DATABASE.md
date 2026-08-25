@@ -690,7 +690,8 @@ interface QuoteLine {
   unit: string;
   qty: number;
   unitPrice: number;
-  discount: number;    // line-level discount %
+  discount: number;    // line-level discount — % or baht, per `discountMode`
+  discountMode?: DiscountMode;  // added 2026-08-25; "percent" | "amount". ABSENT MEANS "percent"
   tags: string[];
   subDetails: SubDetail[];  // pinned rows in the editor; a product's Product.specifications or a
                              // Quotation Template item's specifications fold in here on add/apply
@@ -712,7 +713,8 @@ interface Quote {
   salesperson: string;          // real per-quote field; defaults to the signed-in user's name on new quotes
   interest: QuoteInterest;
   lines: QuoteLine[];
-  discount: number;               // quote-level discount %
+  discount: number;               // quote-level "ส่วนลดพิเศษ" — % or baht, per `discountMode`
+  discountMode?: DiscountMode;    // added 2026-08-25; "percent" | "amount". ABSENT MEANS "percent"
   contactName: string;
   contactPhone: string;
   contactEmail: string;
@@ -761,6 +763,18 @@ interface CustomerSnapshot {
   taxId: string; deliveryMethod: string; projectName: string; deliveryAddress: string;
 }
 ```
+**`discountMode` (added 2026-08-25, both on `Quote` and on each `QuoteLine`)** is deliberately
+**optional with no migration**: every quotation written before 2026-08-25 has no such field, and an
+absent `discountMode` is read as `"percent"` everywhere — the unit those numbers already meant — so
+historical totals are byte-identical to what they were. It is only ever written when the client
+actually chose a unit (`POST /api/quotes` spreads it in conditionally), so untouched old documents
+stay untouched. Line-level and document-level modes are independent of each other. The single
+implementation of the resulting math is `src/lib/quoteMath.ts`, re-exported by
+`api/_lib/quoteAmounts.ts` — see [MODULES/Quotation.md](./MODULES/Quotation.md) "Discount unit
+(% / ฿)". Bounds differ per unit (`api/_lib/quoteValidation.ts`): a percentage is capped at 100, a
+baht amount is bounded like any other money field, and an over-large baht discount clamps the base
+to zero rather than producing a negative total.
+
 All document fields below `discount` were hardcoded placeholder text on the form until 2026-07-08 (see [CHANGELOG.md](./CHANGELOG.md)) — they are now real, per-quote, controlled data. Empty ones are auto-hidden in the print/PDF view rather than printing a blank row (see [UI_GUIDELINES.md](./UI_GUIDELINES.md) Print/PDF section). `createdByUserId`/`approvalHistory` were added 2026-07-08 for the approval workflow — see [RBAC.md](./RBAC.md). `contactEmail`/`deliveryMethod`/`deliveryAddress`/`project`/`remarks` were added 2026-07-09 for the print/PDF redesign — `remarks` in particular fixes a latent bug where the "หมายเหตุ / เงื่อนไข" textarea was `defaultValue`-only (uncontrolled, never saved); it's now a real controlled field like the rest. `updatedBy` was added 2026-07-09 for the production-readiness audit-field requirement — deliberately excluded from `QuoteUpdateFields` (the client-writable field set), only ever set server-side from the authenticated session. `customerId`/`customerSnapshot` (added 2026-07-14, replacing the short-lived `issuerCompanyId`/`issuerCompanySnapshot` pair from 2026-07-13) are set by `POST /api/quotes` and (Draft-only, for `customerId` specifically) `PATCH /api/quotes/:id`/`POST /api/quotes/:id/workflow` — see `resolveCustomerIdUpdate()`/`buildCustomerSnapshot()` in `api/handlers/quotes.ts`, and [MODULES/Customer.md](./MODULES/Customer.md). `quotationTemplateId`/`quotationTemplateName`/`quotationTemplateVersion` (added 2026-07-14) are frozen provenance metadata set only by `POST /api/quotes` when a quote is created from the Create Quotation wizard's Preview step — the client sends only `quotationTemplateId`; `quotationTemplateName`/`quotationTemplateVersion` are always re-derived server-side from the matched `quotation_templates` record (`validateQuotationTemplate()` in `api/_lib/quoteValidation.ts`, mirroring `validateJobType()`), never trusted from the client, and structurally excluded from `PATCH /api/quotes/:id`'s field whitelist so they can never change after creation. All three are optional — a quote created without the wizard (or before this feature existed) simply has them `undefined`. `QuoteLine.isSectionHeader` (added 2026-07-14) similarly defaults to `undefined`/falsy on every pre-existing line — see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md) "Template → Quote Snapshot Semantics." `checklistGroups` existed briefly (added 2026-07-16, removed the same day per an explicit business decision to make Quotation fields optional and remove its "ข้อกำหนดเอกสารและการส่งมอบ" section) — see "Required-Field Validation" in [MODULES/Quotation.md](./MODULES/Quotation.md) and CHANGELOG.md.
 
 Indexes added 2026-07-09 (`quotes` had none beyond default `_id` before this): `{ status: 1 }`, `{ createdByUserId: 1 }` (already used for ownership checks), `{ issueDate: 1 }` (needed for the Dashboard's monthly revenue aggregation — see below). Added 2026-07-10: `{ jobTypeCode: 1 }`, `{ salesperson: 1 }`, `{ followUpDate: 1 }`, serving the Dashboard filters/grouping; later the same day, `{ isPotentialOpportunity: 1 }` and `{ client: 1 }` (Expected Sales/forecast filtering and customer-analytics grouping, respectively — both already-hot query paths that had no supporting index). No soft-delete field — the `ยกเลิก` (Cancelled) terminal workflow status already serves that role, so a `createdAt`/`updatedAt`/`isDeleted`/`department` index (all requested by a generic Dashboard index checklist) would be moot: `Quote` has no `createdAt`/`updatedAt` fields (`issueDate`/`date`/`updatedBy` serve that role instead) and no `isDeleted`/`department` field at all (`User.department`, itself free text, is what Dashboard department filtering actually joins against — see below).

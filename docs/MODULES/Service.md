@@ -416,6 +416,28 @@ link with a 7-day expiry** (the owner's recorded preference against always-live 
   `${APP_URL}/api/line/webhook`, and a real HTTPS `APP_URL` (LINE refuses non-HTTPS URIs in
   buttons). Tested in `tests/api/serviceApproval.test.ts` (6 tests, incl. webhook signature).
 
+## Auto-save (added 2026-08-25)
+
+The report editor auto-saves like every other document editor — shared `src/hooks/useAutoSave.ts`,
+rendered through `AutoSaveIndicator` (toolbar chip) and `DraftRecoveryBanner`. Two layers: a
+`localStorage` snapshot ~700 ms after typing stops, and a silent `PATCH /api/service-reports/:id
+?autoSave=1` 2.5 s after typing stops for a report that is **already saved and still Draft**. The
+server rejects `?autoSave=1` past Draft (409) and writes no audit-log entry for an auto-saved write.
+
+**Module-specific:**
+
+- A **brand-new report** (`serviceReportId === "new"`) has no server record, so it gets the local
+  layer only; the toolbar reads "เก็บร่างไว้ในเครื่องให้อัตโนมัติ". Its snapshot deliberately carries
+  `selectedTemplateId` alongside the form and checklist values — without the template choice, restored
+  answers would have no checklist structure to belong to. It is cleared the moment the report is
+  created, so the next new report starts clean.
+- The background save does **not** call `applyServerReport()` the way the manual Save does: the
+  response is discarded rather than written back into `form`/`checklist`, because the engineer may be
+  mid-entry when it lands.
+- **This does not fix the 2026-08-21 "a never-saved report can't attach photos" issue** (TODO.md
+  High Priority). The snapshot recovers the form if you navigate away, but the checklist table is
+  still read-only before the first save, so there is still no photo control to press.
+
 ## Routes
 
 See [API.md](../API.md) "Service Templates + Service Reports" for the full method/auth/route table

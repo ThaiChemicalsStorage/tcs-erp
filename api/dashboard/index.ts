@@ -11,7 +11,7 @@ import {
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
-import { computeQuoteAmountBeforeVat, computeQuoteAmountWithVat } from "../_lib/quoteAmounts.js";
+import { computeQuoteAmountBeforeVat, computeQuoteAmountWithVat, type DiscountMode } from "../_lib/quoteAmounts.js";
 import { dedupeQuotesByRevisionChain } from "../_lib/quoteRevisions.js";
 
 const WON_STATUS = "ปิดการขายสำเร็จ";
@@ -128,7 +128,7 @@ type QuoteCalcDoc = Pick<
   QuoteFields,
   "status" | "client" | "salesperson" | "jobTypeCode" | "jobTypeName" |
   "isPotentialOpportunity" | "followUpDate" | "issueDate" | "expiryDate" | "approvalHistory" | "interest" |
-  "lines" | "discount"
+  "lines" | "discount" | "discountMode"
 > & { _id: string; amount: number };
 
 /**
@@ -274,8 +274,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const salespersonFilter = queryString(req, "salesperson");
     const departmentFilter = queryString(req, "department");
     const vatMode: "pre" | "post" = queryString(req, "vat") === "post" ? "post" : "pre";
-    const quoteAmount = (lines: QuoteFields["lines"] | undefined, discountPct: number): number =>
-      vatMode === "post" ? computeQuoteAmountWithVat(lines ?? [], discountPct) : computeQuoteAmountBeforeVat(lines ?? [], discountPct);
+    // `discountMode` (added 2026-08-25) says whether `discount` is a percentage or a baht amount.
+    // Absent — which is every quotation issued before then — means percent, so historical figures
+    // are unchanged.
+    const quoteAmount = (lines: QuoteFields["lines"] | undefined, discount: number, discountMode?: DiscountMode): number =>
+      vatMode === "post"
+        ? computeQuoteAmountWithVat(lines ?? [], discount, discountMode)
+        : computeQuoteAmountBeforeVat(lines ?? [], discount, discountMode);
     const today = todayIsoDate();
 
     const [customers, leads, quotes, products, categories, users, jobTypes, auditLog] = await Promise.all([
@@ -374,7 +379,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const projection = {
       status: 1, client: 1, salesperson: 1, jobTypeCode: 1, jobTypeName: 1,
       isPotentialOpportunity: 1, followUpDate: 1, issueDate: 1, expiryDate: 1, approvalHistory: 1, interest: 1,
-      lines: 1, discount: 1,
+      lines: 1, discount: 1, discountMode: 1,
     } as const;
 
     const [
@@ -411,7 +416,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // WON_STATUS filter is applied in JS below, after dedup.
       quotes.find(
         { ...salespersonOnlyMatch, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } },
-        { projection: { status: 1, issueDate: 1, lines: 1, discount: 1 } },
+        { projection: { status: 1, issueDate: 1, lines: 1, discount: 1, discountMode: 1 } },
       ).toArray(),
       products.aggregate<{ _id: string; count: number }>([
         { $match: { archived: false } },
@@ -430,7 +435,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // consistent with "the date filter must affect every widget" (see MODULES/Dashboard.md).
       quotes.find(
         fullMatch,
-        { projection: { status: 1, client: 1, salesperson: 1, followUpDate: 1, lines: 1, discount: 1 } },
+        { projection: { status: 1, client: 1, salesperson: 1, followUpDate: 1, lines: 1, discount: 1, discountMode: 1 } },
       ).toArray(),
       // Deliberately company-wide only (no salesperson filter) — the forecast's weighting baseline is a
       // trailing-12-month win rate meant to be a stable, low-noise reference; narrowing it to one
@@ -471,7 +476,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // consistently, using each chain's LATEST revision (never the superseded original, never a sum
     // across revisions), per explicit 2026-07-22 business decision.
     const docs = dedupeQuotesByRevisionChain(
-      (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: quoteAmount(q.lines, q.discount ?? 0) })),
+      (docsRaw as QuoteCalcDoc[]).map((q) => ({ ...q, client: q.client ?? "", salesperson: q.salesperson ?? "", amount: quoteAmount(q.lines, q.discount ?? 0, q.discountMode) })),
     );
 
     // Data-quality telemetry (2026-07-14, Codex review Medium finding): a doc with `lines` entirely
@@ -705,10 +710,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Deduped by revision chain (2026-07-22, Rewrite double-counting fix) — otherwise a rewritten
     // quotation with a follow-up date could surface as two separate reminders (one per revision)
     // instead of one, using whichever revision is actually current.
-    const followUpDocs = dedupeQuotesByRevisionChain(followUpDocsRaw as Array<Pick<QuoteFields, "status" | "client" | "salesperson" | "followUpDate" | "lines" | "discount"> & { _id: string }>)
+    const followUpDocs = dedupeQuotesByRevisionChain(followUpDocsRaw as Array<Pick<QuoteFields, "status" | "client" | "salesperson" | "followUpDate" | "lines" | "discount" | "discountMode"> & { _id: string }>)
       .filter((q) => q.followUpDate && !TERMINAL_STATUSES.has(q.status));
     const toFollowUpSummary = (q: (typeof followUpDocs)[number]) => ({
-      id: q._id, client: q.client, salesperson: q.salesperson, followUpDate: q.followUpDate, amount: quoteAmount(q.lines, q.discount ?? 0),
+      id: q._id, client: q.client, salesperson: q.salesperson, followUpDate: q.followUpDate, amount: quoteAmount(q.lines, q.discount ?? 0, q.discountMode),
     });
     const followUps = {
       today: followUpDocs.filter((q) => q.followUpDate === today).map(toFollowUpSummary),
@@ -1086,7 +1091,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // chain only contributes revenue here if its LATEST revision is Won; a Won original superseded
     // by a still-open (or since-lost) rewrite must not count, and a chain that only became Won via
     // a later revision must count using that revision's own amount, not the original's.
-    const revenueTrendDocs = dedupeQuotesByRevisionChain(revenueTrendDocsRaw as Array<{ _id: string; status: string; issueDate: string; lines: QuoteFields["lines"]; discount: number }>)
+    const revenueTrendDocs = dedupeQuotesByRevisionChain(revenueTrendDocsRaw as Array<{ _id: string; status: string; issueDate: string; lines: QuoteFields["lines"]; discount: number; discountMode?: DiscountMode }>)
       .filter((q) => q.status === WON_STATUS);
     const revenueByWeekMap = new Map<string, number>();
     const revenueByMonthMap = new Map<string, number>();
@@ -1098,7 +1103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const wk = isoWeekKey(date);
       const monthKey = r.issueDate.slice(0, 7);
       const qk = quarterKey(y, m - 1);
-      const amt = quoteAmount(r.lines, r.discount ?? 0);
+      const amt = quoteAmount(r.lines, r.discount ?? 0, r.discountMode);
       revenueByWeekMap.set(wk, (revenueByWeekMap.get(wk) ?? 0) + amt);
       revenueByMonthMap.set(monthKey, (revenueByMonthMap.get(monthKey) ?? 0) + amt);
       revenueByQuarterMap.set(qk, (revenueByQuarterMap.get(qk) ?? 0) + amt);

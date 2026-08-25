@@ -1,6 +1,6 @@
 import { HttpError } from "./http.js";
 import type { QuoteFields } from "./collections.js";
-import { computeQuoteAmountWithVat } from "./quoteAmounts.js";
+import { computeQuoteAmountWithVat, type DiscountMode } from "./quoteAmounts.js";
 
 /**
  * Server-side quote payload validation — added per the 2026-07-10 Codex review's Critical finding
@@ -21,6 +21,8 @@ const MAX_SUBDETAILS_PER_LINE = 50;
 const MAX_SHORT_TEXT = 300;
 const MAX_LONG_TEXT = 5000;
 const MAX_LINE_TEXT = 2000;
+/** ส่วนลดที่กรอกเป็นจำนวนเงิน ใช้เพดานเดียวกับราคาต่อหน่วย */
+const MAX_DISCOUNT_AMOUNT = 1_000_000_000;
 
 function isFiniteNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
@@ -87,7 +89,17 @@ function sanitizeLine(raw: unknown, index: number): QuoteFields["lines"][number]
     unit: sanitizeText(r.unit, `หน่วยของรายการที่ ${index + 1}`, 50),
     qty: sanitizeNumber(r.qty, `จำนวนของรายการที่ ${index + 1}`, { min: 0, max: 1_000_000 }),
     unitPrice: sanitizeNumber(r.unitPrice, `ราคาต่อหน่วยของรายการที่ ${index + 1}`, { min: 0, max: 1_000_000_000 }),
-    discount: sanitizeNumber(r.discount, `ส่วนลดของรายการที่ ${index + 1}`, { min: 0, max: 100 }),
+    // ส่วนลดของรายการตีความตาม `discountMode` ของรายการนั้น — เพดานจึงต่างกัน (% สูงสุด 100, บาทสูงสุดเท่าราคา)
+    // The line's discount is read in the unit its own `discountMode` names, so the bound differs:
+    // a percentage can't exceed 100, a baht amount is bounded like any other money field. An
+    // over-large baht discount is not rejected here — `quoteMath.ts` clamps it to the line total,
+    // so the worst a caller can do is zero the line out, never push it negative.
+    discount: sanitizeNumber(
+      r.discount,
+      `ส่วนลดของรายการที่ ${index + 1}`,
+      { min: 0, max: r.discountMode === "amount" ? MAX_DISCOUNT_AMOUNT : 100 },
+    ),
+    discountMode: sanitizeDiscountMode(r.discountMode, `หน่วยส่วนลดของรายการที่ ${index + 1}`),
     tags,
     subDetails,
     // Optional, defaults falsy — added 2026-07-14 for Quotation Templates' section-header lines
@@ -107,8 +119,8 @@ export function validateLines(raw: unknown): QuoteFields["lines"] {
 }
 
 /** The VAT-included grand total actually persisted as `Quote.amount` — see `./quoteAmounts.ts`. */
-export function computeQuoteAmount(lines: QuoteFields["lines"], discountPct: number): number {
-  return computeQuoteAmountWithVat(lines, discountPct);
+export function computeQuoteAmount(lines: QuoteFields["lines"], discount: number, discountMode?: DiscountMode): number {
+  return computeQuoteAmountWithVat(lines, discount, discountMode);
 }
 
 /**
@@ -169,9 +181,29 @@ export function sanitizeShortText(v: unknown, fieldLabel: string, required = fal
 export function sanitizeLongText(v: unknown, fieldLabel: string): string {
   return sanitizeText(v, fieldLabel, MAX_LONG_TEXT);
 }
-export function sanitizeDiscountPct(v: unknown): number {
+/**
+ * ส่วนลดพิเศษท้ายเอกสาร — ตีความตาม `discountMode` ที่ส่งมาคู่กัน (ไม่ส่ง = เปอร์เซ็นต์)
+ * The document-level special discount. Bounded by the unit it is expressed in: a percentage can't
+ * exceed 100, a baht amount is bounded like any other money field. Callers must pass the same
+ * `discountMode` they are about to persist, otherwise a baht discount would be rejected as an
+ * out-of-range percentage.
+ */
+export function sanitizeDiscountPct(v: unknown, discountMode?: DiscountMode): number {
   if (v === undefined) return 0;
-  return sanitizeNumber(v, "ส่วนลดรวม", { min: 0, max: 100 });
+  return sanitizeNumber(v, "ส่วนลดรวม", { min: 0, max: discountMode === "amount" ? MAX_DISCOUNT_AMOUNT : 100 });
+}
+
+/**
+ * หน่วยของส่วนลด — ไม่ส่งมา (ข้อมูลเดิมก่อน 2026-08-25) ถือเป็นเปอร์เซ็นต์
+ * A discount's unit. `undefined` is returned for an absent value rather than defaulting to
+ * `"percent"` so the field stays genuinely optional on the stored document: every quotation
+ * written before 2026-08-25 has no `discountMode` at all and must keep computing as a percentage,
+ * and nothing here should start writing a field onto documents that never had one.
+ */
+export function sanitizeDiscountMode(v: unknown, fieldLabel: string): DiscountMode | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (v !== "percent" && v !== "amount") throw new HttpError(400, `${fieldLabel}ไม่ถูกต้อง`);
+  return v;
 }
 export function sanitizeBoolean(v: unknown, fieldLabel: string): boolean {
   if (v === undefined) return false;

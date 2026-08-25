@@ -279,6 +279,22 @@ signing — it does not capture/embed a digital customer signature the way Work 
 via `SignaturePad`. Worth revisiting if digital signature capture on delivery documents becomes a
 real requirement; not pursued as part of this removal.
 
+## Auto-save (added 2026-08-25)
+
+This module's document editor auto-saves like every other one — shared
+`src/hooks/useAutoSave.ts`, rendered through `AutoSaveIndicator` (toolbar chip, next to Save) and
+`DraftRecoveryBanner` (the "พบร่างที่ยังไม่ได้บันทึก" offer). Two layers: a `localStorage` snapshot
+~700 ms after typing stops, and a silent `PATCH ...?autoSave=1` 2.5 s after typing stops. The hook is
+fed the exact payload the Save button sends (`toUpdateFields(draft)`), never the whole loaded record.
+
+**Draft-only, and no audit entry.** The server rejects `?autoSave=1` on anything past Draft (409) and
+skips the audit-log row for auto-saved writes — otherwise one editing session would bury the log's
+real, deliberate entries. Permissions, validation and status gates are unchanged. See
+[../API.md](../API.md) "Auto-save writes", [../UI_GUIDELINES.md](../UI_GUIDELINES.md) "Auto-Save
+Indicator & Draft Recovery", and [../CHANGELOG.md](../CHANGELOG.md) 2026-08-25.
+
+Applies to the three document editors in this module — ใบเบิกและใบคืนวัสดุ (Material Requisition), ใบสั่งงาน (Job Order) and ใบขอซื้อ (Purchase Request). All three already rejected non-Draft updates server-side, so the Draft-only rule needed no new guard; only the audit-entry suppression was added.
+
 ## Files
 
 - `src/lib/project.ts` / `materialRequisition.ts` / `jobOrder.ts` / `purchaseRequest.ts` — types +

@@ -13,7 +13,7 @@
  * `SC-2026-08-009`, confirmed with the owner rather than assumed.
  */
 
-import { apiFetch } from "./apiClient.js";
+import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 
 export type ProductionOrderStatus = "Draft" | "PendingApproval" | "Final";
 
@@ -116,8 +116,8 @@ export async function createProductionOrderFromScope(scopeOfWorkId: string): Pro
   return productionOrder;
 }
 export type ProductionOrderUpdateFields = Partial<Omit<ProductionOrder, "id" | "createdAt" | "createdBy" | "isDeleted">>;
-export async function updateProductionOrder(id: string, fields: ProductionOrderUpdateFields): Promise<ProductionOrder> {
-  const { productionOrder } = await apiFetch<{ productionOrder: ProductionOrder }>(`/production-orders/${encodeURIComponent(id)}`, {
+export async function updateProductionOrder(id: string, fields: ProductionOrderUpdateFields, options?: WriteOptions): Promise<ProductionOrder> {
+  const { productionOrder } = await apiFetch<{ productionOrder: ProductionOrder }>(`/production-orders/${encodeURIComponent(id)}${writeQuery(options)}`, {
     method: "PATCH", body: JSON.stringify(fields),
   });
   return productionOrder;

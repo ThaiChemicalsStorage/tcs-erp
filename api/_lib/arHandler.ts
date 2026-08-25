@@ -11,7 +11,7 @@ import {
   type ArWorkClassification, type ArDocumentType, type ArBillingStatus, type ArDocumentCustomerSnapshot,
   type ScopeOfWorkFields, type QuoteFields, countersCollection, type StockMovementFields,
 } from "./collections.js";
-import { computeQuoteAmountBeforeVat } from "./quoteAmounts.js";
+import { computeQuoteAmountBeforeVat, lineSubtotal } from "./quoteAmounts.js";
 import { nextArDocNumber } from "./documentNumbering.js";
 import {
   round2, computeDownPaymentLineAmount, computeDepositDeductionLineAmount, computeArDocumentTotals, computeDueDate,
@@ -71,8 +71,9 @@ async function loadTotalContractValueExVat(scope: WithId<ScopeOfWorkFields>): Pr
   const quote = await quotes.findOne({ _id: scope.quotationId });
   if (!quote) throw new HttpError(400, "ไม่พบใบเสนอราคาต้นทางของ Scope of Work นี้ ไม่สามารถคำนวณมูลค่างานได้");
   const total = computeQuoteAmountBeforeVat(
-    quote.lines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice, discount: l.discount })),
+    quote.lines.map((l) => ({ qty: l.qty, unitPrice: l.unitPrice, discount: l.discount, discountMode: l.discountMode })),
     quote.discount,
+    quote.discountMode,
   );
   return { total: round2(total), quote };
 }
@@ -371,7 +372,10 @@ async function buildDocumentLines(
       qty: l.qty,
       unit: l.unit,
       unitPrice: l.unitPrice,
-      amount: round2(l.qty * l.unitPrice * (1 - l.discount / 100)),
+      // ผ่าน lineSubtotal() เสมอ เพื่อให้ส่วนลดที่กรอกเป็นบาท (2026-08-25) คิดถูกเหมือนกับหน้าใบเสนอราคา
+      // Always via `lineSubtotal()` so a line whose discount was entered as a baht amount
+      // (2026-08-25) bills exactly what the quotation showed, not a percentage misreading of it.
+      amount: round2(lineSubtotal(l)),
     }));
   const deductionLines: ArDocumentLine[] = priorDeposits.map((dep, i) => ({
     seq: itemLines.length + i + 1,

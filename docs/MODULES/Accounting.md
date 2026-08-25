@@ -626,6 +626,20 @@ committed/deployed by accident. This doc is the durable, safe-to-commit summary 
   `stock_movements` ledger (2026-08-18, not Accounting-owned — see [Product.md](./Product.md)).
 - **Domain lib**: `src/lib/accounting.ts`.
 
+## Quotation baht discounts — AR line-amount fix (2026-08-25)
+
+`api/_lib/arHandler.ts` built each invoice/tax-invoice line amount with a hardcoded
+`round2(l.qty * l.unitPrice * (1 - l.discount / 100))`, and computed a Scope of Work's total contract
+value by passing the quotation's lines through without their discount unit. Once a quotation could
+express a discount as a **baht amount** (see [Quotation.md](./Quotation.md) "Discount unit (% / ฿)"),
+both would have read that number as a percentage and billed the wrong figure — e.g. a ฿200 line
+discount read as 200%, zeroing the line. Both now go through the shared `lineSubtotal()` /
+`computeQuoteAmountBeforeVat()` from `api/_lib/quoteAmounts.ts`, which respect `discountMode`.
+
+No AR document schema changed: `ArDocumentFields.discount` was already a baht amount
+(`valueAmount = subtotal - discount`, `api/_lib/arCalculations.ts`) — accounting had always worked
+this way, and it was the quotation that was percentage-only.
+
 ## Known Issues
 
 - Receipt amount is always the tax invoice's full net total — no WHT/bank-fee reconciliation yet

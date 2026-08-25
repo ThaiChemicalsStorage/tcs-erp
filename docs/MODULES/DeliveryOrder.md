@@ -305,6 +305,22 @@ FM-SL-05 form to PDF and attaching it via the Scope of Work's normal ไฟล�
 field may linger on `delivery_orders` documents that had a link minted during the feature's brief
 lifetime — harmless, nothing reads it. See CHANGELOG.md 2026-07-24.
 
+## Auto-save (added 2026-08-25)
+
+This module's document editor auto-saves like every other one — shared
+`src/hooks/useAutoSave.ts`, rendered through `AutoSaveIndicator` (toolbar chip, next to Save) and
+`DraftRecoveryBanner` (the "พบร่างที่ยังไม่ได้บันทึก" offer). Two layers: a `localStorage` snapshot
+~700 ms after typing stops, and a silent `PATCH ...?autoSave=1` 2.5 s after typing stops. The hook is
+fed the exact payload the Save button sends (`toUpdateFields(draft)`), never the whole loaded record.
+
+**Draft-only, and no audit entry.** The server rejects `?autoSave=1` on anything past Draft (409) and
+skips the audit-log row for auto-saved writes — otherwise one editing session would bury the log's
+real, deliberate entries. Permissions, validation and status gates are unchanged. See
+[../API.md](../API.md) "Auto-save writes", [../UI_GUIDELINES.md](../UI_GUIDELINES.md) "Auto-Save
+Indicator & Draft Recovery", and [../CHANGELOG.md](../CHANGELOG.md) 2026-08-25.
+
+**Module-specific**: this editor keeps a single `deliveryOrder` state that is both the loaded record and the edit buffer, so the background save deliberately does **not** write the server's response back into it — that would overwrite whatever was typed while the request was in flight.
+
 ## Files
 
 - `src/lib/deliveryOrder.ts` — types + `fetch*`/`create*`/`update*`/`finalize*`/`refresh*`/`delete*`

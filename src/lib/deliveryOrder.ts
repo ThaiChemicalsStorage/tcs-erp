@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiClient.js";
+import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 
 export type DeliveryOrderStatus = "Draft" | "PendingApproval" | "Final";
 
@@ -91,8 +91,8 @@ export async function createDeliveryOrderFromScope(scopeOfWorkId: string): Promi
   });
   return deliveryOrder;
 }
-export async function updateDeliveryOrder(id: string, fields: DeliveryOrderUpdateFields): Promise<DeliveryOrder> {
-  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}`, {
+export async function updateDeliveryOrder(id: string, fields: DeliveryOrderUpdateFields, options?: WriteOptions): Promise<DeliveryOrder> {
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}${writeQuery(options)}`, {
     method: "PATCH",
     body: JSON.stringify(fields),
   });

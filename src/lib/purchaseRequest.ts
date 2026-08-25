@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiClient.js";
+import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 
 /**
  * Purchase Request (form FMPU05 Rev.02, printed footer reads "FM-PU-05") — added 2026-08-18.
@@ -132,8 +132,8 @@ export async function fetchPurchaseRequest(id: string): Promise<PurchaseRequest>
   return purchaseRequest;
 }
 export type PurchaseRequestUpdateFields = Partial<Omit<PurchaseRequest, "id" | "createdAt" | "createdBy" | "isDeleted">>;
-export async function updatePurchaseRequest(id: string, fields: PurchaseRequestUpdateFields): Promise<PurchaseRequest> {
-  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
+export async function updatePurchaseRequest(id: string, fields: PurchaseRequestUpdateFields, options?: WriteOptions): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}${writeQuery(options)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return purchaseRequest;
 }
 export async function finalizePurchaseRequest(id: string): Promise<PurchaseRequest> {

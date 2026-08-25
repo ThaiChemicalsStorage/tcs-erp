@@ -4,7 +4,90 @@
 
 ---
 
-## 2026-08-21d (absolute latest) — Service photos: cropped in every view, and invisible to the customer on Normal items
+## 2026-08-25 (absolute latest) — Auto-save for every document editor, and discounts you can type in baht
+
+Two owner requests in one pass: *"เวลาสร้างใบเสนอราคาแล้วถ้าลืมกดบันทึกร่างแล้วมันหายไปเลย ให้มันบันทึกร่าง
+อัตโนมัติไว้ ทำ auto-save ให้ทุกเอกสารเลย"* and *"เปอร์เซ็นต์ส่วนลดช่วยระบุเป็นจำนวนเงินเลยได้ไหมไม่ต้องเป็น
+เปอร์เซ็นต์"*.
+
+### 1. Auto-save — two layers, because they fail differently
+
+New shared hooks in `src/hooks/useAutoSave.ts`, rendered through two new shared components
+(`AutoSaveIndicator.tsx`, `DraftRecoveryBanner.tsx`):
+
+- **`useDraftBackup()` — a local snapshot in `localStorage`**, written ~700 ms after the user stops
+  typing. Costs nothing, needs no network, and survives a closed tab, a crash, or a click onto
+  another page mid-edit. Crucially it is the **only** layer that can protect a document that does
+  not exist on the server yet — a brand-new quotation being filled in for the first time, which is
+  exactly the case the owner reported. Reopening the form offers the snapshot back through a gold
+  banner ("พบร่างที่ยังไม่ได้บันทึก … กู้คืนร่างนี้ / ทิ้งร่างนี้"). Recovery is **offered, never applied
+  silently**: quietly replacing a freshly-opened blank form with an abandoned draft would be worse
+  than losing it. Snapshots expire after 7 days and are dropped as soon as they match what the
+  server already has.
+- **`useAutoSave()` — a real, silent `PATCH`**, 2.5 s after the user stops typing, for documents
+  that already exist **and are still Drafts**. Status shows in the document toolbar next to Save:
+  "มีการแก้ไขที่ยังไม่ได้บันทึก" → "กำลังบันทึกอัตโนมัติ..." → "บันทึกอัตโนมัติแล้ว HH:MM", or a red
+  "บันทึกอัตโนมัติไม่สำเร็จ กรุณากดบันทึกเอง" if the write fails (deliberately no toast — the local
+  snapshot still holds the edit, and a background stream of error toasts would be worse than a quiet
+  chip).
+
+Wired into **every document editor**: Quotation, Scope of Work, Delivery Order, Material
+Requisition, Job Order, Purchase Request, Production Order, and Service Report. Each one feeds the
+hooks the *exact* payload its own Save button sends (`toUpdateFields(draft)`), not the whole loaded
+record — so server-assigned fields like `updatedAt` never enter the change comparison and an
+auto-save can't observe its own write and loop. The two editors with a "new" mode (Quotation,
+Service Report) get the local layer only until the record exists.
+
+Two deliberate constraints on the server layer, both enforced server-side, not just in the UI:
+
+- **Drafts only.** `?autoSave=1` on a PATCH is rejected with 409 on anything past ร่าง/Draft. An
+  approved or already-submitted document must only change when a person presses Save, with the
+  audit entry that comes with it. (Scope of Work's follow-up fields — PO number, document recipients
+  — are editable after approval and stay manual-save for the same reason.)
+- **No audit-log entry.** `isAutoSaveRequest()` (`api/_lib/http.ts`) is read by every affected
+  handler; a single editing session would otherwise produce dozens of identical "แก้ไขเอกสาร X" rows
+  and bury the deliberate actions the log exists to record. Everything else — permissions,
+  validation, status gates, `updatedBy`, server-recomputed `amount` — is identical to a manual save,
+  so an auto-save can never do something a manual save could not.
+
+### 2. Discounts in baht, not just percent
+
+`Quote` and `QuoteLine` gained an optional `discountMode: "percent" | "amount"`. **Absent means
+percent**, which is what every quotation written before today meant — no migration, no change to any
+historical total. New quotations default to ฿, which is what was asked for; existing ones open in
+whatever they were written in.
+
+The UI is a compact `% / ฿` segmented toggle in two places, switchable independently: the
+"ส่วนลด" column header (applies to all line items) and beside the "ส่วนลดพิเศษ" field in the totals
+block. Switching back to `%` caps any figure above 100 — otherwise ฿500 would become 500%, which the
+server rejects, and the document would silently stop auto-saving until someone noticed. A baht
+discount larger than what it discounts clamps to zero rather than producing a negative total.
+
+**The money math is now genuinely one implementation, not two mirrored ones.** The formula moved to
+a new React-free `src/lib/quoteMath.ts`, which `api/_lib/quoteAmounts.ts` re-exports — the same
+frontend↔API sharing pattern already used for `src/lib/validation/*`. The client's on-screen totals
+and the server's authoritative `Quote.amount` are literally the same code now. Everything downstream
+was threaded through: `api/_lib/quoteValidation.ts` (per-unit bounds — a percentage can't exceed 100,
+a baht amount is bounded like any money field), `api/handlers/quotes.ts` (create/edit/duplicate/
+rewrite/workflow), `api/dashboard/index.ts`, `api/_lib/searchHandler.ts`, the print document, and
+`revisionDiff.ts` (a revision summary now names the unit it is talking about).
+
+Also fixed while in there: **`api/_lib/arHandler.ts` computed invoice line amounts with a hardcoded
+`(1 - discount/100)`**, so a quotation using baht line discounts would have billed the wrong amount.
+It now goes through the shared `lineSubtotal()` like everything else.
+
+Verified live in the running app (not just tests): baht line discount ฿200 off 1×฿1,000 → ฿800,
+special discount ฿100 → ฿700, VAT → **฿749.00**, matching the server's recomputed `amount` exactly;
+auto-save chip observed going pending → saving → "บันทึกอัตโนมัติแล้ว"; recovery banner shown,
+restored, and dismissed on a new quotation; audit log confirmed to have **zero** new entries from the
+auto-saves. Toolbar re-checked at 1440px and 1366px. `tsc --noEmit` clean (both projects),
+`npm run lint` 0 errors, `npm run build` clean, `npm test` 270/270 (6 new baht-discount cases in
+`tests/quoteAmounts.test.ts`, plus two mixed-unit cases added to the existing client/server
+lockstep check).
+
+---
+
+## 2026-08-21d — Service photos: cropped in every view, and invisible to the customer on Normal items
 
 Two owner reports in one pass: *"บางรูปก็เห็นไม่ครบ"* and *"ในหน้าเวลาเอาลิงก์ส่งให้ลูกค้า กดปกติมีรูป
 แต่มันไม่เห็นรูป"*.

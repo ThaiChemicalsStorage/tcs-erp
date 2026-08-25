@@ -9,7 +9,19 @@
 - [ ] **🔴 JSX ยังอยู่ใน `src/lib/quotes.tsx` ซึ่งฝั่ง server import ไปด้วย — เคยทำ production ล่มมาแล้ว (2026-08-21).** `statusIcon` (ไอคอนสถานะใบเสนอราคา) เป็น JSX อยู่ในไฟล์ที่ `api/` value-import ไปใช้ helper คำนวณยอดเงิน แปลว่า **server ต้องโหลดไฟล์ `.tsx` ตอน boot** ซึ่งเป็นสิ่งที่ CLAUDE.md เตือนไว้ตรง ๆ ว่าห้ามทำ รอบนี้รอดมาได้ด้วยการ copy `tsconfig.json` เข้า Docker image (ดู CHANGELOG.md 2026-08-21c) แต่เป็นการอุดปลายเหตุ — ตราบใดที่ยังมี JSX อยู่ในนั้น การเปลี่ยน runtime/บิลด์/คอนเทนเนอร์ครั้งไหนก็ทำให้ล่มซ้ำได้อีก **วิธีแก้ที่ต้นเหตุ**: ย้าย `statusIcon` ไปไฟล์ component (เช่น `src/pages/quotation/statusIcons.tsx`) แล้วเปลี่ยน `src/lib/quotes.tsx` → `.ts` ให้เป็น TypeScript ล้วน จะได้ไม่มีทางที่ server ต้องแปลง JSX อีกเลย ต้องไล่แก้ import ทุกที่ที่ใช้ `statusIcon` (งานปานกลาง ไม่ยาก แต่แตะหลายไฟล์)
 - [ ] **ไล่เช็คไฟล์อื่นใน `src/lib/` ว่ามี JSX ปนอยู่อีกไหม (2026-08-21).** CLAUDE.md ระบุว่าไฟล์ที่ `api/` ลากไปด้วยมี `roles.ts`, `users.ts`, `products.ts`, `permissions.ts`, `quotes.tsx`, `storage.ts`, `notifications.ts`, `auditLog.ts` — ตอนนี้มีแค่ `quotes.tsx` ที่ลงท้าย `.tsx` แต่ควรทำเช็คอัตโนมัติ (เทสต์หรือ lint rule) ที่ฟ้องเมื่อมีไฟล์ JSX โผล่ใน chain ที่ server import แทนที่จะรอให้ล่มแล้วค่อยรู้
 
-- [ ] **หน้าเซอร์วิส: รายงานที่ยังไม่เคยบันทึก ยังแนบรูป/แก้รายการตรวจเช็คไม่ได้เลย (แจ้งโดยผู้ใช้ 2026-08-21).** อาการ "กดเพิ่มอะไรไปแล้วจะเพิ่มรูป มันเพิ่มไม่ได้" มี 2 สาเหตุ — **เคสที่เป็นบั๊กแก้แล้ว** (เพิ่มรายการในร่างที่บันทึกแล้ว แล้วแนบรูป เคยเด้ง 404 ตอนนี้ระบบบันทึกให้เองก่อนอัตโนมัติ ดู CHANGELOG.md 2026-08-21b) **ที่ยังเหลือคือรายงานใหม่เอี่ยม**: ตอน `serviceReportId === "new"` ตารางตรวจเช็คตั้งใจให้เป็นตัวอย่างอ่านอย่างเดียว — `disabled={!isEditable || isNew}`, `structureEditable` เป็น false, และ `displayChecklist` ทิ้งการแก้ไขในเครื่องทั้งหมด ผลคือ **ติ๊กสถานะไม่ได้ → แถบรูปไม่โผล่ → ไม่มีปุ่มแนบรูปให้กดตั้งแต่แรก** ข้อความ "แนบรูปภาพได้หลังสร้างรายงานร่างแล้ว" จึงอธิบายปุ่มที่ไม่มีอยู่จริง **ทางเลือก**: (ก) ปล่อยไว้ — กดบันทึกร่างครั้งเดียวก็จบ เสียเวลา 1 คลิก (ข) ทำให้ตารางแก้ได้ก่อนบันทึก แล้วให้ระบบสร้างร่างให้เอง ตอนแนบรูปครั้งแรก — ตรงกับที่เจ้าของเลือกไว้ แต่ต้องรื้อ `displayChecklist`/`structureEditable` (ค) สร้างร่างอัตโนมัติทันทีที่เลือก template — ง่ายสุด แต่จะมีร่างเปล่าค้างถ้าคนเปิดแล้วทิ้ง ต้องให้เจ้าของเคาะก่อนทำ
+- [ ] **บันทึกอัตโนมัติ: ยังไม่รองรับ "ฟิลด์ติดตามผล" ของเอกสารที่อนุมัติแล้ว (ตั้งใจไว้ก่อน — 2026-08-25).**
+  Scope of Work ยังแก้เลข PO / ผู้รับเอกสารได้แม้อนุมัติแล้ว แต่ช่องพวกนี้ยัง**ไม่**บันทึกอัตโนมัติ ต้องกดบันทึกเอง
+  (ทั้งฝั่ง UI และฝั่ง server ที่ตอบ 409) เหตุผลคือการแก้เอกสารที่อนุมัติแล้วควรมี audit log กำกับเสมอ ถ้าภายหลัง
+  เจ้าของอยากให้บันทึกอัตโนมัติตรงนี้ด้วย ต้องตัดสินใจก่อนว่าจะยอมให้เขียน audit log ถี่ ๆ หรือจะยุบรวมรายการ
+  audit ของช่วงเวลาใกล้กันเป็นรายการเดียว
+- [ ] **บันทึกอัตโนมัติ: ยังไม่มีเทสต์อัตโนมัติของตัว hook เอง (2026-08-25).** `tests/quoteAmounts.test.ts`
+  ครอบคลุมคณิตศาสตร์ส่วนลดแบบบาทครบแล้ว (270/270 ผ่าน) แต่ `src/hooks/useAutoSave.ts` ยังพิสูจน์ด้วยการ
+  ทดสอบในเบราว์เซอร์จริงเท่านั้น — ยังไม่มีเทสต์ที่จับ regression ของ debounce / การตั้งฐานเทียบ (baseline) /
+  การกัน request ซ้อน / การเสนอกู้คืนร่าง ถ้าจะเพิ่ม ต้องใส่ `@testing-library/react` + jsdom ซึ่งโปรเจกต์ยังไม่มี
+- [ ] **หน้าเซอร์วิส: รายงานที่ยังไม่เคยบันทึก ยังแนบรูป/แก้รายการตรวจเช็คไม่ได้เลย (แจ้งโดยผู้ใช้ 2026-08-21).**
+  **อัปเดต 2026-08-25**: auto-save ที่เพิ่งทำ **ไม่ได้แก้ข้อนี้** — รายงานใหม่ได้แค่สำเนาในเครื่อง (กู้คืนได้ถ้าออกจาก
+  หน้าไป) แต่ตารางตรวจเช็คยังอ่านอย่างเดียวก่อนบันทึกครั้งแรกเหมือนเดิม ตัวเลือก (ก)/(ข)/(ค) ด้านล่างยังต้องให้
+  เจ้าของเคาะอยู่ อาการ "กดเพิ่มอะไรไปแล้วจะเพิ่มรูป มันเพิ่มไม่ได้" มี 2 สาเหตุ — **เคสที่เป็นบั๊กแก้แล้ว** (เพิ่มรายการในร่างที่บันทึกแล้ว แล้วแนบรูป เคยเด้ง 404 ตอนนี้ระบบบันทึกให้เองก่อนอัตโนมัติ ดู CHANGELOG.md 2026-08-21b) **ที่ยังเหลือคือรายงานใหม่เอี่ยม**: ตอน `serviceReportId === "new"` ตารางตรวจเช็คตั้งใจให้เป็นตัวอย่างอ่านอย่างเดียว — `disabled={!isEditable || isNew}`, `structureEditable` เป็น false, และ `displayChecklist` ทิ้งการแก้ไขในเครื่องทั้งหมด ผลคือ **ติ๊กสถานะไม่ได้ → แถบรูปไม่โผล่ → ไม่มีปุ่มแนบรูปให้กดตั้งแต่แรก** ข้อความ "แนบรูปภาพได้หลังสร้างรายงานร่างแล้ว" จึงอธิบายปุ่มที่ไม่มีอยู่จริง **ทางเลือก**: (ก) ปล่อยไว้ — กดบันทึกร่างครั้งเดียวก็จบ เสียเวลา 1 คลิก (ข) ทำให้ตารางแก้ได้ก่อนบันทึก แล้วให้ระบบสร้างร่างให้เอง ตอนแนบรูปครั้งแรก — ตรงกับที่เจ้าของเลือกไว้ แต่ต้องรื้อ `displayChecklist`/`structureEditable` (ค) สร้างร่างอัตโนมัติทันทีที่เลือก template — ง่ายสุด แต่จะมีร่างเปล่าค้างถ้าคนเปิดแล้วทิ้ง ต้องให้เจ้าของเคาะก่อนทำ
 
 - [ ] **🔴 ข้ออ้าง "เบราว์เซอร์อัตโนมัติเข้าเครื่องนี้ไม่ได้" ไม่จริง — ต้องรื้อรายการ "ยังไม่เคยกดจริง" ทั้งกองใหม่ (พบ 2026-08-21).** Playwright ต่อ `localhost:3000` ได้ปกติ ล็อกอิน กดเมนู แคปรูปครบทุกหน้าในเซสชันเดียว และในโฟลเดอร์ `.playwright-mcp/` ก็มี transcript ตั้งแต่ 2026-08-18 อยู่ก่อนแล้ว แปลว่ามันใช้ได้มาตลอด ก่อนที่ประโยคนี้จะถูกเขียนลง CHANGELOG.md 2026-08-20e เสียอีก **ผลกระทบ**: รายการ "verified via tsc/lint/build/test เท่านั้น ไม่มีเซสชันจริง เพราะเบราว์เซอร์เข้าไม่ได้" ประมาณ 40 ข้อในไฟล์นี้ อ้างเหตุผลที่ผิด — ต้องอ่านใหม่ว่า "ยังไม่ได้ลอง" ไม่ใช่ "ลองไม่ได้" ควรไล่เคลียร์ทีเดียวด้วยเซสชันเบราว์เซอร์จริง แทนที่จะปล่อยค้างต่อไป
 - [ ] **แก้ข้อความในรายการด้านล่างที่อ้างเหตุผลผิดเรื่องเบราว์เซอร์ (2026-08-21).** ยังไม่ได้ไล่แก้ทีละข้อในรอบนี้ (งานหลักคืออัปเดตคู่มือ) — ทำเป็นรอบของตัวเองพร้อมกับตอนไล่ทดสอบจริง
@@ -493,7 +505,17 @@ left unaddressed, deliberately out of scope for a "fix Critical/High" pass:
 
 ## Completed
 
-- [x] **[2026-08-20] Product Stock, the IV stock-cutting panel and manual tax-invoice creation now have a What's New entry** (`2026-08-20-stock-and-manual-tax-invoice`), together with the new one for the whole ผลิต department (`2026-08-20-production-department`). Both written in Thai for staff, covering what the feature does rather than how it was built.
+- [x] **[2026-08-25] Auto-save on every document editor + discounts enterable in baht.** Owner
+  requests: *"เวลาสร้างใบเสนอราคาแล้วถ้าลืมกดบันทึกร่างแล้วมันหายไปเลย ให้มันบันทึกร่างอัตโนมัติไว้ ทำ auto-save
+  ให้ทุกเอกสารเลย"* and *"เปอร์เซ็นต์ส่วนลดช่วยระบุเป็นจำนวนเงินเลยได้ไหมไม่ต้องเป็นเปอร์เซ็นต์"*. Shared
+  `src/hooks/useAutoSave.ts` (local `localStorage` snapshot + silent Draft-only server PATCH) wired
+  into Quotation, Scope of Work, Delivery Order, Material Requisition, Job Order, Purchase Request,
+  Production Order and Service Report; `?autoSave=1` / `isAutoSaveRequest()` suppresses the audit
+  entry and gates to Drafts server-side. `discountMode: "percent" | "amount"` on `Quote`/`QuoteLine`
+  (optional, absent = percent, no migration), with the money math consolidated into the single
+  React-free `src/lib/quoteMath.ts` that `api/_lib/quoteAmounts.ts` re-exports. Verified live in the
+  running app; see CHANGELOG.md 2026-08-25.
+ (`2026-08-20-stock-and-manual-tax-invoice`), together with the new one for the whole ผลิต department (`2026-08-20-production-department`). Both written in Thai for staff, covering what the feature does rather than how it was built.
 
 - [x] **[2026-08-20] Resolved: Quotation's product picker no longer surfaces the 82 internal-only
   store SKUs — category-level filter, decided over a per-product flag.** The Material

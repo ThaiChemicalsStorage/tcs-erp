@@ -1,4 +1,4 @@
-import { apiFetch } from "./apiClient.js";
+import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import type { ServiceChecklistSectionDef } from "./serviceTemplates.js";
 import { compressImageFile, isCompressibleImage } from "./imageCompression.js";
 
@@ -252,8 +252,8 @@ export async function createServiceReport(draft: ServiceReportDraft): Promise<Se
 
 // แก้ไขรายงานบริการที่ยังเป็นร่าง
 // Updates a Draft Service Report
-export async function updateServiceReport(id: string, fields: ServiceReportUpdate): Promise<ServiceReport> {
-  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${encodeURIComponent(id)}`, {
+export async function updateServiceReport(id: string, fields: ServiceReportUpdate, options?: WriteOptions): Promise<ServiceReport> {
+  const { serviceReport } = await apiFetch<{ serviceReport: ServiceReport }>(`/service-reports/${encodeURIComponent(id)}${writeQuery(options)}`, {
     method: "PATCH",
     body: JSON.stringify(fields),
   });

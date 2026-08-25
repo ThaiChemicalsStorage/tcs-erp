@@ -107,6 +107,20 @@ Creation accepts either parent:
 from `App.tsx` with distinct `key`s (so switching remounts instead of showing the other department's
 stale list) — the same multi-mount pattern `ArDocumentListPage` already uses.
 
+## Auto-save (added 2026-08-25)
+
+ใบสั่งผลิต's editor auto-saves like every other document editor — shared `src/hooks/useAutoSave.ts`,
+rendered through `AutoSaveIndicator` (toolbar chip, next to Save) and `DraftRecoveryBanner`. Two
+layers: a `localStorage` snapshot ~700 ms after typing stops, and a silent
+`PATCH /api/production-orders/:id?autoSave=1` 2.5 s after typing stops. The hook is fed the exact
+payload the Save button sends (`toUpdateFields(draft)`).
+
+`handleUpdate()` here already rejected any non-Draft update **and** already wrote no audit entry of
+its own, so this module needed no server change at all beyond the shared query flag. The
+post-approval signatory fields (`POST /:id/signatories`, ผู้ส่งมอบงาน/ผู้ตรวจรับงาน/แผนกต้นทุน) are a
+separate route and are **not** auto-saved — they are signed after approval, and a change to an
+approved document should leave an audit trail. See [../API.md](../API.md) "Auto-save writes".
+
 ## RBAC
 
 7 new `productionOrder:*` permissions (`view`/`viewAll`/`create`/`edit`/`finalize`/`print`/`delete`)

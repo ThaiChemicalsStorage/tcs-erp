@@ -52,6 +52,22 @@ export function getPathSegments(req: VercelRequest, prefix: string): string[] {
   return trimmed.split("/").filter(Boolean).map((segment) => decodeURIComponent(segment));
 }
 
+/**
+ * คำขอนี้มาจากการบันทึกอัตโนมัติหรือไม่ (`?autoSave=1`) — เพิ่ม 2026-08-25
+ *
+ * Whether this write came from the background auto-save rather than a person pressing Save.
+ * Auto-save fires every few seconds while someone types, so an auto-saved write deliberately
+ * writes **no audit-log entry**: hundreds of identical "แก้ไขเอกสาร X" rows per document would
+ * bury the real, deliberate actions the audit log exists to record. Everything else — permission
+ * checks, validation, status gates, `updatedBy` — is identical to a manual save, so an auto-save
+ * can never do something a manual save could not.
+ */
+export function isAutoSaveRequest(req: VercelRequest): boolean {
+  const raw = req.query?.autoSave;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === "1" || value === "true";
+}
+
 export async function withErrorHandling(
   req: VercelRequest,
   res: VercelResponse,
