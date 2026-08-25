@@ -43,12 +43,21 @@ the extension check is exact by itself.
   and treats a now-optional duplication as permanent. Rewritten to state what is actually true now,
   including that collapsing `quoteWorkflow.ts`'s duplicate is a legitimate option again.
 
-### Also found, while browser-verifying (logged, not fixed)
+### The "defect" I reported from the browser sweep was my own testing error
 Before switching to this task I had started clearing the browser-verification backlog and confirmed
-seven items (see below). One real defect fell out: **the "มีอะไรใหม่" and notification dropdowns
-never close on an outside click** — both only listen for Escape, so they stay open and can overlap
-each other and Global Search. `GlobalSearch.tsx` already solves this in the same codebase with a
-`fixed inset-0` scrim. Logged at the top of TODO.md High Priority.
+seven items (see below). I also reported an eighth finding — that the "มีอะไรใหม่" and notification
+dropdowns never close on an outside click — and it was **wrong**. Both already had the dismissal
+scrim, as did Global Search and the user menu. Retested with a real `browser_click`: they close
+correctly. Nothing was broken and nothing was changed; the TODO entry has been withdrawn.
+
+Worth carrying forward, because the same trap sits in front of the ~35 remaining verification
+items: I clicked with `dispatchEvent(new MouseEvent("click"))` aimed at `<main>`. Synthetic dispatch
+does no hit-testing, so it goes to the element named and never to the transparent full-viewport
+scrim sitting above it — which is exactly what a real click would hit. My confirming grep then
+searched for `mousedown`/`addEventListener`/`contains(`, the idioms such a handler usually uses;
+this codebase uses an inline JSX `onClick` on a rendered scrim, matching none of them. Two checks
+agreed because both were blind the same way. **Anything depending on what is visually on top needs a
+real click, not a dispatched event.**
 
 Verified in that partial sweep: refresh-lands-on-the-right-page (48), sidebar re-click returns to
 the list (49), tour marks on appear not dismissal (64), tour doesn't auto-replay after a reload but

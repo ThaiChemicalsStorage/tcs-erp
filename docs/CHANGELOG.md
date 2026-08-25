@@ -4,7 +4,36 @@
 
 ---
 
-## 2026-08-25b (absolute latest) — The server no longer loads a single line of JSX, and a test now keeps it that way
+## 2026-08-25c (absolute latest) — Retraction: the "header dropdowns don't close on an outside click" defect was not real
+
+Entry 2026-08-25b below closes with "Also logged, found while browser-verifying: the What's New and
+notification dropdowns never close on an outside click." **That was wrong, and nothing was broken.**
+Both components — and Global Search, and the user menu — have had the dismissal scrim
+(`<div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />`) all along. Retested with a
+real Playwright `click()`: each panel opens, the scrim mounts, the click lands on it, the panel
+closes, the scrim unmounts. No code change was needed and none was made.
+
+**How the false positive happened, because the same trap is waiting for the ~35 remaining
+browser-verification items in TODO.md:**
+
+1. The test clicked with `element.dispatchEvent(new MouseEvent("click"))` aimed at `<main>`.
+   A synthetic dispatch goes straight to the element named — it performs **no hit-testing**. The
+   scrim is a transparent full-viewport layer sitting *above* `<main>`, so a real click at those
+   coordinates hits the scrim and a dispatched one never can. The panel stayed open because nothing
+   ever told it to close, not because it couldn't.
+2. The corroborating grep searched for `mousedown|addEventListener|Escape|contains(` — the
+   idioms an outside-click handler *usually* uses. This codebase uses an inline JSX `onClick` on a
+   rendered scrim instead, which matches none of those. Two independent-looking checks agreed
+   because both were blind in the same direction.
+
+**Rule for the rest of the sweep: dismissal, focus, hover and anything else that depends on what is
+visually on top must be tested with a real `browser_click`, never `dispatchEvent`.** `dispatchEvent`
+remains fine for driving controlled inputs (`input`/`change` on a field you have a handle to), which
+is what the rest of that session's verifications used.
+
+---
+
+## 2026-08-25b — The server no longer loads a single line of JSX, and a test now keeps it that way
 
 Closes the 🔴 TODO item left over from the 2026-08-21c production outage, plus its "we should have
 an automated check for this" follow-up.
