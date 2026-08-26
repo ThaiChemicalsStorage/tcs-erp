@@ -14,6 +14,18 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-26] The sidebar's scrollbar stopped being the brightest thing on the navy rail.**
+  Reported with a screenshot: a full-height white OS track with Windows arrow buttons running down
+  the sidebar. The app had no scrollbar styling anywhere, and the sidebar is its only scroll region
+  on a dark surface, so the default track read as a seam splitting the rail off from the page. New
+  `.sidebar-scroll` class (`src/styles/index.css`) on the sidebar `<nav>`: transparent track, arrow
+  buttons suppressed, a 6px `rounded-full` thumb in the rail's own `--sidebar-foreground` ink at
+  28% → 45% on rail hover → 62% on thumb hover, plus the Firefox `scrollbar-width`/`scrollbar-color`
+  pair. Not gold (Rare Gold Rule) and not hidden-until-hover. Verified in Playwright on the running
+  app — expanded rail, collapsed `w-16` rail, and the hover step — with `tsc`, lint, build and the
+  full 304-test suite clean. Light-surface scroll regions were deliberately left on the OS default;
+  that decision is logged in TODO.md rather than swept in.
+
 - ✅ **[2026-08-25b] The API bundle no longer contains a single line of JSX, and a test keeps it that way.**
   Closed the 🔴 left over from the 2026-08-21 production crash-loop. Walking the real import graph
   showed only **one** runtime import forced the server to load a `.tsx`

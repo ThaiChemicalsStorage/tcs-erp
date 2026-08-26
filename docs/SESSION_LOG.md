@@ -4,6 +4,53 @@
 
 ---
 
+## Session — 2026-08-26 (absolute latest), The sidebar scrollbar
+
+### What was asked
+A cropped screenshot of the sidebar's right edge, with *"ทำให้สวยขึ้นหน่อย"*. The crop showed a
+full-height white track with Windows arrow buttons at both ends, navy on either side of it — the
+sidebar's own scroll region.
+
+### The finding was broader than the symptom
+`grep -rn scrollbar src/` returned **nothing**. The app has never styled a scrollbar anywhere; every
+scroll region falls back to the OS default. On Windows that is a ~17px white track with arrow
+buttons, which is unremarkable on the white/paper-blue surfaces that make up most of the app — and
+glaring on the one surface that is dark. So this wasn't a sidebar bug so much as a system-level gap
+whose only *visible* victim is the sidebar.
+
+That shaped the fix: style the sidebar, and log the app-wide question as a decision rather than
+silently answering it. Half-styled scrollbars read worse than none, so the light-surface regions
+either all get a twin of this treatment or all stay native — that's one deliberate call, not a
+side effect of a screenshot about the navy rail.
+
+### The design decisions worth keeping
+Two rules generalised out of it and are now written into DESIGN.md:
+
+- **The thumb takes the surface's own foreground ink, never gold.** `#a8bed8` is what inactive nav
+  labels are already made of, so the scrollbar belongs to the rail instead of decorating it. Gold
+  would have been the obvious "make it pretty" reach and would have broken the Rare Gold Rule for
+  a piece of chrome.
+- **It stays visible at rest.** Fading a scrollbar in on hover is a common trick and it's the same
+  mistake DESIGN.md already bans for icon-only row actions (`opacity-50`, never `opacity-0`) —
+  scroll position is information, and hiding it costs more than the tidiness is worth.
+
+The 10px-track / 6px-thumb split (transparent border + `background-clip: content-box`) is the
+detail that makes it feel considered rather than merely thin: the grab target stays comfortable
+while the visible pill never touches the rail edge.
+
+### Verification
+Playwright against the running local stack at 1440×720, signed in with real data: expanded rail,
+collapsed `w-16` rail, rail-hover brighten step. Measured `offsetWidth - clientWidth = 10` and
+`scrollbar-color: rgba(168, 190, 216, 0.28) transparent`. `npx tsc --noEmit`, `npm run lint` (0
+errors, 3 pre-existing `react-refresh` warnings), `npm run build`, `npm test` (30 files / 304
+tests) all clean.
+
+### What's next
+One open item in TODO.md (Low Priority): decide whether the light-surface scroll regions get a
+`--muted-foreground`-inked twin of `.sidebar-scroll` applied globally, or stay OS-native.
+
+---
+
 ## Session — 2026-08-25b (absolute latest), Killed the JSX-in-the-server-graph 🔴 for good
 
 ### The item was real, but smaller than it had been written down as

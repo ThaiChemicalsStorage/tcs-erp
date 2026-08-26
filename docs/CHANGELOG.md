@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-08-26 (absolute latest) — Sidebar: the navy rail's scrollbar is no longer the brightest thing on it
+
+Reported with a screenshot of the sidebar's right edge: a full-height **white** track with Windows
+arrow buttons at both ends, running down the middle of the navy rail. The app had **no scrollbar
+styling anywhere** — every scroll region fell back to the OS scrollbar — so on Windows the sidebar,
+the one scroll region in the app that sits on a dark surface, got a ~17px white stripe that read as
+a seam splitting the rail off from the page.
+
+**What changed**
+
+- New `.sidebar-scroll` class in `src/styles/index.css`, applied to the sidebar `<nav>` in
+  `App.tsx` (the same element in both the docked desktop rail and the mobile off-canvas drawer):
+  - track transparent — navy shows through, no white stripe;
+  - `::-webkit-scrollbar-button { display: none }` — kills the Windows arrow buttons;
+  - 10px track with a 6px `rounded-full` thumb (transparent 2px border + `background-clip:
+    content-box`), so the grab target stays comfortable while the visible pill keeps 2px of navy
+    breathing room on each side;
+  - `scrollbar-width: thin` + `scrollbar-color` so Firefox gets the same treatment.
+- Thumb colour is the sidebar's own inactive-label ink `#a8bed8` (`--sidebar-foreground`) at
+  `0.28` → `0.45` on rail hover → `0.62` on thumb hover/active. Deliberately **not** gold: the Rare
+  Gold Rule reserves gold for the active nav item and primary actions, and a scrollbar is chrome.
+  Deliberately **not** hidden-until-hover either — DESIGN.md's rule against `opacity-0` affordances
+  applies here too; scroll position stays readable at rest.
+- Rail width is unchanged (`w-64` / `w-16`); the nav's content box actually gains 7px back, since
+  the scrollbar went from ~17px to 10px.
+
+**Scope**: sidebar only, as asked. Every other scroll region in the app still uses the OS
+scrollbar — those all sit on white/paper-blue where the default track is unremarkable rather than
+glaring, so restyling them is a separate, deliberate call, not a side effect of this fix. Logged in
+TODO.md as an open option.
+
+**Verified** in Playwright at 1440×720 on the real running app, signed in: expanded rail, collapsed
+`w-16` rail, and the rail-hover brighten step all render correctly; measured scrollbar width is
+10px and `scrollbar-color` computes to `rgba(168, 190, 216, 0.28) transparent`. `npx tsc --noEmit`,
+`npm run lint` (3 pre-existing `react-refresh` warnings, 0 errors), `npm run build`, and `npm test`
+(30 files / 304 tests) all pass.
+
+---
+
 ## 2026-08-25g (absolute latest) — Correction: "signing in is out of bounds" was too broad, and one 2026-07-10 item was already done
 
 A TODO review turned up a 🔴 item from 2026-08-21 recording that the standing excuse *"the automated

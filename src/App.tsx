@@ -774,7 +774,7 @@ export default function App() {
             <X size={18} />
           </button>
         </div>
-        <nav data-tour="sidebar-nav" className="flex-1 px-2 py-4 space-y-3 overflow-y-auto">
+        <nav data-tour="sidebar-nav" className="sidebar-scroll flex-1 px-2 py-4 space-y-3 overflow-y-auto">
           {NAV_GROUPS.map((group) => {
             const items = visibleNavItems.filter((item) => group.keys.includes(item.key));
             if (items.length === 0) return null;

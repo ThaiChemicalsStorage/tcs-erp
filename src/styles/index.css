@@ -8,6 +8,62 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Sidebar scroll region (the navy nav rail in App.tsx).
+
+   The rail had no scrollbar styling at all, so it fell back to the OS scrollbar — on Windows a
+   ~17px white track with arrow buttons at both ends, which rendered as the single brightest
+   element on the sidebar and read as a seam splitting the navy rail off from the page.
+
+   Scoped to the sidebar rather than applied globally on purpose: this is the app's only scroll
+   region sitting on a dark surface, where the default white track is genuinely glaring. Every
+   other scroll region is on white/paper-blue, where the OS scrollbar is unremarkable — restyling
+   those too is a separate, deliberate call, not a side effect of this fix.
+
+   The thumb is the sidebar's own inactive-label ink (#a8bed8, --sidebar-foreground) at low alpha,
+   not gold: The Rare Gold Rule reserves gold for the active nav item and primary actions, and a
+   scrollbar is chrome, not the one thing that matters on the screen. It stays visible at rest
+   (never opacity-0-until-hover) and brightens in two steps — once when the rail is hovered, again
+   when the thumb itself is — so scroll position is always readable but never competes with the
+   nav labels. */
+.sidebar-scroll {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 190, 216, 0.28) transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Suppresses the Windows arrow buttons at both ends of the track. */
+.sidebar-scroll::-webkit-scrollbar-button {
+  display: none;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(168, 190, 216, 0.28);
+  border-radius: 9999px;
+  /* A transparent border plus content-box clipping paints a 6px pill inside the 10px hit target:
+     easy to grab, but with 2px of navy breathing room on each side so the thumb never touches the
+     rail edge or the nav items. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 150ms ease;
+}
+
+.sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(168, 190, 216, 0.45);
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover,
+.sidebar-scroll::-webkit-scrollbar-thumb:active {
+  background-color: rgba(168, 190, 216, 0.62);
+}
+
 /* 2026-07-29, accessibility hardening pass: this app had no prefers-reduced-motion handling
    anywhere. Loading indicators (animate-spin/animate-pulse) still need to communicate "this is
    loading" — removing motion entirely would silently drop that signal — so this slows them to a
