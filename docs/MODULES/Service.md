@@ -280,6 +280,14 @@ compatible with the mobile/camera phase without changing this control). Disabled
 explanatory reason while the report doesn't exist yet (`serviceReportId === "new"` — there's
 nowhere to store bytes against until the Draft is created).
 
+**The file input carries no `capture` attribute — deliberately (2026-08-26).** It used to be
+`capture="environment"`, which tells a mobile browser to open the camera *instead of* the file
+picker: engineers could only shoot a new photo, never attach one already on the phone. Plain
+`accept="image/*"` gives the normal picker, which still offers the camera among its options, and
+matches `ImageUploadField.tsx`. Do not add `capture` back as a mobile "convenience" — it removes a
+route rather than adding one. The add button uses `ImagePlus` (not `Camera`) for the same reason:
+the icon should not promise camera-only.
+
 ## Print (added 2026-08-06, pulled forward from the Phase 3 roadmap)
 
 `ServiceReportPrintDocument.tsx` — browser-native print CSS, **no PDF library exists in this app**

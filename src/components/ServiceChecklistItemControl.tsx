@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Check, AlertTriangle, Camera, X, Loader2, ImageOff, Ruler, ToggleLeft } from "lucide-react";
+import { Check, AlertTriangle, ImagePlus, X, Loader2, ImageOff, Ruler, ToggleLeft } from "lucide-react";
 import type { ServiceChecklistItemDef, ServiceChecklistItemKind } from "../lib/serviceTemplates";
 import type { ServiceChecklistItemValue, ServiceChecklistItemPhoto } from "../lib/serviceReports";
 import { MAX_CHECKLIST_ITEM_LABEL_LENGTH } from "../lib/validation/serviceReportValidation";
@@ -279,10 +279,17 @@ function PhotoAttachments({
           onClick={() => inputRef.current?.click()}
           className="w-16 h-16 flex flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50 disabled:hover:border-border"
         >
-          {uploading ? <Loader2 size={16} className="animate-spin" /> : inactive ? <ImageOff size={16} /> : <Camera size={16} />}
+          {uploading ? <Loader2 size={16} className="animate-spin" /> : inactive ? <ImageOff size={16} /> : <ImagePlus size={16} />}
           <span className="text-[9px]">{t("service.checklist.addPhoto")}</span>
         </button>
-        <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+        {/* No `capture` attribute on purpose. `capture="environment"` told mobile browsers to open
+            the camera *directly*, which skipped the file picker entirely — an engineer could only
+            shoot a new photo and never attach one already in the phone's gallery (reported
+            2026-08-26). Plain `accept="image/*"` gives the normal picker, which still offers the
+            camera as one of its options, and matches ImageUploadField.tsx, the app's other image
+            input. Do not add `capture` back to "help" on mobile: it removes a choice rather than
+            adding one. */}
+        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
       </div>
       {disabledReason && inactive && <p className="text-[10px] text-muted-foreground mt-1">{disabledReason}</p>}
     </div>

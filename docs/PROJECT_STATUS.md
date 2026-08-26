@@ -14,6 +14,15 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-26c] Service checklist photos can come from the phone's gallery, not just the camera.**
+  `capture="environment"` on the hidden file input told mobile browsers to launch the camera
+  *instead of* the picker, so a field engineer could never attach a photo already on the phone.
+  Removed — plain `accept="image/*"` still offers the camera among the picker's options, and it
+  matches `ImageUploadField.tsx`, which never had `capture`. Button icon `Camera` → `ImagePlus` so
+  the affordance stops promising camera-only. Verified the picker path uploads for real end to end
+  (then cleaned up); announced in What's New. Desktop Chromium can't exercise a real mobile gallery
+  sheet, so a phone check after deploy is the last confirmation.
+
 - ✅ **[2026-08-26b] Customer approval page shows อ้างอิงโปรเจกต์/รหัสงาน; "ลูกค้า" → "ชื่อบริษัท";
   checklist detail panel no longer collides with its own item.** The project/job reference was
   never missing from the API — `buildApprovalPublicPayload()` always sent it and the client type

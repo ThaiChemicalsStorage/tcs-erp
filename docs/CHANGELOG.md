@@ -4,7 +4,55 @@
 
 ---
 
-## 2026-08-26b (absolute latest) — Customer approval page: project/job reference + "ชื่อบริษัท", and the checklist detail panel stops colliding with its own item
+## 2026-08-26c (absolute latest) — Service checklist photos: the phone opened the camera and nothing else
+
+Reported from the field: *"ตอนใช้ในโทรศัพท์ เวลาจะกดเพิ่มรูปมันให้ถ่ายรูปอย่างเดียว มันเพิ่มจากรูปในเครื่องไม่ได้"*.
+
+**Cause, one attribute.** `ServiceChecklistItemControl.tsx`'s hidden file input carried
+`capture="environment"`. That attribute is not a hint — it tells a mobile browser to launch the
+camera *instead of* the file picker, so an engineer could only ever shoot a new photo and never
+attach one already on the phone (one taken earlier in the day, one received over LINE, one from
+another app). It was also the odd one out: `ImageUploadField.tsx`, the app's other image input, has
+always been plain `accept="image/*"` with no `capture`, and `grep` found no other use of the
+attribute anywhere.
+
+Removed it. Plain `accept="image/*"` opens the normal picker, which still offers the camera as one
+of its options — so this only ever adds a route, never removes one. A comment now says not to put it
+back to "help" on mobile.
+
+**The button's icon changed with it**, `Camera` → `ImagePlus` (it pairs with the existing `ImageOff`
+disabled state). The camera icon promised exactly the behaviour being removed, and leaving it would
+have kept telling engineers the button only takes photos. Beyond the literal request, but the
+literal request is unfinished while the affordance still says "camera".
+
+Client-side compression is unchanged and still runs before any size cap (`compressImageFile`), so a
+full-resolution gallery original is handled exactly like a camera capture — no cap change needed.
+
+**Verified** end to end against the running local stack: all ten photo inputs now render
+`accept="image/*"` with no `capture`, and a file chosen through the *picker* path (Playwright's
+`setInputFiles`, which is precisely the "pick an existing file from storage" case that was blocked)
+uploaded for real — `POST /service-reports/:id/photos`, persisted at 29,352 bytes as WebP, thumbnail
+rendered — then deleted again, leaving the record's original nine photos untouched. Also confirmed
+an undecodable file still surfaces "แนบรูปภาพไม่สำเร็จ" rather than failing silently, which matters
+more now that the picker can reach a wider range of files. Note this is desktop Chromium: `capture`
+is a mobile-only behaviour, so what is verified here is the rendered attribute and the picker path,
+not an actual iOS/Android gallery sheet. **`npm run dev` on a phone (or the deployed site) is the
+last confirmation.** `tsc`, `lint`, `build`, `npm test` (30 files / 304 tests) clean.
+
+Announced in `WHATS_NEW_ENTRIES` (`2026-08-26-service-photo-from-gallery`) — it changes what field
+engineers can do on the device they actually use.
+
+### Correction to 2026-08-26b's verification note
+
+That entry named the wrong record. The checklist item my browser check toggled on and back off was
+**`blower.bearingLubrication` ("ตรวจสอบการหล่อลื่น Bearing")**, not "การสั่นหรือความผิดปกติอื่นๆ" —
+confirmed by reading the document back: it is `not_selected` and still holds its five pre-existing
+photos, which is what identified it. The substance of the note is unchanged: net zero status change
+on a local demo record, no detail text or photo touched, and only `updatedAt`/`updatedBy` moved.
+
+---
+
+## 2026-08-26b — Customer approval page: project/job reference + "ชื่อบริษัท", and the checklist detail panel stops colliding with its own item
 
 Three small fixes reported from live screenshots.
 

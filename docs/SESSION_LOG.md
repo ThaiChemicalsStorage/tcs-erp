@@ -4,7 +4,47 @@
 
 ---
 
-## Session — 2026-08-26b (absolute latest), Three screenshot-driven fixes, and a lesson about auto-save
+## Session — 2026-08-26c (absolute latest), One attribute, and a correction
+
+### The fix was one attribute; finding it took one grep
+*"ตอนใช้ในโทรศัพท์ ... มันให้ถ่ายรูปอย่างเดียว"*. `grep -rn "capture=" src/` returned exactly one
+line — `capture="environment"` on the checklist photo input. That attribute is not a hint; it
+replaces the file picker with the camera. `ImageUploadField.tsx`, the app's other image input, never
+had it, so the fix was to delete the outlier rather than to design anything.
+
+The judgement call was the icon. `Camera` → `ImagePlus` was not asked for, but the button was
+*telling* engineers it only takes photos — leaving it would have left the complaint half-answered.
+Small change, stated plainly to the user rather than slipped in.
+
+### Two things I got wrong and corrected
+1. **I named the wrong record in 2026-08-26b.** The item my earlier browser check toggled was
+   `blower.bearingLubrication`, not "การสั่นหรือความผิดปกติอื่นๆ" — identified by reading the
+   document back and matching the five pre-existing photos. Corrected forward in CHANGELOG.md
+   rather than by editing the old entry.
+2. **I reported an upload as failing silently when it wasn't.** My hand-rolled 8×8 test PNG was
+   simply not a decodable image, and I had watched the console instead of the screen. `handleUploadPhoto`
+   already catches and shows "แนบรูปภาพไม่สำเร็จ" — confirmed by re-running it and reading the toast.
+   Nearly "hardened" an error path that was already there. Check the UI for the error before
+   concluding there is no error handling.
+
+### Verification, and its honest limit
+All ten photo inputs render with no `capture`; a file chosen through the picker path uploaded for
+real (`POST /photos`, 29,352 bytes WebP, thumbnail rendered) and was deleted again, leaving the
+record's original nine photos untouched. But `capture` is a mobile-only behaviour — desktop Chromium
+cannot show an iOS/Android gallery sheet. What is verified is the attribute and the picker path;
+**the phone itself is still the last check**, and the changelog says so rather than implying more.
+
+Also applied the lesson from 2026-08-26b: the report was opened without clicking any form control
+(nine items were already "ปกติ", so their photo inputs rendered on their own), avoiding a pointless
+auto-save write.
+
+### What's next
+Unchanged: the light-surface scrollbar decision (TODO.md, Low Priority), and the approval page's
+unshown `nextPmDate`/`onSiteContact*`/`serviceType` fields. Nothing new opened.
+
+---
+
+## Session — 2026-08-26b, Three screenshot-driven fixes, and a lesson about auto-save
 
 ### Two of the three were already built, just not shown
 The customer approval page "never showed" อ้างอิงโปรเจกต์/รหัสงาน — except the server had always
