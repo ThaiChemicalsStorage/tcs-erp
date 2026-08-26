@@ -146,7 +146,12 @@ export function ServiceChecklistItemControl({
       )}
       {(isAbnormal || isNormal) && (
         <tr>
-          <td colSpan={totalCols} className="pl-5 pr-5 pb-3">
+          {/* `pt-2` matters: a table row has no margin, so without it this panel's textarea began
+              0.3px below the item row above it and read as jammed under its own title. The 8px
+              here plus the item row's own `py-2` gives ~16px of air above, still less than the
+              ~24px below (`pb-4` + the next row's `py-2`) — so the panel stays visibly grouped
+              with the item it belongs to rather than floating between two items. */}
+          <td colSpan={totalCols} className="pl-5 pr-5 pt-2 pb-4">
             <div className={`pl-3 border-l-2 space-y-2 ${isAbnormal ? "border-[#e05252]/40" : "border-border"}`}>
               <textarea
                 value={value.abnormalDetail}

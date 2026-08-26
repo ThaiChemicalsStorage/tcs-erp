@@ -4,7 +4,53 @@
 
 ---
 
-## Session — 2026-08-26 (absolute latest), The sidebar scrollbar
+## Session — 2026-08-26b (absolute latest), Three screenshot-driven fixes, and a lesson about auto-save
+
+### Two of the three were already built, just not shown
+The customer approval page "never showed" อ้างอิงโปรเจกต์/รหัสงาน — except the server had always
+sent it (`buildApprovalPublicPayload`) and `CustomerApprovalReportView` had always declared it. The
+only thing missing was a line in the page's field-list array. Worth checking the wire before
+assuming a display gap is a data gap; it turned a "add a field end-to-end" job into a one-line one.
+
+Same shape for "ลูกค้า" → "ชื่อบริษัท": the term already existed as `service.form.companyName` in
+the editor, so the fix was to *align* with established terminology rather than invent wording —
+which is what DESIGN.md asks for anyway.
+
+### The third was a real defect with a measurable cause
+*"ทำไมกรอบรายละเอียดเพิ่มเติมมันชิดงี้"*. Rather than nudging a padding value until it looked
+better, measured it: the disclosure `<tr>` had `pb-3` and **no top padding at all**, and a table row
+has no margin to fall back on, so the textarea's top edge sat 0.3px below the item row above it.
+The fix follows from the diagnosis instead of from taste — `pt-2 pb-4`, deliberately asymmetric so
+the panel groups with its own item rather than floating between two.
+
+### The lesson worth keeping: auto-save makes "just looking" a write
+Verifying that panel meant opening a real Draft in the service editor and toggling a checklist item.
+The 2026-08-25 auto-save PATCHes the server for any existing editable Draft on a 2.5s debounce — so
+clicking around to *look* at something silently persisted it. `SR-2569-0002` in the local demo
+database (`localhost:27017/tcs_erp`, confirmed **not** production — the user's screenshots are of
+SR-2569-0005, which does not exist locally) has a fresh `updatedAt`; the item toggled is back to
+`not_selected` and no detail text or photo changed.
+
+Two habits from this: check `MONGODB_URI` **before** clicking anything in an editor, not after; and
+prefer stubbing the API at the network layer (`page.route`) when the goal is to see a component
+render. That is exactly how the approval page was verified here — real component, real routing, real
+render, no LINE push and no write — and it should have been the first move on the editor too.
+
+### Verification
+Playwright against the running local stack (the user's own `npm run dev`, left running rather than
+killed). Approval page at 940px with a stubbed payload; checklist panel measured live before and
+after. `npx tsc --noEmit`, `npm run lint` (0 errors, 3 pre-existing warnings), `npm run build`,
+`npm test` (30 files / 304 tests) all clean.
+
+### What's next
+Still open from earlier today: whether the light-surface scroll regions get a styled scrollbar
+(TODO.md, Low Priority). Also noted in MODULES/Service.md: the approval payload already carries
+`nextPmDate`, `onSiteContactName`/`Phone` and `serviceType`, none of which the page displays —
+adding any of them is a display change only.
+
+---
+
+## Session — 2026-08-26, The sidebar scrollbar
 
 ### What was asked
 A cropped screenshot of the sidebar's right edge, with *"ทำให้สวยขึ้นหน่อย"*. The crop showed a

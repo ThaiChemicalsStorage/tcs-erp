@@ -14,6 +14,16 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-26b] Customer approval page shows อ้างอิงโปรเจกต์/รหัสงาน; "ลูกค้า" → "ชื่อบริษัท";
+  checklist detail panel no longer collides with its own item.** The project/job reference was
+  never missing from the API — `buildApprovalPublicPayload()` always sent it and the client type
+  always declared it; only `CustomerApprovalPage.tsx`'s field list omitted it. It is often the
+  customer's only link between our SR number and a PO on their side, so it now renders in the
+  editor's field order and in `font-mono`, matching the printed report. Separately, the checklist
+  item's disclosure row had `pb-3` and no top padding, leaving the textarea 0.3px under the item
+  row above it — now `pt-2 pb-4` (~16px above, ~24px below), so the panel reads as belonging to its
+  item. Verified in Playwright; tsc/lint/build/304 tests clean.
+
 - ✅ **[2026-08-26] The sidebar's scrollbar stopped being the brightest thing on the navy rail.**
   Reported with a screenshot: a full-height white OS track with Windows arrow buttons running down
   the sidebar. The app had no scrollbar styling anywhere, and the sidebar is its only scroll region

@@ -91,6 +91,15 @@ Abnormal reveals, inline:
 - **At least one attached photo** (added same day as the print view) — the "Photos" label shows a
   red "*at least 1 required" hint until one exists.
 
+**Spacing of the revealed panel (fixed 2026-08-26).** The detail/photos panel is a second `<tr>`
+spanning every column, and a table row has no margin — so its padding is the only separation it
+gets. It carried `pb-3` and **no top padding**, which put the textarea's top edge 0.3px below the
+item row above it and read as jammed under its own title (reported as *"ทำไมกรอบรายละเอียดเพิ่มเติม
+มันชิดงี้"*). Now `pt-2 pb-4`: ~16px above, ~24px below to the next item, so the panel stays visibly
+grouped with the item it belongs to instead of floating between two. Keep that asymmetry if this
+row is touched again — equal padding above and below is what makes a disclosure panel look
+detached from its own trigger.
+
 **2026-08-14, direct business request: photos are no longer Abnormal-only.** Selecting **Normal**
 now also reveals the same photo-attachment grid — no "at least 1 required" hint, attaching a photo
 to a Normal item is always optional, only Abnormal enforces the ≥1-photo rule. Neither the detail
@@ -405,6 +414,17 @@ link with a 7-day expiry** (the owner's recorded preference against always-live 
   capability URLs), then SignaturePad + อนุมัติ, or ไม่อนุมัติ + **required reason**. GET/respond
   use the key (wrong key = opaque 404; expired = shown as expired, respond = 410; one response
   per link).
+- **The summary block (`ข้อมูลงานบริการ`)** lists ชื่อบริษัท · ผู้ติดต่อ · สถานที่ให้บริการ ·
+  **อ้างอิงโปรเจกต์/รหัสงาน** · ระบบที่ให้บริการ · ประเภทบริการ · วันที่เข้าบริการ ·
+  วันที่ออกรายงาน · ผู้เข้าตรวจสอบ — the editor's own field order, so one record reads the same way
+  to the engineer who filled it in and the customer who receives it. Empty values are filtered out
+  (most are optional and a customer-facing page should never show a labelled blank), and
+  `projectOrJobCode` renders `font-mono` like the printed report does, being a code rather than
+  prose. `projectOrJobCode` was added to the display 2026-08-26 — the server had always sent it,
+  only the page's field list omitted it. The first label reads **ชื่อบริษัท** (not "ลูกค้า") since
+  2026-08-26, matching `service.form.companyName` in the editor. The server payload also carries
+  `nextPmDate`, `onSiteContactName`/`Phone` and `serviceType`, which this block does **not** show
+  today — adding one is a display change only, no API work.
 - **On approve**: writes the same `customerSignatureDataUrl`/`customerSignedName`/
   `customerSignedAt` fields the on-site SignaturePad uses — the printed report shows the customer
   signature identically regardless of which path captured it. On reject: `rejectReason` stored on

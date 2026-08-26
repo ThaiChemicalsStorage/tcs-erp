@@ -4,7 +4,56 @@
 
 ---
 
-## 2026-08-26 (absolute latest) — Sidebar: the navy rail's scrollbar is no longer the brightest thing on it
+## 2026-08-26b (absolute latest) — Customer approval page: project/job reference + "ชื่อบริษัท", and the checklist detail panel stops colliding with its own item
+
+Three small fixes reported from live screenshots.
+
+**1. The customer approval page never showed อ้างอิงโปรเจกต์/รหัสงาน.** Nothing was missing on the
+wire — `buildApprovalPublicPayload()` has always sent `projectOrJobCode`, and
+`CustomerApprovalReportView` has always declared it. Only `CustomerApprovalPage.tsx`'s field list
+omitted it. It is often the customer's **only** link between our SR number and a PO/project on
+their side, so it belongs on the page they actually read. Added in the editor's own field order
+(after สถานที่ให้บริการ, before ระบบที่ให้บริการ) so the same record reads the same way to the
+engineer who filled it in and the customer who receives it, and rendered `font-mono` — a code read
+character-by-character, matching how `ServiceReportPrintDocument.tsx` already renders the same
+field and DESIGN.md's Numbers/Codes rule. The field is optional in the editor, and the existing
+`.filter(([, v]) => v)` already drops empty values, so a report without one shows no blank row.
+
+Mechanically the field list gained a third tuple slot (`[label, value, "mono"?]`) rather than a
+second hard-coded `<dd>` variant, so the next value that needs mono is one word, not a branch.
+
+**2. "ลูกค้า" on that page is now "ชื่อบริษัท"** — per direct request, and it is the term the
+editor already uses for this exact field (`service.form.companyName`), so this aligns the page with
+established terminology rather than inventing new wording. Only the label changed; the value is the
+same `customerSnapshot.companyName`.
+
+**3. The checklist item's detail panel was jammed under its own title.** Reported as
+*"ทำไมกรอบรายละเอียดเพิ่มเติมมันชิดงี้"*. Measured in the running app: the disclosure row
+(`ServiceChecklistItemControl.tsx`) carried `pb-3` but **no top padding at all**, and a table row
+has no margin to fall back on — so the textarea's top edge sat **0.3px** below the item row above
+it, leaving only the item row's own `py-2` as separation. `pl-5 pr-5 pb-3` → `pl-5 pr-5 pt-2 pb-4`:
+~16px of air above the panel, ~24px below it to the next item, so the panel still reads as
+belonging to the item it hangs off rather than floating between two of them. Applies to both the
+normal and abnormal variants (same element, only the accent colour differs).
+
+**Verified** in Playwright against the running local stack. The approval page was exercised by
+stubbing only the API response at the network layer (`page.route`) — the real component, real
+routing, real render — because minting a genuine approval link would have sent a LINE push. The
+checklist panel was measured on a real Draft in the local dev database (`localhost:27017/tcs_erp`,
+the local demo copy — **not** production): 0.3px gap before, 8px + `py-2` after. `npx tsc --noEmit`,
+`npm run lint` (0 errors, 3 pre-existing warnings), `npm run build`, `npm test` (30 files / 304
+tests) all clean.
+
+**Note on that verification**: opening a Draft in the service editor and toggling a checklist item
+triggers the 2026-08-25 auto-save, which PATCHes the server for real. `SR-2569-0002` in the **local
+demo database** therefore has a fresh `updatedAt`; its item "การสั่นหรือความผิดปกติอื่นๆ" was
+toggled on and back off and reads `not_selected` again, and no other item, detail text, or photo
+changed. Worth remembering before the next browser check on an editable Draft: auto-save makes
+"just clicking around to look" a write.
+
+---
+
+## 2026-08-26 — Sidebar: the navy rail's scrollbar is no longer the brightest thing on it
 
 Reported with a screenshot of the sidebar's right edge: a full-height **white** track with Windows
 arrow buttons at both ends, running down the middle of the navy rail. The app had **no scrollbar

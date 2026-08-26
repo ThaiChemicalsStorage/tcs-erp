@@ -112,19 +112,29 @@ export default function CustomerApprovalPage() {
         <section className="bg-card border border-border rounded-xl p-5">
           <h2 className="text-sm font-semibold mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>ข้อมูลงานบริการ</h2>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            {[
-              ["ลูกค้า", report.customerSnapshot.companyName],
+            {/* Field order matches the editor form (ServiceReportEditor.tsx) so the same record
+                reads the same way to the engineer who filled it in and the customer who receives
+                it. Empty values drop out — most of these are optional, and a customer-facing page
+                should never show a labelled blank. `mono` marks a value meant to be read
+                character-by-character rather than as prose (DESIGN.md, Numbers/Codes); the printed
+                Service Report renders อ้างอิงโปรเจกต์ the same way. */}
+            {([
+              ["ชื่อบริษัท", report.customerSnapshot.companyName],
               ["ผู้ติดต่อ", report.customerSnapshot.contactName],
               ["สถานที่ให้บริการ", report.serviceLocation],
+              // The customer's own reference for this job — often the only thing that ties our
+              // SR number to a PO/project on their side, so it is worth the row even though the
+              // field is optional in the editor.
+              ["อ้างอิงโปรเจกต์/รหัสงาน", report.projectOrJobCode, "mono"],
               ["ระบบที่ให้บริการ", report.serviceSystemName],
               ["ประเภทบริการ", report.serviceType],
               ["วันที่เข้าบริการ", report.inspectionDate],
               ["วันที่ออกรายงาน", report.reportDate],
               ["ผู้เข้าตรวจสอบ", [report.engineerName, ...report.additionalInspectorNames].filter(Boolean).join(", ")],
-            ].filter(([, v]) => v).map(([label, value]) => (
+            ] as [string, string, "mono"?][]).filter(([, v]) => v).map(([label, value, mono]) => (
               <div key={label} className="flex flex-col">
                 <dt className="text-xs text-muted-foreground">{label}</dt>
-                <dd className="text-foreground">{value}</dd>
+                <dd className={mono ? "text-foreground font-mono" : "text-foreground"}>{value}</dd>
               </div>
             ))}
           </dl>
