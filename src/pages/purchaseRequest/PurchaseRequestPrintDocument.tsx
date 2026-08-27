@@ -51,7 +51,13 @@ export function PurchaseRequestPrintDocument({ purchaseRequest: p }: { purchaseR
           {p.lines.map((line, idx) => (
             <tr key={line.id}>
               <td className="border border-black px-1.5 py-1 text-center">{idx + 1}</td>
-              <td className="border border-black px-1.5 py-1">{line.productCode ? `${line.productCode} ` : ""}{line.description}</td>
+              <td className="border border-black px-1.5 py-1">
+                {line.productCode ? `${line.productCode} ` : ""}{line.description}
+                {/* บรรทัดย่อย เยื้องเข้ามาใต้คำอธิบายในช่องเดียวกัน เหมือนใบสั่งผลิต ไม่แตกคอลัมน์ */}
+                {(line.subDetails ?? []).map((sd, i) => (
+                  <p key={i} style={{ margin: "1px 0 0 12px" }}>{sd}</p>
+                ))}
+              </td>
               <td className="border border-black px-1.5 py-1 text-center">{line.warehouseRemainingQty}</td>
               <td className="border border-black px-1.5 py-1 text-center">{line.qtyRequested ?? ""}</td>
               <td className="border border-black px-1.5 py-1 text-center">{line.neededByDate}</td>

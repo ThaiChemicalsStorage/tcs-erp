@@ -176,6 +176,30 @@ Production department accepted to start work earlier, not a problem that was sol
 that pinned the 400s were **inverted on purpose**, each with a comment saying so, so a future reader
 cannot mistake this for a gate that went missing.
 
+## Rewrite + revision note (2026-08-27)
+
+Production department request: *"เพิ่ม Rewrite"* and *"ใบเบิกของมี Rewrite แล้วสามารถทำหมายเหตุการแก้ไขได้เหมือนใน scope
+และสามารถดูในใบปริ้นได้"*. **ใบสั่งผลิต** and **ใบเบิก-คืนวัสดุ** both gained `POST /:id/rewrite` and a
+`revisionNote` field. Both use their `_id` as the document number, so the revision appends `-R{n}`
+to it, reserved through an atomic per-chain counter — the same idiom Scope of Work and Quotation use.
+
+**`revisionNote` is printed here, unlike everywhere else.** Quotation and Scope of Work have carried a
+`revisionNote` since 2026-07-23 but never rendered it on any print document — it is purely internal
+there. The Production department asked for the opposite, so both print layouts show a
+"หมายเหตุการแก้ไข" block when the note is non-empty. It is never inherited by the next revision.
+
+**The Production Order carries two numbers, and each takes its own root.** `_id` and
+`documentNumber` diverge as soon as a user edits the printed number (see the numbering section
+above), so the revision suffix is computed from each value's *own* root. Deriving the
+`documentNumber` root from `_id` would silently discard a number the user chose — pinned by a test.
+
+**The Material Requisition rewrite must move its `ProjectItem` link.** A revision is a new `_id`; if
+the link is not moved, the Project page keeps pointing at the superseded document forever and a user
+clicking through from the project lands on the wrong one — with nothing failing anywhere.
+`tests/api/projectAtomicity.test.ts` covers it, and the test was verified to fail when the re-link is
+removed. Production-owned requisitions have no `projectId` and skip the step. Withdrawal and return
+quantities are not inherited.
+
 ## Known gaps
 
 - **Partly click-tested now.** The 2026-08-27 pass exercised creating a production order (incl. from a

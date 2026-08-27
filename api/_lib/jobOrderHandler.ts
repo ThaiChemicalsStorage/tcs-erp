@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { Collection } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
+import { handleAttachmentUpload, handleAttachmentDelete, handleAttachmentDownload, type AttachmentConfig } from "./documentAttachments.js";
+import type { DocumentAttachment } from "../../src/lib/documentAttachments.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
@@ -13,7 +15,7 @@ import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
 import { sanitizeNullableNumber } from "./projectValidation.js";
-import { buildJobOrderChecklistGroups } from "../../src/lib/jobOrder.js";
+import { buildJobOrderChecklistGroups, withJobOrderChecklistGroups } from "../../src/lib/jobOrder.js";
 import type { JobOrderLine, JobOrderSummary, ChecklistGroup } from "../../src/lib/jobOrder.js";
 
 /**
@@ -68,7 +70,10 @@ function sanitizeLines(raw: unknown): JobOrderLine[] {
  * `buildJobOrderChecklistGroups()`) and only ever toggles `checked`/`value` — same
  * "a client can toggle state but never inject new structure" rule Scope of Work's own
  * `sanitizeChecklistGroups()` enforces. */
-function sanitizeChecklist(raw: unknown, current: ChecklistGroup[]): ChecklistGroup[] {
+function sanitizeChecklist(raw: unknown, currentRaw: ChecklistGroup[]): ChecklistGroup[] {
+  // เทียบกับโครงสร้างที่จัดกลุ่มแล้ว ไม่ใช่ค่าดิบในฐานข้อมูล — ไม่งั้นเอกสารเก่า (กลุ่มเดียว) จะถูก
+  // ปฏิเสธด้วย "กลุ่มเช็คลิสต์ไม่ถูกต้อง" ทันทีที่หน้าจอส่งหัวข้อใหม่กลับมา
+  const current = withJobOrderChecklistGroups(currentRaw);
   if (raw === undefined) return current;
   if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลขอบเขตงานไม่ถูกต้อง");
   const currentByKey = new Map(current.map((g) => [g.key, g]));
@@ -82,15 +87,24 @@ function sanitizeChecklist(raw: unknown, current: ChecklistGroup[]): ChecklistGr
       const r = optionByKey.get(baseOpt.key);
       if (!r) return baseOpt;
       const checked = typeof r.checked === "boolean" ? r.checked : baseOpt.checked;
-      if (baseOpt.value === undefined) return { ...baseOpt, checked };
-      return { ...baseOpt, checked, value: sanitizeShortText(r.value, `รายละเอียด (${baseOpt.label})`) };
+      // บรรทัดย่อย — ตัดบรรทัดว่างทิ้ง และเก็บเฉพาะตอนที่ตัวเลือกถูกติ๊ก (ปลดติ๊กแล้วรายละเอียดหายไปด้วย
+      // โดยตั้งใจ ไม่งั้นใบพิมพ์จะมีรายละเอียดของงานที่ไม่ได้อยู่ในขอบเขต)
+      const details = checked
+        ? (Array.isArray(r.details) ? r.details : [])
+            .map((d, i) => sanitizeShortText(d, `รายละเอียดย่อย (${baseOpt.label}) ลำดับที่ ${i + 1}`))
+            .filter(Boolean)
+        : [];
+      if (baseOpt.value === undefined) return { ...baseOpt, checked, details };
+      return { ...baseOpt, checked, details, value: sanitizeShortText(r.value, `รายละเอียด (${baseOpt.label})`) };
     });
     return { ...base, options };
   });
 }
 
 function toClient(doc: JobOrderFields & { _id: string }) {
-  return withStringId(withApprovalDefaults(doc));
+  // จัดเช็คลิสต์เข้าหัวข้อปัจจุบันทุกครั้งที่อ่าน — ใบที่บันทึกไว้ตอนยังเป็นกลุ่มเดียว 23 ข้อจะถูกกระจาย
+  // เข้าหัวข้อใหม่โดยค่าที่ติ๊กไว้ไม่หาย ดู withJobOrderChecklistGroups() ใน src/lib/jobOrder.ts
+  return withStringId(withApprovalDefaults({ ...doc, scopeChecklist: withJobOrderChecklistGroups(doc.scopeChecklist), attachments: doc.attachments ?? [] }));
 }
 function toSummary(doc: JobOrderFields & { _id: string }): JobOrderSummary {
   const full = withStringId(doc);
@@ -141,6 +155,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     // (เป็นปัญหาข้อมูล ไม่ใช่โค้ด — ดู TODO.md เรื่อแผนกของพนักงานที่ยังไม่ตรงกับตาราง departments)
     fromSite: (ctx.user.department ?? "").trim(), toSite: "", startDate: "", finishDate: "",
     lines: [], scopeChecklist: buildJobOrderChecklistGroups(), outOfScope: "",
+    attachments: [],
     status: "Draft",
     // requestedAt seeds from a date-only slice of `now`, not the full ISO timestamp — this field
     // round-trips through handleUpdate()'s validateIsoDateOrEmpty() on every save, which requires
@@ -272,6 +287,18 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
+const attachmentConfig: AttachmentConfig<JobOrderFields & { _id: string }> = {
+  label: "ใบสั่งงาน",
+  docType: "job-orders",
+  load: loadOrThrow,
+  canEdit,
+  collection: async () => (await jobOrdersCollection()) as unknown as Collection<never>,
+  idOf: (doc) => doc._id,
+  currentAttachments: (doc) => (doc.attachments ?? []) as DocumentAttachment[],
+  writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
+  respond: async (res, id) => { res.status(200).json({ jobOrder: toClient(await loadOrThrow(id)) }); },
+};
+
 export async function handleJobOrder(req: VercelRequest, res: VercelResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/job-orders");
 
@@ -288,5 +315,12 @@ export async function handleJobOrder(req: VercelRequest, res: VercelResponse): P
     if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);
     if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
+  // ไฟล์แนบ — ตัวดาวน์โหลดตั้งใจให้เปิดได้โดยไม่ต้องล็อกอิน คุมด้วย capability key ใน URL แทน
+  // ดู api/_lib/documentAttachments.ts — route นี้จึงต้องมาก่อนด่าน requireUser ของ handler อื่น
+  if (parts.length === 4 && parts[1] === "attachments" && parts[3] === "download") {
+    return handleAttachmentDownload(req, res, "job-orders", parts[0], parts[2]);
+  }
+  if (parts.length === 2 && parts[1] === "attachments") return handleAttachmentUpload(req, res, parts[0], attachmentConfig);
+  if (parts.length === 3 && parts[1] === "attachments") return handleAttachmentDelete(req, res, parts[0], parts[2], attachmentConfig);
   throw new HttpError(404, "Not found");
 }

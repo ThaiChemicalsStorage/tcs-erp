@@ -117,6 +117,13 @@ export function ProductionOrderPrintDocument({ doc }: { doc: ProductionOrder }) 
                 </tbody>
               </table>
 
+              {/* หมายเหตุการแก้ไข — พิมพ์จริงตามที่ฝ่ายผลิตขอ ("สามารถดูในใบปริ้นได้") ซ่อนเมื่อว่าง */}
+              {doc.revisionNote.trim() !== "" && (
+                <div style={{ border: "1px solid #000", borderTop: "none", padding: "4px 6px", whiteSpace: "pre-wrap" }}>
+                  <span style={{ fontWeight: 700 }}>หมายเหตุการแก้ไข :</span> {doc.revisionNote}
+                </div>
+              )}
+
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "-1px", fontWeight: 700 }}>
                 <tbody>
                   {signRow("ผู้สั่งผลิต", doc.orderedBy)}

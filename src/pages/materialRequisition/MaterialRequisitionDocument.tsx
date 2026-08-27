@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2 } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2 , GitBranch } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
@@ -8,15 +8,18 @@ import {
   finalizeMaterialRequisition, logMaterialRequisitionPrinted, deleteMaterialRequisition,
   blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES,
   submitMaterialRequisitionApproval, approveMaterialRequisition, rejectMaterialRequisition, withdrawMaterialRequisitionApproval,
+  rewriteMaterialRequisition,
 } from "../../lib/materialRequisition";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
 import { ApiError } from "../../lib/apiClient";
+import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { MaterialRequisitionPrintDocument } from "./MaterialRequisitionPrintDocument";
 import { useI18n } from "../../lib/i18n";
+import { getRevisionNumber } from "../../lib/revisionDiff";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -27,6 +30,7 @@ import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields {
   return {
     lines: m.lines,
+    revisionNote: m.revisionNote,
     customerName: m.customerName,
     productName: m.productName,
     responsibleEmployee: m.responsibleEmployee,
@@ -51,6 +55,7 @@ function toGuardPayload(m: MaterialRequisition) {
 // Material Requisition editor: header fields, catalog line table, and the material-return section.
 export function MaterialRequisitionDocument({
   materialRequisitionId,
+  company,
   currentUserId,
   canEdit,
   canFinalize,
@@ -58,9 +63,11 @@ export function MaterialRequisitionDocument({
   canDelete,
   onBack,
   onDeleted,
+  onOpenOther,
   showToast,
 }: {
   materialRequisitionId: string;
+  company: Company;
   currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
@@ -68,6 +75,8 @@ export function MaterialRequisitionDocument({
   canDelete: boolean;
   onBack: () => void;
   onDeleted: () => void;
+  /** เปิดเอกสารใบอื่นในโมดูลเดียวกัน — ใช้ตอน Rewrite เพื่อพาไปฉบับใหม่ที่เพิ่งสร้าง */
+  onOpenOther: (id: string) => void;
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
@@ -83,6 +92,8 @@ export function MaterialRequisitionDocument({
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRewrite, setConfirmRewrite] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
@@ -242,6 +253,15 @@ export function MaterialRequisitionDocument({
   const isDraftStatus = doc.status === "Draft";
   const editable = canEdit && isDraftStatus;
 
+  // แบบเดียวกับที่ใบส่งมอบสินค้าทำ (DeliveryOrderDocument.tsx) — โมดูลนี้ไม่เคยโหลดโปรไฟล์บริษัท
+  // มาก่อนเลย จึงพิมพ์หัวจดหมายไม่ได้ จนกระทั่งฝ่ายผลิตขอเมื่อ 2026-08-27
+  const companyHeader: CompanyHeaderInfo = {
+    name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
+    branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
+  };
+
   const updateLine = (id: string, patch: Partial<MaterialRequisitionLine>) => {
     setDraft((prev) => prev && { ...prev, lines: prev.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
   };
@@ -267,6 +287,19 @@ export function MaterialRequisitionDocument({
     } finally {
       setFinalizing(false);
     }
+  };
+
+  // สร้างฉบับแก้ไข แล้วเปิดฉบับใหม่ทันที — ฉบับเดิมยังอยู่ และลิงก์ในโครงการถูกย้ายมาชี้ฉบับใหม่ให้แล้ว
+  const handleRewrite = async () => {
+    if (!doc) return;
+    setRewriting(true);
+    try {
+      const created = await rewriteMaterialRequisition(doc.id);
+      showToast(t("docRevision.rewritten"));
+      onOpenOther(created.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("docRevision.errorRewrite"));
+    } finally { setRewriting(false); setConfirmRewrite(false); }
   };
 
   const handlePrint = async () => {
@@ -313,6 +346,11 @@ export function MaterialRequisitionDocument({
         <div data-tour="mrdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
           {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
+          {canEdit && doc.status === "Final" && (
+            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
+            </button>
+          )}
           {canPrint && (
             <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("materialRequisitionDoc.print")}
@@ -465,6 +503,23 @@ export function MaterialRequisitionDocument({
           </div>
         </div>
 
+        {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
+            ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
+        {getRevisionNumber(doc.id) > 0 && (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-foreground mb-1">{t("docRevision.noteTitle")}</h2>
+            <p className="text-xs text-muted-foreground mb-2">{t("docRevision.noteHelp")}</p>
+            <textarea
+              rows={4}
+              disabled={!editable}
+              value={draft.revisionNote}
+              onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
+              placeholder={t("docRevision.notePlaceholder")}
+              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60"
+            />
+          </div>
+        )}
+
         <div data-tour="mrdoc-returnCard" className="bg-card border border-[#c9a84c]/30 rounded-xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <Undo2 size={15} className="text-[#c9a84c]" />
@@ -520,7 +575,7 @@ export function MaterialRequisitionDocument({
         </div>
       </div>
 
-      {showPrint && <MaterialRequisitionPrintDocument materialRequisition={doc} />}
+      {showPrint && <MaterialRequisitionPrintDocument materialRequisition={doc} companyHeader={companyHeader} />}
 
       <ProductPickerModal open={pickerOpen} products={filteredProducts} categories={categories} onSelect={addProduct} onClose={() => setPickerOpen(false)} />
 
@@ -532,6 +587,15 @@ export function MaterialRequisitionDocument({
         busy={deleting}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
+      />
+      <ConfirmDialog
+        open={confirmRewrite}
+        title={t("docRevision.rewriteConfirmTitle")}
+        message={t("docRevision.rewriteConfirmBody")}
+        confirmLabel={t("docRevision.rewrite")}
+        busy={rewriting}
+        onConfirm={() => void handleRewrite()}
+        onCancel={() => setConfirmRewrite(false)}
       />
       <ConfirmDialog
         open={confirmFinalize}

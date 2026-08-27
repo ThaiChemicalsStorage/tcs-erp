@@ -1,17 +1,38 @@
 import type { MaterialRequisition } from "../../lib/materialRequisition";
+import type { CompanyHeaderInfo } from "../../lib/storage";
+import { PrintLetterhead } from "../../components/PrintLetterhead";
 
 /**
- * Print layout for FM-ST-04 Rev.02 — plain black-on-white formal form, matching the reference PDF's
- * column layout (No./Code/Description/Unit/Planned/1st/2nd/Return/Actual). Only rendered while
- * printing (`hidden print:block`, same convention DeliveryOrderPrintDocument.tsx established) — a
- * first-pass reproduction of the form's structure, not yet pixel-calibrated against the real
- * printed page (that level of polish came as a later pass for Delivery Order's own print layout too,
- * not its first ship).
+ * Print layout for FM-ST-04 Rev.02 — the form's own column layout
+ * (No./Code/Description/Unit/Planned/1st/2nd/Return/Actual), rendered only while printing
+ * (`hidden print:block`, the convention DeliveryOrderPrintDocument.tsx established).
+ *
+ * **2026-08-27**: gained the company letterhead, per the Production department's request that
+ * ใบเบิกและใบคืนพัสดุ "ทำเทมเพลตออกมาคล้ายๆของใบเสนอราคา". The letterhead itself lives in the shared
+ * `PrintLetterhead` component; the form body below is unchanged, because the reference form's column
+ * layout is what Store staff actually read — only the header was asked to change.
+ *
+ * The whole document is wrapped in one outer table so the FM-ST-04 form code can sit in `<tfoot>`
+ * and repeat on every printed page, the same mechanism ProductionOrderPrintDocument.tsx uses.
+ *
+ * Fixed Thai, no i18n — see docs/CLAUDE.md's print policy.
  */
-export function MaterialRequisitionPrintDocument({ materialRequisition: m }: { materialRequisition: MaterialRequisition }) {
+export function MaterialRequisitionPrintDocument({ materialRequisition: m, companyHeader }: { materialRequisition: MaterialRequisition; companyHeader: CompanyHeaderInfo }) {
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif" }}>
       <style>{"@media print { @page { size: A4 portrait; margin: 12mm; } }"}</style>
+      <table className="w-full" style={{ borderCollapse: "collapse" }}>
+        <tbody>
+          <tr>
+            <td style={{ padding: 0, border: "none" }}>
+      <PrintLetterhead
+        companyHeader={companyHeader}
+        docLabel="REQUISITION"
+        rightMeta={[
+          { label: "เลขที่ใบเบิก", value: m.id },
+          { label: "รหัสงาน", value: m.jobCode },
+        ]}
+      />
       <h1 className="text-center text-lg font-bold mb-3">ใบเบิกและใบคืนวัสดุ</h1>
       <table className="w-full text-xs mb-3" style={{ borderCollapse: "collapse" }}>
         <tbody>
@@ -65,6 +86,13 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m }: { m
         </tbody>
       </table>
 
+      {/* หมายเหตุการแก้ไข — พิมพ์จริงตามที่ฝ่ายผลิตขอ ("สามารถดูในใบปริ้นได้") ซ่อนเมื่อว่าง */}
+      {(m.revisionNote ?? "").trim() !== "" && (
+        <div className="border border-black px-2 py-1 mt-2 text-[10px]" style={{ whiteSpace: "pre-wrap" }}>
+          <span className="font-semibold">หมายเหตุการแก้ไข :</span> {m.revisionNote}
+        </div>
+      )}
+
       <table className="w-full text-xs mt-6" style={{ borderCollapse: "collapse" }}>
         <tbody>
           <tr>
@@ -105,7 +133,18 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m }: { m
           </tr>
         </tbody>
       </table>
-      <p className="text-[9px] text-right mt-4">FM-ST-04 Rev.02 : 21/07/68</p>
+            </td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td style={{ padding: 0, border: "none" }}>
+              <p className="text-[9px] text-right mt-4">FM-ST-04 Rev.02 : 21/07/68</p>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
     </div>
   );
 }

@@ -11,7 +11,8 @@ import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApprov
 import { loadPendingProjectItemOrThrow, linkProjectItemToSubDocument, markProjectItemFulfilled, unlinkProjectItem, findProjectItemIdByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
-import { sanitizeShortText, validateIsoDateOrEmpty } from "./quoteValidation.js";
+import { sanitizeShortText, validateIsoDateOrEmpty, sanitizeLongText } from "./quoteValidation.js";
+import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
 import { ensureMaterialCatalogSeeded } from "./materialCatalogSeedData.js";
 import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary } from "../../src/lib/materialRequisition.js";
@@ -102,7 +103,8 @@ async function sanitizeLines(raw: unknown): Promise<MaterialRequisitionLine[]> {
 }
 
 function toClient(doc: MaterialRequisitionFields & { _id: string }) {
-  return withStringId(withApprovalDefaults(doc));
+  // เอกสารก่อน 2026-08-27 ไม่มี revisionNote — เติมเป็น "" ตอนอ่าน ไม่ได้ทำ migration
+  return withStringId(withApprovalDefaults({ ...doc, revisionNote: doc.revisionNote ?? "" }));
 }
 function toSummary(doc: MaterialRequisitionFields & { _id: string }): MaterialRequisitionSummary {
   const full = withStringId(doc);
@@ -196,6 +198,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     projectId: source.projectId, scopeOfWorkId: source.scopeOfWorkId, jobCode: source.jobCode,
     customerName: source.customerName,
     ownerDepartment: fromProduction ? "production" : "project",
+    revisionNote: "",
     productionOrderId: fromProduction ? productionOrderId : "",
     jobOrderId: jobOrderLink.jobOrderId, jobOrderCode: jobOrderLink.jobOrderCode,
     productName: source.productName, responsibleEmployee: "", productionStartDate: "",
@@ -272,6 +275,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<MaterialRequisitionFields> = {};
   if ("lines" in body) update.lines = await sanitizeLines(body.lines);
+  if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   if ("jobOrderId" in body) {
     const link = await resolveJobOrderLink(doc.projectId, body.jobOrderId);
     update.jobOrderId = link.jobOrderId;
@@ -364,6 +368,77 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
   res.status(200).json({ ok: true });
 }
 
+/** ตัวนับเลขฉบับแก้ไขต่อสายเอกสาร — idiom เดียวกับ Scope of Work และใบสั่งผลิต */
+async function nextMaterialRequisitionRevision(counters: Collection<CounterFields>, root: string): Promise<number> {
+  const result = await counters.findOneAndUpdate(
+    { _id: `material_requisition_revision_${root}` },
+    { $inc: { seq: 1 } },
+    { returnDocument: "after", upsert: true },
+  );
+  return result?.seq ?? 1;
+}
+
+/**
+ * Rewrite ใบเบิก-คืนวัสดุ (ฝ่ายผลิตขอไว้ 2026-08-27) — `_id` คือเลขที่เอกสาร จึงต่อท้ายด้วย `-R{n}`
+ *
+ * ⚠️ **ต้องย้ายลิงก์ของ ProjectItem มาชี้ฉบับใหม่ด้วย** ไม่งั้นหน้าโครงการจะยังชี้ฉบับเก่าตลอดไป
+ * แล้วผู้ใช้จะกดจากโครงการเข้าไปเจอใบที่เลิกใช้แล้ว — ต่างจากใบสั่งผลิตที่ไม่ผูกกับ ProjectItem เลย
+ * ใบของฝ่ายผลิต (`ownerDepartment === "production"`) ไม่มี projectId จึงข้ามขั้นตอนนี้ไปเอง
+ *
+ * ยอดเบิก/ยอดคืน/ช่องเซ็นไม่สืบทอด — ฉบับใหม่เริ่มต้นเหมือนใบเบิกที่ยังไม่ได้เบิกจริง
+ */
+async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "materialRequisition:create");
+  const source = await loadOrThrow(id);
+
+  const [materialRequisitions, counters] = await Promise.all([materialRequisitionsCollection(), countersCollection()]);
+  const root = getRevisionRoot(source._id);
+  const now = nowIso();
+
+  let created: (MaterialRequisitionFields & { _id: string }) | null = null;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 5 && !created; attempt++) {
+    const seq = await nextMaterialRequisitionRevision(counters, root);
+    const { _id: _drop, ...rest } = source;
+    const doc: MaterialRequisitionFields & { _id: string } = {
+      ...rest,
+      _id: `${root}-R${seq}`,
+      lines: source.lines.map((l) => ({ ...l, withdrawal1Qty: null, withdrawal2Qty: null, returnQty: null, actualUsedQty: null })),
+      status: "Draft",
+      preparedBy: ctx.user.fullName, preparedAt: now.slice(0, 10),
+      approvedBy: "", approvedAt: "",
+      storeDeptBy: "", storeDeptAt: "",
+      costDeptBy: "", costDeptAt: "",
+      returnedBy: "", returnReceivedBy: "", returnedAt: "",
+      approvedByUserId: "",
+      rejectionComment: "",
+      revisionNote: "",
+      createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
+    };
+    try {
+      await materialRequisitions.insertOne(doc);
+      created = doc;
+    } catch (err) {
+      if (err && typeof err === "object" && (err as { code?: number }).code === 11000) { lastErr = err; continue; }
+      throw err;
+    }
+  }
+  if (!created) {
+    console.error("[material-requisitions] exhausted retries reserving a unique revision number", lastErr);
+    throw new HttpError(409, "ไม่สามารถสร้างเลขที่ฉบับแก้ไขที่ไม่ซ้ำกันได้ กรุณาลองใหม่อีกครั้ง");
+  }
+
+  // ย้ายลิงก์ในโครงการมาชี้ฉบับใหม่ — เฉพาะใบฝั่งโครงการที่ผูกกับรายการอยู่จริง
+  if (source.projectId) {
+    const itemId = await findProjectItemIdByLink(source.projectId, "materialRequisitionId", source._id);
+    if (itemId) await linkProjectItemToSubDocument(source.projectId, itemId, "requisition", "materialRequisitionId", created._id);
+  }
+
+  await writeAuditEntry(ctx, "Material Requisition Rewritten", `สร้างใบเบิกฉบับแก้ไข ${created._id} จาก ${source._id}`, { scopeOfWorkId: source.scopeOfWorkId });
+  res.status(201).json({ materialRequisition: toClient(created) });
+}
+
 async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "materialRequisition:delete");
@@ -406,5 +481,6 @@ export async function handleMaterialRequisition(req: VercelRequest, res: VercelR
   if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
   throw new HttpError(404, "Not found");
 }

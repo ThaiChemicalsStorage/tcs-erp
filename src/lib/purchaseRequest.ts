@@ -36,6 +36,13 @@ export interface PurchaseRequestLine {
    * requesting-department code and a distinct cost/job code. Revisit once a real filled multi-line PR
    * is available to confirm whether this is actually a second, distinct field. */
   costCode: string;
+  /**
+   * บรรทัดรายละเอียดย่อยใต้รายการหลัก — พิมพ์เยื้องเข้ามาใต้คำอธิบาย (ฝ่ายโครงการขอไว้ 2026-08-27:
+   * "ใบขอซื้อสามารถเพิ่มรายละเอียดย่อย") ใช้รูปแบบเดียวกับ ProductionOrderLine.subDetails ทุกประการ
+   * คือ string[] ธรรมดา ไม่ใช่ SubDetail[] แบบใบเสนอราคา เพราะที่นี่ไม่ต้องลากสลับลำดับ
+   * บรรทัดว่างถูกตัดทิ้งฝั่งเซิร์ฟเวอร์ เอกสารเก่าที่ไม่มีฟิลด์นี้อ่านออกมาเป็น [] เสมอ
+   */
+  subDetails: string[];
   /** "tied to a job code" per the original request — cost lives per-line here, not on the header,
    * since a PR is naturally a list of individually-priced items. */
   estimatedCost: number | null;
@@ -151,9 +158,9 @@ export async function deletePurchaseRequest(id: string): Promise<void> {
 export function blankPurchaseRequestLine(product?: { id: string; code: string; name: string; unit: string }): PurchaseRequestLine {
   const newId = `prline-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   if (product) {
-    return { id: newId, productId: product.id, productCode: product.code, description: product.name, unit: product.unit, warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "", estimatedCost: null };
+    return { id: newId, subDetails: [], productId: product.id, productCode: product.code, description: product.name, unit: product.unit, warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "", estimatedCost: null };
   }
-  return { id: newId, productId: "", productCode: "", description: "", unit: "", warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "", estimatedCost: null };
+  return { id: newId, subDetails: [], productId: "", productCode: "", description: "", unit: "", warehouseRemainingQty: "", qtyRequested: null, neededByDate: "", departmentCode: "", costCode: "", estimatedCost: null };
 }
 
 // ── ขั้นตอนอนุมัติ (ร่าง → รออนุมัติ → อนุมัติ) เพิ่ม 2026-08-20 ──────────────────────────────

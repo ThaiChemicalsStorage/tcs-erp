@@ -71,6 +71,10 @@ async function sanitizeLines(raw: unknown): Promise<PurchaseRequestLine[]> {
     if (productId && !product) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: ไม่พบสินค้าที่ระบุ`);
     return {
       id: typeof r.id === "string" && r.id ? r.id : newId("prline"),
+      // บรรทัดย่อย — ตัดบรรทัดว่างทิ้งเหมือน ProductionOrderLine.subDetails (มีเทสต์คุมพฤติกรรมนี้อยู่)
+      subDetails: (Array.isArray(r.subDetails) ? r.subDetails : [])
+        .map((sd, i) => sanitizeShortText(sd, `รายละเอียดย่อยลำดับที่ ${idx + 1}.${i + 1}`))
+        .filter(Boolean),
       productId,
       productCode: product ? product.code : sanitizeShortText(r.productCode, `รหัสสินค้าลำดับที่ ${idx + 1}`),
       description: product ? product.name : sanitizeShortText(r.description, `รายละเอียดลำดับที่ ${idx + 1}`, true),

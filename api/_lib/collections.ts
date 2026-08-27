@@ -136,6 +136,27 @@ export async function scopeAttachmentFilesCollection() {
   return db.collection<ScopeAttachmentFileFields>("scope_attachment_files");
 }
 
+/** ไฟล์แนบแบบใช้ร่วมกันได้ทุกเอกสาร (เพิ่ม 2026-08-27 ตอนที่ใบสั่งงานต้องแนบไฟล์ได้) —
+ *  โครงสร้างเหมือน `scope_attachment_files` ทุกอย่าง ต่างแค่แทน `scopeOfWorkId` ด้วยคู่
+ *  `docType` + `docId` เพื่อให้เอกสารชนิดไหนก็ใช้ได้ ไฟล์เก็บเป็น BSON Binary แยกจากตัวเอกสาร
+ *  เหมือนเดิม การดึงเอกสารจึงไม่ลากไฟล์เป็นเมกะไบต์มาด้วย ลิมิตอยู่ที่ route (2 MB/ไฟล์, 5 ไฟล์/เอกสาร)
+ *  ดู api/_lib/documentAttachments.ts — **Scope of Work ยังใช้คอลเลกชันเดิมของตัวเอง ยังไม่ย้ายมา** */
+export interface DocumentAttachmentFileFields {
+  docType: string;
+  docId: string;
+  attachmentId: string;
+  downloadKey: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  data: import("mongodb").Binary;
+  createdAt: string;
+}
+export async function documentAttachmentFilesCollection() {
+  const db = await getDb();
+  return db.collection<DocumentAttachmentFileFields>("document_attachment_files");
+}
+
 /** Failed-login tracking for `POST /api/auth/login`'s rate limiting (added 2026-07-29 — closes the
  * long-standing "no login rate limiting" Known Gap; see docs/RBAC.md). One document per FAILED
  * attempt; successful logins delete the identifier's documents. MongoDB-backed deliberately (not

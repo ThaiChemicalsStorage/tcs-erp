@@ -10,7 +10,8 @@ import {
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
-import { sanitizeShortText, validateIsoDateOrEmpty } from "./quoteValidation.js";
+import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
+import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import { sanitizeNullableNumber } from "./projectValidation.js";
 import type { ProductionOrderLine, ProductionOrderSignatory, ProductionOrderSummary } from "../../src/lib/productionOrder.js";
 
@@ -133,9 +134,36 @@ function sanitizeLines(raw: unknown): ProductionOrderLine[] {
   });
 }
 
+/**
+ * แปลงรายการของ Scope of Work มาเป็นรายการในใบสั่งผลิต (ฝ่ายผลิตขอไว้ 2026-08-27:
+ * "ใบสั่งผลิตดึงข้อมูลสินค้าและรายละเอียดเอาไปใช้")
+ *
+ * ทิศทางตรงข้ามกับ `mapLineToScopeItem()` ใน scopeOfWorkHandler.ts — สเปกของงาน (ScopeOfWorkSpecLine[])
+ * กลายเป็นบรรทัดย่อย (subDetails) ซึ่งเป็นสิ่งเดียวกันในเชิงความหมาย แค่คนละโครงสร้าง
+ *
+ * เป็น **สำเนา ณ เวลาที่ดึง** ไม่ใช่การอ้างอิงสด — ตรงกับที่ทุกโมดูลในแอปนี้ทำกับ Scope of Work
+ * (ใบส่งมอบ/โครงการ) ผู้ใช้แก้รายการในใบสั่งผลิตต่อได้อิสระโดยไม่กระทบงานต้นทาง
+ */
+function mapScopeItemsToLines(items: unknown): ProductionOrderLine[] {
+  if (!Array.isArray(items)) return [];
+  return (items as Record<string, unknown>[]).slice(0, MAX_LINES).map((it) => {
+    const isSectionHeader = it.isSectionHeader === true;
+    const specs = Array.isArray(it.specifications) ? (it.specifications as Record<string, unknown>[]) : [];
+    return {
+      id: newId("poline"),
+      isSectionHeader,
+      description: typeof it.name === "string" ? it.name : "",
+      subDetails: specs.map((sp) => (typeof sp.text === "string" ? sp.text.trim() : "")).filter(Boolean),
+      qty: isSectionHeader ? null : (typeof it.quantity === "number" ? it.quantity : null),
+      unit: isSectionHeader ? "" : (typeof it.unit === "string" ? it.unit : ""),
+      remark: typeof it.remark === "string" ? it.remark : "",
+    };
+  });
+}
+
 function toClient(doc: ProductionOrderFields & { _id: string }) {
   // เอกสารที่สร้างก่อน 2026-08-27 ไม่มี documentNumber — ถือว่าเลขที่พิมพ์เท่ากับ _id เหมือนเดิม
-  return withStringId(withApprovalDefaults({ ...doc, documentNumber: doc.documentNumber || doc._id }));
+  return withStringId(withApprovalDefaults({ ...doc, documentNumber: doc.documentNumber || doc._id, revisionNote: doc.revisionNote ?? "" }));
 }
 function toSummary(doc: ProductionOrderFields & { _id: string }): ProductionOrderSummary {
   const full = withStringId(doc);
@@ -222,7 +250,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     supervisorName: "",
     startDate: "",
     dueDate: "",
-    lines: [],
+    // ดึงรายการ+สเปกจากงานต้นทางมาให้เลย ผู้ใช้ลบ/แก้ต่อได้ (ก่อน 2026-08-27 เริ่มจากตารางว่าง)
+    lines: mapScopeItemsToLines(scope.items),
     status: "Draft",
     orderedBy: { name: ctx.user.fullName, date: now.slice(0, 10) },
     approver: { ...blank },
@@ -231,6 +260,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     costDeptBy: { ...blank },
     approvedByUserId: "",
     rejectionComment: "",
+    revisionNote: "",
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
   };
   const productionOrders = await productionOrdersCollection();
@@ -273,6 +303,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
     }
     set.documentNumber = documentNumber;
   }
+  if (body.revisionNote !== undefined) set.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   if (body.productName !== undefined) set.productName = sanitizeShortText(body.productName, "ชื่อสินค้า");
   if (body.supervisorName !== undefined) set.supervisorName = sanitizeShortText(body.supervisorName, "ชื่อพนักงานดูแล");
   if (body.startDate !== undefined) set.startDate = validateIsoDateOrEmpty(body.startDate, "วันที่เริ่มผลิต");
@@ -315,6 +346,110 @@ async function handleSignatories(req: VercelRequest, res: VercelResponse, id: st
   res.status(200).json({ productionOrder: toClient(await loadOrThrow(id)) });
 }
 
+/**
+ * ดึงรายการจาก Scope of Work ใหม่ — **แทนที่ `lines` ทั้งชุด** ตามเจตนาของปุ่ม
+ * ("อัปเดตข้อมูลจาก Scope of Work" แบบเดียวกับที่ใบส่งมอบและโครงการมี)
+ *
+ * ล็อกที่ Draft เหมือน `handleUpdate()` เพราะมันเขียนทับเนื้อหาเอกสาร ไม่ใช่ข้อมูลติดตามผล
+ * เขียน audit เพราะเป็นการทำลายงานที่พิมพ์ไว้เอง ผู้ใช้ควรตามรอยได้ว่าใครกดเมื่อไหร่
+ */
+async function handleRefreshFromScope(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "productionOrder:edit");
+  if (!roleHasPermission(ctx.role, "scopeOfWork:view")) throw new HttpError(403, "Forbidden");
+  const doc = await loadOrThrow(id);
+  if (!canEdit(ctx, doc)) throw new HttpError(403, "Forbidden");
+  if (doc.status !== "Draft") throw new HttpError(400, "ดึงข้อมูลใหม่ได้เฉพาะเอกสารฉบับร่างเท่านั้น");
+
+  const scopeOfWorks = await scopeOfWorksCollection();
+  const scope = await scopeOfWorks.findOne({ _id: toObjectId(doc.scopeOfWorkId) });
+  if (!scope || scope.isDeleted) throw new HttpError(404, "ไม่พบ Scope of Work");
+
+  const productionOrders = await productionOrdersCollection();
+  await productionOrders.updateOne({ _id: id }, {
+    $set: {
+      lines: mapScopeItemsToLines(scope.items),
+      jobCode: scope.scopeNumber,
+      customerCompanyName: scope.customerSnapshot.companyName,
+      updatedAt: nowIso(), updatedBy: ctx.user.id,
+    },
+  });
+  await writeAuditEntry(ctx, "Production Order Refreshed", `ดึงข้อมูลใบสั่งผลิต ${id} จากงาน ${scope.scopeNumber} ใหม่`, { scopeOfWorkId: doc.scopeOfWorkId });
+  res.status(200).json({ productionOrder: toClient(await loadOrThrow(id)) });
+}
+
+/** ตัวนับเลขฉบับแก้ไขต่อสายเอกสาร — idiom เดียวกับ nextScopeRevisionNumber() ของ Scope of Work */
+async function nextProductionOrderRevision(counters: Collection<CounterFields>, root: string): Promise<number> {
+  const result = await counters.findOneAndUpdate(
+    { _id: `production_order_revision_${root}` },
+    { $inc: { seq: 1 } },
+    { returnDocument: "after", upsert: true },
+  );
+  return result?.seq ?? 1;
+}
+
+/**
+ * Rewrite — สร้างฉบับแก้ไขใหม่จากใบที่อนุมัติแล้ว (ฝ่ายผลิตขอไว้ 2026-08-27: "เพิ่ม Rewrite")
+ *
+ * `_id` ของเอกสารนี้คือเลขที่เอกสาร จึงต่อท้ายด้วย `-R{n}` เหมือนใบเสนอราคาทำกับ `_id` ของตัวเอง
+ * ส่วน `documentNumber` (เลขที่ที่พิมพ์บนฟอร์ม ซึ่งผู้ใช้อาจแก้ไปแล้ว) ต่อท้ายด้วย `-R{n}` เดียวกัน
+ * โดยคิดจากรากของตัวมันเอง ไม่ใช่ของ `_id` — สองค่านี้จึงแยกจากกันได้อย่างอิสระตามที่ตั้งใจไว้แต่แรก
+ *
+ * ช่องเซ็นทุกช่องถูกล้าง และ `revisionNote` **ไม่สืบทอด** มาจากฉบับก่อน (ตรงกับ Scope of Work)
+ */
+async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "productionOrder:create");
+  const source = await loadOrThrow(id);
+
+  const [productionOrders, counters] = await Promise.all([productionOrdersCollection(), countersCollection()]);
+  await ensureProductionOrderNumberIndex(productionOrders);
+
+  const idRoot = getRevisionRoot(source._id);
+  const numberRoot = getRevisionRoot(source.documentNumber || source._id);
+  const now = nowIso();
+  const blank: ProductionOrderSignatory = { name: "", date: "" };
+
+  let created: (ProductionOrderFields & { _id: string }) | null = null;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 5 && !created; attempt++) {
+    const seq = await nextProductionOrderRevision(counters, idRoot);
+    const { _id: _drop, ...rest } = source;
+    const doc: ProductionOrderFields & { _id: string } = {
+      ...rest,
+      _id: `${idRoot}-R${seq}`,
+      documentNumber: `${numberRoot}-R${seq}`,
+      lines: source.lines.map((l) => ({ ...l, id: newId("poline"), subDetails: [...l.subDetails] })),
+      status: "Draft",
+      orderedBy: { name: ctx.user.fullName, date: now.slice(0, 10) },
+      approver: { ...blank },
+      deliveredBy: { ...blank },
+      receivedBy: { ...blank },
+      costDeptBy: { ...blank },
+      approvedByUserId: "",
+      rejectionComment: "",
+      revisionNote: "",
+      createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
+    };
+    try {
+      await productionOrders.insertOne(doc);
+      created = doc;
+    } catch (err) {
+      // ชนเลขที่จองไว้ — แทบเป็นไปไม่ได้เพราะ seq จองแบบ atomic แต่กันไว้แบบมีขอบเขต
+      // เหมือน handleRewrite ของ Scope of Work และใบเสนอราคา แทนที่จะโยน 500 ดิบ ๆ
+      if (err && typeof err === "object" && (err as { code?: number }).code === 11000) { lastErr = err; continue; }
+      throw err;
+    }
+  }
+  if (!created) {
+    console.error("[production-orders] exhausted retries reserving a unique revision number", lastErr);
+    throw new HttpError(409, "ไม่สามารถสร้างเลขที่ฉบับแก้ไขที่ไม่ซ้ำกันได้ กรุณาลองใหม่อีกครั้ง");
+  }
+
+  await writeAuditEntry(ctx, "Production Order Rewritten", `สร้างใบสั่งผลิตฉบับแก้ไข ${created._id} จาก ${source._id}`, { scopeOfWorkId: source.scopeOfWorkId });
+  res.status(201).json({ productionOrder: toClient(created) });
+}
+
 async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
   const ctx = await requirePermission(req, "productionOrder:delete");
   const doc = await loadOrThrow(id);
@@ -343,6 +478,8 @@ export async function handleProductionOrder(req: VercelRequest, res: VercelRespo
   if (parts.length === 1) return handleOne(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "signatories") return handleSignatories(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "refresh") return handleRefreshFromScope(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
   // finalize เป็น alias ของ approve — พฤติกรรมเปลี่ยนโดยตั้งใจ: ต้องผ่าน PendingApproval ก่อนเสมอ
   if (parts.length === 2 && (parts[1] === "approve" || parts[1] === "finalize")) return handleApprove(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "submit-approval") return handleSubmitApproval(req, res, parts[0], approvalConfig);

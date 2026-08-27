@@ -83,6 +83,7 @@ export function ProductionOrderPage({
           canDelete={canDelete}
           onBack={backToList}
           onDeleted={backToList}
+          onOpenOther={open}
           showToast={toast.show}
         />
         <Toast message={toast.message} />

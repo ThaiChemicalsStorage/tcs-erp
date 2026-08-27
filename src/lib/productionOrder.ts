@@ -77,6 +77,16 @@ export interface ProductionOrder {
   receivedBy: ProductionOrderSignatory;
   costDeptBy: ProductionOrderSignatory;
 
+  /**
+   * หมายเหตุการแก้ไข — พิมพ์เอง อธิบายว่าฉบับนี้ต่างจากฉบับก่อนตรงไหน (ฝ่ายผลิตขอไว้ 2026-08-27:
+   * "ใบเบิกของมี Rewrite แล้วสามารถทำหมายเหตุการแก้ไขได้เหมือนใน scope และสามารถดูในใบปริ้นได้") **แสดงบนใบพิมพ์ด้วย** ต่างจาก revisionNote ของใบเสนอราคา/Scope of Work
+   * ที่เป็นข้อมูลภายในและไม่เคยถูกพิมพ์เลย
+   *
+   * ไม่สืบทอดมาจากฉบับก่อนตอนกด Rewrite — เริ่มว่างเสมอ ตรงกับพฤติกรรมของ Scope of Work
+   * เอกสารเก่าที่ไม่มีฟิลด์นี้อ่านออกมาเป็น "" (normalize ตอนอ่าน ไม่ได้ทำ migration)
+   */
+  revisionNote: string;
+
   /** ผู้กดอนุมัติจริงในระบบ + เหตุผลที่ตีกลับ — เซิร์ฟเวอร์เขียนเท่านั้น */
   approvedByUserId?: string;
   rejectionComment?: string;
@@ -145,6 +155,18 @@ export async function updateProductionOrderSignatories(
   const { productionOrder } = await apiFetch<{ productionOrder: ProductionOrder }>(`/production-orders/${encodeURIComponent(id)}/signatories`, {
     method: "POST", body: JSON.stringify(fields),
   });
+  return productionOrder;
+}
+
+/** ดึงรายการ+สเปกจาก Scope of Work ต้นทางมาแทนที่รายการทั้งชุด (ฉบับร่างเท่านั้น) */
+export async function refreshProductionOrderFromScope(id: string): Promise<ProductionOrder> {
+  const { productionOrder } = await apiFetch<{ productionOrder: ProductionOrder }>(`/production-orders/${encodeURIComponent(id)}/refresh`, { method: "POST" });
+  return productionOrder;
+}
+
+/** สร้างฉบับแก้ไขใหม่ (`-R{n}`) จากใบที่อนุมัติแล้ว — หมายเหตุการแก้ไขเริ่มว่างเสมอ */
+export async function rewriteProductionOrder(id: string): Promise<ProductionOrder> {
+  const { productionOrder } = await apiFetch<{ productionOrder: ProductionOrder }>(`/production-orders/${encodeURIComponent(id)}/rewrite`, { method: "POST" });
   return productionOrder;
 }
 

@@ -418,6 +418,39 @@ legacy values (`"Technic"`, `"Purchase"`) matching no row in the `departments` t
 "จากหน่วยงาน" comes out blank for those users. That is a data problem for an admin to fix in
 จัดการผู้ใช้, not something to paper over in code.
 
+## Job Order: grouped checklist, sub-details, attachments (2026-08-27)
+
+Three Project department requests landed on ใบสั่งงาน together.
+
+**The scope checklist is split into headings.** `buildJobOrderChecklistGroups()` used to return a
+single group of 23 options; it now returns six. **Every `ChecklistOption.key` is unchanged**, because
+`withJobOrderChecklistGroups()` regroups a saved document **on read** by key — there was no database
+migration. If that function is wrong, a job order that already had ticks silently reads back empty,
+so `tests/jobOrderChecklist.test.ts` (9 tests) pins it: ticks survive, fill-in values survive, no key
+is lost, a retired option is kept rather than dropped, and applying it twice is stable.
+
+⚠️ **The grouping is inferred from what each option means, not read off the paper form** — `reference/`
+is gitignored. Titles and ordering still need checking against a real FM-PJ-01. See TODO.md.
+
+**Ticked options take free-text sub-details.** `ChecklistOption.details?: string[]` is optional and
+purely additive — Scope of Work never sets it, so `ChecklistGroupCard` renders nothing extra there
+(the same shape as `value` when it was added 2026-08-18). Two deliberate details: the inputs sit
+**outside** the `<label>`, or clicking one would toggle the checkbox; and the server **clears details
+when an option is unticked**, so the printed form can never carry detail for work that is out of scope.
+
+**Attachments** use the new shared module (`api/_lib/documentAttachments.ts`,
+`src/components/DocumentAttachmentsCard.tsx`, `document_attachment_files`) rather than a third copy
+of the Scope of Work implementation — see [Product.md](./Product.md) and CHANGELOG.md 2026-08-27c.
+`JobOrder.attachments` is **not** a PATCHable field; it is managed only through its own routes, so a
+stale client cannot wipe files someone else just added. Downloads are unauthenticated capability URLs.
+
+## Purchase Request sub-details (2026-08-27)
+
+`PurchaseRequestLine.subDetails: string[]`, copied wholesale from `ProductionOrderLine` — same type,
+same blank-line stripping server-side, same indented row in the editor and the print. In the PR's
+line **table** the sub-details are their own row beneath the line, and the row is hidden entirely when
+the document is locked and has none.
+
 ## Known Limitations, Not Built This Pass
 
 - **No approval workflow** — Material Requisition/Job Order/Purchase Request go straight

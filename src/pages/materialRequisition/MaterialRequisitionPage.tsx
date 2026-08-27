@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { Company } from "../../lib/storage";
 import { Plus } from "lucide-react";
 import { type MaterialRequisitionSummary, fetchAllMaterialRequisitions, createMaterialRequisition, createMaterialRequisitionFromProductionOrder } from "../../lib/materialRequisition";
 import { MaterialRequisitionList } from "./MaterialRequisitionList";
@@ -13,6 +14,7 @@ import { useI18n } from "../../lib/i18n";
 // Standalone Material Requisition management page — not nested under Project, so Store staff have
 // their own entry point.
 export function MaterialRequisitionPage({
+  company,
   currentUserId,
   canEdit,
   canFinalize,
@@ -23,6 +25,7 @@ export function MaterialRequisitionPage({
   initialMaterialRequisitionId,
   onMaterialRequisitionIdConsumed,
 }: {
+  company: Company;
   currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
@@ -110,6 +113,7 @@ export function MaterialRequisitionPage({
         <MaterialRequisitionDocument
           key={selectedId}
           materialRequisitionId={selectedId}
+          company={company}
           currentUserId={currentUserId}
           canEdit={canEdit}
           canFinalize={canFinalize}
@@ -117,6 +121,7 @@ export function MaterialRequisitionPage({
           canDelete={canDelete}
           onBack={backToList}
           onDeleted={backToList}
+          onOpenOther={openMaterialRequisition}
           showToast={toast.show}
         />
         <Toast message={toast.message} />

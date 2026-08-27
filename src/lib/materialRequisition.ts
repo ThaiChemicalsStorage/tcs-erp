@@ -83,6 +83,16 @@ export interface MaterialRequisition {
   productionStartDate: string;
   lines: MaterialRequisitionLine[];
   status: MaterialRequisitionStatus;
+  /**
+   * หมายเหตุการแก้ไข — พิมพ์เอง อธิบายว่าฉบับนี้ต่างจากฉบับก่อนตรงไหน (ฝ่ายผลิตขอไว้ 2026-08-27:
+   * "ใบเบิกของมี Rewrite แล้วสามารถทำหมายเหตุการแก้ไขได้เหมือนใน scope และสามารถดูในใบปริ้นได้") **แสดงบนใบพิมพ์ด้วย** ต่างจาก revisionNote ของใบเสนอราคา/Scope of Work
+   * ที่เป็นข้อมูลภายในและไม่เคยถูกพิมพ์เลย
+   *
+   * ไม่สืบทอดมาจากฉบับก่อนตอนกด Rewrite — เริ่มว่างเสมอ ตรงกับพฤติกรรมของ Scope of Work
+   * เอกสารเก่าที่ไม่มีฟิลด์นี้อ่านออกมาเป็น "" (normalize ตอนอ่าน ไม่ได้ทำ migration)
+   */
+  revisionNote: string;
+
   preparedBy: string;
   preparedAt: string;
   approvedBy: string;
@@ -198,6 +208,12 @@ export async function finalizeMaterialRequisition(id: string): Promise<MaterialR
   const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}/finalize`, { method: "POST" });
   return materialRequisition;
 }
+/** สร้างฉบับแก้ไขใหม่ (`-R{n}`) — ลิงก์ในโครงการถูกย้ายมาชี้ฉบับใหม่ให้อัตโนมัติ */
+export async function rewriteMaterialRequisition(id: string): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}/rewrite`, { method: "POST" });
+  return materialRequisition;
+}
+
 export async function logMaterialRequisitionPrinted(id: string): Promise<void> {
   await apiFetch<{ ok: boolean }>(`/material-requisitions/${encodeURIComponent(id)}/print`, { method: "POST" });
 }

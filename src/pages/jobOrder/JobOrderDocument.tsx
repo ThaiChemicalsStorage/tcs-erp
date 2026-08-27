@@ -5,6 +5,7 @@ import {
   type JobOrder, type JobOrderLine, type JobOrderUpdateFields,
   fetchJobOrder, updateJobOrder, finalizeJobOrder, logJobOrderPrinted, deleteJobOrder, blankJobOrderLine,
   submitJobOrderApproval, approveJobOrder, rejectJobOrder, withdrawJobOrderApproval,
+  uploadJobOrderAttachment, deleteJobOrderAttachment,
 } from "../../lib/jobOrder";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
 import { ApiError } from "../../lib/apiClient";
@@ -14,6 +15,7 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ChecklistGroupCard } from "../quotation/ChecklistGroupCard";
 import { JobOrderPrintDocument } from "./JobOrderPrintDocument";
 import { useI18n } from "../../lib/i18n";
+import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCard";
 import { fetchDepartments, type Department } from "../../lib/departments";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
@@ -448,6 +450,14 @@ export function JobOrderDocument({
         </div>
 
         <div className="bg-card border border-border rounded-xl p-5">
+            {/* ไฟล์แนบ — ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้ เพราะแบบ/PO มักมาหลังอนุมัติ */}
+            <DocumentAttachmentsCard
+              attachments={doc.attachments ?? []}
+              disabled={!canEdit}
+              onUpload={async (file) => { const updated = await uploadJobOrderAttachment(doc.id, file); setDoc(updated); }}
+              onDelete={async (attachmentId) => { const updated = await deleteJobOrderAttachment(doc.id, attachmentId); setDoc(updated); }}
+            />
+
           <label htmlFor="jo-outOfScope" className="text-sm font-semibold text-foreground block mb-2" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrderDoc.outOfScopeTitle")}</label>
           <textarea id="jo-outOfScope" disabled={!editable} rows={3} value={draft.outOfScope}
             onChange={(e) => setDraft({ ...draft, outOfScope: e.target.value })}

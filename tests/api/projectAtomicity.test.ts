@@ -44,6 +44,8 @@ function makeReqRes(method: string, url: string, body?: unknown): { req: VercelR
     status(code: number) { captured.statusCode = code; return this; },
     json(payload: unknown) { captured.body = payload; return this; },
     setHeader(name: string, value: string) { captured.headers[name.toLowerCase()] = value; return this; },
+    // route ดาวน์โหลดไฟล์แนบส่ง Buffer ผ่าน send() ไม่ใช่ json()
+    send(payload: unknown) { captured.body = payload; return this; },
     end() { return this; },
   } as unknown as VercelResponse;
   return { req, res, captured };
@@ -477,6 +479,40 @@ describe("Production Order", () => {
     expect(doc.approver.name).toBe("Admin");
     expect(doc.approver.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
+  /**
+   * Rewrite ของใบสั่งผลิต — `_id` คือเลขที่เอกสาร จึงต่อท้าย -R{n} ทั้ง `_id` และ `documentNumber`
+   * เทสต์นี้คุมสองอย่างที่พังเงียบได้ง่าย: (1) ช่องเซ็นต้องถูกล้าง ไม่ให้ลายเซ็นของฉบับเก่าติดมา
+   * (2) เลขที่ที่ผู้ใช้แก้เองต้องต่อ -R จาก "รากของตัวมันเอง" ไม่ใช่จากรากของ _id
+   */
+  it("creates a -R revision, clearing signatories and keeping the two numbers independent", async () => {
+    const source = await createPo();
+    await call("PATCH", `/api/production-orders/${source.id}`, { documentNumber: "เลขของฉัน-99", productName: "ถังทดสอบ" });
+    await call("POST", `/api/production-orders/${source.id}/submit-approval`);
+    const approved = await call("POST", `/api/production-orders/${source.id}/approve`);
+    expect(approved.statusCode, JSON.stringify(approved.body)).toBe(200);
+
+    const res = await call("POST", `/api/production-orders/${source.id}/rewrite`);
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+    const rev = (res.body as { productionOrder: {
+      id: string; documentNumber: string; status: string; productName: string; revisionNote: string;
+      approver: { name: string; date: string }; orderedBy: { name: string };
+    } }).productionOrder;
+
+    expect(rev.id).toBe(`${source.id}-R1`);
+    // เลขที่พิมพ์ต่อ -R จากรากของตัวเอง ("เลขของฉัน-99") ไม่ใช่จาก _id
+    expect(rev.documentNumber).toBe("เลขของฉัน-99-R1");
+    expect(rev.status).toBe("Draft");
+    expect(rev.productName, "เนื้อหาต้องถูกคัดลอกมา").toBe("ถังทดสอบ");
+    expect(rev.approver.name, "ลายเซ็นผู้อนุมัติของฉบับเก่าต้องไม่ติดมา").toBe("");
+    expect(rev.approver.date).toBe("");
+    expect(rev.revisionNote, "หมายเหตุการแก้ไขไม่สืบทอด").toBe("");
+
+    // ฉบับเดิมยังอยู่ ไม่ถูกแตะต้อง
+    const original = await call("GET", `/api/production-orders/${source.id}`);
+    expect(original.statusCode).toBe(200);
+    expect((original.body as { productionOrder: { status: string } }).productionOrder.status).toBe("Final");
+  });
+
 
   it("cannot be edited once approved", async () => {
     const po = await createPo();
@@ -494,6 +530,140 @@ describe("Production Order", () => {
  * The important half is the back-compat one: documents created before ownerDepartment existed have
  * no such field at all, and must keep showing up for the Project department rather than vanishing.
  */
+describe("Job Order attachments", () => {
+  /**
+   * ตรรกะความปลอดภัยของไฟล์แนบทำให้ถูกยาก และตอนนี้ถูกยกมาไว้ที่เดียว (documentAttachments.ts)
+   * เทสต์ชุดนี้คุมข้อที่พังแล้วจะไม่มีใครสังเกต: เพดานจำนวนไฟล์, charset ของ base64, และ capability key
+   */
+  const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
+
+  async function createJobOrder(): Promise<string> {
+    const project = await createProject();
+    const res = await call("POST", "/api/job-orders", { projectId: project.id, itemId: project.items[0].id });
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+    return (res.body as { jobOrder: { id: string } }).jobOrder.id;
+  }
+
+  it("attaches a file, exposes it through a capability URL, and removes it again", async () => {
+    const id = await createJobOrder();
+    const up = await call("POST", `/api/job-orders/${id}/attachments`, {
+      fileName: "แบบงาน.pdf", contentType: "application/pdf", dataBase64: b64("hello-drawing"),
+    });
+    expect(up.statusCode, JSON.stringify(up.body)).toBe(200);
+    const attachments = (up.body as { jobOrder: { attachments: { id: string; fileName: string; size: number; url: string }[] } }).jobOrder.attachments;
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].fileName).toBe("แบบงาน.pdf");
+    expect(attachments[0].size).toBe("hello-drawing".length);
+
+    // URL ต้องพาไปดาวน์โหลดได้จริง โดยไม่ต้องแก้อะไรเพิ่ม
+    const dl = await call("GET", attachments[0].url.replace("/api", "/api"));
+    expect(dl.statusCode).toBe(200);
+    expect(Buffer.isBuffer(dl.body) ? dl.body.toString("utf8") : String(dl.body)).toBe("hello-drawing");
+    expect(dl.headers["x-content-type-options"]).toBe("nosniff");
+
+    const del = await call("DELETE", `/api/job-orders/${id}/attachments/${attachments[0].id}`);
+    expect(del.statusCode, JSON.stringify(del.body)).toBe(200);
+    expect((del.body as { jobOrder: { attachments: unknown[] } }).jobOrder.attachments).toHaveLength(0);
+  });
+
+  it("refuses a download without the right key", async () => {
+    const id = await createJobOrder();
+    const up = await call("POST", `/api/job-orders/${id}/attachments`, {
+      fileName: "a.txt", contentType: "text/plain", dataBase64: b64("secret"),
+    });
+    const a = (up.body as { jobOrder: { attachments: { id: string; url: string }[] } }).jobOrder.attachments[0];
+    const noKey = await call("GET", `/api/job-orders/${id}/attachments/${a.id}/download`);
+    expect(noKey.statusCode, "ไม่มี key ต้อง 404").toBe(404);
+    const wrongKey = await call("GET", `/api/job-orders/${id}/attachments/${a.id}/download?key=not-the-key`);
+    expect(wrongKey.statusCode, "key ผิดต้อง 404").toBe(404);
+  });
+
+  it("serves a script-capable type as a plain download, never inline", async () => {
+    const id = await createJobOrder();
+    const up = await call("POST", `/api/job-orders/${id}/attachments`, {
+      fileName: "evil.html", contentType: "text/html", dataBase64: b64("<script>alert(1)</script>"),
+    });
+    const a = (up.body as { jobOrder: { attachments: { url: string }[] } }).jobOrder.attachments[0];
+    const dl = await call("GET", a.url);
+    expect(dl.statusCode).toBe(200);
+    expect(dl.headers["content-type"], "HTML ต้องไม่ถูกส่งกลับเป็น text/html").toBe("application/octet-stream");
+    expect(dl.headers["content-disposition"]).toContain("attachment;");
+  });
+
+  it("rejects a base64 payload with invalid characters instead of storing it truncated", async () => {
+    const id = await createJobOrder();
+    const res = await call("POST", `/api/job-orders/${id}/attachments`, {
+      fileName: "broken.bin", contentType: "application/octet-stream", dataBase64: "not valid base64!!",
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("enforces the per-document file cap", async () => {
+    const id = await createJobOrder();
+    for (let i = 0; i < 5; i++) {
+      const ok = await call("POST", `/api/job-orders/${id}/attachments`, {
+        fileName: `f${i}.txt`, contentType: "text/plain", dataBase64: b64(`file-${i}`),
+      });
+      expect(ok.statusCode, `ไฟล์ที่ ${i + 1} ควรแนบได้: ${JSON.stringify(ok.body)}`).toBe(200);
+    }
+    const sixth = await call("POST", `/api/job-orders/${id}/attachments`, {
+      fileName: "f5.txt", contentType: "text/plain", dataBase64: b64("one-too-many"),
+    });
+    expect(sixth.statusCode, "ไฟล์ที่หกต้องถูกปฏิเสธ").toBe(400);
+  });
+});
+
+describe("Material Requisition rewrite", () => {
+  /**
+   * จุดที่พังเงียบที่สุดของ Rewrite ใบเบิก: ฉบับใหม่มี `_id` ใหม่ ถ้าไม่ย้ายลิงก์ `ProjectItem`
+   * มาชี้ฉบับใหม่ หน้าโครงการจะยังชี้ฉบับเก่าตลอดไป แล้วผู้ใช้กดจากโครงการเข้าไปเจอใบที่เลิกใช้แล้ว
+   * — ไม่มีอะไรฟ้อง ไม่ error ทั้ง tsc/lint/build จึงต้องมีเทสต์คุมไว้
+   */
+  it("moves the ProjectItem link onto the new revision", async () => {
+    const project = await createProject();
+    const itemId = project.items[0].id;
+    const created = await call("POST", "/api/material-requisitions", { projectId: project.id, itemId });
+    expect(created.statusCode, JSON.stringify(created.body)).toBe(201);
+    const source = (created.body as { materialRequisition: { id: string } }).materialRequisition;
+
+    const rewritten = await call("POST", `/api/material-requisitions/${source.id}/rewrite`);
+    expect(rewritten.statusCode, JSON.stringify(rewritten.body)).toBe(201);
+    const rev = (rewritten.body as { materialRequisition: { id: string; status: string; revisionNote: string } }).materialRequisition;
+    expect(rev.id).toBe(`${source.id}-R1`);
+    expect(rev.status).toBe("Draft");
+    expect(rev.revisionNote).toBe("");
+
+    const after = await call("GET", `/api/projects/${project.id}`);
+    const item = (after.body as { project: ProjectJson }).project.items.find((it) => it.id === itemId)!;
+    expect(item.materialRequisitionId, "โครงการต้องชี้ฉบับแก้ไขใหม่ ไม่ใช่ฉบับเดิม").toBe(rev.id);
+    expect(item.sourcingMethod).toBe("requisition");
+    expect(item.itemStatus).toBe("documentCreated");
+  });
+
+  /** ยอดเบิก/ยอดคืนไม่สืบทอด — ฉบับใหม่ต้องเริ่มเหมือนใบที่ยังไม่ได้เบิกจริง */
+  it("does not inherit withdrawal or return quantities", async () => {
+    const project = await createProject();
+    const created = await call("POST", "/api/material-requisitions", { projectId: project.id, itemId: project.items[0].id });
+    const source = (created.body as { materialRequisition: { id: string; lines: unknown[] } }).materialRequisition;
+    // ใบเบิกบังคับว่าทุกบรรทัดต้องอ้างสินค้าจริงในคลัง — ใส่สินค้าทดสอบลงฐานข้อมูลตรง ๆ
+    const productId = (await client.db("tcs_erp").collection("products").insertOne({
+      code: "RW-TEST-01", name: "สินค้าทดสอบ Rewrite", categoryId: "", unit: "ชิ้น",
+      defaultPrice: 0, description: "", specifications: [], archived: false, stockQty: 0,
+      createdAt: "", updatedAt: "", createdBy: "", updatedBy: "",
+    })).insertedId.toString();
+    await call("PATCH", `/api/material-requisitions/${source.id}`, {
+      lines: [{ productId, category: "other", plannedQty: 10, withdrawal1Qty: 4, returnQty: 1, actualUsedQty: 3 }],
+    });
+
+    const rewritten = await call("POST", `/api/material-requisitions/${source.id}/rewrite`);
+    const lines = (rewritten.body as { materialRequisition: { lines: { plannedQty: number | null; withdrawal1Qty: number | null; returnQty: number | null }[] } }).materialRequisition.lines;
+    expect(lines).toHaveLength(1);
+    expect(lines[0].plannedQty, "จำนวนที่วางแผนไว้ยังอยู่").toBe(10);
+    expect(lines[0].withdrawal1Qty, "ยอดเบิกต้องล้าง").toBeNull();
+    expect(lines[0].returnQty, "ยอดคืนต้องล้าง").toBeNull();
+  });
+});
+
 describe("Material Requisition / Purchase Request are separated by owning department", () => {
   /**
    * ใบเบิก/ใบขอซื้อของฝ่ายผลิตออกจากใบสั่งผลิตที่ "อนุมัติแล้ว" เท่านั้น จึงต้องเดินขั้นตอนจริงให้ครบ

@@ -60,11 +60,23 @@ export function JobOrderPrintDocument({ jobOrder: j }: { jobOrder: JobOrder }) {
       </table>
 
       <p className="text-xs font-semibold mt-4 mb-1">ขอบเขตงาน (Scope of work)</p>
-      <div className="text-[10px] grid grid-cols-2 gap-x-4">
-        {j.scopeChecklist.flatMap((g) => g.options).map((opt) => (
-          <p key={opt.key}>{opt.checked ? "☑" : "☐"} {opt.label}{opt.value ? `: ${opt.value}` : ""}</p>
-        ))}
-      </div>
+      {/* แยกเป็นหัวข้อตั้งแต่ 2026-08-27 — เดิมยุบตัวเลือกทุกกลุ่มมาเรียงรวมเป็นตารางสองคอลัมน์เดียว
+          ตอนนี้พิมพ์ชื่อหัวข้อกำกับ และมีบรรทัดย่อยใต้ข้อที่ติ๊กไว้ */}
+      {j.scopeChecklist.map((g) => (
+        <div key={g.key} className="mb-1.5">
+          <p className="text-[10px] font-semibold">{g.title}</p>
+          <div className="text-[10px] grid grid-cols-2 gap-x-4">
+            {g.options.map((opt) => (
+              <div key={opt.key}>
+                <p>{opt.checked ? "☑" : "☐"} {opt.label}{opt.value ? `: ${opt.value}` : ""}</p>
+                {(opt.details ?? []).map((d, i) => (
+                  <p key={i} style={{ margin: "0 0 0 12px" }}>- {d}</p>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
 
       {j.outOfScope.trim() && (
         <>

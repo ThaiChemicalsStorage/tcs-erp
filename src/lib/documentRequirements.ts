@@ -7,6 +7,15 @@ export interface ChecklistOption {
    * Project module Stage 2), backward-compatible since it's optional and Scope of Work's existing
    * options never set it. */
   value?: string;
+  /**
+   * บรรทัดรายละเอียดย่อยใต้ตัวเลือกที่ติ๊กไว้ (ฝ่ายโครงการขอไว้ 2026-08-27:
+   * "ติ๊กเลือกได้ว่าจะเอาตัวไหน แบบหลายหัวข้อและสามารถเพิ่มเติมรายละเอียดย่อยได้")
+   *
+   * optional และเป็นการ**เพิ่มล้วน ๆ** — Scope of Work ไม่ได้ตั้งค่านี้เลย ChecklistGroupCard จึงไม่
+   * เรนเดอร์อะไรเพิ่มให้ ตรงตามแบบเดียวกับตอนเพิ่ม `value` เมื่อ 2026-08-18
+   * ต่างจาก `value` ตรงที่เป็นรายการหลายบรรทัด และแสดงเฉพาะเมื่อตัวเลือกถูกติ๊กแล้วเท่านั้น
+   */
+  details?: string[];
 }
 
 /** Extra `documentRecipients` key for recipients picked freely from the whole staff directory,

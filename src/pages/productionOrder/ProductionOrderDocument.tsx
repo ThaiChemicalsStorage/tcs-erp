@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Loader2, Printer, Save, Trash2, Plus, CornerDownRight, Heading } from "lucide-react";
+import { ChevronRight, Loader2, Printer, Save, Trash2, Plus, CornerDownRight, Heading, RotateCw, GitBranch } from "lucide-react";
 import {
   fetchProductionOrder, updateProductionOrder, deleteProductionOrder, logProductionOrderPrinted,
   submitProductionOrderApproval, approveProductionOrder, rejectProductionOrder, withdrawProductionOrderApproval,
-  blankProductionOrderLine, updateProductionOrderSignatories,
+  blankProductionOrderLine, updateProductionOrderSignatories, refreshProductionOrderFromScope, rewriteProductionOrder,
   type ProductionOrder, type ProductionOrderLine, type ProductionOrderUpdateFields,
 } from "../../lib/productionOrder";
 import { ProductionOrderPrintDocument } from "./ProductionOrderPrintDocument";
@@ -12,6 +12,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ApiError } from "../../lib/apiClient";
 import { newId } from "../../lib/products";
 import { useI18n } from "../../lib/i18n";
+import { getRevisionNumber } from "../../lib/revisionDiff";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
@@ -23,7 +24,7 @@ const inputCls = "w-full text-sm text-foreground bg-secondary border border-bord
 
 function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
   return {
-    documentNumber: d.documentNumber,
+    documentNumber: d.documentNumber, revisionNote: d.revisionNote,
     productName: d.productName, supervisorName: d.supervisorName,
     startDate: d.startDate, dueDate: d.dueDate, lines: d.lines,
     orderedBy: d.orderedBy, deliveredBy: d.deliveredBy, receivedBy: d.receivedBy, costDeptBy: d.costDeptBy,
@@ -32,7 +33,7 @@ function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
 
 // หน้าแก้ไขใบสั่งผลิต (FM-PD-02) — แก้ได้เฉพาะฉบับร่าง อนุมัติแล้วล็อก เหมือนเอกสารอื่นในระบบ
 export function ProductionOrderDocument({
-  productionOrderId, canEdit, canApprove, canPrint, canDelete, onBack, onDeleted, showToast,
+  productionOrderId, canEdit, canApprove, canPrint, canDelete, onBack, onDeleted, onOpenOther, showToast,
 }: {
   productionOrderId: string;
   canEdit: boolean;
@@ -41,6 +42,8 @@ export function ProductionOrderDocument({
   canDelete: boolean;
   onBack: () => void;
   onDeleted: () => void;
+  /** เปิดเอกสารใบอื่นในโมดูลเดียวกัน — ใช้ตอน Rewrite เพื่อพาไปฉบับใหม่ที่เพิ่งสร้าง */
+  onOpenOther: (id: string) => void;
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
@@ -51,6 +54,10 @@ export function ProductionOrderDocument({
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRefresh, setConfirmRefresh] = useState(false);
+  const [confirmRewrite, setConfirmRewrite] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — ประกาศเหนือ effect โหลดข้อมูล เพื่อตั้งฐานเทียบใหม่ทุกครั้งที่ดึงเอกสาร
@@ -114,6 +121,35 @@ export function ProductionOrderDocument({
       showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorSave"));
       return false;
     } finally { setSaving(false); }
+  };
+
+  // ดึงรายการจากงานต้นทางมาแทนที่ทั้งชุด — ยืนยันก่อนเสมอ เพราะเขียนทับสิ่งที่พิมพ์ไว้เอง
+  const refreshFromScope = async () => {
+    if (!doc) return;
+    setRefreshing(true);
+    try {
+      const updated = await refreshProductionOrderFromScope(doc.id);
+      setDoc(updated); setDraft(updated);
+      autoSave.markSaved(toUpdateFields(updated));
+      dirty.markSaved(toUpdateFields(updated));
+      draftBackup.clear();
+      showToast(t("productionOrderDoc.refreshed"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("productionOrderDoc.errorRefresh"));
+    } finally { setRefreshing(false); setConfirmRefresh(false); }
+  };
+
+  // สร้างฉบับแก้ไข แล้วเปิดฉบับใหม่ทันที — ฉบับเดิมยังอยู่ ไม่ถูกแตะต้อง
+  const handleRewrite = async () => {
+    if (!doc) return;
+    setRewriting(true);
+    try {
+      const created = await rewriteProductionOrder(doc.id);
+      showToast(t("docRevision.rewritten"));
+      onOpenOther(created.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("docRevision.errorRewrite"));
+    } finally { setRewriting(false); setConfirmRewrite(false); }
   };
 
   const saveSignatories = async (): Promise<boolean> => {
@@ -233,9 +269,19 @@ export function ProductionOrderDocument({
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
+          {canEdit && doc.status === "Final" && (
+            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
+            </button>
+          )}
           {canPrint && (
             <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("productionOrderDoc.print")}
+            </button>
+          )}
+          {editable && (
+            <button onClick={() => setConfirmRefresh(true)} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              {refreshing ? <Loader2 size={13} className="animate-spin" /> : <RotateCw size={13} />} {t("productionOrderDoc.refreshFromScope")}
             </button>
           )}
           {editable && (
@@ -295,6 +341,23 @@ export function ProductionOrderDocument({
             {field(t("productionOrderDoc.field.dueDate"), draft.dueDate, (v) => setDraft({ ...draft, dueDate: v }), "date")}
           </div>
         </div>
+
+{/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย) เท่านั้น
+            ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
+        {getRevisionNumber(doc.id) > 0 && (
+          <div className="bg-card border border-border rounded-xl p-4">
+            <h2 className="text-sm font-semibold text-foreground mb-1">{t("docRevision.noteTitle")}</h2>
+            <p className="text-xs text-muted-foreground mb-2">{t("docRevision.noteHelp")}</p>
+            <textarea
+              rows={4}
+              disabled={!editable}
+              value={draft.revisionNote}
+              onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
+              placeholder={t("docRevision.notePlaceholder")}
+              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60"
+            />
+          </div>
+        )}
 
         <div className="bg-card border border-border rounded-xl p-4 space-y-2">
           <h2 className="text-sm font-semibold text-foreground mb-1">{t("productionOrderDoc.linesHeading")}</h2>
@@ -418,6 +481,23 @@ export function ProductionOrderDocument({
         busy={deleting}
         onConfirm={() => void handleDelete()}
         onCancel={() => setConfirmDelete(false)}
+      />
+      <ConfirmDialog
+        open={confirmRefresh}
+        title={t("productionOrderDoc.refreshConfirmTitle")}
+        message={t("productionOrderDoc.refreshConfirmBody")}
+        confirmLabel={t("productionOrderDoc.refreshFromScope")}
+        onConfirm={() => void refreshFromScope()}
+        onCancel={() => setConfirmRefresh(false)}
+      />
+      <ConfirmDialog
+        open={confirmRewrite}
+        title={t("docRevision.rewriteConfirmTitle")}
+        message={t("docRevision.rewriteConfirmBody")}
+        confirmLabel={t("docRevision.rewrite")}
+        busy={rewriting}
+        onConfirm={() => void handleRewrite()}
+        onCancel={() => setConfirmRewrite(false)}
       />
     </div>
   );
