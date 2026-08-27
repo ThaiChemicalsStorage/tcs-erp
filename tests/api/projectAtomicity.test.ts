@@ -18,6 +18,7 @@ let mongod: MongoMemoryServer;
 let client: MongoClient;
 let authHandler: (req: VercelRequest, res: VercelResponse) => Promise<void>;
 let quotesHandler: (req: VercelRequest, res: VercelResponse) => Promise<void>;
+let linkProjectItemsToSubDocument: typeof import("../../api/_lib/projectHandler.js")["linkProjectItemsToSubDocument"];
 let sessionCookie = "";
 let scopeOfWorkId = "";
 
@@ -84,6 +85,7 @@ beforeAll(async () => {
   await client.connect();
   authHandler = (await import("../../api/handlers/auth.js")).default;
   quotesHandler = (await import("../../api/handlers/quotes.js")).default;
+  linkProjectItemsToSubDocument = (await import("../../api/_lib/projectHandler.js")).linkProjectItemsToSubDocument;
 
   // Setup Wizard creates the one Super Admin, who holds every permission implicitly — no custom
   // role setup needed for this test.
@@ -636,6 +638,28 @@ describe("Job Order covering several project items", () => {
     const item = (after.body as { project: ProjectJson }).project.items.find((it) => it.id === second)!;
     expect(item.itemStatus).toBe("pending");
     expect(item.jobOrderId).toBe("");
+  });
+
+  /**
+   * ด่านสุดท้ายของ invariant "ห้ามมีเอกสารลูกที่ผูกกับรายการที่ไม่มีอยู่จริง" — ตัว filter ของ
+   * `linkProjectItemsToSubDocument()` ใช้ `$all` ไม่ใช่ `$in` เพราะ `$in` ผ่านเมื่อมีสักรายการเดียวตรง
+   * แล้วจะผูกให้แค่ตัวที่เหลือ กลายเป็นเอกสารที่ผูกครึ่ง ๆ กลาง ๆ โดยไม่มีอะไรฟ้อง
+   *
+   * ยิงตรงเข้าตัวช่วย เพราะเส้นทางปกติมี `loadPendingProjectItemsOrThrow()` กันไว้ก่อนแล้ว —
+   * ด่านนี้คือด่านที่สอง ไว้กันกรณีรายการถูกลบไประหว่างที่คำขอกำลังทำงาน
+   */
+  it("refuses to link when any requested item no longer exists", async () => {
+    const project = await projectWithItems();
+    const realId = project.items[0].id;
+    await expect(
+      linkProjectItemsToSubDocument(project.id, [realId, "item-ที่ถูกลบไปแล้ว"], "jobOrder", "jobOrderId", "JO-GHOST"),
+    ).rejects.toThrow();
+
+    // และต้องไม่ผูกตัวที่มีอยู่จริงทิ้งไว้ครึ่ง ๆ กลาง ๆ
+    const after = await call("GET", `/api/projects/${project.id}`);
+    const item = (after.body as { project: ProjectJson }).project.items.find((it) => it.id === realId)!;
+    expect(item.jobOrderId, "รายการที่มีอยู่จริงต้องไม่ถูกผูกกับเอกสารที่ไม่ควรถูกสร้าง").toBe("");
+    expect(item.itemStatus).toBe("pending");
   });
 
   it("still accepts the old single-item body shape", async () => {

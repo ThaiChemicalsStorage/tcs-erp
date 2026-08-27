@@ -54,6 +54,20 @@ export function DocumentAttachmentsCard({
     }
   };
 
+  // ลบก็ต้องจับ error เหมือนอัปโหลด — เดิมเป็น `void onDelete(...)` เปล่า ๆ ไฟล์ลบไม่ออกจึงเงียบสนิท
+  // (ไม่มีข้อความ ไม่มีอะไรเปลี่ยน) แถมทิ้ง unhandled promise rejection ไว้ที่ console
+  const remove = async (attachmentId: string) => {
+    setError("");
+    setBusy(true);
+    try {
+      await onDelete(attachmentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("attachments.removeFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="bg-card border border-border rounded-xl p-4">
       <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
@@ -105,9 +119,10 @@ export function DocumentAttachmentsCard({
               {!disabled && (
                 <button
                   type="button"
-                  onClick={() => void onDelete(a.id)}
+                  onClick={() => void remove(a.id)}
+                  disabled={busy}
                   title={t("attachments.remove")}
-                  className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0"
+                  className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 disabled:opacity-50"
                 >
                   <Trash2 size={13} />
                 </button>

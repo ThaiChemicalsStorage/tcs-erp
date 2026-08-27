@@ -155,7 +155,9 @@ async function handleApprove(req: VercelRequest, res: VercelResponse, id: string
     unit: doc.unit,
     defaultPrice: 0,
     description: doc.specifications,
-    specifications: [],
+    // `Product.specifications` เป็น **string** ไม่ใช่ array (ดู src/lib/products.ts) — เคยใส่ `[]` ไว้
+    // ซึ่ง cast `as never` กลบไว้ แล้วไปพังจริงตอน LineItemsEditor.tsx เรียก `product.specifications.trim()`
+    specifications: "",
     archived: false,
     // ตั้งต้นที่ 0 เสมอ เหมือน POST /api/products — จำนวนจริงเข้ามาทางหน้าสต๊อกเท่านั้น
     stockQty: 0,

@@ -73,7 +73,9 @@ export function PrintLetterhead({
           )}
         </div>
         {rightMeta && rightMeta.length > 0 && (
-          <div className={`text-right ${docLabel ? "pr-8" : ""}`}>
+          // ไม่ต้องมี `pr-8` ซ้ำอีกชั้น — แถวที่ครอบอยู่เว้นที่ให้แถบตั้งไปแล้ว ใส่ซ้ำจะดันบล็อกนี้
+          // เข้ามาอีก 2rem จนลอยห่างจากขอบขวาแบบไม่มีเหตุผล
+          <div className="text-right">
             {rightMeta.map((m) => (
               <p key={m.label} className="text-[10px] text-[#5a7299]">
                 {m.label} : <span className="font-mono text-[#0b1d3a]">{m.value || "-"}</span>

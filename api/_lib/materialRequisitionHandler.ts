@@ -410,6 +410,9 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "materialRequisition:create");
   const source = await loadOrThrow(id);
+  // ด่านรายเอกสารเหมือนทุก route ที่แก้ข้อมูลในโมดูลนี้ — `:create` อย่างเดียวไม่พอ ไม่งั้นใครก็ตามที่
+  // สร้างใบเบิกได้จะแตกฉบับแก้ไขจากใบของคนอื่น (และย้ายลิงก์ ProjectItem ตามไปด้วย) ได้
+  if (!canEdit(ctx, source)) throw new HttpError(403, "Forbidden");
 
   const [materialRequisitions, counters] = await Promise.all([materialRequisitionsCollection(), countersCollection()]);
   const root = getRevisionRoot(source._id);

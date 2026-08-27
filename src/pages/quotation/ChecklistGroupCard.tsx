@@ -1,4 +1,5 @@
 import type { ChecklistGroup } from "../../lib/documentRequirements";
+import { useI18n } from "../../lib/i18n";
 
 // การ์ดกลุ่มตัวเลือกแบบ checkbox/radio หนึ่งกลุ่ม ใช้ร่วมกันระหว่างใบเสนอราคาและ Scope of Work
 // One checkbox/radio group card, shared between the Quotation and Scope of Work checklist sections.
@@ -15,6 +16,7 @@ export function ChecklistGroupCard({
   required?: boolean;
   error?: string;
 }) {
+  const { t } = useI18n();
   // สลับสถานะติ๊กของตัวเลือก: โหมด single จะเลือกได้ทีละหนึ่งรายการเท่านั้น
   // Toggles an option's checked state; in "single" mode, selecting one clears the others.
   const toggleOption = (key: string) => {
@@ -71,7 +73,7 @@ export function ChecklistGroupCard({
                           ? { ...o, details: (o.details ?? []).map((x, xi) => (xi === di ? e.target.value : x)) }
                           : o)),
                       })}
-                      placeholder="รายละเอียดย่อย..."
+                      placeholder={t("checklist.subDetailPlaceholder")}
                       className="flex-1 min-w-0 text-xs bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 disabled:opacity-60"
                     />
                     {!disabled && (
@@ -84,7 +86,7 @@ export function ChecklistGroupCard({
                             : o)),
                         })}
                         className="text-muted-foreground hover:text-[#e05252] transition-colors text-xs px-1"
-                        aria-label={`ลบรายละเอียดย่อยของ ${opt.label}`}
+                        aria-label={`${t("checklist.removeSubDetail")} — ${opt.label}`}
                       >
                         ×
                       </button>
@@ -100,7 +102,7 @@ export function ChecklistGroupCard({
                     })}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    + เพิ่มรายละเอียดย่อย
+                    + {t("checklist.addSubDetail")}
                   </button>
                 )}
               </div>

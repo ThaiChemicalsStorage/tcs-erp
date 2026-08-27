@@ -1,4 +1,4 @@
-import { usersCollection, notificationsCollection, departmentsCollection } from "./collections.js";
+import { usersCollection, notificationsCollection } from "./collections.js";
 import { nowIso } from "../../src/lib/products.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
 
@@ -87,14 +87,4 @@ export async function notifyUser(
     read: false,
   });
   return 1;
-}
-
-/**
- * ชื่อแผนกทั้งหมดที่ "มีอยู่จริง" ในตาราง departments และตรงกับรายการที่ให้มา — ใช้เขียนลง audit log
- * ให้อ่านรู้เรื่องว่าส่งถึงแผนกไหน (ไม่ได้ใช้กรองผู้รับ เพราะผู้รับจับคู่จาก `User.department` โดยตรง)
- */
-export async function resolveDepartmentLabels(candidateNames: string[]): Promise<string> {
-  const departments = await departmentsCollection();
-  const found = await departments.find({ name: { $in: candidateNames }, isActive: true }).toArray();
-  return found.map((d) => d.name).join(", ") || candidateNames[0];
 }

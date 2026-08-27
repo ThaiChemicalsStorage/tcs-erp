@@ -149,14 +149,16 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
                   </div>
                 )}
             </div>
-            {(scopeItems?.length ?? 0) > 0 && (
+            {/* แถบยืนยันแสดงแม้ไม่มีรายการให้ติ๊กเลย — งานที่ไม่มีรายการ (หรือมีแต่หัวข้อคั่น) ต้องยัง
+                เปิดใบสั่งผลิตเปล่าได้ ไม่งั้นผู้ใช้จะเจอทางตัน กดอะไรต่อไม่ได้นอกจากย้อนกลับ */}
+            {scopeItems !== null && (
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
                 <span className="text-xs text-muted-foreground">
                   {t("project.picker.item.selectedCount").replace("{n}", String(checkedItems.size))}
                 </span>
                 <button
                   onClick={() => { setBusyId(pickedScope.id); onSelect(pickedScope.id, [...checkedItems]); }}
-                  disabled={busyId !== null || checkedItems.size === 0}
+                  disabled={busyId !== null || (scopeItems.length > 0 && checkedItems.size === 0)}
                   className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {busyId !== null && <Loader2 size={12} className="animate-spin" />} {t("project.picker.item.confirm")}

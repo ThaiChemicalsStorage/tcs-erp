@@ -7,6 +7,7 @@ import {
 import { type ProductCategory, fetchCategories } from "../../lib/products";
 import { ApiError } from "../../lib/apiClient";
 import { EmptyState } from "../../components/EmptyState";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
@@ -29,8 +30,10 @@ const STATUS_STYLE: Record<ProductRequestStatus, string> = {
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
 
 export function ProductRequestPage({
-  canCreate, canReview, initialProductRequestId, onProductRequestIdConsumed,
+  currentUserId, canCreate, canReview, initialProductRequestId, onProductRequestIdConsumed,
 }: {
+  /** ใช้ซ่อนปุ่มลบบนคำขอของคนอื่น — เซิร์ฟเวอร์ก็ปฏิเสธอยู่แล้ว แต่ปุ่มที่กดแล้วได้ 403 เสมอไม่ควรมีให้เห็น */
+  currentUserId: string;
   canCreate: boolean;
   canReview: boolean;
   initialProductRequestId?: string | null;
@@ -51,6 +54,7 @@ export function ProductRequestPage({
   const [reviewCode, setReviewCode] = useState("");
   const [reviewCategoryId, setReviewCategoryId] = useState("");
   const [rejectTarget, setRejectTarget] = useState<ProductRequest | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProductRequest | null>(null);
 
   const reload = async () => {
     const list = await fetchProductRequests();
@@ -130,13 +134,16 @@ export function ProductRequestPage({
     } finally { setRejectTarget(null); }
   };
 
-  const remove = async (r: ProductRequest) => {
+  // ลบเป็นการกระทำที่ย้อนกลับไม่ได้ จึงถามยืนยันก่อนเสมอ เหมือนทุกปุ่มลบในแอปนี้ (ConfirmDialog)
+  const remove = async () => {
+    if (!deleteTarget) return;
+    setBusy(true);
     try {
-      await deleteProductRequest(r.id);
+      await deleteProductRequest(deleteTarget.id);
       await reload();
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("productRequest.error"));
-    }
+    } finally { setBusy(false); setDeleteTarget(null); }
   };
 
   if (loading) {
@@ -220,8 +227,8 @@ export function ProductRequestPage({
                               </button>
                             </>
                           )}
-                          {r.status === "Pending" && (
-                            <button onClick={() => void remove(r)} className="text-muted-foreground hover:text-[#e05252] transition-colors p-1">
+                          {r.status === "Pending" && (r.requestedBy === currentUserId || canReview) && (
+                            <button onClick={() => setDeleteTarget(r)} title={t("productRequest.delete")} className="text-muted-foreground hover:text-[#e05252] transition-colors p-1">
                               <Trash2 size={13} />
                             </button>
                           )}
@@ -313,6 +320,16 @@ export function ProductRequestPage({
         </div>
       )}
 
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={t("productRequest.deleteConfirmTitle")}
+        message={t("productRequest.deleteConfirmBody")}
+        confirmLabel={t("productRequest.delete")}
+        danger
+        busy={busy}
+        onConfirm={() => void remove()}
+        onCancel={() => setDeleteTarget(null)}
+      />
       <PromptDialog
         open={rejectTarget !== null}
         title={t("productRequest.reject")}

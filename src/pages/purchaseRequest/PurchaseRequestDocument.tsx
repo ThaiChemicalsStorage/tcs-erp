@@ -491,21 +491,21 @@ export function PurchaseRequestDocument({
                       </tr>
                       {/* บรรทัดรายละเอียดย่อย — แถวของตัวเองใต้รายการหลัก เยื้องเข้ามาเหมือนใบสั่งผลิต
                           ซ่อนทั้งแถวเมื่อเอกสารล็อกแล้วและไม่มีบรรทัดย่อย จะได้ไม่มีแถวว่างเปล่าคั่นตาราง */}
-                      {(line.subDetails.length > 0 || editable) && (
+                      {((line.subDetails ?? []).length > 0 || editable) && (
                         <tr className="border-b border-border/50">
                           <td />
                           <td colSpan={8} className="px-3 pb-2 space-y-1">
-                            {line.subDetails.map((sd, i) => (
+                            {(line.subDetails ?? []).map((sd, i) => (
                               <div key={i} className="flex items-center gap-2 pl-4">
                                 <CornerDownRight size={12} className="text-muted-foreground flex-shrink-0" />
                                 <input
                                   disabled={!editable} value={sd}
-                                  onChange={(e) => updateLine(line.id, { subDetails: line.subDetails.map((x, j) => (j === i ? e.target.value : x)) })}
+                                  onChange={(e) => updateLine(line.id, { subDetails: (line.subDetails ?? []).map((x, j) => (j === i ? e.target.value : x)) })}
                                   placeholder={t("purchaseRequestDoc.subDetailPlaceholder")}
                                   className="flex-1 min-w-[160px] text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
                                 />
                                 {editable && (
-                                  <button onClick={() => updateLine(line.id, { subDetails: line.subDetails.filter((_, j) => j !== i) })}
+                                  <button onClick={() => updateLine(line.id, { subDetails: (line.subDetails ?? []).filter((_, j) => j !== i) })}
                                     title={t("purchaseRequestDoc.removeSubDetail")}
                                     className="text-muted-foreground opacity-50 hover:opacity-100 hover:text-[#e05252] transition-opacity">
                                     <X size={11} />
@@ -514,7 +514,7 @@ export function PurchaseRequestDocument({
                               </div>
                             ))}
                             {editable && (
-                              <button onClick={() => updateLine(line.id, { subDetails: [...line.subDetails, ""] })}
+                              <button onClick={() => updateLine(line.id, { subDetails: [...(line.subDetails ?? []), ""] })}
                                 className="flex items-center gap-1.5 pl-4 text-xs text-muted-foreground hover:text-foreground transition-colors">
                                 <Plus size={11} /> {t("purchaseRequestDoc.addSubDetail")}
                               </button>

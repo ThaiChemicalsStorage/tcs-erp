@@ -86,7 +86,12 @@ export function ProductionOrderDocument({
   // an editable Draft; the local snapshot alongside it survives a closed tab or a click onto
   // another page. See src/hooks/useAutoSave.ts.
   const autoSaveEditable = !!draft && canEdit && draft.status === "Draft";
-  const autoSavePayload = draft && autoSaveEditable ? toUpdateFields(draft) : null;
+  // เลขที่ที่พิมพ์บนฟอร์มว่างไม่ได้ (เซิร์ฟเวอร์ตอบ 400 โดยตั้งใจ) แต่การบันทึกอัตโนมัติยิงระหว่างที่ผู้ใช้ยัง
+  // พิมพ์อยู่ — คนที่ล้างช่องเพื่อพิมพ์เลขใหม่จึงเห็น error กลางคันทั้งที่ยังพิมพ์ไม่เสร็จ ระหว่างที่ช่องว่าง
+  // ให้ส่งเลขเดิมไปแทน (เท่ากับ "ยังไม่เปลี่ยน") แล้วค่อยบันทึกจริงเมื่อพิมพ์ค่าใหม่เสร็จ
+  const autoSavePayload: ProductionOrderUpdateFields | null = draft && autoSaveEditable
+    ? { ...toUpdateFields(draft), documentNumber: draft.documentNumber.trim() || draft.id }
+    : null;
   const draftBackup = useDraftBackup({
     storageKey: draft ? `productionOrder:${draft.id}` : null,
     data: autoSavePayload,

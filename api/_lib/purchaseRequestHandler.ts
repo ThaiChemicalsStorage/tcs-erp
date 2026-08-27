@@ -91,7 +91,12 @@ async function sanitizeLines(raw: unknown): Promise<PurchaseRequestLine[]> {
 }
 
 function toClient(doc: PurchaseRequestFields & { _id: string }) {
-  return withStringId(withApprovalDefaults(doc));
+  // บรรทัดที่บันทึกไว้ก่อน 2026-08-27 ไม่มี `subDetails` — เติมเป็น [] ตอนอ่าน ไม่ได้ทำ migration
+  // ถ้าไม่เติม หน้าแก้ไขใบขอซื้อจะพังทั้งหน้ากับเอกสารเก่าทุกใบ (`line.subDetails.length` ของ undefined)
+  return withStringId(withApprovalDefaults({
+    ...doc,
+    lines: (doc.lines ?? []).map((l) => ({ ...l, subDetails: l.subDetails ?? [] })),
+  }));
 }
 function toSummary(doc: PurchaseRequestFields & { _id: string }): PurchaseRequestSummary {
   const full = withStringId(doc);

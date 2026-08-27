@@ -436,6 +436,8 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productionOrder:create");
   const source = await loadOrThrow(id);
+  // ด่านรายเอกสารเหมือน handleUpdate/handleDelete/handleRefreshFromScope — `:create` อย่างเดียวไม่พอ
+  if (!canEdit(ctx, source)) throw new HttpError(403, "Forbidden");
 
   const [productionOrders, counters] = await Promise.all([productionOrdersCollection(), countersCollection()]);
   await ensureProductionOrderNumberIndex(productionOrders);

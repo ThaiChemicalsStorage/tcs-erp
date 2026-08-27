@@ -192,7 +192,9 @@ export function DeliveryOrderDocument({
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — ประกาศเหนือ effect โหลดข้อมูล เพื่อตั้งฐานเทียบใหม่ทุกครั้งที่ดึงเอกสาร
   // หน้านี้ใช้ state เดียวเป็นทั้งข้อมูลที่โหลดมาและบัฟเฟอร์แก้ไข ทุกจุดที่รับคำตอบจากเซิร์ฟเวอร์จึงต้องตั้งฐานเทียบใหม่
-  const dirty = useDirtyTracker(deliveryOrder && canEdit && deliveryOrder.status === "Draft" ? toUpdateFields(deliveryOrder) : null);
+  // ตั้งแต่ 2026-08-27 ช่องเลขที่/วันที่ของงวดแก้ได้แม้เอกสารพ้นสถานะร่างไปแล้ว ตัวจับ "ยังไม่บันทึก" จึงต้อง
+  // ทำงานทุกสถานะ ไม่ใช่เฉพาะร่าง — ไม่งั้นแก้เลขที่แล้วเปลี่ยนหน้า ข้อมูลหายเงียบ ๆ โดยไม่มีอะไรเตือน
+  const dirty = useDirtyTracker(deliveryOrder && canEdit ? toUpdateFields(deliveryOrder) : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -267,6 +269,7 @@ export function DeliveryOrderDocument({
         deliveryOrder.installments.map((i) => ({ id: i.id, documentNumber: i.documentNumber, issueDate: i.issueDate })),
       );
       setDeliveryOrder(updated);
+      dirty.markSaved(toUpdateFields(updated));
       showToast("บันทึกเลขที่และวันที่แล้ว");
       return true;
     } catch (err) {
@@ -288,7 +291,8 @@ export function DeliveryOrderDocument({
             autoSaveState: autoSave.state,
           }),
           documentLabel: deliveryOrder.id,
-          save,
+          // เอกสารที่พ้นร่างแล้วบันทึกผ่าน route เลขที่/วันที่เท่านั้น — `save()` ปกติจะโดน 400 (PATCH ล็อคที่ Draft)
+          save: deliveryOrder.status === "Draft" ? save : saveNumbers,
           discard: draftBackup.clear,
         }
       : null,

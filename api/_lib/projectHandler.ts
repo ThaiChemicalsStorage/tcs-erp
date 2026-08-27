@@ -174,8 +174,16 @@ export async function linkProjectItemsToSubDocument(
   const projects = await projectsCollection();
   // เขียนทุกรายการใน `updateOne` ครั้งเดียวด้วย arrayFilters — ไม่ใช่วนลูปอัปเดตทีละตัว
   // เพราะการวนลูปเปิดช่องให้ผูกได้บางตัวแล้วพลาดตัวที่เหลือ กลายเป็นเอกสารที่ผูกครึ่ง ๆ กลาง ๆ
+  // ตัว filter ต้องมีเงื่อนไขรายการด้วย ไม่ใช่แค่ `_id` — ถ้าเหลือแค่ `_id` การอัปเดตจะ "สำเร็จ"
+  // (matchedCount = 1) แม้ไม่มีรายการไหนตรงเลย แล้วเอกสารลูกที่เพิ่ง insert ไปจะกลายเป็นเอกสารกำพร้า
+  // เงียบ ๆ ซึ่งเป็นสิ่งที่คอมเมนต์ CRITICAL ด้านบนบอกว่าห้ามเกิด
+  //
+  // ใช้ `$all` ไม่ใช่ `$in` โดยตั้งใจ: `$in` ผ่านเมื่อ**มีสักรายการเดียว**ตรง ตอนที่ยังผูกทีละรายการ
+  // สองอย่างนี้เท่ากัน แต่พอผูกได้หลายรายการแล้วมันต่างกันมาก — ถ้ามีรายการหนึ่งถูกลบไประหว่างทาง
+  // `$in` จะปล่อยผ่านแล้วผูกให้แค่ตัวที่เหลือ กลายเป็นเอกสารที่ผูกครึ่ง ๆ กลาง ๆ โดยไม่มีอะไรฟ้อง
+  // `$all` บังคับว่าทุก id ที่ขอมาต้องมีอยู่จริง ไม่งั้น matchedCount = 0 แล้วโยน 404 ออกไป
   const result = await projects.updateOne(
-    { _id: toObjectId(projectId) },
+    { _id: toObjectId(projectId), "items.id": { $all: itemIds } },
     {
       $set: {
         "items.$[it].sourcingMethod": sourcingMethod,
@@ -186,7 +194,7 @@ export async function linkProjectItemsToSubDocument(
     },
     { arrayFilters: [{ "it.id": { $in: itemIds } }] },
   );
-  if (result.matchedCount === 0) throw new HttpError(404, "ไม่พบโครงการนี้");
+  if (result.matchedCount === 0) throw new HttpError(404, "ไม่พบรายการนี้ในโครงการ");
 }
 
 /** เวอร์ชันรายการเดียว — ใบเบิกและใบขอซื้อยังผูกทีละรายการ */

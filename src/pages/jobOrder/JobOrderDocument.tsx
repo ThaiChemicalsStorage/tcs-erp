@@ -481,15 +481,18 @@ export function JobOrderDocument({
           ))}
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-5">
-            {/* ไฟล์แนบ — ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้ เพราะแบบ/PO มักมาหลังอนุมัติ */}
-            <DocumentAttachmentsCard
-              attachments={doc.attachments ?? []}
-              disabled={!canEdit}
-              onUpload={async (file) => { const updated = await uploadJobOrderAttachment(doc.id, file); setDoc(updated); }}
-              onDelete={async (attachmentId) => { const updated = await deleteJobOrderAttachment(doc.id, attachmentId); setDoc(updated); }}
-            />
+        {/* ไฟล์แนบ — การ์ดของตัวเอง ไม่ใช่ซ้อนอยู่ในการ์ด "รายละเอียดอื่นๆ" (DocumentAttachmentsCard
+            เรนเดอร์ `bg-card border rounded-xl` ของมันเองอยู่แล้ว การซ้อนจึงได้กรอบซ้อนกรอบและอ่านเหมือน
+            ว่าไฟล์แนบเป็นส่วนหนึ่งของ Out of Scope)
+            ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้ เพราะแบบ/PO มักมาหลังอนุมัติ */}
+        <DocumentAttachmentsCard
+          attachments={doc.attachments ?? []}
+          disabled={!canEdit}
+          onUpload={async (file) => { const updated = await uploadJobOrderAttachment(doc.id, file); setDoc(updated); }}
+          onDelete={async (attachmentId) => { const updated = await deleteJobOrderAttachment(doc.id, attachmentId); setDoc(updated); }}
+        />
 
+        <div className="bg-card border border-border rounded-xl p-5">
           <label htmlFor="jo-outOfScope" className="text-sm font-semibold text-foreground block mb-2" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrderDoc.outOfScopeTitle")}</label>
           <textarea id="jo-outOfScope" disabled={!editable} rows={3} value={draft.outOfScope}
             onChange={(e) => setDraft({ ...draft, outOfScope: e.target.value })}

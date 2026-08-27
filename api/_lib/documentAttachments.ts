@@ -141,13 +141,16 @@ export async function handleAttachmentDelete<TDoc>(
   if (!target) throw new HttpError(404, "ไม่พบไฟล์แนบ");
 
   const files = await documentAttachmentFilesCollection();
-  await files.deleteOne({ attachmentId });
   const collection = await cfg.collection();
   // `$pull` เฉพาะรายการนี้ (ไม่ใช่ `$set` ทับทั้ง array ที่อ่านมา) เพื่อไม่ให้ไฟล์ที่เพิ่งถูกแนบพร้อมกันหายไปด้วย
+  //
+  // ถอดรายการออกจากเอกสาร **ก่อน** ลบตัวไฟล์ ลำดับนี้สำคัญ: ถ้าลบไฟล์ก่อนแล้ว `$pull` ล้ม เอกสารจะเหลือ
+  // ไฟล์แนบที่กดแล้วได้ 404 ตลอดไป ส่วนลำดับนี้ ถ้าการลบไฟล์ล้ม อย่างมากก็เหลือ blob กำพร้าที่ไม่มีใครอ้างถึง
   await collection.updateOne(
     { _id: cfg.idOf(doc) } as never,
     { $pull: { attachments: { id: attachmentId } }, $set: { updatedAt: nowIso(), updatedBy: ctx.user.id } } as never,
   );
+  await files.deleteOne({ attachmentId });
 
   await cfg.writeAudit(ctx, `${cfg.label} Attachment Removed`, `ลบไฟล์แนบ "${target.fileName}" ออกจาก${cfg.label} ${id}`, doc);
   await cfg.respond(res, id);
