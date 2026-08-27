@@ -183,6 +183,11 @@ Production department request: *"เพิ่ม Rewrite"* and *"ใบเบิ
 `revisionNote` field. Both use their `_id` as the document number, so the revision appends `-R{n}`
 to it, reserved through an atomic per-chain counter — the same idiom Scope of Work and Quotation use.
 
+**Extended to ใบสั่งงาน and ใบขอซื้อ on 2026-08-27** (see CHANGELOG 2026-08-27g) — the meeting line
+*"เพิ่ม Rewrite"* covers every document the department uses, not only the two named elsewhere in the notes.
+Job Order needs the **plural** re-link helpers because one job order can cover several project items;
+using the singular ones would move only the first and leave the rest pointing at the superseded copy.
+
 **`revisionNote` is printed here, unlike everywhere else.** Quotation and Scope of Work have carried a
 `revisionNote` since 2026-07-23 but never rendered it on any print document — it is purely internal
 there. The Production department asked for the opposite, so both print layouts show a

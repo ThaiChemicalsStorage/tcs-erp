@@ -67,6 +67,13 @@ export function PurchaseRequestPrintDocument({ purchaseRequest: p }: { purchaseR
           ))}
         </tbody>
       </table>
+      {/* หมายเหตุการแก้ไข — พิมพ์จริงตามที่ฝ่ายผลิตขอ ("สามารถดูในใบปริ้นได้") ซ่อนเมื่อว่าง */}
+      {(p.revisionNote ?? "").trim() !== "" && (
+        <div className="border border-black px-2 py-1 mt-2 text-[10px]" style={{ whiteSpace: "pre-wrap" }}>
+          <span className="font-semibold">หมายเหตุการแก้ไข :</span> {p.revisionNote}
+        </div>
+      )}
+
 
       <table className="w-full text-xs mt-6" style={{ borderCollapse: "collapse" }}>
         <tbody>

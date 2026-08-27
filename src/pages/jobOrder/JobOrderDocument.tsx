@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X , CornerDownRight } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X , CornerDownRight , GitBranch } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import {
   type JobOrder, type JobOrderLine, type JobOrderUpdateFields,
   fetchJobOrder, updateJobOrder, finalizeJobOrder, logJobOrderPrinted, deleteJobOrder, blankJobOrderLine,
   submitJobOrderApproval, approveJobOrder, rejectJobOrder, withdrawJobOrderApproval,
   uploadJobOrderAttachment, deleteJobOrderAttachment,
+  rewriteJobOrder,
 } from "../../lib/jobOrder";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
 import { ApiError } from "../../lib/apiClient";
@@ -15,6 +16,7 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ChecklistGroupCard } from "../quotation/ChecklistGroupCard";
 import { JobOrderPrintDocument } from "./JobOrderPrintDocument";
 import { useI18n } from "../../lib/i18n";
+import { getRevisionNumber } from "../../lib/revisionDiff";
 import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCard";
 import { fetchDepartments, type Department } from "../../lib/departments";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
@@ -27,6 +29,7 @@ import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 function toUpdateFields(j: JobOrder): JobOrderUpdateFields {
   return {
     lines: j.lines,
+    revisionNote: j.revisionNote,
     scopeChecklist: j.scopeChecklist,
     outOfScope: j.outOfScope,
     customerName: j.customerName,
@@ -54,6 +57,7 @@ export function JobOrderDocument({
   canDelete,
   onBack,
   onDeleted,
+  onOpenOther,
   showToast,
 }: {
   jobOrderId: string;
@@ -64,6 +68,8 @@ export function JobOrderDocument({
   canDelete: boolean;
   onBack: () => void;
   onDeleted: () => void;
+  /** เปิดเอกสารใบอื่นในโมดูลเดียวกัน — ใช้ตอน Rewrite เพื่อพาไปฉบับใหม่ที่เพิ่งสร้าง */
+  onOpenOther: (id: string) => void;
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
@@ -78,6 +84,8 @@ export function JobOrderDocument({
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRewrite, setConfirmRewrite] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
 
@@ -249,6 +257,19 @@ export function JobOrderDocument({
     }
   };
 
+  // สร้างฉบับแก้ไข แล้วเปิดฉบับใหม่ทันที — ฉบับเดิมยังอยู่ครบ ไม่ถูกแตะต้อง
+  const handleRewrite = async () => {
+    if (!doc) return;
+    setRewriting(true);
+    try {
+      const created = await rewriteJobOrder(doc.id);
+      showToast(t("docRevision.rewritten"));
+      onOpenOther(created.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("docRevision.errorRewrite"));
+    } finally { setRewriting(false); setConfirmRewrite(false); }
+  };
+
   const handlePrint = async () => {
     setPrinting(true);
     try {
@@ -288,6 +309,11 @@ export function JobOrderDocument({
         <div data-tour="jodoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
           {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
+          {canEdit && doc.status === "Final" && (
+            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
+            </button>
+          )}
           {canPrint && (
             <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("jobOrderDoc.print")}
@@ -381,6 +407,23 @@ export function JobOrderDocument({
             </div>
           </div>
         </div>
+
+        {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
+            ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
+        {getRevisionNumber(doc.id) > 0 && (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-foreground mb-1">{t("docRevision.noteTitle")}</h2>
+            <p className="text-xs text-muted-foreground mb-2">{t("docRevision.noteHelp")}</p>
+            <textarea
+              rows={4}
+              disabled={!editable}
+              value={draft.revisionNote}
+              onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
+              placeholder={t("docRevision.notePlaceholder")}
+              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60"
+            />
+          </div>
+        )}
 
         <div data-tour="jodoc-lines" className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
@@ -536,6 +579,15 @@ export function JobOrderDocument({
         busy={deleting}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
+      />
+      <ConfirmDialog
+        open={confirmRewrite}
+        title={t("docRevision.rewriteConfirmTitle")}
+        message={t("docRevision.rewriteConfirmBody")}
+        confirmLabel={t("docRevision.rewrite")}
+        busy={rewriting}
+        onConfirm={() => void handleRewrite()}
+        onCancel={() => setConfirmRewrite(false)}
       />
       <ConfirmDialog
         open={confirmFinalize}

@@ -532,41 +532,42 @@ describe("Production Order", () => {
  * The important half is the back-compat one: documents created before ownerDepartment existed have
  * no such field at all, and must keep showing up for the Project department rather than vanishing.
  */
-describe("Job Order covering several project items", () => {
-  /**
-   * ฝ่ายโครงการขอไว้ 2026-08-27 ว่าใบสั่งงาน "ติ๊กเลือกได้ว่าจะเอาตัวไหน" — หนึ่งใบจึงครอบคลุมหลายรายการ
-   * จุดที่พังเงียบที่สุดคือการอนุมัติ/ลบ: ถ้าตัวช่วยยังคืนแค่รายการแรก รายการที่เหลือจะค้างสถานะเดิมตลอดไป
-   * โดยไม่มี error ที่ไหนเลย
-   */
-  /**
-   * fixture หลักของไฟล์นี้มีรายการเดียว — เทสต์ชุดนี้ต้องการอย่างน้อยสองรายการ ไม่งั้น "ติ๊กหลายรายการ"
-   * จะถูกทดสอบด้วยรายการเดียวและผ่านไปทั้งที่โค้ดอาจรองรับแค่ตัวแรก (พลาดแบบนี้มาแล้วตอนเขียนครั้งแรก)
-   * เพิ่มรายการที่สองเข้าไปในโครงการโดยตรง — เร็วกว่าและไม่กระทบ fixture ที่เทสต์อื่นใช้ร่วมกัน
-   */
-  async function projectWithItems(): Promise<ProjectJson> {
-    const project = await createProject();
-    await client.db("tcs_erp").collection("projects").updateOne(
-      { _id: new ObjectId(project.id) },
-      {
-        $push: {
-          items: {
-            id: `item-2-${project.id}`,
-            name: "Recirculating pump",
-            specifications: ["SUS316", "3 kW"],
-            quantity: 2,
-            unit: "Set",
-            sourcingMethod: "unassigned",
-            itemStatus: "pending",
-            materialRequisitionId: "", jobOrderId: "", purchaseRequestId: "",
-          },
+/**
+ * ฝ่ายโครงการขอไว้ 2026-08-27 ว่าใบสั่งงาน "ติ๊กเลือกได้ว่าจะเอาตัวไหน" — หนึ่งใบจึงครอบคลุมหลายรายการ
+ * จุดที่พังเงียบที่สุดคือการอนุมัติ/ลบ: ถ้าตัวช่วยยังคืนแค่รายการแรก รายการที่เหลือจะค้างสถานะเดิมตลอดไป
+ * โดยไม่มี error ที่ไหนเลย
+ */
+/**
+ * fixture หลักของไฟล์นี้มีรายการเดียว — เทสต์ชุดนี้ต้องการอย่างน้อยสองรายการ ไม่งั้น "ติ๊กหลายรายการ"
+ * จะถูกทดสอบด้วยรายการเดียวและผ่านไปทั้งที่โค้ดอาจรองรับแค่ตัวแรก (พลาดแบบนี้มาแล้วตอนเขียนครั้งแรก)
+ * เพิ่มรายการที่สองเข้าไปในโครงการโดยตรง — เร็วกว่าและไม่กระทบ fixture ที่เทสต์อื่นใช้ร่วมกัน
+ */
+async function projectWithItems(): Promise<ProjectJson> {
+  const project = await createProject();
+  await client.db("tcs_erp").collection("projects").updateOne(
+    { _id: new ObjectId(project.id) },
+    {
+      $push: {
+        items: {
+          id: `item-2-${project.id}`,
+          name: "Recirculating pump",
+          specifications: ["SUS316", "3 kW"],
+          quantity: 2,
+          unit: "Set",
+          sourcingMethod: "unassigned",
+          itemStatus: "pending",
+          materialRequisitionId: "", jobOrderId: "", purchaseRequestId: "",
         },
-      } as never,
-    );
-    const reloaded = await call("GET", `/api/projects/${project.id}`);
-    const full = (reloaded.body as { project: ProjectJson }).project;
-    expect(full.items.length, "ต้องมีอย่างน้อย 2 รายการเพื่อทดสอบการติ๊กหลายรายการจริง").toBeGreaterThanOrEqual(2);
-    return full;
-  }
+      },
+    } as never,
+  );
+  const reloaded = await call("GET", `/api/projects/${project.id}`);
+  const full = (reloaded.body as { project: ProjectJson }).project;
+  expect(full.items.length, "ต้องมีอย่างน้อย 2 รายการเพื่อทดสอบการติ๊กหลายรายการจริง").toBeGreaterThanOrEqual(2);
+  return full;
+}
+
+describe("Job Order covering several project items", () => {
 
   it("links every ticked item to the one job order, and copies them in as lines", async () => {
     const project = await projectWithItems();
@@ -667,6 +668,84 @@ describe("Job Order covering several project items", () => {
     const res = await call("POST", "/api/job-orders", { projectId: project.id, itemId: project.items[0].id });
     expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
     expect((res.body as { jobOrder: { lines: unknown[] } }).jobOrder.lines).toHaveLength(1);
+  });
+});
+
+describe("Job Order and Purchase Request rewrite", () => {
+  /**
+   * "เพิ่ม Rewrite" ในบันทึกการประชุมของฝ่ายผลิต — ใบสั่งผลิตกับใบเบิกทำไปแล้ว รอบนี้คือสองใบที่เหลือ
+   *
+   * จุดที่ใบสั่งงานต่างจากใบอื่น: มันผูกได้ **หลายรายการ** ถ้า rewrite ใช้ตัวช่วยเอกพจน์จะย้ายลิงก์ให้
+   * แค่รายการแรก ที่เหลือค้างชี้ฉบับเก่าเงียบ ๆ โดยไม่มี error ที่ไหนเลย
+   */
+  it("moves every linked ProjectItem onto the new Job Order revision", async () => {
+    const project = await projectWithItems();
+    const itemIds = project.items.slice(0, 2).map((it) => it.id);
+    const created = await call("POST", "/api/job-orders", { projectId: project.id, itemIds });
+    const source = (created.body as { jobOrder: { id: string } }).jobOrder;
+
+    const rewritten = await call("POST", `/api/job-orders/${source.id}/rewrite`);
+    expect(rewritten.statusCode, JSON.stringify(rewritten.body)).toBe(201);
+    const rev = (rewritten.body as { jobOrder: { id: string; status: string; revisionNote: string; attachments: unknown[] } }).jobOrder;
+    expect(rev.id).toBe(`${source.id}-R1`);
+    expect(rev.status).toBe("Draft");
+    expect(rev.revisionNote, "หมายเหตุการแก้ไขไม่สืบทอด").toBe("");
+    expect(rev.attachments, "ไฟล์แนบไม่สืบทอด — สำเนาจะชี้ไฟล์ก้อนเดียวกันแล้วลบทีเดียวพังทั้งสองฉบับ").toEqual([]);
+
+    const after = await call("GET", `/api/projects/${project.id}`);
+    const items = (after.body as { project: ProjectJson }).project.items;
+    for (const itemId of itemIds) {
+      const item = items.find((it) => it.id === itemId)!;
+      expect(item.jobOrderId, `รายการ ${itemId} ต้องชี้ฉบับแก้ไขใหม่`).toBe(rev.id);
+    }
+  });
+
+  it("copies the Job Order's lines and checklist into the revision", async () => {
+    const project = await projectWithItems();
+    const created = await call("POST", "/api/job-orders", { projectId: project.id, itemIds: [project.items[0].id] });
+    const source = (created.body as { jobOrder: { id: string; lines: unknown[] } }).jobOrder;
+    expect(source.lines.length).toBeGreaterThan(0);
+
+    const rewritten = await call("POST", `/api/job-orders/${source.id}/rewrite`);
+    const rev = (rewritten.body as { jobOrder: { lines: { id: string }[]; scopeChecklist: unknown[] } }).jobOrder;
+    expect(rev.lines).toHaveLength(source.lines.length);
+    expect(rev.scopeChecklist.length, "เช็คลิสต์ขอบเขตงานสืบทอดมาด้วย").toBeGreaterThan(0);
+    // id ของบรรทัดต้องถูกสร้างใหม่ ไม่ใช้ซ้ำกับฉบับเดิม
+    const sourceIds = new Set((source.lines as { id: string }[]).map((l) => l.id));
+    for (const l of rev.lines) expect(sourceIds.has(l.id), "บรรทัดต้องได้ id ใหม่").toBe(false);
+  });
+
+  it("moves the linked ProjectItem onto the new Purchase Request revision", async () => {
+    const project = await projectWithItems();
+    const itemId = project.items[0].id;
+    const created = await call("POST", "/api/purchase-requests", { projectId: project.id, itemId });
+    expect(created.statusCode, JSON.stringify(created.body)).toBe(201);
+    const source = (created.body as { purchaseRequest: { id: string } }).purchaseRequest;
+
+    const rewritten = await call("POST", `/api/purchase-requests/${source.id}/rewrite`);
+    expect(rewritten.statusCode, JSON.stringify(rewritten.body)).toBe(201);
+    const rev = (rewritten.body as { purchaseRequest: { id: string; status: string; revisionNote: string; approvedBy: string } }).purchaseRequest;
+    expect(rev.id).toBe(`${source.id}-R1`);
+    expect(rev.status).toBe("Draft");
+    expect(rev.revisionNote).toBe("");
+    expect(rev.approvedBy, "ช่องเซ็นของฉบับเก่าต้องไม่ติดมา").toBe("");
+
+    const after = await call("GET", `/api/projects/${project.id}`);
+    const item = (after.body as { project: ProjectJson }).project.items.find((it) => it.id === itemId)!;
+    expect(item.purchaseRequestId, "โครงการต้องชี้ฉบับแก้ไขใหม่").toBe(rev.id);
+  });
+
+  it("keeps the original of both documents untouched", async () => {
+    const project = await projectWithItems();
+    const jo = (await call("POST", "/api/job-orders", { projectId: project.id, itemIds: [project.items[0].id] })).body as { jobOrder: { id: string } };
+    await call("POST", `/api/job-orders/${jo.jobOrder.id}/submit-approval`);
+    await call("POST", `/api/job-orders/${jo.jobOrder.id}/approve`);
+    await call("POST", `/api/job-orders/${jo.jobOrder.id}/rewrite`);
+
+    const original = await call("GET", `/api/job-orders/${jo.jobOrder.id}`);
+    expect(original.statusCode).toBe(200);
+    expect((original.body as { jobOrder: { status: string } }).jobOrder.status,
+      "ฉบับเดิมต้องยังเป็น Final ไม่ถูกแตะต้อง").toBe("Final");
   });
 });
 

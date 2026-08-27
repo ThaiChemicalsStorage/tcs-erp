@@ -14,6 +14,7 @@ import { loadPendingProjectItemsOrThrow, linkProjectItemsToSubDocument, markProj
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
+import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import { sanitizeNullableNumber } from "./projectValidation.js";
 import { buildJobOrderChecklistGroups, withJobOrderChecklistGroups } from "../../src/lib/jobOrder.js";
 import type { JobOrderLine, JobOrderSummary, ChecklistGroup } from "../../src/lib/jobOrder.js";
@@ -108,7 +109,7 @@ function sanitizeChecklist(raw: unknown, currentRaw: ChecklistGroup[]): Checklis
 function toClient(doc: JobOrderFields & { _id: string }) {
   // จัดเช็คลิสต์เข้าหัวข้อปัจจุบันทุกครั้งที่อ่าน — ใบที่บันทึกไว้ตอนยังเป็นกลุ่มเดียว 23 ข้อจะถูกกระจาย
   // เข้าหัวข้อใหม่โดยค่าที่ติ๊กไว้ไม่หาย ดู withJobOrderChecklistGroups() ใน src/lib/jobOrder.ts
-  return withStringId(withApprovalDefaults({ ...doc, scopeChecklist: withJobOrderChecklistGroups(doc.scopeChecklist), attachments: doc.attachments ?? [] }));
+  return withStringId(withApprovalDefaults({ ...doc, scopeChecklist: withJobOrderChecklistGroups(doc.scopeChecklist), attachments: doc.attachments ?? [], revisionNote: doc.revisionNote ?? "" }));
 }
 function toSummary(doc: JobOrderFields & { _id: string }): JobOrderSummary {
   const full = withStringId(doc);
@@ -178,6 +179,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     })),
     scopeChecklist: buildJobOrderChecklistGroups(), outOfScope: "",
     attachments: [],
+    revisionNote: "",
     status: "Draft",
     // requestedAt seeds from a date-only slice of `now`, not the full ISO timestamp — this field
     // round-trips through handleUpdate()'s validateIsoDateOrEmpty() on every save, which requires
@@ -239,6 +241,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<JobOrderFields> = {};
   if ("lines" in body) update.lines = sanitizeLines(body.lines);
+  if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   if ("scopeChecklist" in body) update.scopeChecklist = sanitizeChecklist(body.scopeChecklist, doc.scopeChecklist);
   if ("outOfScope" in body) update.outOfScope = sanitizeLongText(body.outOfScope, "รายละเอียดอื่นๆ (Out of Scope)");
   for (const f of SHORT_TEXT_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = sanitizeShortText(body[f.key], f.label);
@@ -287,6 +290,82 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
   const doc = await loadOrThrow(id);
   await writeAuditEntry(ctx, "Job Order Printed", `พิมพ์ใบสั่งงาน ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
   res.status(200).json({ ok: true });
+}
+
+/** ตัวนับเลขฉบับแก้ไขต่อสายเอกสาร — idiom เดียวกับเอกสารใบอื่นในระบบ */
+async function nextJobOrderRevision(counters: Collection<CounterFields>, root: string): Promise<number> {
+  const result = await counters.findOneAndUpdate(
+    { _id: `job_order_revision_${root}` },
+    { $inc: { seq: 1 } },
+    { returnDocument: "after", upsert: true },
+  );
+  return result?.seq ?? 1;
+}
+
+/**
+ * Rewrite ใบสั่งงาน (2026-08-27) — `_id` คือเลขที่เอกสาร จึงต่อท้ายด้วย `-R{n}`
+ *
+ * ⚠️ **ต่างจากใบเบิกและใบขอซื้อตรงที่ใบสั่งงานผูกได้ "หลายรายการ"** จึงต้องย้ายลิงก์ให้ครบทุกตัวด้วย
+ * ตัวช่วยพหูพจน์ ถ้าเผลอใช้ตัวเอกพจน์จะย้ายให้แค่รายการแรก ที่เหลือค้างชี้ฉบับเก่าอยู่เงียบ ๆ
+ *
+ * **ไฟล์แนบไม่สืบทอด** — สำเนาจะชี้ไฟล์ก้อนเดียวกันกับฉบับเดิม พอลบจากฉบับหนึ่งอีกฉบับจะลิงก์เสีย
+ * เป็นเหตุผลเดียวกับที่ Scope of Work ไม่สืบทอดไฟล์แนบตอน Rewrite (ดู scopeOfWorkHandler.ts)
+ *
+ * เช็คลิสต์ขอบเขตงานสืบทอดมาทั้งหมด เพราะเป็นเนื้อหาของเอกสาร ไม่ใช่ข้อมูลการดำเนินงาน
+ */
+async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "jobOrder:create");
+  const source = await loadOrThrow(id);
+  // ด่านรายเอกสารเหมือนทุก route ที่แก้ข้อมูลในโมดูลนี้ — `:create` อย่างเดียวไม่พอ
+  if (!canEdit(ctx, source)) throw new HttpError(403, "Forbidden");
+
+  const [jobOrders, counters] = await Promise.all([jobOrdersCollection(), countersCollection()]);
+  const root = getRevisionRoot(source._id);
+  const now = nowIso();
+
+  let created: (JobOrderFields & { _id: string }) | null = null;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 5 && !created; attempt++) {
+    const seq = await nextJobOrderRevision(counters, root);
+    const { _id: _drop, ...rest } = source;
+    const doc: JobOrderFields & { _id: string } = {
+      ...rest,
+      _id: `${root}-R${seq}`,
+      lines: source.lines.map((l) => ({ ...l, id: newId("joline"), subDetails: [...(l.subDetails ?? [])] })),
+      attachments: [],
+      status: "Draft",
+      requestedBy: ctx.user.fullName, requestedAt: now.slice(0, 10),
+      approvedBy: "", approvedAt: "",
+      documentRecipientBy: "", documentRecipientAt: "",
+      approvedByUserId: "",
+      rejectionComment: "",
+      revisionNote: "",
+      createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
+    };
+    try {
+      await jobOrders.insertOne(doc);
+      created = doc;
+    } catch (err) {
+      if (err && typeof err === "object" && (err as { code?: number }).code === 11000) { lastErr = err; continue; }
+      throw err;
+    }
+  }
+  if (!created) {
+    console.error("[job-orders] exhausted retries reserving a unique revision number", lastErr);
+    throw new HttpError(409, "ไม่สามารถสร้างเลขที่ฉบับแก้ไขที่ไม่ซ้ำกันได้ กรุณาลองใหม่อีกครั้ง");
+  }
+
+  // ย้ายลิงก์ **ทุกรายการ** ที่ผูกกับใบเดิมมาชี้ฉบับใหม่
+  if (source.projectId) {
+    const itemIds = await findProjectItemIdsByLink(source.projectId, "jobOrderId", source._id);
+    if (itemIds.length > 0) {
+      await linkProjectItemsToSubDocument(source.projectId, itemIds, "jobOrder", "jobOrderId", created._id);
+    }
+  }
+
+  await writeAuditEntry(ctx, "Job Order Rewritten", `สร้างใบสั่งงานฉบับแก้ไข ${created._id} จาก ${source._id}`, { scopeOfWorkId: source.scopeOfWorkId });
+  res.status(201).json({ jobOrder: toClient(created) });
 }
 
 async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
@@ -339,6 +418,7 @@ export async function handleJobOrder(req: VercelRequest, res: VercelResponse): P
     if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);
     if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
   // ไฟล์แนบ — ตัวดาวน์โหลดตั้งใจให้เปิดได้โดยไม่ต้องล็อกอิน คุมด้วย capability key ใน URL แทน
   // ดู api/_lib/documentAttachments.ts — route นี้จึงต้องมาก่อนด่าน requireUser ของ handler อื่น
   if (parts.length === 4 && parts[1] === "attachments" && parts[3] === "download") {

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight , PackagePlus } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight , PackagePlus , GitBranch } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
@@ -7,6 +7,7 @@ import {
   fetchPurchaseRequest, updatePurchaseRequest, finalizePurchaseRequest, logPurchaseRequestPrinted,
   deletePurchaseRequest, blankPurchaseRequestLine,
   submitPurchaseRequestApproval, approvePurchaseRequest, rejectPurchaseRequest, withdrawPurchaseRequestApproval,
+  rewritePurchaseRequest,
 } from "../../lib/purchaseRequest";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { createProductRequest } from "../../lib/productRequest";
@@ -18,6 +19,7 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { PurchaseRequestPrintDocument } from "./PurchaseRequestPrintDocument";
 import { useI18n } from "../../lib/i18n";
+import { getRevisionNumber } from "../../lib/revisionDiff";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -28,6 +30,7 @@ import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
   return {
     lines: p.lines,
+    revisionNote: p.revisionNote,
     vendorName: p.vendorName,
     neededByDate: p.neededByDate,
     creditDays: p.creditDays,
@@ -54,6 +57,7 @@ export function PurchaseRequestDocument({
   canDelete,
   onBack,
   onDeleted,
+  onOpenOther,
   showToast,
 }: {
   purchaseRequestId: string;
@@ -65,6 +69,8 @@ export function PurchaseRequestDocument({
   canDelete: boolean;
   onBack: () => void;
   onDeleted: () => void;
+  /** เปิดเอกสารใบอื่นในโมดูลเดียวกัน — ใช้ตอน Rewrite เพื่อพาไปฉบับใหม่ที่เพิ่งสร้าง */
+  onOpenOther: (id: string) => void;
   showToast: (msg: string) => void;
 }) {
   const { t } = useI18n();
@@ -79,6 +85,8 @@ export function PurchaseRequestDocument({
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRewrite, setConfirmRewrite] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
@@ -279,6 +287,19 @@ export function PurchaseRequestDocument({
     } finally { setRequestingCodeFor(null); }
   };
 
+  // สร้างฉบับแก้ไข แล้วเปิดฉบับใหม่ทันที — ฉบับเดิมยังอยู่ครบ ไม่ถูกแตะต้อง
+  const handleRewrite = async () => {
+    if (!doc) return;
+    setRewriting(true);
+    try {
+      const created = await rewritePurchaseRequest(doc.id);
+      showToast(t("docRevision.rewritten"));
+      onOpenOther(created.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("docRevision.errorRewrite"));
+    } finally { setRewriting(false); setConfirmRewrite(false); }
+  };
+
   const handlePrint = async () => {
     setPrinting(true);
     try {
@@ -323,6 +344,11 @@ export function PurchaseRequestDocument({
         <div data-tour="prdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
           {autoSaveEditable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}
+          {canEdit && doc.status === "Final" && (
+            <button onClick={() => setConfirmRewrite(true)} disabled={rewriting} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              {rewriting ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />} {t("docRevision.rewrite")}
+            </button>
+          )}
           {canPrint && (
             <button onClick={handlePrint} disabled={printing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
               {printing ? <Loader2 size={13} className="animate-spin" /> : <Printer size={13} />} {t("purchaseRequestDoc.print")}
@@ -544,6 +570,23 @@ export function PurchaseRequestDocument({
           </div>
         </div>
 
+        {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
+            ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
+        {getRevisionNumber(doc.id) > 0 && (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-foreground mb-1">{t("docRevision.noteTitle")}</h2>
+            <p className="text-xs text-muted-foreground mb-2">{t("docRevision.noteHelp")}</p>
+            <textarea
+              rows={4}
+              disabled={!editable}
+              value={draft.revisionNote}
+              onChange={(e) => setDraft({ ...draft, revisionNote: e.target.value })}
+              placeholder={t("docRevision.notePlaceholder")}
+              className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2.5 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-60"
+            />
+          </div>
+        )}
+
         <div className="bg-card border border-border rounded-xl p-5">
           <h2 className="text-sm font-semibold text-foreground mb-3" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseRequestDoc.signatoriesTitle")}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
@@ -583,6 +626,15 @@ export function PurchaseRequestDocument({
         busy={deleting}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(false)}
+      />
+      <ConfirmDialog
+        open={confirmRewrite}
+        title={t("docRevision.rewriteConfirmTitle")}
+        message={t("docRevision.rewriteConfirmBody")}
+        confirmLabel={t("docRevision.rewrite")}
+        busy={rewriting}
+        onConfirm={() => void handleRewrite()}
+        onCancel={() => setConfirmRewrite(false)}
       />
       <ConfirmDialog
         open={confirmFinalize}

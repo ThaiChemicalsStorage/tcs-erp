@@ -12,7 +12,8 @@ import { loadPendingProjectItemOrThrow, linkProjectItemToSubDocument, markProjec
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { notifyDepartments, PURCHASING_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { nowIso, newId } from "../../src/lib/products.js";
-import { sanitizeShortText, validateIsoDateOrEmpty } from "./quoteValidation.js";
+import { sanitizeShortText, validateIsoDateOrEmpty, sanitizeLongText } from "./quoteValidation.js";
+import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import { sanitizeNullableNumber } from "./projectValidation.js";
 import type { PurchaseRequestLine, PurchaseRequestSummary } from "../../src/lib/purchaseRequest.js";
 
@@ -96,6 +97,7 @@ function toClient(doc: PurchaseRequestFields & { _id: string }) {
   return withStringId(withApprovalDefaults({
     ...doc,
     lines: (doc.lines ?? []).map((l) => ({ ...l, subDetails: l.subDetails ?? [] })),
+    revisionNote: doc.revisionNote ?? "",
   }));
 }
 function toSummary(doc: PurchaseRequestFields & { _id: string }): PurchaseRequestSummary {
@@ -187,6 +189,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     requestedBy: ctx.user.fullName, requestedAt: now.slice(0, 10),
     approvedBy: "", approvedAt: "",
     purchasingDeptBy: "", purchasingDeptAt: "",
+    revisionNote: "",
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
   };
   const purchaseRequests = await purchaseRequestsCollection();
@@ -247,6 +250,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const body = (req.body ?? {}) as Record<string, unknown>;
   const update: Partial<PurchaseRequestFields> = {};
   if ("lines" in body) update.lines = await sanitizeLines(body.lines);
+  if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)");
   for (const f of SHORT_TEXT_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = sanitizeShortText(body[f.key], f.label);
   for (const f of DATE_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = validateIsoDateOrEmpty(body[f.key], f.label);
@@ -313,6 +317,77 @@ async function handlePrint(req: VercelRequest, res: VercelResponse, id: string) 
   res.status(200).json({ ok: true });
 }
 
+/** ตัวนับเลขฉบับแก้ไขต่อสายเอกสาร — idiom เดียวกับ Scope of Work / ใบสั่งผลิต / ใบเบิก */
+async function nextPurchaseRequestRevision(counters: Collection<CounterFields>, root: string): Promise<number> {
+  const result = await counters.findOneAndUpdate(
+    { _id: `purchase_request_revision_${root}` },
+    { $inc: { seq: 1 } },
+    { returnDocument: "after", upsert: true },
+  );
+  return result?.seq ?? 1;
+}
+
+/**
+ * Rewrite ใบขอซื้อ (2026-08-27) — `_id` คือเลขที่เอกสาร จึงต่อท้ายด้วย `-R{n}`
+ *
+ * ⚠️ ต้องย้ายลิงก์ `ProjectItem` มาชี้ฉบับใหม่ ไม่งั้นหน้าโครงการจะยังชี้ฉบับเก่าตลอดไป
+ * ใบของฝ่ายผลิตไม่มี `projectId` จึงข้ามขั้นตอนนี้ไปเอง
+ *
+ * **รายการและราคาประเมินสืบทอดมาทั้งหมด** ต่างจากใบเบิกที่ล้างยอดเบิก/ยอดคืนทิ้ง — เพราะใบขอซื้อ
+ * ฉบับแก้ไขมักเป็นการแก้ผู้ขาย/เงื่อนไข/จำนวน ไม่ใช่การเริ่มขอซื้อใหม่ตั้งแต่ต้น ส่วนช่องเซ็นและ
+ * สถานะถูกล้างเหมือนกันทุกใบ
+ */
+async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "purchaseRequest:create");
+  const source = await loadOrThrow(id);
+  // ด่านรายเอกสารเหมือนทุก route ที่แก้ข้อมูลในโมดูลนี้ — `:create` อย่างเดียวไม่พอ ไม่งั้นใครก็ตามที่
+  // สร้างใบขอซื้อได้จะแตกฉบับแก้ไขจากใบของคนอื่น (และย้ายลิงก์ ProjectItem ตามไปด้วย) ได้
+  if (!canEdit(ctx, source)) throw new HttpError(403, "Forbidden");
+
+  const [purchaseRequests, counters] = await Promise.all([purchaseRequestsCollection(), countersCollection()]);
+  const root = getRevisionRoot(source._id);
+  const now = nowIso();
+
+  let created: (PurchaseRequestFields & { _id: string }) | null = null;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 5 && !created; attempt++) {
+    const seq = await nextPurchaseRequestRevision(counters, root);
+    const { _id: _drop, ...rest } = source;
+    const doc: PurchaseRequestFields & { _id: string } = {
+      ...rest,
+      _id: `${root}-R${seq}`,
+      status: "Draft",
+      requestedBy: ctx.user.fullName, requestedAt: now.slice(0, 10),
+      approvedBy: "", approvedAt: "",
+      purchasingDeptBy: "", purchasingDeptAt: "",
+      approvedByUserId: "",
+      rejectionComment: "",
+      revisionNote: "",
+      createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
+    };
+    try {
+      await purchaseRequests.insertOne(doc);
+      created = doc;
+    } catch (err) {
+      if (err && typeof err === "object" && (err as { code?: number }).code === 11000) { lastErr = err; continue; }
+      throw err;
+    }
+  }
+  if (!created) {
+    console.error("[purchase-requests] exhausted retries reserving a unique revision number", lastErr);
+    throw new HttpError(409, "ไม่สามารถสร้างเลขที่ฉบับแก้ไขที่ไม่ซ้ำกันได้ กรุณาลองใหม่อีกครั้ง");
+  }
+
+  if (source.projectId) {
+    const itemId = await findProjectItemIdByLink(source.projectId, "purchaseRequestId", source._id);
+    if (itemId) await linkProjectItemToSubDocument(source.projectId, itemId, "purchaseRequest", "purchaseRequestId", created._id);
+  }
+
+  await writeAuditEntry(ctx, "Purchase Request Rewritten", `สร้างใบขอซื้อฉบับแก้ไข ${created._id} จาก ${source._id}`, { scopeOfWorkId: source.scopeOfWorkId });
+  res.status(201).json({ purchaseRequest: toClient(created) });
+}
+
 async function handleDelete(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseRequest:delete");
@@ -350,5 +425,6 @@ export async function handlePurchaseRequest(req: VercelRequest, res: VercelRespo
     if (parts.length === 2 && parts[1] === "reject") return handleReject(req, res, parts[0], approvalConfig);
     if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
   throw new HttpError(404, "Not found");
 }

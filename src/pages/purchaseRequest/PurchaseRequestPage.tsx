@@ -121,6 +121,7 @@ export function PurchaseRequestPage({
           canDelete={canDelete}
           onBack={backToList}
           onDeleted={backToList}
+          onOpenOther={openPurchaseRequest}
           showToast={toast.show}
         />
         <Toast message={toast.message} />

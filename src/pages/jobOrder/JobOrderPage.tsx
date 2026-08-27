@@ -101,6 +101,7 @@ export function JobOrderPage({
           canDelete={canDelete}
           onBack={backToList}
           onDeleted={backToList}
+          onOpenOther={openJobOrder}
           showToast={toast.show}
         />
         <Toast message={toast.message} />

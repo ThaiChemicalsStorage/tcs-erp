@@ -78,6 +78,15 @@ export interface PurchaseRequest {
   deliveryLocation: string;
   lines: PurchaseRequestLine[];
   status: PurchaseRequestStatus;
+  /**
+   * หมายเหตุการแก้ไข — พิมพ์เอง อธิบายว่าฉบับนี้ต่างจากฉบับก่อนตรงไหน และ **แสดงบนใบพิมพ์ด้วย**
+   * (ฝ่ายผลิตขอไว้ 2026-08-27 ว่า "สามารถดูในใบปริ้นได้" — ต่างจาก revisionNote ของใบเสนอราคา/
+   * Scope of Work ที่เป็นข้อมูลภายในและไม่เคยถูกพิมพ์)
+   *
+   * ไม่สืบทอดมาจากฉบับก่อนตอนกด Rewrite — เริ่มว่างเสมอ ตรงกับพฤติกรรมของ Scope of Work
+   * เอกสารเก่าที่ไม่มีฟิลด์นี้อ่านออกมาเป็น "" (normalize ตอนอ่าน ไม่ได้ทำ migration)
+   */
+  revisionNote: string;
   /** "ผู้ขอซื้อ" */
   requestedBy: string;
   requestedAt: string;
@@ -147,6 +156,12 @@ export async function finalizePurchaseRequest(id: string): Promise<PurchaseReque
   const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}/finalize`, { method: "POST" });
   return purchaseRequest;
 }
+/** สร้างฉบับแก้ไขใหม่ (`-R{n}`) — ลิงก์ในโครงการถูกย้ายมาชี้ฉบับใหม่ให้อัตโนมัติ */
+export async function rewritePurchaseRequest(id: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}/rewrite`, { method: "POST" });
+  return purchaseRequest;
+}
+
 export async function logPurchaseRequestPrinted(id: string): Promise<void> {
   await apiFetch<{ ok: boolean }>(`/purchase-requests/${encodeURIComponent(id)}/print`, { method: "POST" });
 }

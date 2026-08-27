@@ -90,6 +90,13 @@ export function JobOrderPrintDocument({ jobOrder: j }: { jobOrder: JobOrder }) {
           <p className="text-[10px] whitespace-pre-line">{j.outOfScope}</p>
         </>
       )}
+      {/* หมายเหตุการแก้ไข — พิมพ์จริงตามที่ฝ่ายผลิตขอ ("สามารถดูในใบปริ้นได้") ซ่อนเมื่อว่าง */}
+      {(j.revisionNote ?? "").trim() !== "" && (
+        <div className="border border-black px-2 py-1 mt-2 text-[10px]" style={{ whiteSpace: "pre-wrap" }}>
+          <span className="font-semibold">หมายเหตุการแก้ไข :</span> {j.revisionNote}
+        </div>
+      )}
+
 
       <table className="w-full text-xs mt-6" style={{ borderCollapse: "collapse" }}>
         <tbody>

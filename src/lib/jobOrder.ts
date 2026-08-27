@@ -60,6 +60,15 @@ export interface JobOrder {
   outOfScope: string;
   status: JobOrderStatus;
   /**
+   * หมายเหตุการแก้ไข — พิมพ์เอง อธิบายว่าฉบับนี้ต่างจากฉบับก่อนตรงไหน และ **แสดงบนใบพิมพ์ด้วย**
+   * (ฝ่ายผลิตขอไว้ 2026-08-27 ว่า "สามารถดูในใบปริ้นได้" — ต่างจาก revisionNote ของใบเสนอราคา/
+   * Scope of Work ที่เป็นข้อมูลภายในและไม่เคยถูกพิมพ์)
+   *
+   * ไม่สืบทอดมาจากฉบับก่อนตอนกด Rewrite — เริ่มว่างเสมอ ตรงกับพฤติกรรมของ Scope of Work
+   * เอกสารเก่าที่ไม่มีฟิลด์นี้อ่านออกมาเป็น "" (normalize ตอนอ่าน ไม่ได้ทำ migration)
+   */
+  revisionNote: string;
+  /**
    * ไฟล์แนบ (แบบ, รูป, PO ของลูกค้า) — ฝ่ายโครงการขอไว้ 2026-08-27 ("สามารถแนบไฟล์ในใบสั่งงาน")
    *
    * จัดการผ่าน route เฉพาะของมันเท่านั้น **ไม่ใช่ฟิลด์ที่ PATCH ได้** เพื่อไม่ให้หน้าจอที่ถือข้อมูลเก่า
@@ -147,6 +156,15 @@ export async function uploadJobOrderAttachment(id: string, file: File): Promise<
 }
 export async function deleteJobOrderAttachment(id: string, attachmentId: string): Promise<JobOrder> {
   const { jobOrder } = await deleteDocumentAttachment<{ jobOrder: JobOrder }>("job-orders", id, attachmentId);
+  return jobOrder;
+}
+
+/**
+ * สร้างฉบับแก้ไขใหม่ (`-R{n}`) — ลิงก์ในโครงการ **ทุกรายการ** ถูกย้ายมาชี้ฉบับใหม่ให้อัตโนมัติ
+ * ไฟล์แนบไม่สืบทอด เพราะสำเนาจะชี้ไฟล์ก้อนเดียวกันแล้วลบทีเดียวพังทั้งสองฉบับ
+ */
+export async function rewriteJobOrder(id: string): Promise<JobOrder> {
+  const { jobOrder } = await apiFetch<{ jobOrder: JobOrder }>(`/job-orders/${encodeURIComponent(id)}/rewrite`, { method: "POST" });
   return jobOrder;
 }
 
