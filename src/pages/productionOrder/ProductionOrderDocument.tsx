@@ -23,6 +23,7 @@ const inputCls = "w-full text-sm text-foreground bg-secondary border border-bord
 
 function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
   return {
+    documentNumber: d.documentNumber,
     productName: d.productName, supervisorName: d.supervisorName,
     startDate: d.startDate, dueDate: d.dueDate, lines: d.lines,
     orderedBy: d.orderedBy, deliveredBy: d.deliveredBy, receivedBy: d.receivedBy, costDeptBy: d.costDeptBy,
@@ -227,7 +228,7 @@ export function ProductionOrderDocument({
           <ChevronRight size={14} className="rotate-180" /> {t("productionOrderDoc.backToList")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{doc.id}</span>
+        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{doc.documentNumber || doc.id}</span>
         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusPill}`}>{statusText}</span>
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
@@ -283,6 +284,11 @@ export function ProductionOrderDocument({
             <p className="text-[#a8bed8] text-xs mt-1">{t("productionOrderDoc.jobCodePrefix")} {doc.jobCode} · {doc.customerCompanyName}</p>
           </div>
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* เลขที่ที่พิมพ์บนฟอร์ม — แก้ได้ตอนเป็นร่าง แต่ id จริงของเอกสารไม่เปลี่ยน ตัวนับจึงเดินต่อตามปกติ */}
+            <div>
+              {field(t("productionOrderDoc.field.documentNumber"), draft.documentNumber, (v) => setDraft({ ...draft, documentNumber: v }))}
+              <p className="text-xs text-muted-foreground mt-1">{t("productionOrderDoc.field.documentNumberHint")}</p>
+            </div>
             {field(t("productionOrderDoc.field.productName"), draft.productName, (v) => setDraft({ ...draft, productName: v }))}
             {field(t("productionOrderDoc.field.supervisorName"), draft.supervisorName, (v) => setDraft({ ...draft, supervisorName: v }))}
             {field(t("productionOrderDoc.field.startDate"), draft.startDate, (v) => setDraft({ ...draft, startDate: v }), "date")}

@@ -262,7 +262,7 @@ function BillingNotePage({ document, copyLabel, paidByInvoiceId }: { document: A
 export function ArDocumentPrintDocument({ document, paidByInvoiceId = {} }: { document: ArDocument; paidByInvoiceId?: ArPaidByInvoiceId }) {
   return (
     <>
-      <style>{"@media print { @page { margin: 0 } }"}</style>
+      <style>{"@media print { @page { size: A4 portrait; margin: 0 } }"}</style>
       {copyLabels(document.docType).map((label) => (
         document.docType === "BI"
           ? <BillingNotePage key={label} document={document} copyLabel={label} paidByInvoiceId={paidByInvoiceId} />

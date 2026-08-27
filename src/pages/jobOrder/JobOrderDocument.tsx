@@ -14,6 +14,7 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ChecklistGroupCard } from "../quotation/ChecklistGroupCard";
 import { JobOrderPrintDocument } from "./JobOrderPrintDocument";
 import { useI18n } from "../../lib/i18n";
+import { fetchDepartments, type Department } from "../../lib/departments";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -65,6 +66,8 @@ export function JobOrderDocument({
 }) {
   const { t } = useI18n();
   const [doc, setDoc] = useState<JobOrder | null>(null);
+  // รายชื่อแผนกจริงสำหรับช่อง "ถึงหน่วยงาน" — GET /departments เปิดให้ทุกคนที่ล็อกอินแล้ว จึงไม่ต้องมีสิทธิ์เพิ่ม
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [draft, setDraft] = useState<JobOrder | null>(null);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -80,6 +83,13 @@ export function JobOrderDocument({
   // ประกาศเหนือ effect โหลดข้อมูล เพราะทุกครั้งที่ดึงเอกสารจากเซิร์ฟเวอร์ต้องตั้งฐานเทียบใหม่ ไม่งั้นเอกสารจะ
   // ค้างสถานะ "ยังไม่บันทึก" ตลอดไปแล้วเด้งถามทุกครั้งที่เปลี่ยนหน้า
   const dirty = useDirtyTracker(draft && canEdit && draft.status === "Draft" ? toUpdateFields(draft) : null);
+  useEffect(() => {
+    let cancelled = false;
+    // โหลดไม่สำเร็จก็ปล่อยเงียบ — ช่องจะเหลือแค่ค่าที่บันทึกไว้เดิม ดีกว่าพังทั้งหน้า
+    fetchDepartments().then((list) => { if (!cancelled) setDepartments(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -341,9 +351,19 @@ export function JobOrderDocument({
             </div>
             <div>
               <label htmlFor="jo-toSite" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.toSite")}</label>
-              <input id="jo-toSite" disabled={!editable} value={draft.toSite}
+              {/* ดึงจากตาราง departments จริง — เก็บเป็น "ชื่อ" ไม่ใช่ id เพราะใบพิมพ์ต้องแสดงชื่อ
+                  และมี option สำรองสำหรับค่าเก่าที่พิมพ์ไว้ก่อนมี dropdown แบบเดียวกับหน้าจัดการผู้ใช้ จะได้ไม่หายเงียบ */}
+              <select id="jo-toSite" disabled={!editable} value={draft.toSite}
                 onChange={(e) => setDraft({ ...draft, toSite: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70">
+                <option value="">{t("jobOrderDoc.field.toSitePlaceholder")}</option>
+                {departments.filter((d) => d.isActive).map((d) => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+                {draft.toSite && !departments.some((d) => d.name === draft.toSite) && (
+                  <option value={draft.toSite}>{draft.toSite} ({t("users.field.department.legacy")})</option>
+                )}
+              </select>
             </div>
             <div>
               <label htmlFor="jo-startDate" className="text-xs text-muted-foreground block mb-1">{t("jobOrderDoc.field.startDate")}</label>

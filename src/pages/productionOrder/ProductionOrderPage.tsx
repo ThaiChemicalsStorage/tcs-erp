@@ -131,6 +131,7 @@ export function ProductionOrderPage({
           onClose={() => setPickerOpen(false)}
           onSelect={(scopeOfWorkId) => void createFromScope(scopeOfWorkId)}
           allowMultiplePerScope
+          requireFinalScope={false}
         />
       )}
       <Toast message={toast.message} />

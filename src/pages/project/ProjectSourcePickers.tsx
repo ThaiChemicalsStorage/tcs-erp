@@ -37,7 +37,7 @@ function SkeletonRows() {
  * `POST /api/projects` allows several projects per scope — but creating a second one by accident is
  * far more likely to be a mistake than intent, so the UI steers away from it while staying honest).
  */
-export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiplePerScope = false }: {
+export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiplePerScope = false, requireFinalScope = true }: {
   onClose: () => void;
   onSelect: (scopeOfWorkId: string) => void;
   /**
@@ -45,6 +45,12 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
    * (ต่างจากโครงการที่ปกติมีใบเดียวต่อหนึ่งงาน) ตัวเช็คนั้นยิง API ต่อ 1 งาน จึงข้ามไปเลยเมื่อไม่ใช้
    */
   allowMultiplePerScope?: boolean;
+  /**
+   * บังคับว่า Scope of Work ต้องอนุมัติแล้ว (Final) — จริงๆ ตัวบังคับคือเซิร์ฟเวอร์ ตรงนี้แค่สะท้อนให้
+   * โครงการยังคงบังคับ (projectHandler.ts) ส่วนใบสั่งผลิตส่ง false มา เพราะปลดด่านไปแล้ว
+   * ตามที่ฝ่ายผลิตขอไว้เมื่อ 2026-08-27
+   */
+  requireFinalScope?: boolean;
 }) {
   const { t } = useI18n();
   const [scopes, setScopes] = useState<ScopeOfWorkListItem[]>([]);
@@ -108,9 +114,9 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
               <div className="space-y-1.5">
                 {filtered.map((s) => {
                   const taken = !allowMultiplePerScope && Boolean(existingByScope[s.id]);
-                  // เฉพาะงานที่อนุมัติแล้ว (Final) เท่านั้นที่เปิดโครงการได้ — ตรงกับด่านฝั่งเซิร์ฟเวอร์ใน
-                  // handleCreate() (api/_lib/projectHandler.ts) ซึ่งเป็นตัวบังคับจริง
-                  const notApproved = s.status !== "Final";
+                  // โครงการยังต้องใช้งานที่อนุมัติแล้ว — ตรงกับด่านฝั่งเซิร์ฟเวอร์ใน handleCreate()
+                  // (api/_lib/projectHandler.ts) ส่วนใบสั่งผลิตปลดด่านไปแล้ว จึงส่ง requireFinalScope=false มา
+                  const notApproved = requireFinalScope && s.status !== "Final";
                   return (
                     <button key={s.id} onClick={() => { setBusyId(s.id); onSelect(s.id); }} disabled={taken || notApproved || busyId !== null} className={rowButton}>
                       <div className="min-w-0">
@@ -325,7 +331,7 @@ export function ProductionOrderSourcePickerDialog({ title, onClose, onSelect }: 
                 {filtered.map((o) => (
                   <button key={o.id} onClick={() => { setBusy(true); onSelect(o.id); }} disabled={busy} className={rowButton}>
                     <div className="min-w-0">
-                      <p className="text-sm font-mono font-medium text-foreground truncate">{o.id}</p>
+                      <p className="text-sm font-mono font-medium text-foreground truncate">{o.documentNumber || o.id}</p>
                       <p className="text-xs text-muted-foreground truncate">{o.jobCode} · {o.customerCompanyName}{o.productName ? ` · ${o.productName}` : ""}</p>
                     </div>
                     {busy && <Loader2 size={14} className="animate-spin text-muted-foreground flex-shrink-0" />}

@@ -33,7 +33,7 @@ export function ProductionOrderList({
 
   const filtered = productionOrders
     .filter((p) => filterStatus === FILTER_ALL || p.status === filterStatus)
-    .filter((p) => !q || [p.id, p.jobCode, p.customerCompanyName, p.productName].some((v) => (v ?? "").toLowerCase().includes(q)));
+    .filter((p) => !q || [p.id, p.documentNumber, p.jobCode, p.customerCompanyName, p.productName].some((v) => (v ?? "").toLowerCase().includes(q)));
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -102,7 +102,7 @@ export function ProductionOrderList({
                     onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(p.id); } }}
                     className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 focus-visible:bg-secondary/30"
                   >
-                    <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{p.id}</td>
+                    <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{p.documentNumber || p.id}</td>
                     <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{p.jobCode || "—"}</td>
                     <td className="px-4 py-3.5 text-sm text-foreground max-w-[200px] truncate" title={p.customerCompanyName}>{p.customerCompanyName || "—"}</td>
                     <td className="px-4 py-3.5 text-sm text-muted-foreground max-w-[240px] truncate" title={p.productName}>{p.productName || "—"}</td>

@@ -35,6 +35,17 @@ before building:
    where every other document in this app uses a Buddhist year. `tests/api/projectAtomicity.test.ts`
    pins the format so a future "make it consistent" refactor cannot quietly change it.
 
+   **The printed number became editable 2026-08-27** (Production department request: *"ใบสั่งผลิต
+   สามารถแก้ไขเลขที่ใบสั่งผลิตได้ แต่ยังรันปกติ"*). The generated `SC-…` value **is the Mongo `_id`**, and
+   Material Requisition / Purchase Request reference it via `productionOrderId` — so it cannot be
+   mutated. A separate `documentNumber` field now carries what the form prints: seeded equal to the
+   `_id` at creation, editable Draft-only, unique-checked with the exact recipe Scope of Work uses
+   (`sanitize` → friendly pre-check → unique index). The monthly counter is untouched, so editing one
+   order's number never shifts the next one. Records created before this have no such field;
+   `toClient()` falls back to `_id`, and `ensureProductionOrderNumberIndex()` backfills them to `_id`
+   **before** creating the unique index — without that backfill every legacy row is `null` and the
+   index creation fails with E11000.
+
 **Line model** matches what the printed table actually contains — three kinds of row:
 - a bold product header and a centred "ชิ้นส่วน" divider (`isSectionHeader: true`), carrying a remark
   but no qty/unit, and **skipped when numbering** so inserting one never renumbers the items below;
@@ -137,8 +148,33 @@ Two things this needed that are easy to miss on a similar module later:
   missing roles but never edits an existing role's permission array, so an already-provisioned
   database — production — also needs an `RBAC_MIGRATIONS` entry
   (`production-order-permissions-2026-08-20`). Ship both or the feature is invisible to real users.
-- Raising an MR/PR from a Production Order requires that order to be `Final` **and** checks
-  `productionOrder:view` on the parent. A Draft order must not be able to spend materials.
+- Raising an MR/PR from a Production Order checks `productionOrder:view` on the parent. It once
+  also required that order to be `Final` ("a Draft order must not be able to spend materials") —
+  **that requirement was removed 2026-08-27** at the Production department's request, together with
+  the Scope-of-Work-must-be-Final gate on creating the order itself. See "Final gates removed" below.
+
+## Final gates removed (2026-08-27)
+
+Direct request from the Production department's meeting: *"ใบสั่งผลิตกับใบเบิกไม่ต้องรอ Final ก็สร้างได้"*,
+with the owner confirming **both** layers should go:
+
+| Gate | Was | Now |
+|---|---|---|
+| Scope of Work → ใบสั่งผลิต | `scope.status !== "Final"` → 400 | no status check |
+| ใบสั่งผลิต → ใบเบิก / ใบขอซื้อ | `po.status !== "Final"` → 400 | no status check |
+
+`ScopeOfWorkSourcePickerDialog` gained `requireFinalScope` (default `true`); only the Production Order
+page passes `false`, so the Project module's own picker still greys out non-Final scopes.
+
+**The Project module's "สร้างโครงการ" gate (`projectHandler.ts`) is deliberately untouched** — a
+different document, not part of what the meeting asked for.
+
+The original 2026-08-20 reasoning still holds and is worth remembering: a Draft/PendingApproval scope
+can still have its items edited, and a Scope of Work refresh regenerates every `ScopeOfWorkItem.id`,
+so sub-documents raised against a not-yet-final job can end up silently orphaned. This is a trade the
+Production department accepted to start work earlier, not a problem that was solved. The two tests
+that pinned the 400s were **inverted on purpose**, each with a comment saying so, so a future reader
+cannot mistake this for a gate that went missing.
 
 ## Known gaps
 
@@ -147,4 +183,9 @@ Two things this needed that are easy to miss on a similar module later:
   documents, and the FM-PD-02 print layout are verified by tests and type-checking only.
 - **Cost Control is still unmodelled** — the spec names it as a precondition for the Production
   department too, exactly as it does for Project. See [`../TODO.md`](../TODO.md).
-- The Production Order's print layout has not been compared against the physical form.
+- The Production Order's print layout has not been compared against the physical form. **Partly
+  addressed 2026-08-27**: the `FM-PD-02 Rev.00 : 01/11/64` footer now repeats on every printed page
+  (moved into the outer table's `<tfoot>`, the same mechanism Quotation's letterhead uses with
+  `<thead>`) instead of printing once at the end of the content, and the sheet's `@page` rule moved
+  inside `@media print` and onto the app-standard 12mm margin. **Still needs a real print preview on
+  a document longer than one page** — nothing in `tsc`/`lint`/`build`/`test` can see a page break.

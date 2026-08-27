@@ -100,7 +100,7 @@ export function ServiceReportPrintDocument({ serviceReport, companyHeader, engin
 
   return (
     <>
-      <style>{"@media print { @page { margin: 0 } }"}</style>
+      <style>{"@media print { @page { size: A4 portrait; margin: 0 } }"}</style>
       <table className="hidden print:table w-full border-collapse text-[#0b1d3a]" style={{ fontSize: "10.5px", padding: "0 12mm" }}>
         <colgroup>
           <col style={{ width: "50%" }} />

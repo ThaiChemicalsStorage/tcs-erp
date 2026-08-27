@@ -43,6 +43,49 @@ async function nextProductionOrderId(counters: Collection<CounterFields>): Promi
   return `SC-${year}-${month}-${String(seq).padStart(3, "0")}`;
 }
 
+/**
+ * เลขที่ที่พิมพ์บนฟอร์ม (`documentNumber`) แก้เองได้ ต่างจาก `_id` ที่แก้ไม่ได้ — ลอกสูตรของ Scope of
+ * Work มาทั้งชุด (sanitize ไม่ให้ว่าง + pre-check ที่ให้ข้อความไทยสวย ๆ + unique index กัน race)
+ * เอกสารที่ลบแบบ soft-delete ยังกันเลขไว้ เหมือน Scope of Work ด้วยเหตุผลเดียวกัน (audit trail กำกวม)
+ */
+function sanitizeProductionOrderNumber(raw: unknown): string {
+  return sanitizeShortText(raw, "เลขที่ใบสั่งผลิต", true);
+}
+
+async function assertProductionOrderNumberAvailable(
+  productionOrders: Awaited<ReturnType<typeof productionOrdersCollection>>,
+  documentNumber: string,
+  excludeId: string,
+): Promise<void> {
+  const clash = await productionOrders.findOne(
+    { documentNumber, _id: { $ne: excludeId } },
+    { projection: { _id: 1 } },
+  );
+  if (clash) throw new HttpError(409, `เลขที่ใบสั่งผลิต "${documentNumber}" ถูกใช้กับใบอื่นแล้ว กรุณาใช้เลขอื่น`);
+}
+
+/** `ensureIndexes()` รันเฉพาะตอน Setup Wizard ครั้งแรก ซึ่งเข้าไม่ถึงแล้วบนระบบที่ติดตั้งไปนานแล้ว —
+ *  กันเหนียวแบบเดียวกับ `ensureScopeNumberIndexes()` โดยสร้างครั้งเดียวต่ออายุ instance */
+let productionOrderNumberIndexEnsured = false;
+async function ensureProductionOrderNumberIndex(
+  productionOrders: Awaited<ReturnType<typeof productionOrdersCollection>>,
+): Promise<void> {
+  if (productionOrderNumberIndexEnsured) return;
+  try {
+    // เอกสารที่สร้างก่อนฟีเจอร์นี้ยังไม่มีฟิลด์เลย ถ้าปล่อยไว้ทุกใบจะเป็น null เหมือนกันหมด แล้ว unique
+    // index จะสร้างไม่ผ่าน (E11000) — เติมให้เท่ากับ _id ก่อน ซึ่งตรงกับค่าที่ toClient() แสดงอยู่แล้ว
+    await productionOrders.updateMany(
+      { $or: [{ documentNumber: { $exists: false } }, { documentNumber: "" }] },
+      [{ $set: { documentNumber: "$_id" } }],
+    );
+    await productionOrders.createIndex({ documentNumber: 1 }, { unique: true });
+  } catch (err) {
+    // น่าจะมีข้อมูลซ้ำอยู่ก่อน — pre-check ด้านบนยังจับเคสปกติได้ อย่าให้การสร้าง index ล้มไปบล็อกทุกการสร้างเอกสาร
+    console.error("[production-orders] failed to ensure unique documentNumber index", err);
+  }
+  productionOrderNumberIndexEnsured = true;
+}
+
 async function writeAuditEntry(ctx: AuthContext, action: string, details: string, related: { scopeOfWorkId?: string }): Promise<void> {
   const auditLog = await auditLogCollection();
   await auditLog.insertOne({
@@ -91,12 +134,14 @@ function sanitizeLines(raw: unknown): ProductionOrderLine[] {
 }
 
 function toClient(doc: ProductionOrderFields & { _id: string }) {
-  return withStringId(withApprovalDefaults(doc));
+  // เอกสารที่สร้างก่อน 2026-08-27 ไม่มี documentNumber — ถือว่าเลขที่พิมพ์เท่ากับ _id เหมือนเดิม
+  return withStringId(withApprovalDefaults({ ...doc, documentNumber: doc.documentNumber || doc._id }));
 }
 function toSummary(doc: ProductionOrderFields & { _id: string }): ProductionOrderSummary {
   const full = withStringId(doc);
   return {
-    id: full.id, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode,
+    id: full.id, documentNumber: full.documentNumber || full.id,
+    scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode,
     customerCompanyName: full.customerCompanyName, productName: full.productName,
     status: full.status, updatedAt: full.updatedAt,
   };
@@ -157,10 +202,10 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const scopeOfWorks = await scopeOfWorksCollection();
   const scope = await scopeOfWorks.findOne({ _id: toObjectId(scopeOfWorkId) });
   if (!scope || scope.isDeleted) throw new HttpError(404, "ไม่พบ Scope of Work");
-  // เหมือนโครงการ — เปิดใบสั่งผลิตได้เฉพาะงานที่อนุมัติแล้ว เพราะงานที่ยังแก้ได้อาจเปลี่ยนรายการทีหลัง
-  if (scope.status !== "Final") {
-    throw new HttpError(400, "Scope of Work นี้ยังไม่ได้รับการอนุมัติ (ต้องเป็นสถานะ Final ก่อนจึงจะออกใบสั่งผลิตได้)");
-  }
+  // ไม่มีด่าน status ที่นี่: ฝ่ายผลิตขอไว้ในการประชุม 2026-08-27 ว่า "ใบสั่งผลิตกับใบเบิกไม่ต้องรอ Final ก็สร้างได้"
+  // (เจ้าของยืนยันให้ปลดทั้งสองชั้น) เดิมบังคับ Final ตั้งแต่ 2026-08-20 ด้วยเหตุผลว่างานที่ยังแก้ได้อาจเปลี่ยน
+  // รายการทีหลัง — ความเสี่ยงนั้นยังอยู่จริง แต่เป็นการแลกที่ฝ่ายผลิตยอมรับเพื่อให้เริ่มงานได้ก่อนอนุมัติ
+  // ด่านของ "สร้างโครงการ" (projectHandler.ts) ไม่เกี่ยวและยังคงบังคับ Final อยู่เหมือนเดิม
 
   const counters = await countersCollection();
   const id = await nextProductionOrderId(counters);
@@ -168,6 +213,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const blank: ProductionOrderSignatory = { name: "", date: "" };
   const doc: ProductionOrderFields & { _id: string } = {
     _id: id,
+    // เลขที่ที่พิมพ์บนฟอร์ม เริ่มต้นเท่ากับเลขที่ระบบรันให้ แล้วผู้ใช้แก้ทีหลังได้ตอนเป็นร่าง
+    documentNumber: id,
     scopeOfWorkId,
     jobCode: scope.scopeNumber,
     customerCompanyName: scope.customerSnapshot.companyName,
@@ -187,6 +234,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
   };
   const productionOrders = await productionOrdersCollection();
+  await ensureProductionOrderNumberIndex(productionOrders);
   await productionOrders.insertOne(doc);
   await writeAuditEntry(ctx, "Production Order Created", `สร้างใบสั่งผลิต ${id} จากงาน ${scope.scopeNumber}`, { scopeOfWorkId });
   res.status(201).json({ productionOrder: toClient(doc) });
@@ -217,6 +265,14 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const set: Partial<ProductionOrderFields> = { updatedAt: nowIso(), updatedBy: ctx.user.id };
+  if (body.documentNumber !== undefined) {
+    const documentNumber = sanitizeProductionOrderNumber(body.documentNumber);
+    if (documentNumber !== (doc.documentNumber || doc._id)) {
+      await ensureProductionOrderNumberIndex(await productionOrdersCollection());
+      await assertProductionOrderNumberAvailable(await productionOrdersCollection(), documentNumber, id);
+    }
+    set.documentNumber = documentNumber;
+  }
   if (body.productName !== undefined) set.productName = sanitizeShortText(body.productName, "ชื่อสินค้า");
   if (body.supervisorName !== undefined) set.supervisorName = sanitizeShortText(body.supervisorName, "ชื่อพนักงานดูแล");
   if (body.startDate !== undefined) set.startDate = validateIsoDateOrEmpty(body.startDate, "วันที่เริ่มผลิต");

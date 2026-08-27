@@ -151,9 +151,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     const productionOrders = await productionOrdersCollection();
     const po = await productionOrders.findOne({ _id: productionOrderId });
     if (!po || po.isDeleted) throw new HttpError(404, "ไม่พบใบสั่งผลิต");
-    // ต้องอนุมัติใบสั่งผลิตก่อน จึงจะเบิกของ/ขอซื้อตามได้ — แนวเดียวกับที่ใบสั่งผลิตเองต้องมาจาก
-    // Scope of Work ที่อนุมัติแล้ว และใบฝั่งโครงการต้องมาจากรายการที่ยัง pending
-    if (po.status !== "Final") throw new HttpError(400, "ใบสั่งผลิตนี้ยังไม่ได้รับการอนุมัติ");
+    // ไม่บังคับว่าใบสั่งผลิตต้องอนุมัติก่อน — ฝ่ายผลิตขอไว้ในการประชุม 2026-08-27
+    // ("ใบสั่งผลิตกับใบเบิกไม่ต้องรอ Final ก็สร้างได้") เจ้าของยืนยันให้ปลดทั้งชั้นนี้และชั้น Scope of Work → ใบสั่งผลิต
+    // เดิมบังคับไว้ตั้งแต่ 2026-08-20 ด้วยเหตุผลว่าใบสั่งผลิตฉบับร่างไม่ควรสั่งเบิกของจริงได้
     if (!roleHasPermission(ctx.role, "productionOrder:view")) throw new HttpError(403, "Forbidden");
     source = { projectId: "", scopeOfWorkId: po.scopeOfWorkId, jobCode: po.jobCode };
   } else {

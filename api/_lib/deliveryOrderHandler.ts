@@ -323,6 +323,55 @@ function sanitizeInstallmentsUpdate(raw: unknown, current: DeliveryOrderInstallm
   });
 }
 
+/**
+ * เลขที่/วันที่ของแต่ละงวด — แก้ได้แม้หลังอนุมัติ (ฝ่ายโครงการขอไว้เมื่อ 2026-08-27)
+ *
+ * ตั้งใจแยกออกจาก `PATCH` ที่ล็อคที่ Draft เหมือนเดิม — แนวเดียวกับ `POST /material-requisitions/:id/return`
+ * และช่องเลข PO ของ Scope of Work: ข้อมูลที่เติมทีหลังตามธรรมชาติของงาน ไม่ควรโดนล็อคไปด้วย
+ *
+ * เขียนเฉพาะ `documentNumber`/`issueDate` — การติ๊กเลือกรายการ (`itemIds`) ยังล็อคตามเดิมโดยตั้งใจ
+ * เพราะเป็นเนื้อหาของเอกสารที่อนุมัติไปแล้ว — เจ้าของยืนยันว่า "ไม่สามารถติ๊กได้เหมือนเดิม"
+ *
+ * เขียน audit ทุกครั้ง และไม่ต่อกับการบันทึกอัตโนมัติ — การแก้เอกสารที่อนุมัติแล้วควรมีร่องรอยเสมอ (ดู TODO.md)
+ */
+async function handleInstallmentNumbers(req: VercelRequest, res: VercelResponse, id: string) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requireUser(req);
+  const doc = await loadDeliveryOrderOrThrow(id);
+  if (!canEditDeliveryOrder(ctx, doc)) throw new HttpError(403, "Forbidden");
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const raw = body.installments;
+  if (!Array.isArray(raw)) throw new HttpError(400, "ข้อมูลงวดชำระเงินไม่ถูกต้อง");
+  if (raw.length > MAX_INSTALLMENT_ROWS) throw new HttpError(400, `จำนวนงวดต้องไม่เกิน ${MAX_INSTALLMENT_ROWS} งวด`);
+
+  const byId = new Map(doc.installments.map((i) => [i.id, i]));
+  const patched = new Map<string, { documentNumber: string; issueDate: string }>();
+  (raw as Record<string, unknown>[]).forEach((r, idx) => {
+    const rowId = typeof r.id === "string" ? r.id : "";
+    if (!byId.has(rowId)) throw new HttpError(400, `งวดชำระเงินลำดับที่ ${idx + 1} ไม่ถูกต้อง`);
+    patched.set(rowId, {
+      documentNumber: sanitizeShortText(r.documentNumber, "เลขที่"),
+      issueDate: validateIsoDateOrEmpty(r.issueDate, "วันที่"),
+    });
+  });
+
+  const installments = doc.installments.map((row) => {
+    const next = patched.get(row.id);
+    return next ? { ...row, ...next } : row;
+  });
+
+  const deliveryOrders = await deliveryOrdersCollection();
+  await deliveryOrders.updateOne({ _id: doc._id }, { $set: { installments, updatedAt: nowIso(), updatedBy: ctx.user.id } });
+  const updated = await deliveryOrders.findOne({ _id: doc._id });
+  if (!updated) throw new HttpError(404, "ไม่พบใบส่งมอบสินค้า");
+  await writeDeliveryOrderAuditEntry(ctx, "Delivery Order Installment Numbers Updated",
+    `แก้เลขที่/วันที่ใบส่งมอบของ Scope of Work ${updated.scopeNumber}`, {
+      scopeOfWorkId: updated.scopeOfWorkId, scopeNumber: updated.scopeNumber,
+    });
+  res.status(200).json({ deliveryOrder: toClient(updated) });
+}
+
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
   const autoSave = isAutoSaveRequest(req);
   const ctx = await requireUser(req);
@@ -650,7 +699,7 @@ export async function handleDeliveryOrder(req: VercelRequest, res: VercelRespons
   // ด่านเดียวคุมทุก route ที่แก้ข้อมูล — ผู้รับจากการส่งถึงแผนกต้องดู/พิมพ์ได้อย่างเดียว (2026-08-20)
   // วางไว้ตรงนี้จุดเดียวแทนที่จะไปโรยตาม handler ทีละตัว จะได้ไม่มี route ใหม่หลุดด่านนี้ในอนาคต
   const isMutation = parts.length === 2
-    ? ["refresh", "finalize", "submit-approval", "reject", "withdraw-approval", "rewrite", "send-to-departments"].includes(parts[1])
+    ? ["refresh", "finalize", "submit-approval", "reject", "withdraw-approval", "rewrite", "send-to-departments", "installment-numbers"].includes(parts[1])
     : parts.length === 1 && (req.method === "PATCH" || req.method === "DELETE");
   if (isMutation) {
     const ctx = await requireUser(req);
@@ -658,6 +707,7 @@ export async function handleDeliveryOrder(req: VercelRequest, res: VercelRespons
   }
 
   if (parts.length === 1) return handleOne(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "installment-numbers") return handleInstallmentNumbers(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "send-to-departments") return handleSendToDepartments(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "finalize") return handleFinalize(req, res, parts[0]);

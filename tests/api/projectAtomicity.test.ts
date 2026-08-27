@@ -390,10 +390,10 @@ describe("shared document approval workflow (Draft -> PendingApproval -> Final)"
  * refactor can't quietly change them.
  */
 describe("Production Order", () => {
-  const createPo = async (): Promise<{ id: string; jobCode: string }> => {
+  const createPo = async (): Promise<{ id: string; documentNumber: string; jobCode: string }> => {
     const res = await call("POST", "/api/production-orders", { scopeOfWorkId });
     expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
-    return (res.body as { productionOrder: { id: string; jobCode: string } }).productionOrder;
+    return (res.body as { productionOrder: { id: string; documentNumber: string; jobCode: string } }).productionOrder;
   };
 
   it("is created from an approved Scope of Work and numbered SC-YYYY-MM-NNN", async () => {
@@ -404,7 +404,11 @@ describe("Production Order", () => {
     expect(po.jobCode).toBe("TEST-SOW-01");
   });
 
-  it("refuses a Scope of Work that is not approved", async () => {
+  /**
+   * เดิมเคยบังคับว่า Scope of Work ต้อง Final ก่อน (2026-08-20) — ปลดออกเมื่อ 2026-08-27 ตามที่
+   * ฝ่ายผลิตขอในการประชุม เทสต์นี้กลับด้านโดยตั้งใจ เพื่อเป็นหลักฐานว่าการปลดด่านเป็นเจตนา ไม่ใช่ด่านหายไปเอง
+   */
+  it("accepts a Scope of Work that is not approved yet", async () => {
     const db = client.db("tcs_erp");
     const draft = await db.collection("scope_of_works").insertOne({
       scopeNumber: "PO-GATE-DRAFT", quotationId: "", quotationNumber: "", jobTypeCode: "", jobTypeName: "",
@@ -414,8 +418,39 @@ describe("Production Order", () => {
       status: "Draft", isDeleted: false, createdAt: "", updatedAt: "", createdBy: "", updatedBy: "",
     });
     const res = await call("POST", "/api/production-orders", { scopeOfWorkId: draft.insertedId.toString() });
-    expect(res.statusCode).toBe(400);
-    expect(String((res.body as { error?: string }).error)).toContain("ยังไม่ได้รับการอนุมัติ");
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+  });
+
+  /**
+   * เลขที่ที่พิมพ์บนฟอร์ม (documentNumber) แก้เองได้ แต่ _id แก้ไม่ได้ — ฝ่ายผลิตขอไว้
+   * 2026-08-27 ว่า "แก้ไขเลขที่ได้ แต่ยังรันปกติ" — สองอย่างนี้ต้องจริงพร้อมกัน จึงปักทั้งคู่ไว้ที่นี่
+   */
+  it("lets the printed number be edited while the running counter is untouched", async () => {
+    const first = await createPo();
+    expect(first.documentNumber, "ตอนสร้าง เลขที่พิมพ์เท่ากับเลขที่ระบบรัน").toBe(first.id);
+
+    const renamed = await call("PATCH", `/api/production-orders/${first.id}`, { documentNumber: "SC-ทดสอบ-001" });
+    expect(renamed.statusCode, JSON.stringify(renamed.body)).toBe(200);
+    const doc = (renamed.body as { productionOrder: { id: string; documentNumber: string } }).productionOrder;
+    expect(doc.documentNumber).toBe("SC-ทดสอบ-001");
+    expect(doc.id, "_id ต้องไม่ขยับ ไม่งั้นใบเบิก/ใบขอซื้อที่อ้างอยู่จะหลุด").toBe(first.id);
+
+    // ตัวนับเดินต่อตามปกติ — ใบถัดไปต้องได้เลขลำดับถัดจากของเดิม ไม่ใช่เลขที่เพิ่งแก้ไป
+    const second = await createPo();
+    const seqOf = (id: string) => Number(id.slice(-3));
+    expect(seqOf(second.id)).toBe(seqOf(first.id) + 1);
+
+    // เลขซ้ำกับใบอื่นต้องถูกปฏิเสธ
+    const clash = await call("PATCH", `/api/production-orders/${second.id}`, { documentNumber: "SC-ทดสอบ-001" });
+    expect(clash.statusCode, "เลขที่ซ้ำต้อง 409").toBe(409);
+
+    // ตั้งเลขเดิมของตัวเองซ้ำได้ ไม่นับเป็นการชน
+    const noop = await call("PATCH", `/api/production-orders/${second.id}`, { documentNumber: second.documentNumber });
+    expect(noop.statusCode, JSON.stringify(noop.body)).toBe(200);
+
+    // เลขที่ว่างไม่ได้
+    const blank = await call("PATCH", `/api/production-orders/${second.id}`, { documentNumber: "   " });
+    expect(blank.statusCode).toBe(400);
   });
 
   it("keeps section-header rows free of qty/unit, and stamps the approver signatory on approval", async () => {
@@ -474,11 +509,13 @@ describe("Material Requisition / Purchase Request are separated by owning depart
     return poId;
   }
 
-  it("refuses to raise a requisition from a production order that is not approved yet", async () => {
+  it("raises a requisition from a production order that is still a draft", async () => {
+    // เดิมปฏิเสธ 400 ตั้งแต่ 2026-08-20 ("A Draft order must not be able to spend materials")
+    // เจ้าของสั่งปลดเมื่อ 2026-08-27 เพื่อให้ฝ่ายผลิตเบิกของตั้งแต่ยังไม่อนุมัติได้
     const po = await call("POST", "/api/production-orders", { scopeOfWorkId });
     const poId = (po.body as { productionOrder: { id: string } }).productionOrder.id;
-    const tooEarly = await call("POST", "/api/material-requisitions", { productionOrderId: poId });
-    expect(tooEarly.statusCode, "a Draft production order must not be able to spend materials").toBe(400);
+    const mr = await call("POST", "/api/material-requisitions", { productionOrderId: poId });
+    expect(mr.statusCode, JSON.stringify(mr.body)).toBe(201);
   });
 
   it("a production-owned requisition is invisible to the project list and vice versa, and legacy rows stay with Project", async () => {

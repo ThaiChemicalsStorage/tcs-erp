@@ -401,6 +401,23 @@ free-typed line UI works for both kinds in the same document; every English-mode
 header checked renders without truncation (aside from the one description-column bug above, now
 fixed); print documents and catalog/checklist content correctly stay fixed-Thai in English mode.
 
+## Job Order: จาก/ถึงหน่วยงาน bound to real departments (2026-08-27)
+
+Project department request. `JobOrder.fromSite`/`toSite` were plain free-text inputs bound to nothing.
+
+- **จากหน่วยงาน (`fromSite`)** is seeded server-side from `ctx.user.department` in `handleCreate()` —
+  no new prop needed on the page, and still overwritable by hand afterwards.
+- **ถึงหน่วยงาน (`toSite`)** is now a `<select>` fed by `fetchDepartments()` filtered to
+  `isActive`, following `DeliveryOrderDepartmentRouting.tsx`'s precedent. It stores the department
+  **name, not the id**, because the print document has to render a name — and it keeps a
+  "legacy value" fallback `<option>` exactly like `UserManagementPage.tsx` does, so a value typed
+  before this change is never silently dropped.
+
+⚠️ **Depends on data that isn't right yet.** TODO.md already records that `User.department` holds
+legacy values (`"Technic"`, `"Purchase"`) matching no row in the `departments` table, so
+"จากหน่วยงาน" comes out blank for those users. That is a data problem for an admin to fix in
+จัดการผู้ใช้, not something to paper over in code.
+
 ## Known Limitations, Not Built This Pass
 
 - **No approval workflow** — Material Requisition/Job Order/Purchase Request go straight

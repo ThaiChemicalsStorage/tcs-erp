@@ -47,6 +47,14 @@ export interface ProductionOrderSignatory {
 
 export interface ProductionOrder {
   id: string;
+  /**
+   * เลขที่ใบสั่งผลิตที่พิมพ์ออกมาบนฟอร์ม — แก้เองได้ (ฉบับร่างเท่านั้น) ตามที่ฝ่ายผลิตขอเมื่อ 2026-08-27
+   *
+   * แยกจาก `id` โดยตั้งใจ: `id` คือ `_id` ของ MongoDB ซึ่งแก้ไม่ได้ และใบเบิก/ใบขอซื้ออ้างถึงมันผ่าน
+   * `productionOrderId` ตัวนับรายเดือนจึงยังเดินตามปกติทุกใบ ส่วนเลขที่พิมพ์บนกระดาษเปลี่ยนได้อิสระ
+   * ตอนสร้างจะเท่ากับ `id` เสมอ เอกสารเก่าที่ไม่มีฟิลด์นี้เซิร์ฟเวอร์เติมให้เป็น `id` ตอนอ่าน
+   */
+  documentNumber: string;
   /** เลขที่งาน (รหัสงาน) — snapshot ของ ScopeOfWork.scopeNumber */
   scopeOfWorkId: string;
   jobCode: string;
@@ -82,6 +90,7 @@ export interface ProductionOrder {
 
 export interface ProductionOrderSummary {
   id: string;
+  documentNumber: string;
   scopeOfWorkId: string;
   jobCode: string;
   customerCompanyName: string;

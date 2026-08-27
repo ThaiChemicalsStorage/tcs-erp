@@ -1,5 +1,25 @@
 # Module: Delivery Order
 
+
+## Installment number/date stay editable after approval (2026-08-27)
+
+Project department request: *"ใบส่งมอบงานโปรเจกต์สามารถเพิ่มหรือแก้ไขเลขที่ใบส่งมอบงานได้ แต่ไม่สามารถ
+ติ๊กได้เหมือนเดิม"* — owner-confirmed reading: the **number** must stay editable past Final, the
+**item tick-list** must stay locked exactly as it is.
+
+`POST /api/delivery-orders/:id/installment-numbers` writes **only** `documentNumber`/`issueDate` per
+installment row and carries no `status` lock, mirroring `POST /material-requisitions/:id/return` and
+Scope of Work's PO-chasing fields — all three are follow-up data filled in after the document is
+signed off, which the ordinary Draft-only `PATCH` can never reach.
+
+- Row ids must already exist on the document (same rule `sanitizeInstallmentsUpdate()` enforces), so
+  this route can never invent an installment.
+- **Writes an audit entry every time** and is deliberately **not** wired to auto-save — per the
+  standing decision in TODO.md that editing an approved document should always leave a trail.
+- In the editor the two inputs are gated on `canEdit` alone (`numbersDisabled`), while the item
+  checkboxes and Remark stay on `editable` (`canEdit && isDraft`). A separate "บันทึกเลขที่/วันที่"
+  toolbar button appears once the document is past Draft, since the ordinary save button is hidden.
+
 ## Status: ✅ Built (2026-07-23), Down Payment exclusion + signature-line fix same day, separate per-milestone printing + full print-layout rebuild to match the FM-SL-05 reference 2026-07-24, Facebook/Line/website letterhead fields wired to Settings 2026-08-04
 
 **2026-07-24, print layout rebuilt to visually match the reference PDF**: `DeliveryOrderPrintDocument.tsx`

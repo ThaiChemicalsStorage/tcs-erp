@@ -43,7 +43,7 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUse
       {/* ยกเลิก margin ของ @page เพื่อไม่ให้เบราว์เซอร์วาดวันที่/URL/ชื่อหน้าตอนพิมพ์ — ชดเชยระยะขอบ
           กระดาษเองด้วย padding แทน (ซ้าย/ขวาซ้ำทุกหน้าผ่าน padding ของ table เอง, บนซ้ำทุกหน้าผ่าน
           thead ที่พิมพ์ซ้ำ, ล่างชดเชยเฉพาะหน้าสุดท้ายที่บล็อคลายเซ็นอยู่) — เหมือน PrintDocument.tsx */}
-      <style>{"@media print { @page { margin: 0 } }"}</style>
+      <style>{"@media print { @page { size: A4 portrait; margin: 0 } }"}</style>
       <table className="hidden print:table w-full border-collapse text-[#0b1d3a]" style={{ fontSize: "10.5px", padding: "0 12mm" }}>
         <colgroup>
           <col style={{ width: "6%" }} />

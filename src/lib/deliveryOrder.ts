@@ -115,6 +115,20 @@ export async function sendDeliveryOrderToDepartments(
 }
 // อนุมัติใบส่งมอบสินค้า (เปลี่ยนสถานะจาก PendingApproval เป็น Final)
 // Approves a Delivery Order (PendingApproval -> Final)
+/**
+ * เลขที่/วันที่ของแต่ละงวด — route แยกที่ไม่ติดล็อค Final ต่างจาก `updateDeliveryOrder()` ที่แก้ได้เฉพาะฉบับร่าง
+ * ฝ่ายโครงการขอไว้เมื่อ 2026-08-27 — ดู handleInstallmentNumbers() ใน api/_lib/deliveryOrderHandler.ts
+ */
+export async function updateDeliveryOrderInstallmentNumbers(
+  id: string,
+  installments: { id: string; documentNumber: string; issueDate: string }[],
+): Promise<DeliveryOrder> {
+  const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}/installment-numbers`, {
+    method: "POST", body: JSON.stringify({ installments }),
+  });
+  return deliveryOrder;
+}
+
 export async function finalizeDeliveryOrder(id: string): Promise<DeliveryOrder> {
   const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}/finalize`, { method: "POST" });
   return deliveryOrder;

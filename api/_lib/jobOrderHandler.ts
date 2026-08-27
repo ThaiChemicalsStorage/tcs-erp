@@ -136,7 +136,10 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const doc: JobOrderFields = {
     projectId, scopeOfWorkId: project.scopeOfWorkId, jobCode: project.scopeNumber,
     customerName: project.customerCompanyName,
-    fromSite: "", toSite: "", startDate: "", finishDate: "",
+    // "จากหน่วยงาน" เติมจากแผนกของคนสร้าง (ฝ่ายโครงการขอไว้ 2026-08-27) — แก้ทับทีหลังได้
+    // User.department เก็บเป็น"ชื่อ"แผนก ไม่ใช่ id — คนที่แผนกยังเป็นค่าเก่าที่ไม่มีในตารางจะได้ช่องว่าง
+    // (เป็นปัญหาข้อมูล ไม่ใช่โค้ด — ดู TODO.md เรื่อแผนกของพนักงานที่ยังไม่ตรงกับตาราง departments)
+    fromSite: (ctx.user.department ?? "").trim(), toSite: "", startDate: "", finishDate: "",
     lines: [], scopeChecklist: buildJobOrderChecklistGroups(), outOfScope: "",
     status: "Draft",
     // requestedAt seeds from a date-only slice of `now`, not the full ISO timestamp — this field

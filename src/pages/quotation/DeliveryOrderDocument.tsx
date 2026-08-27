@@ -4,6 +4,7 @@ import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import {
   type DeliveryOrder, type DeliveryOrderUpdateFields, type DeliveryOrderInstallment,
   fetchDeliveryOrder, updateDeliveryOrder, finalizeDeliveryOrder, refreshDeliveryOrderFromScope, deleteDeliveryOrder,
+  updateDeliveryOrderInstallmentNumbers,
   submitDeliveryOrderApproval, rejectDeliveryOrder, withdrawDeliveryOrderApproval, rewriteDeliveryOrder,
 } from "../../lib/deliveryOrder";
 import { ApiError } from "../../lib/apiClient";
@@ -36,11 +37,16 @@ function installmentTitle(inst: DeliveryOrderInstallment): string {
 
 // การ์ดแก้ไขข้อมูลงวดชำระเงินหนึ่งงวด: เลขที่ วันที่ รายการสินค้าที่ส่งมอบ และ Remark
 // Editor card for one payment installment: document number, date, delivered items, and remark.
-function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: {
+function InstallmentEditor({ installment, items, onChange, disabled, numbersDisabled, onPrint }: {
   installment: DeliveryOrderInstallment;
   items: DeliveryOrder["items"];
   onChange: (next: DeliveryOrderInstallment) => void;
   disabled: boolean;
+  /**
+   * ช่องเลขที่/วันที่ล็อคแยกจากช่องอื่น — สองช่องนี้แก้ได้แม้หลังอนุมัติ (ฝ่ายโครงการขอไว้ 2026-08-27)
+   * ส่วนการติ๊กเลือกรายการยังล็อคเหมือนเดิม เพราะเป็นเนื้อหาของเอกสารที่อนุมัติไปแล้ว
+   */
+  numbersDisabled: boolean;
   onPrint: (() => void) | null;
 }) {
   // สลับว่ารายการสินค้าใดถูกรวมอยู่ในงวดนี้
@@ -75,7 +81,7 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
           <label htmlFor={documentNumberId} className="text-xs text-muted-foreground block mb-1">เลขที่</label>
           <input
             id={documentNumberId}
-            disabled={disabled}
+            disabled={numbersDisabled}
             value={installment.documentNumber}
             onChange={(e) => onChange({ ...installment, documentNumber: e.target.value })}
             className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
@@ -85,7 +91,7 @@ function InstallmentEditor({ installment, items, onChange, disabled, onPrint }: 
           <label htmlFor={issueDateId} className="text-xs text-muted-foreground block mb-1">วันที่</label>
           <input
             id={issueDateId}
-            disabled={disabled}
+            disabled={numbersDisabled}
             type="date"
             value={installment.issueDate}
             onChange={(e) => onChange({ ...installment, issueDate: e.target.value })}
@@ -239,6 +245,29 @@ export function DeliveryOrderDocument({
       dirty.markSaved(toUpdateFields(updated));
       draftBackup.clear();
       showToast("บันทึกร่างแล้ว");
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * บันทึกเฉพาะเลขที่/วันที่ของทุกงวด — ใช้ตอนเอกสารพ้นสถานะร่างไปแล้ว ที่ `save()` ปกติใช้ไม่ได้
+   * (`PATCH` ล็อคที่ Draft) — ยิงไปที่ route แยก ซึ่งเขียนเฉพาะสองช่องนี้และบันทึก audit ทุกครั้ง
+   */
+  const saveNumbers = async (): Promise<boolean> => {
+    if (!deliveryOrder) return false;
+    try {
+      setSaving(true);
+      const updated = await updateDeliveryOrderInstallmentNumbers(
+        deliveryOrder.id,
+        deliveryOrder.installments.map((i) => ({ id: i.id, documentNumber: i.documentNumber, issueDate: i.issueDate })),
+      );
+      setDeliveryOrder(updated);
+      showToast("บันทึกเลขที่และวันที่แล้ว");
       return true;
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "บันทึกไม่สำเร็จ");
@@ -414,6 +443,11 @@ export function DeliveryOrderDocument({
               <Save size={13} /> บันทึกร่าง
             </button>
           )}
+          {canEdit && !isDraft && (
+            <button onClick={saveNumbers} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              <Save size={13} /> บันทึกเลขที่/วันที่
+            </button>
+          )}
           {canEdit && isDraft && (
             <button onClick={() => setConfirmAction("submit")} className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors">
               <Send size={13} /> ส่งขออนุมัติ
@@ -505,6 +539,7 @@ export function DeliveryOrderDocument({
                 items={deliveryOrder.items}
                 onChange={(next) => updateInstallment(installment.id, next)}
                 disabled={!editable}
+                numbersDisabled={!canEdit}
                 onPrint={canPrint ? () => handlePrintInstallment(installment) : null}
               />
             ))
