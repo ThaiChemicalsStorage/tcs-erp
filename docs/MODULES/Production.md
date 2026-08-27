@@ -178,7 +178,11 @@ cannot mistake this for a gate that went missing.
 
 ## Known gaps
 
-- **Not click-tested in a real browser.** The automated browser cannot reach this machine's dev
+- **Partly click-tested now.** The 2026-08-27 pass exercised creating a production order (incl. from a
+  Draft Scope of Work), the editable document number, its uniqueness 409, and the multi-page print
+  footer — see CHANGELOG.md 2026-08-27b. Still untested by hand: the approve/reject/withdraw buttons
+  on all four documents, and the ผลิต-vs-โครงการ record separation.
+- ~~**Not click-tested in a real browser.**~~ The automated browser cannot reach this machine's dev
   server (see CHANGELOG.md 2026-08-20e), so the ผลิต pages, the approve buttons on all four
   documents, and the FM-PD-02 print layout are verified by tests and type-checking only.
 - **Cost Control is still unmodelled** — the spec names it as a precondition for the Production
@@ -187,5 +191,8 @@ cannot mistake this for a gate that went missing.
   addressed 2026-08-27**: the `FM-PD-02 Rev.00 : 01/11/64` footer now repeats on every printed page
   (moved into the outer table's `<tfoot>`, the same mechanism Quotation's letterhead uses with
   `<thead>`) instead of printing once at the end of the content, and the sheet's `@page` rule moved
-  inside `@media print` and onto the app-standard 12mm margin. **Still needs a real print preview on
-  a document longer than one page** — nothing in `tsc`/`lint`/`build`/`test` can see a page break.
+  inside `@media print` and onto the app-standard 12mm margin. **Verified 2026-08-27 on a real
+  multi-page render**: a 41-line order was printed to an A4 PDF via `page.pdf({ preferCSSPageSize: true })`
+  (which applies the real print CSS), came out as **2 pages**, and decoding each page's content stream
+  shows the last text drawn on **both** pages is `FM-PD-02 Rev.00 : 01/11/64`. That also confirms the
+  `@page { size: A4 portrait }` rule is honoured. See CHANGELOG.md 2026-08-27b.
