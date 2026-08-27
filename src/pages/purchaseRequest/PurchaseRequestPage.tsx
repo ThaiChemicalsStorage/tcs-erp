@@ -181,7 +181,7 @@ export function PurchaseRequestPage({
           title={t("purchaseRequest.createBtn")}
           description={t("project.picker.project.description")}
           onClose={() => setPickerOpen(false)}
-          onSelect={(projectId, itemId) => void handleCreate(projectId, itemId)}
+          onSelect={(projectId, itemIds) => void handleCreate(projectId, itemIds[0])}
         />
       ))}
       <Toast message={toast.message} />

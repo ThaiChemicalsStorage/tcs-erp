@@ -128,9 +128,9 @@ export async function fetchProductionOrder(id: string): Promise<ProductionOrder>
   return productionOrder;
 }
 /** สร้างจาก Scope of Work ที่อนุมัติแล้วเท่านั้น (เซิร์ฟเวอร์บังคับ) */
-export async function createProductionOrderFromScope(scopeOfWorkId: string): Promise<ProductionOrder> {
+export async function createProductionOrderFromScope(scopeOfWorkId: string, itemIds?: string[]): Promise<ProductionOrder> {
   const { productionOrder } = await apiFetch<{ productionOrder: ProductionOrder }>("/production-orders", {
-    method: "POST", body: JSON.stringify({ scopeOfWorkId }),
+    method: "POST", body: JSON.stringify({ scopeOfWorkId, ...(itemIds ? { itemIds } : {}) }),
   });
   return productionOrder;
 }

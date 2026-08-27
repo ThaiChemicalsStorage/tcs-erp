@@ -42,9 +42,9 @@ export function JobOrderPage({
 
   // สร้างใบสั่งงานจากหน้านี้ได้เลย โดยเลือกโครงการและรายการต้นทางเอง (เดิมสร้างได้จากในหน้าโครงการเท่านั้น)
   // ตามคำขอ 2026-08-20; API ยังต้องการทั้ง projectId และ itemId เหมือนเดิมทุกประการ
-  const handleCreate = async (projectId: string, itemId: string) => {
+  const handleCreate = async (projectId: string, itemIds: string[]) => {
     try {
-      const created = await createJobOrder(projectId, itemId);
+      const created = await createJobOrder(projectId, itemIds);
       setPickerOpen(false);
       openJobOrder(created.id);
     } catch (err) {
@@ -155,7 +155,8 @@ export function JobOrderPage({
           title={t("jobOrder.createBtn")}
           description={t("project.picker.project.description")}
           onClose={() => setPickerOpen(false)}
-          onSelect={(projectId, itemId) => void handleCreate(projectId, itemId)}
+          multiSelect
+          onSelect={(projectId, itemIds) => void handleCreate(projectId, itemIds)}
         />
       )}
       <Toast message={toast.message} />

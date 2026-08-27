@@ -50,7 +50,13 @@ export function JobOrderPrintDocument({ jobOrder: j }: { jobOrder: JobOrder }) {
           {j.lines.map((line, idx) => (
             <tr key={line.id}>
               <td className="border border-black px-1.5 py-1 text-center">{idx + 1}</td>
-              <td className="border border-black px-1.5 py-1">{line.description}</td>
+              <td className="border border-black px-1.5 py-1">
+                {line.description}
+                {/* บรรทัดย่อย เยื้องเข้ามาในช่องเดียวกัน ไม่แตกคอลัมน์ — รูปแบบเดียวกับใบสั่งผลิตและใบขอซื้อ */}
+                {(line.subDetails ?? []).map((sd, i) => (
+                  <p key={i} style={{ margin: "1px 0 0 12px" }}>{sd}</p>
+                ))}
+              </td>
               <td className="border border-black px-1.5 py-1 text-center">{line.quantity ?? ""}</td>
               <td className="border border-black px-1.5 py-1 text-center">{line.unit}</td>
               <td className="border border-black px-1.5 py-1">{line.remark}</td>

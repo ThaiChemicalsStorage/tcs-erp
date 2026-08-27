@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Search, X, ChevronLeft, FileText, Loader2 } from "lucide-react";
-import { fetchAllScopeOfWorks, type ScopeOfWorkListItem } from "../../lib/scopeOfWork";
+import { fetchScopeOfWork, fetchAllScopeOfWorks, type ScopeOfWorkListItem } from "../../lib/scopeOfWork";
 import {
   fetchAllProjects, fetchProject, fetchProjectsByScope,
   type ProjectListItem, type ProjectItem, type ProjectItemSourcingMethod,
@@ -37,14 +37,21 @@ function SkeletonRows() {
  * `POST /api/projects` allows several projects per scope — but creating a second one by accident is
  * far more likely to be a mistake than intent, so the UI steers away from it while staying honest).
  */
-export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiplePerScope = false, requireFinalScope = true }: {
+export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiplePerScope = false, requireFinalScope = true, pickItems = false }: {
   onClose: () => void;
-  onSelect: (scopeOfWorkId: string) => void;
+  /** `itemIds` มีค่าเฉพาะเมื่อเปิด `pickItems` — ไม่งั้นเป็น undefined แปลว่า "เอาทุกรายการ" */
+  onSelect: (scopeOfWorkId: string, itemIds?: string[]) => void;
   /**
    * ปิดการเช็ค "มีโครงการแล้ว" — ใช้กับใบสั่งผลิต ซึ่งงานหนึ่งออกได้หลายใบตามจำนวนสินค้าที่ต้องผลิต
    * (ต่างจากโครงการที่ปกติมีใบเดียวต่อหนึ่งงาน) ตัวเช็คนั้นยิง API ต่อ 1 งาน จึงข้ามไปเลยเมื่อไม่ใช้
    */
   allowMultiplePerScope?: boolean;
+  /**
+   * เพิ่มขั้นที่สอง: เลือกงานแล้วติ๊กว่าจะเอารายการไหนบ้าง (ฝ่ายผลิตขอไว้ 2026-08-27 "อยากให้พวกนี้
+   * มันติ๊กเลือกได้ เพราะแต่ละอันไม่เหมือนกัน") — หนึ่งงานออกใบสั่งผลิตได้หลายใบ ใบละสินค้า
+   * ไม่เปิดโหมดนี้ = เลือกงานแล้วสร้างทันทีเหมือนเดิม
+   */
+  pickItems?: boolean;
   /**
    * บังคับว่า Scope of Work ต้องอนุมัติแล้ว (Final) — จริงๆ ตัวบังคับคือเซิร์ฟเวอร์ ตรงนี้แค่สะท้อนให้
    * โครงการยังคงบังคับ (projectHandler.ts) ส่วนใบสั่งผลิตส่ง false มา เพราะปลดด่านไปแล้ว
@@ -59,6 +66,11 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  // ขั้นที่สอง (เฉพาะโหมด pickItems)
+  const [pickedScope, setPickedScope] = useState<ScopeOfWorkListItem | null>(null);
+  const [scopeItems, setScopeItems] = useState<{ id: string; name: string; quantity: number | null; unit: string }[] | null>(null);
+  const [scopeItemsError, setScopeItemsError] = useState(false);
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +109,63 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
             <X size={18} />
           </button>
         </div>
+        {pickedScope ? (
+          <>
+            <button onClick={() => { setPickedScope(null); setScopeItems(null); setScopeItemsError(false); setCheckedItems(new Set()); }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit">
+              <ChevronLeft size={14} /> {t("project.picker.back")}
+            </button>
+            <p className="text-xs text-muted-foreground">
+              {t("project.picker.item.description")} — <span className="font-mono text-foreground">{pickedScope.scopeNumber}</span>
+            </p>
+            <div className="flex-1 overflow-y-auto">
+              {scopeItemsError ? <p className="text-sm text-muted-foreground text-center py-6">{t("project.picker.loadError")}</p>
+                : scopeItems === null ? <SkeletonRows />
+                : scopeItems.length === 0 ? (
+                  <EmptyState icon={FileText} title={t("project.picker.item.emptyTitle")} description={t("project.picker.item.emptyDescription")} compact />
+                ) : (
+                  <div className="space-y-1.5">
+                    {scopeItems.map((item) => (
+                      <label key={item.id} className={`${rowButton} ${busyId ? "" : "cursor-pointer"}`}>
+                        <span className="flex items-center gap-2.5 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={checkedItems.has(item.id)}
+                            disabled={busyId !== null}
+                            onChange={() => setCheckedItems((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
+                              return next;
+                            })}
+                            className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c] disabled:opacity-60 flex-shrink-0"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-foreground truncate">{item.name}</span>
+                            <span className="block text-xs text-muted-foreground truncate">{item.quantity ?? "-"} {item.unit}</span>
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+            </div>
+            {(scopeItems?.length ?? 0) > 0 && (
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+                <span className="text-xs text-muted-foreground">
+                  {t("project.picker.item.selectedCount").replace("{n}", String(checkedItems.size))}
+                </span>
+                <button
+                  onClick={() => { setBusyId(pickedScope.id); onSelect(pickedScope.id, [...checkedItems]); }}
+                  disabled={busyId !== null || checkedItems.size === 0}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {busyId !== null && <Loader2 size={12} className="animate-spin" />} {t("project.picker.item.confirm")}
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+        <>
         <p className="text-xs text-muted-foreground">{t("project.picker.scope.description")}</p>
 
         <div className={searchBox}>
@@ -118,7 +187,22 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
                   // (api/_lib/projectHandler.ts) ส่วนใบสั่งผลิตปลดด่านไปแล้ว จึงส่ง requireFinalScope=false มา
                   const notApproved = requireFinalScope && s.status !== "Final";
                   return (
-                    <button key={s.id} onClick={() => { setBusyId(s.id); onSelect(s.id); }} disabled={taken || notApproved || busyId !== null} className={rowButton}>
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        if (!pickItems) { setBusyId(s.id); onSelect(s.id); return; }
+                        // โหมดติ๊กรายการ: โหลดรายการของงานนี้ก่อน แล้วค่อยให้เลือก
+                        setPickedScope(s);
+                        setScopeItems(null);
+                        setScopeItemsError(false);
+                        setCheckedItems(new Set());
+                        fetchScopeOfWork(s.id)
+                          .then((full) => setScopeItems(full.items.filter((it) => !it.isSectionHeader).map((it) => ({ id: it.id, name: it.name, quantity: it.quantity, unit: it.unit }))))
+                          .catch(() => setScopeItemsError(true));
+                      }}
+                      disabled={taken || notApproved || busyId !== null}
+                      className={rowButton}
+                    >
                       <div className="min-w-0">
                         <p className="text-sm font-mono font-medium text-foreground truncate">{s.scopeNumber}</p>
                         <p className="text-xs text-muted-foreground truncate">{s.customerName} · {s.quotationNumber}</p>
@@ -133,6 +217,8 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
               </div>
             )}
         </div>
+        </>
+        )}
       </div>
     </div>
   );
@@ -146,11 +232,17 @@ export function ScopeOfWorkSourcePickerDialog({ onClose, onSelect, allowMultiple
  * An item pre-assigned to a *different* sourcing branch still shows (the server allows it — creating
  * overwrites `sourcingMethod`), but its current assignment is labelled so the choice is informed.
  */
-export function ProjectItemSourcePickerDialog({ title, description, onClose, onSelect }: {
+export function ProjectItemSourcePickerDialog({ title, description, onClose, onSelect, multiSelect = false }: {
   title: string;
   description: string;
   onClose: () => void;
-  onSelect: (projectId: string, itemId: string) => void;
+  /** ส่งกลับเป็นลิสต์เสมอ — โหมดเลือกเดี่ยวก็คือลิสต์ที่มีสมาชิกตัวเดียว ผู้เรียกจึงเขียนทางเดียวกันได้ */
+  onSelect: (projectId: string, itemIds: string[]) => void;
+  /**
+   * ติ๊กเลือกได้หลายรายการแล้วกดยืนยันครั้งเดียว (ฝ่ายโครงการขอไว้สำหรับใบสั่งงาน 2026-08-27
+   * "ติ๊กเลือกได้ว่าจะเอาตัวไหน") — ใบเบิกและใบขอซื้อยังเลือกทีละรายการ เพราะหนึ่งใบต่อหนึ่งรายการ
+   */
+  multiSelect?: boolean;
 }) {
   const { t } = useI18n();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
@@ -161,6 +253,7 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
   const [items, setItems] = useState<ProjectItem[] | null>(null);
   const [itemsError, setItemsError] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
 
   const sourcingLabel: Record<ProjectItemSourcingMethod, string> = {
     unassigned: t("project.sourcing.unassigned"),
@@ -181,6 +274,8 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
     setPicked(p);
     setItems(null);
     setItemsError(false);
+    // ล้างการติ๊กเสมอเมื่อสลับโครงการ ไม่งั้น id ของโครงการเก่าจะติดไปกับการสร้างเอกสารของโครงการใหม่
+    setChecked(new Set());
     fetchProject(p.id)
       .then((full) => setItems(full.items))
       .catch(() => setItemsError(true));
@@ -204,7 +299,7 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
 
         {picked ? (
           <>
-            <button onClick={() => { setPicked(null); setItems(null); setItemsError(false); }}
+            <button onClick={() => { setPicked(null); setItems(null); setItemsError(false); setChecked(new Set()); }}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit">
               <ChevronLeft size={14} /> {t("project.picker.back")}
             </button>
@@ -218,8 +313,8 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
                   <EmptyState icon={FileText} title={t("project.picker.item.emptyTitle")} description={t("project.picker.item.emptyDescription")} compact />
                 ) : (
                   <div className="space-y-1.5">
-                    {pendingItems.map((item) => (
-                      <button key={item.id} onClick={() => { setBusy(true); onSelect(picked.id, item.id); }} disabled={busy} className={rowButton}>
+                    {pendingItems.map((item) => {
+                      const itemMeta = (
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-foreground truncate">{item.name}</p>
                           <p className="text-xs text-muted-foreground truncate">
@@ -227,12 +322,51 @@ export function ProjectItemSourcePickerDialog({ title, description, onClose, onS
                             {item.sourcingMethod !== "unassigned" && ` · ${t("project.picker.item.preassigned")} ${sourcingLabel[item.sourcingMethod]}`}
                           </p>
                         </div>
-                        {busy && <Loader2 size={14} className="animate-spin text-muted-foreground flex-shrink-0" />}
-                      </button>
-                    ))}
+                      );
+                      if (!multiSelect) {
+                        return (
+                          <button key={item.id} onClick={() => { setBusy(true); onSelect(picked.id, [item.id]); }} disabled={busy} className={rowButton}>
+                            {itemMeta}
+                            {busy && <Loader2 size={14} className="animate-spin text-muted-foreground flex-shrink-0" />}
+                          </button>
+                        );
+                      }
+                      return (
+                        <label key={item.id} className={`${rowButton} ${busy ? "" : "cursor-pointer"}`}>
+                          <span className="flex items-center gap-2.5 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={checked.has(item.id)}
+                              disabled={busy}
+                              onChange={() => setChecked((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
+                                return next;
+                              })}
+                              className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c] disabled:opacity-60 flex-shrink-0"
+                            />
+                            {itemMeta}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 )}
             </div>
+            {multiSelect && pendingItems.length > 0 && (
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+                <span className="text-xs text-muted-foreground">
+                  {t("project.picker.item.selectedCount").replace("{n}", String(checked.size))}
+                </span>
+                <button
+                  onClick={() => { setBusy(true); onSelect(picked.id, [...checked]); }}
+                  disabled={busy || checked.size === 0}
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {busy && <Loader2 size={12} className="animate-spin" />} {t("project.picker.item.confirm")}
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <>

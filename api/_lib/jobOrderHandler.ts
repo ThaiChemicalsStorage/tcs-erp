@@ -10,7 +10,7 @@ import {
   withStringId, type JobOrderFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
-import { loadPendingProjectItemOrThrow, linkProjectItemToSubDocument, markProjectItemFulfilled, unlinkProjectItem, findProjectItemIdByLink } from "./projectHandler.js";
+import { loadPendingProjectItemsOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
@@ -60,6 +60,10 @@ function sanitizeLines(raw: unknown): JobOrderLine[] {
   return (raw as Record<string, unknown>[]).map((r, idx) => ({
     id: typeof r.id === "string" && r.id ? r.id : newId("joline"),
     description: sanitizeShortText(r.description, `รายละเอียดลำดับที่ ${idx + 1}`),
+    // บรรทัดว่างถูกตัดทิ้ง เหมือน ProductionOrderLine.subDetails ที่มีเทสต์คุมพฤติกรรมนี้อยู่
+    subDetails: (Array.isArray(r.subDetails) ? r.subDetails : [])
+      .map((sd, i) => sanitizeShortText(sd, `รายละเอียดย่อยลำดับที่ ${idx + 1}.${i + 1}`))
+      .filter(Boolean),
     quantity: sanitizeNullableNumber(r.quantity, `จำนวนลำดับที่ ${idx + 1}`),
     unit: sanitizeShortText(r.unit, `หน่วยลำดับที่ ${idx + 1}`),
     remark: sanitizeLongText(r.remark, `หมายเหตุลำดับที่ ${idx + 1}`),
@@ -139,10 +143,18 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
-  const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
-  if (!projectId || !itemId) throw new HttpError(400, "กรุณาระบุโครงการและรายการ");
+  /**
+   * รับได้ทั้ง `itemIds` (หลายรายการ — ฝ่ายโครงการขอไว้ 2026-08-27 "ติ๊กเลือกได้ว่าจะเอาตัวไหน")
+   * และ `itemId` เดี่ยวแบบเดิม เพื่อไม่ให้ผู้เรียกเก่าพัง ตัวซ้ำถูกยุบทิ้งเพราะการผูกซ้ำไม่มีความหมาย
+   */
+  const itemIds = [...new Set(
+    Array.isArray(body.itemIds)
+      ? (body.itemIds as unknown[]).filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean)
+      : typeof body.itemId === "string" && body.itemId.trim() ? [body.itemId.trim()] : [],
+  )];
+  if (!projectId || itemIds.length === 0) throw new HttpError(400, "กรุณาระบุโครงการและรายการ");
 
-  const { project, item } = await loadPendingProjectItemOrThrow(projectId, itemId);
+  const { project, items } = await loadPendingProjectItemsOrThrow(projectId, itemIds);
 
   const counters = await countersCollection();
   const id = await nextJobOrderId(counters);
@@ -154,7 +166,17 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     // User.department เก็บเป็น"ชื่อ"แผนก ไม่ใช่ id — คนที่แผนกยังเป็นค่าเก่าที่ไม่มีในตารางจะได้ช่องว่าง
     // (เป็นปัญหาข้อมูล ไม่ใช่โค้ด — ดู TODO.md เรื่อแผนกของพนักงานที่ยังไม่ตรงกับตาราง departments)
     fromSite: (ctx.user.department ?? "").trim(), toSite: "", startDate: "", finishDate: "",
-    lines: [], scopeChecklist: buildJobOrderChecklistGroups(), outOfScope: "",
+    // คัดลอกรายการที่ติ๊กมาเป็นรายการดำเนินงานให้เลย — เดิมเริ่มจากตารางว่างและต้องพิมพ์เองทั้งหมด
+    // สเปกของแต่ละรายการลงไปเป็นบรรทัดย่อย จะได้ไม่หายไประหว่างทาง
+    lines: items.map((it) => ({
+      id: newId("joline"),
+      description: it.name,
+      subDetails: (it.specifications ?? []).map((sp) => sp.trim()).filter(Boolean),
+      quantity: it.quantity,
+      unit: it.unit,
+      remark: "",
+    })),
+    scopeChecklist: buildJobOrderChecklistGroups(), outOfScope: "",
     attachments: [],
     status: "Draft",
     // requestedAt seeds from a date-only slice of `now`, not the full ISO timestamp — this field
@@ -171,9 +193,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   await jobOrders.insertOne({ ...doc, _id: id });
 
   // CRITICAL invariant — see materialRequisitionHandler.ts's identical comment on this same step.
-  await linkProjectItemToSubDocument(projectId, itemId, "jobOrder", "jobOrderId", id);
+  await linkProjectItemsToSubDocument(projectId, itemIds, "jobOrder", "jobOrderId", id);
 
-  await writeAuditEntry(ctx, "Job Order Created", `สร้างใบสั่งงาน ${id} สำหรับรายการ "${item.name}"`, { scopeOfWorkId: project.scopeOfWorkId });
+  await writeAuditEntry(ctx, "Job Order Created", `สร้างใบสั่งงาน ${id} สำหรับ ${items.length} รายการ: ${items.map((it) => `"${it.name}"`).join(", ")}`, { scopeOfWorkId: project.scopeOfWorkId });
   res.status(201).json({ jobOrder: toClient({ ...doc, _id: id }) });
 }
 
@@ -252,8 +274,9 @@ const approvalConfig: ApprovalConfig<JobOrderFields & { _id: string }> = {
   writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
   // อนุมัติแล้วถือว่ารายการใน Project ต้นทางถูกจัดหาเรียบร้อย (เดิมทำตอน finalize)
   onApproved: async (_ctx, doc) => {
-    const itemId = await findProjectItemIdByLink(doc.projectId, "jobOrderId", doc._id);
-    if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
+    // ปิดงานให้ **ทุก** รายการที่ผูกกับใบนี้ — ใบเดียวครอบคลุมได้หลายรายการตั้งแต่ 2026-08-27
+    const itemIds = await findProjectItemIdsByLink(doc.projectId, "jobOrderId", doc._id);
+    await markProjectItemsFulfilled(doc.projectId, itemIds);
   },
   respond: (res, doc) => res.status(200).json({ jobOrder: toClient(doc) }),
 };
@@ -274,8 +297,9 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
 
   const jobOrders = await jobOrdersCollection();
   await jobOrders.updateOne({ _id: id }, { $set: { isDeleted: true, updatedAt: nowIso(), updatedBy: ctx.user.id } });
-  const itemId = await findProjectItemIdByLink(doc.projectId, "jobOrderId", id);
-  if (itemId) await unlinkProjectItem(doc.projectId, itemId, "jobOrderId");
+  // คืนสถานะให้ทุกรายการที่ผูกไว้ ไม่ใช่แค่ตัวแรก ไม่งั้นรายการที่เหลือจะค้างเป็น "สร้างเอกสารแล้ว" ตลอดไป
+  const itemIds = await findProjectItemIdsByLink(doc.projectId, "jobOrderId", id);
+  await unlinkProjectItems(doc.projectId, itemIds, "jobOrderId");
   await writeAuditEntry(ctx, "Job Order Deleted", `ลบใบสั่งงาน ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
   res.status(200).json({ ok: true });
 }

@@ -144,9 +144,15 @@ function sanitizeLines(raw: unknown): ProductionOrderLine[] {
  * เป็น **สำเนา ณ เวลาที่ดึง** ไม่ใช่การอ้างอิงสด — ตรงกับที่ทุกโมดูลในแอปนี้ทำกับ Scope of Work
  * (ใบส่งมอบ/โครงการ) ผู้ใช้แก้รายการในใบสั่งผลิตต่อได้อิสระโดยไม่กระทบงานต้นทาง
  */
-function mapScopeItemsToLines(items: unknown): ProductionOrderLine[] {
+function mapScopeItemsToLines(items: unknown, onlyIds?: string[]): ProductionOrderLine[] {
   if (!Array.isArray(items)) return [];
-  return (items as Record<string, unknown>[]).slice(0, MAX_LINES).map((it) => {
+  // onlyIds = รายการที่ผู้ใช้ติ๊กเลือกไว้ (ฝ่ายผลิตขอไว้ 2026-08-27 "อยากให้พวกนี้มันติ๊กเลือกได้
+  // เพราะแต่ละอันไม่เหมือนกัน") — ไม่ระบุ = เอาทั้งหมดเหมือนเดิม
+  const wanted = onlyIds && onlyIds.length > 0 ? new Set(onlyIds) : null;
+  const source = wanted
+    ? (items as Record<string, unknown>[]).filter((it) => typeof it.id === "string" && wanted.has(it.id))
+    : (items as Record<string, unknown>[]);
+  return source.slice(0, MAX_LINES).map((it) => {
     const isSectionHeader = it.isSectionHeader === true;
     const specs = Array.isArray(it.specifications) ? (it.specifications as Record<string, unknown>[]) : [];
     return {
@@ -226,6 +232,15 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const scopeOfWorkId = typeof body.scopeOfWorkId === "string" ? body.scopeOfWorkId.trim() : "";
   if (!scopeOfWorkId) throw new HttpError(400, "กรุณาระบุ Scope of Work");
+  /**
+   * รายการที่ติ๊กเลือกไว้ — ไม่ส่งมาเลย = เอาทุกรายการ (พฤติกรรมเดิม ผู้เรียกเก่าจึงไม่พัง)
+   * หนึ่งงานออกใบสั่งผลิตได้หลายใบ ใบละสินค้า จึงต้องเลือกได้ว่าใบนี้ครอบคลุมรายการไหนบ้าง
+   */
+  const itemIds = [...new Set(
+    Array.isArray(body.itemIds)
+      ? (body.itemIds as unknown[]).filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean)
+      : [],
+  )];
 
   const scopeOfWorks = await scopeOfWorksCollection();
   const scope = await scopeOfWorks.findOne({ _id: toObjectId(scopeOfWorkId) });
@@ -251,7 +266,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     startDate: "",
     dueDate: "",
     // ดึงรายการ+สเปกจากงานต้นทางมาให้เลย ผู้ใช้ลบ/แก้ต่อได้ (ก่อน 2026-08-27 เริ่มจากตารางว่าง)
-    lines: mapScopeItemsToLines(scope.items),
+    lines: mapScopeItemsToLines(scope.items, itemIds),
     status: "Draft",
     orderedBy: { name: ctx.user.fullName, date: now.slice(0, 10) },
     approver: { ...blank },
@@ -353,6 +368,24 @@ async function handleSignatories(req: VercelRequest, res: VercelResponse, id: st
  * ล็อกที่ Draft เหมือน `handleUpdate()` เพราะมันเขียนทับเนื้อหาเอกสาร ไม่ใช่ข้อมูลติดตามผล
  * เขียน audit เพราะเป็นการทำลายงานที่พิมพ์ไว้เอง ผู้ใช้ควรตามรอยได้ว่าใครกดเมื่อไหร่
  */
+/**
+ * หา id ของรายการใน Scope of Work ที่ตรงกับรายการที่เอกสารนี้มีอยู่ — จับคู่ด้วย **ชื่อรายการ**
+ * เพราะใบสั่งผลิตไม่ได้เก็บ id ของ ScopeOfWorkItem ไว้ (และ id พวกนั้นถูกสร้างใหม่ทุกครั้งที่ Scope
+ * refresh จากใบเสนอราคา จึงเก็บไว้ก็ไม่น่าเชื่อถืออยู่ดี — ดู TODO.md เรื่อง ScopeOfWorkItem id stability)
+ *
+ * คืนลิสต์ว่างเมื่อจับคู่ไม่ได้เลย ซึ่ง mapScopeItemsToLines() ตีความว่า "เอาทั้งหมด" — เป็นพฤติกรรม
+ * ที่ตั้งใจ: ถ้าเอกสารยังว่างอยู่ การกดอัปเดตควรดึงมาให้ทั้งหมด ไม่ใช่ได้ตารางเปล่ากลับมา
+ */
+function matchingScopeItemIds(scopeItems: unknown, lines: ProductionOrderLine[]): string[] {
+  if (!Array.isArray(scopeItems)) return [];
+  const names = new Set(lines.filter((l) => !l.isSectionHeader).map((l) => l.description.trim()).filter(Boolean));
+  if (names.size === 0) return [];
+  return (scopeItems as Record<string, unknown>[])
+    .filter((it) => typeof it.name === "string" && names.has(it.name.trim()))
+    .map((it) => (typeof it.id === "string" ? it.id : ""))
+    .filter(Boolean);
+}
+
 async function handleRefreshFromScope(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "productionOrder:edit");
@@ -368,7 +401,9 @@ async function handleRefreshFromScope(req: VercelRequest, res: VercelResponse, i
   const productionOrders = await productionOrdersCollection();
   await productionOrders.updateOne({ _id: id }, {
     $set: {
-      lines: mapScopeItemsToLines(scope.items),
+      // เคารพรายการที่ใบนี้ครอบคลุมอยู่ — เทียบจากชื่อรายการที่มีอยู่ในเอกสาร ไม่งั้นการกดอัปเดต
+      // ครั้งเดียวจะดึงรายการที่ผู้ใช้ตั้งใจไม่เอากลับเข้ามาทั้งหมด
+      lines: mapScopeItemsToLines(scope.items, matchingScopeItemIds(scope.items, doc.lines)),
       jobCode: scope.scopeNumber,
       customerCompanyName: scope.customerSnapshot.companyName,
       updatedAt: nowIso(), updatedBy: ctx.user.id,

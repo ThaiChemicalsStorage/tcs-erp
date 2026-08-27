@@ -451,6 +451,39 @@ same blank-line stripping server-side, same indented row in the editor and the p
 line **table** the sub-details are their own row beneath the line, and the row is hidden entirely when
 the document is locked and has none.
 
+## One Job Order can cover several project items (2026-08-27)
+
+Follow-up to the same J1 sentence — its first half (the scope checklist) shipped earlier the same
+day; this is the second half, *"ติ๊กเลือกได้ว่าจะเอาตัวไหน"*, applied to the item list itself.
+
+**No structural change was needed.** Each `ProjectItem` carries its own `jobOrderId`, so several items
+can already point at the same Job Order. What had to change were the helpers in `projectHandler.ts`,
+which were written on the assumption of one document per item and therefore took and returned single
+values. Each gained a plural sibling (`loadPendingProjectItemsOrThrow`, `linkProjectItemsToSubDocument`,
+`findProjectItemIdsByLink`, `markProjectItemsFulfilled`, `unlinkProjectItems`); the singular ones remain
+as thin wrappers, so **Material Requisition and Purchase Request are untouched** and stay one-per-item.
+
+Two details that matter:
+- The multi-item write uses one `updateOne` with `arrayFilters`, not a loop — a loop could link some
+  items and miss the rest, leaving a half-linked document with nothing reporting it.
+- `loadPendingProjectItemsOrThrow()` validates **every** item before returning, so a request that
+  includes one already-claimed item is refused whole rather than partly applied.
+
+**Ticked items are copied in as lines**, with their specifications becoming `subDetails` —
+`JobOrderLine` gained that field for this reason (same shape `ProductionOrderLine` and
+`PurchaseRequestLine` already use). Without it every item's spec would be dropped silently on copy.
+
+`ProjectItemSourcePickerDialog` gained `multiSelect`; `onSelect` now always returns an array so callers
+share one code path. Ticks reset when the project changes, or ids from the previous project would
+travel into the new document.
+
+**Production Order** got the same idea from the other end: its picker gained a second step
+(`pickItems`) to choose which Scope of Work items the order covers — matching what
+`src/lib/productionOrder.ts` already documented, that one job may need several orders, one per
+product. Its "refresh from Scope of Work" respects that selection, matching by **item name** because
+the order stores no `ScopeOfWorkItem` ids (and those ids are regenerated on every scope refresh
+anyway — see TODO.md).
+
 ## Known Limitations, Not Built This Pass
 
 - **No approval workflow** — Material Requisition/Job Order/Purchase Request go straight

@@ -27,6 +27,12 @@ export interface JobOrderLine {
   quantity: number | null;
   unit: string;
   remark: string;
+  /**
+   * บรรทัดรายละเอียดย่อยใต้รายการหลัก — รูปแบบเดียวกับ ProductionOrderLine/PurchaseRequestLine
+   * เพิ่ม 2026-08-27 พร้อมกับการติ๊กเลือกหลายรายการ: สเปกของ ProjectItem ถูกคัดลอกมาลงตรงนี้
+   * ถ้าไม่มีฟิลด์นี้ สเปกจะหายเงียบ ๆ ตอนสร้างเอกสาร
+   */
+  subDetails: string[];
 }
 
 export interface JobOrder {
@@ -83,9 +89,14 @@ export interface JobOrder {
   isDeleted: boolean;
 }
 
-export async function createJobOrder(projectId: string, itemId: string): Promise<JobOrder> {
+/**
+ * หนึ่งใบสั่งงานครอบคลุมได้หลายรายการ (ฝ่ายโครงการขอไว้ 2026-08-27) — รายการที่ติ๊ก
+ * จะถูกคัดลอกมาเป็นรายการดำเนินงานในเอกสารให้เลย พร้อมสเปคเป็นบรรทัดย่อย
+ */
+export async function createJobOrder(projectId: string, itemIds: string | string[]): Promise<JobOrder> {
+  const ids = Array.isArray(itemIds) ? itemIds : [itemIds];
   const { jobOrder } = await apiFetch<{ jobOrder: JobOrder }>("/job-orders", {
-    method: "POST", body: JSON.stringify({ projectId, itemId }),
+    method: "POST", body: JSON.stringify({ projectId, itemIds: ids }),
   });
   return jobOrder;
 }
@@ -148,7 +159,7 @@ export async function deleteJobOrder(id: string): Promise<void> {
 // สร้างรายการเปล่าสำหรับตารางที่พิมพ์เองอิสระ (ไม่ผูกกับแคตตาล็อก)
 // Builds a blank free-typed line (not catalog-linked, unlike Material Requisition's lines)
 export function blankJobOrderLine(): JobOrderLine {
-  return { id: `joline-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, description: "", quantity: null, unit: "", remark: "" };
+  return { id: `joline-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, description: "", subDetails: [], quantity: null, unit: "", remark: "" };
 }
 
 /** Builds the default "ขอบเขตงาน (Scope of work)" checklist, in the reference PDF's own reading

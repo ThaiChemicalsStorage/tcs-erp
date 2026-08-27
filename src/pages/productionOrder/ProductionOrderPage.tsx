@@ -60,9 +60,9 @@ export function ProductionOrderPage({
     if (initialProductionOrderId) onProductionOrderIdConsumed?.();
   }, [initialProductionOrderId, onProductionOrderIdConsumed]);
 
-  const createFromScope = async (scopeOfWorkId: string) => {
+  const createFromScope = async (scopeOfWorkId: string, itemIds?: string[]) => {
     try {
-      const created = await createProductionOrderFromScope(scopeOfWorkId);
+      const created = await createProductionOrderFromScope(scopeOfWorkId, itemIds);
       setPickerOpen(false);
       open(created.id);
     } catch (err) {
@@ -130,9 +130,10 @@ export function ProductionOrderPage({
       {pickerOpen && (
         <ScopeOfWorkSourcePickerDialog
           onClose={() => setPickerOpen(false)}
-          onSelect={(scopeOfWorkId) => void createFromScope(scopeOfWorkId)}
+          onSelect={(scopeOfWorkId, itemIds) => void createFromScope(scopeOfWorkId, itemIds)}
           allowMultiplePerScope
           requireFinalScope={false}
+          pickItems
         />
       )}
       <Toast message={toast.message} />

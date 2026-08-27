@@ -116,17 +116,39 @@ export async function loadProjectOrThrow(id: string): Promise<WithId<ProjectFiel
  * sub-document is never created for an invalid/already-claimed item in the first place. Exported so
  * the 400/404 error and the "already claimed" check live in exactly one place.
  */
+/**
+ * ตรวจว่ารายการที่ขอมา "มีอยู่จริงและยังว่าง" ทุกตัว **ก่อน** จะ insert อะไรลงไป
+ *
+ * รับได้หลายรายการตั้งแต่ 2026-08-27 — ฝ่ายโครงการขอให้ใบสั่งงาน "ติ๊กเลือกได้ว่าจะเอาตัวไหน"
+ * หนึ่งเอกสารจึงครอบคลุมได้หลายรายการ ตัวเดียวก็ยังใช้ `loadPendingProjectItemOrThrow()` ได้เหมือนเดิม
+ *
+ * ตรวจให้ครบทุกตัวก่อน แล้วค่อยคืนค่า — ไม่ใช่ตรวจไปสร้างไป เพื่อไม่ให้เกิดเอกสารที่ผูกรายการได้แค่บางส่วน
+ */
+export async function loadPendingProjectItemsOrThrow(
+  projectId: string,
+  itemIds: string[],
+): Promise<{ project: WithId<ProjectFields>; items: ProjectItem[] }> {
+  if (itemIds.length === 0) throw new HttpError(400, "กรุณาเลือกรายการอย่างน้อย 1 รายการ");
+  const project = await loadProjectOrThrow(projectId);
+  const items: ProjectItem[] = [];
+  for (const itemId of itemIds) {
+    const item = project.items.find((it) => it.id === itemId);
+    if (!item) throw new HttpError(404, "ไม่พบรายการนี้ในโครงการ");
+    if (item.itemStatus !== "pending") {
+      throw new HttpError(400, `รายการ "${item.name}" มีเอกสารที่สร้างไว้แล้ว`);
+    }
+    items.push(item);
+  }
+  return { project, items };
+}
+
+/** เวอร์ชันรายการเดียว — ใบเบิกและใบขอซื้อยังสร้างทีละรายการ */
 export async function loadPendingProjectItemOrThrow(
   projectId: string,
   itemId: string,
 ): Promise<{ project: WithId<ProjectFields>; item: ProjectItem }> {
-  const project = await loadProjectOrThrow(projectId);
-  const item = project.items.find((it) => it.id === itemId);
-  if (!item) throw new HttpError(404, "ไม่พบรายการนี้ในโครงการ");
-  if (item.itemStatus !== "pending") {
-    throw new HttpError(400, "รายการนี้มีเอกสารที่สร้างไว้แล้ว");
-  }
-  return { project, item };
+  const { project, items } = await loadPendingProjectItemsOrThrow(projectId, [itemId]);
+  return { project, item: items[0] };
 }
 
 /**
@@ -141,6 +163,33 @@ export async function loadPendingProjectItemOrThrow(
  * `"pending"` *before* the sub-document is inserted, so the only way this update could fail after a
  * successful insert is a genuine DB outage between the two calls.
  */
+export async function linkProjectItemsToSubDocument(
+  projectId: string,
+  itemIds: string[],
+  sourcingMethod: ProjectItemSourcingMethod,
+  linkField: "materialRequisitionId" | "jobOrderId" | "purchaseRequestId",
+  subDocumentId: string,
+): Promise<void> {
+  if (itemIds.length === 0) return;
+  const projects = await projectsCollection();
+  // เขียนทุกรายการใน `updateOne` ครั้งเดียวด้วย arrayFilters — ไม่ใช่วนลูปอัปเดตทีละตัว
+  // เพราะการวนลูปเปิดช่องให้ผูกได้บางตัวแล้วพลาดตัวที่เหลือ กลายเป็นเอกสารที่ผูกครึ่ง ๆ กลาง ๆ
+  const result = await projects.updateOne(
+    { _id: toObjectId(projectId) },
+    {
+      $set: {
+        "items.$[it].sourcingMethod": sourcingMethod,
+        "items.$[it].itemStatus": "documentCreated",
+        [`items.$[it].${linkField}`]: subDocumentId,
+        updatedAt: nowIso(),
+      },
+    },
+    { arrayFilters: [{ "it.id": { $in: itemIds } }] },
+  );
+  if (result.matchedCount === 0) throw new HttpError(404, "ไม่พบโครงการนี้");
+}
+
+/** เวอร์ชันรายการเดียว — ใบเบิกและใบขอซื้อยังผูกทีละรายการ */
 export async function linkProjectItemToSubDocument(
   projectId: string,
   itemId: string,
@@ -148,19 +197,7 @@ export async function linkProjectItemToSubDocument(
   linkField: "materialRequisitionId" | "jobOrderId" | "purchaseRequestId",
   subDocumentId: string,
 ): Promise<void> {
-  const projects = await projectsCollection();
-  const result = await projects.updateOne(
-    { _id: toObjectId(projectId), "items.id": itemId },
-    {
-      $set: {
-        "items.$.sourcingMethod": sourcingMethod,
-        "items.$.itemStatus": "documentCreated",
-        [`items.$.${linkField}`]: subDocumentId,
-        updatedAt: nowIso(),
-      },
-    },
-  );
-  if (result.matchedCount === 0) throw new HttpError(404, "ไม่พบรายการนี้ในโครงการ");
+  return linkProjectItemsToSubDocument(projectId, [itemId], sourcingMethod, linkField, subDocumentId);
 }
 
 /** Resolves which ProjectItem a sub-document belongs to by its recorded link field — the
@@ -169,16 +206,30 @@ export async function linkProjectItemToSubDocument(
  * `handleFinalize()`/`handleDelete()` on each sub-document handler resolve it this way rather than
  * carrying a redundant reverse-reference. Returns `null` (never throws) if the Project was deleted
  * or the link was already cleared — callers treat that as "nothing to update," not an error. */
+/**
+ * หา **ทุก** รายการในโครงการที่ผูกอยู่กับเอกสารใบนี้ — ตั้งแต่ 2026-08-27 ใบสั่งงานหนึ่งใบครอบคลุม
+ * ได้หลายรายการ ถ้ายังคืนแค่ตัวแรก การกดอนุมัติจะปิดงานให้แค่รายการเดียว ที่เหลือค้างเป็น
+ * "สร้างเอกสารแล้ว" ตลอดไปโดยไม่มีอะไรฟ้อง
+ */
+export async function findProjectItemIdsByLink(
+  projectId: string,
+  linkField: "materialRequisitionId" | "jobOrderId" | "purchaseRequestId",
+  subDocumentId: string,
+): Promise<string[]> {
+  const projects = await projectsCollection();
+  const doc = await projects.findOne({ _id: toObjectId(projectId), [`items.${linkField}`]: subDocumentId });
+  if (!doc) return [];
+  return doc.items.filter((it) => it[linkField] === subDocumentId).map((it) => it.id);
+}
+
+/** เวอร์ชันรายการเดียว — ใบเบิกและใบขอซื้อผูกทีละรายการ จึงมีได้ตัวเดียวเสมอ */
 export async function findProjectItemIdByLink(
   projectId: string,
   linkField: "materialRequisitionId" | "jobOrderId" | "purchaseRequestId",
   subDocumentId: string,
 ): Promise<string | null> {
-  const projects = await projectsCollection();
-  const doc = await projects.findOne({ _id: toObjectId(projectId), [`items.${linkField}`]: subDocumentId });
-  if (!doc) return null;
-  const item = doc.items.find((it) => it[linkField] === subDocumentId);
-  return item?.id ?? null;
+  const ids = await findProjectItemIdsByLink(projectId, linkField, subDocumentId);
+  return ids[0] ?? null;
 }
 
 /** Called by each sub-document handler's own `/:id/finalize` route, after the sub-document's status
@@ -186,35 +237,51 @@ export async function findProjectItemIdByLink(
  * by this point the item is already linked from a successful create, so a missing match here would
  * only mean the parent Project was independently deleted/refreshed out from under it, not a bug in
  * the finalize action itself. */
-export async function markProjectItemFulfilled(projectId: string, itemId: string): Promise<void> {
+export async function markProjectItemsFulfilled(projectId: string, itemIds: string[]): Promise<void> {
+  if (itemIds.length === 0) return;
   const projects = await projectsCollection();
   await projects.updateOne(
-    { _id: toObjectId(projectId), "items.id": itemId },
-    { $set: { "items.$.itemStatus": "fulfilled", updatedAt: nowIso() } },
+    { _id: toObjectId(projectId) },
+    { $set: { "items.$[it].itemStatus": "fulfilled", updatedAt: nowIso() } },
+    { arrayFilters: [{ "it.id": { $in: itemIds } }] },
   );
+}
+
+export async function markProjectItemFulfilled(projectId: string, itemId: string): Promise<void> {
+  return markProjectItemsFulfilled(projectId, [itemId]);
 }
 
 /** Called by each sub-document handler's own `DELETE /:id` route — resets the parent ProjectItem
  * back to `"unassigned"`/`"pending"` and clears the link, closing the loop `handleItemUpdate()`
  * above points users toward ("ยกเลิก/ลบเอกสารเดิมก่อน"). Best-effort, same reasoning as
  * markProjectItemFulfilled() above. */
+export async function unlinkProjectItems(
+  projectId: string,
+  itemIds: string[],
+  linkField: "materialRequisitionId" | "jobOrderId" | "purchaseRequestId",
+): Promise<void> {
+  if (itemIds.length === 0) return;
+  const projects = await projectsCollection();
+  await projects.updateOne(
+    { _id: toObjectId(projectId) },
+    {
+      $set: {
+        "items.$[it].sourcingMethod": "unassigned",
+        "items.$[it].itemStatus": "pending",
+        [`items.$[it].${linkField}`]: "",
+        updatedAt: nowIso(),
+      },
+    },
+    { arrayFilters: [{ "it.id": { $in: itemIds } }] },
+  );
+}
+
 export async function unlinkProjectItem(
   projectId: string,
   itemId: string,
   linkField: "materialRequisitionId" | "jobOrderId" | "purchaseRequestId",
 ): Promise<void> {
-  const projects = await projectsCollection();
-  await projects.updateOne(
-    { _id: toObjectId(projectId), "items.id": itemId },
-    {
-      $set: {
-        "items.$.sourcingMethod": "unassigned",
-        "items.$.itemStatus": "pending",
-        [`items.$.${linkField}`]: "",
-        updatedAt: nowIso(),
-      },
-    },
-  );
+  return unlinkProjectItems(projectId, [itemId], linkField);
 }
 async function loadScopeOrThrow(scopeOfWorkId: string): Promise<WithId<ScopeOfWorkFields>> {
   const scopeOfWorks = await scopeOfWorksCollection();

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X , CornerDownRight } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import {
   type JobOrder, type JobOrderLine, type JobOrderUpdateFields,
@@ -405,7 +405,8 @@ export function JobOrderDocument({
                 </thead>
                 <tbody>
                   {draft.lines.map((line) => (
-                    <tr key={line.id} className="border-b border-border/50">
+                    <Fragment key={line.id}>
+                    <tr className="border-b border-border/50">
                       <td className="px-3 py-2 min-w-[200px]">
                         <input disabled={!editable} value={line.description} onChange={(e) => updateLine(line.id, { description: e.target.value })}
                           className="w-full text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
@@ -430,6 +431,37 @@ export function JobOrderDocument({
                         )}
                       </td>
                     </tr>
+                    {/* บรรทัดรายละเอียดย่อย — แถวของตัวเองใต้รายการหลัก ซ่อนทั้งแถวเมื่อเอกสารล็อกแล้วและไม่มีบรรทัดย่อย */}
+                    {((line.subDetails ?? []).length > 0 || editable) && (
+                      <tr className="border-b border-border/50">
+                        <td colSpan={5} className="px-3 pb-2 space-y-1">
+                          {(line.subDetails ?? []).map((sd, i) => (
+                            <div key={i} className="flex items-center gap-2 pl-4">
+                              <CornerDownRight size={12} className="text-muted-foreground flex-shrink-0" />
+                              <input
+                                disabled={!editable} value={sd}
+                                onChange={(e) => updateLine(line.id, { subDetails: (line.subDetails ?? []).map((x, j) => (j === i ? e.target.value : x)) })}
+                                placeholder={t("jobOrderDoc.subDetailPlaceholder")}
+                                className="flex-1 min-w-[160px] text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
+                              />
+                              {editable && (
+                                <button onClick={() => updateLine(line.id, { subDetails: (line.subDetails ?? []).filter((_, j) => j !== i) })}
+                                  className="text-muted-foreground opacity-50 hover:opacity-100 hover:text-[#e05252] transition-opacity">
+                                  <X size={11} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          {editable && (
+                            <button onClick={() => updateLine(line.id, { subDetails: [...(line.subDetails ?? []), ""] })}
+                              className="flex items-center gap-1.5 pl-4 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                              <Plus size={11} /> {t("jobOrderDoc.addSubDetail")}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

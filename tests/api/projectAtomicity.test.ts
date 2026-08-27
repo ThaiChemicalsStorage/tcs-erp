@@ -530,6 +530,122 @@ describe("Production Order", () => {
  * The important half is the back-compat one: documents created before ownerDepartment existed have
  * no such field at all, and must keep showing up for the Project department rather than vanishing.
  */
+describe("Job Order covering several project items", () => {
+  /**
+   * ฝ่ายโครงการขอไว้ 2026-08-27 ว่าใบสั่งงาน "ติ๊กเลือกได้ว่าจะเอาตัวไหน" — หนึ่งใบจึงครอบคลุมหลายรายการ
+   * จุดที่พังเงียบที่สุดคือการอนุมัติ/ลบ: ถ้าตัวช่วยยังคืนแค่รายการแรก รายการที่เหลือจะค้างสถานะเดิมตลอดไป
+   * โดยไม่มี error ที่ไหนเลย
+   */
+  /**
+   * fixture หลักของไฟล์นี้มีรายการเดียว — เทสต์ชุดนี้ต้องการอย่างน้อยสองรายการ ไม่งั้น "ติ๊กหลายรายการ"
+   * จะถูกทดสอบด้วยรายการเดียวและผ่านไปทั้งที่โค้ดอาจรองรับแค่ตัวแรก (พลาดแบบนี้มาแล้วตอนเขียนครั้งแรก)
+   * เพิ่มรายการที่สองเข้าไปในโครงการโดยตรง — เร็วกว่าและไม่กระทบ fixture ที่เทสต์อื่นใช้ร่วมกัน
+   */
+  async function projectWithItems(): Promise<ProjectJson> {
+    const project = await createProject();
+    await client.db("tcs_erp").collection("projects").updateOne(
+      { _id: new ObjectId(project.id) },
+      {
+        $push: {
+          items: {
+            id: `item-2-${project.id}`,
+            name: "Recirculating pump",
+            specifications: ["SUS316", "3 kW"],
+            quantity: 2,
+            unit: "Set",
+            sourcingMethod: "unassigned",
+            itemStatus: "pending",
+            materialRequisitionId: "", jobOrderId: "", purchaseRequestId: "",
+          },
+        },
+      } as never,
+    );
+    const reloaded = await call("GET", `/api/projects/${project.id}`);
+    const full = (reloaded.body as { project: ProjectJson }).project;
+    expect(full.items.length, "ต้องมีอย่างน้อย 2 รายการเพื่อทดสอบการติ๊กหลายรายการจริง").toBeGreaterThanOrEqual(2);
+    return full;
+  }
+
+  it("links every ticked item to the one job order, and copies them in as lines", async () => {
+    const project = await projectWithItems();
+    const itemIds = project.items.slice(0, 2).map((it) => it.id);
+    const res = await call("POST", "/api/job-orders", { projectId: project.id, itemIds });
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+    const jo = (res.body as { jobOrder: { id: string; lines: { description: string }[] } }).jobOrder;
+
+    expect(jo.lines, "รายการที่ติ๊กต้องถูกคัดลอกมาเป็นรายการในเอกสาร").toHaveLength(itemIds.length);
+
+    const after = await call("GET", `/api/projects/${project.id}`);
+    const items = (after.body as { project: ProjectJson }).project.items;
+    for (const id of itemIds) {
+      const item = items.find((it) => it.id === id)!;
+      expect(item.jobOrderId, `รายการ ${id} ต้องผูกกับใบนี้`).toBe(jo.id);
+      expect(item.sourcingMethod).toBe("jobOrder");
+      expect(item.itemStatus).toBe("documentCreated");
+    }
+  });
+
+  it("fulfils every linked item on approval, not just the first", async () => {
+    const project = await projectWithItems();
+    const itemIds = project.items.slice(0, 2).map((it) => it.id);
+    const created = await call("POST", "/api/job-orders", { projectId: project.id, itemIds });
+    const id = (created.body as { jobOrder: { id: string } }).jobOrder.id;
+
+    await call("POST", `/api/job-orders/${id}/submit-approval`);
+    const approved = await call("POST", `/api/job-orders/${id}/approve`);
+    expect(approved.statusCode, JSON.stringify(approved.body)).toBe(200);
+
+    const after = await call("GET", `/api/projects/${project.id}`);
+    const items = (after.body as { project: ProjectJson }).project.items;
+    for (const itemId of itemIds) {
+      const item = items.find((it) => it.id === itemId) as unknown as { itemStatus: string };
+      expect(item.itemStatus, `รายการ ${itemId} ต้องถูกปิดงานด้วย` ).toBe("fulfilled");
+    }
+  });
+
+  it("releases every linked item when the job order is deleted", async () => {
+    const project = await projectWithItems();
+    const itemIds = project.items.slice(0, 2).map((it) => it.id);
+    const created = await call("POST", "/api/job-orders", { projectId: project.id, itemIds });
+    const id = (created.body as { jobOrder: { id: string } }).jobOrder.id;
+
+    const del = await call("DELETE", `/api/job-orders/${id}`);
+    expect(del.statusCode, JSON.stringify(del.body)).toBe(200);
+
+    const after = await call("GET", `/api/projects/${project.id}`);
+    const items = (after.body as { project: ProjectJson }).project.items;
+    for (const itemId of itemIds) {
+      const item = items.find((it) => it.id === itemId)!;
+      expect(item.jobOrderId, `รายการ ${itemId} ต้องถูกปลดลิงก์`).toBe("");
+      expect(item.sourcingMethod).toBe("unassigned");
+      expect(item.itemStatus).toBe("pending");
+    }
+  });
+
+  it("refuses the whole request when any ticked item is already taken", async () => {
+    const project = await projectWithItems();
+    const [first, second] = project.items.slice(0, 2).map((it) => it.id);
+    await call("POST", "/api/job-orders", { projectId: project.id, itemIds: [first] });
+
+    // ติ๊กทั้งตัวที่ถูกจองไปแล้วและตัวที่ยังว่าง — ต้องปฏิเสธทั้งคำขอ ไม่ใช่สร้างเฉพาะตัวที่ว่าง
+    const clash = await call("POST", "/api/job-orders", { projectId: project.id, itemIds: [first, second] });
+    expect(clash.statusCode).toBe(400);
+
+    // ตัวที่ว่างต้องไม่ถูกแตะเลย — ไม่งั้นจะเหลือรายการที่ผูกกับเอกสารที่ไม่เคยถูกสร้าง
+    const after = await call("GET", `/api/projects/${project.id}`);
+    const item = (after.body as { project: ProjectJson }).project.items.find((it) => it.id === second)!;
+    expect(item.itemStatus).toBe("pending");
+    expect(item.jobOrderId).toBe("");
+  });
+
+  it("still accepts the old single-item body shape", async () => {
+    const project = await projectWithItems();
+    const res = await call("POST", "/api/job-orders", { projectId: project.id, itemId: project.items[0].id });
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+    expect((res.body as { jobOrder: { lines: unknown[] } }).jobOrder.lines).toHaveLength(1);
+  });
+});
+
 describe("Product requests", () => {
   /**
    * หัวใจของฟีเจอร์นี้คือ "ใครตั้งรหัสได้" — ที่ประชุมขอไว้ว่า "ขอเพิ่มสินค้าได้แต่ตั้งรหัสไม่ได้"
