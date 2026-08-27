@@ -71,6 +71,12 @@ export type Permission =
   | "ar:cancel"
   | "stock:view"
   | "stock:adjust"
+  // คำขอเพิ่มสินค้า (2026-08-27) — แผนกอื่นขอเพิ่มสินค้าได้ แต่ "ตั้งรหัสไม่ได้"
+  // การตั้งรหัสผูกกับ :review ซึ่งเป็นสิทธิ์ของสโตร์ ไม่ใช่ :create ที่ทุกแผนกมีได้
+  | "productRequest:view"
+  | "productRequest:viewAll"
+  | "productRequest:create"
+  | "productRequest:review"
   | "project:view"
   | "project:viewAll"
   | "project:create"
@@ -178,6 +184,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "ar:cancel",
   "stock:view",
   "stock:adjust",
+  "productRequest:view",
+  "productRequest:viewAll",
+  "productRequest:create",
+  "productRequest:review",
   "project:view",
   "project:viewAll",
   "project:create",
@@ -286,6 +296,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "ar:cancel": "ยกเลิกเอกสารบัญชีลูกหนี้",
   "stock:view": "ดูสต๊อกสินค้าและประวัติการปรับสต๊อก",
   "stock:adjust": "รับเข้า/ตัดออก/ปรับยอดสต๊อกสินค้า",
+  "productRequest:view": "ดูคำขอเพิ่มสินค้า",
+  "productRequest:viewAll": "ดูคำขอเพิ่มสินค้าของผู้อื่น",
+  "productRequest:create": "ขอเพิ่มสินค้าใหม่ (ตั้งรหัสสินค้าเองไม่ได้)",
+  "productRequest:review": "อนุมัติคำขอและตั้งรหัสสินค้า (สโตร์)",
   "project:view": "ดูโครงการ",
   "project:viewAll": "ดูโครงการของผู้อื่น",
   "project:create": "สร้างโครงการ",
@@ -394,6 +408,10 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "ar:cancel": "permission.arCancel",
   "stock:view": "permission.stockView",
   "stock:adjust": "permission.stockAdjust",
+  "productRequest:view": "permission.productRequestView",
+  "productRequest:viewAll": "permission.productRequestViewAll",
+  "productRequest:create": "permission.productRequestCreate",
+  "productRequest:review": "permission.productRequestReview",
   "project:view": "permission.projectView",
   "project:viewAll": "permission.projectViewAll",
   "project:create": "permission.projectCreate",
@@ -479,7 +497,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
   {
     label: "คลังสินค้า",
     labelKey: "nav.products",
-    permissions: ["products:view", "products:create", "products:edit", "products:delete", "products:export", "stock:view", "stock:adjust"],
+    permissions: ["products:view", "products:create", "products:edit", "products:delete", "products:export", "stock:view", "stock:adjust", "productRequest:view", "productRequest:viewAll", "productRequest:create", "productRequest:review"],
   },
   {
     label: "ลูกค้า",

@@ -106,3 +106,52 @@ Quotation. See CHANGELOG.md 2026-07-30.
 ## Known Issues
 
 - None currently open. An operator-precedence bug in the "sort by status" column comparator was found and fixed during the 2026-07-08 code review (see [CHANGELOG.md](../CHANGELOG.md)).
+
+
+## Product Requests (คำขอเพิ่มสินค้า) — added 2026-08-27
+
+Project department request: *"เพิ่มหน้าแผนกอื่นสามารถขอเพิ่มสินค้าได้แต่ไม่สามารถตั้งรหัสได้ เมื่อสโตร์
+กดอนุมัติให้แจ้งเตือนผู้ขอเพิ่มสินค้าว่าสินค้าได้รับการตั้งรหัสสินค้าแล้ว"*
+
+Before this, nothing in the app resembled it: `Product` has no status and no workflow, and `code` is
+a plain text field any `products:create` holder types themselves. The floor's workaround was a
+free-typed line on a Purchase Request (no `productId`), which never became a catalog product at all.
+
+**The whole point is who may assign the code, and it is enforced server-side — not by hiding a field.**
+`handleCreate()` and `handleUpdate()` in `api/_lib/productRequestHandler.ts` never read `code` from
+the request body. The only path that writes one is `handleApprove()`, gated on `productRequest:review`.
+A test posts `code`, `assignedProductCode` and `status: "Approved"` directly and asserts all three are
+ignored — verified to fail when the guard is removed.
+
+| Piece | Where |
+|---|---|
+| Type + API wrappers | `src/lib/productRequest.ts` |
+| Handler | `api/_lib/productRequestHandler.ts` (mounted via `api/handlers/quotes.ts`) |
+| Collection | `product_requests` |
+| Page | `src/pages/productRequest/ProductRequestPage.tsx` ("คำขอเพิ่มสินค้า", under the คลังสินค้า nav group) |
+| Permissions | `productRequest:view/viewAll/create/review` |
+
+**Approve creates the `Product` before flipping the request's status**, so a duplicate code (409)
+leaves the request `Pending` and retryable instead of `Approved` with no catalog product behind it.
+Code is upper-cased and duplicate-checked exactly as `POST /api/products` does, so both routes into
+the catalog behave the same. New products always start at `stockQty: 0`.
+
+**Anyone holding `productRequest:review` also sees every request**, regardless of `:viewAll` — Stores
+cannot approve what it cannot see.
+
+**Purchase Request integration (J5)**: a PR line with no `productId` shows a "ขอรหัสสินค้า" button that
+opens a request pre-filled from that line and stamped with `sourcePurchaseRequestId`. It deliberately
+does **not** rewrite the PR line once Stores assigns a code — the PR may already be approved and
+locked, and silently editing an approved document is worse than asking someone to re-pick the product.
+
+## Approval hand-off notifications — added 2026-08-27
+
+`api/_lib/departmentNotify.ts` is the shared "notify everyone in department X" helper, extracted from
+the one inline copy that lived in `deliveryOrderHandler.ts`. Material Requisition approval notifies
+Stores; Purchase Request approval notifies Purchasing; a new product request notifies Stores; and
+approving/rejecting one notifies the requester.
+
+⚠️ **Matching is by `User.department`, which is free text and does not line up with the `departments`
+table in the live data** — so the helper accepts several spellings per department (Thai full/short and
+the legacy English values). It returns the real recipient count and logs a warning when that is zero.
+Notification failures never fail the approval itself. See TODO.md for the data fix this depends on.

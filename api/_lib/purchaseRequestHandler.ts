@@ -10,6 +10,7 @@ import {
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
 import { loadPendingProjectItemOrThrow, linkProjectItemToSubDocument, markProjectItemFulfilled, unlinkProjectItem, findProjectItemIdByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
+import { notifyDepartments, PURCHASING_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, validateIsoDateOrEmpty } from "./quoteValidation.js";
 import { sanitizeNullableNumber } from "./projectValidation.js";
@@ -274,9 +275,27 @@ const approvalConfig: ApprovalConfig<PurchaseRequestFields & { _id: string }> = 
   canEdit,
   writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
   // อนุมัติแล้วถือว่ารายการใน Project ต้นทางถูกจัดหาเรียบร้อย (เดิมทำตอน finalize)
-  onApproved: async (_ctx, doc) => {
+  onApproved: async (ctx, doc) => {
     const itemId = doc.projectId ? await findProjectItemIdByLink(doc.projectId, "purchaseRequestId", doc._id) : null;
     if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
+
+    // ส่งต่อให้จัดซื้อ (ฝ่ายโครงการขอไว้ 2026-08-27: "ใบขอซื้อ ให้ผู้จัดการอนุมัติแล้วส่งไปที่จัดซื้อ")
+    // best-effort โดยตั้งใจ — การอนุมัติต้องไม่ล้มเพราะแจ้งเตือนส่งไม่ออก แต่ถ้าไม่มีผู้รับเลยต้องเห็นใน log
+    try {
+      const sent = await notifyDepartments(PURCHASING_DEPARTMENT_NAMES, ctx.user.id, {
+        type: "purchase_request_approved",
+        title: "ใบขอซื้ออนุมัติแล้ว — รอจัดซื้อดำเนินการ",
+        description: `${ctx.user.fullName} อนุมัติใบขอซื้อ ${doc._id} (งาน ${doc.jobCode || "-"})`,
+        module: "ใบขอซื้อ",
+        related: { relatedPurchaseRequestId: doc._id },
+      });
+      if (sent === 0) {
+        console.warn("[purchase-requests] approved but nobody in Purchasing received a notification —",
+          "no active user has User.department matching", PURCHASING_DEPARTMENT_NAMES.join("/"));
+      }
+    } catch (err) {
+      console.error("[purchase-requests] failed to notify Purchasing on approval", err);
+    }
   },
   respond: (res, doc) => res.status(200).json({ purchaseRequest: toClient(doc) }),
 };

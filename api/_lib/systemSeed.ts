@@ -90,6 +90,11 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   service_report_completed: { label: "รายงานบริการเสร็จสิ้นแล้ว", module: "บริการ" },
   service_report_customer_approved: { label: "ลูกค้าอนุมัติรายงานบริการแล้ว", module: "บริการ" },
   service_report_customer_rejected: { label: "ลูกค้าไม่อนุมัติรายงานบริการ", module: "บริการ" },
+  material_requisition_approved: { label: "อนุมัติใบเบิกและใบคืนวัสดุ", module: "ใบเบิกและใบคืนวัสดุ" },
+  purchase_request_approved: { label: "อนุมัติใบขอซื้อ", module: "ใบขอซื้อ" },
+  product_request_submitted: { label: "มีคำขอเพิ่มสินค้าใหม่", module: "คำขอเพิ่มสินค้า" },
+  product_request_approved: { label: "คำขอเพิ่มสินค้าได้รับอนุมัติ", module: "คำขอเพิ่มสินค้า" },
+  product_request_rejected: { label: "คำขอเพิ่มสินค้าถูกปฏิเสธ", module: "คำขอเพิ่มสินค้า" },
 };
 
 /** Idempotent. Mirrors the NotificationType union in src/lib/notifications.ts — scaffolding, not read by any live code path yet. */

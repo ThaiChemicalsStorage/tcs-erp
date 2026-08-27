@@ -502,6 +502,25 @@ If/when a hypothetical Next.js migration happened (the "Phase 2" plan, see [ARCH
 
 ## Production Order + shared document approval (added 2026-08-20)
 
+### Product Request (`api/_lib/productRequestHandler.ts`, mounted at `/api/product-requests` via `api/handlers/quotes.ts` — added 2026-08-27)
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/product-requests` | `productRequest:view` | Own requests only, unless the caller holds `:viewAll` **or `:review`** — Stores cannot approve what it cannot see. |
+| `POST /api/product-requests` | `productRequest:create` | Body `{ name, unit, categoryId, specifications, reason, sourcePurchaseRequestId? }`. **`code` is never read from the body** — the requester cannot assign a product code by any route, not merely by a hidden field. Always starts `Pending` with an empty code, whatever the client sends. Notifies Stores. `201`. |
+| `GET /api/product-requests/:id` | `productRequest:view` | |
+| `PATCH /api/product-requests/:id` | `productRequest:create` + owner | `400` once reviewed. Same no-`code` rule as create. |
+| `POST /api/product-requests/:id/approve` | `productRequest:review` | Body `{ code, categoryId }`. **The only route that can write a product code.** Creates a real `products` row (upper-cased code, `409` on duplicate — same check `POST /api/products` uses, `stockQty: 0`) **before** flipping the request to `Approved`, so a duplicate leaves it `Pending` and retryable rather than approved with nothing behind it. Notifies the requester with the assigned code. |
+| `POST /api/product-requests/:id/reject` | `productRequest:review` | Body `{ comment }` — required (`400` if blank). Notifies the requester. |
+| `DELETE /api/product-requests/:id` | `productRequest:create` + (owner **or** `:review`) | Soft delete. |
+
+**Approval hand-off notifications (2026-08-27)**: approving a Material Requisition notifies everyone
+in Stores, and a Purchase Request notifies Purchasing — fired from the existing `onApproved` hook in
+`ApprovalConfig`, via the shared `api/_lib/departmentNotify.ts`. Recipients are matched on the
+free-text `User.department`, which does not line up with the `departments` table in the live data, so
+the helper accepts several spellings per department and logs a warning when nobody matched.
+Notification failures are caught and never fail the approval itself.
+
 ### Production Order (`api/_lib/productionOrderHandler.ts`, mounted at `/api/production-orders` via `api/handlers/quotes.ts`)
 
 Same 12/12 function-slot sharing convention as the other Project-family documents. Full design:

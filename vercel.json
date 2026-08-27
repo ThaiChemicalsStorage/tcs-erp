@@ -46,6 +46,8 @@
     { "source": "/api/purchase-requests/:path*", "destination": "/api/handlers/quotes" },
     { "source": "/api/production-orders", "destination": "/api/handlers/quotes" },
     { "source": "/api/production-orders/:path*", "destination": "/api/handlers/quotes" },
+    { "source": "/api/product-requests", "destination": "/api/handlers/quotes" },
+    { "source": "/api/product-requests/:path*", "destination": "/api/handlers/quotes" },
     { "source": "/api/service-templates", "destination": "/api/handlers/customers" },
     { "source": "/api/service-templates/:path*", "destination": "/api/handlers/customers" },
     { "source": "/api/service-reports", "destination": "/api/handlers/customers" },

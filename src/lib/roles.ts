@@ -83,6 +83,10 @@ export const defaultRoles: Role[] = [
       "ar:cancel",
       "stock:view",
       "stock:adjust",
+      "productRequest:view",
+      "productRequest:viewAll",
+      "productRequest:create",
+      "productRequest:review",
       // ใบสั่งผลิต (ฝ่ายผลิต, 2026-08-20) — ให้ Administrator/Super Admin เท่านั้นโดยปริยาย
       // เหมือนโมดูลโปรเจกต์: ฝ่ายผลิตต้องสร้าง role ของตัวเองผ่านหน้าจัดการบทบาท
       "productionOrder:view",

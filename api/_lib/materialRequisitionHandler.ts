@@ -13,6 +13,7 @@ import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, validateIsoDateOrEmpty, sanitizeLongText } from "./quoteValidation.js";
 import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
+import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
 import { ensureMaterialCatalogSeeded } from "./materialCatalogSeedData.js";
 import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary } from "../../src/lib/materialRequisition.js";
@@ -353,9 +354,27 @@ const approvalConfig: ApprovalConfig<MaterialRequisitionFields & { _id: string }
   canEdit,
   writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
   // อนุมัติแล้วถือว่ารายการใน Project ต้นทางถูกจัดหาเรียบร้อย (เดิมทำตอน finalize)
-  onApproved: async (_ctx, doc) => {
+  onApproved: async (ctx, doc) => {
     const itemId = doc.projectId ? await findProjectItemIdByLink(doc.projectId, "materialRequisitionId", doc._id) : null;
     if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
+
+    // ส่งต่อให้สโตร์ (ฝ่ายโครงการขอไว้ 2026-08-27: "เมื่อผู้จัดการอนุมัติเสร็จจะส่งให้ Stores ของใบเบิก")
+    // best-effort โดยตั้งใจ — การอนุมัติต้องไม่ล้มเพราะแจ้งเตือนส่งไม่ออก แต่ถ้าไม่มีผู้รับเลยต้องเห็นใน log
+    try {
+      const sent = await notifyDepartments(STORE_DEPARTMENT_NAMES, ctx.user.id, {
+        type: "material_requisition_approved",
+        title: "ใบเบิกวัสดุอนุมัติแล้ว — รอสโตร์จ่ายของ",
+        description: `${ctx.user.fullName} อนุมัติใบเบิก ${doc._id} (งาน ${doc.jobCode || "-"})`,
+        module: "ใบเบิกและใบคืนวัสดุ",
+        related: { relatedMaterialRequisitionId: doc._id },
+      });
+      if (sent === 0) {
+        console.warn("[material-requisitions] approved but nobody in Stores received a notification —",
+          "no active user has User.department matching", STORE_DEPARTMENT_NAMES.join("/"));
+      }
+    } catch (err) {
+      console.error("[material-requisitions] failed to notify Stores on approval", err);
+    }
   },
   respond: (res, doc) => res.status(200).json({ materialRequisition: toClient(doc) }),
 };

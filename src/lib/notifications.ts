@@ -23,7 +23,15 @@ export type NotificationType =
   | "service_report_created"
   | "service_report_completed"
   | "service_report_customer_approved"
-  | "service_report_customer_rejected";
+  | "service_report_customer_rejected"
+  // ── ส่งต่อหลังอนุมัติ (2026-08-27) — ก่อนหน้านี้เอกสารกลุ่มโครงการ/ผลิตไม่มีการแจ้งเตือนเลยแม้แต่ตัวเดียว
+  //    ตัวช่วยอนุมัติร่วม (api/_lib/documentApproval.ts) เขียนแค่ audit log เท่านั้น
+  | "material_requisition_approved"
+  | "purchase_request_approved"
+  // ── คำขอเพิ่มสินค้า (2026-08-27) ──
+  | "product_request_submitted"
+  | "product_request_approved"
+  | "product_request_rejected";
 
 export interface Notification {
   id: string;
@@ -37,6 +45,13 @@ export interface Notification {
   relatedScopeNumber?: string;
   relatedDeliveryOrderId?: string;
   relatedServiceReportId?: string;
+  /**
+   * deep-link ของเอกสารกลุ่มโครงการ/ผลิต และคำขอเพิ่มสินค้า (2026-08-27) — ถ้าไม่มีฟิลด์พวกนี้
+   * กระดิ่งจะได้แจ้งเตือนที่กดแล้วไม่ไปไหน ซึ่ง deliveryOrderHandler.ts เตือนไว้ตรง ๆ ว่าเคยเจอมาแล้ว
+   */
+  relatedMaterialRequisitionId?: string;
+  relatedPurchaseRequestId?: string;
+  relatedProductRequestId?: string;
   createdAt: string;
   read: boolean;
 }

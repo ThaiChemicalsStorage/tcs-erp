@@ -530,6 +530,101 @@ describe("Production Order", () => {
  * The important half is the back-compat one: documents created before ownerDepartment existed have
  * no such field at all, and must keep showing up for the Project department rather than vanishing.
  */
+describe("Product requests", () => {
+  /**
+   * หัวใจของฟีเจอร์นี้คือ "ใครตั้งรหัสได้" — ที่ประชุมขอไว้ว่า "ขอเพิ่มสินค้าได้แต่ตั้งรหัสไม่ได้"
+   * การซ่อนช่องบนหน้าจอไม่พอ — คนที่ยิง API ตรงๆ ต้องตั้งรหัสไม่ได้ด้วย เทสต์นี้จึงยิงค่า code เข้าไปตรงๆ
+   */
+  async function anyCategoryId(): Promise<string> {
+    const db = client.db("tcs_erp");
+    const existing = await db.collection("categories").findOne({});
+    if (existing) return existing._id.toString();
+    const created = await db.collection("categories").insertOne({ name: "หมวดทดสอบ", createdAt: "", updatedAt: "" });
+    return created.insertedId.toString();
+  }
+
+  it("ignores any product code the requester tries to send", async () => {
+    const res = await call("POST", "/api/product-requests", {
+      name: "น็อตทดสอบ M12",
+      unit: "ตัว",
+      reason: "งานทดสอบ",
+      // คนขอพยายามตั้งรหัสเอง — ต้องถูกเมินเฉย
+      code: "รหัสที่ฉันตั้งเอง",
+      assignedProductCode: "ก็อันนี้ด้วย",
+      status: "Approved",
+    });
+    expect(res.statusCode, JSON.stringify(res.body)).toBe(201);
+    const pr = (res.body as { productRequest: { assignedProductCode: string; assignedProductId: string; status: string } }).productRequest;
+    expect(pr.assignedProductCode, "รหัสต้องว่างจนกว่าสโตร์จะตั้งให้").toBe("");
+    expect(pr.assignedProductId).toBe("");
+    expect(pr.status, "สถานะต้องเริ่มที่ Pending เสมอ แม้ client ส่ง Approved มา").toBe("Pending");
+  });
+
+  it("creates a real catalog product on approval and reports the code back", async () => {
+    const categoryId = await anyCategoryId();
+    const created = await call("POST", "/api/product-requests", { name: "เรซิ่นทดสอบ", unit: "กก.", reason: "งาน A" });
+    const id = (created.body as { productRequest: { id: string } }).productRequest.id;
+
+    const approved = await call("POST", `/api/product-requests/${id}/approve`, { code: "pr-test-01", categoryId });
+    expect(approved.statusCode, JSON.stringify(approved.body)).toBe(200);
+    const pr = (approved.body as { productRequest: { status: string; assignedProductCode: string; assignedProductId: string } }).productRequest;
+    expect(pr.status).toBe("Approved");
+    // รหัสถูกทำเป็นตัวพิมพ์ใหญ่ เหมือนหน้าเพิ่มสินค้าปกติ
+    expect(pr.assignedProductCode).toBe("PR-TEST-01");
+    expect(pr.assignedProductId).not.toBe("");
+
+    const product = await client.db("tcs_erp").collection("products").findOne({ code: "PR-TEST-01" });
+    expect(product, "ต้องมีสินค้าจริงในคลัง").not.toBeNull();
+    expect(product?.name).toBe("เรซิ่นทดสอบ");
+    expect(product?.stockQty, "สินค้าใหม่เริ่มที่สต็อก 0 เสมอ").toBe(0);
+  });
+
+  it("leaves the request Pending when the code collides, so it can be retried", async () => {
+    const categoryId = await anyCategoryId();
+    await client.db("tcs_erp").collection("products").insertOne({
+      code: "DUP-CODE-01", name: "ของเดิม", categoryId: "", unit: "", defaultPrice: 0,
+      description: "", specifications: [], archived: false, stockQty: 0,
+      createdAt: "", updatedAt: "", createdBy: "", updatedBy: "",
+    });
+    const created = await call("POST", "/api/product-requests", { name: "ชนรหัส", unit: "ตัว", reason: "ทดสอบ" });
+    const id = (created.body as { productRequest: { id: string } }).productRequest.id;
+
+    const clash = await call("POST", `/api/product-requests/${id}/approve`, { code: "DUP-CODE-01", categoryId });
+    expect(clash.statusCode).toBe(409);
+
+    const after = await call("GET", `/api/product-requests/${id}`);
+    expect((after.body as { productRequest: { status: string } }).productRequest.status,
+      "รหัสซ้ำแล้วคำขอต้องยังแก้ได้ ไม่ใช่กลายเป็น Approved ที่ไม่มีสินค้า").toBe("Pending");
+
+    // แก้รหัสแล้วกดใหม่ต้องผ่าน
+    const retry = await call("POST", `/api/product-requests/${id}/approve`, { code: "DUP-CODE-02", categoryId });
+    expect(retry.statusCode, JSON.stringify(retry.body)).toBe(200);
+  });
+
+  it("requires a reason to reject, and records it", async () => {
+    const created = await call("POST", "/api/product-requests", { name: "ของที่จะถูกปฏิเสธ", unit: "ตัว", reason: "-" });
+    const id = (created.body as { productRequest: { id: string } }).productRequest.id;
+
+    const noReason = await call("POST", `/api/product-requests/${id}/reject`, { comment: "   " });
+    expect(noReason.statusCode).toBe(400);
+
+    const rejected = await call("POST", `/api/product-requests/${id}/reject`, { comment: "มีของเทียบเท่าอยู่แล้ว" });
+    expect(rejected.statusCode, JSON.stringify(rejected.body)).toBe(200);
+    const pr = (rejected.body as { productRequest: { status: string; rejectionComment: string } }).productRequest;
+    expect(pr.status).toBe("Rejected");
+    expect(pr.rejectionComment).toBe("มีของเทียบเท่าอยู่แล้ว");
+  });
+
+  it("refuses to review a request twice", async () => {
+    const categoryId = await anyCategoryId();
+    const created = await call("POST", "/api/product-requests", { name: "กดสองรอบ", unit: "ตัว", reason: "-" });
+    const id = (created.body as { productRequest: { id: string } }).productRequest.id;
+    await call("POST", `/api/product-requests/${id}/approve`, { code: "TWICE-01", categoryId });
+    const again = await call("POST", `/api/product-requests/${id}/approve`, { code: "TWICE-02", categoryId });
+    expect(again.statusCode).toBe(400);
+  });
+});
+
 describe("Job Order attachments", () => {
   /**
    * ตรรกะความปลอดภัยของไฟล์แนบทำให้ถูกยาก และตอนนี้ถูกยกมาไว้ที่เดียว (documentAttachments.ts)

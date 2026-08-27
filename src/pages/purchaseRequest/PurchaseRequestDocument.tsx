@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight , PackagePlus } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
@@ -9,6 +9,7 @@ import {
   submitPurchaseRequestApproval, approvePurchaseRequest, rejectPurchaseRequest, withdrawPurchaseRequestApproval,
 } from "../../lib/purchaseRequest";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
+import { createProductRequest } from "../../lib/productRequest";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -47,6 +48,7 @@ export function PurchaseRequestDocument({
   purchaseRequestId,
   currentUserId,
   canEdit,
+  canRequestProductCode,
   canFinalize,
   canPrint,
   canDelete,
@@ -57,6 +59,7 @@ export function PurchaseRequestDocument({
   purchaseRequestId: string;
   currentUserId: string;
   canEdit: boolean;
+  canRequestProductCode: boolean;
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
@@ -79,6 +82,7 @@ export function PurchaseRequestDocument({
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
+  const [requestingCodeFor, setRequestingCodeFor] = useState<string | null>(null);
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) ─────────────────────────────────────────────────────
   // ประกาศเหนือ effect โหลดข้อมูล เพราะทุกครั้งที่ดึงเอกสารจากเซิร์ฟเวอร์ต้องตั้งฐานเทียบใหม่ ไม่งั้นเอกสารจะ
@@ -248,6 +252,31 @@ export function PurchaseRequestDocument({
     } finally {
       setFinalizing(false);
     }
+  };
+
+  /**
+   * ขอรหัสสินค้าให้บรรทัดที่พิมพ์เอง (ฝ่ายโครงการขอไว้ 2026-08-27: "ใบขอซื้อมีปุ่มแจ้งเตือนหาสโตร์เอาไว้
+   * ตั้งรหัสสินค้าที่ไม่มีในคลัง") — สร้างคำขอพร้อมผูกเลขที่ใบขอซื้อไว้ แล้วสโตร์จะได้แจ้งเตือนทันที
+   *
+   * ตั้งใจ**ไม่**แก้บรรทัดในใบขอซื้อให้อัตโนมัติตอนสโตร์ตั้งรหัสเสร็จ — ใบขอซื้ออาจถูกอนุมัติ/ล็อกไปแล้ว
+   * และการไปแก้เนื้อหาเอกสารที่อนุมัติแล้วเงียบ ๆ แย่กว่าการให้คนกดเลือกสินค้าจากคลังเองอีกครั้ง
+   */
+  const requestProductCode = async (line: PurchaseRequestLine) => {
+    if (!doc) return;
+    setRequestingCodeFor(line.id);
+    try {
+      await createProductRequest({
+        name: line.description.trim(),
+        unit: line.unit,
+        categoryId: "",
+        specifications: (line.subDetails ?? []).join(" / "),
+        reason: `ใช้กับใบขอซื้อ ${doc.id}`,
+        sourcePurchaseRequestId: doc.id,
+      });
+      showToast(t("productRequest.created"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("productRequest.error"));
+    } finally { setRequestingCodeFor(null); }
   };
 
   const handlePrint = async () => {
@@ -488,6 +517,18 @@ export function PurchaseRequestDocument({
                               <button onClick={() => updateLine(line.id, { subDetails: [...line.subDetails, ""] })}
                                 className="flex items-center gap-1.5 pl-4 text-xs text-muted-foreground hover:text-foreground transition-colors">
                                 <Plus size={11} /> {t("purchaseRequestDoc.addSubDetail")}
+                              </button>
+                            )}
+                            {/* บรรทัดที่พิมพ์เอง (ไม่มี productId) = สินค้าที่ยังไม่มีในคลัง — ให้ขอรหัสจากสโตร์ได้ตรงนี้
+                                ปุ่มไม่ขึ้นกับสถานะเอกสาร เพราะการขอรหัสไม่ได้แก้เนื้อหาใบขอซื้อ */}
+                            {canRequestProductCode && !line.productId && line.description.trim() !== "" && (
+                              <button
+                                onClick={() => void requestProductCode(line)}
+                                disabled={requestingCodeFor === line.id}
+                                title={t("purchaseRequestDoc.requestCodeHint")}
+                                className="flex items-center gap-1.5 pl-4 text-xs text-[#c9a84c] hover:text-[#b8973f] transition-colors disabled:opacity-60">
+                                {requestingCodeFor === line.id ? <Loader2 size={11} className="animate-spin" /> : <PackagePlus size={11} />}
+                                {t("purchaseRequestDoc.requestCode")}
                               </button>
                             )}
                           </td>

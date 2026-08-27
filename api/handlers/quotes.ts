@@ -11,6 +11,7 @@ import { handleMaterialRequisition } from "../_lib/materialRequisitionHandler.js
 import { handleJobOrder } from "../_lib/jobOrderHandler.js";
 import { handlePurchaseRequest } from "../_lib/purchaseRequestHandler.js";
 import { handleProductionOrder } from "../_lib/productionOrderHandler.js";
+import { handleProductRequest } from "../_lib/productRequestHandler.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
 import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notifications.js";
@@ -923,6 +924,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (pathname === "/api/production-orders" || pathname.startsWith("/api/production-orders/")) {
       return handleProductionOrder(req, res);
+    }
+    if (pathname === "/api/product-requests" || pathname.startsWith("/api/product-requests/")) {
+      return handleProductRequest(req, res);
     }
 
     const parts = getPathSegments(req, "/api/quotes");

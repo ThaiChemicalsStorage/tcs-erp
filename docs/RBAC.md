@@ -908,3 +908,22 @@ check only `{doc}:view` — they do **not** apply `buildSimpleOwnershipClause()`
 consistent across all four modules, so it was left alone rather than changed unilaterally — it is
 logged in [TODO.md](./TODO.md) High Priority for an explicit decision, since tightening it would
 change behaviour for existing users who share document ids between themselves.
+
+
+## Product Request permissions (added 2026-08-27)
+
+4 permissions — `productRequest:view` / `:viewAll` / `:create` / `:review` — in the **"คลังสินค้า"**
+permission group. Granted to Administrator/Super Admin in `defaultRoles`, which affects **fresh
+installs only**.
+
+🔸 **No `RBAC_MIGRATIONS` entry was written**, per the owner's 2026-08-25 decision to tick new
+permissions by hand in Role Management rather than have migrations added unasked. An
+already-provisioned database — including production — therefore needs the boxes ticked manually.
+
+**Granting these correctly is what makes the feature mean anything**: `:create` goes to every
+department that needs to request materials; `:review` goes to **Stores only**, because `:review` is
+the permission that allows assigning a product code. Handing `:review` to everyone would defeat the
+"can request, cannot assign a code" rule the business asked for.
+
+`:review` also implies seeing every request (the list handler treats it like `:viewAll`) — Stores
+cannot approve what it cannot see.

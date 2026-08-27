@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, Briefcase, Package2, Hammer, ShoppingCart, Factory,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, Briefcase, Package2, Hammer, ShoppingCart, Factory,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -63,6 +63,7 @@ const ArDocumentListPage = lazy(() => import("./pages/accounting/ArDocumentListP
 const ArMonthlyReportPage = lazy(() => import("./pages/accounting/ArMonthlyReportPage").then((m) => ({ default: m.ArMonthlyReportPage })));
 const AccountingDashboardPage = lazy(() => import("./pages/accounting/AccountingDashboardPage").then((m) => ({ default: m.AccountingDashboardPage })));
 const StockPage = lazy(() => import("./pages/stock/StockPage").then((m) => ({ default: m.StockPage })));
+const ProductRequestPage = lazy(() => import("./pages/productRequest/ProductRequestPage").then((m) => ({ default: m.ProductRequestPage })));
 
 // แสดงสถานะกำลังโหลดหน้าย่อยระหว่างรอโหลดโค้ด (Suspense fallback) พร้อมข้อความสำหรับ screen reader
 // Loading placeholder shown as the Suspense fallback for every lazy-loaded page, with a screen-reader label
@@ -134,7 +135,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "productionOrder" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "productionOrder" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -192,6 +193,7 @@ const navItems: NavItem[] = [
   { key: "productionPurchase", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "stock", icon: Boxes, labelKey: "nav.stock", permission: "stock:view" },
+  { key: "productRequest", icon: PackagePlus, labelKey: "nav.productRequest", permission: "productRequest:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
   { key: "roles", icon: ShieldCheck, labelKey: "nav.roles", permission: "roles:manage" },
@@ -209,7 +211,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   // แผนกเข้าถึงได้จากหมวดของตัวเองแทนที่จะต้องไปหาใต้ "ขาย"
   { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest", "deliveryOrder"] },
   { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "productionPurchase", "deliveryOrder"] },
-  { labelKey: "nav.group.inventory", keys: ["products", "stock"] },
+  { labelKey: "nav.group.inventory", keys: ["products", "stock", "productRequest"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 
@@ -237,6 +239,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   productionPurchase: "nav.purchaseRequest",
   products: "nav.products",
   stock: "nav.stock",
+  productRequest: "nav.productRequest",
   customers: "nav.customers",
   users: "nav.users",
   roles: "nav.roles",
@@ -319,6 +322,7 @@ export default function App() {
   const [materialRequisitionDeepLinkId, setMaterialRequisitionDeepLinkId] = useState<string | null>(null);
   const [jobOrderDeepLinkId, setJobOrderDeepLinkId] = useState<string | null>(null);
   const [purchaseRequestDeepLinkId, setPurchaseRequestDeepLinkId] = useState<string | null>(null);
+  const [productRequestDeepLinkId, setProductRequestDeepLinkId] = useState<string | null>(null);
   const [productionOrderDeepLinkId, setProductionOrderDeepLinkId] = useState<string | null>(null);
   const [serviceReportDeepLinkId, setServiceReportDeepLinkId] = useState<string | null>(null);
   const [templateCreateForJobType, setTemplateCreateForJobType] = useState<{ jobTypeCode: string; jobTypeName: string; seq: number } | null>(null);
@@ -505,6 +509,10 @@ export default function App() {
   const navigateToPurchaseRequest = (purchaseRequestId: string) => guardedNav(() => {
     setPurchaseRequestDeepLinkId(purchaseRequestId);
     setActiveNav("purchaseRequest");
+  });
+  const navigateToProductRequest = (productRequestId: string) => guardedNav(() => {
+    setProductRequestDeepLinkId(productRequestId);
+    setActiveNav("productRequest");
   });
   const navigateToServiceReport = (serviceReportId: string) => guardedNav(() => {
     setServiceReportDeepLinkId(serviceReportId);
@@ -731,6 +739,8 @@ export default function App() {
   const canCancelAr = hasPermission(currentUser, roles, "ar:cancel");
   const canViewStock = hasPermission(currentUser, roles, "stock:view");
   const canAdjustStock = hasPermission(currentUser, roles, "stock:adjust");
+  const canCreateProductRequest = hasPermission(currentUser, roles, "productRequest:create");
+  const canReviewProductRequest = hasPermission(currentUser, roles, "productRequest:review");
   const isSuperAdmin = userIsSuperAdmin(currentUser, roles);
   // ตรวจสิทธิ์ template โดยยอมรับสิทธิ์ระดับ manage แบบเก่า (superset) ควบคู่กับสิทธิ์ย่อยแบบใหม่
   // Checks a template permission, accepting the legacy superset "manage" permission alongside the granular one
@@ -866,6 +876,11 @@ export default function App() {
               onNavigate={(n) => {
                 if (n.relatedServiceReportId) navigateToServiceReport(n.relatedServiceReportId);
                 else if (n.relatedDeliveryOrderId) navigateToDeliveryOrder(n.relatedDeliveryOrderId);
+                // เอกสารกลุ่มโครงการ/ผลิต (2026-08-27) — ต้องมาก่อน relatedScopeId เพราะแจ้งเตือนพวกนี้
+                // แนบ scope มาด้วยเสมอ (audit ของโมดูลเหล่านี้ผูกกับ scope) ถ้าเช็ค scope ก่อน จะพาไปผิดหน้า
+                else if (n.relatedMaterialRequisitionId) navigateToMaterialRequisition(n.relatedMaterialRequisitionId);
+                else if (n.relatedPurchaseRequestId) navigateToPurchaseRequest(n.relatedPurchaseRequestId);
+                else if (n.relatedProductRequestId) navigateToProductRequest(n.relatedProductRequestId);
                 else if (n.relatedScopeId) navigateToScopeOfWorkStandalone(n.relatedScopeId);
                 else if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId);
               }}
@@ -945,11 +960,11 @@ export default function App() {
               : effectiveNav === "jobOrder"
               ? <JobOrderPage currentUserId={currentUser.id} canEdit={canEditJobOrder} canFinalize={canFinalizeJobOrder} canPrint={canPrintJobOrder} canDelete={canDeleteJobOrder} canCreate={canCreateJobOrder} initialJobOrderId={jobOrderDeepLinkId} onJobOrderIdConsumed={() => setJobOrderDeepLinkId(null)} />
               : effectiveNav === "purchaseRequest"
-              ? <PurchaseRequestPage currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
+              ? <PurchaseRequestPage canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionRequisition"
               ? <MaterialRequisitionPage key="mr-production" ownerDepartment="production" company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} />
               : effectiveNav === "productionPurchase"
-              ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} />
+              ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} />
               : effectiveNav === "productionOrder"
               ? <ProductionOrderPage canEdit={canEditProductionOrder} canApprove={canApproveProductionOrder} canPrint={canPrintProductionOrder} canDelete={canDeleteProductionOrder} canCreate={canCreateProductionOrder} initialProductionOrderId={productionOrderDeepLinkId} onProductionOrderIdConsumed={() => setProductionOrderDeepLinkId(null)} />
               : effectiveNav === "service"
@@ -984,6 +999,8 @@ export default function App() {
               ? <ProductsPage products={products} onProductsChange={updateProducts} categories={categories} onCategoriesChange={updateCategories} currentUserId={currentUser.id} initialEditId={productDeepLinkId} onEditIdConsumed={() => setProductDeepLinkId(null)} autoView={pageAction?.nav === "products" ? pageAction.action : null} autoViewSeq={pageAction?.nav === "products" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "stock"
               ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} />
+              : effectiveNav === "productRequest"
+              ? <ProductRequestPage canCreate={canCreateProductRequest} canReview={canReviewProductRequest} initialProductRequestId={productRequestDeepLinkId} onProductRequestIdConsumed={() => setProductRequestDeepLinkId(null)} />
               : effectiveNav === "users"
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} departments={departments} teams={teams} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
               : effectiveNav === "roles" && isSuperAdmin

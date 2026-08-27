@@ -13,6 +13,7 @@ import { useI18n } from "../../lib/i18n";
 // Standalone Purchase Request management page — not nested under Project, same reasoning as
 // Material Requisition's own standalone page.
 export function PurchaseRequestPage({
+  canRequestProductCode,
   currentUserId,
   canEdit,
   canFinalize,
@@ -29,6 +30,8 @@ export function PurchaseRequestPage({
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
+  /** สิทธิ์ productRequest:create — คุมปุ่ม "ขอรหัสสินค้า" บนบรรทัดที่พิมพ์เอง */
+  canRequestProductCode: boolean;
   /** แผนกเจ้าของ — หน้านี้ถูกเมาต์ 2 ครั้ง (โครงการ/ผลิต) และเห็นคนละชุดข้อมูล (2026-08-20).
    *  ฝั่งผลิตออกเอกสารจากใบสั่งผลิต ส่วนฝั่งโครงการออกจากรายการในโครงการ */
   ownerDepartment?: "project" | "production";
@@ -110,6 +113,7 @@ export function PurchaseRequestPage({
         <PurchaseRequestDocument
           key={selectedId}
           purchaseRequestId={selectedId}
+          canRequestProductCode={canRequestProductCode}
           currentUserId={currentUserId}
           canEdit={canEdit}
           canFinalize={canFinalize}

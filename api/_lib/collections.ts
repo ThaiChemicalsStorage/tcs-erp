@@ -152,6 +152,13 @@ export interface DocumentAttachmentFileFields {
   data: import("mongodb").Binary;
   createdAt: string;
 }
+/** คำขอเพิ่มสินค้า (2026-08-27) — แผนกอื่นขอได้ แต่ตั้งรหัสไม่ได้
+ *  รหัสถูกตั้งโดยสโตร์ตอนอนุมัติเท่านั้น แล้วระบบจึงสร้างแถวใน `products` ให้จริง — ดู api/_lib/productRequestHandler.ts */
+export type ProductRequestFields = Omit<import("../../src/lib/productRequest.js").ProductRequest, "id">;
+export async function productRequestsCollection() {
+  const db = await getDb();
+  return db.collection<ProductRequestFields>("product_requests");
+}
 export async function documentAttachmentFilesCollection() {
   const db = await getDb();
   return db.collection<DocumentAttachmentFileFields>("document_attachment_files");
@@ -820,6 +827,7 @@ export async function ensureIndexes() {
     scopeAttachmentFiles, serviceTemplates, serviceReports, serviceChecklistPhotoFiles,
     arMilestones, arAttachmentFiles, arDocuments, stockMovements,
     projects, materialRequisitions, jobOrders, purchaseRequests, productionOrders,
+    productRequests,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -834,6 +842,7 @@ export async function ensureIndexes() {
     stockMovementsCollection(),
     projectsCollection(), materialRequisitionsCollection(), jobOrdersCollection(), purchaseRequestsCollection(),
     productionOrdersCollection(),
+    productRequestsCollection(),
   ]);
 
   await Promise.all([
@@ -940,6 +949,11 @@ export async function ensureIndexes() {
     productionOrders.createIndex({ scopeOfWorkId: 1 }),
     productionOrders.createIndex({ status: 1 }),
     productionOrders.createIndex({ isDeleted: 1 }),
+
+    // คำขอเพิ่มสินค้า (2026-08-27) — หน้ารายการกรองตามผู้ขอ/สถานะ และเรียงตามวันที่สร้าง
+    productRequests.createIndex({ requestedBy: 1 }),
+    productRequests.createIndex({ status: 1 }),
+    productRequests.createIndex({ isDeleted: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)
