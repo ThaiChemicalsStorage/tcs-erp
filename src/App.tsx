@@ -18,6 +18,8 @@ import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { type Department, fetchDepartments } from "./lib/departments";
 import { type Team, fetchTeams } from "./lib/teams";
 import type { Permission } from "./lib/permissions";
+import type { ArDocumentType } from "./lib/accounting";
+import type { SearchHit } from "./lib/search";
 import { fetchSession, setupSuperAdmin, login, logout } from "./lib/session";
 import { ApiError } from "./lib/apiClient";
 import {
@@ -201,6 +203,14 @@ const navItems: NavItem[] = [
   { key: "auditLog", icon: ScrollText, labelKey: "nav.auditLog", permission: "auditLog:view" },
 ];
 
+/** เอกสารบัญชีสี่ชนิด อยู่คนละหน้ากัน — ใช้ตอนเปิดเอกสารจากผลค้นหา (2026-08-28) */
+const AR_NAV_KEY_BY_DOC_TYPE: Record<ArDocumentType, NavKey> = {
+  AR: "arDeposit",
+  BI: "arBilling",
+  RE: "arReceipt",
+  IV: "arTaxInvoice",
+};
+
 const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.main", keys: ["dashboard"] },
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
@@ -315,7 +325,6 @@ export default function App() {
   const [productDeepLinkId, setProductDeepLinkId] = useState<string | null>(null);
   const [userDeepLinkId, setUserDeepLinkId] = useState<string | null>(null);
   const [quotationTemplateDeepLink, setQuotationTemplateDeepLink] = useState<{ jobTypeCode: string; templateId: string } | null>(null);
-  const [scopeOfWorkDeepLink, setScopeOfWorkDeepLink] = useState<{ quotationId: string; scopeOfWorkId: string } | null>(null);
   const [scopeOfWorkDeepLinkId, setScopeOfWorkDeepLinkId] = useState<string | null>(null);
   const [deliveryOrderDeepLinkId, setDeliveryOrderDeepLinkId] = useState<string | null>(null);
   const [projectDeepLinkId, setProjectDeepLinkId] = useState<string | null>(null);
@@ -324,6 +333,8 @@ export default function App() {
   const [purchaseRequestDeepLinkId, setPurchaseRequestDeepLinkId] = useState<string | null>(null);
   const [productRequestDeepLinkId, setProductRequestDeepLinkId] = useState<string | null>(null);
   const [productionOrderDeepLinkId, setProductionOrderDeepLinkId] = useState<string | null>(null);
+  // เอกสารบัญชีมีสี่ชนิดอยู่คนละหน้า จึงต้องพก docType มาด้วยเพื่อรู้ว่าจะเปิดหน้าไหน (2026-08-28)
+  const [arDocumentDeepLink, setArDocumentDeepLink] = useState<{ docType: ArDocumentType; id: string } | null>(null);
   const [serviceReportDeepLinkId, setServiceReportDeepLinkId] = useState<string | null>(null);
   const [templateCreateForJobType, setTemplateCreateForJobType] = useState<{ jobTypeCode: string; jobTypeName: string; seq: number } | null>(null);
   const templateCreateSeq = useRef(0);
@@ -482,10 +493,10 @@ export default function App() {
     setQuotationTemplateDeepLink({ jobTypeCode, templateId });
     setActiveNav("quotations");
   });
-  const navigateToScopeOfWork = (quotationId: string, scopeOfWorkId: string) => guardedNav(() => {
-    setScopeOfWorkDeepLink({ quotationId, scopeOfWorkId });
-    setActiveNav("quotations");
-  });
+  // 2026-08-28: `navigateToScopeOfWork(quotationId, scopeOfWorkId)` — which opened a Scope of Work
+  // nested inside its quotation — was removed along with QuotationPage's matching props. Global
+  // Search was its only caller and now uses the standalone navigator below, so every search result
+  // in the app follows one rule: it opens the document on that document's own module page.
   const navigateToScopeOfWorkStandalone = (scopeOfWorkId: string) => guardedNav(() => {
     setScopeOfWorkDeepLinkId(scopeOfWorkId);
     setActiveNav("scopeOfWork");
@@ -498,17 +509,19 @@ export default function App() {
     setProjectDeepLinkId(projectId);
     setActiveNav("project");
   });
-  const navigateToMaterialRequisition = (materialRequisitionId: string) => guardedNav(() => {
+  // ฝ่ายโครงการกับฝ่ายผลิตใช้เอกสารชนิดเดียวกันแต่คนละหน้า — ผลค้นหาพก ownerDepartment มาบอกว่าหน้าไหน
+  // (2026-08-28) ไม่ระบุ = ฝ่ายโครงการ ตรงกับเอกสารเก่าที่ไม่มีฟิลด์นี้ และกับผู้เรียกเดิมทุกจุด
+  const navigateToMaterialRequisition = (materialRequisitionId: string, ownerDepartment?: "project" | "production") => guardedNav(() => {
     setMaterialRequisitionDeepLinkId(materialRequisitionId);
-    setActiveNav("materialRequisition");
+    setActiveNav(ownerDepartment === "production" ? "productionRequisition" : "materialRequisition");
   });
   const navigateToJobOrder = (jobOrderId: string) => guardedNav(() => {
     setJobOrderDeepLinkId(jobOrderId);
     setActiveNav("jobOrder");
   });
-  const navigateToPurchaseRequest = (purchaseRequestId: string) => guardedNav(() => {
+  const navigateToPurchaseRequest = (purchaseRequestId: string, ownerDepartment?: "project" | "production") => guardedNav(() => {
     setPurchaseRequestDeepLinkId(purchaseRequestId);
-    setActiveNav("purchaseRequest");
+    setActiveNav(ownerDepartment === "production" ? "productionPurchase" : "purchaseRequest");
   });
   const navigateToProductRequest = (productRequestId: string) => guardedNav(() => {
     setProductRequestDeepLinkId(productRequestId);
@@ -517,6 +530,15 @@ export default function App() {
   const navigateToServiceReport = (serviceReportId: string) => guardedNav(() => {
     setServiceReportDeepLinkId(serviceReportId);
     setActiveNav("service");
+  });
+  // ใบสั่งผลิตมี state กับ prop รออยู่แล้วตั้งแต่ตอนสร้างโมดูล แต่ไม่เคยมีใครเรียก — ต่อให้ครบ 2026-08-28
+  const navigateToProductionOrder = (productionOrderId: string) => guardedNav(() => {
+    setProductionOrderDeepLinkId(productionOrderId);
+    setActiveNav("productionOrder");
+  });
+  const navigateToArDocument = (docType: ArDocumentType, arDocumentId: string) => guardedNav(() => {
+    setArDocumentDeepLink({ docType, id: arDocumentId });
+    setActiveNav(AR_NAV_KEY_BY_DOC_TYPE[docType]);
   });
   const navigateToCreateTemplateForJobType = (jobTypeCode: string, jobTypeName: string) => guardedNav(() => {
     templateCreateSeq.current += 1;
@@ -537,6 +559,37 @@ export default function App() {
     });
   };
   const clearPageAction = () => setPageAction(null);
+
+  /**
+   * เปิดผลค้นหาหนึ่งรายการ — จุดเดียวที่แปลงชนิดของผลลัพธ์เป็นหน้าปลายทาง (2026-08-28)
+   *
+   * Global Search used to take one `onNavigateTo*` prop per result type. With 16 categories that
+   * would have been 18 props on one component, so it now hands back a single discriminated
+   * `SearchHit` and this switch picks the navigator — the same shape `NotificationBell` already
+   * uses. Every branch goes through the navigators above, so the unsaved-changes guard still runs.
+   */
+  const openSearchResult = (hit: SearchHit) => {
+    switch (hit.category) {
+      case "quotations": navigateToQuotation(hit.data.id); break;
+      // ไปหน้า Scope of Work ของตัวเอง ไม่ใช่ไปเปิดในหน้าใบเสนอราคาแบบเดิม — ให้ทุกชนิดเหมือนกันหมด
+      case "scopeOfWorks": navigateToScopeOfWorkStandalone(hit.data.id); break;
+      case "deliveryOrders": navigateToDeliveryOrder(hit.data.id); break;
+      case "serviceReports": navigateToServiceReport(hit.data.id); break;
+      case "projects": navigateToProject(hit.data.id); break;
+      case "jobOrders": navigateToJobOrder(hit.data.id); break;
+      case "productionOrders": navigateToProductionOrder(hit.data.id); break;
+      case "productRequests": navigateToProductRequest(hit.data.id); break;
+      // ใบเบิกของ/ใบขอซื้อ ของฝ่ายผลิตอยู่คนละหน้ากับของฝ่ายโครงการ แม้เป็นเอกสารชนิดเดียวกัน
+      case "materialRequisitions": navigateToMaterialRequisition(hit.data.id, hit.data.ownerDepartment); break;
+      case "purchaseRequests": navigateToPurchaseRequest(hit.data.id, hit.data.ownerDepartment); break;
+      case "arDocuments": if (hit.data.docType) navigateToArDocument(hit.data.docType, hit.data.id); break;
+      case "customers": navigateToCustomer(hit.data.id); break;
+      case "products": navigateToProduct(hit.data.id); break;
+      case "templates": navigateToTemplate(hit.data.jobTypeCode, hit.data.id); break;
+      case "users": navigateToUser(hit.data.id); break;
+      case "pages": navigateToPage(hit.data.navKey, hit.data.action); break;
+    }
+  };
 
   const refreshNotifications = () => { fetchNotifications().then(setNotifications).catch(() => {}); };
   const markNotificationRead = (id: string) => {
@@ -838,15 +891,7 @@ export default function App() {
             <ChevronRight size={13} className="text-muted-foreground flex-shrink-0" />
             <span className="text-[#c9a84c] font-medium truncate" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t(NAV_LABEL_KEYS[effectiveNav])}</span>
           </div>
-          <GlobalSearch
-            onNavigateToQuotation={navigateToQuotation}
-            onNavigateToCustomer={navigateToCustomer}
-            onNavigateToProduct={navigateToProduct}
-            onNavigateToUser={navigateToUser}
-            onNavigateToPage={navigateToPage}
-            onNavigateToTemplate={navigateToTemplate}
-            onNavigateToScopeOfWork={navigateToScopeOfWork}
-          />
+          <GlobalSearch currentUserId={currentUser.id} onOpenResult={openSearchResult} />
           {/* 2026-08-07: opens the web manual page (public/manual.html) — replaced the old PDF per
               direct user request for the new document-style manual. That PDF is no longer served:
               c2f91b5 moved it out of public/ as a data-exposure fix (public/ is served
@@ -962,9 +1007,9 @@ export default function App() {
               : effectiveNav === "purchaseRequest"
               ? <PurchaseRequestPage canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionRequisition"
-              ? <MaterialRequisitionPage key="mr-production" ownerDepartment="production" company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} />
+              ? <MaterialRequisitionPage key="mr-production" ownerDepartment="production" company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
               : effectiveNav === "productionPurchase"
-              ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} />
+              ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionOrder"
               ? <ProductionOrderPage canEdit={canEditProductionOrder} canApprove={canApproveProductionOrder} canPrint={canPrintProductionOrder} canDelete={canDeleteProductionOrder} canCreate={canCreateProductionOrder} initialProductionOrderId={productionOrderDeepLinkId} onProductionOrderIdConsumed={() => setProductionOrderDeepLinkId(null)} />
               : effectiveNav === "service"
@@ -974,13 +1019,13 @@ export default function App() {
               : effectiveNav === "accounting"
               ? <AccountingPage canCreate={canCreateAr} canIssue={canIssueAr} />
               : effectiveNav === "arDeposit"
-              ? <ArDocumentListPage key="AR" docType="AR" canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage key="AR" docType="AR" initialArDocumentId={arDocumentDeepLink?.docType === "AR" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arBilling"
-              ? <ArDocumentListPage key="BI" docType="BI" canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage key="BI" docType="BI" initialArDocumentId={arDocumentDeepLink?.docType === "BI" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arReceipt"
-              ? <ArDocumentListPage key="RE" docType="RE" canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage key="RE" docType="RE" initialArDocumentId={arDocumentDeepLink?.docType === "RE" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arTaxInvoice"
-              ? <ArDocumentListPage key="IV" docType="IV" canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
+              ? <ArDocumentListPage key="IV" docType="IV" initialArDocumentId={arDocumentDeepLink?.docType === "IV" ? arDocumentDeepLink.id : null} onArDocumentIdConsumed={() => setArDocumentDeepLink(null)} canIssue={canIssueAr} canCancel={canCancelAr} canCreate={canCreateAr} canViewStock={canViewStock} canAdjustStock={canAdjustStock} />
               : effectiveNav === "arMonthly"
               ? <ArMonthlyReportPage />
               : effectiveNav === "accountingDashboard"
@@ -988,7 +1033,7 @@ export default function App() {
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} initialScopeOfWorkDeepLink={scopeOfWorkDeepLink} onScopeOfWorkDeepLinkConsumed={() => setScopeOfWorkDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} canViewProject={canViewProject} canCreateProject={canCreateProject} onOpenProject={navigateToProject} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} canViewProject={canViewProject} canCreateProject={canCreateProject} onOpenProject={navigateToProject} />
               : effectiveNav === "quotationTemplates"
               ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} currentUserId={currentUser.id} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "customers"

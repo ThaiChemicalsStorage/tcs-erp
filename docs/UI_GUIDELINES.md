@@ -174,12 +174,79 @@ never closed.
 **Known gap, shared with every other dialog here:** `useDialogA11y` does not restore focus to the
 trigger on close. Tracked in TODO.md; don't fix it in one dialog only.
 
-### Global Search (`src/components/GlobalSearch.tsx`, added 2026-07-14, fixed against an
-independent Codex review the same day)
+### Global Search (`src/components/GlobalSearch.tsx`, added 2026-07-14, **rebuilt as a centred panel
+2026-08-28**)
+
+> **2026-08-28 — read this first; the anchored-dropdown description below is historical.** Search
+> went from 7 categories to 16 (every business document in the system) on a direct owner request,
+> and the `w-[26rem]` dropdown could not hold it — 16 groups in that box is a long scroll for
+> someone who wanted one document. It is now a **centred modal panel**. Everything below about the
+> topbar entry points still applies unchanged; only what opens is different.
+>
+> **The panel.** Backdrop `bg-[#0b1d3a]/40` (the same scrim `ConfirmDialog`/`PromptDialog` use),
+> panel `w-[46rem] max-h-[72vh]` at `sm:`+ with `rounded-xl border-border shadow-xl`, sitting at
+> `sm:pt-[10vh]`. Below `sm` the *same* panel becomes full-screen (`inset-0`, square, no border) —
+> desktop and mobile now share one component tree instead of the two duplicated trees the previous
+> version maintained in parallel. Four horizontal bands, top to bottom: input · filter chips ·
+> scrolling results · keyboard-hint bar (`hidden sm:flex` — the hints are meaningless on touch).
+>
+> **Why a modal here**, given that a modal is usually the lazy answer: a command palette is the
+> standard affordance for search that spans a whole app, the anchored dropdown genuinely could not
+> grow, and one centred panel removed a duplicated mobile implementation. `role="dialog"
+> aria-modal="true"` with a Tab focus trap — the old full-screen mobile search had neither.
+>
+> **The document-number band.** When the query looks like a document number (`Q#` `MR-` `JO-` `PR-`
+> `SC-` `SR-` `AR|BI|RE|IV`), the server returns `exact` and the panel pins that one row above every
+> group under a gold `ตรงเลขที่เอกสาร` heading, **pre-selected** (`activeIndex` starts at 0, not
+> `-1`) so Enter opens it immediately. This is the commonest real task the feature exists for.
+>
+> **Type filter chips.** One chip per category that actually matched, each showing its count, plus
+> `ทั้งหมด`. Uses the Tinted Pill formula for its active state (`bg-[#c9a84c]/10 text-[#866d28]
+> border-[#c9a84c]/20`), so the chips read as the same vocabulary as every status badge. Selecting
+> one re-queries with `?types=` and gets 20 rows instead of the 3-row teaser. The rail **wraps**
+> rather than scrolling horizontally: an overflow rail draws the OS scrollbar as a grey line
+> directly under the chips, which reads as a seam across the panel and hides the remaining chips
+> off-screen.
+>
+> **One row component for all 16 categories.** `describe(hit)` maps any result to a single `RowView`
+> (`primary`/`mono`/`secondary`/`status`/`trailing`); the server's shared `SearchDocumentResult`
+> shape is what makes that possible. Line 1 is the document number (`font-mono`, `<mark>`-highlighted
+> match) with status and date/amount right-aligned; line 2 is **the lineage** — customer plus the job
+> code or quotation the document descends from — so a row is identifiable without opening it. Adding
+> a 17th category is a searcher function and a label, not a new row component.
+>
+> **Status is coloured text, not a pill.** A pill on every row of a 16-group panel is noise, but the
+> colour is still the Tinted Pill Rule's darkened text variant for that status, so the vocabulary
+> matches the rest of the app. `DOC_STATUS` in `GlobalSearch.tsx` maps every status value across
+> every module; established Thai terminology is reused verbatim (and `Draft`/`Final` genuinely
+> render in English in this app — they are not retranslated here).
+>
+> **Empty state teaches.** Before two characters are typed the panel shows `เอกสารที่เปิดล่าสุด`
+> (per-user `localStorage`, **pointers only** — id and number, never customer names or amounts, since
+> this is unencrypted storage on a shared office machine) and a legend of which prefix belongs to
+> which document type. That serves PRODUCT.md's "many users are first-time users of a system like
+> this" mandate better than the old bare "พิมพ์อย่างน้อย 2 ตัวอักษร".
+>
+> **Keyboard.** `↑`/`↓` move the selection across group boundaries as one flat index, `Enter` opens,
+> `Esc` closes, `Ctrl/⌘K` opens from anywhere. `←`/`→` move **between filter chips only when focus is
+> inside the chip rail** (a roving-tabindex toolbar) — they are never intercepted while the caret is
+> in the text field, where they belong to editing. The hint bar names exactly these.
+>
+> **Closing restores focus to the trigger — except when a result was opened.** `close(false)` skips
+> the focus restore in that case. Restoring it reopened the panel instantly: closing on Enter moves
+> focus to a `<button>`, and the browser then fires that button's default activation for the same
+> keypress. Caught only by really pressing Enter in a browser; it is invisible to types, lint, and
+> tests.
+>
+> **Motion** is one authored moment: `.search-panel-in` in `src/styles/index.css`, a 160 ms
+> ease-out settle, with a `prefers-reduced-motion` opt-out. Nothing else in the panel animates.
+
 Replaces the previously decorative, non-functional topbar search input (a bare `<input>` with no
 `value`/`onChange`, plus a placeholder mentioning purchase orders/SKU/vendors — none of which are
 modules this ERP has). Same visual chrome as the old box (`bg-secondary border border-border
-rounded-lg`, `w-72`) at `lg:`+ so it doesn't look "redesigned," just made real.
+rounded-lg`, `w-72`) at `lg:`+ so it doesn't look "redesigned," just made real. **2026-08-28**: that
+box is now a `<button>` that opens the panel rather than an inline `<input>`, keeping identical
+chrome and the `Ctrl K` badge.
 
 **Placeholder**: "ค้นหาใบเสนอราคา ลูกค้า สินค้า หรือเมนู..." (Thai) / "Search quotations, customers,
 products, or pages..." (English) — describes what this ERP actually has, not a generic e-commerce

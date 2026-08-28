@@ -4,7 +4,125 @@
 
 ---
 
-## 2026-08-27g (absolute latest) — Rewrite ครบทุกใบของฝ่ายผลิตและฝ่ายโครงการ (ใบสั่งงาน + ใบขอซื้อ)
+## 2026-08-28 (absolute latest) — ค้นหาได้ทุกเอกสาร: Global Search 7 → 16 categories, rebuilt as a centred panel
+
+Direct owner request: *"ช่วยออกแบบในส่วนของค้นหาให้หน่อย ให้มันสามารถค้นหาได้ทุกเอกสาร กดไปละไปดูในเอกสารได้เลย"*
+— make search cover every document, and make clicking a result open that document.
+
+Global Search had covered the same 7 categories since 2026-07-14 (Quotations, Customers, Products,
+Templates, Scope of Work, Users, menu pages). Every module built after that date was invisible to
+it: **ใบส่งมอบสินค้า, รายงานบริการ, โครงการ, ใบเบิกและใบคืนวัสดุ, ใบสั่งงาน, ใบขอซื้อ, ใบสั่งผลิต,
+คำขอเพิ่มสินค้า, and all four accounting document types** — 11 document types in total. Someone
+holding an `MR-2569-0004` had to work out which module it belonged to and hunt for it on that
+module's list page.
+
+Two decisions were confirmed with the owner via `AskUserQuestion` before building: the UI form (a
+centred panel with type filters, over simply adding more groups to the existing dropdown) and
+aligning search's visibility rules with the list pages.
+
+### Backend
+
+- **New `api/_lib/searchDocuments.ts`** — the 9 document searchers plus the document-number fast
+  path. **New `api/_lib/searchShared.ts`** — regex helpers, limits, and prefix detection, a third
+  file only because `searchHandler.ts` and `searchDocuments.ts` both need them and neither can
+  import the other without a cycle. `searchHandler.ts` keeps master data, the menu catalog, and
+  orchestration.
+- **All 9 document categories share one `SearchDocumentResult` shape** (`id`, `docNumber`, `party`,
+  `lineage`, `status`, `date`, `ownerDepartment?`, `docType?`) rather than 9 bespoke interfaces —
+  every document answers the same four questions, and this is what lets the client render one row
+  component instead of nine.
+- **Ownership scoping mirrors each module's own list route exactly**, so search can never surface a
+  record its list page hides: `buildOwnershipClause()` for Delivery Order (including the
+  `sentToDepartmentIds` recipient merge via `departmentIdForUser()`, now exported from
+  `deliveryOrderHandler.ts`), `buildSimpleOwnershipClause()` for the rest, `viewAll || review` for
+  Product Requests, and no ownership filter for `ar_documents` (matching `handleDocumentsList()`).
+  Every searcher uses `$and: [ownership, { $or: text }]` — never a spread, which would silently drop
+  the ownership half.
+- **Document-number fast path.** `detectDocNumberFamily()` recognises `Q#` / `SR-` / `MR-` / `JO-` /
+  `PR-` / `SC-` / `AR|BI|RE|IV` and runs one **anchored** `^` prefix query against just that
+  family's collection, returned as a new `exact` field. This is the only index-usable query shape
+  the system has — there is no text index anywhere, so every other query is an unanchored scan.
+  Each branch re-applies its own module's ownership rules, so an unauthorised caller gets `null`,
+  indistinguishable from a number that does not exist. Scope of Work is deliberately excluded (its
+  `scopeNumber` is free-text with no enforced format). The letters-only AR/BI/RE/IV prefixes require
+  a digit immediately after, so "REV" stays a word.
+- **`?types=a,b,c`** narrows to specific categories. Per-category cap is now `LIMIT_ALL` (3)
+  unfiltered / `LIMIT_FILTERED` (20) narrowed, replacing the flat 5 — 16 × 5 was ~80 rows.
+- **Per-category resilience**: `runCategory()` catches a failing category and degrades it to `[]`
+  instead of 500-ing the whole request — the same pattern `api/dashboard/index.ts` adopted
+  2026-07-14, and more load-bearing now that one request touches 16 collections.
+- **`SEARCHABLE_PAGES` grew from 11 entries to 33**, covering every `NavKey`; every module built
+  after 2026-07-14 had been unreachable by name.
+
+### Visibility fix (approved by the owner as part of this task)
+
+`searchQuotations()` and the Scope of Work clause had hand-rolled a binary own-vs-`viewAll` filter
+since 2026-07-22/07-23, while both list routes moved to the 4-tier `buildOwnershipClause()` cascade
+on 2026-08-14. The gap was one-directional and user-visible: **a Sales team lead holding
+`quotations:viewTeam` saw a teammate's quotation on the list page but got nothing for it in
+search.** Both now call the shared helper. This grants no access the list routes did not already
+grant — it stops search from hiding records they already show.
+
+### Frontend
+
+- **`GlobalSearch.tsx` rebuilt** as a centred modal panel (`w-[46rem]`, full-screen below `sm`),
+  replacing the `w-[26rem]` anchored dropdown *and* the separately-rendered mobile takeover — one
+  component tree now instead of two duplicated ones. Topbar entry points are unchanged: same box at
+  `lg:`+, same icon button below, same `Ctrl/⌘K`. See UI_GUIDELINES.md "Global Search" for the full
+  spec (bands, chips, row model, keyboard, motion, the `localStorage` recents rule).
+- **One `onOpenResult(hit)` prop replaces 7 `onNavigateTo*` props.** With 16 categories that would
+  have been 18 props; `App.tsx` now switches on a discriminated `SearchHit`, the same shape
+  `NotificationBell` already uses.
+- **`navigateToProductionOrder()` added** — `productionOrderDeepLinkId` state and the matching
+  `ProductionOrderPage` prop had existed since the module was built, but **nothing ever set them**.
+  A genuinely dead wire, now live.
+- **Accounting documents gained deep-linking**, the one document family with no such path at all:
+  new `arDocumentDeepLink` state, `navigateToArDocument(docType, id)` mapping the four doc types to
+  their four sidebar pages, and `initialArDocumentId`/`onArDocumentIdConsumed` on
+  `ArDocumentListPage` following the established render-phase `applied*` pattern.
+- **The production-department variants of ใบเบิกของ/ใบขอซื้อ now receive deep-link props too**
+  (`productionRequisition`/`productionPurchase` rendered them without any), and
+  `navigateToMaterialRequisition`/`navigateToPurchaseRequest` take an optional `ownerDepartment` to
+  pick which of the two pages to open.
+- **Scope of Work results now open the standalone Scope of Work page** instead of the Scope of Work
+  view nested inside the quotation editor, so one rule holds for all 16 result types: a result opens
+  the document on that document's own module page. `navigateToScopeOfWork(quotationId,
+  scopeOfWorkId)` and `QuotationPage`'s `initialScopeOfWorkDeepLink`/`onScopeOfWorkDeepLinkConsumed`
+  props were removed — search was their only caller, so they were unreachable afterwards. Opening a
+  Scope of Work from *inside* a quotation is unaffected (that is the page's own button).
+- `src/lib/search.ts` gained the 16-category contract, `SearchHit`, `SEARCH_CATEGORY_ORDER`, and the
+  recents helpers; ~30 new i18n keys in both `th` and `en`; `topbar.searchPlaceholder` and
+  `search.noResultsHelper` updated (they still named only quotations/customers/products).
+- Quotation amounts in search rows now use the app's shared `fmt()` (2 decimals) — the previous bare
+  `toLocaleString()` produced `฿1,065,435.9`, which reads as broken.
+
+### Tests
+
+**`tests/api/search.test.ts` — 15 tests, search's first coverage of any kind.** Prefix detection and
+its false-positive guards ("REV"/"ARM"/"BIN"/bare "PR" must not hijack the search), per-module
+ownership scoping, the `isDeleted` rule, `ownerDepartment` tagging including the pre-2026-08-20
+no-field normalisation, cancelled-AR visibility, result limits, and that the fast path re-checks
+permissions and stays anchored. Full suite: 352 tests passing.
+
+### Bug found and fixed during browser verification
+
+Pressing Enter on a result opened the document **and immediately reopened the panel**: `close()`
+restored focus to the trigger `<button>`, and the browser then fired that button's default
+activation for the same keypress. Fixed with `close(restoreFocus)` — focus is restored when the
+panel is dismissed without going anywhere (Escape/×/backdrop, where dropping focus on `<body>` would
+strand a keyboard user) but not when a result was opened, since focus belongs on the document. Only
+a real keypress in a real browser surfaces this; types, lint, and tests were all green throughout.
+
+Verified in the browser against the local dev database with real clicks and real keystrokes: the
+pinned-number path into a production-department ใบเบิกของ, a project-department one, an accounting
+ใบเสร็จรับเงิน (all-new plumbing), a 21-result multi-type search across 10 document types, chip
+filtering (3-row teaser → 11 rows), Escape and focus restore, the no-results and pre-typing states,
+and the full-screen layout at 420 px. Role-based category filtering was verified by unit test and
+code review rather than a second browser login — no other account's credentials were available.
+
+---
+
+## 2026-08-27g — Rewrite ครบทุกใบของฝ่ายผลิตและฝ่ายโครงการ (ใบสั่งงาน + ใบขอซื้อ)
 
 ตอนไล่เช็คว่าทำครบทุกข้อที่ประชุมหรือยัง พบว่าข้อ *"เพิ่ม Rewrite"* ของฝ่ายผลิตถูกตีความแคบเกินไป:
 เฟส 2 ทำให้เฉพาะ **ใบสั่งผลิต** และ **ใบเบิก** เพราะข้ออื่นในบันทึกระบุใบเบิกไว้ตรง ๆ แต่ข้อนั้นเขียนลอย ๆ

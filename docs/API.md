@@ -422,14 +422,89 @@ actually worked before this pass (a dead `<input>` with no `value`/`onChange` at
 
 | Method & Path | Auth | Notes |
 |---|---|---|
-| `GET /api/search?q=` | Any authenticated user | `q` required, trimmed, 2–100 characters (`400` outside that range — the frontend already gates on both ends via the input's own `minLength`/native `maxLength`, so a caller normally never hits the 400 path). The 100-character maximum was added 2026-07-14 in a same-day Codex review fix pass — previously unbounded, letting an oversized term force an expensive unanchored `$regex` `$or` scan across several collections in one request (a performance/availability concern, not a regex-injection one — `escapeRegExp()` already prevented that). Returns `{ quotations, customers, products, templates, scopeOfWorks, pages, users }`, each an array capped at 5 results. **Every category is independently RBAC-filtered** via `roleHasPermission()` before its query even runs: `quotations` needs `quotations:view`, `customers` needs `customers:view`, `products` needs `products:view`, `templates` needs `quotations:create` **or** `quotationTemplates:manage` (added 2026-07-14, see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)), `scopeOfWorks` needs `scopeOfWork:view` (added 2026-07-15, Codex review High Priority fix — see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md)), `users` needs `users:manage`, `pages` are filtered per-entry against the same permission each page's sidebar item already requires (`null` permission = always included, e.g. Settings/Profile). A category the caller lacks permission for comes back as an empty array — identical in shape to a genuine zero-result search, so the response itself never signals "you're not allowed to see this" vs. "there's nothing here." `quotations[].amount` is the before-VAT figure via the same shared `computeQuoteAmountBeforeVat()` the Dashboard uses. **2026-07-22**: `quotations` is now further scoped by the same own-quotes-only rule as `GET /api/quotes` — a caller without `quotations:viewAll` only gets their own (plus ownerless legacy) quotations back here too, closing what would otherwise be a way to discover another user's quotation through search that the list page itself hides — see [RBAC.md](./RBAC.md) "Quotation Own-Quotes-Only Viewing". `templates[]` only ever projects `templateCode`/`templateName`/`jobTypeCode`/`jobTypeName`/`description` — `sections`/`internalNotes` never leave the server via this endpoint. `scopeOfWorks[]` matches scope number/quotation number/customer name/Job Type/PO/status and is sourced from non-deleted `scope_of_works` documents only. **2026-07-23**: `scopeOfWorks` is now further scoped by the same own-records-only rule as `GET /api/scope-of-works`'s list-everything mode — a caller without `scopeOfWork:viewAll` only gets their own (plus ownerless legacy) Scope of Work records back here too — see [RBAC.md](./RBAC.md) "Scope of Work Own-Records-Only Viewing". See [DATABASE.md](./DATABASE.md) "Global Search" for the exact fields matched per category and the index/scaling notes. |
+| `GET /api/search?q=` | Any authenticated user | `q` required, trimmed, 2–100 characters (`400` outside that range — the frontend already gates on both ends via the input's own `minLength`/native `maxLength`, so a caller normally never hits the 400 path). The 100-character maximum was added 2026-07-14 in a same-day Codex review fix pass — previously unbounded, letting an oversized term force an expensive unanchored `$regex` `$or` scan across several collections in one request (a performance/availability concern, not a regex-injection one — `escapeRegExp()` already prevented that). Returns 16 result arrays plus `exact` (see the 2026-08-28 note below, which supersedes the original 7-category/5-result shape described here). **2026-08-28**: also accepts `?types=a,b,c` to narrow to specific categories. **Every category is independently RBAC-filtered** via `roleHasPermission()` before its query even runs: `quotations` needs `quotations:view`, `customers` needs `customers:view`, `products` needs `products:view`, `templates` needs `quotations:create` **or** `quotationTemplates:manage` (added 2026-07-14, see [MODULES/QuotationTemplates.md](./MODULES/QuotationTemplates.md)), `scopeOfWorks` needs `scopeOfWork:view` (added 2026-07-15, Codex review High Priority fix — see [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md)), `users` needs `users:manage`, `pages` are filtered per-entry against the same permission each page's sidebar item already requires (`null` permission = always included, e.g. Settings/Profile). A category the caller lacks permission for comes back as an empty array — identical in shape to a genuine zero-result search, so the response itself never signals "you're not allowed to see this" vs. "there's nothing here." `quotations[].amount` is the before-VAT figure via the same shared `computeQuoteAmountBeforeVat()` the Dashboard uses. **2026-07-22**: `quotations` is now further scoped by the same own-quotes-only rule as `GET /api/quotes` — a caller without `quotations:viewAll` only gets their own (plus ownerless legacy) quotations back here too, closing what would otherwise be a way to discover another user's quotation through search that the list page itself hides — see [RBAC.md](./RBAC.md) "Quotation Own-Quotes-Only Viewing". `templates[]` only ever projects `templateCode`/`templateName`/`jobTypeCode`/`jobTypeName`/`description` — `sections`/`internalNotes` never leave the server via this endpoint. `scopeOfWorks[]` matches scope number/quotation number/customer name/Job Type/PO/status and is sourced from non-deleted `scope_of_works` documents only. **2026-07-23**: `scopeOfWorks` is now further scoped by the same own-records-only rule as `GET /api/scope-of-works`'s list-everything mode — a caller without `scopeOfWork:viewAll` only gets their own (plus ownerless legacy) Scope of Work records back here too — see [RBAC.md](./RBAC.md) "Scope of Work Own-Records-Only Viewing". See [DATABASE.md](./DATABASE.md) "Global Search" for the exact fields matched per category and the index/scaling notes. |
 
-`GlobalSearch.tsx` self-fetches via `src/lib/search.ts`'s `fetchGlobalSearch(query, signal)`,
+`GlobalSearch.tsx` self-fetches via `src/lib/search.ts`'s `fetchGlobalSearch(query, signal, types?)`,
 debounced 300ms client-side and cancelled via `AbortSignal` when a newer query supersedes an
 in-flight one — not part of the universal boot-time fetch, since it only runs while the search box
 is actively in use. `signal` support means a rapidly-typing user never races an older response
 against a newer one; the aborted request's `.catch()` recognizes `signal.aborted` and treats it as
 "superseded," not a real error.
+
+### 2026-08-28 — "ค้นหาได้ทุกเอกสาร": 7 categories → 16, plus a document-number fast path
+
+Per a direct owner request ("ให้มันสามารถค้นหาได้ทุกเอกสาร กดไปละไปดูในเอกสารได้เลย"), search now
+covers every business document in the system, not just the 7 categories it had carried since
+2026-07-14. The handler was split: `api/_lib/searchHandler.ts` keeps master data, the static menu
+catalog, and orchestration; the 9 new document categories live in **`api/_lib/searchDocuments.ts`**,
+with the shared regex helpers/limits in **`api/_lib/searchShared.ts`** (a third file only because the
+other two both need them and neither can import the other without a cycle).
+
+**Response shape** is now `{ quotations, scopeOfWorks, deliveryOrders, serviceReports, projects,
+materialRequisitions, jobOrders, purchaseRequests, productionOrders, arDocuments, productRequests,
+customers, products, templates, users, pages, exact }`. No existing key changed meaning; 9 array keys
+and `exact` were added. Categories are ordered as the UI renders them — documents first, roughly
+following how work moves through the company, then master data, then menu shortcuts.
+
+**All 9 document categories share one result shape**, `SearchDocumentResult`
+(`{ id, docNumber, party, lineage, status, date, ownerDepartment?, docType? }`), rather than nine
+bespoke interfaces — every document answers the same four questions, which is what lets the client
+render one row component for all of them. `lineage` is the Scope of Work / job code / quotation the
+document descends from; surfacing it is why a search result is identifiable without opening it.
+
+**Per-category permission gates** (same "no permission ⇒ empty array, indistinguishable from no
+results" rule as before): `deliveryOrder:view`, `service:view`, `project:view`,
+`materialRequisition:view`, `jobOrder:view`, `purchaseRequest:view`, `productionOrder:view`,
+`ar:view`, `productRequest:view`. Ownership scoping in each searcher mirrors that module's own list
+route exactly — `buildOwnershipClause()` for Delivery Order (including the `sentToDepartmentIds`
+recipient merge and `departmentIdForUser()`, now exported from `deliveryOrderHandler.ts`),
+`buildSimpleOwnershipClause()` for the rest, `viewAll || review` for Product Requests, and **no**
+ownership filter for `ar_documents` (matching `handleDocumentsList()`).
+
+**Two deliberate departures from the list routes**, both documented in code:
+- **ใบเบิกของ/ใบขอซื้อ return both departments' documents, tagged with `ownerDepartment`.** The list
+  pages split project vs production, but that split is navigational, not a permission boundary —
+  both sidebar entries are gated by the same permission and `ROLE_HIDDEN_NAV_KEYS` hides neither, so
+  anyone who can search them can already open both pages. The tag tells the client which of the two
+  pages to open.
+- **`ar_documents` has no `isDeleted` filter**, because an issued accounting document is never
+  soft-deleted — cancellation is `status: "cancelled"`. Cancelled documents stay findable, which is
+  what an accountant chasing a number needs.
+
+**`?types=a,b,c`** narrows to specific categories. Unrecognised or absent ⇒ every category. The
+per-category cap is `LIMIT_ALL` (3) when unfiltered and `LIMIT_FILTERED` (20) when narrowed — the old
+flat 5 became unreadable at 16 categories (~80 rows), so the unfiltered response is a teaser and the
+UI's filter chips are the explicit way to ask for a browsable page of one kind.
+
+**`exact: ExactMatch | null`** is the document-number fast path. `detectDocNumberFamily()`
+(`searchShared.ts`) recognises `Q#` / `SR-` / `MR-` / `JO-` / `PR-` / `SC-` / `AR|BI|RE|IV`; a match
+runs one **anchored** `^` prefix query against just that family's collection — the only index-usable
+query shape this system has, since there is no text index anywhere (see DATABASE.md). Every branch
+re-applies its own module's ownership scoping, so a caller who may not see the document gets `null`,
+indistinguishable from a number that does not exist. Scope of Work is deliberately absent: its
+`scopeNumber` is free-text with no enforced format, so there is no prefix to recognise. The
+letters-only AR/BI/RE/IV prefixes additionally require a digit immediately after, so "REV" stays a
+word and only "RE6908…" is a receipt.
+
+**Resilience**: every category now runs inside `runCategory()`, which catches and degrades that one
+group to `[]` rather than failing the whole request — the same per-section pattern
+`api/dashboard/index.ts` adopted 2026-07-14, and more load-bearing now that one request touches 16
+collections. The fast path is wrapped the same way.
+
+**Also fixed the same day — search's visibility now matches the list pages.** `searchQuotations()`
+and the Scope of Work clause had hand-rolled a binary own-vs-`viewAll` filter since 2026-07-22/07-23,
+while both list routes moved to the 4-tier `buildOwnershipClause()` cascade on 2026-08-14. The gap
+was one-directional and user-visible: a Sales team lead holding `quotations:viewTeam` saw a
+teammate's quotation on the list page but got nothing for it in search. Both now call the shared
+helper. **This grants no access the list routes did not already grant** — it stops search from hiding
+records they already show.
+
+`SEARCHABLE_PAGES` also grew from 11 entries to 33, covering every `NavKey` in `App.tsx`; every
+module built after 2026-07-14 had been unreachable by name.
+
+Tests: `tests/api/search.test.ts` (added 2026-08-28 — search had none), covering prefix detection and
+its false-positive guards, per-module ownership scoping, the `isDeleted` rule, `ownerDepartment`
+tagging, cancelled-AR visibility, and that the fast path re-checks permissions and stays anchored.
 
 ## Quotations (`api/handlers/quotes.ts`, mounted at `/api/quotes`)
 

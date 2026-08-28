@@ -14,6 +14,19 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-28] Global Search covers every document, and a result opens it.** Direct owner
+  request. Search had covered the same 7 categories since 2026-07-14; the 11 document types built
+  after that date (ใบส่งมอบสินค้า, รายงานบริการ, โครงการ, ใบเบิกและใบคืนวัสดุ, ใบสั่งงาน, ใบขอซื้อ,
+  ใบสั่งผลิต, คำขอเพิ่มสินค้า, and all 4 accounting types) were invisible to it. Now 16 categories,
+  each permission-gated and ownership-scoped to match its own list route, with a document-number
+  fast path (`Q#`/`MR-`/`JO-`/`PR-`/`SC-`/`SR-`/AR-BI-RE-IV) that pins and pre-selects the match so
+  Enter opens it. UI rebuilt as a centred panel with type-filter chips, replacing a `w-[26rem]`
+  dropdown that could not have held 16 groups. Two pieces of missing plumbing filled in along the
+  way: `navigateToProductionOrder()` (state and prop had existed since the module was built but
+  nothing ever set them) and accounting-document deep-linking (none existed). Also aligned search's
+  visibility with the list pages' 4-tier cascade — a team lead could see a teammate's quotation on
+  the list page but not find it in search. First test coverage for search: 15 tests. See
+  CHANGELOG.md 2026-08-28.
 - ✅ **[2026-08-26c] Service checklist photos can come from the phone's gallery, not just the camera.**
   `capture="environment"` on the hidden file input told mobile browsers to launch the camera
   *instead of* the picker, so a field engineer could never attach a photo already on the phone.

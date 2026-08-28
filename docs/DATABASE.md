@@ -844,10 +844,48 @@ Read-only, no collection of its own — see [MODULES/Dashboard.md](./MODULES/Das
 - `categoryBreakdown`: real `products` grouped by `categoryId` (archived excluded) — intentionally **not** "revenue by category," since `QuoteLine` has no `categoryId` reference back to `Product` (see Relationships below) and there's no reliable way to compute that without unreliable string-matching.
 - `scopeOfWork` (added 2026-07-23, per a direct user request to show the Scope of Work document count on the Dashboard): `{ total, draft, final }`, three `scope_of_works.countDocuments()` calls (`{ isDeleted: false }`, plus `status: "Draft"` / `"Final"` respectively) — company-wide, all-time, **not** scoped by the date-range/salesperson/department filter, same reasoning as `totalCustomers`/`totalLeads`/`categoryBreakdown` above (a Scope of Work document has no `issueDate`/`salesperson` field of its own to filter by). `null` in the response unless the caller has `scopeOfWork:view`, same `roleHasPermission()` gate pattern as `approvalDashboard`.
 
-### Global Search (`GET /api/search?q=`, added 2026-07-14)
+### Global Search (`GET /api/search?q=`, added 2026-07-14, expanded to every document 2026-08-28)
 
 Read-only, no collection of its own — see [API.md](./API.md) "Global Search" for the full field
-list per category. Key data-model notes:
+list per category.
+
+**2026-08-28 — the 9 document collections search now also reads** (`api/_lib/searchDocuments.ts`;
+see API.md's "ค้นหาได้ทุกเอกสาร" section for permissions, response shape, and the `?types=` /
+`exact` additions):
+
+| Category | Collection | Number shown | Fields matched | Soft-delete |
+|---|---|---|---|---|
+| `deliveryOrders` | `delivery_orders` | `scopeNumber` (the document has no number of its own — one per Scope of Work) | `scopeNumber`, `quotationId`, `customerCompanyName`, `installments.documentNumber` | `isDeleted: false` |
+| `serviceReports` | `service_reports` | `_id` (`SR-{พ.ศ.}-{seq}`) | `_id`, `customerSnapshot.companyName`, `serviceLocation`, `projectOrJobCode`, `serviceSystemName`, `serviceType` | `isDeleted: false` |
+| `projects` | `projects` | `scopeNumber` (grouping record, no number of its own) | `scopeNumber`, `quotationId`, `customerCompanyName`, `items.name` | `isDeleted: false` |
+| `materialRequisitions` | `material_requisitions` | `_id` (`MR-{พ.ศ.}-{seq}`) | `_id`, `customerName`, `jobCode`, `productName`, `responsibleEmployee`, `jobOrderCode`, `lines.productCode`, `lines.productName` | `isDeleted: false` |
+| `jobOrders` | `job_orders` | `_id` (`JO-{พ.ศ.}-{seq}`) | `_id`, `customerName`, `jobCode`, `fromSite`, `toSite`, `outOfScope`, `lines.description` | `isDeleted: false` |
+| `purchaseRequests` | `purchase_requests` | `_id` (`PR-{พ.ศ.}-{seq}`) | `_id`, `vendorName`, `jobCode`, `deliveryLocation`, `shippingMethod`, `lines.productCode`, `lines.description` | `isDeleted: false` |
+| `productionOrders` | `production_orders` | `documentNumber`, falling back to `_id` | `documentNumber`, `_id`, `customerCompanyName`, `jobCode`, `productName`, `supervisorName`, `lines.description` | `isDeleted: false` |
+| `arDocuments` | `ar_documents` | `docNo` (`{AR\|BI\|RE\|IV}{YY}{MM}{SEQ}`) | `docNo`, `reference`, `customerSnapshot.companyName`/`.taxId`/`.contactName`, `lines.description` | **none — see below** |
+| `productRequests` | `product_requests` | `assignedProductCode` (often blank until approved; the client falls back to the product name) | `name`, `specifications`, `reason`, `requestedByName`, `assignedProductCode` | `isDeleted: false` |
+
+Data-model notes specific to these:
+- **`ar_documents` is queried without any soft-delete filter, deliberately.** An issued accounting
+  document is never soft-deleted — cancellation is the `status: "cancelled"` transition (see the
+  `ArDocumentFields` comment in `api/_lib/collections.ts`) — so cancelled documents stay findable,
+  which is what someone chasing a document number actually needs.
+- **`ownerDepartment` is returned, not filtered on**, for `material_requisitions`/
+  `purchase_requests`. The list pages split project vs production, but both sidebar entries share one
+  permission, so search returns both and tags each row so the client opens the right page. Documents
+  written before 2026-08-20 have no `ownerDepartment` field at all and are normalised to `"project"`
+  on read, exactly as the list handlers do — there was no migration.
+- **`production_orders.documentNumber` may be absent** on documents created before 2026-08-27;
+  both it and `_id` are matched, and display falls back to `_id`, matching `toClient()` in
+  `api/_lib/productionOrderHandler.ts`.
+- **Sort order** is `updatedAt: -1` for all of them except `ar_documents`, which sorts by `docDate`
+  (its own issue date, the meaningful ordering for an issued document).
+- **The document-number fast path is the only place an anchored regex is used.** `^`-anchored
+  queries are the sole index-usable shape available here (see the index note at the end of this
+  section), which is why a query recognised as a document number runs one targeted prefix query
+  against a single collection instead of the broad unanchored scan.
+
+Key data-model notes for the original 7 categories:
 - **`templates`** (added 2026-07-14, same day as the `quotation_templates` collection itself):
   matches `templateCode`/`templateName`/`jobTypeCode`/`jobTypeName`/`description` against active,
   non-deleted `quotation_templates` documents only. Only those 5 fields are projected — `sections`/

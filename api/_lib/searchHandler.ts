@@ -8,7 +8,17 @@ import {
 import { roleHasPermission, isNavHiddenForRole } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
 import { computeQuoteAmountBeforeVat } from "./quoteAmounts.js";
-import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
+import { buildOwnershipClause } from "./visibility.js";
+import {
+  LIMIT_ALL, LIMIT_FILTERED, MIN_QUERY_LENGTH, MAX_QUERY_LENGTH,
+  escapeRegExp, containsRegex, startsWithRegex, detectDocNumberFamily,
+} from "./searchShared.js";
+import {
+  searchDeliveryOrders, searchServiceReports, searchProjects, searchMaterialRequisitions,
+  searchJobOrders, searchPurchaseRequests, searchProductionOrders, searchProductRequests,
+  searchArDocuments, searchByDocNumber, scopeOfWorkOwnership,
+  type SearchDocumentResult,
+} from "./searchDocuments.js";
 
 /**
  * Global Search (added 2026-07-14) — powers the top navigation search box. Entry point:
@@ -24,21 +34,16 @@ import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
  * actual data never leaves the server for an unauthorized caller in the first place.
  */
 
-const RESULT_LIMIT = 5;
-const MIN_QUERY_LENGTH = 2;
 /**
- * 2026-07-14, Codex review High Priority fix: this endpoint builds a case-insensitive unanchored
- * `$regex` `$or` across several fields on 4 collections per request — cheap at a couple dozen
- * characters, but with no upper bound an authenticated caller could submit an arbitrarily long
- * term and force needlessly expensive scans (a real performance/availability concern, not a
- * regex-injection one — `escapeRegExp()` already prevents that). 100 covers every legitimate
- * search term this ERP has (the longest realistic input is a full company name/address, well
- * under this), while still being short enough to bound the cost of a single request. Must stay in
- * sync with the client-side `maxLength` on the search `<input>` in `GlobalSearch.tsx` — that's
- * defense-in-depth (a native browser constraint a modified client could bypass), this is the real
- * enforcement.
+ * Limits, the query-length bounds, and the regex helpers now live in `searchShared.ts` so
+ * `searchDocuments.ts` can use them too without an import cycle. The 2026-07-14 Codex review's
+ * `MAX_QUERY_LENGTH` rationale is recorded there.
+ *
+ * **2026-08-28**: the flat 5-per-category cap became `LIMIT_ALL` (3) / `LIMIT_FILTERED` (20).
+ * Search went from 7 categories to 16, and 16 × 5 is ~80 rows of scrolling for someone who just
+ * wanted one document — 3 keeps the unfiltered panel scannable, and the type-filter chips are the
+ * explicit way to ask for more of one kind.
  */
-const MAX_QUERY_LENGTH = 100;
 
 /**
  * `ensureIndexes()` in api/_lib/collections.ts only ever runs from the one-time Setup Wizard
@@ -88,15 +93,6 @@ async function ensureSearchIndexes(
     scopeOfWorks.createIndex({ customerPoNumber: 1 }),
   ]);
   searchIndexesEnsured = true;
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Case-insensitive, unanchored (substring) match — safe against regex injection via `escapeRegExp`. */
-function containsRegex(query: string): { $regex: string; $options: string } {
-  return { $regex: escapeRegExp(query), $options: "i" };
 }
 
 export interface SearchQuotationResult {
@@ -175,15 +171,59 @@ export interface SearchScopeOfWorkResult {
   status: string;
 }
 
+/**
+ * Every category, in the order the UI renders them: the document chain first, roughly in the order
+ * work moves through the company (quotation → scope → delivery, then the project/production and
+ * accounting branches), then master data, then menu shortcuts last. A person searching an ERP is
+ * almost always after a document, so documents get the top of the panel.
+ *
+ * `SearchDocumentResult` is one shared shape across all 9 document categories — see
+ * `searchDocuments.ts` for why.
+ */
 export interface SearchResults {
   quotations: SearchQuotationResult[];
+  scopeOfWorks: SearchScopeOfWorkResult[];
+  deliveryOrders: SearchDocumentResult[];
+  serviceReports: SearchDocumentResult[];
+  projects: SearchDocumentResult[];
+  materialRequisitions: SearchDocumentResult[];
+  jobOrders: SearchDocumentResult[];
+  purchaseRequests: SearchDocumentResult[];
+  productionOrders: SearchDocumentResult[];
+  arDocuments: SearchDocumentResult[];
+  productRequests: SearchDocumentResult[];
   customers: SearchCustomerResult[];
   products: SearchProductResult[];
   templates: SearchTemplateResult[];
-  scopeOfWorks: SearchScopeOfWorkResult[];
-  pages: SearchPageResult[];
   users: SearchUserResult[];
+  pages: SearchPageResult[];
+  /**
+   * The document-number fast path's single hit, pinned above every group and pre-selected by the
+   * client so Enter opens it immediately. `null` whenever the query does not look like a document
+   * number, or the number does not resolve to something this caller may see.
+   */
+  exact: ExactMatch | null;
 }
+
+/** A pinned document-number hit. `category` names which `SearchResults` group it belongs to. */
+export interface ExactMatch {
+  category: SearchCategory;
+  quotation?: SearchQuotationResult;
+  document?: SearchDocumentResult;
+}
+
+/** Every key of `SearchResults` that carries results — the vocabulary `?types=` accepts. */
+export type SearchCategory =
+  | "quotations" | "scopeOfWorks" | "deliveryOrders" | "serviceReports" | "projects"
+  | "materialRequisitions" | "jobOrders" | "purchaseRequests" | "productionOrders"
+  | "arDocuments" | "productRequests" | "customers" | "products" | "templates"
+  | "users" | "pages";
+
+const ALL_CATEGORIES: SearchCategory[] = [
+  "quotations", "scopeOfWorks", "deliveryOrders", "serviceReports", "projects",
+  "materialRequisitions", "jobOrders", "purchaseRequests", "productionOrders",
+  "arDocuments", "productRequests", "customers", "products", "templates", "users", "pages",
+];
 
 /**
  * Static — not MongoDB-backed, this ERP's page/menu list is small, fixed, and part of the
@@ -218,17 +258,46 @@ const SEARCHABLE_PAGES: {
   { id: "roles", titleTh: "บทบาทและสิทธิ์", titleEn: "Roles and Permissions", navKey: "roles", permission: "roles:manage", aliases: ["บทบาทและสิทธิ์", "roles and permissions", "roles", "บทบาท", "สิทธิ์"] },
   { id: "auditLog", titleTh: "บันทึกการใช้งาน", titleEn: "Audit Logs", navKey: "auditLog", permission: "auditLog:view", aliases: ["บันทึกการใช้งาน", "audit logs", "audit log", "ประวัติการใช้งาน"] },
   { id: "settings", titleTh: "โปรไฟล์", titleEn: "Profile", navKey: "settings", permission: null, aliases: ["โปรไฟล์", "profile", "settings", "การตั้งค่า"] },
+
+  // 2026-08-28: this list had covered 11 of App.tsx's 30 nav keys since 2026-07-14 — every module
+  // built after that date was unreachable by name. The rest, in sidebar order. Each reuses its own
+  // nav item's permission from App.tsx's `navItems`, never an invented stricter one.
+  { id: "quotationTemplates", titleTh: "Template ใบเสนอราคา", titleEn: "Quotation Templates", navKey: "quotationTemplates", permission: "quotationTemplates:view", aliases: ["template ใบเสนอราคา", "quotation templates", "template", "เทมเพลต"] },
+  { id: "scopeOfWork", titleTh: "Scope of Work", titleEn: "Scope of Work", navKey: "scopeOfWork", permission: "scopeOfWork:view", aliases: ["scope of work", "scope", "สโคป", "ขอบเขตงาน"] },
+  { id: "deliveryOrder", titleTh: "ใบส่งมอบสินค้า", titleEn: "Delivery Orders", navKey: "deliveryOrder", permission: "deliveryOrder:view", aliases: ["ใบส่งมอบสินค้า", "ใบส่งมอบ", "ใบส่งมอบงาน", "delivery order", "delivery"] },
+  { id: "service", titleTh: "รายงานบริการ", titleEn: "Service Reports", navKey: "service", permission: "service:view", aliases: ["รายงานบริการ", "บริการ", "service report", "service"] },
+  { id: "serviceTemplates", titleTh: "Template รายงานบริการ", titleEn: "Service Templates", navKey: "serviceTemplates", permission: "serviceTemplates:view", aliases: ["template รายงานบริการ", "service templates", "เทมเพลตบริการ"] },
+  { id: "accountingDashboard", titleTh: "แดชบอร์ดบัญชี", titleEn: "Accounting Dashboard", navKey: "accountingDashboard", permission: "ar:view", aliases: ["แดชบอร์ดบัญชี", "accounting dashboard", "ภาพรวมบัญชี"] },
+  { id: "accounting", titleTh: "วางบิลตามงาน", titleEn: "Billing by Job", navKey: "accounting", permission: "ar:view", aliases: ["วางบิลตามงาน", "วางบิล", "billing", "บัญชี", "accounting"] },
+  { id: "arDeposit", titleTh: "ใบรับเงินมัดจำ/ใบกำกับภาษี", titleEn: "Deposit Receipt / Tax Invoice", navKey: "arDeposit", permission: "ar:view", aliases: ["ใบรับเงินมัดจำ", "มัดจำ", "deposit", "ar"] },
+  { id: "arBilling", titleTh: "ใบแจ้งหนี้/ใบวางบิล", titleEn: "Invoice / Billing Note", navKey: "arBilling", permission: "ar:view", aliases: ["ใบแจ้งหนี้", "ใบวางบิล", "invoice", "billing note", "bi"] },
+  { id: "arReceipt", titleTh: "ใบเสร็จรับเงิน", titleEn: "Receipts", navKey: "arReceipt", permission: "ar:view", aliases: ["ใบเสร็จรับเงิน", "ใบเสร็จ", "receipt", "re"] },
+  { id: "arTaxInvoice", titleTh: "ใบกำกับภาษี/ใบส่งสินค้า", titleEn: "Tax Invoice / Delivery Note", navKey: "arTaxInvoice", permission: "ar:view", aliases: ["ใบกำกับภาษี", "ใบส่งสินค้า", "tax invoice", "iv"] },
+  { id: "arMonthly", titleTh: "สรุปเอกสารประจำเดือน", titleEn: "Monthly Document Summary", navKey: "arMonthly", permission: "ar:view", aliases: ["สรุปเอกสารประจำเดือน", "สรุปประจำเดือน", "monthly summary", "monthly"] },
+  { id: "project", titleTh: "โครงการ", titleEn: "Projects", navKey: "project", permission: "project:view", aliases: ["โครงการ", "project", "projects"] },
+  { id: "materialRequisition", titleTh: "ใบเบิกและคืนวัสดุ", titleEn: "Material Requisitions", navKey: "materialRequisition", permission: "materialRequisition:view", aliases: ["ใบเบิกและคืนวัสดุ", "ใบเบิกของ", "ใบเบิก", "ใบคืนวัสดุ", "material requisition"] },
+  { id: "jobOrder", titleTh: "ใบสั่งงาน", titleEn: "Job Orders", navKey: "jobOrder", permission: "jobOrder:view", aliases: ["ใบสั่งงาน", "job order"] },
+  { id: "purchaseRequest", titleTh: "ใบขอซื้อ", titleEn: "Purchase Requests", navKey: "purchaseRequest", permission: "purchaseRequest:view", aliases: ["ใบขอซื้อ", "ขอซื้อ", "purchase request", "pr"] },
+  { id: "productionOrder", titleTh: "ใบสั่งผลิต", titleEn: "Production Orders", navKey: "productionOrder", permission: "productionOrder:view", aliases: ["ใบสั่งผลิต", "ใบส่งผลิต", "production order", "ผลิต"] },
+  { id: "productionRequisition", titleTh: "ใบเบิกและคืนวัสดุ (ฝ่ายผลิต)", titleEn: "Material Requisitions (Production)", navKey: "productionRequisition", permission: "materialRequisition:view", aliases: ["ใบเบิกและคืนวัสดุ ฝ่ายผลิต", "ใบเบิกของ ฝ่ายผลิต", "material requisition production"] },
+  { id: "productionPurchase", titleTh: "ใบขอซื้อ (ฝ่ายผลิต)", titleEn: "Purchase Requests (Production)", navKey: "productionPurchase", permission: "purchaseRequest:view", aliases: ["ใบขอซื้อ ฝ่ายผลิต", "purchase request production"] },
+  { id: "stock", titleTh: "สต๊อกสินค้า", titleEn: "Stock", navKey: "stock", permission: "stock:view", aliases: ["สต๊อกสินค้า", "สต๊อก", "stock", "คลัง"] },
+  { id: "productRequest", titleTh: "คำขอเพิ่มสินค้า", titleEn: "Product Requests", navKey: "productRequest", permission: "productRequest:view", aliases: ["คำขอเพิ่มสินค้า", "ขอเพิ่มสินค้า", "product request", "ขอรหัสสินค้า"] },
+  { id: "departments", titleTh: "แผนกและทีม", titleEn: "Departments and Teams", navKey: "departments", permission: "departments:manage", aliases: ["แผนกและทีม", "แผนก", "ทีม", "departments", "teams"] },
 ];
 
-async function searchQuotations(query: string, ctx: AuthContext): Promise<SearchQuotationResult[]> {
+async function searchQuotations(query: string, ctx: AuthContext, limit: number): Promise<SearchQuotationResult[]> {
   const quotes = await quotesCollection();
   const rx = containsRegex(query);
-  // Same own-quotes-only scoping as `GET /api/quotes` (2026-07-22, per direct user request) — a
-  // caller without `quotations:viewAll` must not be able to discover another user's quotation
-  // through Global Search, which would otherwise bypass the list-page restriction entirely.
-  const ownershipMatch = roleHasPermission(ctx.role, "quotations:viewAll")
-    ? {}
-    : { $or: [{ createdByUserId: ctx.user.id }, { createdByUserId: "" }] };
+  // Same scoping as `GET /api/quotes` — a caller must never discover through search a quotation the
+  // list page hides from them (2026-07-22, per direct user request).
+  //
+  // **2026-08-28, corrected**: this was a hand-rolled binary own-vs-`viewAll` clause, while the list
+  // route has used the 4-tier `buildOwnershipClause()` cascade since 2026-08-14. The gap was
+  // one-directional and user-visible — a Sales team lead with `quotations:viewTeam` saw a
+  // teammate's quotation on the list page but got nothing for it in search. Calling the shared
+  // helper closes that; it opens no access the list route did not already grant.
+  const ownershipMatch = await buildOwnershipClause(ctx, "quotations", "createdByUserId");
   const docs = await quotes.find(
     {
       ...ownershipMatch,
@@ -245,7 +314,7 @@ async function searchQuotations(query: string, ctx: AuthContext): Promise<Search
         client: 1, customerSnapshot: 1, project: 1, status: 1, salesperson: 1, issueDate: 1, lines: 1, discount: 1, discountMode: 1,
       },
       sort: { issueDate: -1 },
-      limit: RESULT_LIMIT,
+      limit,
     },
   ).toArray() as unknown as (Pick<QuoteFields, "client" | "customerSnapshot" | "project" | "status" | "salesperson" | "issueDate" | "lines" | "discount" | "discountMode"> & { _id: string })[];
 
@@ -260,7 +329,7 @@ async function searchQuotations(query: string, ctx: AuthContext): Promise<Search
   }));
 }
 
-async function searchCustomers(query: string): Promise<SearchCustomerResult[]> {
+async function searchCustomers(query: string, limit: number): Promise<SearchCustomerResult[]> {
   const customers = await customersCollection();
   const rx = containsRegex(query);
   const docs = await customers.find(
@@ -268,7 +337,7 @@ async function searchCustomers(query: string): Promise<SearchCustomerResult[]> {
       isDeleted: false,
       $or: [{ companyName: rx }, { contactName: rx }, { phone: rx }, { email: rx }, { taxId: rx }, { address: rx }, { projectName: rx }],
     },
-    { projection: { companyName: 1, contactName: 1, phone: 1, email: 1, taxId: 1 }, sort: { companyName: 1 }, limit: RESULT_LIMIT },
+    { projection: { companyName: 1, contactName: 1, phone: 1, email: 1, taxId: 1 }, sort: { companyName: 1 }, limit },
   ).toArray();
   return docs.map((c) => {
     const { id, companyName, contactName, phone, email, taxId } = withStringId(c);
@@ -276,7 +345,7 @@ async function searchCustomers(query: string): Promise<SearchCustomerResult[]> {
   });
 }
 
-async function searchProducts(query: string): Promise<SearchProductResult[]> {
+async function searchProducts(query: string, limit: number): Promise<SearchProductResult[]> {
   const [products, categories] = await Promise.all([productsCollection(), categoriesCollection()]);
   const rx = containsRegex(query);
   // Category-name matches join to their products via categoryId — fetching all categories is
@@ -290,7 +359,7 @@ async function searchProducts(query: string): Promise<SearchProductResult[]> {
       archived: false,
       $or: [{ code: rx }, { name: rx }, { description: rx }, { specifications: rx }, { unit: rx }, { categoryId: { $in: matchingCategoryIds } }],
     },
-    { projection: { code: 1, name: 1, categoryId: 1, unit: 1, archived: 1 }, sort: { name: 1 }, limit: RESULT_LIMIT },
+    { projection: { code: 1, name: 1, categoryId: 1, unit: 1, archived: 1 }, sort: { name: 1 }, limit },
   ).toArray();
   return docs.map((p) => {
     const { id, code, name, categoryId, unit, archived } = withStringId(p);
@@ -298,7 +367,7 @@ async function searchProducts(query: string): Promise<SearchProductResult[]> {
   });
 }
 
-async function searchUsers(query: string): Promise<SearchUserResult[]> {
+async function searchUsers(query: string, limit: number): Promise<SearchUserResult[]> {
   const [users, roles] = await Promise.all([usersCollection(), rolesCollection()]);
   const rx = containsRegex(query);
   const roleDocs = await roles.find({}, { projection: { key: 1, name: 1 } }).toArray();
@@ -312,7 +381,7 @@ async function searchUsers(query: string): Promise<SearchUserResult[]> {
         { username: rx }, { roleKey: { $in: matchingRoleKeys } },
       ],
     },
-    { projection: { fullName: 1, email: 1, employeeId: 1, department: 1, position: 1, roleKey: 1, status: 1 }, sort: { fullName: 1 }, limit: RESULT_LIMIT },
+    { projection: { fullName: 1, email: 1, employeeId: 1, department: 1, position: 1, roleKey: 1, status: 1 }, sort: { fullName: 1 }, limit },
   ).toArray();
   return docs.map((u) => {
     const { id, fullName, email, employeeId, department, position, roleKey, status } = withStringId(u);
@@ -320,19 +389,13 @@ async function searchUsers(query: string): Promise<SearchUserResult[]> {
   });
 }
 
-async function searchScopeOfWorks(query: string, ctx: AuthContext): Promise<SearchScopeOfWorkResult[]> {
+async function searchScopeOfWorks(query: string, ctx: AuthContext, limit: number): Promise<SearchScopeOfWorkResult[]> {
   const scopeOfWorks = await scopeOfWorksCollection();
   const rx = containsRegex(query);
-  // Same own-records-only scoping as the standalone Scope of Work list page (2026-07-23, per direct
-  // user request mirroring `searchQuotations()`'s identical `quotations:viewAll` treatment above) —
-  // a caller without `scopeOfWork:viewAll` must not be able to discover another user's Scope of Work
-  // through Global Search, which would otherwise bypass the list page's restriction entirely.
-  // **Same-day second pass**: also matches when the caller is a picked document recipient (see
-  // "Document Recipients"), mirroring the identical addition to the list page's own query.
-  const recipientMatch = ALL_RECIPIENT_KEYS.map((key) => ({ [`documentRecipients.${key}`]: ctx.user.id }));
-  const ownershipMatch = roleHasPermission(ctx.role, "scopeOfWork:viewAll")
-    ? {}
-    : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }, ...recipientMatch] };
+  // Same scoping as the standalone Scope of Work list page, including the document-recipient
+  // matches (2026-07-23) and, since 2026-08-28, the same 4-tier cascade — see
+  // `scopeOfWorkOwnership()` in searchDocuments.ts for the full note.
+  const ownershipMatch = await scopeOfWorkOwnership(ctx);
   const docs = await scopeOfWorks.find(
     {
       isDeleted: false,
@@ -348,7 +411,7 @@ async function searchScopeOfWorks(query: string, ctx: AuthContext): Promise<Sear
     {
       projection: { scopeNumber: 1, quotationId: 1, quotationNumber: 1, customerSnapshot: 1, jobTypeCode: 1, jobTypeName: 1, status: 1 },
       sort: { updatedAt: -1 },
-      limit: RESULT_LIMIT,
+      limit,
     },
   ).toArray();
   return docs.map((d) => {
@@ -357,7 +420,7 @@ async function searchScopeOfWorks(query: string, ctx: AuthContext): Promise<Sear
   });
 }
 
-async function searchTemplates(query: string): Promise<SearchTemplateResult[]> {
+async function searchTemplates(query: string, limit: number): Promise<SearchTemplateResult[]> {
   const templates = await quotationTemplatesCollection();
   const rx = containsRegex(query);
   const docs = await templates.find(
@@ -371,7 +434,7 @@ async function searchTemplates(query: string): Promise<SearchTemplateResult[]> {
     {
       projection: { templateCode: 1, templateName: 1, jobTypeCode: 1, jobTypeName: 1, description: 1 },
       sort: { templateName: 1 },
-      limit: RESULT_LIMIT,
+      limit,
     },
   ).toArray();
   return docs.map((d) => {
@@ -380,7 +443,7 @@ async function searchTemplates(query: string): Promise<SearchTemplateResult[]> {
   });
 }
 
-function searchPages(query: string, ctx: AuthContext): SearchPageResult[] {
+function searchPages(query: string, ctx: AuthContext, limit: number): SearchPageResult[] {
   const q = query.toLowerCase();
   return SEARCHABLE_PAGES
     .filter((p) => p.permission === null || roleHasPermission(ctx.role, p.permission))
@@ -390,8 +453,97 @@ function searchPages(query: string, ctx: AuthContext): SearchPageResult[] {
     // (a Service Engineer still reads customers through the report editor's CustomerSelector).
     .filter((p) => !isNavHiddenForRole(ctx.role, p.navKey))
     .filter((p) => p.aliases.some((a) => a.toLowerCase().includes(q)))
-    .slice(0, RESULT_LIMIT)
+    .slice(0, limit)
     .map(({ id, titleTh, titleEn, navKey, action }) => ({ id, titleTh, titleEn, navKey, action }));
+}
+
+/** Parses `?types=a,b,c` into the set of categories to run. Empty/absent/unrecognised = everything. */
+function parseTypes(raw: string | string[] | undefined): SearchCategory[] {
+  const value = Array.isArray(raw) ? raw[0] ?? "" : raw ?? "";
+  const asked = value.split(",").map((s) => s.trim()).filter(Boolean);
+  const valid = asked.filter((s): s is SearchCategory => (ALL_CATEGORIES as string[]).includes(s));
+  return valid.length > 0 ? valid : ALL_CATEGORIES;
+}
+
+/**
+ * Runs one category, or returns `[]` — for any of three reasons that are deliberately
+ * indistinguishable to the client: the caller lacks the permission, the caller narrowed to other
+ * types, or the query itself threw.
+ *
+ * That last case is the 2026-08-28 addition. Search now touches 16 collections in one request, so
+ * "one category's query failed" must degrade to an empty group rather than 500 the whole panel and
+ * leave someone unable to find anything — the same per-section resilience `api/dashboard/index.ts`
+ * adopted on 2026-07-14 for the same reason.
+ */
+async function runCategory<T>(
+  category: SearchCategory, wanted: SearchCategory[], allowed: boolean, run: () => Promise<T[]>,
+): Promise<T[]> {
+  if (!allowed || !wanted.includes(category)) return [];
+  try {
+    return await run();
+  } catch (err) {
+    console.error(`[search] category "${category}" failed`, err);
+    return [];
+  }
+}
+
+/**
+ * The quotation half of the document-number fast path. Lives here rather than in
+ * `searchDocuments.ts` because a quotation result carries a computed before-VAT amount, and
+ * `computeQuoteAmountBeforeVat()` is this file's dependency.
+ */
+async function quotationByNumber(query: string, ctx: AuthContext): Promise<SearchQuotationResult | null> {
+  const quotes = await quotesCollection();
+  const ownershipMatch = await buildOwnershipClause(ctx, "quotations", "createdByUserId");
+  const docs = await quotes.find(
+    { ...ownershipMatch, _id: startsWithRegex(query) } as never,
+    { limit: 1 },
+  ).toArray() as unknown as (QuoteFields & { _id: string })[];
+  if (docs.length === 0) return null;
+  const q = docs[0];
+  return {
+    id: q._id,
+    client: q.customerSnapshot?.companyName || q.client,
+    project: q.project,
+    status: q.status,
+    salesperson: q.salesperson,
+    issueDate: q.issueDate,
+    amount: computeQuoteAmountBeforeVat(q.lines ?? [], q.discount ?? 0, q.discountMode),
+  };
+}
+
+/** Maps a `DOC_NUMBER_PREFIXES` family onto the permission and result group it belongs to. */
+const FAST_PATH_GATES: Record<string, { permission: Permission; category: SearchCategory }> = {
+  quotation: { permission: "quotations:view", category: "quotations" },
+  serviceReport: { permission: "service:view", category: "serviceReports" },
+  materialRequisition: { permission: "materialRequisition:view", category: "materialRequisitions" },
+  jobOrder: { permission: "jobOrder:view", category: "jobOrders" },
+  purchaseRequest: { permission: "purchaseRequest:view", category: "purchaseRequests" },
+  productionOrder: { permission: "productionOrder:view", category: "productionOrders" },
+  arDocument: { permission: "ar:view", category: "arDocuments" },
+};
+
+/**
+ * Resolves a query that looks like a document number to the one document it names, so the client
+ * can pin it above every group and pre-select it. Never throws: a failure here degrades to "no
+ * pinned match" and the ordinary substring groups still answer the query.
+ */
+async function findExactMatch(query: string, ctx: AuthContext): Promise<ExactMatch | null> {
+  const family = detectDocNumberFamily(query);
+  if (!family) return null;
+  const gate = FAST_PATH_GATES[family];
+  if (!gate || !roleHasPermission(ctx.role, gate.permission)) return null;
+  try {
+    if (family === "quotation") {
+      const quotation = await quotationByNumber(query, ctx);
+      return quotation ? { category: "quotations", quotation } : null;
+    }
+    const hit = await searchByDocNumber(family, query, ctx);
+    return hit ? { category: gate.category, document: hit.result } : null;
+  } catch (err) {
+    console.error("[search] fast path failed", err);
+    return null;
+  }
 }
 
 export async function handleSearch(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -407,6 +559,11 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
     throw new HttpError(400, `คำค้นหายาวเกินไป (สูงสุด ${MAX_QUERY_LENGTH} ตัวอักษร)`);
   }
 
+  // Narrowing to specific types is how the panel's filter chips ask for more of one kind, so a
+  // narrowed request returns a browsable page of results instead of the 3-row teaser.
+  const wanted = parseTypes(req.query.types);
+  const limit = wanted.length === ALL_CATEGORIES.length ? LIMIT_ALL : LIMIT_FILTERED;
+
   const [quotes, customers, products, users, scopeOfWorks] = await Promise.all([
     quotesCollection(), customersCollection(), productsCollection(), usersCollection(), scopeOfWorksCollection(),
   ]);
@@ -419,23 +576,41 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
     console.error("[search] ensureSearchIndexes failed", err);
   }
 
-  const [quotationResults, customerResults, productResults, templateResults, scopeOfWorkResults, userResults] = await Promise.all([
-    roleHasPermission(ctx.role, "quotations:view") ? searchQuotations(query, ctx) : Promise.resolve([]),
-    roleHasPermission(ctx.role, "customers:view") ? searchCustomers(query) : Promise.resolve([]),
-    roleHasPermission(ctx.role, "products:view") ? searchProducts(query) : Promise.resolve([]),
+  const has = (p: Permission) => roleHasPermission(ctx.role, p);
+
+  const [
+    quotations, scopeOfWorkResults, deliveryOrders, serviceReports, projects,
+    materialRequisitions, jobOrders, purchaseRequests, productionOrders, arDocuments,
+    productRequests, customerResults, productResults, templateResults, userResults, exact,
+  ] = await Promise.all([
+    runCategory("quotations", wanted, has("quotations:view"), () => searchQuotations(query, ctx, limit)),
+    // Scope of Work (added 2026-07-15, Codex review High Priority fix — see docs/MODULES/ScopeOfWork.md).
+    runCategory("scopeOfWorks", wanted, has("scopeOfWork:view"), () => searchScopeOfWorks(query, ctx, limit)),
+    // The 9 document categories below were added 2026-08-28 ("ค้นหาได้ทุกเอกสาร") — see searchDocuments.ts.
+    runCategory("deliveryOrders", wanted, has("deliveryOrder:view"), () => searchDeliveryOrders(query, ctx, limit)),
+    runCategory("serviceReports", wanted, has("service:view"), () => searchServiceReports(query, ctx, limit)),
+    runCategory("projects", wanted, has("project:view"), () => searchProjects(query, ctx, limit)),
+    runCategory("materialRequisitions", wanted, has("materialRequisition:view"), () => searchMaterialRequisitions(query, ctx, limit)),
+    runCategory("jobOrders", wanted, has("jobOrder:view"), () => searchJobOrders(query, ctx, limit)),
+    runCategory("purchaseRequests", wanted, has("purchaseRequest:view"), () => searchPurchaseRequests(query, ctx, limit)),
+    runCategory("productionOrders", wanted, has("productionOrder:view"), () => searchProductionOrders(query, ctx, limit)),
+    runCategory("arDocuments", wanted, has("ar:view"), () => searchArDocuments(query, limit)),
+    runCategory("productRequests", wanted, has("productRequest:view"), () => searchProductRequests(query, ctx, limit)),
+    runCategory("customers", wanted, has("customers:view"), () => searchCustomers(query, limit)),
+    runCategory("products", wanted, has("products:view"), () => searchProducts(query, limit)),
     // Same read gate as browsing templates while creating a quotation (quotationTemplatesHandler.ts)
     // — a Sales user with only quotations:create, no quotationTemplates:manage, can still find them.
-    (roleHasPermission(ctx.role, "quotations:create") || roleHasPermission(ctx.role, "quotationTemplates:manage"))
-      ? searchTemplates(query) : Promise.resolve([]),
-    // Scope of Work (added 2026-07-15, Codex review High Priority fix — see docs/MODULES/ScopeOfWork.md).
-    roleHasPermission(ctx.role, "scopeOfWork:view") ? searchScopeOfWorks(query, ctx) : Promise.resolve([]),
-    roleHasPermission(ctx.role, "users:manage") ? searchUsers(query) : Promise.resolve([]),
+    runCategory("templates", wanted, has("quotations:create") || has("quotationTemplates:manage"), () => searchTemplates(query, limit)),
+    runCategory("users", wanted, has("users:manage"), () => searchUsers(query, limit)),
+    findExactMatch(query, ctx),
   ]);
-  const pages = searchPages(query, ctx);
+  const pages = wanted.includes("pages") ? searchPages(query, ctx, limit) : [];
 
   const results: SearchResults = {
-    quotations: quotationResults, customers: customerResults, products: productResults,
-    templates: templateResults, scopeOfWorks: scopeOfWorkResults, pages, users: userResults,
+    quotations, scopeOfWorks: scopeOfWorkResults, deliveryOrders, serviceReports, projects,
+    materialRequisitions, jobOrders, purchaseRequests, productionOrders, arDocuments,
+    productRequests, customers: customerResults, products: productResults,
+    templates: templateResults, users: userResults, pages, exact,
   };
   res.status(200).json(results);
 }

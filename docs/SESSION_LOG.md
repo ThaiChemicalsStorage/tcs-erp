@@ -4,7 +4,56 @@
 
 ---
 
-## Session — 2026-08-26c (absolute latest), One attribute, and a correction
+## Session — 2026-08-28 (absolute latest), Search that knows every document
+
+### The plumbing was mostly already there
+*"ให้มันสามารถค้นหาได้ทุกเอกสาร กดไปละไปดูในเอกสารได้เลย"*. The obvious reading is a big backend job
+plus a lot of new navigation. The backend half was real — 9 collections search had never touched —
+but the navigation half turned out to be nearly free: `App.tsx` already had working
+`navigateToDeliveryOrder`, `navigateToJobOrder`, `navigateToMaterialRequisition`,
+`navigateToPurchaseRequest`, `navigateToProject`, `navigateToServiceReport`,
+`navigateToProductRequest`. The NotificationBell has been using them daily. They were simply never
+wired into search. Exactly two gaps were genuine: **ใบสั่งผลิต had a `productionOrderDeepLinkId`
+state and an `initialProductionOrderId` prop that nothing ever set** — a dead wire sitting there
+since the module was built — and accounting documents had no deep-link path at all.
+
+Worth remembering as a shape: before assuming a feature needs building, check whether an adjacent
+feature already built it. Two exploration agents pointed at "how does the app open a document" is
+what turned a large-looking task into a mostly-wiring one.
+
+### The design constraint came from the data, not from taste
+Every TCS document family mints its number with a distinct prefix, and the system has **no text
+index anywhere** — every search is an unanchored `$regex`, which cannot use an index. Those two
+facts together produced the best feature in the pass: a query shaped like a document number gets an
+**anchored** `^` query against one collection, which is both the fastest path available and the
+commonest thing anyone actually types. The design idea and the performance fix are the same idea.
+
+### The bug only a real keypress could find
+Pressing Enter on a result opened the document **and instantly reopened the panel**. `close()`
+restored focus to the trigger `<button>`, and the browser then fired that button's default
+activation for the same keystroke. `tsc`, ESLint, and 352 tests were green through all of it. This
+is the third or fourth time the standing "verify in a real browser with real clicks" rule has paid
+for itself; add "and real *keystrokes*" to it.
+
+### Judgement calls worth recording
+- **ใบเบิกของ/ใบขอซื้อ return both departments' documents, tagged.** The list pages split project vs
+  production, which reads like a visibility boundary — but both sidebar entries share one
+  permission and `ROLE_HIDDEN_NAV_KEYS` hides neither, so it is navigational. Filtering one out
+  would have hidden documents the user can reach in two clicks. Checking *why* the split exists,
+  rather than copying it, was the difference.
+- **Removed the nested Scope-of-Work deep link** rather than leaving it unreachable. Search was its
+  only caller; routing Scope of Work results to the standalone page gives one rule for all 16 types.
+  Leaving it would have created a second dead wire in the same session I fixed one.
+
+### Next
+`/impeccable audit` on the new panel. The 16-collection fan-out is fine at current data volumes and
+bounded by debounce + per-category try/catch, but if the DB grows, the honest fix is a text index or
+Atlas Search, not more tuning of the regex path — noted in API.md rather than TODO.md since there is
+no evidence of a problem yet.
+
+---
+
+## Session — 2026-08-26c, One attribute, and a correction
 
 ### The fix was one attribute; finding it took one grep
 *"ตอนใช้ในโทรศัพท์ ... มันให้ถ่ายรูปอย่างเดียว"*. `grep -rn "capture=" src/` returned exactly one

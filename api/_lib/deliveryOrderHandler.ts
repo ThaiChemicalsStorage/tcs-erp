@@ -76,7 +76,7 @@ function canEditDeliveryOrder(ctx: AuthContext, doc: { createdBy: string }): boo
  * กับข้อมูลปัจจุบัน (ผู้ใช้ถือค่าเก่าอย่าง "Purchase"/"Technic" ที่ไม่มีในตารางเลย) คนกลุ่มนี้จะไม่เห็น
  * เอกสารที่ส่งถึงแผนก จนกว่าจะตั้งแผนกให้ตรงกับตารางจริง ดู docs/MODULES/DeliveryOrder.md
  */
-async function departmentIdForUser(ctx: AuthContext): Promise<string | null> {
+export async function departmentIdForUser(ctx: AuthContext): Promise<string | null> {
   const name = (ctx.user.department ?? "").trim();
   if (!name) return null;
   const departments = await departmentsCollection();

@@ -27,6 +27,7 @@ import { useI18n } from "../../lib/i18n";
 // matching the Sales modules' standalone-list pattern per the owner's 2026-08-18 instruction.
 export function ArDocumentListPage({
   docType, canIssue, canCancel, canCreate, canViewStock, canAdjustStock,
+  initialArDocumentId, onArDocumentIdConsumed,
 }: {
   docType: ArDocumentType;
   canIssue: boolean;
@@ -36,6 +37,9 @@ export function ArDocumentListPage({
   canCreate: boolean;
   canViewStock: boolean;
   canAdjustStock: boolean;
+  /** เปิดเอกสารใบนี้ทันทีเมื่อเข้าหน้า — มาจากผลค้นหา (2026-08-28) ดู `initial<X>Id` ของโมดูลอื่น */
+  initialArDocumentId?: string | null;
+  onArDocumentIdConsumed?: () => void;
 }) {
   const { t } = useI18n();
   const [documents, setDocuments] = useState<ArDocument[]>([]);
@@ -99,6 +103,19 @@ export function ArDocumentListPage({
       .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // เปิดเอกสารที่ส่งมาจากผลค้นหา (2026-08-28) — ต้องรอให้โหลดรายการเสร็จก่อน เพราะกล่องรายละเอียด
+  // รับเอกสารทั้งก้อน ไม่ใช่ id เหมือนโมดูลอื่น หน้านี้ถูก remount ด้วย key={docType} และ App.tsx
+  // เลือกหน้าให้ตรงชนิดเอกสารมาแล้ว ใบที่ขอจึงอยู่ใน `documents` เสมอ
+  const [appliedArDocumentId, setAppliedArDocumentId] = useState<string | null>(null);
+  if (initialArDocumentId && !loading && initialArDocumentId !== appliedArDocumentId) {
+    setAppliedArDocumentId(initialArDocumentId);
+    const target = documents.find((d) => d.id === initialArDocumentId);
+    if (target) setDetailDoc(target);
+  }
+  useEffect(() => {
+    if (initialArDocumentId && !loading) onArDocumentIdConsumed?.();
+  }, [initialArDocumentId, loading, onArDocumentIdConsumed]);
 
   useEffect(() => {
     if (!printDoc) return;

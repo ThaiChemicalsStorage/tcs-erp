@@ -39,8 +39,6 @@ export function QuotationPage({
   onQuoteIdConsumed,
   initialTemplateSelection,
   onTemplateSelectionConsumed,
-  initialScopeOfWorkDeepLink,
-  onScopeOfWorkDeepLinkConsumed,
   onNotify,
   canCreateTemplate,
   onCreateTemplateForJobType,
@@ -67,8 +65,6 @@ export function QuotationPage({
   onQuoteIdConsumed: () => void;
   initialTemplateSelection: { jobTypeCode: string; templateId: string } | null;
   onTemplateSelectionConsumed: () => void;
-  initialScopeOfWorkDeepLink: { quotationId: string; scopeOfWorkId: string } | null;
-  onScopeOfWorkDeepLinkConsumed: () => void;
   onNotify: () => void;
   canCreateTemplate: boolean;
   onCreateTemplateForJobType: (jobTypeCode: string, jobTypeName: string) => void;
@@ -115,16 +111,11 @@ export function QuotationPage({
     if (initialTemplateSelection) onTemplateSelectionConsumed();
   }, [initialTemplateSelection, onTemplateSelectionConsumed]);
 
-  const [appliedScopeOfWorkDeepLink, setAppliedScopeOfWorkDeepLink] = useState<{ quotationId: string; scopeOfWorkId: string } | null>(null);
-  if (initialScopeOfWorkDeepLink && initialScopeOfWorkDeepLink !== appliedScopeOfWorkDeepLink) {
-    setAppliedScopeOfWorkDeepLink(initialScopeOfWorkDeepLink);
-    setSelectedId(initialScopeOfWorkDeepLink.quotationId);
-    setScopeOfWorkId(initialScopeOfWorkDeepLink.scopeOfWorkId);
-    setView("scopeOfWork");
-  }
-  useEffect(() => {
-    if (initialScopeOfWorkDeepLink) onScopeOfWorkDeepLinkConsumed();
-  }, [initialScopeOfWorkDeepLink, onScopeOfWorkDeepLinkConsumed]);
+  // 2026-08-28: the "open a Scope of Work nested inside its quotation" deep link was removed.
+  // Global Search was its only caller, and search now sends every Scope of Work result to the
+  // standalone Scope of Work page instead — one rule for all 16 result types: a result opens the
+  // document on its own module page. Opening a Scope of Work from *within* a quotation is
+  // unaffected; that is `setView("scopeOfWork")` on this page's own button, not a deep link.
 
   const toast = useToast();
 
