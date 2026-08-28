@@ -4,7 +4,98 @@
 
 ---
 
-## 2026-08-28 (absolute latest) — ค้นหาได้ทุกเอกสาร: Global Search 7 → 16 categories, rebuilt as a centred panel
+## 2026-08-28b (absolute latest) — คู่มือ: เติมส่วนที่ขาด 8 เดือน + ทำให้ใช้ง่ายขึ้น (20 → 22 บท)
+
+Direct owner request: *"อัปเดตทำคู่มือให้หน่อยในส่วนที่ยังไม่ได้ใส่เข้าไปและทำให้มันดูใช้ง่ายขึ้นด้วย"*.
+
+`public/manual.html` was dated 21 ส.ค. 2026 and had drifted behind the app in two ways — features
+built since then were missing entirely, and several statements had become **wrong** because gates
+were removed after the manual described them.
+
+### เนื้อหาที่เพิ่ม
+
+- **บทที่ 3 ใหม่ — การบันทึกและการกู้คืนร่าง.** Auto-save shipped 2026-08-25 and the manual never
+  mentioned it. Placed third, before any document chapter, because it applies to all eight editors
+  and prevents lost work in every chapter that follows: the four states of the status chip, the
+  gold draft-recovery banner (and why the system never applies a draft silently), the three-button
+  "ยังไม่ได้บันทึก" dialog, that approved documents deliberately do **not** auto-save, and — stated
+  plainly — that browser Back / refresh / closing the tab are **not** guarded.
+- **บทที่ 18 ใหม่ — คำขอเพิ่มสินค้า.** The whole module was absent. How to request, why there is
+  deliberately **no product-code field** (Stores assigns it), the three statuses, the
+  "ขอรหัสสินค้า" button on a hand-typed purchase-request line, the warning that the PR line is
+  **not** updated automatically afterwards, and the Stores-side flow.
+- **ค้นหาทุกเอกสาร (Ctrl+K)** — a new subsection in บทที่ 2 for the 2026-08-28 rebuild, with the
+  full document-number prefix table (`Q#` `MR-` `JO-` `PR-` `SC-` `SR-` `AR/BI/RE/IV`), the filter
+  chips, recently-opened, the keyboard table, and the note that results obey the same permissions
+  as the list pages.
+- **ปุ่ม "?" ดูคำแนะนำของแต่ละหน้า** — guided tours were never documented at all.
+- **แก้ไข (Rewrite) ของเอกสารโครงการ/ผลิต** — a new บทที่ 14 section: `-R1` numbering, that the
+  revision note is **printed** on these forms (unlike a quotation's, which is internal), and the
+  per-document differences (ใบเบิก drops its issued/returned quantities, ใบขอซื้อ keeps its lines,
+  attachments are never carried over).
+- **ติ๊กเลือกหลายรายการ** เมื่อสร้างใบสั่งงาน, and the two-step item picker for ใบสั่งผลิต.
+- **การส่งต่ออัตโนมัติหลังอนุมัติ** (ใบเบิก → สโตร์, ใบขอซื้อ → ฝ่ายจัดซื้อ) plus the warning that
+  it is matched by the employee's **แผนก** and fails silently when that is unset.
+- **ใบสั่งงาน**: attachments, the 6-group scope checklist (and that un-ticking erases its
+  sub-details), จากหน่วยงาน/ถึงหน่วยงาน. **ใบขอซื้อ**: sub-detail lines.
+- **ใบสั่งผลิต**: the editable printed document number and the duplicate-number rejection.
+- **ใบส่งมอบสินค้า**: เลขที่/วันที่ of each installment stay editable after Final via their own save
+  button. **ใบเสนอราคา**: the ฿/% discount toggle in two places, defaulting to ฿ on new quotations.
+- **6 FAQ rows added**, and the row about non-Final Scope of Work split in two.
+
+### สิ่งที่คู่มือเขียนไว้ผิด และแก้แล้ว
+
+| เดิมเขียนว่า | ความจริง |
+|---|---|
+| ช่องค้นหาครอบคลุมใบเสนอราคา/ลูกค้า/สินค้า/SoW/ผู้ใช้/เมนู | ครอบคลุมเอกสารทุกชนิด 16 หมวด ตั้งแต่ 2026-08-28 |
+| ใบสั่งผลิตสร้างจาก Scope of Work **ที่อนุมัติแล้ว** | เอากฎนี้ออกไปแล้ว 2026-08-27a — สร้างจากงานที่ยังเป็นร่างได้ (2 จุด + figcaption) |
+| "ต้องอนุมัติใบสั่งผลิตก่อน จึงเบิกของได้" | เอาออกแล้ว 2026-08-27a — ใบร่างออกใบเบิก/ใบขอซื้อต่อได้ |
+| FAQ: โครงการ **และ** ใบสั่งผลิต ติดกฎ Final | จริงเฉพาะโครงการ — แยกเป็นสองแถว |
+| "อนุมัติแล้ว (Final) แก้เนื้อหาไม่ได้อีก" | ยังจริง แต่ไม่ครบ — ออกฉบับแก้ไข (Rewrite) ได้ทุกใบแล้ว |
+| ส่วนลดพูดถึงเฉพาะเปอร์เซ็นต์ | มีทั้ง % และ ฿ และใบใหม่เริ่มต้นเป็น ฿ |
+| กระดิ่ง = ใบเสนอราคา + Scope of Work | รวมการส่งต่อใบเบิก/ใบขอซื้อ และผลคำขอเพิ่มสินค้า |
+| หมวดคลังสินค้า = คลังสินค้า · สต๊อกสินค้า | ขาดคำขอเพิ่มสินค้า |
+
+Re-dated to 28 ส.ค. 2026 in both the header and the footer.
+
+**Renumbering**: inserting two chapters shifted old 3–16 → 4–17 and old 17–20 → 19–22. Done with a
+one-off script over `id="chN"`, `href="#chN"`, both numeral spans, the comment banners and all 20
+prose "บทที่ N" references, processed in **descending** order so a rename never lands on a number
+still in use. Verified afterwards that section ids, `.ch-no` badges and side-nav numerals are the
+same 22-item sequence, and that the sidebar-menu table's "ดูบทที่" column was remapped by hand
+(it holds ranges, not single numbers).
+
+### ทำให้ใช้ง่ายขึ้น
+
+- **ค้นหาหัวข้อในสารบัญ** — a filter box at the top of the side nav. It matches against **each
+  chapter's own headings (h2/h3/h4), not just its title**, so typing `PO` finds Scope of Work
+  through its "การติดตามเลข PO" section. Group labels with nothing left under them hide themselves;
+  Enter opens the first remaining chapter; Escape clears. **It filters only the nav — never the
+  document** — so the browser's own Ctrl+F still searches the whole manual and a filter left active
+  can never produce an incomplete PDF.
+- **สารบัญบนจอแคบ** — below 1140px there had been **no navigation at all**, only scrolling. A
+  sticky "☰ สารบัญ" bar now expands the same nav (one nav, not a second copy to keep in sync),
+  closes on selection, and closes on Escape.
+- **สารบัญเลื่อนตามบทที่อ่านอยู่** — with 22 chapters the highlighted item could sit outside the
+  visible part of the rail. The scroll-spy now scrolls the rail itself (never the page) to keep it
+  in view.
+- **Accessibility**: a skip link (a keyboard user no longer tabs through 22 nav links to reach the
+  text), a real `<main>` landmark, `aria-current="location"` on the scroll-spy's highlight (it had
+  been colour-only, invisible to screen readers), the TOC heading exposed as a heading, and real
+  `<kbd>` elements — previously keycaps and code spans were styled identically, so a reader could
+  not tell what to press from what to type.
+- Removed the last inline styles from the body by giving `section > h4` a real rule.
+
+Verified in a browser: the filter against Thai and Latin terms and its no-results state; that all
+22 sections stay in the DOM while filtering; the narrow-screen nav opening, navigating and closing;
+scroll-spy correctness at chapters 3, 12, 18 and 22; and — under real print-media emulation — that
+every new control is hidden, the light print palette applies and all 22 chapters survive. The PDF
+was regenerated with `docs/manual/generate-pdf.mjs`: 46 pages, all 29 figures intact (the script
+hard-fails on a blank image).
+
+---
+
+## 2026-08-28 — ค้นหาได้ทุกเอกสาร: Global Search 7 → 16 categories, rebuilt as a centred panel
 
 Direct owner request: *"ช่วยออกแบบในส่วนของค้นหาให้หน่อย ให้มันสามารถค้นหาได้ทุกเอกสาร กดไปละไปดูในเอกสารได้เลย"*
 — make search cover every document, and make clicking a result open that document.

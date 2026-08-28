@@ -4,7 +4,53 @@
 
 ---
 
-## Session — 2026-08-28 (absolute latest), Search that knows every document
+## Session — 2026-08-28b (absolute latest), The manual had gone quietly wrong
+
+### Missing content is obvious; wrong content is not
+The ask was "add what's missing and make it easier to use". The missing part was findable by
+grepping the manual for feature names. The more valuable half came from reading the CHANGELOG
+**forward from the manual's own date** and asking, for each entry, "does the manual currently claim
+the opposite?" That turned up eight statements that had been true when written and had since become
+false — most of them because a gate was *removed* later. A reader following the manual would have
+concluded ใบสั่งผลิต still needed an approved Scope of Work, and given up.
+
+Generalises: a document with a date on it should be diffed against the change log since that date,
+not just searched for gaps. Absent content annoys a reader; wrong content sends them away.
+
+### Renumbering is the risky part, so make it mechanical
+Two new chapters in the middle meant shifting 18 of the 20 existing ones plus 20 prose
+cross-references. Done with a one-off script processing chapters in **descending** order — renaming
+16→17 before 15→16 means a rename never lands on a number still in use — then verified by extracting
+the section ids, the heading badges and the nav numerals and checking all three were the same
+22-item sequence. The one part the script could not do was the sidebar table's "ดูบทที่" column,
+which holds ranges (`4–9`) rather than single numbers; that was done by hand and checked by eye.
+
+### The usability fix that had to not break the PDF
+The manual is also a printed artifact (`generate-pdf.mjs`). That ruled out the obvious idea —
+collapsible chapters — because a collapsed chapter is a chapter missing from the PDF. The search
+box was designed around the same constraint: it filters **the navigation only**, never the
+document, so Ctrl+F still searches everything and a filter left active cannot produce an incomplete
+export. Verified by emulating print media directly and by regenerating the PDF (46 pages, 29 figures
+intact).
+
+Matching against each chapter's own h2/h3/h4 rather than just its title is what makes the filter
+worth having: typing `PO` finds Scope of Work through a subsection heading, which a title-only
+filter would have missed.
+
+### The gap that only showed up in a screenshot
+Below 1140px the manual had **no navigation at all** — the rail was simply `display:none` and
+nothing replaced it. Nobody would find that by reading the CSS; it showed up the moment the page
+was opened at tablet width. Worth repeating the habit: open the thing at the widths people use.
+
+### Next
+The manual still has no per-heading anchor links, so "see section 14.3" cannot be linked directly.
+And the app's manual button always opens at the top — it could open the chapter matching the
+current page, which would need a small change in `App.tsx`. Both are real improvements, neither was
+in scope for a manual-content pass.
+
+---
+
+## Session — 2026-08-28, Search that knows every document
 
 ### The plumbing was mostly already there
 *"ให้มันสามารถค้นหาได้ทุกเอกสาร กดไปละไปดูในเอกสารได้เลย"*. The obvious reading is a big backend job

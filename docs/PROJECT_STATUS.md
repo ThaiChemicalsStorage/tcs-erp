@@ -14,6 +14,16 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-28b] คู่มือการใช้งาน caught up with the app, and made easier to use.**
+  `public/manual.html` was dated 21 ส.ค. and had drifted: auto-save/draft recovery (2026-08-25) and
+  the whole คำขอเพิ่มสินค้า module (2026-08-27) were missing, and several statements had become
+  *wrong* because Final gates were removed after the manual described them. Now 22 chapters (two
+  new: การบันทึกและการกู้คืนร่าง, คำขอเพิ่มสินค้า), plus Rewrite on the project/production
+  documents, the rebuilt Ctrl+K search, guided tours, multi-item ticking, cross-department
+  hand-offs, and 8 corrected claims. Usability: a heading-level filter over the table of contents,
+  a table of contents on narrow screens (there had been **none** below 1140px), a self-scrolling
+  nav rail, a skip link, `<main>`, `aria-current`, and real `<kbd>` elements. PDF regenerated and
+  print output verified. See CHANGELOG.md 2026-08-28b.
 - ✅ **[2026-08-28] Global Search covers every document, and a result opens it.** Direct owner
   request. Search had covered the same 7 categories since 2026-07-14; the 11 document types built
   after that date (ใบส่งมอบสินค้า, รายงานบริการ, โครงการ, ใบเบิกและใบคืนวัสดุ, ใบสั่งงาน, ใบขอซื้อ,
