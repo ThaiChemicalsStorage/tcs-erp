@@ -4,7 +4,38 @@
 
 ---
 
-## Session — 2026-08-28c (absolute latest), A department that existed only as a signature box
+## Session — 2026-08-28d (absolute latest), Built in the morning, deleted in the afternoon
+
+### The cheapest module is the one you delete the same day
+Two documents shipped at midday and were gone by evening, on four words from the owner:
+*"ไม่ได้ใช้"*. That is not waste — it is the system working. They were built from a process chart
+rather than from a person's description of their day, and a chart shows the steps that exist, not
+the steps anyone wants software for. The tell was there at build time and was written down at
+build time: both documents were given a two-state toggle because *the chart showed no approval
+step on either*. A document nobody approves and nobody counts is often a document nobody keeps.
+
+### A removal is only clean if you know what a removal does not touch
+The repo already had the answer written down — the Company Profiles removal from July left a
+module doc that says exactly which categories of thing a code removal may and may not delete.
+Two rules mattered here: never drop a collection, and never rewrite a dated announcement. Both
+would have been tempting to do "for tidiness" and both would have destroyed information.
+
+### The reference nothing can catch
+`PurchaseOrderPickerDialog.tsx` was shared by exactly the two deleted pages. Deleting them left a
+file that compiles, lints, and does nothing — because no tool in this stack looks for files with
+no importers. `noUnusedLocals` works inside a file; ESLint works inside a file; the type-checker
+only follows edges that exist. Generalises: after removing a module, list what it *imported* and
+check each of those for remaining consumers — the dead code is upstream of what you deleted, not
+inside it.
+
+### Next
+Cost Control for แผนก BD, built by dropping the company's real SC workbook in. The owner supplied
+the file, which closed a gap the repo had been carrying since 2026-08-20 — five separate places
+recorded that Cost Control could not be designed until someone said what it was.
+
+---
+
+## Session — 2026-08-28c, A department that existed only as a signature box
 
 ### The gap was visible in the schema before anyone described it
 The owner sent a process chart and asked for "a new module". The useful first move was not to start

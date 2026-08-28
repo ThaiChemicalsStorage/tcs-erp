@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, FileText, Contact, Package, Menu as MenuIcon, Users as UsersIcon, Layers, ClipboardList,
-  Truck, Wrench, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, PackageCheck, ReceiptText, Factory, Receipt, PackagePlus,
+  Truck, Wrench, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Factory, Receipt, PackagePlus,
   Loader2, AlertTriangle, RotateCw, X, CornerDownLeft, Clock,
 } from "lucide-react";
 import {
@@ -25,7 +25,7 @@ const LISTBOX_ID = "global-search-listbox";
  * The app's global search — one panel, every document.
  *
  * **2026-08-28 redesign.** This was a `w-[26rem]` dropdown anchored under the topbar input, showing
- * 5 results across each of 7 categories. Search now covers 19 categories including every business
+ * 5 results across each of 7 categories. Search now covers 17 categories including every business
  * document in the system, which that dropdown could not hold: 16 groups in a 26rem box is a long
  * scroll for someone who wanted one document. It is now a centred panel with a type-filter rail,
  * and — the part that matters most in practice — a pinned band for a query that looks like a
@@ -51,8 +51,6 @@ const CATEGORY_ICON: Record<SearchCategory, typeof FileText> = {
   jobOrders: Hammer,
   purchaseRequests: ShoppingCart,
   purchaseOrders: ShoppingBag,
-  goodsReceipts: PackageCheck,
-  billReceipts: ReceiptText,
   productionOrders: Factory,
   arDocuments: Receipt,
   productRequests: PackagePlus,

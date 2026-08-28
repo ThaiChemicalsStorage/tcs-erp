@@ -108,20 +108,6 @@ export const defaultRoles: Role[] = [
       "purchaseOrder:finalize",
       "purchaseOrder:print",
       "purchaseOrder:delete",
-      "goodsReceipt:view",
-      "goodsReceipt:viewAll",
-      "goodsReceipt:create",
-      "goodsReceipt:edit",
-      "goodsReceipt:finalize",
-      "goodsReceipt:print",
-      "goodsReceipt:delete",
-      "billReceipt:view",
-      "billReceipt:viewAll",
-      "billReceipt:create",
-      "billReceipt:edit",
-      "billReceipt:finalize",
-      "billReceipt:print",
-      "billReceipt:delete",
       // Project module (added 2026-08-18, Stage 2) — granted to Administrator/Super Admin only by
       // default, per the Stage 1 recommendation: none of the existing default roles (Sales/Approver/
       // Viewer/Service Engineer/Accounting User) belong to the Project/Store/Factory/Purchasing

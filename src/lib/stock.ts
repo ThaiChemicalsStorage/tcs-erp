@@ -7,7 +7,7 @@ import type { TranslationKey } from "./i18n.js";
  * feature (src/pages/accounting/ArStockPanel.tsx) is the first caller, not the only intended one.
  */
 export type StockMovementKind = "receive" | "deduct" | "adjust";
-export type StockMovementSourceType = "manual" | "ar_document" | "goods_receipt";
+export type StockMovementSourceType = "manual" | "ar_document";
 
 export interface StockMovement {
   id: string;

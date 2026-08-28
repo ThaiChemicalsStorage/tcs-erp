@@ -14,6 +14,13 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-28d] ถอดใบตรวจรับสินค้าและใบรับวางบิลออก — สร้างเช้า ลบบ่าย.**
+  เจ้าของสั่งว่า *"ไม่ได้ใช้"* ทั้งสองใบเพิ่งสร้างเมื่อเช้าวันเดียวกันและไม่เคยมีข้อมูลจริง ลบตามแบบอย่าง
+  Company Profiles: ลบเฉพาะโค้ด (8 ไฟล์ + จุดเชื่อมอีกราว 40 จุด + สิทธิ์ 14 ตัว + i18n 238 คีย์ +
+  คู่มือ 2 บท) แต่ **ไม่แตะ collection ใน MongoDB และไม่แก้ประกาศ What's New ที่ลงวันที่ไปแล้ว**
+  โมดูลจัดซื้อเหลือ ใบขอซื้อ (ทุกฝ่าย) + ใบสั่งซื้อ · Global Search 19 → 17 หมวด · เทสต์ 364 → 361
+  See CHANGELOG.md 2026-08-28d.
+
 - ✅ **[2026-08-28c] โมดูลจัดซื้อ — the Purchasing department got a module of its own.**
   Built from the owner's "กระบวนการจัดซื้อ" flow chart. Three new documents — ใบสั่งซื้อ
   (`PO-{พ.ศ.}-{NNNN}`, from an approved ใบขอซื้อ or blank, on the shared approval engine with

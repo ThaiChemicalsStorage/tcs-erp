@@ -636,7 +636,11 @@ Applied identically to `material-requisitions`, `purchase-requests`, `job-orders
 
 ## Purchasing (added 2026-08-28)
 
-Three new documents, all mounted on `api/handlers/quotes.ts` — the Vercel 12-function budget is
+> **Note.** ใบตรวจรับสินค้า (`/api/goods-receipts`) and ใบรับวางบิล (`/api/bill-receipts`) were added
+> on 2026-08-28 and **removed the same day** at the owner's instruction. Those paths no longer exist —
+> see [MODULES/Purchasing.md](./MODULES/Purchasing.md) "Removed 2026-08-28".
+
+Mounted on `api/handlers/quotes.ts` — the Vercel 12-function budget is
 full, so a new `api/handlers/*.ts` file is not available. Every route below needs a matching
 rewrite pair in `vercel.json` **and** an `API_ROUTES` entry in `server/app.ts`; if those two
 disagree, local dev and production behave differently. See [MODULES/Purchasing.md](./MODULES/Purchasing.md).
@@ -660,35 +664,6 @@ disagree, local dev and production behave differently. See [MODULES/Purchasing.m
 The unique index on `documentNumber` is created **lazily by the handler**
 (`ensurePurchaseOrderNumberIndex()`, with a backfill), because `ensureIndexes()` only ever runs
 from the Setup Wizard and would never fire on an already-provisioned database.
-
-### Goods Receipt (`api/_lib/goodsReceiptHandler.ts`, mounted at `/api/goods-receipts`)
-
-| Method & Path | Auth | Notes |
-|---|---|---|
-| `GET /api/goods-receipts` | `goodsReceipt:view` | Own only without `:viewAll`. |
-| `POST /api/goods-receipts` | `goodsReceipt:create` + `purchaseOrder:view` | Body `{ purchaseOrderId }` — **required** (`400`). The PO must be `Final` (`400`). Lines are copied with `qtyOrdered` filled and **`qtyReceived: null`** — never pre-filled, or a short delivery passes by inaction. `201`. |
-| `GET /api/goods-receipts/:id` | `goodsReceipt:view` | |
-| `PATCH /api/goods-receipts/:id` | `goodsReceipt:edit` + owner | `Draft` only. Accepts `?autoSave=1`. |
-| `POST /api/goods-receipts/:id/complete` | `goodsReceipt:finalize` | → `Received`. |
-| `POST /api/goods-receipts/:id/reopen` | `goodsReceipt:finalize` | → `Draft`. Deliberately allowed: goods arrive short and inspections get corrected. |
-| `POST /api/goods-receipts/:id/print` | `goodsReceipt:print` | Audit only. |
-| `DELETE /api/goods-receipts/:id` | `goodsReceipt:delete` + owner | Soft delete. |
-
-**Writes no stock.** `StockMovementSourceType` reserves `"goods_receipt"` but nothing calls
-`applyStockMovement()` — see MODULES/Purchasing.md "Known gaps".
-
-### Bill Receipt (`api/_lib/billReceiptHandler.ts`, mounted at `/api/bill-receipts`)
-
-| Method & Path | Auth | Notes |
-|---|---|---|
-| `GET /api/bill-receipts` | `billReceipt:view` | Own only without `:viewAll`. |
-| `POST /api/bill-receipts` | `billReceipt:create` + `purchaseOrder:view` | Body `{ purchaseOrderId, goodsReceiptId? }`. The PO is required and must be `Final`; the ใบตรวจรับ is optional on purpose — vendors routinely bill before inspection finishes. `201`. |
-| `GET /api/bill-receipts/:id` | `billReceipt:view` | |
-| `PATCH /api/bill-receipts/:id` | `billReceipt:edit` + owner | `Draft` only. Accepts `?autoSave=1`. **`sanitizeChecks()` pins the attachment-checklist labels server-side** and reads only `checked` from the client — a client that could rename a row could make a completed document claim it received something it never did. |
-| `POST /api/bill-receipts/:id/complete` | `billReceipt:finalize` | → `Received`. |
-| `POST /api/bill-receipts/:id/reopen` | `billReceipt:finalize` | → `Draft`. |
-| `POST /api/bill-receipts/:id/print` | `billReceipt:print` | Audit only. |
-| `DELETE /api/bill-receipts/:id` | `billReceipt:delete` + owner | Soft delete. |
 
 ### Purchase Request opened to every department (2026-08-28)
 

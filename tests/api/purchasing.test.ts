@@ -49,12 +49,6 @@ type PurchaseOrderDoc = {
   id: string; documentNumber: string; status: string; vendorName: string; purchaseRequestId: string;
   lines: { id: string; description: string; unit: string; qty: number | null; unitPrice: number | null }[];
 };
-type GoodsReceiptDoc = {
-  id: string; documentNumber: string; status: string; purchaseOrderId: string;
-  lines: { description: string; qtyOrdered: number | null; qtyReceived: number | null; result: string }[];
-};
-type BillReceiptDoc = { id: string; documentNumber: string; status: string; purchaseOrderId: string; goodsReceiptId: string };
-
 /** ใบขอซื้อเปล่าของฝ่ายที่ไม่มีเอกสารต้นทาง — ทางสร้างที่เพิ่มมาพร้อมโมดูลจัดซื้อ */
 async function createStandalonePurchaseRequest(): Promise<PurchaseRequestDoc> {
   const res = await api("/api/purchase-requests", { method: "POST", body: JSON.stringify({}) });
@@ -225,64 +219,6 @@ describe("ใบสั่งซื้อ (PO)", () => {
   });
 });
 
-describe("ใบตรวจรับสินค้า (GR) และใบรับวางบิล (BR)", () => {
-  it("ตรวจรับได้เฉพาะใบสั่งซื้อที่อนุมัติแล้ว และจำนวนที่รับเริ่มว่างเสมอ", async () => {
-    const pr = await approvedPurchaseRequest();
-    const po = await createPurchaseOrder({ purchaseRequestId: pr.id });
-
-    const tooEarly = await api("/api/goods-receipts", { method: "POST", body: JSON.stringify({ purchaseOrderId: po.id }) });
-    expect(tooEarly.status).toBe(400);
-
-    await approvePurchaseOrder(po.id);
-    const res = await api("/api/goods-receipts", { method: "POST", body: JSON.stringify({ purchaseOrderId: po.id }) });
-    expect(res.status).toBe(201);
-    const gr = (await json<{ goodsReceipt: GoodsReceiptDoc }>(res)).goodsReceipt;
-
-    expect(gr.id).toMatch(new RegExp(`^GR-${BUDDHIST_YEAR}-\\d{4}$`));
-    expect(gr.status).toBe("Draft");
-    expect(gr.purchaseOrderId).toBe(po.id);
-    expect(gr.lines).toHaveLength(2);
-    expect(gr.lines[0].qtyOrdered).toBe(2);
-    // ผู้ตรวจรับต้องกรอกเอง — ห้าม pre-fill ให้เท่าจำนวนที่สั่ง ไม่งั้นของขาดจะผ่านไปเงียบ ๆ
-    expect(gr.lines[0].qtyReceived).toBeNull();
-    expect(gr.lines[0].result).toBe("Pending");
-
-    const completed = await api(`/api/goods-receipts/${encodeURIComponent(gr.id)}/complete`, { method: "POST" });
-    expect(completed.status).toBe(200);
-    expect((await json<{ goodsReceipt: GoodsReceiptDoc }>(completed)).goodsReceipt.status).toBe("Received");
-  });
-
-  it("รับวางบิลอ้างใบสั่งซื้อที่อนุมัติแล้ว และผูกใบตรวจรับได้ (ไม่บังคับ)", async () => {
-    const po = await createPurchaseOrder();
-    await approvePurchaseOrder(po.id);
-    const gr = (await json<{ goodsReceipt: GoodsReceiptDoc }>(
-      await api("/api/goods-receipts", { method: "POST", body: JSON.stringify({ purchaseOrderId: po.id }) }),
-    )).goodsReceipt;
-
-    const withoutGr = await api("/api/bill-receipts", { method: "POST", body: JSON.stringify({ purchaseOrderId: po.id }) });
-    expect(withoutGr.status).toBe(201);
-    const plain = (await json<{ billReceipt: BillReceiptDoc }>(withoutGr)).billReceipt;
-    expect(plain.id).toMatch(new RegExp(`^BR-${BUDDHIST_YEAR}-\\d{4}$`));
-    expect(plain.goodsReceiptId).toBe("");
-
-    const withGr = await api("/api/bill-receipts", { method: "POST", body: JSON.stringify({ purchaseOrderId: po.id, goodsReceiptId: gr.id }) });
-    expect(withGr.status).toBe(201);
-    const linked = (await json<{ billReceipt: BillReceiptDoc }>(withGr)).billReceipt;
-    expect(linked.goodsReceiptId).toBe(gr.id);
-
-    const completed = await api(`/api/bill-receipts/${encodeURIComponent(linked.id)}/complete`, { method: "POST" });
-    expect(completed.status).toBe(200);
-    expect((await json<{ billReceipt: BillReceiptDoc }>(completed)).billReceipt.status).toBe("Received");
-  });
-
-  it("ต้องระบุใบสั่งซื้อต้นทางเสมอ", async () => {
-    const gr = await api("/api/goods-receipts", { method: "POST", body: JSON.stringify({}) });
-    expect(gr.status).toBe(400);
-    const br = await api("/api/bill-receipts", { method: "POST", body: JSON.stringify({}) });
-    expect(br.status).toBe(400);
-  });
-});
-
 describe("สิทธิ์ — บทบาทที่ไม่มีสิทธิ์จัดซื้อเข้าไม่ได้เลย", () => {
   it("ไม่มี purchaseOrder:view แล้ว list/get/create ต้องถูกปฏิเสธทั้งหมด", async () => {
     // บทบาทที่มีแต่สิทธิ์ดูใบเสนอราคา — ไม่มีสิทธิ์อะไรของโมดูลจัดซื้อสักตัว
@@ -310,7 +246,7 @@ describe("สิทธิ์ — บทบาทที่ไม่มีสิ�
     const asSales = (path: string, init: RequestInit = {}) =>
       fetch(`${baseUrl}${path}`, { ...init, headers: { "content-type": "application/json", cookie, ...(init.headers ?? {}) } });
 
-    for (const path of ["/api/purchase-orders", "/api/goods-receipts", "/api/bill-receipts"]) {
+    for (const path of ["/api/purchase-orders"]) {
       expect((await asSales(path)).status).toBe(403);
       expect((await asSales(path, { method: "POST", body: "{}" })).status).toBe(403);
     }

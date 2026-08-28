@@ -930,14 +930,16 @@ cannot approve what it cannot see.
 
 ## Purchasing permissions (added 2026-08-28)
 
-**21 new permissions** in three families — `purchaseOrder:`, `goodsReceipt:`, `billReceipt:`, each
-with `view` / `viewAll` / `create` / `edit` / `finalize` / `print` / `delete` — shown under a new
-**"จัดซื้อ"** group in Role Management.
+**7 permissions** — `purchaseOrder:` `view` / `viewAll` / `create` / `edit` / `finalize` / `print` /
+`delete` — shown under a new **"จัดซื้อ"** group in Role Management.
 
-`finalize` means different things by document, deliberately: on ใบสั่งซื้อ it is the approval
-(the shared ร่าง→รออนุมัติ→อนุมัติ engine, so it also gates reject); on ใบตรวจรับสินค้า and
-ใบรับวางบิล there is no approval step in the owner's process chart, so it gates the
-complete/reopen toggle instead.
+21 were added on 2026-08-28; the 14 belonging to ใบตรวจรับสินค้า and ใบรับวางบิล were removed the
+same day with those modules, out of all five permission tables and out of `defaultRoles`. A role
+already saved in MongoDB that carries one of the 14 dead strings is not broken — the string is simply
+inert until that role is next saved (same as the Company Profiles removal).
+
+`purchaseOrder:finalize` is the approval — the shared ร่าง→รออนุมัติ→อนุมัติ engine, so it gates
+reject as well.
 
 🔸 **No `RBAC_MIGRATIONS` entry was written**, following the same 2026-08-25 decision the Product
 Request module recorded above: new permissions go into `defaultRoles` (Administrator/Super Admin),
@@ -948,16 +950,13 @@ No `PERMISSION_DEPENDENCIES` entries were added either. That table is only for t
 page breaks permanently because its boot fetch needs a different permission; it is not a list of
 "permissions that ought to go together", and `tests/api/roleDependencies.test.ts` enforces that
 reading. The genuine cross-module checks in this module are enforced **in the handlers** instead:
-creating a ใบสั่งซื้อ from a ใบขอซื้อ also requires `purchaseRequest:view`, and creating a
-ใบตรวจรับ/ใบรับวางบิล also requires `purchaseOrder:view` — without those, a create button doubles
-as a way to read a document the caller cannot open.
+creating a ใบสั่งซื้อ from a ใบขอซื้อ also requires `purchaseRequest:view` — without that, a create
+button doubles as a way to read a document the caller cannot open.
 
-**Who should get what.** `purchaseOrder:*` belongs to the Purchasing department; `goodsReceipt:*`
-to whoever physically receives goods (สโตร์ in most shops, not จัดซื้อ); `billReceipt:*` to
-whoever takes the vendor's billing envelope (บัญชี or จัดซื้อ). `purchaseRequest:create` is now
-worth granting **department-wide**, since 2026-08-28 made it possible for a department with no
-project access to raise one at all.
+**Who should get what.** `purchaseOrder:*` belongs to the Purchasing department.
+`purchaseRequest:create` is now worth granting **department-wide**, since 2026-08-28 made it
+possible for a department with no project access to raise one at all.
 
-The nav group hides itself when a role holds none of the four view permissions in it
+The nav group hides itself when a role holds none of the view permissions in it
 (`items.length === 0` returns `null` in `App.tsx`), so a role without these never sees a จัดซื้อ
 heading with nothing under it.

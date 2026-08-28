@@ -1,7 +1,7 @@
 import type { AuthContext } from "./auth.js";
 import {
   deliveryOrdersCollection, serviceReportsCollection, projectsCollection,
-  materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection, purchaseOrdersCollection, goodsReceiptsCollection, billReceiptsCollection,
+  materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection, purchaseOrdersCollection,
   productionOrdersCollection, productRequestsCollection, arDocumentsCollection,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -249,56 +249,6 @@ export async function searchPurchaseOrders(query: string, ctx: AuthContext, limi
 }
 
 /**
- * ใบตรวจรับสินค้า (2026-08-28) — ค้นทั้ง `_id` และ `documentNumber` เหมือนใบสั่งซื้อ · `lineage` ชี้กลับไป
- * ใบสั่งซื้อต้นทาง เพราะนั่นคือสิ่งที่คนถามหาเวลาไล่เอกสาร ไม่ใช่รหัสงาน
- */
-export async function searchGoodsReceipts(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
-  const col = await goodsReceiptsCollection();
-  const rx = containsRegex(query);
-  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "goodsReceipt:viewAll"), "createdBy");
-  const docs = await col.find(
-    docFilter(ownership, [
-      { _id: rx }, { documentNumber: rx }, { vendorName: rx }, { jobCode: rx },
-      { purchaseOrderId: rx }, { deliveryNoteRef: rx }, { "lines.description": rx }, { "lines.productCode": rx },
-    ]) as never,
-    { sort: SORT_RECENT, limit },
-  ).toArray();
-  return docs.map((d) => ({
-    id: d._id.toString(),
-    docNumber: d.documentNumber || d._id.toString(),
-    party: d.vendorName ?? "",
-    lineage: d.purchaseOrderId || d.jobCode || "",
-    status: d.status ?? "",
-    date: isoOf(d),
-  }));
-}
-
-/**
- * ใบรับวางบิล (2026-08-28) — เลขที่ใบแจ้งหนี้ของผู้ขายค้นได้ด้วย เพราะบัญชีมักถือกระดาษของผู้ขาย
- * อยู่ในมือแล้วอยากรู้ว่ารับวางบิลใบไหนไว้
- */
-export async function searchBillReceipts(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
-  const col = await billReceiptsCollection();
-  const rx = containsRegex(query);
-  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "billReceipt:viewAll"), "createdBy");
-  const docs = await col.find(
-    docFilter(ownership, [
-      { _id: rx }, { documentNumber: rx }, { vendorName: rx }, { jobCode: rx },
-      { purchaseOrderId: rx }, { goodsReceiptId: rx }, { vendorInvoiceNo: rx },
-    ]) as never,
-    { sort: SORT_RECENT, limit },
-  ).toArray();
-  return docs.map((d) => ({
-    id: d._id.toString(),
-    docNumber: d.documentNumber || d._id.toString(),
-    party: d.vendorName ?? "",
-    lineage: d.purchaseOrderId || d.goodsReceiptId || "",
-    status: d.status ?? "",
-    date: isoOf(d),
-  }));
-}
-
-/**
  * ใบสั่งผลิต — the one family whose number is an editable field (`documentNumber`, FM-PD-02) rather
  * than the `_id`. Documents created before 2026-08-27 have no `documentNumber` at all, so both are
  * searched and the display falls back to `_id`, matching `toClient()` in productionOrderHandler.
@@ -474,32 +424,6 @@ export async function searchByDocNumber(
       return first("purchaseOrder", docs.map((d) => ({
         id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
         party: d.vendorName ?? "", lineage: d.jobCode || d.purchaseRequestId || "",
-        status: d.status ?? "", date: isoOf(d),
-      })));
-    }
-    case "goodsReceipt": {
-      const col = await goodsReceiptsCollection();
-      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "goodsReceipt:viewAll"), "createdBy");
-      const docs = await col.find(
-        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
-        { limit: 1 },
-      ).toArray();
-      return first("goodsReceipt", docs.map((d) => ({
-        id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
-        party: d.vendorName ?? "", lineage: d.purchaseOrderId || d.jobCode || "",
-        status: d.status ?? "", date: isoOf(d),
-      })));
-    }
-    case "billReceipt": {
-      const col = await billReceiptsCollection();
-      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "billReceipt:viewAll"), "createdBy");
-      const docs = await col.find(
-        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
-        { limit: 1 },
-      ).toArray();
-      return first("billReceipt", docs.map((d) => ({
-        id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
-        party: d.vendorName ?? "", lineage: d.purchaseOrderId || d.goodsReceiptId || "",
         status: d.status ?? "", date: isoOf(d),
       })));
     }

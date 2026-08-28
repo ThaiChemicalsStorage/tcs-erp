@@ -118,21 +118,7 @@ export type Permission =
   | "purchaseOrder:edit"
   | "purchaseOrder:finalize"
   | "purchaseOrder:print"
-  | "purchaseOrder:delete"
-  | "goodsReceipt:view"
-  | "goodsReceipt:viewAll"
-  | "goodsReceipt:create"
-  | "goodsReceipt:edit"
-  | "goodsReceipt:finalize"
-  | "goodsReceipt:print"
-  | "goodsReceipt:delete"
-  | "billReceipt:view"
-  | "billReceipt:viewAll"
-  | "billReceipt:create"
-  | "billReceipt:edit"
-  | "billReceipt:finalize"
-  | "billReceipt:print"
-  | "billReceipt:delete";
+  | "purchaseOrder:delete";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -251,20 +237,6 @@ export const ALL_PERMISSIONS: Permission[] = [
   "purchaseOrder:finalize",
   "purchaseOrder:print",
   "purchaseOrder:delete",
-  "goodsReceipt:view",
-  "goodsReceipt:viewAll",
-  "goodsReceipt:create",
-  "goodsReceipt:edit",
-  "goodsReceipt:finalize",
-  "goodsReceipt:print",
-  "goodsReceipt:delete",
-  "billReceipt:view",
-  "billReceipt:viewAll",
-  "billReceipt:create",
-  "billReceipt:edit",
-  "billReceipt:finalize",
-  "billReceipt:print",
-  "billReceipt:delete",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -384,20 +356,6 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "purchaseOrder:finalize": "อนุมัติ/ปิดใบสั่งซื้อ",
   "purchaseOrder:print": "พิมพ์ / ส่งออกใบสั่งซื้อ",
   "purchaseOrder:delete": "ลบใบสั่งซื้อ",
-  "goodsReceipt:view": "ดูใบตรวจรับสินค้า",
-  "goodsReceipt:viewAll": "ดูใบตรวจรับสินค้าของผู้อื่น",
-  "goodsReceipt:create": "สร้างใบตรวจรับสินค้า",
-  "goodsReceipt:edit": "แก้ไขใบตรวจรับสินค้า",
-  "goodsReceipt:finalize": "อนุมัติ/ปิดใบตรวจรับสินค้า",
-  "goodsReceipt:print": "พิมพ์ / ส่งออกใบตรวจรับสินค้า",
-  "goodsReceipt:delete": "ลบใบตรวจรับสินค้า",
-  "billReceipt:view": "ดูใบรับวางบิล",
-  "billReceipt:viewAll": "ดูใบรับวางบิลของผู้อื่น",
-  "billReceipt:create": "สร้างใบรับวางบิล",
-  "billReceipt:edit": "แก้ไขใบรับวางบิล",
-  "billReceipt:finalize": "อนุมัติ/ปิดใบรับวางบิล",
-  "billReceipt:print": "พิมพ์ / ส่งออกใบรับวางบิล",
-  "billReceipt:delete": "ลบใบรับวางบิล",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -517,20 +475,6 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "purchaseOrder:finalize": "permission.purchaseOrderFinalize",
   "purchaseOrder:print": "permission.purchaseOrderPrint",
   "purchaseOrder:delete": "permission.purchaseOrderDelete",
-  "goodsReceipt:view": "permission.goodsReceiptView",
-  "goodsReceipt:viewAll": "permission.goodsReceiptViewAll",
-  "goodsReceipt:create": "permission.goodsReceiptCreate",
-  "goodsReceipt:edit": "permission.goodsReceiptEdit",
-  "goodsReceipt:finalize": "permission.goodsReceiptFinalize",
-  "goodsReceipt:print": "permission.goodsReceiptPrint",
-  "goodsReceipt:delete": "permission.goodsReceiptDelete",
-  "billReceipt:view": "permission.billReceiptView",
-  "billReceipt:viewAll": "permission.billReceiptViewAll",
-  "billReceipt:create": "permission.billReceiptCreate",
-  "billReceipt:edit": "permission.billReceiptEdit",
-  "billReceipt:finalize": "permission.billReceiptFinalize",
-  "billReceipt:print": "permission.billReceiptPrint",
-  "billReceipt:delete": "permission.billReceiptDelete",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -657,10 +601,6 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
     permissions: [
       "purchaseOrder:view", "purchaseOrder:viewAll", "purchaseOrder:create", "purchaseOrder:edit",
       "purchaseOrder:finalize", "purchaseOrder:print", "purchaseOrder:delete",
-      "goodsReceipt:view", "goodsReceipt:viewAll", "goodsReceipt:create", "goodsReceipt:edit",
-      "goodsReceipt:finalize", "goodsReceipt:print", "goodsReceipt:delete",
-      "billReceipt:view", "billReceipt:viewAll", "billReceipt:create", "billReceipt:edit",
-      "billReceipt:finalize", "billReceipt:print", "billReceipt:delete",
     ],
   },
   {

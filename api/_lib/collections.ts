@@ -19,8 +19,6 @@ import type { JobOrder } from "../../src/lib/jobOrder.js";
 import type { PurchaseRequest } from "../../src/lib/purchaseRequest.js";
 import type { ProductionOrder } from "../../src/lib/productionOrder.js";
 import type { PurchaseOrder } from "../../src/lib/purchaseOrder.js";
-import type { GoodsReceipt } from "../../src/lib/goodsReceipt.js";
-import type { BillReceipt } from "../../src/lib/billReceipt.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits.
  * (`emailAppPasswordEnc` existed briefly on 2026-08-07 for the since-removed Gmail sending feature;
@@ -744,13 +742,7 @@ export async function arDocumentsCollection() {
 // kept in sync via applyStockMovement() (api/_lib/stockHandler.ts) — the only writer, so every
 // balance change is traceable through a StockMovementFields row. See docs/MODULES/Product.md "Stock".
 export type StockMovementKind = "receive" | "deduct" | "adjust";
-/**
- * `"goods_receipt"` เพิ่มไว้ 2026-08-28 พร้อมโมดูลจัดซื้อ — **ยังไม่มีใครเขียนค่านี้จริง** ใบตรวจรับ
- * สินค้าเป็นผู้เขียนที่ควรจะเป็นในอนาคต แต่ยังไม่ตัดสต๊อกจนกว่าเจ้าของจะตัดสินใจว่าให้ตัดอัตโนมัติตอน
- * ปิดใบ หรือให้กดยืนยันแยก — เดาแล้วผิดคือยอดคงเหลือจริงเพี้ยน ใส่ค่าไว้ก่อนเพื่อให้ตอนต่อจริง
- * ไม่ต้องแก้ชนิดข้อมูลที่ทั้งสองฝั่ง (ดู src/lib/goodsReceipt.ts)
- */
-export type StockMovementSourceType = "manual" | "ar_document" | "goods_receipt";
+export type StockMovementSourceType = "manual" | "ar_document";
 
 export interface StockMovementFields {
   productId: string;
@@ -838,20 +830,6 @@ export async function purchaseOrdersCollection() {
   return db.collection<PurchaseOrderFields & { _id: string }>("purchase_orders");
 }
 
-/** Business-id-keyed (e.g. "GR-2569-0001") — ใบตรวจรับสินค้า สร้างจากใบสั่งซื้อที่อนุมัติแล้ว */
-export type GoodsReceiptFields = Omit<GoodsReceipt, "id">;
-export async function goodsReceiptsCollection() {
-  const db = await getDb();
-  return db.collection<GoodsReceiptFields & { _id: string }>("goods_receipts");
-}
-
-/** Business-id-keyed (e.g. "BR-2569-0001") — ใบรับวางบิล ปลายทางของกระบวนการจัดซื้อ */
-export type BillReceiptFields = Omit<BillReceipt, "id">;
-export async function billReceiptsCollection() {
-  const db = await getDb();
-  return db.collection<BillReceiptFields & { _id: string }>("bill_receipts");
-}
-
 /** Creates required indexes across every collection. Idempotent — safe to call repeatedly, but only worth calling from setup/cold paths, not every request. */
 export async function ensureIndexes() {
   const [
@@ -863,7 +841,7 @@ export async function ensureIndexes() {
     arMilestones, arAttachmentFiles, arDocuments, stockMovements,
     projects, materialRequisitions, jobOrders, purchaseRequests, productionOrders,
     productRequests,
-    purchaseOrders, goodsReceipts, billReceipts,
+    purchaseOrders,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -879,7 +857,7 @@ export async function ensureIndexes() {
     projectsCollection(), materialRequisitionsCollection(), jobOrdersCollection(), purchaseRequestsCollection(),
     productionOrdersCollection(),
     productRequestsCollection(),
-    purchaseOrdersCollection(), goodsReceiptsCollection(), billReceiptsCollection(),
+    purchaseOrdersCollection(),
   ]);
 
   await Promise.all([
@@ -999,15 +977,6 @@ export async function ensureIndexes() {
     purchaseOrders.createIndex({ status: 1 }),
     purchaseOrders.createIndex({ isDeleted: 1 }),
     purchaseOrders.createIndex({ createdBy: 1 }),
-    goodsReceipts.createIndex({ purchaseOrderId: 1 }),
-    goodsReceipts.createIndex({ status: 1 }),
-    goodsReceipts.createIndex({ isDeleted: 1 }),
-    goodsReceipts.createIndex({ createdBy: 1 }),
-    billReceipts.createIndex({ purchaseOrderId: 1 }),
-    billReceipts.createIndex({ goodsReceiptId: 1 }),
-    billReceipts.createIndex({ status: 1 }),
-    billReceipts.createIndex({ isDeleted: 1 }),
-    billReceipts.createIndex({ createdBy: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

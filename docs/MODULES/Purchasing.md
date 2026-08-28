@@ -1,6 +1,6 @@
 # Module: Purchasing (จัดซื้อ)
 
-## Status: ✅ Built 2026-08-28 — ใบสั่งซื้อ (new), ใบตรวจรับสินค้า (new), ใบรับวางบิล (new), plus ใบขอซื้อ opened to every department. Click-tested in a real browser end to end. **Print layouts are placeholders** awaiting the owner's real forms.
+## Status: ✅ Built 2026-08-28 — ใบสั่งซื้อ (new) plus ใบขอซื้อ opened to every department. Click-tested in a real browser end to end. **Print layout is a placeholder** awaiting the owner's real form. ⚠️ **ใบตรวจรับสินค้า and ใบรับวางบิล were built the same day and removed hours later at the owner's instruction — see "Removed 2026-08-28" below.**
 
 Serves the **Purchasing (จัดซื้อ) department**, which until this date had **no module of its own** —
 it existed in the system only as a signature box on ใบขอซื้อ (`purchasingDeptBy`, editable only
@@ -16,19 +16,15 @@ The chart also carries a per-department table of ผู้ขอซื้อ / �
 เซอร์วิส · บัญชี · บุคคล) and a note that approvers may delegate. That table is **not** implemented
 as data yet — see [Known gaps](#known-gaps).
 
-## The four documents
+## The documents
 
 | Document | Built as | Number | Statuses |
 |---|---|---|---|
 | ใบขอซื้อ (Purchase Request) | **Existing** module, extended with `ownerDepartment: "general"` | `PR-{พ.ศ.}-{NNNN}` | ร่าง → รออนุมัติ → อนุมัติ |
 | **ใบสั่งซื้อ (Purchase Order)** | **New** — `src/lib/purchaseOrder.ts` | `PO-{พ.ศ.}-{NNNN}` | ร่าง → รออนุมัติ → อนุมัติ |
-| **ใบตรวจรับสินค้า (Goods Receipt)** | **New** — `src/lib/goodsReceipt.ts` | `GR-{พ.ศ.}-{NNNN}` | ร่าง → ตรวจรับแล้ว |
-| **ใบรับวางบิล (Bill Receipt)** | **New** — `src/lib/billReceipt.ts` | `BR-{พ.ศ.}-{NNNN}` | ร่าง → รับวางบิลแล้ว |
 
-Only the first two need approval. ตรวจรับ/รับวางบิล are **records of a physical event**, not
-decisions — the owner's chart shows no approval step on either, so they got a two-state
-complete/reopen toggle (`goodsReceipt:finalize` / `billReceipt:finalize`) instead of the three-state
-approval engine. Reopening is deliberately allowed: goods arrive short, a bill gets corrected.
+The owner's chart has two further steps — รับ/ตรวจรับสินค้า and รับวางบิล — which were built on
+2026-08-28 and removed the same day; see "Removed 2026-08-28" at the bottom of this file.
 
 ## ใบขอซื้อ opened to every department (2026-08-28)
 
@@ -77,36 +73,9 @@ prevents.
 discount, no withholding — it is a plain qty × price sum, and pulling in the quotation money engine
 would imply tax behaviour this document does not have.
 
-## ใบตรวจรับสินค้า (Goods Receipt)
-
-Created from a **Final** PO, copying its lines with `qtyOrdered` filled and **`qtyReceived` left
-null on purpose**. Pre-filling the received quantity to match the ordered quantity would let a short
-delivery pass inspection by inaction — the person receiving the goods has to type what actually
-arrived. Each line also carries `result: "Pending" | "Passed" | "Rejected"`.
-
-`isFullyReceived()` (client-side) compares the two columns so the UI can flag a partial receipt.
-
-**This document writes no stock.** `StockMovementSourceType` gained `"goods_receipt"` so the
-extension point is reserved and typed, but nothing calls `applyStockMovement()` yet — see
-[Known gaps](#known-gaps).
-
-## ใบรับวางบิล (Bill Receipt)
-
-Records that the vendor's billing envelope arrived and what was in it. References a Final PO
-(required) and a ใบตรวจรับ (optional — vendors routinely bill before inspection finishes), plus the
-vendor's invoice number/date, the amount, and a due date.
-
-The attachment checklist (`DEFAULT_BILL_ATTACHMENT_CHECKS`: ใบแจ้งหนี้ · ใบกำกับภาษี · ใบส่งของ ·
-สำเนาใบสั่งซื้อ · ใบเสร็จรับเงิน) has its **labels pinned server-side** — `sanitizeChecks()` accepts
-only the `checked` boolean from the client. A client that could rename a checklist row could make a
-completed document claim it received something it never did.
-
-**This is not Accounts Payable.** Nothing is posted, no liability is created, and the Accounting
-module does not read these records.
-
 ## Routing
 
-All three documents mount on **`api/handlers/quotes.ts`**, the documented overflow dispatch host —
+ใบสั่งซื้อ mounts on **`api/handlers/quotes.ts`**, the documented overflow dispatch host —
 the Vercel 12-function budget is full (9 handlers + company + audit-log + dashboard), so a new
 `api/handlers/*.ts` file is not available. Adding a document is an import plus a two-line `if` on
 the pathname there, and matching entries in **both** `vercel.json` (two rewrites per route: bare and
@@ -116,8 +85,6 @@ what makes local dev and production behave the same way.
 | Route | Actions |
 |---|---|
 | `/api/purchase-orders` | list · create · get · patch · delete · `print` · `rewrite` · `submit-approval` · `approve`/`finalize` · `reject` · `withdraw-approval` |
-| `/api/goods-receipts` | list · create · get · patch · delete · `print` · `complete` · `reopen` |
-| `/api/bill-receipts` | list · create · get · patch · delete · `print` · `complete` · `reopen` |
 
 `ensureIndexes()` only ever runs from the Setup Wizard, so any index a handler actually depends on
 must also be created lazily by that handler. `ensurePurchaseOrderNumberIndex()` does this for the
@@ -133,19 +100,17 @@ recorded in `DESIGN.md`. Order follows the flow chart, not the alphabet:
 จัดซื้อ
   ใบขอซื้อ (ทุกฝ่าย)   ← กล่องงานเข้า: ทุกแผนก, มีคอลัมน์ "แผนก"
   ใบสั่งซื้อ
-  ใบตรวจรับสินค้า
-  ใบรับวางบิล
 ```
 
 The existing ใบขอซื้อ entries under **โครงการ** and **ผลิต** stay exactly where they were. The nav
-group hides itself entirely when a role can see none of its four entries (`items.length === 0`
+group hides itself entirely when a role can see none of its entries (`items.length === 0`
 returns `null` in `App.tsx`), so a role without the purchasing permissions never sees the heading.
 
 ## RBAC
 
-21 new permissions in three families — `purchaseOrder:*`, `goodsReceipt:*`, `billReceipt:*`, each
-with `view` / `viewAll` / `create` / `edit` / `finalize` / `print` / `delete` — grouped under the
-label **จัดซื้อ** on the roles page.
+7 permissions — `purchaseOrder:` `view` / `viewAll` / `create` / `edit` / `finalize` / `print` /
+`delete` — grouped under the label **จัดซื้อ** on the roles page. (21 were added on 2026-08-28; the
+14 belonging to the two removed documents went with them the same day.)
 
 No `PERMISSION_DEPENDENCIES` entries were added. That table exists only for the case where a page
 breaks permanently because its boot fetch needs a different permission; it is not a list of
@@ -158,26 +123,55 @@ run-once mechanism if that decision is ever reversed.
 
 ## Print documents
 
-`PurchaseOrderPrintDocument.tsx`, `GoodsReceiptPrintDocument.tsx` and
-`BillReceiptPrintDocument.tsx` are **⚠️ placeholders**. The owner said the real forms would come
+`PurchaseOrderPrintDocument.tsx` is a **⚠️ placeholder**. The owner said the real forms would come
 later; `DESIGN.md` is explicit that the paper form is the authority on a print layout, not the app's
-design system, so these are plain bordered tables that hold the right fields rather than an invented
-FM-PU-xx layout. They hardcode Thai and never call `useI18n`, like every other print document.
+design system, so it is a plain bordered table that holds the right fields rather than an invented
+FM-PU-xx layout. It hardcodes Thai and never calls `useI18n`, like every other print document.
 `PrintLetterhead` is deliberately not used until a real form shows a company letterhead.
 
 ## Known gaps
 
-1. **No vendor master.** `vendorName` is free text on all three documents, exactly as it already was
+1. **No vendor master.** `vendorName` is free text on both documents, exactly as it already was
    on ใบขอซื้อ. No vendor record, credit terms, address or tax ID exists anywhere in the system.
-2. **Goods receipt does not move stock.** Whether receiving should cut stock automatically or need a
-   separate confirmation is a business decision that changes on-hand balances; it was left for the
-   owner rather than guessed.
-3. **No link to Accounts Payable.** รับวางบิล records the envelope; it does not create a payable.
-4. **The per-department approver table from the chart is not data.** Existing permissions and
+2. **The per-department approver table from the chart is not data.** Existing permissions and
    departments are used instead, as agreed. Delegation is therefore whatever the roles page allows.
-5. **Nobody is in the Purchasing department in the live database** (`docs/TODO.md`). The existing
+3. **Nobody is in the Purchasing department in the live database** (`docs/TODO.md`). The existing
    "ใบขอซื้ออนุมัติแล้ว" notification has therefore never reached anyone, and this module inherits
    that: it stays silent until employees are assigned to the department on the user-management page.
    Department matching is also by **name**, not `code` — renaming the department silently stops the
    hand-off.
-6. **No guided tour** for the three new documents (`useModuleTour` is wired for ใบขอซื้อ only).
+4. **No guided tour** for the new document (`useModuleTour` is wired for ใบขอซื้อ only).
+
+## Removed 2026-08-28 — ใบตรวจรับสินค้า (GR) และใบรับวางบิล (BR)
+
+Both were built earlier the same day (commit `dc0334c`) and removed hours later on the owner's
+instruction: *"ลบ 2 อันนี้ออกไปด้วยไม่ได้ใช้"*. Nothing had ever been entered into either — the two
+collections were created but never written to outside a local test.
+
+**What the removal touched.** Following the precedent set by
+[CompanyProfiles.md](./CompanyProfiles.md): the four `src/lib`/`api/_lib` modules and both page
+folders were deleted; the collection accessors, types and 9 index declarations came out of
+`api/_lib/collections.ts`; the dispatch branches left `api/handlers/quotes.ts`, the `API_ROUTES`
+entries left `server/app.ts`, and the 4 rewrites left `vercel.json` (those paths now return a plain
+404 — no function is left behind them); `src/App.tsx` lost 11 wiring sites; the 14 permissions came
+out of all five tables in `src/lib/permissions.ts` plus `defaultRoles`; both search categories and
+their `GR-`/`BR-` fast paths came out of all five search files (Global Search went from 19 categories
+to 17); ~238 i18n keys went in both languages; and the manual lost chapters 17-18, with 19-25
+renumbered down to 17-23.
+
+Two things were **deliberately left alone**:
+
+1. **The `goods_receipts` and `bill_receipts` MongoDB collections and anything in them.** Same rule
+   the Company Profiles removal followed — code removal never drops a collection. Dropping them is a
+   separate, deliberate, backed-up decision.
+2. **The 2026-08-28 What's New entry that announced both documents to users.** It is a dated
+   announcement log, not a description of the current system; rewriting history there would be
+   wrong. A later entry records the withdrawal instead.
+
+One thing that had to go with them: **`PurchaseOrderPickerDialog.tsx`**. It was shared by the two
+removed pages and by nothing else, so it became dead code — and neither `noUnusedLocals` nor ESLint
+catches a file that simply has no importers.
+
+`StockMovementSourceType` also lost its `"goods_receipt"` member, in **both** copies of that union
+(`api/_lib/collections.ts` and `src/lib/stock.ts` declare it independently). Nothing had ever written
+that value, so no stored movement can carry it.
