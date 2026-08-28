@@ -196,6 +196,46 @@
   .top-link a { color: var(--muted); text-decoration: none; }
   .top-link a:hover { color: var(--gold-ink); }
 
+  /* ── แถบเลื่อน (2026-08-28) ──
+     หน้านี้เป็นธีมมืดทั้งหน้า แต่แถบเลื่อนของ Windows เป็นรางสีขาวพร้อมปุ่มลูกศร วาดพาดลงมาบนราง
+     สารบัญและขอบหน้า กลายเป็นสิ่งที่สว่างที่สุดบนจอและอ่านเป็น "รอยต่อ" ของหน้า — ปัญหาเดียวกับที่
+     แถบเมนูของตัวระบบเจอและแก้ไปแล้วเมื่อ 2026-08-26 (.sidebar-scroll ใน src/styles/index.css)
+     ใช้กฎชุดเดียวกัน: รางโปร่งใส · ไม่มีปุ่มลูกศร · หัวแถบเป็นสีตัวอักษรของพื้นผิวนั้นเอง ไม่ใช่
+     สีทอง (แถบเลื่อนเป็นส่วนประกอบพื้นหลัง ไม่ใช่สิ่งที่ต้องการให้มอง) · และ "เห็นอยู่ตลอด"
+     ไม่ใช่โผล่ตอนเอาเมาส์ไปวาง
+
+     ต่างจากตัวระบบตรงที่นี่ประกาศเป็นกฎรวมของทั้งหน้า ไม่ใช่คลาสเฉพาะจุด เพราะทุกพื้นผิวที่เลื่อนได้
+     ในคู่มือ (ตัวหน้า · รางสารบัญ · ตารางที่เลื่อนแนวนอน) เป็นสีเข้มหมด ไม่มีพื้นสว่างให้ต้องยกเว้น
+
+     ลำดับความสำคัญที่ต้องรู้: เบราว์เซอร์ยุคนี้ (Chrome/Firefox) ถ้าเห็น `scrollbar-color` หรือ
+     `scrollbar-width` บนอิลิเมนต์ไหน จะ**ไม่สนใจกฎ ::-webkit-scrollbar ของอิลิเมนต์นั้นเลย** สองชุด
+     ล่างนี้จึงไม่ได้ทำงานพร้อมกัน — ชุดมาตรฐานคือชุดที่ทำงานจริงวันนี้ ส่วน ::-webkit-scrollbar
+     เหลือไว้เผื่อเอนจินเก่า และต้อง**ระบุ `scrollbar-width` ให้ทุกพื้นผิวที่เลื่อนได้เอง** เพราะ
+     `scrollbar-color` สืบทอดลงมาให้ แต่ `scrollbar-width` ไม่สืบทอด — ถ้าลืม รางสารบัญจะกว้าง 16px
+     ขณะที่ขอบหน้ากว้าง 10px แล้วดูไม่เข้ากัน */
+  :root,
+  .side-nav,
+  .tbl-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(150, 161, 181, 0.32) transparent;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-button { display: none; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background-color: rgba(150, 161, 181, 0.28);
+    border-radius: 9999px;
+    /* ขอบโปร่งใส 2px + content-box ทำให้หัวแถบที่มองเห็นกว้าง 6px อยู่กลางพื้นที่กด 10px
+       จับง่ายแต่ไม่ไปชนขอบรางหรือชนตัวหนังสือ */
+    border: 2px solid transparent;
+    background-clip: content-box;
+    transition: background-color 150ms ease;
+  }
+  .side-nav:hover::-webkit-scrollbar-thumb { background-color: rgba(150, 161, 181, 0.45); }
+  ::-webkit-scrollbar-thumb:hover,
+  ::-webkit-scrollbar-thumb:active { background-color: rgba(150, 161, 181, 0.62); }
+
   /* สารบัญด้านข้าง — แสดงเฉพาะจอกว้าง (จอแคบ/มือถือใช้สารบัญด้านบนตามเดิม) */
   .side-nav { display: none; }
   @media (min-width: 1140px) {

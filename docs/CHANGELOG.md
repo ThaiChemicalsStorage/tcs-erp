@@ -86,6 +86,24 @@ same 22-item sequence, and that the sidebar-menu table's "ดูบทที่"
   not tell what to press from what to type.
 - Removed the last inline styles from the body by giving `section > h4` a real rule.
 
+- **แถบเลื่อน** (owner-reported straight after the pass above, with a screenshot): the manual is a
+  dark page, but Windows painted its default **white track with arrow buttons** down the table-of-
+  contents rail and the page edge — the brightest thing on screen, reading as a seam. Same problem
+  and same fix as the app's own sidebar on 2026-08-26 (`.sidebar-scroll`): transparent track, no
+  arrow buttons, and a thumb in the surface's own foreground ink at low opacity — **not gold**, a
+  scrollbar is chrome, not something to look at — and visible at rest rather than on hover.
+  Declared page-wide here rather than as a single class, because every scrollable surface in the
+  manual (the page, the rail, the horizontally-scrolling tables) is dark; there is no light surface
+  to exempt.
+
+  Worth recording for the next person: **modern Chrome and Firefox ignore `::-webkit-scrollbar-*`
+  entirely for any element that has `scrollbar-color` or `scrollbar-width` set**, so the two blocks
+  do not combine — the standard properties are what actually render today and the `-webkit-` rules
+  are a fallback for older engines. And **`scrollbar-color` inherits but `scrollbar-width` does
+  not**: declaring it only on `:root` left the rail at the OS default 16px while the page edge was
+  10px, which is why the rule names `.side-nav` and `.tbl-scroll` explicitly. Measured after the
+  fix: 11px and 10px, transparent track, no buttons.
+
 Verified in a browser: the filter against Thai and Latin terms and its no-results state; that all
 22 sections stay in the DOM while filtering; the narrow-screen nav opening, navigating and closing;
 scroll-spy correctness at chapters 3, 12, 18 and 22; and — under real print-media emulation — that
