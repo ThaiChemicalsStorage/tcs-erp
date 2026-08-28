@@ -169,9 +169,9 @@
 - [ ] **รายชื่อแผนก 2 ชุดในระบบไม่ตรงกันเลย (พบ 2026-08-20).** `DOCUMENT_RECIPIENT_DEPARTMENTS` (ฮาร์ดโค้ดใน `src/lib/documentRequirements.ts`: Purchase/Project/Factory/Store/Technic/Service/Accounting) ใช้กับช่อง "เอกสารส่งถึง" ของ Scope of Work ส่วนตาราง `departments` จริง (ฝ่ายขาย/ฝ่ายจัดซื้อ/...) ใช้ตั้ง `User.department` — **ไม่มีชื่อไหนตรงกันสักชื่อ** Scope of Work รอดมาได้เพราะมันเลือกเป็นรายคน (เก็บ user id) ไม่ได้จับคู่ชื่อแผนก ควรตัดสินใจว่าจะรวมเป็นชุดเดียวไหม (ถ้ารวม ต้องย้าย `documentsToSend` ของ Scope of Work ไปใช้ตารางจริง และแปลงข้อมูล `documentRecipients` เดิม — ไม่ใช่งานเล็ก จึงยังไม่ทำ)
 - [ ] **ตัดสินใจ: ดึงเอกสารทีละใบด้วย id ยังไม่กรองตามเจ้าของ (พบจากการรีวิว 2026-08-20).** `GET /api/material-requisitions/:id`, `/purchase-requests/:id`, `/job-orders/:id`, `/production-orders/:id` เช็คแค่สิทธิ์ `:view` ไม่ได้เรียก `buildSimpleOwnershipClause()` เลย — คนที่ไม่มี `:viewAll` เห็นรายการเฉพาะของตัวเองก็จริง แต่ถ้าเดาเลขเอกสารได้ก็เปิดอ่านของคนอื่นได้ และเลขเอกสารเรียงลำดับ (`MR-2569-0001`, `SC-2026-08-009`) จึงเดาได้ไม่ยาก **เป็นของเดิมทุกโมดูล ไม่ใช่ของใหม่** จงใจไม่แก้เองเพราะเปลี่ยนแล้วกระทบพฤติกรรมที่ใช้กันอยู่ (เช่นส่งเลขเอกสารให้กันดู) ต้องให้เจ้าของตัดสินใจก่อนว่าจะปิดหรือปล่อย ดู [RBAC.md](./RBAC.md) "Known gap"
 - [ ] **ทดสอบโมดูลฝ่ายผลิตในเบราว์เซอร์จริง (2026-08-20).** ใบสั่งผลิต (สร้าง/แก้ไข/พิมพ์ FM-PD-02), ปุ่มอนุมัติทั้ง 4 เอกสาร (ส่งขออนุมัติ → อนุมัติ/ไม่อนุมัติ/ถอน), และหน้าใบเบิก-คืนวัสดุ/ใบขอซื้อ "ของฝ่ายผลิต" ว่าเห็นคนละชุดกับฝ่ายโครงการจริง — ทั้งหมดผ่านแค่ test + typecheck ยังไม่เคยกดจริง (เบราว์เซอร์อัตโนมัติเข้าเครื่องนี้ไม่ได้ ดู CHANGELOG.md 2026-08-20e). เช็คเป็นพิเศษ: หน้าพิมพ์ใบสั่งผลิตเทียบกับฟอร์มกระดาษจริง และบรรทัดหัวข้อ/บรรทัดย่อยแสดงถูกตำแหน่ง
-- [ ] **Cost Control ยังไม่มีในระบบ — ทั้งฝ่ายโครงการและฝ่ายผลิต (2026-08-20).** spec ของทั้งสองแผนกระบุ Cost Control เป็นเงื่อนไขตั้งต้นก่อนเริ่มงาน แต่ยังไม่มีฟิลด์/เอกสารใดในระบบเลย ต้องให้เจ้าของนิยามก่อนว่าเป็นข้อมูลแบบไหน (เอกสาร? ตัวเลขงบต่อรายการ? มาจากแผนกไหน?) จึงจะออกแบบได้
+- [ ] **Cost Control ยังไม่มีในระบบ — ทั้งฝ่ายโครงการและฝ่ายผลิต (2026-08-20).** spec ของทั้งสองแผนกระบุ Cost Control เป็นเงื่อนไขตั้งต้นก่อนเริ่มงาน แต่ยังไม่มีฟิลด์/เอกสารใดในระบบเลย ต้องให้เจ้าของนิยามก่อนว่าเป็นข้อมูลแบบไหน (เอกสาร? ตัวเลขงบต่อรายการ? มาจากแผนกไหน?) จึงจะออกแบบได้ **อัปเดต 2026-08-28: เจ้าของตอบแล้ว** — Cost Control เป็น **เอกสารใบใหม่** ที่ต้องสร้างหน้าขึ้นมาในระบบ และบริษัท **มีไฟล์ Excel ที่ใช้กันอยู่จริง** ดูหัวข้อ "Cost Control + โยน Excel เข้าไปสร้างเอกสาร" ด้านล่าง — ที่ยังค้างคือ **ยังไม่ได้เห็นไฟล์จริง**
 - [ ] **ตรวจหน้าพิมพ์จริงของรายละเอียดย่อย/หมายเหตุ ที่เพิ่ง เพิ่ม (2026-08-20).** `ArDocumentLine.subDetails` + document remarks now render on both layouts, but neither was visually checked (the automated browser cannot reach this machine — see CHANGELOG.md 2026-08-20e). Confirm on a real print preview: plain paper indents the sub-detail under its description without breaking column alignment, and the NCR layout puts each sub-detail on its own row **inside** the pre-printed frame — a document with several sub-details is exactly the case that could overflow `rowsPerPage`, so test one with 3+ before a real dot-matrix run.
-- [ ] **Cost Control ไม่มีในระบบ — spec ของฝ่ายโปรเจกต์ระบุไว้เป็นเงื่อนไขตั้งต้น (พบ 2026-08-20).** The owner's spec opens with "เมื่อโปรเจคได้รับ Scope of work, **Cost Control** แล้ว จะแจกจ่ายงานให้กับน้องๆในทีม" — but `Project` (`src/lib/project.ts`) has no cost/budget field, no `costControlId`, and `handleCreate()` copies only scopeNumber/quotationId/customer/items. A grep for `costControl` across `src/` and `api/` returns nothing but prose. Needs the owner to define what Cost Control actually *is* as data (a document? a per-item budget figure? something produced by another department?) before it can be modelled — not buildable from the spec sentence alone.
+- [ ] **Cost Control ไม่มีในระบบ — spec ของฝ่ายโปรเจกต์ระบุไว้เป็นเงื่อนไขตั้งต้น (พบ 2026-08-20).** The owner's spec opens with "เมื่อโปรเจคได้รับ Scope of work, **Cost Control** แล้ว จะแจกจ่ายงานให้กับน้องๆในทีม" — but `Project` (`src/lib/project.ts`) has no cost/budget field, no `costControlId`, and `handleCreate()` copies only scopeNumber/quotationId/customer/items. A grep for `costControl` across `src/` and `api/` returns nothing but prose. Needs the owner to define what Cost Control actually *is* as data (a document? a per-item budget figure? something produced by another department?) before it can be modelled — not buildable from the spec sentence alone. **อัปเดต 2026-08-28: เจ้าของตอบแล้ว** — Cost Control เป็น **เอกสารใบใหม่** ที่ต้องสร้างหน้าขึ้นมาในระบบ และบริษัท **มีไฟล์ Excel ที่ใช้กันอยู่จริง** ดูหัวข้อ "Cost Control + โยน Excel เข้าไปสร้างเอกสาร" ด้านล่าง — ที่ยังค้างคือ **ยังไม่ได้เห็นไฟล์จริง**
 - [ ] **แจกจ่ายงานให้น้องๆ ในทีม ไม่ได้ถูกจำลองในระบบ (พบ 2026-08-20).** Spec step 1 has the project lead distributing items to team members to calculate quantities; `ProjectItem` has no assignee/owner field and nothing in `projectHandler.ts` assigns work. Today this happens entirely outside the system. Decide whether it should be tracked (and if so, whether it needs notifications, same as the Scope of Work document-recipient pattern).
 - [ ] **ลำดับเอกสารบัญชียังไม่ตรง spec: BI ควรออกท้ายสุด หลัง RE (พบ 2026-08-20).** All 3 cases in "Flow การทำงานของบัญชี-รับ" read `AR/IV → ใบเสร็จรับเงิน (RE) → ใบแจ้งหนี้/ใบวางบิล (BI)`, and `docs/MODULES/Accounting.md` records that order correctly — but `handleIssueDocuments()` (`api/_lib/arHandler.ts`) issues the companion BI *in the same action* as the AR/IV, leaving RE last, and its own code comment claims that IS the real flow. Deliberately not changed yet: it alters which BI number a document receives and affects already-issued production records, so it needs an explicit decision. **If BI does move last, the BI list page should also gain the "+ สร้าง" button that was refused on 2026-08-20b** — that refusal was justified by the same wrong premise ("BI always issues together with its AR/IV"), which this spec contradicts.
 - [ ] **ทดสอบด้วยมือในเบราว์เซอร์จริง: ปุ่ม "+ สร้าง" ใหม่ 4 หน้าของฝ่ายโปรเจกต์ + ด่านอนุมัติ Final (2026-08-20).** รวมถึงเช็คว่างานที่ยังไม่ Final ขึ้นเป็นแถวจางกดไม่ได้พร้อมป้าย "ยังไม่อนุมัติ" จริง ProjectPage/MaterialRequisitionPage/JobOrderPage/PurchaseRequestPage each gained a create button opening a source picker (see CHANGELOG.md 2026-08-20e). Verified by `tsc`/lint/build/tests only — no live session was possible. Confirm: the picker lists the right sources, a Scope of Work that already has a project shows disabled, only `pending` items are offered, and creating opens the new document.
@@ -339,6 +339,68 @@
   donut, AR aging chart + 30-row detail table, milestone billing-funnel bar, top-8-customers table.
   Live-verified — every number cross-checked correctly against real local test data. See
   [MODULES/Accounting.md](./MODULES/Accounting.md) "Accounting Dashboard" and CHANGELOG.md 2026-08-18f.
+
+### Cost Control + โยน Excel เข้าไปสร้างเอกสาร (สำรวจแล้ว 2026-08-28, รอไฟล์ตัวอย่างจากเจ้าของ)
+
+- [ ] **⚠️ ขอไฟล์ Excel "Cost Control" ตัวจริงจากเจ้าของ — ติดอยู่ตรงนี้ข้อเดียว (2026-08-28).**
+  เจ้าของถามว่า *"ถ้าโยนไฟล์ Excel เข้าไปแล้วสร้างใบขึ้นมาได้ไหม คือสร้างในเว็บก็ได้ หรือโยนไฟล์ก็ได้"*
+  แล้วระบุว่าเอกสารที่ต้องการคือ **"ใบใหม่คือ cost control เราจะต้องสร้างหน้าใหม่เพิ่มขึ้นมา"** ·
+  ไฟล์ที่จะโยนคือ **ไฟล์ที่บริษัทใช้กันอยู่แล้ว** (ไม่ใช่ฟอร์มที่ระบบกำหนดให้) · และเลือกว่าถ้าไฟล์มีแถว
+  ที่มีปัญหา ให้ **ดูตัวอย่างก่อนเสมอแล้วค่อยยืนยัน** — จากนั้นบอกว่า *"ถามเฉย ๆ ยังไม่ต้องทำ"*
+
+  **คำตอบนี้ปลดล็อกข้อที่ค้างมาตั้งแต่ 2026-08-20** — Cost Control ถูกจดไว้ว่าเป็นตัวติดขัดใน 5 ที่
+  (2 ข้อด้านบนในไฟล์นี้, `MODULES/Project.md:13`, `MODULES/Production.md:217`, `SESSION_LOG.md:682`)
+  ทุกที่เขียนตรงกันว่า *"รอเจ้าของนิยามก่อนว่า Cost Control คือข้อมูลแบบไหน"* ตอนนี้รู้แล้วว่าเป็นเอกสาร
+  และมีไฟล์จริงอยู่ **ที่ยังขาดคือตัวไฟล์**
+
+  **สิ่งที่ต้องขอ:** ไฟล์ Excel Cost Control **ตัวจริงที่กรอกแล้ว 1–2 ไฟล์** (ไม่ใช่ฟอร์มเปล่า — ต้องเห็นว่า
+  ของจริงกรอกกันยังไง มีกี่ sheet หัวคอลัมน์อยู่แถวไหน มีเซลล์ผสาน/สูตร/แถวสรุปไหม) ถ้ามีหลายเวอร์ชัน
+  ที่หน้าตาต่างกันขอทุกแบบ · **กรณีนี้ไฟล์คือ spec** ไม่มีไฟล์ก็ออกแบบอะไรไม่ได้ และ **ห้ามเดาโครงสร้างเอง**
+  (เหตุผลอยู่ในข้อถัดไป — เคยเกือบพลาดมาแล้วครั้งหนึ่ง)
+
+- [ ] **โยน Excel แล้วสร้างเอกสาร — ทำได้ ของพร้อมเกือบหมด (2026-08-28, ผลสำรวจโค้ด).**
+  `xlsx` เป็น dependency อยู่ในระบบแล้ว (`package.json:29`) และใช้จริงทั้งสองฝั่ง — **อ่าน** ฝั่ง server
+  ที่ `api/_lib/templateWorkbookParser.ts:4` · **เขียน** ฝั่ง client ที่ `src/pages/dashboard/xlsxExport.ts:41`
+  (dynamic import ไม่ให้ ~400 KB เข้า main chunk)
+
+  **ทางที่ควรทำ: parse ฝั่ง client แล้วส่ง JSON ที่ parse เสร็จแล้วขึ้น server** ไม่ต้องอัปโหลดไฟล์ดิบเลย —
+  ได้ preview ทันทีโดยไม่ต้อง round-trip · เลี่ยง base64 · และเลี่ยงเพดาน body ของ Vercel (4.5 MB)
+  ที่แก้ไม่ได้ ถ้าวันหนึ่งกลับไปใช้เส้นทางนั้น (วันนี้รันบน VPS ซึ่ง Express ตั้งไว้ 25 MB — `server/app.ts:69`)
+
+- [ ] **ข้อจำกัดที่เจอจากการสำรวจโค้ดจริง — อ่านก่อนเริ่มทำ (2026-08-28).**
+  - **บทเรียนสำคัญที่สุด:** ทีมเคยพยายามอ่าน Excel จริงของบริษัทนี้มาแล้วและ **จงใจหยุด** —
+    `api/_lib/templateWorkbookParser.ts:16-32` อธิบายไว้ว่าไฟล์จริงมีแถวที่ยัดหลายความหมายไว้ในเซลล์เดียว
+    (sheet "Wet scrubber" แถว 61 ยัดเงื่อนไขการชำระ 4 บรรทัด + ข้อความรับประกัน ไว้ในเซลล์เดียวคั่นด้วย `\r\n`)
+    เหตุผลที่หยุดคือ *"A naive automated classifier risks silently corrupting already-twice-reviewed
+    customer-facing quotation content"* → **นี่คือหลักฐานว่าที่เจ้าของเลือก "ดูตัวอย่างก่อนเสมอ" ถูกแล้ว**
+  - **ไม่มีฟังก์ชันค้นสินค้าจาก "รหัส" ฝั่งเซิร์ฟเวอร์เลย** — ทุก handler resolve บรรทัดด้วย `_id` (ObjectId)
+    เท่านั้น (`materialRequisitionHandler.ts:85`, `purchaseRequestHandler.ts:67`, `purchaseOrderHandler.ts:88`)
+    ที่ query ด้วย `code` มีแค่ 2 ที่และเป็น**การเช็คซ้ำ ไม่ใช่การค้นหา** → **Excel มีแต่รหัส ไม่มี ObjectId**
+    ตัวนำเข้าต้องเพิ่มขั้นแปลง รหัส → `_id` เอง และระวัง: ตัวพิมพ์เล็ก/ใหญ่ (ตอนสร้างสินค้า `products.ts:26`
+    แค่ `.trim()` ไม่ได้ upper) · สินค้าที่ archived · และ**รหัสซ้ำกันได้ในข้อมูลเก่า** เพราะไม่มี unique index จริง
+  - **ทุกตัวตรวจข้อมูลเป็น all-or-nothing** — แถวเสียแถวเดียว `throw HttpError(400)` แล้วไม่เขียนอะไรเลย
+    ไม่มี partial success ที่ไหนในระบบ และ **ไม่มี route ไหนรับ array แล้วสร้างหลายเรคคอร์ด** (ไม่มี
+    bulk-create precedent เลย ทุก `insertMany` ในระบบเป็น seed data กับแจ้งเตือน)
+  - **มีแค่ใบเสนอราคาที่รับ `lines` ตอน POST** — ใบขอซื้อ/ใบสั่งซื้อ/ใบเบิก สร้างเป็นใบเปล่าก่อนเสมอ
+    (`lines: []`) แล้วยิงรายการเข้าทาง PATCH ทีหลัง ถ้า Cost Control ทำตามแบบเดียวกัน ตัวนำเข้าจะเป็น
+    2 จังหวะ (สร้างใบ → ยิงรายการ) ต้องออกแบบเผื่อกรณีจังหวะสองพังแล้วใบเปล่าค้าง
+  - **ทั้งระบบไม่มี multipart เลย** — ไม่มี `multer`/`formidable`/`busboy` ทุก upload เป็น base64-in-JSON
+    ถ้าจำเป็นต้องส่งไฟล์ดิบจริง ๆ มี `fileToBase64()` (`src/lib/documentAttachments.ts:37`) พร้อมใช้
+    (แบ่ง chunk 32 KB เพราะ `String.fromCharCode(...bytes)` กับไฟล์ 2 MB ทำ stack ล้น)
+  - **ยังไม่มี drop zone ที่ไหนในแอปเลย** — DnD ที่มีคือลากสลับลำดับรายการ (`LineItemsEditor.tsx:90`)
+    ไม่เคยแตะ `dataTransfer.files` → ต้องทำใหม่ (งานเล็ก)
+  - **12 Vercel function slots เต็ม** — route ใหม่ต้องเกาะไฟล์ handler เดิม เหมือนที่โมดูลจัดซื้อทำ
+  - ของที่ลอกได้: idempotent ด้วย SHA-256 ของ canonical JSON + รายงานผลนำเข้า `TemplateImportReport`
+    ซึ่งมีฟิลด์ `unrecognizedRows` เตรียมไว้แล้วแต่ยังไม่มีใครใช้ (`quotationTemplatesHandler.ts:112`)
+
+- [ ] **รูปงานถ้าจะทำ — 2 เฟส ห้ามสลับลำดับ (2026-08-28).**
+  **เฟส A: ทำให้ Cost Control มีตัวตนก่อน** — โมดูลเอกสารเต็มรูปแบบ (≈ 1,600 บรรทัด ตามแบบใบสั่งซื้อ)
+  **ทำไม่ได้จนกว่าจะเห็นไฟล์จริง** · น่าจะต้องผูกกับ Scope of Work เพราะ spec ของทั้งฝ่ายโครงการและ
+  ฝ่ายผลิตพูดถึงมันคู่กันเสมอ และอาจปลดล็อกข้ออื่นที่รออยู่ด้วย (เช่น `Project` ที่ยังไม่มีฟิลด์งบประมาณเลย)
+  **เฟส B: เพิ่มทาง "โยน Excel" เป็นทางที่สอง** ข้าง ๆ การกรอกในเว็บ — drop zone → parse ฝั่ง client →
+  **หน้า preview บอกว่าจะได้อะไรบ้าง แถวไหนมีปัญหาขึ้นแดงและแก้ตรงนั้นได้เลย** → กดยืนยันค่อยสร้างจริง
+  **ที่จงใจไม่รวม**: โยน Excel เข้าเอกสารชนิดอื่น (ใบเสนอราคา/ใบขอซื้อ/ใบเบิก) — เจ้าของเลือกเฉพาะ
+  Cost Control ถ้าเฟส B สำเร็จค่อยขยายไปใบอื่นด้วยกลไกเดียวกัน
 
 ## High Priority — Accounting module Phase 1 (milestone billing): backend built + verified live, UI paused (2026-08-17)
 
