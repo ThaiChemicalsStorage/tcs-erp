@@ -634,6 +634,72 @@ left unaddressed, deliberately out of scope for a "fix Critical/High" pass:
 - [ ] **Full automated classification of parsed workbook rows into structured template content.** See the partially-done import item above — real parsing/hashing exists, but turning raw rows into `TemplateSection[]`/`TemplateItem[]` automatically (replacing hand-transcription) remains deliberately unbuilt given the demonstrated row-level ambiguity in the real workbook. Only worth building if manual re-transcription becomes a real recurring bottleneck, and should be done carefully, sheet by sheet, verified against current hand-transcribed content as ground truth.
 - [ ] **Live browser/DB verification of the Quotation Templates feature (both the 2026-07-15 Template Management pass and its same-day second fix pass).** `tsc`/`lint`/`build` pass clean on both and a local Playwright check confirmed zero console errors on both, but no local MongoDB credentials means the actual list/create/edit/duplicate/archive/import/apply-to-quotation flows have never round-tripped against a real `quotation_templates`/`quotes` collection. Run the task spec's own manual test plan against a real deployment.
 
+## Medium Priority — สต๊อกบาร์โค้ด: ยิงปืนแล้วเข้าระบบเลย (สำรวจแล้ว 2026-08-28, รอเจ้าของตัดสินใจ)
+
+- [ ] **ทำสต๊อกเป็นบาร์โค้ด ยิงปืนแล้วเข้าระบบเลย — ทำได้ ยังไม่เริ่ม (2026-08-28, เจ้าของถาม).**
+  เจ้าของถามว่า *"ถ้าจะทำสต๊อกเป็นบาร์โค้ดสามารถทำได้ไหม ถ้าแบบใช้ปืนยิงละเข้าระบบเลย"* แล้วบอกว่า
+  **"อย่าพึ่งทำนะ ถามเฉย ๆ"** — จดไว้เพื่อไม่ให้ต้องไปสำรวจโค้ดใหม่ทั้งหมดถ้ากลับมาถามอีก
+
+  **คำตอบ: ทำได้ และไม่ต้องลง npm เพิ่มสักตัว** — ปืนยิงบาร์โค้ด USB เป็นอุปกรณ์ HID คือเสียบแล้ว
+  ทำตัวเป็น *คีย์บอร์ด* ยิงแล้วมัน "พิมพ์" ตัวเลขรัว ๆ ให้เองแล้วกด Enter ปิดท้าย ไม่ต้องลงไดรเวอร์
+  ไม่ต้องเขียนตัวเชื่อมต่ออะไรทั้งนั้น สิ่งเดียวที่ต้องเขียนคือตัวแยกว่า *ชุดคีย์ที่มาเร็วผิดมนุษย์
+  (< 30 ms ต่อตัว) แล้วปิดท้ายด้วย Enter = การยิง ไม่ใช่การพิมพ์*
+
+  **ขอบเขตที่เจ้าของเลือกไว้แล้ว** (ตอบไว้ 2026-08-28): ยิงตอน **รับของ (ใบตรวจรับ)** · **นับสต๊อก** ·
+  **เบิก/ตัดสต๊อก** · บาร์โค้ด **ต้องพิมพ์ฉลากเอง** (ของส่วนใหญ่ไม่มีติดมา) · ใช้ **ทั้งปืน USB และกล้องมือถือ**
+
+- [ ] **ข้อจำกัดที่เจอจากการสำรวจโค้ดจริง — อ่านก่อนเริ่มทำ (2026-08-28).**
+  ส่วนนี้คือของที่มีค่าที่สุดของบันทึกนี้ ถ้าไม่มีต้องไปไล่โค้ดใหม่ทั้งหมด
+  - **`Product.code` เอามาเป็นบาร์โค้ดตรง ๆ ไม่ได้** — แอดมินแก้ได้ตลอดเวลา (`api/handlers/products.ts:71`)
+    และ **ไม่มี unique index ในฐานข้อมูลจริงเลย** กันซ้ำด้วย `findOne` ที่ `api/handlers/products.ts:31`
+    เท่านั้น (racy + case-sensitive) → ต้องมีฟิลด์ `barcode` แยกต่างหาก ออกให้อัตโนมัติ และห้ามแก้หลังพิมพ์ฉลาก
+  - **unique index ต้องสร้างแบบ lazy จาก handler เอง** เพราะ `ensureIndexes()` รันจาก Setup Wizard
+    ครั้งเดียวและไม่มีวันรันอีกบนเครื่องจริง (`docs/DATABASE.md:789`) — ลอกแบบ `purchaseOrderHandler.ts:39`
+    และต้อง backfill สินค้าเดิม ~82 ตัว แบบ once-per-warm-process เหมือน `backfillProductStockDefaults()`
+  - **ไม่ต้องเพิ่ม dependency** — Code 128 เขียนเองได้ ~120 บรรทัด (ตารางลายเส้น + checksum → SVG)
+    ตรงกับแนวทางของรีโปนี้ที่นับ "ไม่เพิ่ม dependency" เป็นข้อดี (เคยถอด `nodemailer`/`@vercel/blob` ทิ้งมาแล้ว)
+  - **แม่แบบการพิมพ์ฉลากมีอยู่แล้ว ไม่ต้องคิดใหม่** — `ArDocumentNcrPrintDocument.tsx` (`@page { size: {W}mm {H}mm }`)
+    + `src/lib/ncrPrintSettings.ts` (เก็บค่าต่อเครื่องใน localStorage) + ปุ่มทดสอบพิมพ์ที่ `ArDocumentListPage.tsx:517`
+  - **หาสินค้าจากบาร์โค้ดไม่ต้องมี API ใหม่** — `App.tsx:392` โหลดสินค้าทั้งก้อนไว้ใน state อยู่แล้ว
+    ทุกหน้า (`ProductPickerModal`/`ProductList`/`StockPage`) กรองฝั่ง client ล้วน ๆ
+  - **ใบตรวจรับไม่ resolve `productId` เลย** — `goodsReceiptHandler.ts:58` รับ `productCode` มาดิบ ๆ
+    ตอนยิงจึงต้องเทียบ `productCode` หรือแก้ให้ resolve เสียก่อน · และใบนี้ **ไม่มีปุ่มเพิ่มแถว** เลย
+    (รายการมาจากใบสั่งซื้อล้วน ๆ) การยิงจึงหมายถึง "ติ๊กของที่มาถึง" คือ `qtyReceived` +1 ไม่ใช่เพิ่มรายการ
+  - **`applyStockMovement()` (`api/_lib/stockHandler.ts:58`) เป็นตัวเขียนสต๊อกตัวเดียวในระบบ** — atomic ต่อสินค้า
+    กันสต๊อกติดลบให้แล้ว ห้ามทำระบบนับคู่ขนาน · แต่ **ไม่เขียน audit log** สำหรับการปรับด้วยมือ (มีแค่แถวใน
+    `stock_movements`) ถ้าโหมดนับสต๊อกจะปรับยอดทีละหลายสิบตัว ควรตกลงกันก่อนว่าจะเพิ่ม audit ไหม
+  - **ยังไม่มี keydown listener ตัวไหนในแอปกัน "โฟกัสอยู่ในช่องกรอก" เลย** (ทั้ง 5 ตัวกรองแค่ปุ่ม ไม่ดู target)
+    ตัวรับการยิงจะเป็นตัวแรกที่ต้องทำ และต้องไม่ชนกับ Ctrl+K (`GlobalSearch.tsx:337`) กับ Enter ที่
+    `PromptDialog.tsx:71` ผูกไว้เป็นปุ่มยืนยัน
+  - **ยิงเร็วกว่า React re-render** — ยิงรัว 5 ชิ้นใน 2 วินาที ถ้าอัปเดต state แบบอ่านค่าเก่าจะตกหล่น
+    ต้องใช้ functional setState ทุกจุด และต้องแก้ผ่าน setter เดิม (`setDraft`/`setLine`) ไม่งั้น auto-save เพี้ยน
+  - **iPhone/Safari ยิงด้วยกล้องไม่ได้** ถ้าไม่ลงไลบรารีอ่านภาพ (เช่น zxing ~200–500 KB) —
+    Android/Chrome ใช้ `BarcodeDetector` ที่ฝังมาในเบราว์เซอร์ได้ฟรี · เสนอให้ iPhone พิมพ์รหัสเองไปก่อน
+  - **เน็ตหลุด = ยิงไม่ได้** — มี `public/manifest.webmanifest` (ติดตั้งลงหน้าจอได้) แต่ **ไม่มี service worker**
+    ทุกครั้งที่ยิงต้องคุยกับเซิร์ฟเวอร์ ถ้าสัญญาณในสโตร์ไม่ดีต้องคิดเรื่องนี้แยกต่างหาก
+
+- [ ] **รูปงานคร่าว ๆ ถ้าตัดสินใจทำ (2026-08-28).**
+  (1) ฟิลด์ `barcode` ใน `src/lib/products.ts` + unique index แบบ lazy + backfill ของเก่า + ช่องแสดงใน `ProductForm.tsx`
+  (2) **ใหม่** `src/lib/barcode.ts` (Code 128 → SVG, ฟังก์ชันบริสุทธิ์ unit test ง่าย) + `BarcodeLabel.tsx`
+  + หน้าพิมพ์ฉลาก + `labelPrintSettings.ts` (ลอก `ncrPrintSettings.ts` ทั้งชุด รวมปุ่มทดสอบพิมพ์)
+  (3) **ใหม่** `useBarcodeScanner()` แล้วเสียบเข้า `GoodsReceiptPage` (บวก `qtyReceived`) ·
+  `StockPage` (เปิดกล่องปรับสต๊อกของตัวที่ยิง) · `MaterialRequisitionDocument` (เพิ่มแถวเลย ไม่ต้องเปิด picker)
+  (4) **ใหม่** หน้า "นับสต๊อก" — ยิงสะสม → เทียบยอด → ยืนยันแล้วยิง `POST /api/stock-movements` แบบ `adjust`
+  ทีละตัว (ใช้ท่อเดิมทั้งหมด ไม่มี API ใหม่) + สิทธิ์ใหม่ `stock:count` แยกจาก `stock:adjust`
+  **ตอนตรวจงานข้อที่สำคัญที่สุด: พิมพ์ฉลากจริงออกมาแล้วเอาปืนยิงดู** — บาร์โค้ดที่เรนเดอร์สวยบนจอ
+  แต่ยิงไม่ติดบนกระดาษเป็นเรื่องปกติ (เส้นบางเกิน/พื้นขาวไม่พอ)
+
+- [ ] **ของที่เจ้าของต้องเตรียมถ้าจะทำ (2026-08-28).**
+  **ปืนยิง USB แบบ HID** ("keyboard wedge" — เกือบทุกรุ่นเป็นแบบนี้ หลักร้อยก็พอ) ตั้งให้ปิดท้ายด้วย Enter
+  ซึ่งปกติเป็นค่าเริ่มต้นจากโรงงานอยู่แล้ว · **เครื่องพิมพ์ฉลาก + สติกเกอร์** ถ้าไม่มี ใช้พิมพ์ลงสติกเกอร์ A4
+  แบบตัดเองไปก่อนได้ (แผนรองรับทั้งสองแบบผ่านหน้าตั้งค่าขนาดฉลาก)
+
+- [ ] **ที่จงใจไม่รวมอยู่ในงานบาร์โค้ด (2026-08-28).**
+  **ตรวจรับแล้วตัดสต๊อกอัตโนมัติ** เป็นการตัดสินใจทางธุรกิจที่ค้างอยู่แล้วตั้งแต่รอบโมดูลจัดซื้อ
+  (ดูหัวข้อ "ตัดสินใจ 3 ข้อที่กันไว้ให้เจ้าของของโมดูลจัดซื้อ" ด้านบน) — คนละเรื่องกับบาร์โค้ด ห้ามเอามารวมกัน ·
+  **ที่เก็บของ/โซน (location/bin)** ระบบยังไม่มีแนวคิดคลังหลายที่เลย เป็นงานก้อนแยก ·
+  **ใบตรวจนับสต๊อกเป็นเอกสารมีเลขที่/มีอนุมัติ** รอบแรกเสนอเป็นหน้าทำงาน ไม่ใช่เอกสาร
+
 ## Low Priority
 
 - [ ] **[Reference, not a gap] Confirmed 2026-08-17: Global Search already has anti-overload safeguards — no action needed.** Came up in conversation (owner asking whether live-search-as-you-type would hammer the server on every keystroke). Checked the actual code: `src/components/GlobalSearch.tsx` debounces 300ms, requires ≥2 typed characters before firing, and cancels any still-in-flight request via `AbortController` when a newer keystroke arrives; `api/_lib/searchHandler.ts` additionally caps query length server-side at 100 chars. If a future search UI is added elsewhere (e.g. inside the not-yet-built Accounting module below), reuse this exact pattern rather than reinventing it.
