@@ -108,6 +108,15 @@ export const defaultRoles: Role[] = [
       "purchaseOrder:finalize",
       "purchaseOrder:print",
       "purchaseOrder:delete",
+      // Cost Control (แผนก BD, 2026-08-28) — เหมือนทุกโมดูลหลัง 2026-08-25 คือใส่ใน defaultRoles
+      // ให้ระบบที่ติดตั้งใหม่เท่านั้น เครื่องจริงต้องเข้าไปติ๊กเองที่หน้าบทบาทและสิทธิ์
+      "costControl:view",
+      "costControl:viewAll",
+      "costControl:create",
+      "costControl:edit",
+      "costControl:finalize",
+      "costControl:print",
+      "costControl:delete",
       // Project module (added 2026-08-18, Stage 2) — granted to Administrator/Super Admin only by
       // default, per the Stage 1 recommendation: none of the existing default roles (Sales/Approver/
       // Viewer/Service Engineer/Accounting User) belong to the Project/Store/Factory/Purchasing

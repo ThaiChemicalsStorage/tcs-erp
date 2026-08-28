@@ -4,7 +4,51 @@
 
 ---
 
-## Session — 2026-08-28d (absolute latest), Built in the morning, deleted in the afternoon
+## Session — 2026-08-28e (absolute latest), The spec was a spreadsheet the whole time
+
+### A blocker that five documents recorded, closed by one file
+Cost Control had been marked unbuildable since 2026-08-20 in five separate places, all saying the
+same thing: nobody had defined what it *was*. The answer, when it came, was not a definition — it
+was an .xlsx and the PDF printed from it. Reading those two files gave the field list, the
+arithmetic, the row taxonomy, the colours, and the form code. Generalises: when a spec asks a
+domain question the team cannot answer, the answer is often an artifact somebody already uses
+daily. Ask for the file before asking for a definition.
+
+### The distinction was in the colour, not the words
+The import first classified rows by whether they held numbers — and produced a printed page that
+was almost entirely pink, because a group heading ("งาน Dust Collector") and a descriptive
+sub-line ("VERTICAL PUMP") are textually identical in this sheet. A human reads them apart by
+background fill. So the parser reads the fill too, from the workbook's own `fgColor`.
+
+Generalises: when a classifier keeps guessing wrong, check what a human is actually looking at.
+It is not always in the text. And pick the fallback that fails quietly rather than loudly — a
+mis-tagged sub-line is invisible; a mis-tagged group heading repaints the document.
+
+### Three honest options, and 24 baht
+Importing the real file produces a cost 24.09 baht higher than the file's own total, because the
+sheet displays a rounded quantity and computes from the full one. The options were: store the
+file's totals alongside the computed ones, round silently to match, or compute honestly and tell
+the user. The first creates two sources of truth for the same number; the second hides a real
+discrepancy inside a document about money. The third is the only one that leaves the document
+internally consistent, so the import counts the disagreeing lines and says so before you commit.
+
+### "Match the PDF exactly" means opening the PDF
+The instruction arrived after the print layout was already written from the spreadsheet — and the
+spreadsheet does not show what the printout looks like. `Read` could not rasterise the PDF here
+(no poppler) and Chrome blocks `file://`, so it went up on a throwaway localhost server and got
+screenshotted. That was the only way to learn the letterhead is bespoke rather than the app's
+shared one, that the summary block has a specific bordered/unbordered split, and that the form
+carries the code FM-SL-06 Rev.02 — none of which is visible in the .xlsx.
+
+### Next
+The rest of the owner's batch is queued in TODO.md: the purchasing field changes, a vendor master,
+the account-code master for PR/PO, a cross-department approval inbox, notify-on-submit, and
+one-session-per-user. Cost Control itself has no link to the Scope of Work it names, by design
+for now.
+
+---
+
+## Session — 2026-08-28d, Built in the morning, deleted in the afternoon
 
 ### The cheapest module is the one you delete the same day
 Two documents shipped at midday and were gone by evening, on four words from the owner:

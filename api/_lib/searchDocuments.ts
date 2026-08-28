@@ -1,7 +1,7 @@
 import type { AuthContext } from "./auth.js";
 import {
   deliveryOrdersCollection, serviceReportsCollection, projectsCollection,
-  materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection, purchaseOrdersCollection,
+  materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection, purchaseOrdersCollection, costControlsCollection,
   productionOrdersCollection, productRequestsCollection, arDocumentsCollection,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -249,6 +249,31 @@ export async function searchPurchaseOrders(query: string, ctx: AuthContext, limi
 }
 
 /**
+ * Cost Control (2026-08-28) — เอกสารของแผนก BD · `party` เป็น **ชื่องาน/ลูกค้า** (Job Name) และ
+ * `lineage` เป็นเลขที่งานต้นทาง (Job order) ซึ่งเป็นเลข Scope of Work ที่คนใช้เรียกงานกันจริง ๆ
+ */
+export async function searchCostControls(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
+  const col = await costControlsCollection();
+  const rx = containsRegex(query);
+  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "costControl:viewAll"), "createdBy");
+  const docs = await col.find(
+    docFilter(ownership, [
+      { _id: rx }, { documentNumber: rx }, { jobName: rx }, { jobOrder: rx }, { workType: rx },
+      { "lines.description": rx },
+    ]) as never,
+    { sort: SORT_RECENT, limit },
+  ).toArray();
+  return docs.map((d) => ({
+    id: d._id.toString(),
+    docNumber: d.documentNumber || d._id.toString(),
+    party: d.jobName ?? "",
+    lineage: d.jobOrder ?? "",
+    status: d.status ?? "",
+    date: isoOf(d),
+  }));
+}
+
+/**
  * ใบสั่งผลิต — the one family whose number is an editable field (`documentNumber`, FM-PD-02) rather
  * than the `_id`. Documents created before 2026-08-27 have no `documentNumber` at all, so both are
  * searched and the display falls back to `_id`, matching `toClient()` in productionOrderHandler.
@@ -424,6 +449,19 @@ export async function searchByDocNumber(
       return first("purchaseOrder", docs.map((d) => ({
         id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
         party: d.vendorName ?? "", lineage: d.jobCode || d.purchaseRequestId || "",
+        status: d.status ?? "", date: isoOf(d),
+      })));
+    }
+    case "costControl": {
+      const col = await costControlsCollection();
+      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "costControl:viewAll"), "createdBy");
+      const docs = await col.find(
+        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
+        { limit: 1 },
+      ).toArray();
+      return first("costControl", docs.map((d) => ({
+        id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
+        party: d.jobName ?? "", lineage: d.jobOrder ?? "",
         status: d.status ?? "", date: isoOf(d),
       })));
     }

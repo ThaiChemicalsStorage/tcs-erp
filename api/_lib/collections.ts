@@ -19,6 +19,7 @@ import type { JobOrder } from "../../src/lib/jobOrder.js";
 import type { PurchaseRequest } from "../../src/lib/purchaseRequest.js";
 import type { ProductionOrder } from "../../src/lib/productionOrder.js";
 import type { PurchaseOrder } from "../../src/lib/purchaseOrder.js";
+import type { CostControl } from "../../src/lib/costControl.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits.
  * (`emailAppPasswordEnc` existed briefly on 2026-08-07 for the since-removed Gmail sending feature;
@@ -830,6 +831,16 @@ export async function purchaseOrdersCollection() {
   return db.collection<PurchaseOrderFields & { _id: string }>("purchase_orders");
 }
 
+/**
+ * Business-id-keyed (e.g. "CC-2569-0001") — Cost Control ของแผนก BD สร้างจากไฟล์ Excel ของงาน
+ * ยอดรวมทุกตัว **ไม่ได้เก็บไว้** คำนวณจาก `lines` ตอนอ่านเสมอ (ดู `costControlTotals()`)
+ */
+export type CostControlFields = Omit<CostControl, "id">;
+export async function costControlsCollection() {
+  const db = await getDb();
+  return db.collection<CostControlFields & { _id: string }>("cost_controls");
+}
+
 /** Creates required indexes across every collection. Idempotent — safe to call repeatedly, but only worth calling from setup/cold paths, not every request. */
 export async function ensureIndexes() {
   const [
@@ -841,7 +852,7 @@ export async function ensureIndexes() {
     arMilestones, arAttachmentFiles, arDocuments, stockMovements,
     projects, materialRequisitions, jobOrders, purchaseRequests, productionOrders,
     productRequests,
-    purchaseOrders,
+    purchaseOrders, costControls,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -857,7 +868,7 @@ export async function ensureIndexes() {
     projectsCollection(), materialRequisitionsCollection(), jobOrdersCollection(), purchaseRequestsCollection(),
     productionOrdersCollection(),
     productRequestsCollection(),
-    purchaseOrdersCollection(),
+    purchaseOrdersCollection(), costControlsCollection(),
   ]);
 
   await Promise.all([
@@ -977,6 +988,10 @@ export async function ensureIndexes() {
     purchaseOrders.createIndex({ status: 1 }),
     purchaseOrders.createIndex({ isDeleted: 1 }),
     purchaseOrders.createIndex({ createdBy: 1 }),
+    costControls.createIndex({ status: 1 }),
+    costControls.createIndex({ isDeleted: 1 }),
+    costControls.createIndex({ createdBy: 1 }),
+    costControls.createIndex({ jobOrder: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

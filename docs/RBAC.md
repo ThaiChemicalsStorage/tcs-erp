@@ -960,3 +960,20 @@ possible for a department with no project access to raise one at all.
 The nav group hides itself when a role holds none of the view permissions in it
 (`items.length === 0` returns `null` in `App.tsx`), so a role without these never sees a จัดซื้อ
 heading with nothing under it.
+
+## Cost Control permissions (added 2026-08-28)
+
+**7 permissions** — `costControl:` `view` / `viewAll` / `create` / `edit` / `finalize` / `print` /
+`delete` — shown under a new **"BD"** group in Role Management.
+
+`costControl:finalize` is the approval on the shared ร่าง→รออนุมัติ→อนุมัติ engine, so it gates
+reject as well. The real paper form has *Submitted by* and *Approved by* signature lines, which is
+why this document has an approval flow at all.
+
+🔸 **No `RBAC_MIGRATIONS` entry**, following the same 2026-08-25 decision every module since has
+used: the permissions go into `defaultRoles` (Administrator/Super Admin), which affects **fresh
+installs only**, and the live database needs the boxes ticked by hand.
+
+**Who should get what.** Cost Control carries the company's true margin on every job, so
+`:viewAll` is the sensitive one — grant it to BD and management, not to whoever merely needs to
+raise a document. The nav group hides itself when a role holds no `costControl:view`.

@@ -671,3 +671,29 @@ from the Setup Wizard and would never fire on an already-provisioned database.
 |---|---|---|
 | `POST /api/purchase-requests` | `purchaseRequest:create` | Now accepts a **third** shape: an **empty body**, creating a standalone document with `ownerDepartment: "general"` — no `projectId`/`scopeOfWorkId`/`jobCode`, and no `linkProjectItemToSubDocument()` call. `project:view` is now required only on the path that actually reads a project; requiring it for the whole route locked out every department that has no project access, which is exactly what this change exists to fix. |
 | `GET /api/purchase-requests?ownerDepartment=` | `purchaseRequest:view` | `project` (default, also matches documents with no field) · `production` · `general` · **`all`** — the last is view-only, never stored, and backs the Purchasing inbox. `all` lifts the department wall **only**: `buildSimpleOwnershipClause` still applies, so a user without `:viewAll` still sees only their own. |
+
+## Cost Control (BD) — added 2026-08-28
+
+`api/_lib/costControlHandler.ts`, mounted at `/api/cost-controls` via `api/handlers/quotes.ts`
+(the Vercel 12-function budget is full). See [MODULES/CostControl.md](./MODULES/CostControl.md).
+
+**The server never receives a file.** The browser parses the workbook, shows a preview the person
+corrects, and posts the corrected rows as ordinary JSON — so there is no multipart route, no
+base64 payload, and no body-size ceiling to design around.
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/cost-controls` | `costControl:view` | Own documents only without `:viewAll`. `totalCost` is **computed per row on read** — no total is stored anywhere. |
+| `POST /api/cost-controls` | `costControl:create` | Body `{ jobName?, workType?, jobOrder?, docDate?, lines?, sourceFileName? }` — every field optional, so an empty body opens a blank document. `lines[].kind` is whitelisted to `group`/`item`/`sub` (`400` otherwise). `201`. |
+| `GET /api/cost-controls/:id` | `costControl:view` | |
+| `PATCH /api/cost-controls/:id` | `costControl:edit` + owner | `400` unless `Draft` — **both** `Final` and `PendingApproval` are locked. `?autoSave=1` suppresses the audit entry and returns `409` on a non-Draft target. Duplicate `documentNumber` → `409`. |
+| `POST /api/cost-controls/:id/submit-approval` | `costControl:edit` | Shared engine (`api/_lib/documentApproval.ts`). |
+| `POST /api/cost-controls/:id/approve` (alias `/finalize`) | `costControl:finalize` | |
+| `POST /api/cost-controls/:id/reject` | `costControl:finalize` | Body `{ comment }` — required. |
+| `POST /api/cost-controls/:id/withdraw-approval` | `costControl:edit` | Back to `Draft`. |
+| `POST /api/cost-controls/:id/rewrite` | `costControl:create` | `Final` only. New `{root}-R{n}`, `Draft`, lines carried over, approval fields cleared. `201`. |
+| `POST /api/cost-controls/:id/print` | `costControl:print` | Audit only. |
+| `DELETE /api/cost-controls/:id` | `costControl:delete` + owner | Soft delete. |
+
+`ensureCostControlNumberIndex()` creates the unique `documentNumber` index lazily, because
+`ensureIndexes()` only ever runs from the Setup Wizard.

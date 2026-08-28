@@ -12,6 +12,7 @@ import { handleJobOrder } from "../_lib/jobOrderHandler.js";
 import { handlePurchaseRequest } from "../_lib/purchaseRequestHandler.js";
 import { handleProductionOrder } from "../_lib/productionOrderHandler.js";
 import { handlePurchaseOrder } from "../_lib/purchaseOrderHandler.js";
+import { handleCostControl } from "../_lib/costControlHandler.js";
 import { handleProductRequest } from "../_lib/productRequestHandler.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
@@ -932,6 +933,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // โมดูลจัดซื้อ (2026-08-28) — ใบสั่งซื้อ
     if (pathname === "/api/purchase-orders" || pathname.startsWith("/api/purchase-orders/")) {
       return handlePurchaseOrder(req, res);
+    }
+    // Cost Control (แผนก BD, 2026-08-28)
+    if (pathname === "/api/cost-controls" || pathname.startsWith("/api/cost-controls/")) {
+      return handleCostControl(req, res);
     }
 
     const parts = getPathSegments(req, "/api/quotes");

@@ -100,7 +100,7 @@ export interface SearchPageResult {
 export type DocumentCategory =
   | "deliveryOrders" | "serviceReports" | "projects" | "materialRequisitions"
   | "jobOrders" | "purchaseRequests" | "productionOrders" | "arDocuments" | "productRequests"
-  | "purchaseOrders";
+  | "purchaseOrders" | "costControls";
 
 export type SearchCategory =
   | "quotations" | "scopeOfWorks" | DocumentCategory
@@ -113,13 +113,13 @@ export type SearchCategory =
  */
 export const SEARCH_CATEGORY_ORDER: SearchCategory[] = [
   "quotations", "scopeOfWorks", "deliveryOrders", "serviceReports", "projects",
-  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "productionOrders",
+  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "costControls", "productionOrders",
   "arDocuments", "productRequests", "customers", "products", "templates", "users", "pages",
 ];
 
 export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   "deliveryOrders", "serviceReports", "projects", "materialRequisitions",
-  "jobOrders", "purchaseRequests", "purchaseOrders", "productionOrders", "arDocuments", "productRequests",
+  "jobOrders", "purchaseRequests", "purchaseOrders", "costControls", "productionOrders", "arDocuments", "productRequests",
 ];
 
 export function isDocumentCategory(c: SearchCategory): c is DocumentCategory {
@@ -143,6 +143,7 @@ export interface SearchResults {
   jobOrders: SearchDocumentResult[];
   purchaseRequests: SearchDocumentResult[];
   purchaseOrders: SearchDocumentResult[];
+  costControls: SearchDocumentResult[];
   productionOrders: SearchDocumentResult[];
   arDocuments: SearchDocumentResult[];
   productRequests: SearchDocumentResult[];
@@ -181,6 +182,7 @@ export const SEARCH_CATEGORY_LABEL_KEY: Record<SearchCategory, string> = {
   jobOrders: "search.group.jobOrders",
   purchaseRequests: "search.group.purchaseRequests",
   purchaseOrders: "search.group.purchaseOrders",
+  costControls: "search.group.costControls",
   productionOrders: "search.group.productionOrders",
   arDocuments: "search.group.arDocuments",
   productRequests: "search.group.productRequests",

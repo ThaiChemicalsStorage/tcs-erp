@@ -15,7 +15,7 @@ import {
 } from "./searchShared.js";
 import {
   searchDeliveryOrders, searchServiceReports, searchProjects, searchMaterialRequisitions,
-  searchJobOrders, searchPurchaseRequests, searchPurchaseOrders, searchProductionOrders, searchProductRequests,
+  searchJobOrders, searchPurchaseRequests, searchPurchaseOrders, searchCostControls, searchProductionOrders, searchProductRequests,
   searchArDocuments, searchByDocNumber, scopeOfWorkOwnership,
   type SearchDocumentResult,
 } from "./searchDocuments.js";
@@ -190,6 +190,7 @@ export interface SearchResults {
   jobOrders: SearchDocumentResult[];
   purchaseRequests: SearchDocumentResult[];
   purchaseOrders: SearchDocumentResult[];
+  costControls: SearchDocumentResult[];
   productionOrders: SearchDocumentResult[];
   arDocuments: SearchDocumentResult[];
   productRequests: SearchDocumentResult[];
@@ -216,13 +217,13 @@ export interface ExactMatch {
 /** Every key of `SearchResults` that carries results — the vocabulary `?types=` accepts. */
 export type SearchCategory =
   | "quotations" | "scopeOfWorks" | "deliveryOrders" | "serviceReports" | "projects"
-  | "materialRequisitions" | "jobOrders" | "purchaseRequests" | "purchaseOrders" | "productionOrders"
+  | "materialRequisitions" | "jobOrders" | "purchaseRequests" | "purchaseOrders" | "costControls" | "productionOrders"
   | "arDocuments" | "productRequests" | "customers" | "products" | "templates"
   | "users" | "pages";
 
 const ALL_CATEGORIES: SearchCategory[] = [
   "quotations", "scopeOfWorks", "deliveryOrders", "serviceReports", "projects",
-  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "productionOrders",
+  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "costControls", "productionOrders",
   "arDocuments", "productRequests", "customers", "products", "templates", "users", "pages",
 ];
 
@@ -521,6 +522,7 @@ const FAST_PATH_GATES: Record<string, { permission: Permission; category: Search
   jobOrder: { permission: "jobOrder:view", category: "jobOrders" },
   purchaseRequest: { permission: "purchaseRequest:view", category: "purchaseRequests" },
   purchaseOrder: { permission: "purchaseOrder:view", category: "purchaseOrders" },
+  costControl: { permission: "costControl:view", category: "costControls" },
   productionOrder: { permission: "productionOrder:view", category: "productionOrders" },
   arDocument: { permission: "ar:view", category: "arDocuments" },
 };
@@ -582,7 +584,7 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
 
   const [
     quotations, scopeOfWorkResults, deliveryOrders, serviceReports, projects,
-    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, productionOrders, arDocuments,
+    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, costControls, productionOrders, arDocuments,
     productRequests, customerResults, productResults, templateResults, userResults, exact,
   ] = await Promise.all([
     runCategory("quotations", wanted, has("quotations:view"), () => searchQuotations(query, ctx, limit)),
@@ -596,6 +598,7 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
     runCategory("jobOrders", wanted, has("jobOrder:view"), () => searchJobOrders(query, ctx, limit)),
     runCategory("purchaseRequests", wanted, has("purchaseRequest:view"), () => searchPurchaseRequests(query, ctx, limit)),
     runCategory("purchaseOrders", wanted, has("purchaseOrder:view"), () => searchPurchaseOrders(query, ctx, limit)),
+    runCategory("costControls", wanted, has("costControl:view"), () => searchCostControls(query, ctx, limit)),
     runCategory("productionOrders", wanted, has("productionOrder:view"), () => searchProductionOrders(query, ctx, limit)),
     runCategory("arDocuments", wanted, has("ar:view"), () => searchArDocuments(query, limit)),
     runCategory("productRequests", wanted, has("productRequest:view"), () => searchProductRequests(query, ctx, limit)),
@@ -611,7 +614,7 @@ export async function handleSearch(req: VercelRequest, res: VercelResponse): Pro
 
   const results: SearchResults = {
     quotations, scopeOfWorks: scopeOfWorkResults, deliveryOrders, serviceReports, projects,
-    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, productionOrders, arDocuments,
+    materialRequisitions, jobOrders, purchaseRequests, purchaseOrders, costControls, productionOrders, arDocuments,
     productRequests, customers: customerResults, products: productResults,
     templates: templateResults, users: userResults, pages, exact,
   };

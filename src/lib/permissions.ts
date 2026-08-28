@@ -118,7 +118,14 @@ export type Permission =
   | "purchaseOrder:edit"
   | "purchaseOrder:finalize"
   | "purchaseOrder:print"
-  | "purchaseOrder:delete";
+  | "purchaseOrder:delete"
+  | "costControl:view"
+  | "costControl:viewAll"
+  | "costControl:create"
+  | "costControl:edit"
+  | "costControl:finalize"
+  | "costControl:print"
+  | "costControl:delete";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -237,6 +244,13 @@ export const ALL_PERMISSIONS: Permission[] = [
   "purchaseOrder:finalize",
   "purchaseOrder:print",
   "purchaseOrder:delete",
+  "costControl:view",
+  "costControl:viewAll",
+  "costControl:create",
+  "costControl:edit",
+  "costControl:finalize",
+  "costControl:print",
+  "costControl:delete",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -356,6 +370,13 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "purchaseOrder:finalize": "อนุมัติ/ปิดใบสั่งซื้อ",
   "purchaseOrder:print": "พิมพ์ / ส่งออกใบสั่งซื้อ",
   "purchaseOrder:delete": "ลบใบสั่งซื้อ",
+  "costControl:view": "ดู Cost Control",
+  "costControl:viewAll": "ดู Cost Control ของผู้อื่น",
+  "costControl:create": "สร้าง Cost Control",
+  "costControl:edit": "แก้ไข Cost Control",
+  "costControl:finalize": "อนุมัติ Cost Control",
+  "costControl:print": "พิมพ์ / ส่งออก Cost Control",
+  "costControl:delete": "ลบ Cost Control",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -475,6 +496,13 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "purchaseOrder:finalize": "permission.purchaseOrderFinalize",
   "purchaseOrder:print": "permission.purchaseOrderPrint",
   "purchaseOrder:delete": "permission.purchaseOrderDelete",
+  "costControl:view": "permission.costControlView",
+  "costControl:viewAll": "permission.costControlViewAll",
+  "costControl:create": "permission.costControlCreate",
+  "costControl:edit": "permission.costControlEdit",
+  "costControl:finalize": "permission.costControlFinalize",
+  "costControl:print": "permission.costControlPrint",
+  "costControl:delete": "permission.costControlDelete",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -601,6 +629,14 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
     permissions: [
       "purchaseOrder:view", "purchaseOrder:viewAll", "purchaseOrder:create", "purchaseOrder:edit",
       "purchaseOrder:finalize", "purchaseOrder:print", "purchaseOrder:delete",
+    ],
+  },
+  {
+    label: "BD",
+    labelKey: "nav.group.bd",
+    permissions: [
+      "costControl:view", "costControl:viewAll", "costControl:create", "costControl:edit",
+      "costControl:finalize", "costControl:print", "costControl:delete",
     ],
   },
   {
