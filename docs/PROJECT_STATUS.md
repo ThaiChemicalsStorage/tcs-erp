@@ -14,6 +14,18 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-08-28c] โมดูลจัดซื้อ — the Purchasing department got a module of its own.**
+  Built from the owner's "กระบวนการจัดซื้อ" flow chart. Three new documents — ใบสั่งซื้อ
+  (`PO-{พ.ศ.}-{NNNN}`, from an approved ใบขอซื้อ or blank, on the shared approval engine with
+  `-R1` rewrite), ใบตรวจรับสินค้า (`GR-…`, จำนวนที่สั่ง/รับจริง/ผลตรวจ per line, `qtyReceived`
+  deliberately blank), ใบรับวางบิล (`BR-…`, PO + optional GR + a server-pinned attachment
+  checklist) — plus **ใบขอซื้อ opened to every department** (`ownerDepartment: "general"` and a
+  create path with no source document, since four of the six departments named in the chart could
+  not raise one at all) and a "ใบขอซื้อ (ทุกฝ่าย)" inbox. A ninth nav group (DESIGN.md updated to
+  record why), 21 permissions, 3 search categories, 12 new integration tests. Print layouts are
+  placeholders pending the real forms; no vendor master, no stock movement on receipt, no AP
+  posting. **Production must tick the 21 permissions by hand.** See CHANGELOG.md 2026-08-28c.
+
 - ✅ **[2026-08-28b] คู่มือการใช้งาน caught up with the app, and made easier to use.**
   `public/manual.html` was dated 21 ส.ค. and had drifted: auto-save/draft recovery (2026-08-25) and
   the whole คำขอเพิ่มสินค้า module (2026-08-27) were missing, and several statements had become
@@ -1510,7 +1522,7 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 - Product Library has module-level (sidebar) permission gating but **not** button-level gating (create/edit/delete buttons inside Products aren't yet hidden per `products:create`/`products:edit`/`products:delete` — only the sidebar entry respects `products:view`).
 - Dashboard's "ส่งออกรายงาน" (export report), "+ สร้างคำสั่งซื้อ" (create order), "ดูทั้งหมด" (view all orders) — reference an Orders/Reports module that doesn't exist yet, left inert by design
 - Global header search — decorative, not wired to any data
-- HR, Accounting, Inventory, Warehouse, Purchasing, Project Management modules — not started
+- HR, Inventory, Warehouse modules — not started (Accounting started 2026-08-17/18; ~~Purchasing~~ — **built 2026-08-28**, see MODULES/Purchasing.md; ~~Project Management~~ — **built 2026-08-18**, see MODULES/Project.md)
 
 ## Upcoming Milestones
 

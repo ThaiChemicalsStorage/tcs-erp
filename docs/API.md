@@ -633,3 +633,66 @@ Applied identically to `material-requisitions`, `purchase-requests`, `job-orders
 |---|---|
 | `GET /api/{material-requisitions,purchase-requests}?ownerDepartment=` | `project` (default) or `production`. **A document with no `ownerDepartment` field counts as `project`**, so records created before 2026-08-20 keep appearing where they always did — no migration was run. Ignored when `projectId` is supplied (that mode is already scoped to one project). |
 | `POST /api/{material-requisitions,purchase-requests}` | Now accepts **either** `{ projectId, itemId }` (Project-owned; still performs the atomic ProjectItem link) **or** `{ productionOrderId }` (Production-owned; no item to link, so that step is skipped entirely). |
+
+## Purchasing (added 2026-08-28)
+
+Three new documents, all mounted on `api/handlers/quotes.ts` — the Vercel 12-function budget is
+full, so a new `api/handlers/*.ts` file is not available. Every route below needs a matching
+rewrite pair in `vercel.json` **and** an `API_ROUTES` entry in `server/app.ts`; if those two
+disagree, local dev and production behave differently. See [MODULES/Purchasing.md](./MODULES/Purchasing.md).
+
+### Purchase Order (`api/_lib/purchaseOrderHandler.ts`, mounted at `/api/purchase-orders` via `api/handlers/quotes.ts`)
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/purchase-orders` | `purchaseOrder:view` | Own documents only without `:viewAll` (`buildSimpleOwnershipClause`). |
+| `POST /api/purchase-orders` | `purchaseOrder:create` | Body `{ purchaseRequestId? }`. With an id: also requires `purchaseRequest:view` (otherwise the create button doubles as a way to read a ใบขอซื้อ you cannot open), the source must be `Final` (`400` otherwise), and vendor/dates/credit/shipping/lines are copied as a **snapshot**. Without one: a blank draft. `201`. |
+| `GET /api/purchase-orders/:id` | `purchaseOrder:view` | |
+| `PATCH /api/purchase-orders/:id` | `purchaseOrder:edit` + owner | `400` unless `Draft` — **both** `Final` and `PendingApproval` are locked. Accepts `?autoSave=1` (`isAutoSaveRequest`): no audit entry, and `409` on a non-Draft target. Line product fields are server-resolved, never trusted from the client. Duplicate `documentNumber` → `409`. |
+| `POST /api/purchase-orders/:id/submit-approval` | `purchaseOrder:edit` | Shared engine (`api/_lib/documentApproval.ts`). |
+| `POST /api/purchase-orders/:id/approve` (alias `/finalize`) | `purchaseOrder:finalize` | |
+| `POST /api/purchase-orders/:id/reject` | `purchaseOrder:finalize` | Body `{ comment }` — required. |
+| `POST /api/purchase-orders/:id/withdraw-approval` | `purchaseOrder:edit` | Back to `Draft`. |
+| `POST /api/purchase-orders/:id/rewrite` | `purchaseOrder:create` | `Final` only (`400` otherwise). New `{root}-R{n}` document, `Draft`, approval fields and revision note cleared; the original is untouched. `201`. |
+| `POST /api/purchase-orders/:id/print` | `purchaseOrder:print` | Audit only. |
+| `DELETE /api/purchase-orders/:id` | `purchaseOrder:delete` + owner | Soft delete. |
+
+The unique index on `documentNumber` is created **lazily by the handler**
+(`ensurePurchaseOrderNumberIndex()`, with a backfill), because `ensureIndexes()` only ever runs
+from the Setup Wizard and would never fire on an already-provisioned database.
+
+### Goods Receipt (`api/_lib/goodsReceiptHandler.ts`, mounted at `/api/goods-receipts`)
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/goods-receipts` | `goodsReceipt:view` | Own only without `:viewAll`. |
+| `POST /api/goods-receipts` | `goodsReceipt:create` + `purchaseOrder:view` | Body `{ purchaseOrderId }` — **required** (`400`). The PO must be `Final` (`400`). Lines are copied with `qtyOrdered` filled and **`qtyReceived: null`** — never pre-filled, or a short delivery passes by inaction. `201`. |
+| `GET /api/goods-receipts/:id` | `goodsReceipt:view` | |
+| `PATCH /api/goods-receipts/:id` | `goodsReceipt:edit` + owner | `Draft` only. Accepts `?autoSave=1`. |
+| `POST /api/goods-receipts/:id/complete` | `goodsReceipt:finalize` | → `Received`. |
+| `POST /api/goods-receipts/:id/reopen` | `goodsReceipt:finalize` | → `Draft`. Deliberately allowed: goods arrive short and inspections get corrected. |
+| `POST /api/goods-receipts/:id/print` | `goodsReceipt:print` | Audit only. |
+| `DELETE /api/goods-receipts/:id` | `goodsReceipt:delete` + owner | Soft delete. |
+
+**Writes no stock.** `StockMovementSourceType` reserves `"goods_receipt"` but nothing calls
+`applyStockMovement()` — see MODULES/Purchasing.md "Known gaps".
+
+### Bill Receipt (`api/_lib/billReceiptHandler.ts`, mounted at `/api/bill-receipts`)
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/bill-receipts` | `billReceipt:view` | Own only without `:viewAll`. |
+| `POST /api/bill-receipts` | `billReceipt:create` + `purchaseOrder:view` | Body `{ purchaseOrderId, goodsReceiptId? }`. The PO is required and must be `Final`; the ใบตรวจรับ is optional on purpose — vendors routinely bill before inspection finishes. `201`. |
+| `GET /api/bill-receipts/:id` | `billReceipt:view` | |
+| `PATCH /api/bill-receipts/:id` | `billReceipt:edit` + owner | `Draft` only. Accepts `?autoSave=1`. **`sanitizeChecks()` pins the attachment-checklist labels server-side** and reads only `checked` from the client — a client that could rename a row could make a completed document claim it received something it never did. |
+| `POST /api/bill-receipts/:id/complete` | `billReceipt:finalize` | → `Received`. |
+| `POST /api/bill-receipts/:id/reopen` | `billReceipt:finalize` | → `Draft`. |
+| `POST /api/bill-receipts/:id/print` | `billReceipt:print` | Audit only. |
+| `DELETE /api/bill-receipts/:id` | `billReceipt:delete` + owner | Soft delete. |
+
+### Purchase Request opened to every department (2026-08-28)
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `POST /api/purchase-requests` | `purchaseRequest:create` | Now accepts a **third** shape: an **empty body**, creating a standalone document with `ownerDepartment: "general"` — no `projectId`/`scopeOfWorkId`/`jobCode`, and no `linkProjectItemToSubDocument()` call. `project:view` is now required only on the path that actually reads a project; requiring it for the whole route locked out every department that has no project access, which is exactly what this change exists to fix. |
+| `GET /api/purchase-requests?ownerDepartment=` | `purchaseRequest:view` | `project` (default, also matches documents with no field) · `production` · `general` · **`all`** — the last is view-only, never stored, and backs the Purchasing inbox. `all` lifts the department wall **only**: `buildSimpleOwnershipClause` still applies, so a user without `:viewAll` still sees only their own. |

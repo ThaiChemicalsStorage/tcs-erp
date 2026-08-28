@@ -1,7 +1,7 @@
 import type { AuthContext } from "./auth.js";
 import {
   deliveryOrdersCollection, serviceReportsCollection, projectsCollection,
-  materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection,
+  materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection, purchaseOrdersCollection, goodsReceiptsCollection, billReceiptsCollection,
   productionOrdersCollection, productRequestsCollection, arDocumentsCollection,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -11,15 +11,16 @@ import { departmentIdForUser } from "./deliveryOrderHandler.js";
 import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 
 /**
- * The 9 business-document categories Global Search gained on 2026-08-28, when the owner asked for
- * "ค้นหาได้ทุกเอกสาร" — every document, not the 7 categories search had covered since 2026-07-14.
+ * The 12 business-document categories Global Search covers as of 2026-08-28 — 9 added when the owner
+ * asked for "ค้นหาได้ทุกเอกสาร" (up from the 7 it had covered since 2026-07-14), then ใบสั่งซื้อ /
+ * ใบตรวจรับสินค้า / ใบรับวางบิล the same day with the Purchasing module.
  * Master data (customers/products/templates/users) and menu shortcuts stay in `searchHandler.ts`;
  * this file is only the documents people actually hunt for by number.
  *
  * **One result shape for all nine.** Every document in this ERP answers the same four questions —
  * what number is it, whose job is it, where did it come from, and what state is it in — so they
- * share `SearchDocumentResult` rather than getting nine bespoke interfaces. That is what lets the
- * UI render one row component instead of nine, and it is why adding a tenth document type later is
+ * share `SearchDocumentResult` rather than getting twelve bespoke interfaces. That is what lets the
+ * UI render one row component instead of twelve, and it is why adding a thirteenth document type is
  * a searcher function plus a label, nothing more.
  *
  * Every searcher here follows the same two rules, both load-bearing:
@@ -42,8 +43,8 @@ export interface SearchDocumentResult {
   status: string;
   /** ISO timestamp, last touched — what the results are sorted by. */
   date: string;
-  /** ใบเบิกของ/ใบขอซื้อ เท่านั้น — picks which of the two sidebar pages the result opens. */
-  ownerDepartment?: "project" | "production";
+  /** ใบเบิกของ/ใบขอซื้อ เท่านั้น — picks which sidebar page the result opens ("general" = กล่องงานเข้าจัดซื้อ). */
+  ownerDepartment?: "project" | "production" | "general";
   /** เอกสารบัญชีเท่านั้น — picks which of the four accounting pages the result opens. */
   docType?: "AR" | "BI" | "RE" | "IV";
 }
@@ -216,7 +217,84 @@ export async function searchPurchaseRequests(query: string, ctx: AuthContext, li
     lineage: d.jobCode ?? "",
     status: d.status ?? "",
     date: isoOf(d),
-    ownerDepartment: d.ownerDepartment === "production" ? ("production" as const) : ("project" as const),
+    ownerDepartment: d.ownerDepartment === "production" ? ("production" as const)
+      : d.ownerDepartment === "general" ? ("general" as const) : ("project" as const),
+  }));
+}
+
+/**
+ * ใบสั่งซื้อ (2026-08-28) — `_id` คือเลขที่ (PO-2569-0001) และมี `documentNumber` ที่แก้เองได้แยกอีกตัว
+ * จึงค้นทั้งสองฟิลด์ แบบเดียวกับใบสั่งผลิต · `party` เป็น **ผู้ขาย** ไม่ใช่ลูกค้า ต่างจากเอกสารอื่น
+ * ทุกใบในไฟล์นี้ — เป็นเอกสารขาซื้อ ปลายทางคือผู้ขาย
+ */
+export async function searchPurchaseOrders(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
+  const col = await purchaseOrdersCollection();
+  const rx = containsRegex(query);
+  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "purchaseOrder:viewAll"), "createdBy");
+  const docs = await col.find(
+    docFilter(ownership, [
+      { _id: rx }, { documentNumber: rx }, { vendorName: rx }, { jobCode: rx },
+      { purchaseRequestId: rx }, { vendorQuotationRef: rx }, { "lines.description": rx }, { "lines.productCode": rx },
+    ]) as never,
+    { sort: SORT_RECENT, limit },
+  ).toArray();
+  return docs.map((d) => ({
+    id: d._id.toString(),
+    docNumber: d.documentNumber || d._id.toString(),
+    party: d.vendorName ?? "",
+    lineage: d.jobCode || d.purchaseRequestId || "",
+    status: d.status ?? "",
+    date: isoOf(d),
+  }));
+}
+
+/**
+ * ใบตรวจรับสินค้า (2026-08-28) — ค้นทั้ง `_id` และ `documentNumber` เหมือนใบสั่งซื้อ · `lineage` ชี้กลับไป
+ * ใบสั่งซื้อต้นทาง เพราะนั่นคือสิ่งที่คนถามหาเวลาไล่เอกสาร ไม่ใช่รหัสงาน
+ */
+export async function searchGoodsReceipts(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
+  const col = await goodsReceiptsCollection();
+  const rx = containsRegex(query);
+  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "goodsReceipt:viewAll"), "createdBy");
+  const docs = await col.find(
+    docFilter(ownership, [
+      { _id: rx }, { documentNumber: rx }, { vendorName: rx }, { jobCode: rx },
+      { purchaseOrderId: rx }, { deliveryNoteRef: rx }, { "lines.description": rx }, { "lines.productCode": rx },
+    ]) as never,
+    { sort: SORT_RECENT, limit },
+  ).toArray();
+  return docs.map((d) => ({
+    id: d._id.toString(),
+    docNumber: d.documentNumber || d._id.toString(),
+    party: d.vendorName ?? "",
+    lineage: d.purchaseOrderId || d.jobCode || "",
+    status: d.status ?? "",
+    date: isoOf(d),
+  }));
+}
+
+/**
+ * ใบรับวางบิล (2026-08-28) — เลขที่ใบแจ้งหนี้ของผู้ขายค้นได้ด้วย เพราะบัญชีมักถือกระดาษของผู้ขาย
+ * อยู่ในมือแล้วอยากรู้ว่ารับวางบิลใบไหนไว้
+ */
+export async function searchBillReceipts(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
+  const col = await billReceiptsCollection();
+  const rx = containsRegex(query);
+  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "billReceipt:viewAll"), "createdBy");
+  const docs = await col.find(
+    docFilter(ownership, [
+      { _id: rx }, { documentNumber: rx }, { vendorName: rx }, { jobCode: rx },
+      { purchaseOrderId: rx }, { goodsReceiptId: rx }, { vendorInvoiceNo: rx },
+    ]) as never,
+    { sort: SORT_RECENT, limit },
+  ).toArray();
+  return docs.map((d) => ({
+    id: d._id.toString(),
+    docNumber: d.documentNumber || d._id.toString(),
+    party: d.vendorName ?? "",
+    lineage: d.purchaseOrderId || d.goodsReceiptId || "",
+    status: d.status ?? "",
+    date: isoOf(d),
   }));
 }
 
@@ -382,7 +460,47 @@ export async function searchByDocNumber(
       return first("purchaseRequest", docs.map((d) => ({
         id: d._id.toString(), docNumber: d._id.toString(),
         party: d.vendorName ?? "", lineage: d.jobCode ?? "", status: d.status ?? "", date: isoOf(d),
-        ownerDepartment: d.ownerDepartment === "production" ? ("production" as const) : ("project" as const),
+        ownerDepartment: d.ownerDepartment === "production" ? ("production" as const)
+          : d.ownerDepartment === "general" ? ("general" as const) : ("project" as const),
+      })));
+    }
+    case "purchaseOrder": {
+      const col = await purchaseOrdersCollection();
+      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "purchaseOrder:viewAll"), "createdBy");
+      const docs = await col.find(
+        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
+        { limit: 1 },
+      ).toArray();
+      return first("purchaseOrder", docs.map((d) => ({
+        id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
+        party: d.vendorName ?? "", lineage: d.jobCode || d.purchaseRequestId || "",
+        status: d.status ?? "", date: isoOf(d),
+      })));
+    }
+    case "goodsReceipt": {
+      const col = await goodsReceiptsCollection();
+      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "goodsReceipt:viewAll"), "createdBy");
+      const docs = await col.find(
+        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
+        { limit: 1 },
+      ).toArray();
+      return first("goodsReceipt", docs.map((d) => ({
+        id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
+        party: d.vendorName ?? "", lineage: d.purchaseOrderId || d.jobCode || "",
+        status: d.status ?? "", date: isoOf(d),
+      })));
+    }
+    case "billReceipt": {
+      const col = await billReceiptsCollection();
+      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "billReceipt:viewAll"), "createdBy");
+      const docs = await col.find(
+        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
+        { limit: 1 },
+      ).toArray();
+      return first("billReceipt", docs.map((d) => ({
+        id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
+        party: d.vendorName ?? "", lineage: d.purchaseOrderId || d.goodsReceiptId || "",
+        status: d.status ?? "", date: isoOf(d),
       })));
     }
     case "productionOrder": {

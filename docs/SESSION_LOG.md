@@ -4,7 +4,53 @@
 
 ---
 
-## Session — 2026-08-28b (absolute latest), The manual had gone quietly wrong
+## Session — 2026-08-28c (absolute latest), A department that existed only as a signature box
+
+### The gap was visible in the schema before anyone described it
+The owner sent a process chart and asked for "a new module". The useful first move was not to start
+building the chart's boxes — it was to grep for what Purchasing already had. The answer was two
+things: a `purchasingDeptBy` field editable **only while the document was a draft** (so the
+department could sign only before the requesting department had even submitted it) and one
+notification. A field that can only be written at a moment when the writer has no reason to write it
+is a strong tell that the process it belongs to was never modelled. That single finding shaped the
+whole plan more than the chart did.
+
+### Building the next document exposed the missing half of the previous one
+The chart's step 1 is ใบขอซื้อ — which already existed, and looked done. It was not: it could only
+be raised from a Project item or a Production Order, while the same chart lists สโตร์, เซอร์วิส,
+บัญชี and บุคคล as requesters. Four of the six departments named in the process could not perform
+step 1 at all, and nothing in the codebase looked broken, because the restriction was expressed as
+two required parameters rather than as an error. Reading a business process end to end finds gaps
+that reading each module finds does not.
+
+### Copying a working module's shape is not the same as copying its behaviour
+All three new editors were written against the existing document editors and looked right — same
+hooks, same guard, same layout. Browsing the result in a real browser surfaced a false "ยังไม่ได้
+บันทึก" prompt when leaving a document nobody had edited: the approval callback updated `doc` and
+`draft` but never reset the dirty tracker's baseline, one line that ใบขอซื้อ, ใบเบิก and ใบสั่งงาน
+all had and the copy did not. Typecheck, lint and 364 tests were green throughout. The same pass
+caught a doubled `+` on three buttons and a nav group ordered by the wrong array.
+
+Generalises: when a new module is modelled on an old one, diff the new call sites against the old
+ones **line by line at the seams** — the state-reset calls, not the JSX — and then click it. A
+structural copy reproduces what a file looks like, not what it does at the moments that matter.
+
+### When the code has to contradict the documentation, change the documentation in the same commit
+`DESIGN.md` said a new module joins an existing nav group rather than inventing a ninth. The owner
+chose a ninth. Rather than leave the repo self-contradicting, the rule was rewritten to say what
+actually distinguishes the cases — a department with a process of its own earns a group, which is
+already why โครงการ and ผลิต have theirs. A rule that has been violated once and left standing stops
+being consulted at all.
+
+### Next
+The owner's real forms (FM-PU-xx) turn three placeholder print components into real documents. The
+three business decisions left open are stock-on-receipt, a vendor master, and whether รับวางบิล
+should create a payable in Accounting. And **production still needs the 21 permissions ticked by
+hand** — the module is invisible until then, exactly like คำขอเพิ่มสินค้า last week.
+
+---
+
+## Session — 2026-08-28b, The manual had gone quietly wrong
 
 ### Missing content is obvious; wrong content is not
 The ask was "add what's missing and make it easier to use". The missing part was findable by

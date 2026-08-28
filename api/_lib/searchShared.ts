@@ -4,7 +4,7 @@
  * business-document categories) both need these, and neither can import the other without a cycle.
  */
 
-/** Result cap per category when searching everything — deliberately small. 16 categories × 5 was
+/** Result cap per category when searching everything — deliberately small. 19 categories × 5 was
  * ~80 rows to scroll past; 3 keeps the "all" view scannable and the type-filter chips are how a
  * user asks for more. */
 export const LIMIT_ALL = 3;
@@ -56,6 +56,9 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
   { prefix: "MR-", type: "materialRequisition" },
   { prefix: "JO-", type: "jobOrder" },
   { prefix: "PR-", type: "purchaseRequest" },
+  { prefix: "PO-", type: "purchaseOrder" },
+  { prefix: "GR-", type: "goodsReceipt" },
+  { prefix: "BR-", type: "billReceipt" },
   { prefix: "SC-", type: "productionOrder" },
   { prefix: "AR", type: "arDocument" },
   { prefix: "BI", type: "arDocument" },
@@ -65,7 +68,7 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
 
 export type DocNumberFamily =
   | "quotation" | "serviceReport" | "materialRequisition" | "jobOrder"
-  | "purchaseRequest" | "productionOrder" | "arDocument";
+  | "purchaseRequest" | "productionOrder" | "arDocument" | "purchaseOrder" | "goodsReceipt" | "billReceipt";
 
 /**
  * Which document family a query looks like, or `null` when it doesn't look like a number at all.

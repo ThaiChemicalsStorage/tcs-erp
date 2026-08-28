@@ -28,9 +28,11 @@ export interface SearchScopeOfWorkResult {
 }
 
 /**
- * One shape shared by all 9 business-document categories (added 2026-08-28). Every document in the
+ * One shape shared by all 12 business-document categories (9 added 2026-08-28, then ใบสั่งซื้อ /
+ * ใบตรวจรับสินค้า / ใบรับวางบิล with the Purchasing module the same day). Every document in the
  * system answers the same four questions — its number, whose job it is, what it descends from, and
- * what state it is in — so the panel renders one row component for all of them instead of nine.
+ * what state it is in — so the panel renders one row component for all of them, and a thirteenth
+ * document type is a searcher function plus a label.
  */
 export interface SearchDocumentResult {
   id: string;
@@ -43,7 +45,7 @@ export interface SearchDocumentResult {
   status: string;
   date: string;
   /** ใบเบิกของ/ใบขอซื้อ — picks which of the two sidebar pages the result opens. */
-  ownerDepartment?: "project" | "production";
+  ownerDepartment?: "project" | "production" | "general";
   /** เอกสารบัญชี — picks which of the four accounting pages the result opens. */
   docType?: "AR" | "BI" | "RE" | "IV";
 }
@@ -97,7 +99,8 @@ export interface SearchPageResult {
 /** The 9 categories backed by `SearchDocumentResult`. */
 export type DocumentCategory =
   | "deliveryOrders" | "serviceReports" | "projects" | "materialRequisitions"
-  | "jobOrders" | "purchaseRequests" | "productionOrders" | "arDocuments" | "productRequests";
+  | "jobOrders" | "purchaseRequests" | "productionOrders" | "arDocuments" | "productRequests"
+  | "purchaseOrders" | "goodsReceipts" | "billReceipts";
 
 export type SearchCategory =
   | "quotations" | "scopeOfWorks" | DocumentCategory
@@ -110,13 +113,13 @@ export type SearchCategory =
  */
 export const SEARCH_CATEGORY_ORDER: SearchCategory[] = [
   "quotations", "scopeOfWorks", "deliveryOrders", "serviceReports", "projects",
-  "materialRequisitions", "jobOrders", "purchaseRequests", "productionOrders",
+  "materialRequisitions", "jobOrders", "purchaseRequests", "purchaseOrders", "goodsReceipts", "billReceipts", "productionOrders",
   "arDocuments", "productRequests", "customers", "products", "templates", "users", "pages",
 ];
 
 export const DOCUMENT_CATEGORIES: DocumentCategory[] = [
   "deliveryOrders", "serviceReports", "projects", "materialRequisitions",
-  "jobOrders", "purchaseRequests", "productionOrders", "arDocuments", "productRequests",
+  "jobOrders", "purchaseRequests", "purchaseOrders", "goodsReceipts", "billReceipts", "productionOrders", "arDocuments", "productRequests",
 ];
 
 export function isDocumentCategory(c: SearchCategory): c is DocumentCategory {
@@ -139,6 +142,9 @@ export interface SearchResults {
   materialRequisitions: SearchDocumentResult[];
   jobOrders: SearchDocumentResult[];
   purchaseRequests: SearchDocumentResult[];
+  purchaseOrders: SearchDocumentResult[];
+  goodsReceipts: SearchDocumentResult[];
+  billReceipts: SearchDocumentResult[];
   productionOrders: SearchDocumentResult[];
   arDocuments: SearchDocumentResult[];
   productRequests: SearchDocumentResult[];
@@ -176,6 +182,9 @@ export const SEARCH_CATEGORY_LABEL_KEY: Record<SearchCategory, string> = {
   materialRequisitions: "search.group.materialRequisitions",
   jobOrders: "search.group.jobOrders",
   purchaseRequests: "search.group.purchaseRequests",
+  purchaseOrders: "search.group.purchaseOrders",
+  goodsReceipts: "search.group.goodsReceipts",
+  billReceipts: "search.group.billReceipts",
   productionOrders: "search.group.productionOrders",
   arDocuments: "search.group.arDocuments",
   productRequests: "search.group.productRequests",
@@ -222,7 +231,7 @@ export interface RecentDoc {
   id: string;
   label: string;
   /** Carried through so a recent ใบเบิกของ/ใบขอซื้อ or accounting document reopens the right page. */
-  ownerDepartment?: "project" | "production";
+  ownerDepartment?: "project" | "production" | "general";
   docType?: "AR" | "BI" | "RE" | "IV";
 }
 

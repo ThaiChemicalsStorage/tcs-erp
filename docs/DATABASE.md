@@ -44,6 +44,9 @@ This supersedes the pre-2026-07-09 `localStorage`-only persistence described low
 | `job_orders` | business ID string (e.g. `"JO-2569-0001"`) | `JobOrderFields` (`src/lib/jobOrder.ts` minus `id`) | **API routes added Stage 3, 2026-08-18** — see "Project module" below and [API.md](./API.md) "Project." No UI yet. |
 | `purchase_requests` | business ID string (e.g. `"PR-2569-0001"`) | `PurchaseRequestFields` (`src/lib/purchaseRequest.ts` minus `id`) | **API routes added Stage 3, 2026-08-18** — see "Project module" below and [API.md](./API.md) "Project." No UI yet. |
 | `production_orders` | business ID string (e.g. `"SC-2026-08-009"`, atomic per-**Gregorian**-year+month counter) | `ProductionOrderFields` (`src/lib/productionOrder.ts` minus `id`) | **Added 2026-08-20** — ใบสั่งผลิต (FM-PD-02) for the Production department. Unlike the three documents above it is generated **directly from an approved Scope of Work**, not a Project item, so it has no `projectId`. Its numbering deliberately uses the Gregorian year to match the real form, unlike every other document in this database — see [MODULES/Production.md](./MODULES/Production.md). **2026-08-27**: gained `documentNumber` — the number actually printed on the form, seeded equal to `_id` and editable while Draft, with a unique index. The `_id` stays immutable because `material_requisitions`/`purchase_requests` reference it via `productionOrderId`. Legacy rows are backfilled to `_id` on first write (`ensureProductionOrderNumberIndex()`), since a unique index over many missing values would otherwise fail with E11000. |
+| `purchase_orders` | business ID string (`"PO-2569-0001"`, atomic per-**Buddhist**-year counter) | `PurchaseOrderFields` (`src/lib/purchaseOrder.ts` minus `id`) | **Added 2026-08-28** — ใบสั่งซื้อ for the Purchasing module. Created from an approved `purchase_requests` document (lines copied as a snapshot, never a live reference) or blank. Uses the shared ร่าง→รออนุมัติ→อนุมัติ fields (`api/_lib/documentApproval.ts`) and `{root}-R{n}` rewrites. `documentNumber` is separately editable and uniquely indexed — the index is created **lazily by the handler**, since `ensureIndexes()` only runs from the Setup Wizard. Soft-deleted via `isDeleted`. |
+| `goods_receipts` | business ID string (`"GR-2569-0001"`, atomic per-Buddhist-year counter) | `GoodsReceiptFields` (`src/lib/goodsReceipt.ts` minus `id`) | **Added 2026-08-28** — ใบตรวจรับสินค้า, created from a `Final` purchase order. Lines carry `qtyOrdered` / `qtyReceived` / `result` (`Pending`/`Passed`/`Rejected`); `qtyReceived` is stored **null** at creation on purpose. Two statuses only (`Draft`/`Received`) — no approval workflow. **Writes nothing to `products.stockQty` or `stock_movements`.** |
+| `bill_receipts` | business ID string (`"BR-2569-0001"`, atomic per-Buddhist-year counter) | `BillReceiptFields` (`src/lib/billReceipt.ts` minus `id`) | **Added 2026-08-28** — ใบรับวางบิล: records that the vendor's billing envelope arrived (invoice no./date, amount, due date, attachment checklist) against a `Final` purchase order, optionally referencing a goods receipt. Checklist **labels are pinned server-side**; only `checked` comes from the client. Two statuses (`Draft`/`Received`). **Not Accounts Payable** — nothing is posted and Accounting never reads it. |
 
 ### Schema-prep collections (added 2026-07-09, mostly not wired to routes/UI yet)
 
@@ -1110,3 +1113,13 @@ lack them:
 
 Production Order stores its approver as an `approver: { name, date }` signatory block rather than a
 plain string, matching its printed form — which is why `ApprovalConfig` has an `approvalStamp` hook.
+
+## `ownerDepartment` gained a third value (2026-08-28)
+
+| Field | On | Meaning |
+|---|---|---|
+| `ownerDepartment: "general"` | `purchase_requests` | ใบขอซื้อ raised by a department that has neither a project item nor a production order to hang it on (สโตร์ · เซอร์วิส · บัญชี · บุคคล · จัดซื้อ itself). Such a document has empty `projectId`/`scopeOfWorkId`/`jobCode` and is never linked onto a `ProjectItem`. Documents with **no** `ownerDepartment` field at all still read as `"project"`, exactly as before — no migration was run. |
+
+There is a fourth value used only as a **query scope**, never stored: `?ownerDepartment=all`, which
+the Purchasing inbox uses to list every department's requests in one table. It removes the
+department filter and nothing else — ownership scoping still applies.

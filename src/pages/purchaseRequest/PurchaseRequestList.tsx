@@ -23,10 +23,16 @@ export function PurchaseRequestList({
   currentUserId,
   onOpen,
   headerAction,
+  heading,
+  showDepartment = false,
 }: {
   purchaseRequests: PurchaseRequestSummary[];
   currentUserId: string;
   onOpen: (id: string) => void;
+  /** หัวข้อหน้า — ระบุเมื่อหน้านี้ถูกเมาต์เป็นกล่องงานเข้าของจัดซื้อ ที่ไม่ใช่ใบของแผนกใดแผนกหนึ่ง */
+  heading?: string;
+  /** เพิ่มคอลัมน์ "แผนก" — จำเป็นเฉพาะมุมมองรวมทุกฝ่าย ที่ไม่รู้จากหน้าเองว่าใบไหนของใคร */
+  showDepartment?: boolean;
   /** ปุ่ม "+ สร้าง" ของหน้านั้นๆ — หน้า Page เป็นเจ้าของ state ของกล่องเลือกต้นทาง (2026-08-20) */
   headerAction?: ReactNode;
 }) {
@@ -37,6 +43,11 @@ export function PurchaseRequestList({
     { element: '[data-tour="pr-table"]', popover: { title: t("tour.pr.table.title"), description: t("tour.pr.table.desc"), side: "top" } },
   ];
   const tour = useModuleTour("purchaseRequest", currentUserId, tourSteps);
+  const departmentLabel: Record<string, string> = {
+    project: t("purchaseRequest.dept.project"),
+    production: t("purchaseRequest.dept.production"),
+    general: t("purchaseRequest.dept.general"),
+  };
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -50,7 +61,7 @@ export function PurchaseRequestList({
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseRequest.pageTitle")}</h1>
+          <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{heading ?? t("purchaseRequest.pageTitle")}</h1>
           <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("purchaseRequest.pageSubtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -100,7 +111,7 @@ export function PurchaseRequestList({
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              {[t("purchaseRequest.col.id"), t("purchaseRequest.col.jobCode"), t("purchaseRequest.col.status"), t("purchaseRequest.col.updatedAt")].map((h) => (
+              {[t("purchaseRequest.col.id"), t("purchaseRequest.col.jobCode"), ...(showDepartment ? [t("purchaseRequest.col.department")] : []), t("purchaseRequest.col.status"), t("purchaseRequest.col.updatedAt")].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -118,6 +129,9 @@ export function PurchaseRequestList({
               >
                 <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{p.id}</td>
                 <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{p.jobCode || "—"}</td>
+                {showDepartment && (
+                  <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{departmentLabel[p.ownerDepartment ?? "project"]}</td>
+                )}
                 <td className="px-4 py-3.5">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[p.status]}`}>
                     {statusLabel[p.status]}

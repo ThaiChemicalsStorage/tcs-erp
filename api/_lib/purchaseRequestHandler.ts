@@ -102,7 +102,7 @@ function toClient(doc: PurchaseRequestFields & { _id: string }) {
 }
 function toSummary(doc: PurchaseRequestFields & { _id: string }): PurchaseRequestSummary {
   const full = withStringId(doc);
-  return { id: full.id, projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, updatedAt: full.updatedAt };
+  return { id: full.id, projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, updatedAt: full.updatedAt, ownerDepartment: full.ownerDepartment ?? "project" };
 }
 
 async function loadOrThrow(id: string) {
@@ -125,9 +125,15 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   // แยกเอกสารตามแผนกเจ้าของ — ฝ่ายโครงการกับฝ่ายผลิตใช้เอกสารชนิดเดียวกันแต่ไม่เห็นของกันและกัน
   // (ยืนยันกับเจ้าของ 2026-08-20). เอกสารเก่าที่ไม่มีฟิลด์นี้ถือเป็นของฝ่ายโครงการ จึงต้องรับทั้ง
   // ค่า "project" และกรณีที่ยังไม่มีฟิลด์เลย — ไม่ได้ทำ migration
-  const ownerDepartment = req.query.ownerDepartment === "production" ? "production" : "project";
-  const departmentClause: Filter<PurchaseRequestFields & { _id: string }> = ownerDepartment === "production"
-    ? { ownerDepartment: "production" }
+  // 2026-08-28: เพิ่มอีกสองค่า — "general" คือใบที่ฝ่ายอื่น (สโตร์/เซอร์วิส/บัญชี/บุคคล) เปิดเองโดยไม่มี
+  // เอกสารต้นทาง และ "all" คือกล่องงานเข้าของฝ่ายจัดซื้อ ที่ต้องเห็นใบของทุกฝ่ายรวมกันเพื่อออกใบสั่งซื้อต่อ
+  // (ยังกรองด้วย ownership เดิมอยู่ — "all" เปิดเฉพาะกำแพงแผนก ไม่ได้เปิดกำแพงสิทธิ์)
+  const q = req.query.ownerDepartment;
+  const ownerDepartment = q === "production" || q === "general" || q === "all" ? q : "project";
+  const departmentClause: Filter<PurchaseRequestFields & { _id: string }> =
+    ownerDepartment === "production" ? { ownerDepartment: "production" }
+    : ownerDepartment === "general" ? { ownerDepartment: "general" }
+    : ownerDepartment === "all" ? {}
     : { $or: [{ ownerDepartment: "project" }, { ownerDepartment: { $exists: false } }] };
   // เวลาระบุ projectId คือเช็คของโครงการนั้นโดยตรง ไม่ต้องกรองแผนกซ้ำ
   // $and, not spread: buildSimpleOwnershipClause() also returns a $or, so spreading both
@@ -142,7 +148,6 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "purchaseRequest:create");
-  if (!roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
@@ -155,11 +160,23 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
    *   - ใบสั่งผลิต       → ของฝ่ายผลิต ไม่มีรายการให้ผูก จึงข้าม item-link
    */
   const fromProduction = Boolean(productionOrderId);
-  if (!fromProduction && (!projectId || !itemId)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+  /**
+   * ต้นทางที่สาม เพิ่ม 2026-08-28: **ไม่มีเอกสารต้นทางเลย** — ฝ่ายสโตร์ เซอร์วิส บัญชี บุคคล ตามผัง
+   * "กระบวนการจัดซื้อ" ที่เจ้าของส่งมา ทุกฝ่ายขอซื้อได้ แต่มีแค่ฝ่ายโครงการกับฝ่ายผลิตเท่านั้นที่มี
+   * เอกสารต้นทางให้ผูก ใบของฝ่ายอื่นจึงไม่มี projectId/scopeOfWorkId/jobCode และไม่ไปแตะ
+   * linkProjectItemToSubDocument() — ผู้ใช้พิมพ์รายการเองทั้งใบ
+   */
+  const standalone = !fromProduction && !projectId && !itemId;
+  if (!fromProduction && !standalone && (!projectId || !itemId)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+  // สิทธิ์ project:view จำเป็นเฉพาะทางที่ต้องอ่านโครงการจริง ๆ — ถ้าบังคับทั้งก้อนเหมือนเดิม
+  // ฝ่ายที่ไม่มีสิทธิ์ดูโครงการจะเปิดใบของตัวเองไม่ได้เลย ซึ่งเป็นสิ่งที่รอบนี้ตั้งใจแก้
+  if (!fromProduction && !standalone && !roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
 
   let source: { projectId: string; scopeOfWorkId: string; jobCode: string };
   let item: { name: string } | null = null;
-  if (fromProduction) {
+  if (standalone) {
+    source = { projectId: "", scopeOfWorkId: "", jobCode: "" };
+  } else if (fromProduction) {
     const productionOrders = await productionOrdersCollection();
     const po = await productionOrders.findOne({ _id: productionOrderId });
     if (!po || po.isDeleted) throw new HttpError(404, "ไม่พบใบสั่งผลิต");
@@ -179,7 +196,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const now = nowIso();
   const doc: PurchaseRequestFields = {
     projectId: source.projectId, scopeOfWorkId: source.scopeOfWorkId, jobCode: source.jobCode,
-    ownerDepartment: fromProduction ? "production" : "project",
+    ownerDepartment: standalone ? "general" : fromProduction ? "production" : "project",
     productionOrderId: fromProduction ? productionOrderId : "",
     vendorName: "", neededByDate: "", creditDays: null, shippingMethod: "", deliveryLocation: "",
     lines: [], status: "Draft",
@@ -197,13 +214,15 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 
   // CRITICAL invariant — see materialRequisitionHandler.ts's identical comment on this same step.
   // ฝ่ายผลิตออกจากใบสั่งผลิต ไม่มีรายการในโครงการให้ผูก จึงข้ามขั้นตอนนี้
-  if (!fromProduction) {
+  if (!fromProduction && !standalone) {
     await linkProjectItemToSubDocument(projectId, itemId, "purchaseRequest", "purchaseRequestId", id);
   }
 
   await writeAuditEntry(
     ctx, "Purchase Request Created",
-    fromProduction
+    standalone
+      ? `สร้างใบขอซื้อ ${id} (ไม่มีเอกสารต้นทาง)`
+      : fromProduction
       ? `สร้างใบขอซื้อ ${id} จากใบสั่งผลิต ${productionOrderId}`
       : `สร้างใบขอซื้อ ${id} สำหรับรายการ "${item?.name ?? ""}"`,
     { scopeOfWorkId: source.scopeOfWorkId },

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import { type PurchaseRequestSummary, fetchAllPurchaseRequests, createPurchaseRequest, createPurchaseRequestFromProductionOrder } from "../../lib/purchaseRequest";
+import { type PurchaseRequestSummary, type PurchaseRequestScope, fetchAllPurchaseRequests, createPurchaseRequest, createPurchaseRequestFromProductionOrder, createStandalonePurchaseRequest } from "../../lib/purchaseRequest";
 import { PurchaseRequestList } from "./PurchaseRequestList";
 import { PurchaseRequestDocument } from "./PurchaseRequestDocument";
 import { ProjectItemSourcePickerDialog, ProductionOrderSourcePickerDialog } from "../project/ProjectSourcePickers";
@@ -32,9 +32,10 @@ export function PurchaseRequestPage({
   canCreate: boolean;
   /** สิทธิ์ productRequest:create — คุมปุ่ม "ขอรหัสสินค้า" บนบรรทัดที่พิมพ์เอง */
   canRequestProductCode: boolean;
-  /** แผนกเจ้าของ — หน้านี้ถูกเมาต์ 2 ครั้ง (โครงการ/ผลิต) และเห็นคนละชุดข้อมูล (2026-08-20).
-   *  ฝั่งผลิตออกเอกสารจากใบสั่งผลิต ส่วนฝั่งโครงการออกจากรายการในโครงการ */
-  ownerDepartment?: "project" | "production";
+  /** แผนกเจ้าของ — หน้านี้ถูกเมาต์ 3 ครั้ง (โครงการ/ผลิต/จัดซื้อ) และเห็นคนละชุดข้อมูล (2026-08-20, 2026-08-28).
+   *  ฝั่งผลิตออกเอกสารจากใบสั่งผลิต ฝั่งโครงการออกจากรายการในโครงการ ส่วน `"all"` คือกล่องงานเข้า
+   *  ของฝ่ายจัดซื้อ เห็นใบของทุกฝ่ายและเปิดใบเปล่าเองได้ */
+  ownerDepartment?: PurchaseRequestScope;
   initialPurchaseRequestId?: string | null;
   onPurchaseRequestIdConsumed?: () => void;
 }) {
@@ -57,6 +58,16 @@ export function PurchaseRequestPage({
       openPurchaseRequest(created.id);
     } catch (err) {
       setPickerOpen(false);
+      toast.show(err instanceof ApiError ? err.message : t("purchaseRequest.loadError"));
+    }
+  };
+
+  // ฝ่ายที่ไม่มีเอกสารต้นทาง (และกล่องงานเข้าของจัดซื้อ) เปิดใบเปล่าได้ทันที ไม่ต้องเลือกต้นทาง
+  const handleCreateStandalone = async () => {
+    try {
+      const created = await createStandalonePurchaseRequest();
+      openPurchaseRequest(created.id);
+    } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("purchaseRequest.loadError"));
     }
   };
@@ -156,22 +167,27 @@ export function PurchaseRequestPage({
     );
   }
 
+  // มีแค่สองแผนกที่ต้องเลือกเอกสารต้นทางก่อน — ที่เหลือเปิดใบเปล่า
+  const needsSourcePicker = ownerDepartment === "project" || ownerDepartment === "production";
+
   return (
     <>
       <PurchaseRequestList
         purchaseRequests={purchaseRequests}
         currentUserId={currentUserId}
         onOpen={openPurchaseRequest}
+        heading={ownerDepartment === "all" ? t("nav.purchasingRequestInbox") : undefined}
+        showDepartment={ownerDepartment === "all"}
         headerAction={canCreate ? (
           <button
-            onClick={() => setPickerOpen(true)}
+            onClick={() => (needsSourcePicker ? setPickerOpen(true) : void handleCreateStandalone())}
             className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
           >
             <Plus size={15} /> {t("purchaseRequest.createBtn")}
           </button>
         ) : undefined}
       />
-      {pickerOpen && (ownerDepartment === "production" ? (
+      {pickerOpen && needsSourcePicker && (ownerDepartment === "production" ? (
         <ProductionOrderSourcePickerDialog
           title={t("purchaseRequest.createBtn")}
           onClose={() => setPickerOpen(false)}

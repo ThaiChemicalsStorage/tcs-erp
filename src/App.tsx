@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, Briefcase, Package2, Hammer, ShoppingCart, Factory,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, PackageCheck, ReceiptText, Factory,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -58,6 +58,9 @@ const MaterialRequisitionPage = lazy(() => import("./pages/materialRequisition/M
 const JobOrderPage = lazy(() => import("./pages/jobOrder/JobOrderPage").then((m) => ({ default: m.JobOrderPage })));
 const PurchaseRequestPage = lazy(() => import("./pages/purchaseRequest/PurchaseRequestPage").then((m) => ({ default: m.PurchaseRequestPage })));
 const ProductionOrderPage = lazy(() => import("./pages/productionOrder/ProductionOrderPage").then((m) => ({ default: m.ProductionOrderPage })));
+const PurchaseOrderPage = lazy(() => import("./pages/purchaseOrder/PurchaseOrderPage").then((m) => ({ default: m.PurchaseOrderPage })));
+const GoodsReceiptPage = lazy(() => import("./pages/goodsReceipt/GoodsReceiptPage").then((m) => ({ default: m.GoodsReceiptPage })));
+const BillReceiptPage = lazy(() => import("./pages/billReceipt/BillReceiptPage").then((m) => ({ default: m.BillReceiptPage })));
 const ServicePage = lazy(() => import("./pages/service/ServicePage").then((m) => ({ default: m.ServicePage })));
 const ServiceTemplateManagement = lazy(() => import("./pages/service/ServiceTemplateManagement").then((m) => ({ default: m.ServiceTemplateManagement })));
 const AccountingPage = lazy(() => import("./pages/accounting/AccountingPage").then((m) => ({ default: m.AccountingPage })));
@@ -137,7 +140,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "productionOrder" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "goodsReceipt" | "billReceipt" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers";
 type ResourceState = "loading" | "ready" | "error";
@@ -191,6 +194,11 @@ const navItems: NavItem[] = [
   { key: "jobOrder", icon: Hammer, labelKey: "nav.jobOrder", permission: "jobOrder:view" },
   { key: "purchaseRequest", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "productionOrder", icon: Factory, labelKey: "nav.productionOrder", permission: "productionOrder:view" },
+  // กล่องงานเข้าของฝ่ายจัดซื้อ — หน้าเดียวกับใบขอซื้อ แต่เห็นของทุกฝ่ายรวมกัน (2026-08-28)
+  { key: "purchasingRequestInbox", icon: ShoppingCart, labelKey: "nav.purchasingRequestInbox", permission: "purchaseRequest:view" },
+  { key: "purchaseOrder", icon: ShoppingBag, labelKey: "nav.purchaseOrder", permission: "purchaseOrder:view" },
+  { key: "goodsReceipt", icon: PackageCheck, labelKey: "nav.goodsReceipt", permission: "goodsReceipt:view" },
+  { key: "billReceipt", icon: ReceiptText, labelKey: "nav.billReceipt", permission: "billReceipt:view" },
   { key: "productionRequisition", icon: Package2, labelKey: "nav.materialRequisition", permission: "materialRequisition:view" },
   { key: "productionPurchase", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
@@ -221,6 +229,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   // แผนกเข้าถึงได้จากหมวดของตัวเองแทนที่จะต้องไปหาใต้ "ขาย"
   { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest", "deliveryOrder"] },
   { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "productionPurchase", "deliveryOrder"] },
+  { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "purchaseOrder", "goodsReceipt", "billReceipt"] },
   { labelKey: "nav.group.inventory", keys: ["products", "stock", "productRequest"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
@@ -245,8 +254,12 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   jobOrder: "nav.jobOrder",
   purchaseRequest: "nav.purchaseRequest",
   productionOrder: "nav.productionOrder",
+  purchaseOrder: "nav.purchaseOrder",
+  goodsReceipt: "nav.goodsReceipt",
+  billReceipt: "nav.billReceipt",
   productionRequisition: "nav.materialRequisition",
   productionPurchase: "nav.purchaseRequest",
+  purchasingRequestInbox: "nav.purchasingRequestInbox",
   products: "nav.products",
   stock: "nav.stock",
   productRequest: "nav.productRequest",
@@ -333,6 +346,9 @@ export default function App() {
   const [purchaseRequestDeepLinkId, setPurchaseRequestDeepLinkId] = useState<string | null>(null);
   const [productRequestDeepLinkId, setProductRequestDeepLinkId] = useState<string | null>(null);
   const [productionOrderDeepLinkId, setProductionOrderDeepLinkId] = useState<string | null>(null);
+  const [purchaseOrderDeepLinkId, setPurchaseOrderDeepLinkId] = useState<string | null>(null);
+  const [goodsReceiptDeepLinkId, setGoodsReceiptDeepLinkId] = useState<string | null>(null);
+  const [billReceiptDeepLinkId, setBillReceiptDeepLinkId] = useState<string | null>(null);
   // เอกสารบัญชีมีสี่ชนิดอยู่คนละหน้า จึงต้องพก docType มาด้วยเพื่อรู้ว่าจะเปิดหน้าไหน (2026-08-28)
   const [arDocumentDeepLink, setArDocumentDeepLink] = useState<{ docType: ArDocumentType; id: string } | null>(null);
   const [serviceReportDeepLinkId, setServiceReportDeepLinkId] = useState<string | null>(null);
@@ -511,7 +527,9 @@ export default function App() {
   });
   // ฝ่ายโครงการกับฝ่ายผลิตใช้เอกสารชนิดเดียวกันแต่คนละหน้า — ผลค้นหาพก ownerDepartment มาบอกว่าหน้าไหน
   // (2026-08-28) ไม่ระบุ = ฝ่ายโครงการ ตรงกับเอกสารเก่าที่ไม่มีฟิลด์นี้ และกับผู้เรียกเดิมทุกจุด
-  const navigateToMaterialRequisition = (materialRequisitionId: string, ownerDepartment?: "project" | "production") => guardedNav(() => {
+  // "general" มีได้เฉพาะใบขอซื้อ (ใบเบิกของยังมีแค่สองแผนก) แต่ผลค้นหาใช้รูปแบบเดียวกันทุกเอกสาร
+  // จึงรับค่าเดียวกันแล้วตกลงหน้าฝ่ายโครงการเป็นค่าเริ่มต้น
+  const navigateToMaterialRequisition = (materialRequisitionId: string, ownerDepartment?: "project" | "production" | "general") => guardedNav(() => {
     setMaterialRequisitionDeepLinkId(materialRequisitionId);
     setActiveNav(ownerDepartment === "production" ? "productionRequisition" : "materialRequisition");
   });
@@ -519,9 +537,10 @@ export default function App() {
     setJobOrderDeepLinkId(jobOrderId);
     setActiveNav("jobOrder");
   });
-  const navigateToPurchaseRequest = (purchaseRequestId: string, ownerDepartment?: "project" | "production") => guardedNav(() => {
+  const navigateToPurchaseRequest = (purchaseRequestId: string, ownerDepartment?: "project" | "production" | "general") => guardedNav(() => {
     setPurchaseRequestDeepLinkId(purchaseRequestId);
-    setActiveNav(ownerDepartment === "production" ? "productionPurchase" : "purchaseRequest");
+    // ใบของฝ่ายอื่นไม่มีหน้าเป็นของตัวเอง — เปิดในกล่องงานเข้าของจัดซื้อ ซึ่งเป็นหน้าเดียวที่แสดงมันอยู่
+    setActiveNav(ownerDepartment === "production" ? "productionPurchase" : ownerDepartment === "general" ? "purchasingRequestInbox" : "purchaseRequest");
   });
   const navigateToProductRequest = (productRequestId: string) => guardedNav(() => {
     setProductRequestDeepLinkId(productRequestId);
@@ -535,6 +554,18 @@ export default function App() {
   const navigateToProductionOrder = (productionOrderId: string) => guardedNav(() => {
     setProductionOrderDeepLinkId(productionOrderId);
     setActiveNav("productionOrder");
+  });
+  const navigateToPurchaseOrder = (purchaseOrderId: string) => guardedNav(() => {
+    setPurchaseOrderDeepLinkId(purchaseOrderId);
+    setActiveNav("purchaseOrder");
+  });
+  const navigateToGoodsReceipt = (goodsReceiptId: string) => guardedNav(() => {
+    setGoodsReceiptDeepLinkId(goodsReceiptId);
+    setActiveNav("goodsReceipt");
+  });
+  const navigateToBillReceipt = (billReceiptId: string) => guardedNav(() => {
+    setBillReceiptDeepLinkId(billReceiptId);
+    setActiveNav("billReceipt");
   });
   const navigateToArDocument = (docType: ArDocumentType, arDocumentId: string) => guardedNav(() => {
     setArDocumentDeepLink({ docType, id: arDocumentId });
@@ -582,6 +613,9 @@ export default function App() {
       // ใบเบิกของ/ใบขอซื้อ ของฝ่ายผลิตอยู่คนละหน้ากับของฝ่ายโครงการ แม้เป็นเอกสารชนิดเดียวกัน
       case "materialRequisitions": navigateToMaterialRequisition(hit.data.id, hit.data.ownerDepartment); break;
       case "purchaseRequests": navigateToPurchaseRequest(hit.data.id, hit.data.ownerDepartment); break;
+      case "purchaseOrders": navigateToPurchaseOrder(hit.data.id); break;
+      case "goodsReceipts": navigateToGoodsReceipt(hit.data.id); break;
+      case "billReceipts": navigateToBillReceipt(hit.data.id); break;
       case "arDocuments": if (hit.data.docType) navigateToArDocument(hit.data.docType, hit.data.id); break;
       case "customers": navigateToCustomer(hit.data.id); break;
       case "products": navigateToProduct(hit.data.id); break;
@@ -770,11 +804,28 @@ export default function App() {
   const canPrintJobOrder = hasPermission(currentUser, roles, "jobOrder:print");
   const canDeleteJobOrder = hasPermission(currentUser, roles, "jobOrder:delete");
   const canCreatePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:create");
+  const canViewPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:view");
   const canCreateProductionOrder = hasPermission(currentUser, roles, "productionOrder:create");
   const canEditProductionOrder = hasPermission(currentUser, roles, "productionOrder:edit");
   const canApproveProductionOrder = hasPermission(currentUser, roles, "productionOrder:finalize");
   const canPrintProductionOrder = hasPermission(currentUser, roles, "productionOrder:print");
   const canDeleteProductionOrder = hasPermission(currentUser, roles, "productionOrder:delete");
+  const canCreatePurchaseOrder = hasPermission(currentUser, roles, "purchaseOrder:create");
+  const canEditPurchaseOrder = hasPermission(currentUser, roles, "purchaseOrder:edit");
+  const canApprovePurchaseOrder = hasPermission(currentUser, roles, "purchaseOrder:finalize");
+  const canPrintPurchaseOrder = hasPermission(currentUser, roles, "purchaseOrder:print");
+  const canDeletePurchaseOrder = hasPermission(currentUser, roles, "purchaseOrder:delete");
+  const canCreateGoodsReceipt = hasPermission(currentUser, roles, "goodsReceipt:create");
+  const canEditGoodsReceipt = hasPermission(currentUser, roles, "goodsReceipt:edit");
+  const canCompleteGoodsReceipt = hasPermission(currentUser, roles, "goodsReceipt:finalize");
+  const canPrintGoodsReceipt = hasPermission(currentUser, roles, "goodsReceipt:print");
+  const canDeleteGoodsReceipt = hasPermission(currentUser, roles, "goodsReceipt:delete");
+  const canViewPurchaseOrder = hasPermission(currentUser, roles, "purchaseOrder:view");
+  const canCreateBillReceipt = hasPermission(currentUser, roles, "billReceipt:create");
+  const canEditBillReceipt = hasPermission(currentUser, roles, "billReceipt:edit");
+  const canCompleteBillReceipt = hasPermission(currentUser, roles, "billReceipt:finalize");
+  const canPrintBillReceipt = hasPermission(currentUser, roles, "billReceipt:print");
+  const canDeleteBillReceipt = hasPermission(currentUser, roles, "billReceipt:delete");
   const canEditPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:edit");
   const canFinalizePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:finalize");
   const canPrintPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:print");
@@ -1004,6 +1055,8 @@ export default function App() {
               ? <MaterialRequisitionPage company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
               : effectiveNav === "jobOrder"
               ? <JobOrderPage currentUserId={currentUser.id} canEdit={canEditJobOrder} canFinalize={canFinalizeJobOrder} canPrint={canPrintJobOrder} canDelete={canDeleteJobOrder} canCreate={canCreateJobOrder} initialJobOrderId={jobOrderDeepLinkId} onJobOrderIdConsumed={() => setJobOrderDeepLinkId(null)} />
+              : effectiveNav === "purchasingRequestInbox"
+              ? <PurchaseRequestPage key="pr-purchasing" ownerDepartment="all" canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "purchaseRequest"
               ? <PurchaseRequestPage canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionRequisition"
@@ -1012,6 +1065,12 @@ export default function App() {
               ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionOrder"
               ? <ProductionOrderPage canEdit={canEditProductionOrder} canApprove={canApproveProductionOrder} canPrint={canPrintProductionOrder} canDelete={canDeleteProductionOrder} canCreate={canCreateProductionOrder} initialProductionOrderId={productionOrderDeepLinkId} onProductionOrderIdConsumed={() => setProductionOrderDeepLinkId(null)} />
+              : effectiveNav === "purchaseOrder"
+              ? <PurchaseOrderPage canCreate={canCreatePurchaseOrder} canEdit={canEditPurchaseOrder} canApprove={canApprovePurchaseOrder} canPrint={canPrintPurchaseOrder} canDelete={canDeletePurchaseOrder} canViewPurchaseRequest={canViewPurchaseRequest} initialPurchaseOrderId={purchaseOrderDeepLinkId} onPurchaseOrderIdConsumed={() => setPurchaseOrderDeepLinkId(null)} />
+              : effectiveNav === "goodsReceipt"
+              ? <GoodsReceiptPage canCreate={canCreateGoodsReceipt} canEdit={canEditGoodsReceipt} canComplete={canCompleteGoodsReceipt} canPrint={canPrintGoodsReceipt} canDelete={canDeleteGoodsReceipt} canViewPurchaseOrder={canViewPurchaseOrder} initialGoodsReceiptId={goodsReceiptDeepLinkId} onGoodsReceiptIdConsumed={() => setGoodsReceiptDeepLinkId(null)} />
+              : effectiveNav === "billReceipt"
+              ? <BillReceiptPage canCreate={canCreateBillReceipt} canEdit={canEditBillReceipt} canComplete={canCompleteBillReceipt} canPrint={canPrintBillReceipt} canDelete={canDeleteBillReceipt} canViewPurchaseOrder={canViewPurchaseOrder} initialBillReceiptId={billReceiptDeepLinkId} onBillReceiptIdConsumed={() => setBillReceiptDeepLinkId(null)} />
               : effectiveNav === "service"
               ? <ServicePage currentUserId={currentUser.id} company={company} canCreate={canCreateService} canEdit={canEditService} canComplete={canCompleteService} canDelete={canDeleteService} canPrint={canPrintService} initialServiceReportId={serviceReportDeepLinkId} onServiceReportIdConsumed={() => setServiceReportDeepLinkId(null)} />
               : effectiveNav === "serviceTemplates"

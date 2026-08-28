@@ -59,7 +59,7 @@ export interface PurchaseRequest {
    * (ยืนยันกับเจ้าของ 2026-08-20). optional เพราะเอกสารที่บันทึกก่อนหน้านั้นไม่มีฟิลด์นี้ — อ่านแล้ว
    * normalize เป็น "project" เสมอ ไม่ได้ทำ migration
    */
-  ownerDepartment?: "project" | "production";
+  ownerDepartment?: "project" | "production" | "general";
   /** ใบสั่งผลิตต้นทาง — มีค่าเฉพาะเอกสารของฝ่ายผลิต (ฝั่งโครงการใช้ projectId แทน) */
   productionOrderId?: string;
   scopeOfWorkId: string;
@@ -119,6 +119,8 @@ export async function createPurchaseRequest(projectId: string, itemId: string): 
 /** Stage 3 addition — lightweight shape for list views, same convention as DeliveryOrderSummary. */
 export interface PurchaseRequestSummary {
   id: string;
+  /** แผนกเจ้าของ — ใช้เฉพาะกล่องงานเข้าของจัดซื้อ ที่เห็นใบของทุกฝ่ายรวมกัน (2026-08-28) */
+  ownerDepartment?: "project" | "production" | "general";
   projectId: string;
   scopeOfWorkId: string;
   jobCode: string;
@@ -126,14 +128,33 @@ export interface PurchaseRequestSummary {
   updatedAt: string;
 }
 
+/**
+ * ขอบเขตของรายการใบขอซื้อ — สามค่าแรกคือ "แผนกเจ้าของเอกสาร" ที่เก็บจริงในฐานข้อมูล
+ * ส่วน `"all"` เป็นมุมมองอย่างเดียว ไม่เคยถูกบันทึก ใช้กับกล่องงานเข้าของฝ่ายจัดซื้อ
+ * ที่ต้องเห็นใบของทุกฝ่ายรวมกันเพื่อออกใบสั่งซื้อต่อ (2026-08-28)
+ */
+export type PurchaseRequestScope = "project" | "production" | "general" | "all";
+
 // Stage 5 additions — full wrapper set alongside the Purchase Request document page.
 export async function fetchPurchaseRequestsByProject(projectId: string): Promise<PurchaseRequestSummary[]> {
   const { purchaseRequests } = await apiFetch<{ purchaseRequests: PurchaseRequestSummary[] }>(`/purchase-requests?projectId=${encodeURIComponent(projectId)}`);
   return purchaseRequests;
 }
-export async function fetchAllPurchaseRequests(ownerDepartment: "project" | "production" = "project"): Promise<PurchaseRequestSummary[]> {
+export async function fetchAllPurchaseRequests(ownerDepartment: PurchaseRequestScope = "project"): Promise<PurchaseRequestSummary[]> {
   const { purchaseRequests } = await apiFetch<{ purchaseRequests: PurchaseRequestSummary[] }>(`/purchase-requests?ownerDepartment=${ownerDepartment}`);
   return purchaseRequests;
+}
+
+/**
+ * สร้างใบเปล่าโดยไม่มีเอกสารต้นทาง — สำหรับฝ่ายที่ไม่ได้ทำงานผ่านโครงการหรือใบสั่งผลิต
+ * (สโตร์ เซอร์วิส บัญชี บุคคล จัดซื้อเอง) ตามผังกระบวนการจัดซื้อที่เจ้าของส่งมา 2026-08-28
+ * ใบที่ได้มี `ownerDepartment: "general"` และผู้ใช้พิมพ์รายการเองทั้งใบ
+ */
+export async function createStandalonePurchaseRequest(): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>("/purchase-requests", {
+    method: "POST", body: JSON.stringify({}),
+  });
+  return purchaseRequest;
 }
 
 /** สร้างจากใบสั่งผลิต — เอกสารฝั่งฝ่ายผลิต (ฝั่งโครงการใช้ createPurchaseRequest(projectId, itemId)) */

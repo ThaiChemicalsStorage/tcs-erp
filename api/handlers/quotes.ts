@@ -11,6 +11,9 @@ import { handleMaterialRequisition } from "../_lib/materialRequisitionHandler.js
 import { handleJobOrder } from "../_lib/jobOrderHandler.js";
 import { handlePurchaseRequest } from "../_lib/purchaseRequestHandler.js";
 import { handleProductionOrder } from "../_lib/productionOrderHandler.js";
+import { handlePurchaseOrder } from "../_lib/purchaseOrderHandler.js";
+import { handleGoodsReceipt } from "../_lib/goodsReceiptHandler.js";
+import { handleBillReceipt } from "../_lib/billReceiptHandler.js";
 import { handleProductRequest } from "../_lib/productRequestHandler.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
@@ -927,6 +930,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (pathname === "/api/product-requests" || pathname.startsWith("/api/product-requests/")) {
       return handleProductRequest(req, res);
+    }
+    // โมดูลจัดซื้อ (2026-08-28) — ใบสั่งซื้อ / ใบตรวจรับสินค้า / ใบรับวางบิล
+    if (pathname === "/api/purchase-orders" || pathname.startsWith("/api/purchase-orders/")) {
+      return handlePurchaseOrder(req, res);
+    }
+    if (pathname === "/api/goods-receipts" || pathname.startsWith("/api/goods-receipts/")) {
+      return handleGoodsReceipt(req, res);
+    }
+    if (pathname === "/api/bill-receipts" || pathname.startsWith("/api/bill-receipts/")) {
+      return handleBillReceipt(req, res);
     }
 
     const parts = getPathSegments(req, "/api/quotes");

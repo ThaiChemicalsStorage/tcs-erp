@@ -4,7 +4,102 @@
 
 ---
 
-## 2026-08-28b (absolute latest) — คู่มือ: เติมส่วนที่ขาด 8 เดือน + ทำให้ใช้ง่ายขึ้น (20 → 22 บท)
+## 2026-08-28c (absolute latest) — โมดูลจัดซื้อ: ใบสั่งซื้อ · ใบตรวจรับสินค้า · ใบรับวางบิล + เปิดใบขอซื้อให้ทุกฝ่าย
+
+Owner request, with the company's **"กระบวนการจัดซื้อ (Procurement Process Flow)"** chart attached:
+*"ตัวนี้เป็น Flow งานสำหรับฝ่ายจัดซื้อ ช่วยทำโมดูลใหม่เพิ่มขึ้นมาที เป็นของเอกสาร เดี๋ยวเอาเอกสารไว้ให้ทีหลัง
+แค่ขึ้นพวกโครงหน้าตาอะไรไว้ก่อนก็ได้"*.
+
+Purchasing had **no module of its own** — it existed only as a signature box on ใบขอซื้อ (editable
+only while that document was still a draft, i.e. before the requesting department had even sent it
+for approval) and as the recipient of one notification. The chart's four steps are now four real
+documents.
+
+### เอกสารใหม่ 3 ใบ
+
+- **ใบสั่งซื้อ (`PO-{พ.ศ.}-{NNNN}`)** — created from an approved ใบขอซื้อ, or blank. Inheriting from
+  a ใบขอซื้อ copies vendor, dates, credit, shipping and every line as a **snapshot**: editing the PO
+  never reaches back into the PR, and editing the PR never rewrites the PO. The source must be
+  `Final`. Runs on the shared approval engine (`api/_lib/documentApproval.ts`), so it gets
+  ร่าง→รออนุมัติ→อนุมัติ, rejection comments, withdraw-to-draft and `-R1` rewrite unchanged. **Both**
+  `Final` and `PendingApproval` lock editing — approving content that changed while it sat in the
+  queue is the failure that prevents. `purchaseOrderSubtotal()` deliberately does not use
+  `quoteMath.ts`: a PO has no VAT, discount or withholding, and borrowing the quotation money engine
+  would imply tax behaviour this document does not have.
+- **ใบตรวจรับสินค้า (`GR-{พ.ศ.}-{NNNN}`)** — created from a `Final` PO, one line per PO line with
+  จำนวนที่สั่ง / จำนวนที่รับจริง / ผลตรวจ. `qtyReceived` is **left null on purpose**; pre-filling it to
+  match the order would let a short delivery pass inspection by inaction.
+- **ใบรับวางบิล (`BR-{พ.ศ.}-{NNNN}`)** — a `Final` PO (required) plus a ใบตรวจรับ (optional, because
+  vendors routinely bill before inspection finishes), the vendor's invoice number/date/amount/due
+  date, and an attachment checklist whose **labels are pinned server-side** — `sanitizeChecks()`
+  reads only `checked` from the client, so a completed document cannot be made to claim it received
+  something it never did.
+
+ตรวจรับ and รับวางบิล get a two-state complete/reopen toggle instead of the approval engine: the
+owner's chart shows no approval step on either, because they record a physical event rather than a
+decision. Reopen is deliberately allowed — goods arrive short, bills get corrected.
+
+### ใบขอซื้อ เปิดให้ทุกฝ่ายขอได้
+
+The chart lists ผลิต · โครงการ · สโตร์ · เซอร์วิส · บัญชี · บุคคล as requesters, but a ใบขอซื้อ could
+only be raised from a Project item or a Production Order — so four of those six could not raise one
+at all. `ownerDepartment` gained `"general"`, `POST /api/purchase-requests` accepts an empty body,
+and the `project:view` check moved off the whole route onto only the branch that actually reads a
+project (requiring it everywhere is what locked those departments out).
+
+A new **"ใบขอซื้อ (ทุกฝ่าย)"** inbox lists every department's requests in one table with a แผนก
+column, via a view-only `?ownerDepartment=all` scope. It lifts the **department** wall only —
+`buildSimpleOwnershipClause` still applies, so a user without `:viewAll` still sees only their own.
+
+### กลุ่มเมนูที่ 9
+
+จัดซื้อ — ใบขอซื้อ (ทุกฝ่าย) → ใบสั่งซื้อ → ใบตรวจรับสินค้า → ใบรับวางบิล, ordered by the department's
+process rather than the alphabet. This contradicted `DESIGN.md` (*"A new module joins an existing
+group rather than inventing a ninth"*), so **DESIGN.md was updated rather than quietly violated**:
+the rule now says a new group is earned by serving a department with a process of its own — the same
+reasoning that already gave โครงการ and ผลิต theirs. The existing ใบขอซื้อ entries under โครงการ and
+ผลิต did not move.
+
+### แก้บั๊กที่เจอระหว่างตรวจในเบราว์เซอร์
+
+- **กล่อง "ยังไม่ได้บันทึก" เด้งทั้งที่ไม่มีอะไรค้าง.** All three new editors updated `doc`/`draft`
+  after an approve/complete/reopen but never called `dirty.markSaved()`, so the dirty tracker kept
+  comparing against the pre-action snapshot and the navigation guard fired on the way out of a
+  document nobody had edited. ใบขอซื้อ, ใบเบิก and ใบสั่งงาน all already did this correctly — the
+  new code had copied the surrounding shape without that line.
+- **ปุ่มสร้างขึ้น "+ +".** `purchaseOrder.createBtn` / `goodsReceipt.createBtn` /
+  `billReceipt.createBtn` carried a literal `"+ "` on top of the `<Plus />` icon the button already
+  renders.
+- **กล่องงานเข้าเรียงผิดลำดับ** (ใบขอซื้อ ตกไปอยู่ท้ายกลุ่ม เพราะกลุ่มเมนูเรียงตาม `navItems` ไม่ใช่ตาม
+  `NAV_GROUPS.keys`) และ **ใบรับวางบิลกว้างไม่เท่าอีกสองใบ** (`max-w-4xl` vs `max-w-5xl`).
+
+### ที่จงใจยังไม่ทำ
+
+Print layouts are **placeholders** — the owner said the real forms come later, and `DESIGN.md` is
+explicit that the paper form is the authority on a print layout, not the app's design system. No
+vendor master (`vendorName` stays free text, as it already was on ใบขอซื้อ). **Receiving moves no
+stock** — `StockMovementSourceType` reserves `"goods_receipt"` but nothing calls
+`applyStockMovement()`, because whether receipt should cut stock automatically changes real balances
+and is the owner's call. รับวางบิล creates no payable. The chart's per-department approver table is
+not data; existing permissions and departments are used, as agreed.
+
+### การตรวจสอบ
+
+`tests/api/purchasing.test.ts` — 12 new integration tests over the real Express app on an in-memory
+MongoDB: numbering formats, sequential ids, `general` scoping across all four query scopes, line
+inheritance as a snapshot, the Draft-source rejections, both non-Draft edit locks, rewrite leaving
+the original `Final`, `qtyReceived` staying null, and a role with no purchasing permissions getting
+403 from all six list/create routes. Suite: 364 tests, 33 files, all passing. Typecheck (both
+configs), lint and build clean. Click-tested end to end in a browser: PR → PO → approve → GR → BR,
+plus `Ctrl+K` on `PO-` / `GR-` / `BR-` opening the real document.
+
+**การให้สิทธิ์บนเครื่องจริง:** the 21 new permissions are in `defaultRoles` (fresh installs only).
+**Production needs them ticked by hand in Role Management** — no RBAC migration was written,
+following the owner's 2026-08-25 decision.
+
+---
+
+## 2026-08-28b — คู่มือ: เติมส่วนที่ขาด 8 เดือน + ทำให้ใช้ง่ายขึ้น (20 → 22 บท)
 
 Direct owner request: *"อัปเดตทำคู่มือให้หน่อยในส่วนที่ยังไม่ได้ใส่เข้าไปและทำให้มันดูใช้ง่ายขึ้นด้วย"*.
 

@@ -96,6 +96,32 @@ export const defaultRoles: Role[] = [
       "productionOrder:finalize",
       "productionOrder:print",
       "productionOrder:delete",
+      // โมดูลจัดซื้อ (2026-08-28) — ใบสั่งซื้อ / ใบตรวจรับสินค้า / ใบรับวางบิล ตามผังกระบวนการจัดซื้อ
+      // ให้ Administrator/Super Admin เท่านั้นโดยปริยาย เหมือนโมดูลโครงการและผลิต เพราะยังไม่มี role
+      // ตั้งต้นตัวไหนสังกัดฝ่ายจัดซื้อ — ต้องสร้าง role "เจ้าหน้าที่จัดซื้อ" ผ่านหน้าบทบาทและสิทธิ์เอง
+      // **ค่าเหล่านี้มีผลกับการติดตั้งใหม่เท่านั้น** เครื่องที่ใช้งานอยู่แล้วต้องเข้าไปติ๊กสิทธิ์ให้บทบาทเอง
+      // (ทำตามแนวของคำขอเพิ่มสินค้า 2026-08-27 ที่เจ้าของเลือกติ๊กเองแทนการเขียน RBAC migration)
+      "purchaseOrder:view",
+      "purchaseOrder:viewAll",
+      "purchaseOrder:create",
+      "purchaseOrder:edit",
+      "purchaseOrder:finalize",
+      "purchaseOrder:print",
+      "purchaseOrder:delete",
+      "goodsReceipt:view",
+      "goodsReceipt:viewAll",
+      "goodsReceipt:create",
+      "goodsReceipt:edit",
+      "goodsReceipt:finalize",
+      "goodsReceipt:print",
+      "goodsReceipt:delete",
+      "billReceipt:view",
+      "billReceipt:viewAll",
+      "billReceipt:create",
+      "billReceipt:edit",
+      "billReceipt:finalize",
+      "billReceipt:print",
+      "billReceipt:delete",
       // Project module (added 2026-08-18, Stage 2) — granted to Administrator/Super Admin only by
       // default, per the Stage 1 recommendation: none of the existing default roles (Sales/Approver/
       // Viewer/Service Engineer/Accounting User) belong to the Project/Store/Factory/Purchasing
