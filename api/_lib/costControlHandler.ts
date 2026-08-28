@@ -142,6 +142,25 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ costControls: docs.map(toSummary) });
 }
 
+/** ช่องบล็อกสรุป 1-5 — รับได้ตอนสร้างเพราะตัวแกะไฟล์อ่านมาจากท้ายชีตให้แล้ว */
+const MARKUP_KEYS = [
+  ["operatingCost", "ค่าดำเนินการ"], ["operatingPct", "% ค่าดำเนินการ"],
+  ["bubbleCost", "Bubble cost"], ["bubblePct", "% Bubble cost"],
+  ["entertainmentCost", "Entertainment + Commission"], ["sellingPrice", "ราคาขาย"],
+] as const;
+
+function markupsFromBody(body: Record<string, unknown>): Pick<CostControlFields,
+  "operatingCost" | "operatingPct" | "bubbleCost" | "bubblePct" | "entertainmentCost" | "sellingPrice"> {
+  const out = {
+    operatingCost: null, operatingPct: null, bubbleCost: null,
+    bubblePct: null, entertainmentCost: null, sellingPrice: null,
+  } as Record<string, number | null>;
+  for (const [key, label] of MARKUP_KEYS) {
+    if (key in body) out[key] = sanitizeNullableNumber(body[key], label);
+  }
+  return out as ReturnType<typeof markupsFromBody>;
+}
+
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "costControl:create");
@@ -164,9 +183,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     jobName, workType, jobOrder,
     docDate: docDate || now.slice(0, 10),
     lines,
-    operatingCost: null, operatingPct: null,
-    bubbleCost: null, bubblePct: null,
-    entertainmentCost: null, sellingPrice: null,
+    // บล็อกสรุปมาจากท้ายชีตตอนนำเข้า ถ้าไม่ได้ส่งมา (เปิดใบเปล่า) ทุกช่องเป็น null
+    ...markupsFromBody(body),
     remarks: "",
     submittedBy: ctx.user.fullName,
     approvedBy: "",
@@ -202,14 +220,8 @@ const SHORT_TEXT_FIELDS: { key: keyof CostControlFields; label: string }[] = [
   { key: "submittedBy", label: "ผู้จัดทำ" },
   { key: "approvedBy", label: "ผู้อนุมัติ" },
 ];
-const NUMBER_FIELDS: { key: keyof CostControlFields; label: string }[] = [
-  { key: "operatingCost", label: "ค่าดำเนินการ" },
-  { key: "operatingPct", label: "% ค่าดำเนินการ" },
-  { key: "bubbleCost", label: "Bubble cost" },
-  { key: "bubblePct", label: "% Bubble cost" },
-  { key: "entertainmentCost", label: "Entertainment + Commission" },
-  { key: "sellingPrice", label: "ราคาขาย" },
-];
+const NUMBER_FIELDS: { key: keyof CostControlFields; label: string }[] =
+  MARKUP_KEYS.map(([key, label]) => ({ key, label }));
 
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");

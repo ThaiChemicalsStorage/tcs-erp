@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  classifySheetName, parseCostControlSheet, parseNumericCell, parseSheetDate,
+  classifySheet, classifySheetName, classifySheetRows, mergeCostControlImports,
+  parseCostControlSheet, parseNumericCell, parseSheetDate,
 } from "../src/lib/costControlImport";
 import { costControlTotals, lineTotalCost } from "../src/lib/costControl";
 
@@ -265,5 +266,143 @@ describe("costControlTotals", () => {
     const t = costControlTotals({ lines, operatingCost: null, bubbleCost: null, entertainmentCost: null, sellingPrice: null });
     expect(t.profitPct).toBe(0);
     expect(Number.isFinite(t.profitPct)).toBe(true);
+  });
+});
+
+/**
+ * ชื่อชีตในไฟล์งานจริงตั้งกันตามใจ — ไฟล์ที่สองที่เจ้าของส่งมา
+ * (`PQ202511-267-LI-SK … น้ำมันพืชไทย`) มีชีตชื่อ `Manhole 5 mm.` / `Rev.01` / `ลองๆ` / `3mm.`
+ * ทั้งสี่ใบเป็น Cost Control เต็มรูปแบบ การตัดสินจากชื่อชีตจึงอ่านไม่เจอสักใบ
+ */
+describe("รู้จักชีตจากเนื้อใน ไม่ใช่จากชื่อ", () => {
+  const ccRows = [
+    ccRow(["COST CONTROL"]),
+    ccRow(["ลำดับที่", "รายละเอียด", "Model", "supplier name", "จำนวน", "หน่วย", "ต้นทุน", "ต้นทุนรวมทั้งหมด"]),
+  ];
+  const scRows = [scRow({}), scRow({ seq: "ITEM", description: "DESCRIPTION", qty: "QUANTITY" })];
+
+  it("ชีตชื่อ \"ลองๆ\" ที่ข้างในเป็นใบ Cost Control ต้องอ่านออก", () => {
+    expect(classifySheetRows(ccRows)).toBe("costControl");
+    expect(classifySheet("ลองๆ", ccRows)).toBe("costControl");
+    expect(classifySheet("Rev.01", ccRows)).toBe("costControl");
+    // ชื่ออย่างเดียวยังอ่านไม่ออกเหมือนเดิม — นั่นคือเหตุผลที่ต้องดูเนื้อใน
+    expect(classifySheetName("ลองๆ")).toBeNull();
+  });
+
+  it("รู้จักใบประเมินราคาจากหัวตาราง ITEM / DESCRIPTION", () => {
+    expect(classifySheetRows(scRows)).toBe("sc");
+  });
+
+  it("ชีตที่ไม่มีหัวตารางของทั้งสองแบบคืน null — ยังตกไปใช้ชื่อชีตได้", () => {
+    const junk = [ccRow(["อะไรก็ไม่รู้"])];
+    expect(classifySheetRows(junk)).toBeNull();
+    expect(classifySheet("COST CONTROL-SC", junk)).toBe("costControl");
+    expect(classifySheet("Sheet1", junk)).toBeNull();
+  });
+});
+
+describe("วันที่แบบ พ.ศ.", () => {
+  /**
+   * ไฟล์น้ำมันพืชไทยเขียนวันที่เป็น `14/11/68` และเลขงานคือ `PQ202511-267` = พ.ย. 2025
+   * ยืนยันว่า 68 คือ พ.ศ. 2568 ไม่ใช่ ค.ศ. ย่อ
+   */
+  it("ปีสองหลักอ่านเป็น พ.ศ.", () => {
+    expect(parseSheetDate("14/11/68")).toBe("2025-11-14");
+    expect(parseSheetDate("20/11/68")).toBe("2025-11-20");
+  });
+
+  it("ปีสี่หลักที่เป็น พ.ศ. ก็แปลงให้", () => {
+    expect(parseSheetDate("26/8/2569")).toBe("2026-08-26");
+  });
+
+  it("ปี ค.ศ. เต็มยังอ่านเหมือนเดิม", () => {
+    expect(parseSheetDate("26/8/2026")).toBe("2026-08-26");
+  });
+});
+
+/** บล็อกสรุปท้ายใบ ถอดจากชีต `Manhole 5 mm.` ของไฟล์น้ำมันพืชไทย */
+describe("บล็อกสรุปท้ายใบ", () => {
+  const rows: string[][] = [
+    ccRow(["ลำดับที่", "รายละเอียด", "Model", "supplier name", "จำนวน", "หน่วย", "ต้นทุน", "ต้นทุนรวมทั้งหมด"]),
+    ccRow(["1", "FRP Lining ถัง Dia.3,500", "", "", "", "", "", "-"]),
+    ccRow(["", "Side Manhole 500A", "", "", "1", "Set", "7,500.00", "7,500.00"]),
+    ccRow(["", "ใยแก้ว #450", "", "", "25", "kg", "70.00", "1,750.00"]),
+    ccRow(["", "1.  ราคาต้นทุน", "", "฿9,250.00"]),
+    ccRow(["", "2.  ค่าดำเนินการ  (10%)", "", "฿7,000.00"]),
+    ccRow(["", "3.  Bubble Cost  (1%)", "", "฿-"]),
+    ccRow(["", "4.  Entertainment + Commission ลูกค้า", "", "฿-   .0"]),
+    ccRow(["", "5.  ราคาขาย", "", "฿70,000.00"]),
+    ccRow(["", "กำไร", "", "9,950.00"]),
+    ccRow(["", "Submitted by ....."]),
+  ];
+  const result = parseCostControlSheet(rows, "costControl");
+
+  it("อ่านยอดและ % ของข้อ 2-5 มาให้ ไม่ต้องพิมพ์ซ้ำ", () => {
+    expect(result.markups.operatingCost).toBe(7000);
+    expect(result.markups.operatingPct).toBe(10);
+    expect(result.markups.bubblePct).toBe(1);
+    expect(result.markups.sellingPrice).toBe(70000);
+  });
+
+  it("ศูนย์ในรูปแบบบัญชี (\"฿-\" / \"฿-   .0\") ไม่กลายเป็นตัวเลขประหลาด", () => {
+    expect(result.markups.bubbleCost).toBeNull();
+    expect(result.markups.entertainmentCost).toBe(0);
+    expect(Object.is(result.markups.entertainmentCost, -0)).toBe(false);
+  });
+
+  it("ไม่เอาแถวสรุปมาเป็นรายการ และหยุดอ่านที่ข้อ 1", () => {
+    expect(result.lines.map((l) => l.description)).toEqual([
+      "FRP Lining ถัง Dia.3,500", "Side Manhole 500A", "ใยแก้ว #450",
+    ]);
+  });
+
+  it("ยอดข้อ 1 ในไฟล์ตรงกับที่รวมได้ จึงไม่เตือน", () => {
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("แกะรายการมาไม่ครบต้องเตือน — ยอดข้อ 1 ไม่ตรงกับผลรวม", () => {
+    const short = rows.map((r) => (r[1] === "ใยแก้ว #450" ? ccRow(["", ""]) : r));
+    expect(parseCostControlSheet(short, "costControl").warnings.join(" ")).toContain("อาจมีบรรทัดที่อ่านไม่เจอ");
+  });
+});
+
+describe("รวมหลายชีตเป็นใบเดียว", () => {
+  const sheet = (label: string, cost: string, selling: string) => [
+    ccRow(["Job Name : " + label]),
+    ccRow(["ลำดับที่", "รายละเอียด", "Model", "supplier name", "จำนวน", "หน่วย", "ต้นทุน", "ต้นทุนรวมทั้งหมด"]),
+    ccRow(["1", "งาน " + label, "", "", "1", "Job", cost, cost]),
+    ccRow(["", "5.  ราคาขาย", "", selling]),
+  ];
+  const parts = [
+    { sheetName: "Manhole 5 mm.", result: parseCostControlSheet(sheet("A", "1,000.00", "5,000.00"), "costControl") },
+    { sheetName: "Rev.01", result: parseCostControlSheet(sheet("", "2,000.00", "5,000.00"), "costControl") },
+  ];
+  const merged = mergeCostControlImports(parts);
+
+  it("คั่นแต่ละชุดด้วยหัวกลุ่มชื่อชีต เพื่อให้ยังรู้ว่าบรรทัดไหนมาจากไหน", () => {
+    expect(merged.lines.map((l) => [l.kind, l.description])).toEqual([
+      ["group", "Manhole 5 mm."], ["item", "งาน A"],
+      ["group", "Rev.01"], ["item", "งาน"],
+    ]);
+  });
+
+  it("หัวใบเอาค่าแรกที่ไม่ว่าง ไล่ตามลำดับชีตที่เลือก", () => {
+    expect(merged.header.jobName).toBe("A");
+  });
+
+  it("ราคาขาย**ไม่บวกกัน** — เป็นของทั้งงาน ไม่ใช่ของแต่ละชีต", () => {
+    expect(merged.markups.sellingPrice).toBe(5000);
+  });
+
+  it("ชีตที่ระบุราคาขายไม่ตรงกันต้องเตือน ไม่ใช่เลือกให้เงียบ ๆ", () => {
+    const clash = [
+      parts[0],
+      { sheetName: "3mm.", result: parseCostControlSheet(sheet("B", "2,000.00", "9,000.00"), "costControl") },
+    ];
+    expect(mergeCostControlImports(clash).warnings.join(" ")).toContain("ระบุราคาขายไว้ไม่ตรงกัน");
+  });
+
+  it("เลือกชีตเดียวได้ผลเดิมเป๊ะ ไม่มีหัวกลุ่มงอกมา", () => {
+    expect(mergeCostControlImports([parts[0]])).toBe(parts[0].result);
   });
 });

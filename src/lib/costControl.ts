@@ -188,6 +188,13 @@ export interface CostControlCreateFields {
   docDate: string;
   lines: CostControlLine[];
   sourceFileName: string;
+  /** บล็อกสรุป 1-5 ที่อ่านมาจากท้ายชีต — ไม่ส่งมาก็ได้ เซิร์ฟเวอร์ตั้งเป็น null ให้ */
+  operatingCost?: number | null;
+  operatingPct?: number | null;
+  bubbleCost?: number | null;
+  bubblePct?: number | null;
+  entertainmentCost?: number | null;
+  sellingPrice?: number | null;
 }
 
 /**

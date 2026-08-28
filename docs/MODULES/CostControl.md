@@ -17,6 +17,49 @@ The answer, given 2026-08-28: **an Excel sheet the company already fills in by h
 The owner supplied a real filled-in workbook and its printed PDF, and this module is transcribed
 from them.
 
+## Which sheets the importer reads, and how it knows
+
+**By content, never by sheet name.** The first version keyed off names (`COST CONTROL-…`, `SC`),
+which fit exactly one workbook. The owner's second job file
+(`PQ202511-267-LI-SK - น้ำมันพืชไทย …xlsx`) has four sheets named `Manhole 5 mm.`, `Rev.01`,
+`ลองๆ` and `3mm.` — all four are complete Cost Control sheets, and the importer found none of
+them. **The `SC` in the first file's name is a job-type code, not a sheet name** (the second file
+is `LI`); the sheets happening to be called `SC` and `COST CONTROL-SC` was a coincidence.
+
+| Kind | Signature row |
+|---|---|
+| Cost Control | `A` = `ลำดับที่` and `B` = `รายละเอียด` |
+| Estimate | `B` = `ITEM` and `D` = `DESCRIPTION` (buried around row 291) |
+
+`classifySheetName()` survives as a last-resort tiebreak only.
+
+### One sheet, or several
+
+Every readable sheet is listed with its kind and **how many lines it parses to**, and any number
+can be ticked. Merging joins them into one document with a **group heading naming each sheet** so
+a reader can still tell where a line came from. Header fields take the first non-empty value;
+**the markup block is not summed** — a selling price belongs to the job, not to a sheet — and a
+disagreement between sheets is warned about rather than silently resolved.
+
+The default selection is a single sheet: the **leftmost one that actually parses**, preferring a
+Cost Control sheet over an estimate. It deliberately does *not* pick the sheet with the most
+lines — that rule picked `ลองๆ` ("just trying"), someone's scratch sheet, out of the real file.
+
+### The summary block comes across too
+
+Rows 2-5 at the foot of the sheet (ค่าดำเนินการ + %, Bubble + %, Entertainment, ราคาขาย) are read
+and sent with the create call, so an imported document arrives with its margin already computed.
+Rows are matched **by their number**, not their wording, which differs between files
+(`Bubble cost` vs `Bubble Cost`). Row 1 (ราคาต้นทุน) is deliberately *not* stored — it is compared
+against the parsed lines and a mismatch with no rounding to explain it is reported as **lines
+missed**, which is the only automatic check that the sheet was laid out as expected.
+
+### Dates are Buddhist
+
+`14/11/68` means 14 Nov พ.ศ. 2568 = 2025-11-14, confirmed by the job number itself
+(`PQ202511-267` = Nov 2025). A two-digit year is always read as a short Buddhist year, and any
+year ≥ 2400 has 543 subtracted.
+
 ## Where the shape came from
 
 `reference/company/PQ202608-222-SC-SK - บริษัท โรงงานแปรรูปขยะชุมชนวังไผ่.xlsx` — two sheets:

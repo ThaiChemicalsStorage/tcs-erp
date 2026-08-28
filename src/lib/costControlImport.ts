@@ -6,14 +6,23 @@
  * ผู้เรียกเป็นคนโหลดไลบรารีและอ่านไฟล์เอง แยกแบบนี้เพื่อให้ unit test ยิงตรงได้โดยไม่ต้องมีไฟล์จริง
  * (ไฟล์ตัวอย่างอยู่ใต้ `reference/` ซึ่ง gitignore ไว้ เทสต์จึงพึ่งมันไม่ได้)
  *
+ * ## รู้จักชีตจาก**เนื้อใน** ไม่ใช่จากชื่อชีต
+ *
+ * รอบแรกตัดสินจากชื่อชีต (`COST CONTROL-…` / `SC`) ซึ่งใช้ได้กับไฟล์ตัวอย่างไฟล์เดียวเท่านั้น —
+ * พอเจ้าของส่งไฟล์งานที่สองมา (`PQ202511-267-LI-SK …น้ำมันพืชไทย`) ชีตทั้งสี่ชื่อว่า
+ * `Manhole 5 mm.` / `Rev.01` / `ลองๆ` / `3mm.` ทั้งที่ข้างในเป็นใบ Cost Control เต็มรูปแบบทุกใบ
+ * ตัวแกะเลยอ่านไม่เจออะไรเลย · **`SC` ในชื่อไฟล์คือรหัสประเภทงาน ไม่ใช่ชื่อชีต** (อีกไฟล์เป็น `LI`)
+ * ตอนนี้จึงดูจากแถวหัวตารางจริง — `classifySheetRows()` — และเหลือชื่อชีตไว้เป็นตัวช่วยตัดสินท้ายสุด
+ *
  * ## กติกาถอดจากไฟล์จริง
  *
- * ไฟล์ที่บริษัทใช้ (`PQ202608-222-SC-SK …xlsx`) มี 2 ชีตที่อ่านได้:
- *
- * **1. ชีต `COST CONTROL-…`** — ใบที่ทำเสร็จแล้ว อ่านตรง ๆ ได้เลย แม่นที่สุด
+ * **1. ชีตแบบ Cost Control** — ใบที่ทำเสร็จแล้ว อ่านตรง ๆ ได้เลย แม่นที่สุด · รู้จักจากแถวที่
+ * คอลัมน์ `A` = `"ลำดับที่"` และ `B` = `"รายละเอียด"`
  * คอลัมน์ `A`=ลำดับ `B`=รายละเอียด `C`=Model `D`=supplier `E`=จำนวน `F`=หน่วย `G`=ต้นทุน `H`=รวม
+ * ท้ายใบมีบล็อกสรุป 1-5 (ราคาต้นทุน / ค่าดำเนินการ / Bubble / Entertainment / ราคาขาย) ซึ่งอ่านมา
+ * ใส่ให้ด้วย — ป้ายอยู่คอลัมน์ `B` ยอดอยู่ถัดไปทางขวา
  *
- * **2. ชีต `SC`** — ใบประเมินราคา 8,400 แถว ต้องแกะ
+ * **2. ชีตแบบใบประเมินราคา (SC)** — 8,400 แถว ต้องแกะ · รู้จักจากแถวหัวตาราง `ITEM` + `DESCRIPTION`
  * - คอลัมน์ `A,C,E,G,I,K,M,O` เป็นตัวอักษร `|` ที่ใช้วาดเส้นตารางปลอม — ข้ามทิ้งทั้งหมด
  * - ที่ใช้จริง: `B`=ลำดับ `D`=รายละเอียด `F`=จำนวน `H`=หน่วย `P`=ยอดรวมของบรรทัด
  * - **หนึ่ง "บล็อก" = หนึ่งรายการ** เริ่มที่แถวที่ `B` มีเลข จบที่แถวที่ `P` เป็น `=`
@@ -43,8 +52,29 @@ export interface CostControlImportHeader {
   docDate: string;
 }
 
+/**
+ * บล็อกสรุปท้ายใบ (ข้อ 2-5) — อ่านมาจากชีตด้วย ไม่ปล่อยให้คนพิมพ์ซ้ำ
+ *
+ * ไม่มีข้อ 1 (ราคาต้นทุน) เพราะระบบนี้ไม่เก็บยอดรวมไว้ที่ไหนเลย — คำนวณจาก lines เสมอ
+ * ยอดข้อ 1 ที่อยู่ในไฟล์ถูกใช้แค่ตรวจว่าแกะรายการมาครบหรือเปล่า
+ */
+export interface CostControlImportMarkups {
+  operatingCost: number | null;
+  operatingPct: number | null;
+  bubbleCost: number | null;
+  bubblePct: number | null;
+  entertainmentCost: number | null;
+  sellingPrice: number | null;
+}
+
+export const EMPTY_MARKUPS: CostControlImportMarkups = {
+  operatingCost: null, operatingPct: null, bubbleCost: null, bubblePct: null,
+  entertainmentCost: null, sellingPrice: null,
+};
+
 export interface CostControlImportResult {
   header: CostControlImportHeader;
+  markups: CostControlImportMarkups;
   lines: CostControlLine[];
   /** เรื่องที่คนต้องรู้ก่อนกดสร้าง — แสดงเหนือตาราง preview */
   warnings: string[];
@@ -66,8 +96,15 @@ export const SHEET_FILL = {
   item: "92D050",
 } as const;
 
-/** ชื่อชีตที่อ่านได้ พร้อมบอกว่าเป็นแบบไหน — ผู้เรียกใช้เลือกชีตก่อนส่ง rows เข้ามา */
-export function classifySheetName(name: string): "costControl" | "sc" | null {
+export type SheetKind = "costControl" | "sc";
+
+/**
+ * เดาชนิดชีตจากชื่อ — **ตัวช่วยท้ายสุดเท่านั้น** ให้ใช้ `classifySheetRows()` ก่อนเสมอ
+ *
+ * ชื่อชีตในไฟล์จริงตั้งกันตามใจ (`Rev.01`, `ลองๆ`, `3mm.`) จะเชื่อถือไม่ได้ ที่เก็บไว้เพราะชีตชื่อ
+ * `COST CONTROL-…` ก็ยังมีอยู่จริง และใช้ตัดสินได้ฟรีเมื่อเนื้อในอ่านไม่ออก
+ */
+export function classifySheetName(name: string): SheetKind | null {
   const n = name.trim().toUpperCase();
   if (n.startsWith("COST CONTROL")) return "costControl";
   if (n === "SC" || n.startsWith("SC ") || n.startsWith("SC-")) return "sc";
@@ -78,6 +115,29 @@ const cell = (row: string[] | undefined, i: number): string =>
   String((row ?? [])[i] ?? "").replace(/\s+/g, " ").trim();
 
 /**
+ * ดูจากแถวหัวตารางว่าชีตนี้เป็นแบบไหน — วิธีหลักในการรู้จักชีต
+ *
+ * | ชนิด | ลายเซ็นที่ใช้ตัดสิน |
+ * |---|---|
+ * | Cost Control | แถวที่ `A` = `"ลำดับที่"` และ `B` = `"รายละเอียด"` |
+ * | ใบประเมินราคา | แถวที่ `B` = `"ITEM"` และ `D` = `"DESCRIPTION"` (หัวตารางอยู่ลึกถึงแถว ~291) |
+ *
+ * ไล่ทั้งชีตเพราะหัวตารางของใบประเมินราคาอยู่ลึกมาก และเลือกอันที่เจอก่อน — ชีตหนึ่งใบเป็นได้แบบเดียว
+ */
+export function classifySheetRows(rows: string[][]): SheetKind | null {
+  for (let i = 0; i < rows.length; i++) {
+    if (cell(rows[i], 0) === "ลำดับที่" && cell(rows[i], 1) === "รายละเอียด") return "costControl";
+    if (cell(rows[i], 1).toUpperCase() === "ITEM" && cell(rows[i], 3).toUpperCase() === "DESCRIPTION") return "sc";
+  }
+  return null;
+}
+
+/** เนื้อในมาก่อน ชื่อชีตเป็นตัวสำรอง */
+export function classifySheet(name: string, rows: string[][]): SheetKind | null {
+  return classifySheetRows(rows) ?? classifySheetName(name);
+}
+
+/**
  * ตัวเลขในไฟล์มาหลายหน้าตา: `"฿931,020.00"`, `"1,802,484.00"`, `"-"` (ศูนย์), `""` (ว่าง)
  * คืน `null` เมื่ออ่านไม่ออกหรือว่าง เพื่อให้แยก "ไม่ระบุ" ออกจาก "ศูนย์" ได้
  */
@@ -85,16 +145,27 @@ export function parseNumericCell(raw: string): number | null {
   const t = raw.replace(/[฿,\s]/g, "").trim();
   if (t === "" || t === "-" || t === "=") return null;
   const n = Number(t);
-  return Number.isFinite(n) ? n : null;
+  // `+ 0` กลบ -0 ที่เกิดจากเซลล์แบบ "฿-   .0" (ศูนย์ในรูปแบบบัญชี) ให้เป็น 0 ธรรมดา
+  return Number.isFinite(n) ? n + 0 : null;
 }
 
-/** `"26/8/2026"` / `"24/8/2026"` (วัน/เดือน/ปี ค.ศ.) → `"2026-08-26"` · อ่านไม่ออกคืน "" */
+/**
+ * `"26/8/2026"` → `"2026-08-26"` · `"14/11/68"` → `"2025-11-14"` · อ่านไม่ออกคืน ""
+ *
+ * ไฟล์ของบริษัทเขียนวันที่ได้ทั้ง **ค.ศ. เต็ม** (`26/8/2026`) และ **พ.ศ. สองหลัก** (`14/11/68`)
+ * แบบหลังเจอในไฟล์งานน้ำมันพืชไทย ซึ่งเลขงานคือ `PQ202511-267` = พ.ย. 2025 ยืนยันว่า `68` คือ
+ * พ.ศ. 2568 จริง · ปีสองหลักจึงอ่านเป็น พ.ศ. เสมอ (ฟอร์มไทย ไม่ใช่ ค.ศ. ย่อ) และปี ≥ 2400
+ * ถือเป็น พ.ศ. แล้วลบ 543
+ */
 export function parseSheetDate(raw: string): string {
   const t = raw.trim();
-  const dmy = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const dmy = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
   if (dmy) {
-    const [, d, m, y] = dmy;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    const [, d, m, rawYear] = dmy;
+    let year = Number(rawYear);
+    if (rawYear.length === 2) year += 2500;
+    if (year >= 2400) year -= 543;
+    return `${year}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
   if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
   return "";
@@ -130,6 +201,47 @@ const CC_COL = { seq: 0, description: 1, model: 2, supplier: 3, qty: 4, unit: 5,
  */
 const ROUNDING_TOLERANCE = 1;
 
+/** ยอดของบล็อกสรุปอยู่ถัดจากป้ายไปทางขวา — ไฟล์จริงใช้คอลัมน์ D แต่ไม่ผูกตายไว้กับตำแหน่งเดียว */
+function valueRightOf(row: string[] | undefined, labelIdx: number): number | null {
+  for (let c = labelIdx + 1; c < labelIdx + 8; c++) {
+    const v = parseNumericCell(cell(row, c));
+    if (v !== null) return v;
+  }
+  return null;
+}
+
+/**
+ * บล็อกสรุป 1-5 ท้ายใบ — ป้ายอยู่คอลัมน์ B (บางไฟล์ A) ยอดอยู่ถัดไปทางขวา
+ *
+ * ตัดสินจาก**เลขข้อ** ไม่ใช่ข้อความ เพราะถ้อยคำต่างกันระหว่างไฟล์ ("Bubble cost" กับ "Bubble Cost")
+ * เปอร์เซ็นต์ที่พิมพ์ไว้ในชื่อบรรทัด เช่น `"2. ค่าดำเนินการ (10%)"` เก็บแยกไว้ เพราะใบจริงพิมพ์มันออกมา
+ * และยอดที่กรอกมักไม่ตรงกับ % นั้นเป๊ะ (คนปัดเอง) — ระบบจึงเก็บทั้งสองค่าตามที่ไฟล์บอก ไม่คิดใหม่ให้
+ */
+function parseSummaryBlock(rows: string[][], from: number): { markups: CostControlImportMarkups; statedTotalCost: number | null } {
+  const markups: CostControlImportMarkups = { ...EMPTY_MARKUPS };
+  let statedTotalCost: number | null = null;
+
+  for (let i = from; i < rows.length; i++) {
+    const labelIdx = cell(rows[i], 1) ? 1 : 0;
+    const label = cell(rows[i], labelIdx);
+    if (label.startsWith("Submitted by") || label.startsWith("Approved by")) break;
+    const m = label.match(/^([1-5])\.\s/);
+    if (!m) continue;
+
+    const value = valueRightOf(rows[i], labelIdx);
+    const pctMatch = label.match(/\(\s*([\d.]+)\s*%\s*\)/);
+    const pct = pctMatch ? Number(pctMatch[1]) : null;
+    switch (m[1]) {
+      case "1": statedTotalCost = value; break;
+      case "2": markups.operatingCost = value; markups.operatingPct = pct; break;
+      case "3": markups.bubbleCost = value; markups.bubblePct = pct; break;
+      case "4": markups.entertainmentCost = value; break;
+      default: markups.sellingPrice = value; break;
+    }
+  }
+  return { markups, statedTotalCost };
+}
+
 function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): CostControlImportResult {
   const header: CostControlImportHeader = { jobName: "", workType: "", jobOrder: "", docDate: "" };
   const lines: CostControlLine[] = [];
@@ -137,6 +249,7 @@ function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): Cost
 
   let rounded = 0;
   let roundedDelta = 0;
+  let summaryStart = -1;
 
   let headerRowIdx = -1;
   for (let i = 0; i < rows.length; i++) {
@@ -153,7 +266,10 @@ function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): Cost
     }
   }
   if (headerRowIdx === -1) {
-    return { header, lines, sheetKind: "costControl", warnings: ["ไม่พบแถวหัวตาราง (\"ลำดับที่\") ในชีตนี้"] };
+    return {
+      header, lines, markups: { ...EMPTY_MARKUPS }, sheetKind: "costControl",
+      warnings: ["ไม่พบแถวหัวตาราง (\"ลำดับที่\") ในชีตนี้"],
+    };
   }
 
   for (let i = headerRowIdx + 1; i < rows.length; i++) {
@@ -163,8 +279,11 @@ function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): Cost
     const qty = parseNumericCell(cell(r, CC_COL.qty));
     const unitCost = parseNumericCell(cell(r, CC_COL.unitCost));
 
-    // บล็อกสรุปท้ายใบเริ่มที่ "1. ราคาต้นทุน" — หยุดอ่านรายการตรงนั้น
-    if (/^\d\.\s/.test(description) || description.startsWith("หมายเหตุ") || description.startsWith("Submitted by")) break;
+    // บล็อกสรุปท้ายใบเริ่มที่ "1. ราคาต้นทุน" — หยุดอ่านรายการตรงนั้น แล้วอ่านบล็อกสรุปต่อจากตรงนี้
+    if (/^\d\.\s/.test(description) || description.startsWith("หมายเหตุ") || description.startsWith("Submitted by")) {
+      summaryStart = i;
+      break;
+    }
     if (!seq && !description) continue;
 
     // สีของช่องรายละเอียดคือตัวชี้ขาด ถ้าอ่านสีไม่ได้ค่อยเดาจากเลขลำดับ — และเมื่อเดา ให้ตกเป็น
@@ -191,6 +310,10 @@ function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): Cost
     }
   }
 
+  const { markups, statedTotalCost } = summaryStart === -1
+    ? { markups: { ...EMPTY_MARKUPS }, statedTotalCost: null }
+    : parseSummaryBlock(rows, summaryStart);
+
   if (lines.length === 0) warnings.push("อ่านชีตได้แต่ไม่พบรายการเลย — ตรวจว่าเลือกชีตถูกไหม");
   if (rounded > 0) {
     warnings.push(
@@ -199,7 +322,19 @@ function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): Cost
       `ถ้าต้องการให้ตรงกับไฟล์เป๊ะ ให้แก้จำนวนหรือต้นทุนของบรรทัดนั้น`,
     );
   }
-  return { header, lines, warnings, sheetKind: "costControl" };
+
+  // ยอด "1. ราคาต้นทุน" ในไฟล์ควรเท่ากับผลรวมที่แกะได้ ถ้าต่างกันโดยไม่มีบรรทัดไหนปัดเศษเลย แปลว่า
+  // **แกะรายการมาไม่ครบ** ไม่ใช่เรื่องปัดเศษ — เป็นสัญญาณเดียวที่จับได้ว่าชีตวางโครงไม่เหมือนที่คาด
+  const computedTotal = lines.reduce((sum, l) => sum + (l.kind === "group" ? 0 : (l.qty ?? 0) * (l.unitCost ?? 0)), 0);
+  if (statedTotalCost !== null && rounded === 0 && Math.abs(statedTotalCost - computedTotal) > ROUNDING_TOLERANCE) {
+    warnings.push(
+      `ไฟล์ระบุราคาต้นทุน ${statedTotalCost.toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท ` +
+      `แต่รวมจากรายการที่แกะได้ ${computedTotal.toLocaleString("th-TH", { minimumFractionDigits: 2 })} บาท — ` +
+      `อาจมีบรรทัดที่อ่านไม่เจอ กรุณาเทียบกับไฟล์ก่อนสร้าง`,
+    );
+  }
+
+  return { header, lines, markups, warnings, sheetKind: "costControl" };
 }
 
 // ── ชีต SC — แกะเป็นบล็อก ───────────────────────────────────────────────────────────────────────
@@ -291,7 +426,7 @@ function parseScSheet(rows: string[][]): CostControlImportResult {
       `ใบจริงมักถูกแตก/ยุบบรรทัดต่างจากนี้ กรุณาตรวจและแก้ก่อนกดสร้าง`,
     );
   }
-  return { header, lines, warnings, sheetKind: "sc" };
+  return { header, lines, markups: { ...EMPTY_MARKUPS }, warnings, sheetKind: "sc" };
 }
 
 /**
@@ -307,6 +442,50 @@ export type SheetFills = (string | null)[][];
  * @param kind  ผลจาก `classifySheetName()` — ผู้เรียกเลือกชีตแล้วส่งมาบอก
  * @param fills สีพื้นหลังต่อเซลล์ (ถ้าอ่านได้) — ใช้แยกหัวกลุ่มออกจากบรรทัดบรรยาย
  */
-export function parseCostControlSheet(rows: string[][], kind: "costControl" | "sc", fills?: SheetFills): CostControlImportResult {
+export function parseCostControlSheet(rows: string[][], kind: SheetKind, fills?: SheetFills): CostControlImportResult {
   return kind === "costControl" ? parseCostControlSheetDirect(rows, fills) : parseScSheet(rows);
+}
+
+/**
+ * รวมหลายชีตเป็นร่างเดียว — สำหรับงานที่ไฟล์เดียวแยกงานย่อยไว้คนละชีต
+ *
+ * เจ้าของสั่งไว้ว่า *"ถ้าในไฟล์ Excel มี sheet หลายอันก็ทำขึ้นมาให้เลือกว่าจะเอาอันไหนไปทำ หรือเอา
+ * ข้อมูลหลายอันไปใช้ในการทำ"* — เลือกชีตเดียวคือทางปกติ ส่วนการรวมมีกติกาดังนี้:
+ *
+ * - **คั่นด้วยหัวกลุ่มชื่อชีต** ทุกชุด เพื่อให้ยังรู้ว่าบรรทัดไหนมาจากไหนหลังรวมแล้ว (ลบทิ้งได้ใน preview)
+ * - **หัวใบ** เอาค่าแรกที่ไม่ว่างของแต่ละช่อง ไล่ตามลำดับชีตที่เลือก
+ * - **บล็อกสรุป** เอาของชีตแรกที่มีค่า **ไม่บวกกัน** — ราคาขายเป็นของทั้งงาน ไม่ใช่ของแต่ละชีต
+ *   ถ้าชีตอื่นระบุราคาขายไว้ต่างกันจะเตือนให้ตรวจ เพราะเลือกให้เองไม่ได้
+ */
+export function mergeCostControlImports(parts: { sheetName: string; result: CostControlImportResult }[]): CostControlImportResult {
+  if (parts.length === 1) return parts[0].result;
+
+  const header: CostControlImportHeader = { jobName: "", workType: "", jobOrder: "", docDate: "" };
+  const markups: CostControlImportMarkups = { ...EMPTY_MARKUPS };
+  const lines: CostControlLine[] = [];
+  const warnings: string[] = [`รวม ${parts.length} ชีตเป็นใบเดียว — แต่ละชุดคั่นด้วยหัวกลุ่มชื่อชีต ลบออกได้ถ้าไม่ต้องการ`];
+
+  const sellingPrices: number[] = [];
+  for (const { sheetName, result } of parts) {
+    for (const key of Object.keys(header) as (keyof CostControlImportHeader)[]) {
+      if (!header[key] && result.header[key]) header[key] = result.header[key];
+    }
+    for (const key of Object.keys(markups) as (keyof CostControlImportMarkups)[]) {
+      if (markups[key] === null && result.markups[key] !== null) markups[key] = result.markups[key];
+    }
+    if (result.markups.sellingPrice !== null) sellingPrices.push(result.markups.sellingPrice);
+
+    lines.push(makeLine("group", { description: sheetName }));
+    lines.push(...result.lines);
+    warnings.push(...result.warnings.map((w) => `[${sheetName}] ${w}`));
+  }
+
+  if (new Set(sellingPrices).size > 1) {
+    warnings.push(
+      `ชีตที่เลือกระบุราคาขายไว้ไม่ตรงกัน (${sellingPrices.map((p) => p.toLocaleString("th-TH")).join(", ")}) — ` +
+      `ใช้ค่าของชีตแรกไว้ก่อน กรุณาตรวจก่อนสร้าง`,
+    );
+  }
+
+  return { header, markups, lines, warnings, sheetKind: parts[0].result.sheetKind };
 }

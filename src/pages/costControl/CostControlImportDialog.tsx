@@ -6,9 +6,18 @@ import { ApiError } from "../../lib/apiClient";
 import { fmt } from "../../lib/quotes";
 import { type CostControl, type CostControlLine, createCostControl, lineTotalCost } from "../../lib/costControl";
 import {
-  classifySheetName, parseCostControlSheet,
-  type CostControlImportResult, type SheetFills,
+  classifySheet, mergeCostControlImports, parseCostControlSheet,
+  type CostControlImportResult, type SheetFills, type SheetKind,
 } from "../../lib/costControlImport";
+
+interface ReadableSheet {
+  name: string;
+  kind: SheetKind;
+  rows: string[][];
+  fills: SheetFills;
+  /** จำนวนบรรทัดที่แกะได้ — คำนวณตอนอ่านไฟล์ เพื่อให้คนเลือกชีตได้โดยไม่ต้องลองทีละอัน */
+  lineCount: number;
+}
 
 /**
  * โยนไฟล์ Excel ของงานเข้ามา → แกะ → **ให้คนตรวจและแก้** → ค่อยสร้างเอกสาร
@@ -34,17 +43,31 @@ export function CostControlImportDialog({ onCreated, onClose }: {
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [fileName, setFileName] = useState("");
-  /** ชีตที่อ่านได้ในไฟล์ — ถ้ามีมากกว่าหนึ่ง ให้คนเลือกเอง */
-  const [sheets, setSheets] = useState<{ name: string; kind: "costControl" | "sc" }[]>([]);
+  /** ชีตที่อ่านได้ในไฟล์ — เลือกได้หลายชีต ไฟล์งานจริงบางไฟล์แยกงานย่อยไว้คนละชีต */
+  const [sheets, setSheets] = useState<ReadableSheet[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
   const [result, setResult] = useState<CostControlImportResult | null>(null);
   const [lines, setLines] = useState<CostControlLine[]>([]);
-  const [rows, setRows] = useState<Record<string, string[][]>>({});
-  const [fills, setFills] = useState<Record<string, SheetFills>>({});
 
-  const applySheet = (grid: string[][], kind: "costControl" | "sc", fill?: SheetFills) => {
-    const parsed = parseCostControlSheet(grid, kind, fill);
-    setResult(parsed);
-    setLines(parsed.lines);
+  /** แกะชีตที่เลือกไว้ทั้งหมดใหม่ทุกครั้ง — ถูกกว่าการเก็บผลลัพธ์ไว้แล้วต้องคอยรวมทีหลัง */
+  const applyPicked = (all: ReadableSheet[], names: string[]) => {
+    const parts = all
+      .filter((s) => names.includes(s.name))
+      .map((s) => ({ sheetName: s.name, result: parseCostControlSheet(s.rows, s.kind, s.fills) }));
+    if (parts.length === 0) {
+      setResult(null);
+      setLines([]);
+      return;
+    }
+    const merged = mergeCostControlImports(parts);
+    setResult(merged);
+    setLines(merged.lines);
+  };
+
+  const toggleSheet = (name: string) => {
+    const next = picked.includes(name) ? picked.filter((n) => n !== name) : [...picked, name];
+    setPicked(next);
+    applyPicked(sheets, next);
   };
 
   const readFile = async (file: File) => {
@@ -56,22 +79,15 @@ export function CostControlImportDialog({ onCreated, onClose }: {
       // cellStyles: true — ชีตจริงแยก "หัวกลุ่ม" ออกจาก "บรรทัดบรรยาย" ด้วยสีพื้นหลังเท่านั้น
       // ตัวหนังสือของสองแบบนี้หน้าตาเหมือนกันทุกประการ (ดู SHEET_FILL ใน costControlImport.ts)
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellStyles: true });
-      const readable = wb.SheetNames
-        .map((name) => ({ name, kind: classifySheetName(name) }))
-        .filter((s): s is { name: string; kind: "costControl" | "sc" } => s.kind !== null);
 
-      if (readable.length === 0) {
-        setError(t("costControlImport.errorNoSheet"));
-        setResult(null);
-        setSheets([]);
-        return;
-      }
+      const readable: ReadableSheet[] = [];
+      for (const name of wb.SheetNames) {
+        const ws = wb.Sheets[name];
+        const grid = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: "" });
+        // ชนิดของชีตดูจากเนื้อใน ไม่ใช่ชื่อ — ไฟล์งานจริงตั้งชื่อชีตตามใจ ("Rev.01", "ลองๆ", "3mm.")
+        const kind = classifySheet(name, grid);
+        if (!kind) continue;
 
-      const grids: Record<string, string[][]> = {};
-      const fillGrids: Record<string, SheetFills> = {};
-      for (const s of readable) {
-        const ws = wb.Sheets[s.name];
-        grids[s.name] = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, raw: false, defval: "" });
         const range = XLSX.utils.decode_range(ws["!ref"] ?? "A1");
         const fillGrid: SheetFills = [];
         for (let r = range.s.r; r <= range.e.r; r++) {
@@ -83,14 +99,30 @@ export function CostControlImportDialog({ onCreated, onClose }: {
           }
           fillGrid.push(row);
         }
-        fillGrids[s.name] = fillGrid;
+        readable.push({
+          name, kind, rows: grid, fills: fillGrid,
+          lineCount: parseCostControlSheet(grid, kind, fillGrid).lines.length,
+        });
       }
-      setRows(grids);
-      setFills(fillGrids);
+
+      if (readable.length === 0) {
+        setError(t("costControlImport.errorNoSheet"));
+        setResult(null);
+        setSheets([]);
+        setPicked([]);
+        return;
+      }
+
       setSheets(readable);
-      // ชีต Cost Control ที่ทำไว้แล้วแม่นกว่า จึงเป็นค่าตั้งต้นเมื่อมีทั้งสองแบบ
-      const preferred = readable.find((s) => s.kind === "costControl") ?? readable[0];
-      applySheet(grids[preferred.name], preferred.kind, fillGrids[preferred.name]);
+      // ตั้งต้นด้วยชีตเดียวเสมอ: ใบ Cost Control ที่ทำไว้แล้วแม่นกว่าใบประเมินราคา และในบรรดาชีตแบบ
+      // เดียวกันเอา**อันซ้ายสุดที่แกะได้จริง** — ไม่ใช่อันที่บรรทัดเยอะสุด เพราะไฟล์งานจริงมีชีตทดลอง
+      // ปนอยู่ (ไฟล์น้ำมันพืชไทยมีชีตชื่อ "ลองๆ" ที่บรรทัดเยอะที่สุดในไฟล์) เดาให้ฉลาดกว่านี้ไม่ได้
+      // คนเป็นคนเลือกเอง ซึ่งคือสิ่งที่หน้านี้มีให้อยู่แล้ว
+      const withLines = readable.filter((s) => s.lineCount > 0);
+      const pool = withLines.length > 0 ? withLines : readable;
+      const best = pool.find((s) => s.kind === "costControl") ?? pool[0];
+      setPicked([best.name]);
+      applyPicked(readable, [best.name]);
     } catch {
       setError(t("costControlImport.errorRead"));
       setResult(null);
@@ -110,7 +142,10 @@ export function CostControlImportDialog({ onCreated, onClose }: {
         jobOrder: result.header.jobOrder,
         docDate: result.header.docDate,
         lines,
-        sourceFileName: fileName,
+        // บันทึกชีตที่ใช้ไว้ด้วย — ไฟล์เดียวมีได้หลายชีตและเลือกได้หลายอัน "ชื่อไฟล์" อย่างเดียวจึงไม่พอ
+        // ที่จะย้อนกลับไปดูว่าใบนี้มาจากไหน
+        sourceFileName: `${fileName} — ${picked.join(", ")}`,
+        ...result.markups,
       });
       onCreated(doc);
     } catch (err) {
@@ -180,30 +215,34 @@ export function CostControlImportDialog({ onCreated, onClose }: {
 
           {result && (
             <>
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <FileSpreadsheet size={14} /> {fileName}
-                </span>
-                {sheets.length > 1 && (
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {t("costControlImport.chooseSheet")}
-                    <select
-                      className="px-2 py-1 text-xs bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50"
-                      onChange={(e) => {
-                        const picked = sheets.find((s) => s.name === e.target.value);
-                        if (picked) applySheet(rows[picked.name], picked.kind, fills[picked.name]);
-                      }}
-                      defaultValue={sheets.find((s) => s.kind === "costControl")?.name ?? sheets[0].name}
-                    >
-                      {sheets.map((s) => (
-                        <option key={s.name} value={s.name}>
-                          {s.name} — {s.kind === "costControl" ? t("costControlImport.sheetCostControl") : t("costControlImport.sheetSc")}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <FileSpreadsheet size={14} /> {fileName}
               </div>
+
+              {sheets.length > 1 && (
+                <fieldset className="border border-border rounded-lg px-3 py-2.5">
+                  <legend className="px-1 text-xs text-muted-foreground">{t("costControlImport.chooseSheet")}</legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {sheets.map((s) => (
+                      <label key={s.name} className="flex items-center gap-1.5 text-xs text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="accent-[#c9a84c]"
+                          checked={picked.includes(s.name)}
+                          onChange={() => toggleSheet(s.name)}
+                        />
+                        <span>{s.name}</span>
+                        <span className="text-muted-foreground">
+                          ({s.kind === "costControl" ? t("costControlImport.sheetCostControl") : t("costControlImport.sheetSc")}
+                          {" · "}
+                          {t("costControlImport.sheetLineCount").replace("{count}", String(s.lineCount))})
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-xs text-muted-foreground">{t("costControlImport.chooseSheetHint")}</p>
+                </fieldset>
+              )}
 
               {result.warnings.length > 0 && (
                 <div className="px-3 py-2.5 rounded-lg bg-[#e08a3c]/10 border border-[#e08a3c]/25 space-y-1">
@@ -238,6 +277,23 @@ export function CostControlImportDialog({ onCreated, onClose }: {
                     onChange={(e) => setResult({ ...result, header: { ...result.header, docDate: e.target.value } })} />
                 </label>
               </div>
+
+              {/* บล็อกสรุปท้ายชีตที่อ่านมาได้ — แสดงให้เห็นว่าอ่านอะไรมาบ้าง แก้ต่อได้ในหน้าเอกสาร */}
+              {(result.markups.sellingPrice !== null || result.markups.operatingCost !== null) && (
+                <p className="text-xs text-muted-foreground">
+                  {t("costControlImport.markupsFromSheet")}{" "}
+                  {[
+                    result.markups.operatingCost !== null
+                      && `${t("costControlDoc.summary.operating")} ${fmt(result.markups.operatingCost)}`,
+                    result.markups.bubbleCost !== null
+                      && `${t("costControlDoc.summary.bubble")} ${fmt(result.markups.bubbleCost)}`,
+                    result.markups.entertainmentCost !== null
+                      && `${t("costControlDoc.summary.entertainment")} ${fmt(result.markups.entertainmentCost)}`,
+                    result.markups.sellingPrice !== null
+                      && `${t("costControlDoc.summary.sellingPrice")} ${fmt(result.markups.sellingPrice)}`,
+                  ].filter(Boolean).join(" · ")}
+                </p>
+              )}
 
               <div className="bg-card border border-border rounded-xl overflow-hidden">
                 <div className="overflow-x-auto max-h-[38vh]">
