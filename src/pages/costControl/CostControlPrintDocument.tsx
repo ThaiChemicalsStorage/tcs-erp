@@ -19,7 +19,7 @@ import { fmt } from "../../lib/quotes";
  * | พื้นหลังหัวกลุ่ม | `#F2DBDB` |
  * | พื้นหลังช่องรายละเอียดของรายการ | `#92D050` (เฉพาะช่องรายละเอียด ไม่ใช่ทั้งแถว) |
  * | ไฮไลต์ราคาขาย / คิดเป็น% | `#FFFF00` |
- * | คอลัมน์ ฿ | แยกเป็นช่องแคบของตัวเอง เลขชิดขวา |
+ * | ช่องต้นทุน | ฿ ชิดซ้าย เลขชิดขวา **อยู่ในช่องเดียวกัน ไม่มีเส้นคั่น** (Excel เก็บเป็นเซลล์เดียว รูปแบบบัญชี) |
  * | ค่าศูนย์ | พิมพ์เป็น `-` ไม่ใช่ 0.00 |
  *
  * สามสีข้างบนอ่านมาจาก `fgColor` ของเซลล์ในไฟล์ Excel จริง ไม่ได้กะจากภาพ
@@ -34,6 +34,16 @@ const LETTERHEAD = {
 };
 const FORM_CODE = "FM-SL-06 Rev.02 : 11/09/67";
 
+/**
+ * เว้นขอบขวาไว้ 2px — ไม่ใช่การจัดหน้า แต่กันเส้นขอบขวาหายตอนพิมพ์
+ *
+ * ตารางกว้าง 100% ของพื้นที่พิมพ์ A4 (186mm ≈ 703px) และ `border-collapse: collapse` วางเส้นขอบนอกสุด
+ * **ถัดจาก** ขอบขวาของตาราง ไม่ใช่ข้างใน — ตรวจจาก PDF ที่พิมพ์ออกมาจริง เส้นแนวตั้งขวาสุดถูกวาดที่
+ * x = 703→704 ขณะที่กระดาษมีถึงแค่ 703 เส้นจึงตกนอกหน้าและหายไปทั้งเส้น (เจ้าของแจ้ง 2026-08-28
+ * ว่า "ตอนกดปริ้นเป็น A4 ขอบมันมาไม่ครบ") · เส้นซ้ายไม่มีปัญหาเพราะวาดที่ x = 0→1 ซึ่งอยู่ในหน้าพอดี
+ */
+const EDGE_GUARD = "2px";
+
 const LINE = "1px solid #000";
 const GROUP_BG = "#F2DBDB";
 const ITEM_BG = "#92D050";
@@ -47,13 +57,14 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
 
   const cell: React.CSSProperties = { border: LINE, padding: "2px 4px", verticalAlign: "middle" };
   const num: React.CSSProperties = { ...cell, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
-  const baht: React.CSSProperties = { ...cell, textAlign: "left", paddingRight: 0 };
+  // ฿ กับตัวเลขอยู่ในช่องเดียวกัน ดันคนละฝั่ง — เคยแยกเป็นสองช่องแล้วมีเส้นคั่นกลางซึ่งฟอร์มจริงไม่มี
+  const bahtRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: "6px" };
   const sumLabel: React.CSSProperties = { padding: "2px 6px", whiteSpace: "nowrap" };
   const sumBaht: React.CSSProperties = { padding: "2px 2px", textAlign: "left", width: "14px" };
   const sumValue: React.CSSProperties = { padding: "2px 6px", textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", minWidth: "110px" };
 
   return (
-    <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", color: "#000", fontSize: "11px" }}>
+    <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", color: "#000", fontSize: "11px", paddingRight: EDGE_GUARD }}>
       <style>{"@media print { @page { size: A4 portrait; margin: 12mm; } }"}</style>
 
       {/* หัวจดหมาย — โลโก้ซ้าย ข้อความขวา ตามฟอร์มจริง */}
@@ -108,7 +119,7 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
             <th style={{ ...cell, width: "10%" }}>supplier name</th>
             <th style={{ ...cell, width: "6%" }}>จำนวน</th>
             <th style={{ ...cell, width: "6%" }}>หน่วย</th>
-            <th style={cell} colSpan={2}>ต้นทุน</th>
+            <th style={cell}>ต้นทุน</th>
             <th style={cell}>ต้นทุนรวมทั้งหมด</th>
           </tr>
         </thead>
@@ -127,8 +138,11 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
                 <td style={{ ...cell, textAlign: "center" }}>{isGroup ? "" : l.supplierName}</td>
                 <td style={{ ...cell, textAlign: "center" }}>{isGroup || l.qty === null ? "" : fmt(l.qty)}</td>
                 <td style={{ ...cell, textAlign: "center" }}>{isGroup ? "" : l.unit}</td>
-                <td style={baht}>{isGroup || l.unitCost === null ? "" : "฿"}</td>
-                <td style={num}>{isGroup || l.unitCost === null ? "" : money(l.unitCost)}</td>
+                <td style={num}>
+                  {isGroup || l.unitCost === null ? "" : (
+                    <span style={bahtRow}><span>฿</span><span>{money(l.unitCost)}</span></span>
+                  )}
+                </td>
                 <td style={num}>{isGroup ? "" : money(lineTotalCost(l))}</td>
               </tr>
             );
@@ -167,7 +181,7 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
           <tr>
             <td style={{ ...sumLabel, border: LINE }}>กำไร</td>
             <td style={{ ...sumBaht, border: LINE, borderRight: "none" }} />
-            <td style={{ ...sumValue, border: LINE, borderLeft: "none" }}>{totals.profit.toFixed(2)}</td>
+            <td style={{ ...sumValue, border: LINE, borderLeft: "none" }}>{fmt(totals.profit)}</td>
           </tr>
           <tr>
             <td style={{ ...sumLabel, border: LINE }}>คิดเป็น%</td>

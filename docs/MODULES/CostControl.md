@@ -136,6 +136,22 @@ The owner's instruction was explicit: *"รูปแบบ pdf ต้องอ�
 
 Fixed Thai, no `useI18n`, per the print policy in [`../CLAUDE.md`](../CLAUDE.md).
 
+### Two print-only rules that are easy to undo by accident
+
+**1. `EDGE_GUARD` — the 2px right padding on the print root is not spacing, it is the right border.**
+The line table is `width: 100%` of A4's 186mm printable area (703px) and `border-collapse: collapse`
+paints the outermost border *after* the table's right edge, not inside it. Measured out of a real
+printed PDF's content stream: the rightmost vertical rule was drawn at **x = 703 → 704** against a
+page that ends at 703, so the whole line fell off the paper. The left border never showed the problem
+(x = 0 → 1, inside), and the DOM measures clean either way — which is why an earlier pass looked at
+`getBoundingClientRect()`, found nothing wrong, and wrote the report off as a screenshot artifact.
+Reported by the owner on 2026-08-28 as *"ตอนกดปริ้นเป็น A4 ขอบมันมาไม่ครบ"*. **Verify this one by
+reading the PDF, not the DOM.**
+
+**2. ฿ and the amount share one cell.** They were briefly two columns under a `colSpan={2}` header,
+which drew a rule between the symbol and the number that the real form does not have (in the source
+workbook it is a single accounting-formatted cell). One `<td>` with an inner flex now pushes ฿ left
+and the number right. Splitting them again reintroduces both the rule and the clipped ฿ glyph.
 > One layout note for whoever edits this next: the line table deliberately uses **auto** table
 > layout. An earlier version set `table-layout: fixed` with percentage widths, and `nowrap` money
 > columns overflowed their assigned cells and lost their last characters on the page edge.
