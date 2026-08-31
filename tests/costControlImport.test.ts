@@ -3,7 +3,7 @@ import {
   classifySheet, classifySheetName, classifySheetRows, mergeCostControlImports,
   parseCostControlSheet, parseNumericCell, parseSheetDate, stripImportedPrices,
 } from "../src/lib/costControlImport";
-import { costControlTotals, lineTotalCost } from "../src/lib/costControl";
+import { costControlTotalCost, lineTotalCost } from "../src/lib/costControl";
 
 /**
  * Unit tests for the Cost Control workbook parser (`src/lib/costControlImport.ts`).
@@ -235,7 +235,13 @@ describe("ชีต SC — แกะเป็นบล็อก", () => {
   });
 });
 
-describe("costControlTotals", () => {
+/**
+ * ยอดต้นทุนรวม — สิ่งเดียวที่โมดูลนี้ยังคำนวณ
+ *
+ * เคยมี `costControlTotals()` ที่คืนค่าดำเนินการ/Bubble/Entertainment/ราคาขาย/กำไร/คิดเป็น% ด้วย
+ * ถอดออกทั้งชุดเมื่อ 2026-08-31 ตามที่เจ้าของสั่ง ("เอาออก" ชี้ที่บล็อกสรุปท้ายใบพิมพ์)
+ */
+describe("costControlTotalCost", () => {
   const lines = [
     { id: "a", kind: "group" as const, seq: "", description: "งาน", model: "", supplierName: "", qty: null, unit: "", unitCost: null },
     { id: "b", kind: "item" as const, seq: "1", description: "x", model: "", supplierName: "", qty: 2, unit: "Set", unitCost: 100 },
@@ -243,29 +249,12 @@ describe("costControlTotals", () => {
   ];
 
   it("รวมต้นทุนจากทุกบรรทัด ยกเว้นหัวกลุ่ม", () => {
-    const t = costControlTotals({ lines, operatingCost: null, bubbleCost: null, entertainmentCost: null, sellingPrice: null });
-    expect(t.totalCost).toBe(350); // 2×100 + 3×50
+    expect(costControlTotalCost(lines)).toBe(350); // 2×100 + 3×50
   });
 
-  it("กำไร = ราคาขาย − (ต้นทุน + ค่าดำเนินการ + bubble + entertainment)", () => {
-    const t = costControlTotals({ lines, operatingCost: 50, bubbleCost: 10, entertainmentCost: 5, sellingPrice: 500 });
-    expect(t.loadedCost).toBe(415);
-    expect(t.profit).toBe(85);
-  });
-
-  it("คิดเป็น% หารด้วยราคาขาย ไม่ใช่ต้นทุน — ตรงกับตัวเลขในไฟล์จริง", () => {
-    const t = costControlTotals({
-      lines: [{ id: "x", kind: "item", seq: "1", description: "รวม", model: "", supplierName: "", qty: 1, unit: "Lot", unitCost: 8_558_497.46 }],
-      operatingCost: 1_300_000, bubbleCost: 130_000, entertainmentCost: 0, sellingPrice: 13_000_000,
-    });
-    expect(t.profit).toBeCloseTo(3_011_502.54, 2);
-    expect(t.profitPct).toBeCloseTo(23.17, 2);
-  });
-
-  it("ยังไม่ใส่ราคาขายต้องไม่หารศูนย์", () => {
-    const t = costControlTotals({ lines, operatingCost: null, bubbleCost: null, entertainmentCost: null, sellingPrice: null });
-    expect(t.profitPct).toBe(0);
-    expect(Number.isFinite(t.profitPct)).toBe(true);
+  it("ใบที่ยังไม่กรอกต้นทุนเลยได้ศูนย์ ไม่ใช่ NaN", () => {
+    expect(costControlTotalCost(lines.map((l) => ({ ...l, unitCost: null })))).toBe(0);
+    expect(costControlTotalCost([])).toBe(0);
   });
 });
 
@@ -337,18 +326,8 @@ describe("บล็อกสรุปท้ายใบ", () => {
   ];
   const result = parseCostControlSheet(rows, "costControl");
 
-  it("อ่านยอดและ % ของข้อ 2-5 มาให้ ไม่ต้องพิมพ์ซ้ำ", () => {
-    expect(result.markups.operatingCost).toBe(7000);
-    expect(result.markups.operatingPct).toBe(10);
-    expect(result.markups.bubblePct).toBe(1);
-    expect(result.markups.sellingPrice).toBe(70000);
-  });
-
-  it("ศูนย์ในรูปแบบบัญชี (\"฿-\" / \"฿-   .0\") ไม่กลายเป็นตัวเลขประหลาด", () => {
-    expect(result.markups.bubbleCost).toBeNull();
-    expect(result.markups.entertainmentCost).toBe(0);
-    expect(Object.is(result.markups.entertainmentCost, -0)).toBe(false);
-  });
+  // ข้อ 2-5 (ค่าดำเนินการ/Bubble/Entertainment/ราคาขาย) เคยถูกอ่านมาใส่ให้ — ถอดออก 2026-08-31
+  // เหลือแค่ข้อ 1 ที่ยังถูกอ่าน เพื่อใช้เทียบว่าแกะรายการมาครบไหม (เทสต์อยู่ในชุด "รู้ว่าแกะมาไม่ครบ")
 
   it("ไม่เอาแถวสรุปมาเป็นรายการ และหยุดอ่านที่ข้อ 1", () => {
     expect(result.lines.map((l) => l.description)).toEqual([
@@ -390,17 +369,7 @@ describe("รวมหลายชีตเป็นใบเดียว", () =
     expect(merged.header.jobName).toBe("A");
   });
 
-  it("ราคาขาย**ไม่บวกกัน** — เป็นของทั้งงาน ไม่ใช่ของแต่ละชีต", () => {
-    expect(merged.markups.sellingPrice).toBe(5000);
-  });
-
-  it("ชีตที่ระบุราคาขายไม่ตรงกันต้องเตือน ไม่ใช่เลือกให้เงียบ ๆ", () => {
-    const clash = [
-      parts[0],
-      { sheetName: "3mm.", result: parseCostControlSheet(sheet("B", "2,000.00", "9,000.00"), "costControl") },
-    ];
-    expect(mergeCostControlImports(clash).warnings.join(" ")).toContain("ระบุราคาขายไว้ไม่ตรงกัน");
-  });
+  // เคสเรื่องราคาขาย (ไม่บวกกัน / เตือนเมื่อชนกัน) ถูกตัดออกเมื่อ 2026-08-31 พร้อมกับบล็อกสรุป
 
   it("เลือกชีตเดียวได้ผลเดิมเป๊ะ ไม่มีหัวกลุ่มงอกมา", () => {
     expect(mergeCostControlImports([parts[0]])).toBe(parts[0].result);
@@ -430,20 +399,12 @@ describe("stripImportedPrices — ตัดราคาออก เหลือ
 
   it("ตัวแกะยังอ่านราคามาครบเหมือนเดิม — การตัดเกิดทีหลัง ไม่ได้ทำให้ตัวแกะโง่ลง", () => {
     expect(parsed.lines[0].unitCost).toBe(931020);
-    expect(parsed.markups.operatingCost).toBeCloseTo(101596.87, 2);
-    expect(parsed.markups.sellingPrice).toBe(1500000);
+    expect(parsed.lines[1].unitCost).toBe(8000);
   });
 
   it("ทุกบรรทัดไม่มีต้นทุนเหลืออยู่เลย", () => {
     expect(stripped.lines.every((l) => l.unitCost === null)).toBe(true);
     expect(stripped.lines).toHaveLength(parsed.lines.length);
-  });
-
-  it("บล็อกสรุปว่างทั้งหกช่อง เท่ากับใบที่เปิดเปล่า", () => {
-    expect(stripped.markups).toEqual({
-      operatingCost: null, operatingPct: null, bubbleCost: null, bubblePct: null,
-      entertainmentCost: null, sellingPrice: null,
-    });
   });
 
   it("ตัดเฉพาะราคา — ลำดับ/รายละเอียด/Model/supplier/จำนวน/หน่วย/ชนิดแถว ไม่ถูกแตะ", () => {
@@ -481,30 +442,23 @@ describe("stripImportedPrices — ตัดราคาออก เหลือ
     expect(stripImportedPrices(sc).warnings.some((w) => w.includes("อ่านยอดรวมไม่ได้"))).toBe(false);
   });
 
-  it("รวมหลายชีต: คำเตือนราคาขายชนกันถูกคัดทิ้ง แต่คำเตือนเรื่องการรวมยังอยู่", () => {
-    const sheet = (label: string, selling: string) => [
+  it("รวมหลายชีต: ต้นทุนถูกล้างทุกบรรทัด แต่คำเตือนเรื่องการรวมยังอยู่", () => {
+    const sheet = (label: string) => [
       ccRow(["ลำดับที่", "รายละเอียด", "Model", "supplier name", "จำนวน", "หน่วย", "ต้นทุน", "ต้นทุนรวมทั้งหมด"]),
       ccRow(["1", "งาน " + label, "", "", "1", "Job", "1,000.00", "1,000.00"]),
-      ccRow(["", "5. ราคาขาย", "", selling]),
     ];
     const merged = mergeCostControlImports([
-      { sheetName: "A", result: parseCostControlSheet(sheet("A", "5,000.00"), "costControl") },
-      { sheetName: "B", result: parseCostControlSheet(sheet("B", "9,000.00"), "costControl") },
+      { sheetName: "A", result: parseCostControlSheet(sheet("A"), "costControl") },
+      { sheetName: "B", result: parseCostControlSheet(sheet("B"), "costControl") },
     ]);
-    expect(merged.warnings.some((w) => w.includes("ระบุราคาขายไว้ไม่ตรงกัน"))).toBe(true);
+    expect(merged.lines.some((l) => l.unitCost === 1000)).toBe(true);
 
     const out = stripImportedPrices(merged);
-    expect(out.warnings.some((w) => w.includes("ระบุราคาขายไว้ไม่ตรงกัน"))).toBe(false);
+    expect(out.lines.every((l) => l.unitCost === null)).toBe(true);
     expect(out.warnings.some((w) => w.includes("แต่ละชุดคั่นด้วยหัวกลุ่มชื่อชีต"))).toBe(true);
   });
 
   it("ใบที่ไม่มีราคาเลยยังคิดยอดได้ ไม่พังและไม่เป็น NaN", () => {
-    const totals = costControlTotals({
-      lines: stripped.lines,
-      operatingCost: null, bubbleCost: null, entertainmentCost: null, sellingPrice: null,
-    });
-    expect(totals.totalCost).toBe(0);
-    expect(totals.profit).toBe(0);
-    expect(totals.profitPct).toBe(0);
+    expect(costControlTotalCost(stripped.lines)).toBe(0);
   });
 });

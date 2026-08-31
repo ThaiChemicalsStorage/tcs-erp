@@ -2,8 +2,13 @@
 
 ## Status: ✅ Built 2026-08-28 — โมดูลเอกสารเต็มรูปแบบของแผนก BD สร้างจากการโยนไฟล์ Excel ของงานเข้ามา หรือเปิดใบเปล่ากรอกเอง · **ใบพิมพ์ถอดแบบจากฟอร์มจริง FM-SL-06 Rev.02** ไม่ใช่ placeholder · ตรวจในเบราว์เซอร์ด้วยไฟล์จริงแล้ว
 
-The document that decides whether a job is worth taking: every cost line the estimate produced,
-totalled, marked up, and compared against the intended selling price.
+Every cost line a job carries, gathered into one document and totalled.
+
+⚠️ **It no longer computes profit.** It was built (2026-08-28) to do exactly that — cost + markups
+against a selling price, giving กำไร and คิดเป็น% — and the owner had that whole block removed on
+2026-08-31, pointing at the printed summary and saying *"เอาออก"*. See "Prices are not imported" and
+"The markup / profit block, removed" below. Anything in this file describing profit arithmetic is
+history, kept because it explains why the code looks the way it does.
 
 ## This closed a gap the repo had carried since 2026-08-20
 
@@ -39,23 +44,24 @@ Every readable sheet is listed with its kind and **how many lines it parses to**
 can be ticked. Merging joins them into one document with a **group heading naming each sheet** so
 a reader can still tell where a line came from. Header fields take the first non-empty value;
 **the markup block is not summed** — a selling price belongs to the job, not to a sheet — and a
-disagreement between sheets is warned about rather than silently resolved. (Since 2026-08-31 neither
-the markups nor that warning survive into the dialog — the parser still computes both, and
-`stripImportedPrices()` drops them.)
+disagreement between sheets is warned about rather than silently resolved. **Both of those rules are
+gone as of 2026-08-31**: the markup block is not read at all any more, so there is nothing to sum and
+nothing to disagree about.
 
 The default selection is a single sheet: the **leftmost one that actually parses**, preferring a
 Cost Control sheet over an estimate. It deliberately does *not* pick the sheet with the most
 lines — that rule picked `ลองๆ` ("just trying"), someone's scratch sheet, out of the real file.
 
-### The summary block is read, then deliberately dropped (2026-08-31)
+### The summary block: read for one check only (2026-08-31)
 
-Rows 2-5 at the foot of the sheet (ค่าดำเนินการ + %, Bubble + %, Entertainment, ราคาขาย) are read
-by the parser. **They no longer reach the created document** — see "Prices are not imported" below;
-an imported document now arrives with an empty margin block, to be filled in by hand.
-Rows are matched **by their number**, not their wording, which differs between files
-(`Bubble cost` vs `Bubble Cost`). Row 1 (ราคาต้นทุน) is deliberately *not* stored — it is compared
-against the parsed lines and a mismatch with no rounding to explain it is reported as **lines
-missed**, which is the only automatic check that the sheet was laid out as expected.
+Only **row 1 (ราคาต้นทุน)** is read now, and it is never stored: it is compared against the parsed
+lines, and a mismatch with no rounding to explain it is reported as **lines missed** — the only
+automatic check that the sheet was laid out as expected. `parseStatedTotalCost()` matches it **by
+its number**, not its wording, which differs between files.
+
+Rows 2-5 (ค่าดำเนินการ + %, Bubble + %, Entertainment, ราคาขาย) used to be read and sent with the
+create call, so an imported document arrived with its margin already computed. They are not read at
+all any more — the module has no margin.
 
 ### Dates are Buddhist
 
@@ -101,9 +107,9 @@ warning stays — it is computed before the strip, so it is still true. The filt
 fragments declared next to the code that builds those messages, with tests asserting each one is
 present before the strip and gone after, so the two cannot drift apart silently.
 
-Nothing on the API side changed: `handleCreate` accepts `unitCost: null` and defaults all six markup
-fields to `null` when they are not sent (identical to opening a blank document), and
-`costControlTotals()` coalesces every null to 0 with the divide-by-zero already guarded.
+Nothing on the API side changed for this pass: `handleCreate` accepts `unitCost: null` exactly as it
+accepts a blank document. (The markup fields it used to accept were removed hours later, in the
+follow-up below.)
 
 One print fix went with it: the *ต้นทุนรวมทั้งหมด* cell used to print `-` (which means **zero** on this
 form) on every row while the cost cell beside it was blank. Both are blank now until a cost is typed.
@@ -164,29 +170,60 @@ them apart by **background colour**, so the parser reads it too:
 |---|---|
 | `F2DBDB` | หัวกลุ่ม |
 | `92D050` | ช่องรายละเอียดของรายการหลัก |
-| `FFFF00` | ไฮไลต์ (ราคาขาย / คิดเป็น%) |
+| `FFFF00` | ไฮไลต์ (ราคาขาย / คิดเป็น%) — no longer used, both rows were removed 2026-08-31 |
 
 Those values were read out of the workbook's `fgColor`, not guessed from a screenshot. When a file
 has no fills, a text-only row falls back to **`sub`, never `group`** — guessing the other way turned
 almost every row pink on the printed page. The editor has a per-line kind selector so a person can
 correct either case.
 
-## Money
+## The markup / profit block, removed (2026-08-31)
 
-**No total is ever stored.** `costControlTotals()` derives everything from the lines and the five
-markup fields at render time, the same rule `Quote.amount` and `purchaseOrderSubtotal()` follow.
-The list route computes `totalCost` per row on read for the same reason.
+The owner sent a screenshot of the printed summary — ข้อ 1-5, กำไร, คิดเป็น%, every value showing
+`-` or `0.00` now that prices are no longer imported — and said *"เอาออก"*, confirming it meant the
+whole thing, from **both the printed form and the document page**.
+
+So the module lost its margin arithmetic entirely:
+
+| Gone | Kept |
+|---|---|
+| `operatingCost`/`operatingPct`, `bubbleCost`/`bubblePct`, `entertainmentCost`, `sellingPrice` | the cost lines |
+| `costControlTotals()` → replaced by `costControlTotalCost(lines)` | ราคาต้นทุนรวม, still derived, never stored |
+| the summary editor on the document page | หมายเหตุ / Submitted by / Approved by |
+| summary rows 1-5 + กำไร + คิดเป็น% on the print form | one ราคาต้นทุนรวม line |
+| ราคาขาย and กำไร columns on the list page | ต้นทุนรวม column |
+| the `#FFFF00` highlight (it only ever highlighted ราคาขาย and คิดเป็น%) | the group/item fills |
+
+**The print form now deviates from FM-SL-06 at exactly this one point, deliberately.** That is worth
+knowing before someone "fixes" it back to match the paper form.
+
+**Stored data was not deleted.** Documents created before this carry their markup values in MongoDB;
+nothing reads them any more. Same convention as the Company Profiles and ใบตรวจรับ removals — delete
+the code, leave the data. The API simply stopped accepting those keys: sending them is ignored, the
+way any unknown key is.
 
 ```
 ต้นทุนรวมของบรรทัด = จำนวน × ต้นทุน          (หัวกลุ่มไม่นับ)
-ราคาต้นทุน         = ผลรวมของทุกบรรทัด
-กำไร              = ราคาขาย − (ราคาต้นทุน + ค่าดำเนินการ + Bubble + Entertainment)
-คิดเป็น%           = กำไร ÷ **ราคาขาย** × 100        ← หารด้วยราคาขาย ไม่ใช่ต้นทุน
+ราคาต้นทุนรวม      = ผลรวมของทุกบรรทัด        ← สิ่งเดียวที่ยังคำนวณ
 ```
 
-Checked against the real document: cost 8,558,497.46 + 1,300,000 + 130,000 + 0 against a selling
-price of 13,000,000 gives 3,011,502.54 and 23.17% — and 23.17% is only reachable by dividing by the
-selling price.
+**No total is ever stored**, unchanged: `costControlTotalCost()` derives it at render time and the
+list route computes it per row on read, the same rule `Quote.amount` and `purchaseOrderSubtotal()`
+follow.
+
+### What the profit formula used to be
+
+Kept as a record, since the numbers below are what the import's "lines missed" check still compares
+against, and because someone will eventually ask why `parseStatedTotalCost()` only reads row 1:
+
+```
+กำไร     = ราคาขาย − (ราคาต้นทุน + ค่าดำเนินการ + Bubble + Entertainment)
+คิดเป็น%  = กำไร ÷ **ราคาขาย** × 100        ← หารด้วยราคาขาย ไม่ใช่ต้นทุน
+```
+
+Checked against the real document at the time: cost 8,558,497.46 + 1,300,000 + 130,000 + 0 against a
+selling price of 13,000,000 gives 3,011,502.54 and 23.17% — and 23.17% is only reachable by dividing
+by the selling price.
 
 ### The 24-baht difference, surfaced rather than hidden
 
@@ -208,8 +245,9 @@ The owner's instruction was explicit: *"รูปแบบ pdf ต้องอ�
   Job order / Date)
 - the nine-column grid, with fills applied **only to the description cell** as in the original
 - `฿` in its own narrow column, numbers right-aligned, zero printed as `-`
-- summary rows 1-5 unbordered with the selling price highlighted; กำไร and คิดเป็น% in a bordered
-  box with the percentage highlighted
+- ~~summary rows 1-5 unbordered with the selling price highlighted; กำไร and คิดเป็น% in a bordered
+  box with the percentage highlighted~~ — **removed 2026-08-31**, replaced by a single
+  ราคาต้นทุนรวม line. The one deliberate deviation from the paper form
 - หมายเหตุ rule, Submitted by / Approved by with Date (ว/ด/ป), and the form code bottom-right
 
 Fixed Thai, no `useI18n`, per the print policy in [`../CLAUDE.md`](../CLAUDE.md).

@@ -73,16 +73,10 @@ export interface CostControl {
 
   lines: CostControlLine[];
 
-  /** 2. ค่าดำเนินการ — เก็บทั้งยอดและ % ที่ใช้คิด เพราะใบจริงพิมพ์ % ไว้ในชื่อบรรทัด */
-  operatingCost: number | null;
-  operatingPct: number | null;
-  /** 3. Bubble cost */
-  bubbleCost: number | null;
-  bubblePct: number | null;
-  /** 4. Entertainment + Commission ลูกค้า */
-  entertainmentCost: number | null;
-  /** 5. ราคาขาย — ตัวตั้งที่ทำให้เกิดกำไร */
-  sellingPrice: number | null;
+  // เคยมีบล็อกสรุป 1-5 อยู่ตรงนี้ (ค่าดำเนินการ + %, Bubble + %, Entertainment, ราคาขาย) พร้อมกำไร
+  // และคิดเป็น% ที่คำนวณจากมัน — **ถอดออกทั้งชุด 2026-08-31** ตามที่เจ้าของสั่ง
+  // เอกสารเก่าที่มีค่าเหล่านี้อยู่ในฐานข้อมูลไม่ได้ถูกลบทิ้ง แค่ไม่มีใครอ่านมันอีกแล้ว
+  // (ธรรมเนียมเดียวกับตอนถอด Company Profiles และใบตรวจรับ — ลบโค้ด ไม่ลบข้อมูล)
 
   remarks: string;
   submittedBy: string;
@@ -116,7 +110,6 @@ export interface CostControlSummary {
   status: CostControlStatus;
   /** ราคาต้นทุนรวม — เซิร์ฟเวอร์คำนวณให้หน้ารายการ ไม่ได้เก็บในฐานข้อมูล */
   totalCost: number;
-  sellingPrice: number | null;
   updatedAt: string;
 }
 
@@ -130,42 +123,15 @@ export function lineTotalCost(line: CostControlLine): number {
   return (line.qty ?? 0) * (line.unitCost ?? 0);
 }
 
-export interface CostControlTotals {
-  /** 1. ราคาต้นทุน — ผลรวมของทุกบรรทัด */
-  totalCost: number;
-  /** 2 + 3 + 4 */
-  operatingCost: number;
-  bubbleCost: number;
-  entertainmentCost: number;
-  /** ต้นทุนทั้งหมดรวมค่าดำเนินการแล้ว */
-  loadedCost: number;
-  sellingPrice: number;
-  /** กำไร = ราคาขาย − ต้นทุนทั้งหมด */
-  profit: number;
-  /** คิดเป็น% ของราคาขาย — 0 เมื่อยังไม่ใส่ราคาขาย (หารศูนย์) */
-  profitPct: number;
-}
-
 /**
- * ยอดทั้งใบ — คำนวณตอนแสดงผลเสมอ ไม่เก็บลงฐานข้อมูล
+ * ราคาต้นทุนรวมทั้งใบ — คำนวณตอนแสดงผลเสมอ ไม่เก็บลงฐานข้อมูล
  *
- * `profitPct` หารด้วย **ราคาขาย** ไม่ใช่ต้นทุน — ตรวจกับไฟล์จริงแล้ว: ต้นทุนรวม 8,558,497.46 +
- * ค่าดำเนินการ 1,300,000 + bubble 130,000 + entertainment 0 เทียบราคาขาย 13,000,000 ได้กำไร
- * 3,011,502.54 และ 23.17% ซึ่งคือ 3,011,502.54 ÷ 13,000,000 ไม่ใช่หารด้วยต้นทุน
+ * **เคยมี `costControlTotals()` ที่คืนค่าดำเนินการ/Bubble/Entertainment/ราคาขาย/กำไร/คิดเป็น% ด้วย
+ * ถูกถอดออกทั้งชุดเมื่อ 2026-08-31** ตามที่เจ้าของสั่ง ("เอาออก" ชี้ที่บล็อกสรุปท้ายใบพิมพ์) —
+ * เอกสารนี้เหลือหน้าที่เดียวคือรวบรวมต้นทุนของงาน ส่วนการคิดกำไรไม่อยู่ในระบบอีกต่อไป
  */
-export function costControlTotals(doc: Pick<CostControl,
-  "lines" | "operatingCost" | "bubbleCost" | "entertainmentCost" | "sellingPrice">): CostControlTotals {
-  const totalCost = doc.lines.reduce((sum, l) => sum + lineTotalCost(l), 0);
-  const operatingCost = doc.operatingCost ?? 0;
-  const bubbleCost = doc.bubbleCost ?? 0;
-  const entertainmentCost = doc.entertainmentCost ?? 0;
-  const loadedCost = totalCost + operatingCost + bubbleCost + entertainmentCost;
-  const sellingPrice = doc.sellingPrice ?? 0;
-  const profit = sellingPrice - loadedCost;
-  return {
-    totalCost, operatingCost, bubbleCost, entertainmentCost, loadedCost, sellingPrice, profit,
-    profitPct: sellingPrice === 0 ? 0 : (profit / sellingPrice) * 100,
-  };
+export function costControlTotalCost(lines: CostControlLine[]): number {
+  return lines.reduce((sum, l) => sum + lineTotalCost(l), 0);
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────
@@ -188,13 +154,6 @@ export interface CostControlCreateFields {
   docDate: string;
   lines: CostControlLine[];
   sourceFileName: string;
-  /** บล็อกสรุป 1-5 ที่อ่านมาจากท้ายชีต — ไม่ส่งมาก็ได้ เซิร์ฟเวอร์ตั้งเป็น null ให้ */
-  operatingCost?: number | null;
-  operatingPct?: number | null;
-  bubbleCost?: number | null;
-  bubblePct?: number | null;
-  entertainmentCost?: number | null;
-  sellingPrice?: number | null;
 }
 
 /**

@@ -42,9 +42,8 @@ type Line = {
 type CostControlDoc = {
   id: string; documentNumber: string; status: string; jobName: string; workType: string;
   jobOrder: string; docDate: string; lines: Line[]; sourceFileName: string; importedAt: string;
-  operatingCost: number | null; sellingPrice: number | null;
 };
-type SummaryRow = { id: string; totalCost: number; sellingPrice: number | null };
+type SummaryRow = { id: string; totalCost: number };
 
 const LINES: Line[] = [
   { id: "l0", kind: "group", seq: "", description: "งาน Dust Collector", model: "", supplierName: "", qty: null, unit: "", unitCost: null },

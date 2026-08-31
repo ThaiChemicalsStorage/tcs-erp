@@ -15,7 +15,7 @@ import { useI18n } from "../../lib/i18n";
 import type { Company } from "../../lib/storage";
 import {
   type CostControl, type CostControlUpdateFields, type CostControlLineKind,
-  blankCostControlLine, costControlTotals, lineTotalCost,
+  blankCostControlLine, costControlTotalCost, lineTotalCost,
   fetchCostControl, updateCostControl, deleteCostControl, rewriteCostControl, logCostControlPrinted,
   submitCostControlApproval, approveCostControl, rejectCostControl, withdrawCostControlApproval,
 } from "../../lib/costControl";
@@ -27,9 +27,6 @@ function toUpdateFields(d: CostControl): CostControlUpdateFields {
     documentNumber: d.documentNumber,
     jobName: d.jobName, workType: d.workType, jobOrder: d.jobOrder, docDate: d.docDate,
     lines: d.lines,
-    operatingCost: d.operatingCost, operatingPct: d.operatingPct,
-    bubbleCost: d.bubbleCost, bubblePct: d.bubblePct,
-    entertainmentCost: d.entertainmentCost, sellingPrice: d.sellingPrice,
     remarks: d.remarks, submittedBy: d.submittedBy, approvedBy: d.approvedBy,
     revisionNote: d.revisionNote,
   };
@@ -161,10 +158,7 @@ export function CostControlDocument({
     setDraft((p) => (p ? { ...p, lines: [...p.lines, blankCostControlLine(newId("ccline"), kind)] } : p));
   const removeLine = (id: string) =>
     setDraft((p) => (p ? { ...p, lines: p.lines.filter((l) => l.id !== id) } : p));
-  const setNumber = (key: keyof CostControl, raw: string) =>
-    set(key as never, (raw === "" ? null : Number(raw)) as never);
-
-  const totals = costControlTotals(draft);
+  const totalCost = costControlTotalCost(draft.lines);
   const inputCls = "w-full px-2.5 py-1.5 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
   const numCls = `${inputCls} text-right font-mono`;
 
@@ -371,38 +365,7 @@ export function CostControlDocument({
             <div className="space-y-2 max-w-xl ml-auto">
               <div className="flex items-center gap-3 text-xs">
                 <span className="flex-1 text-muted-foreground">{t("costControlDoc.summary.totalCost")}</span>
-                <span className="w-36 text-right font-mono text-foreground">{fmt(totals.totalCost)}</span>
-              </div>
-              {([
-                ["operating", "operatingCost", "operatingPct"],
-                ["bubble", "bubbleCost", "bubblePct"],
-              ] as const).map(([label, costKey, pctKey]) => (
-                <div key={label} className="flex items-center gap-3 text-xs">
-                  <span className="flex-1 text-muted-foreground">{t(`costControlDoc.summary.${label}` as never)}</span>
-                  <input type="number" className={`${numCls} w-20`} disabled={!editable} value={draft[pctKey] ?? ""}
-                    placeholder={t("costControlDoc.summary.pctHint")}
-                    onChange={(e) => setNumber(pctKey, e.target.value)} />
-                  <input type="number" className={`${numCls} w-36`} disabled={!editable} value={draft[costKey] ?? ""}
-                    onChange={(e) => setNumber(costKey, e.target.value)} />
-                </div>
-              ))}
-              <div className="flex items-center gap-3 text-xs">
-                <span className="flex-1 text-muted-foreground">{t("costControlDoc.summary.entertainment")}</span>
-                <input type="number" className={`${numCls} w-36`} disabled={!editable} value={draft.entertainmentCost ?? ""}
-                  onChange={(e) => setNumber("entertainmentCost", e.target.value)} />
-              </div>
-              <div className="flex items-center gap-3 text-xs pt-1">
-                <span className="flex-1 font-semibold text-foreground">{t("costControlDoc.summary.sellingPrice")}</span>
-                <input type="number" className={`${numCls} w-36`} disabled={!editable} value={draft.sellingPrice ?? ""}
-                  onChange={(e) => setNumber("sellingPrice", e.target.value)} />
-              </div>
-              <div className="flex items-center gap-3 text-sm pt-2 border-t border-border">
-                <span className="flex-1 font-semibold text-foreground">{t("costControlDoc.summary.profit")}</span>
-                <span className={`w-36 text-right font-mono font-semibold ${totals.profit < 0 ? "text-[#d22626]" : "text-[#207e52]"}`}>{fmt(totals.profit)}</span>
-              </div>
-              <div className="flex items-center gap-3 text-xs">
-                <span className="flex-1 text-muted-foreground">{t("costControlDoc.summary.profitPct")}</span>
-                <span className={`w-36 text-right font-mono ${totals.profit < 0 ? "text-[#d22626]" : "text-muted-foreground"}`}>{fmt(totals.profitPct)}%</span>
+                <span className="w-36 text-right font-mono text-foreground">{fmt(totalCost)}</span>
               </div>
             </div>
 

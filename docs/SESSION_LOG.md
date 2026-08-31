@@ -51,6 +51,22 @@ Generalises: a schema change is only as clean as its dirtiest reader. Grep the *
 the types — a MongoDB predicate written for a scalar fails silently against an array rather than
 erroring, which is the worst failure mode available.
 
+### เอาออกให้หมด ดีกว่าเอาออกครึ่งเดียว
+
+Removing the imported prices left the printed summary showing `-` and `0.00` down the whole block.
+The owner looked at that and asked for the block itself to go — from the print form and the document
+page both. Which is the right call: a margin calculator whose inputs are never filled in is not a
+feature, it is a row of zeros that people learn to ignore.
+
+Worth recording as a shape: **when you remove the data behind a display, the display is now a
+question.** It does not fail loudly, it just sits there looking authoritative and empty. The first
+change (drop the prices) made the second one inevitable, and it would have been better to see that
+in one step rather than two.
+
+The removal itself deliberately deviates from the paper form for the first time in this module —
+FM-SL-06 has that block, this print no longer does. That is the kind of thing a future session
+fixes back unless it is written down in the file and the module doc, so it is written in both.
+
 ### Problems Found
 - Multi-line template payment terms were being silently swallowed by the `<select>` (pre-existing).
 - The Cost Control print form printed `-` in the total column (meaning "zero" on this form) next to

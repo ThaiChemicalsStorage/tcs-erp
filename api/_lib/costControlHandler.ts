@@ -13,7 +13,7 @@ import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
 import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
 import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
-import { costControlTotals, type CostControlLine, type CostControlLineKind, type CostControlSummary } from "../../src/lib/costControl.js";
+import { costControlTotalCost, type CostControlLine, type CostControlLineKind, type CostControlSummary } from "../../src/lib/costControl.js";
 
 /**
  * Cost Control (แผนก BD) API — added 2026-08-28. Mounted from `api/handlers/quotes.ts` alongside
@@ -111,7 +111,7 @@ function toClient(doc: CostControlFields & { _id: string }) {
 function toSummary(doc: CostControlFields & { _id: string }): CostControlSummary {
   const full = withStringId(doc);
   // ยอดรวมไม่ได้เก็บในฐานข้อมูล — คำนวณตอนส่งออกไป เหมือนที่หน้าเอกสารคำนวณเอง
-  const { totalCost } = costControlTotals(full);
+  const totalCost = costControlTotalCost(full.lines);
   return {
     id: full.id,
     documentNumber: full.documentNumber || full.id,
@@ -121,7 +121,6 @@ function toSummary(doc: CostControlFields & { _id: string }): CostControlSummary
     docDate: full.docDate,
     status: full.status,
     totalCost,
-    sellingPrice: full.sellingPrice,
     updatedAt: full.updatedAt,
   };
 }
@@ -142,24 +141,9 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({ costControls: docs.map(toSummary) });
 }
 
-/** ช่องบล็อกสรุป 1-5 — รับได้ตอนสร้างเพราะตัวแกะไฟล์อ่านมาจากท้ายชีตให้แล้ว */
-const MARKUP_KEYS = [
-  ["operatingCost", "ค่าดำเนินการ"], ["operatingPct", "% ค่าดำเนินการ"],
-  ["bubbleCost", "Bubble cost"], ["bubblePct", "% Bubble cost"],
-  ["entertainmentCost", "Entertainment + Commission"], ["sellingPrice", "ราคาขาย"],
-] as const;
-
-function markupsFromBody(body: Record<string, unknown>): Pick<CostControlFields,
-  "operatingCost" | "operatingPct" | "bubbleCost" | "bubblePct" | "entertainmentCost" | "sellingPrice"> {
-  const out = {
-    operatingCost: null, operatingPct: null, bubbleCost: null,
-    bubblePct: null, entertainmentCost: null, sellingPrice: null,
-  } as Record<string, number | null>;
-  for (const [key, label] of MARKUP_KEYS) {
-    if (key in body) out[key] = sanitizeNullableNumber(body[key], label);
-  }
-  return out as ReturnType<typeof markupsFromBody>;
-}
+// บล็อกสรุป 1-5 (ค่าดำเนินการ/Bubble/Entertainment/ราคาขาย) เคยรับเข้ามาตรงนี้ — ถอดออก 2026-08-31
+// ทั้ง create และ update จึงไม่รับคีย์พวกนี้อีกแล้ว ส่งมาก็ถูกละเลยเงียบ ๆ เหมือนคีย์แปลกปลอมอื่น ๆ
+// ค่าที่เอกสารเก่าเก็บไว้ใน MongoDB ไม่ได้ถูกลบ แค่ไม่มีใครอ่าน
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
@@ -183,8 +167,6 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     jobName, workType, jobOrder,
     docDate: docDate || now.slice(0, 10),
     lines,
-    // บล็อกสรุปมาจากท้ายชีตตอนนำเข้า ถ้าไม่ได้ส่งมา (เปิดใบเปล่า) ทุกช่องเป็น null
-    ...markupsFromBody(body),
     remarks: "",
     submittedBy: ctx.user.fullName,
     approvedBy: "",
@@ -220,8 +202,6 @@ const SHORT_TEXT_FIELDS: { key: keyof CostControlFields; label: string }[] = [
   { key: "submittedBy", label: "ผู้จัดทำ" },
   { key: "approvedBy", label: "ผู้อนุมัติ" },
 ];
-const NUMBER_FIELDS: { key: keyof CostControlFields; label: string }[] =
-  MARKUP_KEYS.map(([key, label]) => ({ key, label }));
 
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "PATCH") throw new HttpError(405, "Method not allowed");
@@ -242,9 +222,6 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
 
   for (const { key, label } of SHORT_TEXT_FIELDS) {
     if (key in body) (update as Record<string, unknown>)[key] = sanitizeShortText(body[key], label);
-  }
-  for (const { key, label } of NUMBER_FIELDS) {
-    if (key in body) (update as Record<string, unknown>)[key] = sanitizeNullableNumber(body[key], label);
   }
   if ("docDate" in body) update.docDate = validateIsoDateOrEmpty(body.docDate, "วันที่");
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");

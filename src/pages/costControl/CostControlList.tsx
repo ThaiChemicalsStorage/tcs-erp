@@ -84,7 +84,7 @@ export function CostControlList({ costControls, onOpen, headerAction }: {
               <thead>
                 <tr className="border-b border-border bg-muted/40">
                   {[t("costControl.col.id"), t("costControl.col.jobName"), t("costControl.col.jobOrder"),
-                    t("costControl.col.totalCost"), t("costControl.col.sellingPrice"), t("costControl.col.profit"),
+                    t("costControl.col.totalCost"),
                     t("costControl.col.status"), t("costControl.col.updatedAt")].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
@@ -92,7 +92,6 @@ export function CostControlList({ costControls, onOpen, headerAction }: {
               </thead>
               <tbody>
                 {filtered.map((c) => {
-                  const profit = c.sellingPrice === null ? null : c.sellingPrice - c.totalCost;
                   return (
                     <tr
                       key={c.id}
@@ -107,10 +106,6 @@ export function CostControlList({ costControls, onOpen, headerAction }: {
                       <td className="px-4 py-3.5 text-sm text-foreground max-w-[260px] truncate" title={c.jobName}>{c.jobName || "—"}</td>
                       <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{c.jobOrder || "—"}</td>
                       <td className="px-4 py-3.5 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(c.totalCost)}</td>
-                      <td className="px-4 py-3.5 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{c.sellingPrice === null ? "—" : fmt(c.sellingPrice)}</td>
-                      <td className={`px-4 py-3.5 text-xs font-mono text-right whitespace-nowrap ${profit !== null && profit < 0 ? "text-[#d22626]" : "text-foreground"}`}>
-                        {profit === null ? "—" : fmt(profit)}
-                      </td>
                       <td className="px-4 py-3.5">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[c.status]}`}>
                           {statusLabel[c.status]}

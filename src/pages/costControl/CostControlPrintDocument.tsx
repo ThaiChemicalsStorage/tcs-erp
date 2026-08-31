@@ -1,4 +1,4 @@
-import { type CostControl, costControlTotals, lineTotalCost } from "../../lib/costControl";
+import { type CostControl, costControlTotalCost, lineTotalCost } from "../../lib/costControl";
 import type { Company } from "../../lib/storage";
 import { fmt } from "../../lib/quotes";
 
@@ -18,7 +18,7 @@ import { fmt } from "../../lib/quotes";
  * | กล่องข้อมูลงาน | 2 แถว มีเส้นขอบ: Job Name/Work type · Job order/Date |
  * | พื้นหลังหัวกลุ่ม | `#F2DBDB` |
  * | พื้นหลังช่องรายละเอียดของรายการ | `#92D050` (เฉพาะช่องรายละเอียด ไม่ใช่ทั้งแถว) |
- * | ไฮไลต์ราคาขาย / คิดเป็น% | `#FFFF00` |
+ * | ไฮไลต์ราคาขาย / คิดเป็น% | `#FFFF00` — **เลิกใช้ 2026-08-31 พร้อมกับบล็อกสรุปท้ายใบ** |
  * | ช่องต้นทุน | ฿ ชิดซ้าย เลขชิดขวา **อยู่ในช่องเดียวกัน ไม่มีเส้นคั่น** (Excel เก็บเป็นเซลล์เดียว รูปแบบบัญชี) |
  * | ค่าศูนย์ | พิมพ์เป็น `-` ไม่ใช่ 0.00 |
  *
@@ -47,13 +47,13 @@ const EDGE_GUARD = "2px";
 const LINE = "1px solid #000";
 const GROUP_BG = "#F2DBDB";
 const ITEM_BG = "#92D050";
-const HIGHLIGHT_BG = "#FFFF00";
+// HIGHLIGHT_BG (`#FFFF00`) เคยใช้ไฮไลต์ราคาขายกับคิดเป็น% — ถอดออกพร้อมบล็อกสรุปท้ายใบ 2026-08-31
 
 /** ค่าศูนย์บนฟอร์มจริงพิมพ์เป็นขีด ไม่ใช่ 0.00 */
 const money = (n: number): string => (n === 0 ? "-" : fmt(n));
 
 export function CostControlPrintDocument({ costControl: c, company }: { costControl: CostControl; company: Company }) {
-  const totals = costControlTotals(c);
+  const totalCost = costControlTotalCost(c.lines);
 
   const cell: React.CSSProperties = { border: LINE, padding: "2px 4px", verticalAlign: "middle" };
   const num: React.CSSProperties = { ...cell, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
@@ -152,43 +152,17 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
         </tbody>
       </table>
 
-      {/* บล็อกสรุป — 1-5 ไม่มีเส้นขอบ ส่วนกำไร/คิดเป็น% อยู่ในกรอบ ตามฟอร์มจริง */}
+      {/*
+        บล็อกสรุปท้ายใบ (1. ราคาต้นทุน … 5. ราคาขาย + กำไร + คิดเป็น%) **ถอดออก 2026-08-31**
+        ตามที่เจ้าของสั่ง — ใบนี้จึงต่างจากฟอร์มจริง FM-SL-06 ตรงจุดนี้จุดเดียว โดยตั้งใจ ไม่ใช่ตกหล่น
+        เหลือไว้แค่ยอดรวมต้นทุนบรรทัดเดียว เพราะตารางรายการด้านบนไม่มีแถวรวมของตัวเอง
+      */}
       <table style={{ borderCollapse: "collapse", marginTop: "14px", marginLeft: "60px" }}>
         <tbody>
           <tr>
-            <td style={sumLabel}>1.&nbsp; ราคาต้นทุน</td>
+            <td style={sumLabel}>ราคาต้นทุนรวม</td>
             <td style={sumBaht}>฿</td>
-            <td style={sumValue}>{money(totals.totalCost)}</td>
-          </tr>
-          <tr>
-            <td style={sumLabel}>2.&nbsp; ค่าดำเนินการ{c.operatingPct !== null ? `  (${fmt(c.operatingPct)}%)` : ""}</td>
-            <td style={sumBaht}>฿</td>
-            <td style={sumValue}>{money(totals.operatingCost)}</td>
-          </tr>
-          <tr>
-            <td style={sumLabel}>3.&nbsp; Bubble cost{c.bubblePct !== null ? `  (${fmt(c.bubblePct)}%)` : ""}</td>
-            <td style={sumBaht}>฿</td>
-            <td style={sumValue}>{money(totals.bubbleCost)}</td>
-          </tr>
-          <tr>
-            <td style={sumLabel}>4.&nbsp; Entertainment + Commission ลูกค้า</td>
-            <td style={sumBaht}>฿</td>
-            <td style={sumValue}>{money(totals.entertainmentCost)}</td>
-          </tr>
-          <tr>
-            <td style={sumLabel}>5.&nbsp; ราคาขาย</td>
-            <td style={{ ...sumBaht, background: HIGHLIGHT_BG }}>฿</td>
-            <td style={{ ...sumValue, background: HIGHLIGHT_BG }}>{money(totals.sellingPrice)}</td>
-          </tr>
-          <tr>
-            <td style={{ ...sumLabel, border: LINE }}>กำไร</td>
-            <td style={{ ...sumBaht, border: LINE, borderRight: "none" }} />
-            <td style={{ ...sumValue, border: LINE, borderLeft: "none" }}>{fmt(totals.profit)}</td>
-          </tr>
-          <tr>
-            <td style={{ ...sumLabel, border: LINE }}>คิดเป็น%</td>
-            <td style={{ ...sumBaht, border: LINE, borderRight: "none", background: HIGHLIGHT_BG }} />
-            <td style={{ ...sumValue, border: LINE, borderLeft: "none", background: HIGHLIGHT_BG }}>{fmt(totals.profitPct)}</td>
+            <td style={sumValue}>{money(totalCost)}</td>
           </tr>
         </tbody>
       </table>

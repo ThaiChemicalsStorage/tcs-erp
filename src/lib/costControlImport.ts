@@ -52,20 +52,9 @@ export interface CostControlImportHeader {
   docDate: string;
 }
 
-/**
- * บล็อกสรุปท้ายใบ (ข้อ 2-5) — อ่านมาจากชีตด้วย ไม่ปล่อยให้คนพิมพ์ซ้ำ
- *
- * ไม่มีข้อ 1 (ราคาต้นทุน) เพราะระบบนี้ไม่เก็บยอดรวมไว้ที่ไหนเลย — คำนวณจาก lines เสมอ
- * ยอดข้อ 1 ที่อยู่ในไฟล์ถูกใช้แค่ตรวจว่าแกะรายการมาครบหรือเปล่า
- */
-export interface CostControlImportMarkups {
-  operatingCost: number | null;
-  operatingPct: number | null;
-  bubbleCost: number | null;
-  bubblePct: number | null;
-  entertainmentCost: number | null;
-  sellingPrice: number | null;
-}
+// เคยมี `CostControlImportMarkups` (ค่าดำเนินการ/Bubble/Entertainment/ราคาขาย) อยู่ตรงนี้ — ถอดออก
+// 2026-08-31 พร้อมกับการคิดกำไรทั้งโมดูล · ข้อ 1 (ราคาต้นทุน) ยังถูกอ่านอยู่ แต่ใช้เป็นตัวตรวจว่า
+// แกะรายการมาครบหรือเปล่าเท่านั้น ไม่ได้เก็บลงเอกสาร — ดู `parseStatedTotalCost()`
 
 /**
  * ชิ้นส่วนข้อความของคำเตือนที่พูดถึง **ราคาที่อ่านมาจากไฟล์**
@@ -79,17 +68,10 @@ export interface CostControlImportMarkups {
 const PRICE_WARNING_FRAGMENTS = {
   rounding: "มียอดในไฟล์ต่างจาก จำนวน × ต้นทุน",
   blockTotalUnreadable: "อ่านยอดรวมไม่ได้",
-  sellingPriceClash: "ระบุราคาขายไว้ไม่ตรงกัน",
 } as const;
-
-export const EMPTY_MARKUPS: CostControlImportMarkups = {
-  operatingCost: null, operatingPct: null, bubbleCost: null, bubblePct: null,
-  entertainmentCost: null, sellingPrice: null,
-};
 
 export interface CostControlImportResult {
   header: CostControlImportHeader;
-  markups: CostControlImportMarkups;
   lines: CostControlLine[];
   /** เรื่องที่คนต้องรู้ก่อนกดสร้าง — แสดงเหนือตาราง preview */
   warnings: string[];
@@ -226,35 +208,22 @@ function valueRightOf(row: string[] | undefined, labelIdx: number): number | nul
 }
 
 /**
- * บล็อกสรุป 1-5 ท้ายใบ — ป้ายอยู่คอลัมน์ B (บางไฟล์ A) ยอดอยู่ถัดไปทางขวา
+ * ยอด "1. ราคาต้นทุน" ที่ไฟล์เขียนไว้ท้ายใบ — ป้ายอยู่คอลัมน์ B (บางไฟล์ A) ยอดอยู่ถัดไปทางขวา
  *
- * ตัดสินจาก**เลขข้อ** ไม่ใช่ข้อความ เพราะถ้อยคำต่างกันระหว่างไฟล์ ("Bubble cost" กับ "Bubble Cost")
- * เปอร์เซ็นต์ที่พิมพ์ไว้ในชื่อบรรทัด เช่น `"2. ค่าดำเนินการ (10%)"` เก็บแยกไว้ เพราะใบจริงพิมพ์มันออกมา
- * และยอดที่กรอกมักไม่ตรงกับ % นั้นเป๊ะ (คนปัดเอง) — ระบบจึงเก็บทั้งสองค่าตามที่ไฟล์บอก ไม่คิดใหม่ให้
+ * ตัดสินจาก**เลขข้อ** ไม่ใช่ข้อความ เพราะถ้อยคำต่างกันระหว่างไฟล์
+ *
+ * **ไม่ได้เก็บลงเอกสาร** — ใช้เทียบกับผลรวมของรายการที่แกะได้อย่างเดียว ถ้าไม่ตรงแปลว่าน่าจะแกะมาไม่ครบ
+ * ซึ่งเป็นการตรวจอัตโนมัติอย่างเดียวที่บอกได้ว่าชีตวางโครงไม่เหมือนที่คาด · ข้อ 2-5 (ค่าดำเนินการ/
+ * Bubble/Entertainment/ราคาขาย) เคยถูกอ่านมาใส่ให้ด้วย แต่ถอดออกแล้วเมื่อ 2026-08-31
  */
-function parseSummaryBlock(rows: string[][], from: number): { markups: CostControlImportMarkups; statedTotalCost: number | null } {
-  const markups: CostControlImportMarkups = { ...EMPTY_MARKUPS };
-  let statedTotalCost: number | null = null;
-
+function parseStatedTotalCost(rows: string[][], from: number): number | null {
   for (let i = from; i < rows.length; i++) {
     const labelIdx = cell(rows[i], 1) ? 1 : 0;
     const label = cell(rows[i], labelIdx);
     if (label.startsWith("Submitted by") || label.startsWith("Approved by")) break;
-    const m = label.match(/^([1-5])\.\s/);
-    if (!m) continue;
-
-    const value = valueRightOf(rows[i], labelIdx);
-    const pctMatch = label.match(/\(\s*([\d.]+)\s*%\s*\)/);
-    const pct = pctMatch ? Number(pctMatch[1]) : null;
-    switch (m[1]) {
-      case "1": statedTotalCost = value; break;
-      case "2": markups.operatingCost = value; markups.operatingPct = pct; break;
-      case "3": markups.bubbleCost = value; markups.bubblePct = pct; break;
-      case "4": markups.entertainmentCost = value; break;
-      default: markups.sellingPrice = value; break;
-    }
+    if (/^1\.\s/.test(label)) return valueRightOf(rows[i], labelIdx);
   }
-  return { markups, statedTotalCost };
+  return null;
 }
 
 function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): CostControlImportResult {
@@ -282,7 +251,7 @@ function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): Cost
   }
   if (headerRowIdx === -1) {
     return {
-      header, lines, markups: { ...EMPTY_MARKUPS }, sheetKind: "costControl",
+      header, lines, sheetKind: "costControl",
       warnings: ["ไม่พบแถวหัวตาราง (\"ลำดับที่\") ในชีตนี้"],
     };
   }
@@ -325,9 +294,7 @@ function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): Cost
     }
   }
 
-  const { markups, statedTotalCost } = summaryStart === -1
-    ? { markups: { ...EMPTY_MARKUPS }, statedTotalCost: null }
-    : parseSummaryBlock(rows, summaryStart);
+  const statedTotalCost = summaryStart === -1 ? null : parseStatedTotalCost(rows, summaryStart);
 
   if (lines.length === 0) warnings.push("อ่านชีตได้แต่ไม่พบรายการเลย — ตรวจว่าเลือกชีตถูกไหม");
   if (rounded > 0) {
@@ -349,7 +316,7 @@ function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): Cost
     );
   }
 
-  return { header, lines, markups, warnings, sheetKind: "costControl" };
+  return { header, lines, warnings, sheetKind: "costControl" };
 }
 
 // ── ชีต SC — แกะเป็นบล็อก ───────────────────────────────────────────────────────────────────────
@@ -441,7 +408,7 @@ function parseScSheet(rows: string[][]): CostControlImportResult {
       `ใบจริงมักถูกแตก/ยุบบรรทัดต่างจากนี้ กรุณาตรวจและแก้ก่อนกดสร้าง`,
     );
   }
-  return { header, lines, markups: { ...EMPTY_MARKUPS }, warnings, sheetKind: "sc" };
+  return { header, lines, warnings, sheetKind: "sc" };
 }
 
 /**
@@ -469,40 +436,26 @@ export function parseCostControlSheet(rows: string[][], kind: SheetKind, fills?:
  *
  * - **คั่นด้วยหัวกลุ่มชื่อชีต** ทุกชุด เพื่อให้ยังรู้ว่าบรรทัดไหนมาจากไหนหลังรวมแล้ว (ลบทิ้งได้ใน preview)
  * - **หัวใบ** เอาค่าแรกที่ไม่ว่างของแต่ละช่อง ไล่ตามลำดับชีตที่เลือก
- * - **บล็อกสรุป** เอาของชีตแรกที่มีค่า **ไม่บวกกัน** — ราคาขายเป็นของทั้งงาน ไม่ใช่ของแต่ละชีต
- *   ถ้าชีตอื่นระบุราคาขายไว้ต่างกันจะเตือนให้ตรวจ เพราะเลือกให้เองไม่ได้
+ * - เดิมมีกติกาข้อสามเรื่องบล็อกสรุป (เอาของชีตแรก ไม่บวกกัน เตือนเมื่อราคาขายชนกัน) — ตกไปเมื่อ
+ *   2026-08-31 พร้อมกับการถอดบล็อกสรุปออกจากโมดูล
  */
 export function mergeCostControlImports(parts: { sheetName: string; result: CostControlImportResult }[]): CostControlImportResult {
   if (parts.length === 1) return parts[0].result;
 
   const header: CostControlImportHeader = { jobName: "", workType: "", jobOrder: "", docDate: "" };
-  const markups: CostControlImportMarkups = { ...EMPTY_MARKUPS };
   const lines: CostControlLine[] = [];
   const warnings: string[] = [`รวม ${parts.length} ชีตเป็นใบเดียว — แต่ละชุดคั่นด้วยหัวกลุ่มชื่อชีต ลบออกได้ถ้าไม่ต้องการ`];
 
-  const sellingPrices: number[] = [];
   for (const { sheetName, result } of parts) {
     for (const key of Object.keys(header) as (keyof CostControlImportHeader)[]) {
       if (!header[key] && result.header[key]) header[key] = result.header[key];
     }
-    for (const key of Object.keys(markups) as (keyof CostControlImportMarkups)[]) {
-      if (markups[key] === null && result.markups[key] !== null) markups[key] = result.markups[key];
-    }
-    if (result.markups.sellingPrice !== null) sellingPrices.push(result.markups.sellingPrice);
-
     lines.push(makeLine("group", { description: sheetName }));
     lines.push(...result.lines);
     warnings.push(...result.warnings.map((w) => `[${sheetName}] ${w}`));
   }
 
-  if (new Set(sellingPrices).size > 1) {
-    warnings.push(
-      `ชีตที่เลือก${PRICE_WARNING_FRAGMENTS.sellingPriceClash} (${sellingPrices.map((p) => p.toLocaleString("th-TH")).join(", ")}) — ` +
-      `ใช้ค่าของชีตแรกไว้ก่อน กรุณาตรวจก่อนสร้าง`,
-    );
-  }
-
-  return { header, markups, lines, warnings, sheetKind: parts[0].result.sheetKind };
+  return { header, lines, warnings, sheetKind: parts[0].result.sheetKind };
 }
 
 /**
@@ -511,6 +464,9 @@ export function mergeCostControlImports(parts: { sheetName: string; result: Cost
  * เจ้าของสั่งไว้ว่า *"cost control เวลาโยนไฟล์เข้าไปให้เอาราคาออกให้ด้วย"* และยืนยันว่าหมายถึง
  * **ลบราคาออก ให้เหลือแต่รายการ** แล้วไปกรอกต้นทุน/ราคาขายเองในเอกสาร · เหตุผลคือราคาในไฟล์
  * ประเมินมักยังไม่ใช่ต้นทุนจริงที่จะใช้ตัดสินใจ การให้มันติดมาเลยทำให้คนเผลอเชื่อตัวเลขที่ยังไม่ได้ตรวจ
+ *
+ * ต่อมาวันเดียวกัน เจ้าของสั่งถอดบล็อกสรุป (ค่าดำเนินการ/Bubble/Entertainment/ราคาขาย/กำไร) ออก
+ * ทั้งโมดูล ฟังก์ชันนี้จึงเหลือหน้าที่ล้างต้นทุนรายบรรทัดกับคัดคำเตือนอย่างเดียว
  *
  * **ตัดที่นี่ ไม่ตัดในตัวแกะไฟล์** เป็นเรื่องตั้งใจ: `parseCostControlSheet()` ต้องอ่านไฟล์ให้ตรงตามจริง
  * ต่อไป เพราะคำเตือน "ไฟล์ระบุราคาต้นทุน X แต่รวมจากรายการที่แกะได้ Y" คือ**เครื่องมือเดียว**ที่จับได้ว่า
@@ -525,7 +481,6 @@ export function stripImportedPrices(result: CostControlImportResult): CostContro
   return {
     ...result,
     lines: result.lines.map((line) => ({ ...line, unitCost: null })),
-    markups: { ...EMPTY_MARKUPS },
     warnings: result.warnings.filter(
       (w) => !Object.values(PRICE_WARNING_FRAGMENTS).some((fragment) => w.includes(fragment)),
     ),
