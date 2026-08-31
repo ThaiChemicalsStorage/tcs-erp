@@ -277,6 +277,10 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
 const approvalConfig: ApprovalConfig<JobOrderFields & { _id: string }> = {
   label: "ใบสั่งงาน",
   approvePermission: "jobOrder:finalize",
+  submitNotification: {
+    type: "job_order_submitted", module: "ใบสั่งงาน",
+    relatedField: "relatedJobOrderId", context: (doc) => doc.jobCode || "",
+  },
   collection: async () => (await jobOrdersCollection()) as unknown as Collection<JobOrderFields & { _id: string }>,
   load: loadOrThrow,
   canEdit,

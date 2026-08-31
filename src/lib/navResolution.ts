@@ -25,6 +25,17 @@ import type { Permission } from "./permissions";
 export interface NavCandidate<K extends string> {
   key: K;
   permission?: Permission;
+  /**
+   * เห็นเมนูนี้ถ้ามี**สิทธิ์ใดสิทธิ์หนึ่ง**ในรายการ (2026-08-31) — ต่างจาก `permission` ที่ต้องมีตัวนั้นตัวเดียว
+   *
+   * มีที่ใช้ที่เดียวคือกล่อง "เอกสารรออนุมัติ" ซึ่งรวมเอกสาร 10 ชนิดที่มีสิทธิ์อนุมัติคนละตัว และไม่มีสิทธิ์
+   * ตัวไหนเป็นเจ้าของหน้านั้นได้ · ทางเลือกคือตั้งสิทธิ์ `pendingApprovals:view` ขึ้นมาใหม่ ซึ่งจะกลายเป็น
+   * สิทธิ์ที่แอดมินต้องไปติ๊กเองเพิ่มอีกตัวเพื่อเปิดหน้าที่ไม่ได้ให้อำนาจอะไรใหม่เลย — หน้านี้แสดงเฉพาะสิ่งที่
+   * ผู้ใช้อนุมัติได้อยู่แล้ว การเห็นเมนูจึงควรตามสิทธิ์ที่มีอยู่ ไม่ใช่สิทธิ์ใบใหม่
+   *
+   * ระบุทั้งคู่ = ต้องผ่านทั้งคู่ (ยังไม่มีที่ใช้ แต่เป็นความหมายที่ไม่ทำให้ประหลาดใจ)
+   */
+  anyPermission?: Permission[];
 }
 
 export interface NavResolution<K extends string, T extends NavCandidate<K>> {
@@ -65,9 +76,12 @@ export function resolveNav<K extends string, T extends NavCandidate<K>>({
 
   // Two independent filters: permission (can this user reach the page at all) and per-role nav
   // hiding (should this role be *offered* it — presentation only, see isNavHiddenForRole).
-  const visibleNavItems = navItems.filter((item) =>
+  const allowedByPermission = (item: NavCandidate<K>): boolean =>
     (!item.permission || hasPermission(currentUser, roles, item.permission))
-    && !isNavHiddenForUser(currentUser, roles, item.key));
+    && (!item.anyPermission || item.anyPermission.some((p) => hasPermission(currentUser, roles, p)));
+
+  const visibleNavItems = navItems.filter((item) =>
+    allowedByPermission(item) && !isNavHiddenForUser(currentUser, roles, item.key));
 
   // Whichever nav item this role actually sees first — the landing page and the fallback both use it
   // instead of a hardcoded "dashboard", so a role without Dashboard in its sidebar can never end up
@@ -76,7 +90,7 @@ export function resolveNav<K extends string, T extends NavCandidate<K>>({
 
   const activeNavItem = navItems.find((n) => n.key === activeNav);
   const activeNavAllowed = activeNav === settingsKey
-    || ((!activeNavItem?.permission || hasPermission(currentUser, roles, activeNavItem.permission))
+    || ((!activeNavItem || allowedByPermission(activeNavItem))
       && !isNavHiddenForUser(currentUser, roles, activeNav));
 
   return {

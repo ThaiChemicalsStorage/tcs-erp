@@ -125,3 +125,54 @@ describe("nav resolution once roles are known", () => {
     expect(r.effectiveNav).toBe("settings"); // nothing visible, so the last-resort home
   });
 });
+
+/**
+ * เมนูที่เปิดด้วย "สิทธิ์ใดสิทธิ์หนึ่ง" (2026-08-31) — มีที่ใช้ที่เดียวคือกล่อง "เอกสารรออนุมัติ"
+ * ซึ่งรวมเอกสาร 10 ชนิดที่มีสิทธิ์อนุมัติคนละตัว และไม่มีสิทธิ์ตัวไหนเป็นเจ้าของหน้านั้นได้
+ *
+ * The trap this guards: `anyPermission` gates the sidebar, but the *page* has to answer the same
+ * way. `effectiveNav` is computed from a different branch than `visibleNavItems`, and the original
+ * code duplicated the permission test in both — so a rule added to one and not the other produces a
+ * page reachable by URL that its owner can never see in the menu. Both branches now share one
+ * predicate, and these tests hold them together.
+ */
+describe("menus opened by any one of several permissions", () => {
+  type ANav = "dashboard" | "pendingApprovals" | "settings";
+  const A_ITEMS: NavCandidate<ANav>[] = [
+    { key: "dashboard", permission: "dashboard:view" },
+    { key: "pendingApprovals", anyPermission: ["purchaseRequest:finalize", "costControl:finalize"] },
+    { key: "settings" },
+  ];
+  const roleWith = (key: string, permissions: string[]) =>
+    ({ ...defaultRoles[0], key, name: key, isSuperAdmin: false, permissions } as Role);
+
+  it("holding just one of the listed permissions is enough", () => {
+    const role = roleWith("one_test", ["dashboard:view", "costControl:finalize"]);
+    const r = resolveNav<ANav, NavCandidate<ANav>>({
+      activeNav: "pendingApprovals", navItems: A_ITEMS, currentUser: userWithRole("one_test"),
+      roles: [role], rolesReady: true, settingsKey: "settings",
+    });
+    expect(r.visibleNavItems.map((i) => i.key)).toContain("pendingApprovals");
+    expect(r.effectiveNav).toBe("pendingApprovals");
+  });
+
+  it("holding none of them hides the menu — and the page too, not just the menu", () => {
+    const role = roleWith("none_of_them", ["dashboard:view", "purchaseRequest:view"]);
+    const r = resolveNav<ANav, NavCandidate<ANav>>({
+      activeNav: "pendingApprovals", navItems: A_ITEMS, currentUser: userWithRole("none_of_them"),
+      roles: [role], rolesReady: true, settingsKey: "settings",
+    });
+    expect(r.visibleNavItems.map((i) => i.key)).not.toContain("pendingApprovals");
+    // ที่สำคัญกว่าคือบรรทัดนี้: เข้าด้วย URL ตรง ๆ ก็ต้องไม่ได้ ไม่ใช่แค่ไม่ขึ้นในเมนู
+    expect(r.effectiveNav).toBe("dashboard");
+  });
+
+  it("an item with neither permission nor anyPermission is still visible to everyone", () => {
+    const role = roleWith("empty_test", []);
+    const r = resolveNav<ANav, NavCandidate<ANav>>({
+      activeNav: "settings", navItems: A_ITEMS, currentUser: userWithRole("empty_test"),
+      roles: [role], rolesReady: true, settingsKey: "settings",
+    });
+    expect(r.visibleNavItems.map((i) => i.key)).toEqual(["settings"]);
+  });
+});

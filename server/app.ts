@@ -54,6 +54,7 @@ const API_ROUTES: Record<string, ApiHandler> = {
   customers: customersHandler,
   vendors: customersHandler,
   "code-entries": customersHandler,
+  "pending-approvals": customersHandler,
   search: customersHandler,
   "service-templates": customersHandler,
   "service-reports": customersHandler,

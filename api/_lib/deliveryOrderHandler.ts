@@ -5,10 +5,11 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildOwnershipClause } from "./visibility.js";
 import {
   deliveryOrdersCollection, scopeOfWorksCollection, auditLogCollection,
-  usersCollection, rolesCollection, notificationsCollection, departmentsCollection,
+  usersCollection, notificationsCollection, departmentsCollection,
   toObjectId, withStringId, type DeliveryOrderFields, type ScopeOfWorkFields,
 } from "./collections.js";
-import { roleHasPermission, findRole } from "../../src/lib/roles.js";
+import { activeUserIdsWithPermission } from "./departmentNotify.js";
+import { roleHasPermission } from "../../src/lib/roles.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
@@ -527,17 +528,6 @@ async function notifyDeliveryOrderApprovalEvent(
     relatedDeliveryOrderId: deliveryOrderId, relatedScopeNumber: scopeNumber,
     createdAt, read: false,
   })));
-}
-
-async function activeUserIdsWithPermission(permission: Parameters<typeof roleHasPermission>[1]): Promise<string[]> {
-  const [users, roles] = await Promise.all([usersCollection(), rolesCollection()]);
-  const [activeUsers, roleList] = await Promise.all([
-    users.find({ status: "active" }, { projection: { roleKey: 1 } }).toArray(),
-    roles.find({}).toArray(),
-  ]);
-  return activeUsers
-    .filter((u) => roleHasPermission(findRole(roleList, u.roleKey), permission))
-    .map((u) => u._id.toString());
 }
 
 async function handleSubmitApproval(req: VercelRequest, res: VercelResponse, id: string) {

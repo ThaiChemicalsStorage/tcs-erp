@@ -4,6 +4,8 @@ import { HttpError } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { nowIso } from "../../src/lib/products.js";
 import type { Permission } from "../../src/lib/permissions.js";
+import type { NotificationType } from "../../src/lib/notifications.js";
+import { activeUserIdsWithPermission, notifyUsers } from "./departmentNotify.js";
 
 /**
  * ขั้นตอนอนุมัติเอกสารร่วม (ร่าง → รออนุมัติ → อนุมัติ) สำหรับใบเบิก-คืนวัสดุ / ใบขอซื้อ / ใบสั่งงาน /
@@ -77,6 +79,22 @@ export interface ApprovalConfig<TDoc extends ApprovableFields> {
    * ไม่ระบุ = helper เติม approvedBy ให้ตามค่าเริ่มต้น
    */
   approvalStamp?: (ctx: AuthContext, doc: TDoc) => Record<string, unknown>;
+  /**
+   * แจ้งเตือน**ผู้มีสิทธิ์อนุมัติ**ตอนกดส่งขออนุมัติ (2026-08-31) — เจ้าของขอไว้ 2026-08-28
+   * ไม่ระบุ = ไม่แจ้ง (ค่าเริ่มต้นเดิม คือเขียนแค่ audit log)
+   *
+   * ผู้รับหาจาก `approvePermission` ของ config ตัวเดียวกัน ไม่ใช่จากแผนก — เพราะสิ่งที่เจ้าของอธิบาย
+   * คือ *"เฮดคนนึงต้องอนุมัติหลายแผนก"* คนที่ควรได้รับจึงคือคนที่**กดอนุมัติใบนี้ได้จริง** ไม่ว่าจะอยู่ฝ่ายไหน
+   */
+  submitNotification?: {
+    type: NotificationType;
+    /** ชื่อโมดูลที่โชว์บนกระดิ่ง เช่น "ใบสั่งผลิต" */
+    module: string;
+    /** ชื่อฟิลด์ deep-link บน `Notification` เช่น "relatedJobOrderId" */
+    relatedField: string;
+    /** ข้อความสั้น ๆ บอกว่าเป็นใบของงานไหน เช่นรหัสงานหรือชื่อลูกค้า — วงเล็บต่อท้ายให้เอง */
+    context?: (doc: TDoc) => string;
+  };
   respond: (res: VercelResponse, doc: TDoc) => void;
 }
 
@@ -106,7 +124,38 @@ export async function handleSubmitApproval<TDoc extends ApprovableFields>(
   // ล้างเหตุผลปฏิเสธเดิมทิ้ง — ไม่งั้นใบที่แก้แล้วส่งใหม่จะยังโชว์เหตุผลรอบก่อนค้างอยู่
   const updated = await applyStatusChange(cfg, id, ctx, { status: "PendingApproval", rejectionComment: "" });
   await cfg.writeAudit(ctx, `${cfg.label} Submitted`, `ส่งขออนุมัติ${cfg.label} ${id}`, updated);
+  await notifyApprovers(cfg, id, ctx, updated);
   cfg.respond(res, updated);
+}
+
+/**
+ * แจ้งผู้ที่กดอนุมัติใบนี้ได้ว่ามีใบรอเขาอยู่
+ *
+ * **best-effort โดยตั้งใจ** — แนวเดียวกับการส่งต่อหลังอนุมัติ: การส่งขออนุมัติต้องไม่ล้มเพราะแจ้งเตือน
+ * ส่งไม่ออก แต่ "ไม่มีผู้รับเลย" คือความล้มเหลวแบบเงียบที่แย่ที่สุด (กดส่งแล้วนึกว่ามีคนรู้ ทั้งที่ไม่มี)
+ * จึงเขียน log ไว้ให้ตามได้ · สาเหตุที่พบบ่อยคือยังไม่มีบทบาทไหนได้สิทธิ์อนุมัติใบนั้นเลย
+ */
+async function notifyApprovers<TDoc extends ApprovableFields>(
+  cfg: ApprovalConfig<TDoc>, id: string, ctx: AuthContext, doc: TDoc,
+): Promise<void> {
+  const n = cfg.submitNotification;
+  if (!n) return;
+  try {
+    const context = n.context?.(doc)?.trim() ?? "";
+    const sent = await notifyUsers(await activeUserIdsWithPermission(cfg.approvePermission), ctx.user.id, {
+      type: n.type,
+      title: `${cfg.label}รออนุมัติ`,
+      description: `${ctx.user.fullName} ส่ง${cfg.label} ${id}${context ? ` (${context})` : ""} เพื่อขออนุมัติ`,
+      module: n.module,
+      related: { [n.relatedField]: id },
+    });
+    if (sent === 0) {
+      console.warn(`[document-approval] ${id} submitted but nobody was notified —`,
+        `no active user holds ${cfg.approvePermission}`);
+    }
+  } catch (err) {
+    console.error(`[document-approval] failed to notify approvers of ${id}`, err);
+  }
 }
 
 /** รออนุมัติ → อนุมัติแล้ว (ปุ่ม "อนุมัติ") */

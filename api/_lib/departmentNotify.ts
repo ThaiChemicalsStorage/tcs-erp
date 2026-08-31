@@ -1,4 +1,6 @@
-import { usersCollection, notificationsCollection } from "./collections.js";
+import { usersCollection, notificationsCollection, rolesCollection } from "./collections.js";
+import { roleHasPermission, findRole } from "../../src/lib/roles.js";
+import type { Permission } from "../../src/lib/permissions.js";
 import { nowIso } from "../../src/lib/products.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
 
@@ -66,6 +68,56 @@ export async function notifyDepartments(
     read: false,
   })));
   return recipientIds.length;
+}
+
+/**
+ * พนักงาน active ทุกคนที่บทบาทมีสิทธิ์ที่ระบุ — ใช้หาผู้อนุมัติ
+ *
+ * ยกมาไว้ที่กลาง 2026-08-31 ตอนทำแจ้งเตือน "รออนุมัติ" ของเอกสาร 6 ใบบนเครื่องอนุมัติร่วม ก่อนหน้านั้น
+ * ฟังก์ชันตัวนี้ถูก**ก๊อปไว้ 3 ไฟล์แบบตัวต่อตัว** (`scopeOfWorkHandler`, `deliveryOrderHandler`,
+ * `serviceReportHandler`) และไม่มีตัวไหน export — การเพิ่มที่ใช้ที่ 4 จึงเป็นจังหวะที่ควรยุบ ไม่ใช่ก๊อปอีก
+ *
+ * **โหลดบทบาททั้งตารางมากรองในหน่วยความจำโดยตั้งใจ** — สิทธิ์เก็บเป็น array ในเอกสารบทบาท ไม่ใช่แถวต่อสิทธิ์
+ * จึงเขียนเป็น query ไม่ได้ตรง ๆ และตารางบทบาทมีไม่กี่สิบแถว
+ */
+export async function activeUserIdsWithPermission(permission: Permission): Promise<string[]> {
+  const [users, roles] = await Promise.all([usersCollection(), rolesCollection()]);
+  const [activeUsers, roleList] = await Promise.all([
+    users.find({ status: "active" }, { projection: { roleKey: 1 } }).toArray(),
+    roles.find({}).toArray(),
+  ]);
+  return activeUsers
+    .filter((u) => roleHasPermission(findRole(roleList, u.roleKey), permission))
+    .map((u) => u._id.toString());
+}
+
+/**
+ * ส่งแจ้งเตือนถึงผู้ใช้ตาม id ที่ระบุ — คู่กับ `notifyDepartments` แต่เลือกผู้รับจาก**สิทธิ์** ไม่ใช่แผนก
+ * ไม่ส่งถึงตัวผู้กระทำเอง และตัด id ซ้ำออก
+ *
+ * @returns จำนวนคนที่ได้รับจริง — 0 แปลว่าไม่มีใครได้รับเลย ซึ่งผู้เรียกควรเขียน log ไว้
+ */
+export async function notifyUsers(
+  recipientUserIds: string[],
+  actingUserId: string,
+  notification: DepartmentNotification,
+): Promise<number> {
+  const recipients = [...new Set(recipientUserIds)].filter((uid) => uid && uid !== actingUserId);
+  if (recipients.length === 0) return 0;
+
+  const createdAt = nowIso();
+  const notifications = await notificationsCollection();
+  await notifications.insertMany(recipients.map((recipientUserId) => ({
+    recipientUserId,
+    type: notification.type,
+    title: notification.title,
+    description: notification.description,
+    module: notification.module,
+    ...notification.related,
+    createdAt,
+    read: false,
+  })));
+  return recipients.length;
 }
 
 /** ส่งแจ้งเตือนถึงคนเดียว เช่น แจ้งกลับผู้ขอเพิ่มสินค้าว่าสโตร์ตั้งรหัสให้แล้ว */

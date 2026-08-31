@@ -330,6 +330,10 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
 const approvalConfig: ApprovalConfig<CostControlFields & { _id: string }> = {
   label: "Cost Control",
   approvePermission: "costControl:finalize",
+  submitNotification: {
+    type: "cost_control_submitted", module: "Cost Control",
+    relatedField: "relatedCostControlId", context: (doc) => doc.jobOrder || "",
+  },
   collection: async () => (await costControlsCollection()) as unknown as Collection<CostControlFields & { _id: string }>,
   load: loadOrThrow,
   canEdit,

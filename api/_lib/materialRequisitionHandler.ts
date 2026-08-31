@@ -349,6 +349,10 @@ async function handleReturn(req: VercelRequest, res: VercelResponse, id: string)
 const approvalConfig: ApprovalConfig<MaterialRequisitionFields & { _id: string }> = {
   label: "ใบเบิกและใบคืนวัสดุ",
   approvePermission: "materialRequisition:finalize",
+  submitNotification: {
+    type: "material_requisition_submitted", module: "ใบเบิกและใบคืนวัสดุ",
+    relatedField: "relatedMaterialRequisitionId", context: (doc) => doc.jobCode || "",
+  },
   collection: async () => (await materialRequisitionsCollection()) as unknown as Collection<MaterialRequisitionFields & { _id: string }>,
   load: loadOrThrow,
   canEdit,

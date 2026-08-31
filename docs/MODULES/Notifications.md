@@ -18,6 +18,22 @@ Tell each user, specifically, when a quotation event relevant to them happens �
      - Approve/Reject/Customer Accepted/Customer Rejected → the quote's creator (`createdByUserId`)
      - **Won/Lost/Cancelled** (added 2026-07-10, fifth pass) → the quote's creator — previously these three terminal transitions silently notified no one, unlike every other transition; found by an independent Codex re-review
    - **Scope of Work document routing** (added 2026-07-23, `handleSendDocumentNotifications()` in `api/_lib/scopeOfWorkHandler.ts`'s `POST /api/scope-of-works/:id/send-documents`) → every user explicitly picked as a document recipient (see [ScopeOfWork.md](./ScopeOfWork.md) "Document Recipients") — **not role-based**, a human explicitly chose these specific people, unlike every quotation-workflow notification above. Fired for every resolved recipient regardless of that individual's own outbound-email success/failure (the in-app notification and the email are independent channels).
+   - **Document submitted for approval** (added 2026-08-31, `notifyApprovers()` in
+     `api/_lib/documentApproval.ts`, fired by `POST /api/X/:id/submit-approval`) → every active
+     user whose role holds **that document's own approve permission**. Covers all six documents on
+     the shared approval engine (ใบเบิก / ใบขอซื้อ / ใบสั่งงาน / ใบสั่งผลิต / ใบสั่งซื้อ / Cost Control),
+     which until then wrote an audit entry and notified nobody.
+
+     **Why permission and not department:** the owner asked for this because *"เฮดคนนึงต้องอนุมัติ
+     หลายแผนก"* — one head approves across several departments. Resolving recipients by department
+     would miss exactly that person for every department but their own. Contrast
+     `notifyDepartments()`, which is right for the *post*-approval hand-off ("this is now
+     Purchasing's problem"), where the destination genuinely is a department.
+
+     **Best-effort, like the post-approval hand-off:** a failure is logged and swallowed — the
+     status change must not fail because a notification could not be written. Zero recipients is a
+     `console.warn`, since that is the silent failure that matters (usually: no role holds the
+     approve permission yet).
 5. Real cross-user, cross-device delivery — another user's browser sees the new notification (and updated unread badge) the next time it fetches `GET /api/notifications`, no same-browser/same-session limitation. **2026-07-24 (direct user request — "ต้องกดรีก่อนรอบนึงแจ้งเตือนถึงจะขึ้น")**: that fetch is now automatic — `App.tsx` polls `GET /api/notifications` every 45 seconds while signed in, plus an immediate refetch on window focus and on a hidden→visible tab transition (polling pauses while the tab is hidden, so a backgrounded tab costs nothing). Previously notifications were fetched once at boot only, so nothing new ever appeared without a full page reload. Polling was chosen over SSE/WebSocket deliberately: the Vercel serverless backend can't hold a connection open, and polling is fully portable to the future self-managed server — SSE is recorded as a possible post-migration upgrade in [SERVER_MIGRATION_PLAN.md](../SERVER_MIGRATION_PLAN.md).
 
 ## Pages
@@ -34,7 +50,9 @@ None — lives entirely in the header, not a dedicated page. (No "view all notif
 
 ## APIs
 
-`GET /api/notifications`, `PATCH /api/notifications/:id` (mark read), `POST /api/notifications/mark-all-read`, `DELETE /api/notifications/:id` — see [API.md](../API.md) Notifications section. Creation isn't a direct client-callable route; it's a side effect of `POST /api/quotes/:id/workflow` and, as of 2026-07-23, `POST /api/scope-of-works/:id/send-documents` too (see Business Flow above).
+`GET /api/notifications`, `PATCH /api/notifications/:id` (mark read), `POST /api/notifications/mark-all-read`, `DELETE /api/notifications/:id` — see [API.md](../API.md) Notifications section. Creation isn't a direct client-callable route; it's a side effect of `POST /api/quotes/:id/workflow`, `POST /api/scope-of-works/:id/send-documents` (2026-07-23) and, as of 2026-08-31, every `POST /api/X/:id/submit-approval` on the shared approval engine (see Business Flow above).
+
+The related read-side page is `GET /api/pending-approvals` — the cross-department "เอกสารรออนุมัติ" inbox added the same day, which answers "what is still waiting on me" for anyone who missed or dismissed the bell. See [API.md](../API.md) "Pending approvals inbox".
 
 ## Permissions
 
@@ -50,6 +68,20 @@ None of its own — delivery is inherently role-based (see Business Flow), but r
 - **16 notification types** (added `quotation_won`/`quotation_lost`/`quotation_cancelled` 2026-07-10, fifth pass; `scope_of_work_document_sent` 2026-07-23; **2026-07-24 (approval workflow)**: `scope_of_work_submitted/approved/rejected` + `delivery_order_submitted/approved/rejected` — submitted → every active `*:finalize` holder, approved/rejected → the creator; the `delivery_order_*` types carry the new `relatedDeliveryOrderId` field, checked FIRST in `App.tsx`'s bell `onNavigate`, deep-linking to the standalone Delivery Order page) — each with its own `NotificationBell.tsx` icon
 - **2026-07-23**: first notification type not tied to the quotation approval workflow at all — `scope_of_work_document_sent`, delivered to explicitly-picked people rather than everyone holding a permission (see Business Flow above)
 - **2026-07-24**: automatic 45-second polling + refetch-on-focus (see Business Flow #5) — new notifications appear without a manual page reload
+- **2026-08-31**: six `*_submitted` types for the shared approval engine —
+  `material_requisition_submitted`, `purchase_request_submitted`, `job_order_submitted`,
+  `production_order_submitted`, `purchase_order_submitted`, `cost_control_submitted` — **22 types
+  total**. Four of those documents had **no deep-link field on `Notification` at all**, so they
+  gained `relatedJobOrderId` / `relatedProductionOrderId` / `relatedPurchaseOrderId` /
+  `relatedCostControlId`, checked in `App.tsx`'s `onNavigate` **above `relatedScopeId`** for the
+  reason already commented there since 2026-08-27: these notifications carry a scope too, and
+  checking scope first would open the wrong page. Without the fields the bell would show a
+  notification that goes nowhere when clicked — the failure `deliveryOrderHandler.ts` warns about
+  from experience.
+- **2026-08-31**: `activeUserIdsWithPermission()` moved to `api/_lib/departmentNotify.ts` and
+  exported, alongside a new `notifyUsers()` (the by-user-id counterpart of `notifyDepartments()`).
+  It had been copied byte-for-byte into three handlers and exported from none; adding a fourth
+  caller was the moment to collapse it rather than copy it again.
 - **2026-07-29**: `scope_of_work_po_chase` ("ทวงเลข PO", BellRing icon) — fired by `POST /api/scope-of-works/:id/chase-po` to the record's resolved salesperson (name-matched user → seller link → creator) when someone chases a missing customer PO number; deep-links via `relatedScopeId` like the other Scope of Work types. See [MODULES/ScopeOfWork.md](./ScopeOfWork.md) "PO Chasing".
 
 ## Future Improvements

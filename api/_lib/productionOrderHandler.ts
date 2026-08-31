@@ -194,6 +194,10 @@ async function loadOrThrow(id: string) {
 const approvalConfig: ApprovalConfig<ProductionOrderFields & { _id: string }> = {
   label: "ใบสั่งผลิต",
   approvePermission: "productionOrder:finalize",
+  submitNotification: {
+    type: "production_order_submitted", module: "ใบสั่งผลิต",
+    relatedField: "relatedProductionOrderId", context: (doc) => doc.jobCode || "",
+  },
   collection: async () => (await productionOrdersCollection()) as unknown as Collection<ProductionOrderFields & { _id: string }>,
   load: loadOrThrow,
   canEdit,

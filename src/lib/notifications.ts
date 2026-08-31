@@ -28,6 +28,14 @@ export type NotificationType =
   //    ตัวช่วยอนุมัติร่วม (api/_lib/documentApproval.ts) เขียนแค่ audit log เท่านั้น
   | "material_requisition_approved"
   | "purchase_request_approved"
+  // ── รออนุมัติ (2026-08-31) — เจ้าของขอไว้ 2026-08-28: "ทำแจ้งเตือนให้ด้วยถ้ามีคนกดขอส่งอนุมัติ
+  //    ให้แจ้งเตือนคนที่มีสิทธิ์อนุมัติ" · เอกสาร 6 ใบบนเครื่องอนุมัติร่วมเคยเขียนแค่ audit log
+  | "material_requisition_submitted"
+  | "purchase_request_submitted"
+  | "job_order_submitted"
+  | "production_order_submitted"
+  | "purchase_order_submitted"
+  | "cost_control_submitted"
   // ── คำขอเพิ่มสินค้า (2026-08-27) ──
   | "product_request_submitted"
   | "product_request_approved"
@@ -52,6 +60,14 @@ export interface Notification {
   relatedMaterialRequisitionId?: string;
   relatedPurchaseRequestId?: string;
   relatedProductRequestId?: string;
+  /**
+   * deep-link ของอีก 4 ใบบนเครื่องอนุมัติร่วม (2026-08-31) — เพิ่มพร้อมแจ้งเตือน "รออนุมัติ"
+   * ไม่มีฟิลด์พวกนี้ = กดแจ้งเตือนแล้วไปไหนไม่ได้ ซึ่งเป็นสิ่งที่ TODO เตือนไว้ก่อนเริ่มทำ
+   */
+  relatedJobOrderId?: string;
+  relatedProductionOrderId?: string;
+  relatedPurchaseOrderId?: string;
+  relatedCostControlId?: string;
   createdAt: string;
   read: boolean;
 }

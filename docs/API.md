@@ -616,8 +616,16 @@ Same 12/12 function-slot sharing convention as the other Project-family document
 
 ### Shared approval routes (`api/_lib/documentApproval.ts`)
 
-Applied identically to `material-requisitions`, `purchase-requests`, `job-orders` and
-`production-orders` (`X` below). Mirrors Scope of Work's existing workflow.
+Applied identically to `material-requisitions`, `purchase-requests`, `job-orders`,
+`production-orders`, `purchase-orders` and `cost-controls` (`X` below). Mirrors Scope of Work's
+existing workflow.
+
+**Since 2026-08-31, `submit-approval` also notifies the approvers.** Recipients are every active
+user whose role holds that document's own `approvePermission` — not a department, because the
+owner's stated reason for asking was *"เฮดคนนึงต้องอนุมัติหลายแผนก"*. It is **best-effort**: a
+notification failure is logged and swallowed, never allowed to fail the status change, matching the
+post-approval hand-off. Zero recipients is logged as a warning, since that is the silent failure
+that matters (usually: no role holds the approve permission yet).
 
 | Method & Path | Auth | Notes |
 |---|---|---|
@@ -626,6 +634,31 @@ Applied identically to `material-requisitions`, `purchase-requests`, `job-orders
 | `POST /api/X/:id/reject` | `{doc}:finalize` | `PendingApproval` → `Draft`. Body `{ comment }` — **required**, `400` without it. |
 | `POST /api/X/:id/withdraw-approval` | edit rights on the document | `PendingApproval` → `Draft`, for the submitter to take it back. No approve permission needed. |
 | `POST /api/X/:id/finalize` | `{doc}:finalize` | Kept as an **alias of `/approve`** for backward compatibility; now enforces the PendingApproval step like `/approve` does. |
+
+### Pending approvals inbox (`api/_lib/pendingApprovals.ts`, mounted at `/api/pending-approvals` via `api/handlers/customers.ts`)
+
+Added 2026-08-31, for the cross-department inbox the owner asked for on 2026-08-28.
+
+| Route | Permission | Notes |
+|---|---|---|
+| `GET /api/pending-approvals` | authenticated; **no permission of its own** | Returns `{ items }` — every document waiting on *this* user, oldest first. Each of the 10 categories is gated by that document's **approve** permission (`*:finalize`, `quotations:approve`, `productRequest:review`), so a user who can read a document but not approve it never sees it here. Holding none of them returns `[]`, not `403`. |
+
+Three things about it are load-bearing:
+
+- **Three status vocabularies, one list.** "รออนุมัติ" is stored as `PendingApproval` by eight
+  document types, `รออนุมัติ` by quotations, and `Pending` by product requests — three modules
+  built months apart. Unifying them would be a full-database migration; the translation happens
+  here instead.
+- **No ownership filter, deliberately.** Unlike `searchDocuments.ts`, this route does not apply
+  `buildOwnershipClause`. The caller already holds the approve permission, which outranks
+  "see other people's records", and filtering by `createdBy` would show an approver only the
+  documents they wrote themselves — the exact opposite of the request.
+- **`waitingSince` is `updatedAt`, not a real submission time**, for 9 of the 10 categories: no
+  document in this system records when it was submitted. Quotations are the exception — they keep
+  `approvalHistory`, so their `submitted` entry is the real thing. Recorded in `docs/TODO.md`.
+
+Each category is wrapped so one failing collection returns `[]` instead of emptying the page —
+the same `runCategory` discipline Global Search uses.
 
 ### Department separation on Material Requisition / Purchase Request
 

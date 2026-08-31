@@ -308,6 +308,10 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
 const approvalConfig: ApprovalConfig<PurchaseRequestFields & { _id: string }> = {
   label: "ใบขอซื้อ",
   approvePermission: "purchaseRequest:finalize",
+  submitNotification: {
+    type: "purchase_request_submitted", module: "ใบขอซื้อ",
+    relatedField: "relatedPurchaseRequestId", context: (doc) => doc.jobCode || "",
+  },
   collection: async () => (await purchaseRequestsCollection()) as unknown as Collection<PurchaseRequestFields & { _id: string }>,
   load: loadOrThrow,
   canEdit,

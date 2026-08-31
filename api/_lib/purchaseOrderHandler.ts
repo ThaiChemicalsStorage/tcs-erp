@@ -395,6 +395,10 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
 const approvalConfig: ApprovalConfig<PurchaseOrderFields & { _id: string }> = {
   label: "ใบสั่งซื้อ",
   approvePermission: "purchaseOrder:finalize",
+  submitNotification: {
+    type: "purchase_order_submitted", module: "ใบสั่งซื้อ",
+    relatedField: "relatedPurchaseOrderId", context: (doc) => doc.vendorName || doc.jobCode || "",
+  },
   collection: async () => (await purchaseOrdersCollection()) as unknown as Collection<PurchaseOrderFields & { _id: string }>,
   load: loadOrThrow,
   canEdit,

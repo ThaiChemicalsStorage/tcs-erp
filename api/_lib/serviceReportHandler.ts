@@ -5,11 +5,12 @@ import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import {
   serviceReportsCollection, serviceTemplatesCollection, customersCollection, usersCollection,
-  countersCollection, auditLogCollection, notificationsCollection, rolesCollection,
+  countersCollection, auditLogCollection, notificationsCollection,
   serviceChecklistPhotoFilesCollection,
   toObjectId, withStringId, type ServiceReportFields, type CustomerFields,
 } from "./collections.js";
-import { roleHasPermission, findRole } from "../../src/lib/roles.js";
+import { roleHasPermission } from "../../src/lib/roles.js";
+import { activeUserIdsWithPermission } from "./departmentNotify.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
 import { validateImageDataUrl } from "./uploadValidation.js";
@@ -217,15 +218,6 @@ async function notifyServiceEvent(
   await notifications.insertMany(ids.map((recipientUserId) => ({
     recipientUserId, type, title, description, module: "บริการ", relatedServiceReportId: serviceReportId, createdAt, read: false,
   })));
-}
-
-async function activeUserIdsWithPermission(permission: Parameters<typeof roleHasPermission>[1]): Promise<string[]> {
-  const [users, roles] = await Promise.all([usersCollection(), rolesCollection()]);
-  const [activeUsers, roleList] = await Promise.all([
-    users.find({ status: "active" }, { projection: { roleKey: 1 } }).toArray(),
-    roles.find({}).toArray(),
-  ]);
-  return activeUsers.filter((u) => roleHasPermission(findRole(roleList, u.roleKey), permission)).map((u) => u._id.toString());
 }
 
 // ─── Handlers ───────────────────────────────────────────────────────────────────────────────────

@@ -11,8 +11,8 @@ import {
   type ScopeOfWorkFields, type QuoteFields,
 } from "./collections.js";
 import { Binary } from "mongodb";
-import { roleHasPermission, findRole } from "../../src/lib/roles.js";
-import { rolesCollection } from "./collections.js";
+import { roleHasPermission } from "../../src/lib/roles.js";
+import { activeUserIdsWithPermission } from "./departmentNotify.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty, sanitizeBoolean } from "./quoteValidation.js";
 import { buildDefaultChecklistGroups, withDefaultChecklistGroups, sanitizeChecklistGroups } from "./documentRequirements.js";
@@ -732,18 +732,6 @@ async function notifyScopeApprovalEvent(
   })));
 }
 
-/** Every active user whose role holds `permission` — mirror of the quotation workflow's
- * approver-resolution query. */
-async function activeUserIdsWithPermission(permission: Parameters<typeof roleHasPermission>[1]): Promise<string[]> {
-  const [users, roles] = await Promise.all([usersCollection(), rolesCollection()]);
-  const [activeUsers, roleList] = await Promise.all([
-    users.find({ status: "active" }, { projection: { roleKey: 1 } }).toArray(),
-    roles.find({}).toArray(),
-  ]);
-  return activeUsers
-    .filter((u) => roleHasPermission(findRole(roleList, u.roleKey), permission))
-    .map((u) => u._id.toString());
-}
 
 async function handleSubmitApproval(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");

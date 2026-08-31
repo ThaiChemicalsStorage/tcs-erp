@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
-  LayoutDashboard, Settings, Package,
+  LayoutDashboard, Inbox, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
   Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory,
@@ -11,6 +11,7 @@ import { type JobType, fetchJobTypes } from "./lib/jobTypes";
 import { type Customer, fetchCustomers } from "./lib/customers";
 import { type Vendor, fetchVendors } from "./lib/vendors";
 import { type CodeEntry, fetchCodeEntries } from "./lib/codeRegister";
+import type { PendingApprovalItem } from "./lib/pendingApprovals";
 import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes";
 import { type User, fetchUsers, initials } from "./lib/users";
 import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
@@ -54,6 +55,7 @@ const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) =>
 const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then((m) => ({ default: m.CustomersPage })));
 const VendorsPage = lazy(() => import("./pages/vendors/VendorsPage").then((m) => ({ default: m.VendorsPage })));
 const CodeRegisterPage = lazy(() => import("./pages/codeRegister/CodeRegisterPage").then((m) => ({ default: m.CodeRegisterPage })));
+const PendingApprovalsPage = lazy(() => import("./pages/pendingApprovals/PendingApprovalsPage").then((m) => ({ default: m.PendingApprovalsPage })));
 const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateManagementPage").then((m) => ({ default: m.TemplateManagementPage })));
 const ScopeOfWorkPage = lazy(() => import("./pages/scopeOfWork/ScopeOfWorkPage").then((m) => ({ default: m.ScopeOfWorkPage })));
 const DeliveryOrderPage = lazy(() => import("./pages/deliveryOrder/DeliveryOrderPage").then((m) => ({ default: m.DeliveryOrderPage })));
@@ -143,7 +145,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
@@ -174,10 +176,26 @@ interface NavItem {
   icon: LucideIcon;
   labelKey: TranslationKey;
   permission?: Permission;
+  /** เห็นเมนูถ้ามีสิทธิ์ใดสิทธิ์หนึ่ง — ดู `NavCandidate` ใน navResolution.ts */
+  anyPermission?: Permission[];
 }
+
+/**
+ * สิทธิ์ที่ทำให้ "อนุมัติเอกสารได้" ทั้ง 10 ชนิด — ต้องตรงกับ `KINDS` ใน `api/_lib/pendingApprovals.ts`
+ * ถ้าสองที่นี้ไม่ตรงกัน อาการคือเมนูขึ้นแต่หน้าว่าง (หรือแย่กว่า: มีของรออยู่แต่เมนูไม่ขึ้น)
+ */
+const APPROVAL_PERMISSIONS: Permission[] = [
+  "quotations:approve", "scopeOfWork:finalize", "deliveryOrder:finalize",
+  "materialRequisition:finalize", "jobOrder:finalize", "purchaseRequest:finalize",
+  "purchaseOrder:finalize", "productionOrder:finalize", "costControl:finalize",
+  "productRequest:review",
+];
 
 const navItems: NavItem[] = [
   { key: "dashboard", icon: LayoutDashboard, labelKey: "nav.dashboard", permission: "dashboard:view" },
+  // เอกสารรออนุมัติข้ามแผนก (2026-08-31) — เห็นเมนูถ้ามีสิทธิ์อนุมัติเอกสารชนิดใดชนิดหนึ่ง
+  // ไม่มีสิทธิ์เป็นของตัวเอง เพราะหน้านี้ไม่ให้อำนาจอะไรที่ผู้ใช้ยังไม่มี — ดู navResolution.ts
+  { key: "pendingApprovals", icon: Inbox, labelKey: "nav.pendingApprovals", anyPermission: APPROVAL_PERMISSIONS },
   { key: "quotations", icon: FileText, labelKey: "nav.quotations", permission: "quotations:view" },
   { key: "quotationTemplates", icon: Layers, labelKey: "nav.quotationTemplates", permission: "quotationTemplates:view" },
   { key: "scopeOfWork", icon: ClipboardList, labelKey: "nav.scopeOfWork", permission: "scopeOfWork:view" },
@@ -226,7 +244,7 @@ const AR_NAV_KEY_BY_DOC_TYPE: Record<ArDocumentType, NavKey> = {
 };
 
 const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
-  { labelKey: "nav.group.main", keys: ["dashboard"] },
+  { labelKey: "nav.group.main", keys: ["dashboard", "pendingApprovals"] },
   { labelKey: "nav.group.sales", keys: ["quotations", "scopeOfWork", "deliveryOrder", "quotationTemplates", "customers"] },
   { labelKey: "nav.group.service", keys: ["service", "serviceTemplates"] },
   { labelKey: "nav.group.accounting", keys: ["accountingDashboard", "accounting", "arDeposit", "arBilling", "arReceipt", "arTaxInvoice", "arMonthly"] },
@@ -244,6 +262,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
 
 const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   dashboard: "nav.dashboard",
+  pendingApprovals: "nav.pendingApprovals",
   quotations: "nav.quotations",
   quotationTemplates: "nav.quotationTemplates",
   scopeOfWork: "nav.scopeOfWork",
@@ -575,6 +594,25 @@ export default function App() {
     setCostControlDeepLinkId(costControlId);
     setActiveNav("costControl");
   });
+  /**
+   * เปิดเอกสารจากกล่อง "เอกสารรออนุมัติ" — ส่งต่อให้ตัวนำทางของชนิดนั้น ๆ ที่มีอยู่แล้วทั้งหมด
+   * ไม่มีทางไปใหม่สักเส้น กล่องนี้เป็นแค่ทางเข้าอีกทางหนึ่งของหน้าที่มีอยู่แล้ว
+   */
+  const openPendingApproval = (item: PendingApprovalItem) => {
+    switch (item.kind) {
+      case "quotation": return navigateToQuotation(item.id);
+      case "scopeOfWork": return navigateToScopeOfWorkStandalone(item.id);
+      case "deliveryOrder": return navigateToDeliveryOrder(item.id);
+      case "materialRequisition": return navigateToMaterialRequisition(item.id, item.ownerDepartment === "production" ? "production" : "project");
+      case "jobOrder": return navigateToJobOrder(item.id);
+      case "purchaseRequest": return navigateToPurchaseRequest(item.id, item.ownerDepartment);
+      case "purchaseOrder": return navigateToPurchaseOrder(item.id);
+      case "productionOrder": return navigateToProductionOrder(item.id);
+      case "costControl": return navigateToCostControl(item.id);
+      case "productRequest": return navigateToProductRequest(item.id);
+    }
+  };
+
   const navigateToArDocument = (docType: ArDocumentType, arDocumentId: string) => guardedNav(() => {
     setArDocumentDeepLink({ docType, id: arDocumentId });
     setActiveNav(AR_NAV_KEY_BY_DOC_TYPE[docType]);
@@ -984,6 +1022,12 @@ export default function App() {
                 else if (n.relatedMaterialRequisitionId) navigateToMaterialRequisition(n.relatedMaterialRequisitionId);
                 else if (n.relatedPurchaseRequestId) navigateToPurchaseRequest(n.relatedPurchaseRequestId);
                 else if (n.relatedProductRequestId) navigateToProductRequest(n.relatedProductRequestId);
+                // อีก 4 ใบบนเครื่องอนุมัติร่วม (2026-08-31) — มาพร้อมแจ้งเตือน "รออนุมัติ" ซึ่งเป็น
+                // แจ้งเตือนตัวแรกที่เอกสารพวกนี้เคยมี · ต้องอยู่เหนือ relatedScopeId ด้วยเหตุผลเดียวกับข้างบน
+                else if (n.relatedJobOrderId) navigateToJobOrder(n.relatedJobOrderId);
+                else if (n.relatedProductionOrderId) navigateToProductionOrder(n.relatedProductionOrderId);
+                else if (n.relatedPurchaseOrderId) navigateToPurchaseOrder(n.relatedPurchaseOrderId);
+                else if (n.relatedCostControlId) navigateToCostControl(n.relatedCostControlId);
                 else if (n.relatedScopeId) navigateToScopeOfWorkStandalone(n.relatedScopeId);
                 else if (n.relatedQuoteId) navigateToQuotation(n.relatedQuoteId);
               }}
@@ -1050,6 +1094,8 @@ export default function App() {
               ? <SectionLoading error={false} onRetry={loadDomainData} />
               : effectiveNav === "dashboard"
               ? <DashboardPage currentUserId={currentUser.id} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
+              : effectiveNav === "pendingApprovals"
+              ? <PendingApprovalsPage onOpen={openPendingApproval} />
               : effectiveNav === "auditLog"
               ? <AuditLogPage currentUserId={currentUser.id} />
               : effectiveNav === "scopeOfWork"
