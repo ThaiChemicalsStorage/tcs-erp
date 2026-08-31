@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { Eye, EyeOff, LogIn, User as UserIcon } from "lucide-react";
+import { Eye, EyeOff, LogIn, MonitorSmartphone, User as UserIcon } from "lucide-react";
 import { AuthLayout } from "./AuthLayout";
 import { useI18n } from "../lib/i18n";
 
@@ -7,8 +7,11 @@ import { useI18n } from "../lib/i18n";
 // Sign-in page for authenticating with username/identifier and password.
 export function SignInPage({
   onSignIn,
+  signedOutReason,
 }: {
   onSignIn: (identifier: string, password: string) => Promise<string | null>;
+  /** "superseded" = โดนเตะออกเพราะมีคนเข้าสู่ระบบด้วยบัญชีนี้จากเครื่องอื่น (2026-08-31) */
+  signedOutReason?: "superseded" | null;
 }) {
   const { t } = useI18n();
   const [identifier, setIdentifier] = useState("");
@@ -77,6 +80,14 @@ export function SignInPage({
           </div>
         </div>
 
+        {/* บอกสาเหตุที่ถูกเด้งออกมา ก่อนที่ผู้ใช้จะพิมพ์อะไร — ไม่ใช่ error ของการกรอกฟอร์ม
+            จึงแยกกล่องกัน และหายไปเองเมื่อมี error จริงจากการกดเข้าสู่ระบบ */}
+        {!error && signedOutReason === "superseded" && (
+          <p role="status" className="flex items-start gap-2 text-xs text-[#a75d1a] bg-[#e08a3c]/10 border border-[#e08a3c]/20 rounded-lg px-3 py-2.5">
+            <MonitorSmartphone size={14} className="flex-shrink-0 mt-px" />
+            {t("signin.signedOutElsewhere")}
+          </p>
+        )}
         {error && <p role="alert" className="text-xs text-[#e05252]">{error}</p>}
 
         <button

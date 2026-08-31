@@ -326,6 +326,8 @@ type BootStatus = "loading" | "needsSetup" | "signedOut" | "ready";
 export default function App() {
   const { t } = useI18n();
   const [bootStatus, setBootStatus] = useState<BootStatus>("loading");
+  // ทำไมถึงอยู่หน้าเข้าสู่ระบบ — ใช้บอกผู้ใช้ว่าโดนเตะเพราะมีคนล็อกอินจากเครื่องอื่น (2026-08-31)
+  const [signedOutReason, setSignedOutReason] = useState<"superseded" | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -440,7 +442,7 @@ export default function App() {
       }
       if (cancelled) return;
       if (session.needsSetup) { setBootStatus("needsSetup"); return; }
-      if (!session.user) { setBootStatus("signedOut"); return; }
+      if (!session.user) { setSignedOutReason(session.signedOutReason ?? null); setBootStatus("signedOut"); return; }
       setCurrentUser(session.user);
       setBootStatus("ready");
       loadDomainData();
@@ -482,7 +484,15 @@ export default function App() {
     if (bootStatus !== "ready") return;
     const refetch = () => {
       if (document.hidden) return;
-      fetchNotifications().then(setNotifications).catch(() => {});
+      fetchNotifications().then(setNotifications).catch((err) => {
+        // แท็บที่ถูกเตะออกเพราะมีคนล็อกอินจากเครื่องอื่น (2026-08-31) จะรู้ตัวที่นี่ — ไม่งั้นมันจะ
+        // นั่งค้างหน้าเดิมจนกว่าผู้ใช้จะกดอะไรสักอย่างแล้วเจอ "เซสชันหมดอายุ" โดยไม่รู้สาเหตุ
+        if (!(err instanceof ApiError) || err.status !== 401) return;
+        fetchSession()
+          .then((s) => setSignedOutReason(s.signedOutReason ?? null))
+          .catch(() => {})
+          .finally(() => { setCurrentUser(null); setBootStatus("signedOut"); });
+      });
     };
     const intervalId = window.setInterval(refetch, 45_000);
     const onVisibilityChange = () => { if (!document.hidden) refetch(); };
@@ -813,7 +823,7 @@ export default function App() {
   if (bootStatus === "signedOut" || !currentUser) {
     return (
       <Suspense fallback={<BootLoading />}>
-        <SignInPage onSignIn={handleSignIn} />
+        <SignInPage onSignIn={handleSignIn} signedOutReason={signedOutReason} />
       </Suspense>
     );
   }

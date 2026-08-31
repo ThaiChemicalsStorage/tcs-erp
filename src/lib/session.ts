@@ -4,6 +4,12 @@ import type { User } from "./users";
 export interface SessionInfo {
   user: User | null;
   needsSetup: boolean;
+  /**
+   * ทำไมถึงไม่มี user (2026-08-31) — `"superseded"` แปลว่าบัญชีนี้ถูกเข้าสู่ระบบจากเครื่องอื่น
+   * ตั้งแต่มีข้อจำกัด "1 user เข้าใช้ได้ทีละเครื่องเดียว" · `null`/ไม่มีค่า = เหตุผลธรรมดา
+   * (หมดอายุ กดออกเอง หรือยังไม่เคยเข้า) ซึ่งไม่ต้องอธิบายอะไรเป็นพิเศษ
+   */
+  signedOutReason?: "superseded" | null;
 }
 
 export interface SetupFields {

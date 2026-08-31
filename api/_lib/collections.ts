@@ -261,14 +261,26 @@ export async function permissionsCollection() {
   return db.collection<PermissionFields>("permissions");
 }
 
-/** Scaffolding for future session revocation ("log out other devices"). Not written to yet — auth stays pure-JWT this pass. */
+/**
+ * เซสชันที่ยังใช้ได้ — **เขียนจริงตั้งแต่ 2026-08-31** ตอนทำ "1 user เข้าใช้ได้ทีละเครื่องเดียว"
+ * (เจ้าของสั่งไว้ 2026-08-28) ก่อนหน้านั้นเป็นแค่โครงที่ไม่มีใครเขียนถึงเลย และ auth เป็น JWT ล้วน
+ *
+ * `expiresAt` เป็น **`Date` ไม่ใช่ string** — TTL index ของ MongoDB ไม่รู้จักวันที่ที่เป็นข้อความ
+ * โครงเดิมประกาศเป็น string ไว้ ซึ่งแปลว่า index `expireAfterSeconds` ที่ `ensureIndexes()` สร้าง
+ * ไว้แล้วจะไม่เคยลบอะไรเลย (จดไว้ใน TODO.md ตั้งแต่ตอนสำรวจ)
+ *
+ * `revokedAt` ไม่ใช่การลบทิ้ง — แถวที่ถูกแทนที่ต้องอยู่ต่อ เพื่อให้เครื่องที่โดนเตะรู้ว่า
+ * **โดนเตะ** ไม่ใช่ **เซสชันหมดอายุ** ซึ่งเป็นคนละเรื่องกันสำหรับคนที่กำลังงงว่าทำไมหลุด
+ */
 export interface SessionFields {
   userId: ObjectId;
   tokenId: string;
   issuedAt: string;
-  expiresAt: string;
+  expiresAt: Date;
   userAgent: string;
   revokedAt: string | null;
+  /** ทำไมถึงถูกยกเลิก — "superseded" = มีการเข้าสู่ระบบจากเครื่องอื่น, "logout" = กดออกเอง */
+  revokedReason?: "superseded" | "logout";
 }
 export async function sessionsCollection() {
   const db = await getDb();

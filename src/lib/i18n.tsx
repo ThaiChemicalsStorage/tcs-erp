@@ -621,6 +621,7 @@ const translations = {
     "auth.brand.copyright": "© 2569 TCS ERP · บริษัท ไทย เคมิคอลส์ สโตเรจ จำกัด",
 
     "signin.title": "เข้าสู่ระบบ",
+    "signin.signedOutElsewhere": "คุณถูกออกจากระบบ เพราะบัญชีนี้ถูกเข้าสู่ระบบจากเครื่องอื่น — 1 บัญชีใช้ได้ทีละเครื่องเดียว",
     "signin.subtitle": "ยินดีต้อนรับกลับ กรอกข้อมูลเพื่อเข้าใช้งาน TCS ERP",
     "signin.identifierLabel": "ชื่อผู้ใช้ หรือ อีเมล",
     "signin.identifierPlaceholder": "username หรือ you@tcs-erp.co.th",
@@ -3258,6 +3259,7 @@ const translations = {
     "auth.brand.copyright": "© 2024 TCS ERP · Thai Chemicals Storage Co., Ltd.",
 
     "signin.title": "Sign In",
+    "signin.signedOutElsewhere": "You were signed out because this account signed in on another device — one account, one device at a time.",
     "signin.subtitle": "Welcome back. Enter your details to access TCS ERP.",
     "signin.identifierLabel": "Username or Email",
     "signin.identifierPlaceholder": "username or you@tcs-erp.co.th",

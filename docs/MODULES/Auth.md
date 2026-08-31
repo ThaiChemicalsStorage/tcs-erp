@@ -25,7 +25,9 @@ None shared beyond `AuthLayout`.
 
 ## Database Tables
 
-The `users` MongoDB collection (server-only, includes `passwordHash`; see [DATABASE.md](../DATABASE.md)). No separate session table — sessions are stateless JWTs, not stored server-side.
+The `users` MongoDB collection (server-only, includes `passwordHash`; see [DATABASE.md](../DATABASE.md)).
+
+**As of 2026-08-31 there is also a `sessions` table** and the JWT is no longer stateless: it carries a `sid` claim naming a row in `sessions`, checked on every request beside the existing `status === "active"` lookup. See "One account, one device" below.
 
 ## APIs
 
@@ -69,9 +71,41 @@ UI-files only. See CHANGELOG.md 2026-07-30.
 
 ## Future Improvements
 
-- True session revocation (a server-side deny-list or database-backed sessions) so a still-active account's leaked token can be force-invalidated before its natural expiry — currently only a *deactivated* account is locked out immediately; see [RBAC.md](../RBAC.md) "What Was Achieved vs. the Old Proposed Design." Now a bigger gap than before: since expiry became rolling on 2026-07-31, a leaked-and-actively-replayed token no longer dies after a fixed 7 days.
+- ~~True session revocation (a server-side deny-list or database-backed sessions)~~ — **done 2026-08-31** as a side effect of "one account, one device": sessions are now database-backed and a row can be revoked, which is exactly what that gap asked for. What is still missing is a *UI* for it (an admin "sign this user out" button, or a "your sessions" list); the mechanism exists and `revokedAt` is all such a button would need to set.
 - ~~Rate limiting on `POST /api/auth/login`~~ — **done 2026-07-29**: failed attempts tracked in the TTL-purged `login_attempts` MongoDB collection; ≥5 failures per identifier or ≥20 per IP within 15 minutes → `429` with a Thai "รอประมาณ X นาที" message + `Retry-After`; success clears the identifier's failures; the check runs before the bcrypt compare. See [RBAC.md](../RBAC.md) Known Gaps and [API.md](../API.md).
+
+## One account, one device (2026-08-31)
+
+Asked for by the owner on 2026-08-28: *"1 user จำกัดเข้าได้แค่ 1 คน"*.
+
+**Logging in revokes every other live session for that user.** The token now carries
+`{ sub, sid }`; `startSession()` marks the user's existing rows `revokedAt` +
+`revokedReason: "superseded"` before inserting the new one, and `getAuthContext()` refuses a
+token whose `sid` row is missing or revoked. The check sits next to the existing
+`status !== "active"` lookup, so eviction lands **on the evicted device's very next request** —
+no waiting for a token to expire.
+
+Three things about it are load-bearing:
+
+- **`refreshSessionCookie()` must carry `sid` through.** It re-signs the cookie on *every*
+  request (rolling expiry, since 2026-07-31). A claim it forgets to copy vanishes on the next
+  request, and the user is logged out with no explanation and nothing in the logs. This is the trap
+  `docs/TODO.md` flagged before the work started; `tests/api/singleSession.test.ts` walks two
+  consecutive requests specifically to hold it.
+- **Revoked rows are marked, not deleted.** The evicted device needs to learn it was *superseded*,
+  not that its session merely *expired* — very different information for someone wondering why they
+  were thrown out. `GET /api/auth/session` returns `signedOutReason: "superseded"`, and the
+  sign-in page shows it. The TTL index sweeps the rows up later.
+- **State lives in MongoDB, not memory** — several server instances do not share memory and a cold
+  start would wipe it, the same reason login rate limiting lives in `login_attempts`.
+
+The evicted tab finds out within 45 seconds without being touched: the notification poll already
+runs on that interval, and a `401` from it now re-checks the session and drops the app to the
+sign-in page with the reason.
+
+⚠️ **Cookies issued before 2026-08-31 have no `sid` and are refused**, so everyone signs in once
+more after the deploy. Honouring them would have left the restriction bypassable for seven days.
 
 ## Known Issues
 
-None currently open. The pre-migration client-side checksum/`localStorage`-session limitations were closed by the 2026-07-09 backend migration (real bcrypt hashing, httpOnly JWT cookie), and login rate limiting landed 2026-07-29 — see [RBAC.md](../RBAC.md) for the remaining honest gaps (no true mid-expiry session revocation).
+None currently open. The pre-migration client-side checksum/`localStorage`-session limitations were closed by the 2026-07-09 backend migration (real bcrypt hashing, httpOnly JWT cookie), login rate limiting landed 2026-07-29, and database-backed session revocation landed 2026-08-31 (see "One account, one device" above), which closed the long-standing "no true mid-expiry session revocation" gap in [RBAC.md](../RBAC.md).

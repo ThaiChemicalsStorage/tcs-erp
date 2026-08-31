@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { usersCollection, loginAttemptsCollection, ensureIndexes, toPublicUser } from "../_lib/collections.js";
-import { hashPassword, verifyPassword, issueSessionCookie, clearSessionCookie, getAuthContext } from "../_lib/auth.js";
+import { hashPassword, verifyPassword, issueSessionCookie, clearSessionCookie, getAuthContext, startSession, endSession, signedOutReason } from "../_lib/auth.js";
 import { seedDefaultRolesIfEmpty, bootstrapRbac } from "../_lib/rbacSeed.js";
 import { seedSystemDataIfEmpty } from "../_lib/systemSeed.js";
 import { defaultRoles } from "../../src/lib/roles.js";
@@ -19,8 +19,10 @@ async function handleSession(req: VercelRequest, res: VercelResponse) {
     return;
   }
   const users = await usersCollection();
-  const count = await users.estimatedDocumentCount();
-  res.status(200).json({ user: null, needsSetup: count === 0 });
+  // บอกด้วยว่าทำไมถึงหลุด — "มีคนล็อกอินที่เครื่องอื่น" กับ "เซสชันหมดอายุ" ต่างกันมาก
+  // สำหรับคนที่กำลังงงว่าทำไมอยู่ดี ๆ ก็ถูกเด้งออก
+  const [count, signedOutBecause] = await Promise.all([users.estimatedDocumentCount(), signedOutReason(req)]);
+  res.status(200).json({ user: null, needsSetup: count === 0, signedOutReason: signedOutBecause });
 }
 
 async function handleSetup(req: VercelRequest, res: VercelResponse) {
@@ -66,7 +68,7 @@ async function handleSetup(req: VercelRequest, res: VercelResponse) {
   const doc = await users.findOne({ _id: insertResult.insertedId });
   if (!doc) throw new HttpError(500, "Failed to create user");
 
-  issueSessionCookie(res, doc._id.toString());
+  issueSessionCookie(res, doc._id.toString(), await startSession(doc._id.toString(), req.headers["user-agent"] ?? ""));
   res.status(201).json({ user: toPublicUser(doc) });
 }
 
@@ -154,12 +156,14 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
   // fat-fingered a few times doesn't stay one typo away from a lockout all window long.
   await attempts.deleteMany({ identifier: identifierKey });
 
-  issueSessionCookie(res, doc._id.toString());
+  // เข้าสู่ระบบใหม่ = เซสชันของเครื่องอื่นถูกยกเลิกทั้งหมด ("1 user จำกัดเข้าได้แค่ 1 คน", 2026-08-28)
+  issueSessionCookie(res, doc._id.toString(), await startSession(doc._id.toString(), req.headers["user-agent"] ?? ""));
   res.status(200).json({ user: toPublicUser(doc) });
 }
 
 async function handleLogout(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  await endSession(req);
   clearSessionCookie(res);
   res.status(204).end();
 }
