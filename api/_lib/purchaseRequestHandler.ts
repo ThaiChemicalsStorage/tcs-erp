@@ -98,6 +98,12 @@ function toClient(doc: PurchaseRequestFields & { _id: string }) {
     ...doc,
     lines: (doc.lines ?? []).map((l) => ({ ...l, subDetails: l.subDetails ?? [] })),
     revisionNote: doc.revisionNote ?? "",
+    // ช่องที่เพิ่มมาพร้อมการทาบกับฟอร์ม FM-PU-05 ตัวจริง 2026-08-31 — เอกสารเก่าไม่มี เติมตอนอ่าน
+    vendorPhone: doc.vendorPhone ?? "",
+    issueDate: doc.issueDate ?? "",
+    deliveryContact: doc.deliveryContact ?? "",
+    deliveryPhone: doc.deliveryPhone ?? "",
+    headerRemark: doc.headerRemark ?? "",
   }));
 }
 function toSummary(doc: PurchaseRequestFields & { _id: string }): PurchaseRequestSummary {
@@ -199,6 +205,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     ownerDepartment: standalone ? "general" : fromProduction ? "production" : "project",
     productionOrderId: fromProduction ? productionOrderId : "",
     vendorName: "", neededByDate: "", creditDays: null, shippingMethod: "", deliveryLocation: "",
+    vendorPhone: "", deliveryContact: "", deliveryPhone: "", headerRemark: "",
+    // วันที่บนหัวเอกสารตั้งต้นเป็นวันที่สร้าง แก้ได้ — ใบจริงพิมพ์วันที่ที่ออกเอกสาร ไม่ใช่วันที่เซ็น
+    issueDate: now.slice(0, 10),
     lines: [], status: "Draft",
     // requestedAt seeds from a date-only slice of `now`, not the full ISO timestamp — see
     // jobOrderHandler.ts's identical fix/comment on requestedAt for why (validateIsoDateOrEmpty
@@ -239,14 +248,18 @@ async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string)
 
 const SHORT_TEXT_FIELDS: { key: keyof PurchaseRequestFields; label: string }[] = [
   { key: "vendorName", label: "ผู้จำหน่าย" },
+  { key: "vendorPhone", label: "โทร. ผู้จำหน่าย" },
   { key: "shippingMethod", label: "ขนส่งโดย" },
   { key: "deliveryLocation", label: "สถานที่ส่งของ" },
+  { key: "deliveryContact", label: "ผู้ติดต่อปลายทาง" },
+  { key: "deliveryPhone", label: "โทร. ปลายทาง" },
   { key: "requestedBy", label: "ผู้ขอซื้อ" },
   { key: "approvedBy", label: "ผู้อนุมัติ" },
   { key: "purchasingDeptBy", label: "ฝ่ายจัดซื้อ" },
 ];
 const DATE_FIELDS: { key: keyof PurchaseRequestFields; label: string }[] = [
   { key: "neededByDate", label: "วันที่รับของ" },
+  { key: "issueDate", label: "วันที่" },
   { key: "requestedAt", label: "วันที่ขอซื้อ" },
   { key: "approvedAt", label: "วันที่อนุมัติ" },
   { key: "purchasingDeptAt", label: "วันที่ฝ่ายจัดซื้อ" },
@@ -270,6 +283,7 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   const update: Partial<PurchaseRequestFields> = {};
   if ("lines" in body) update.lines = await sanitizeLines(body.lines);
   if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
+  if ("headerRemark" in body) update.headerRemark = sanitizeLongText(body.headerRemark, "หมายเหตุ");
   if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)");
   for (const f of SHORT_TEXT_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = sanitizeShortText(body[f.key], f.label);
   for (const f of DATE_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = validateIsoDateOrEmpty(body[f.key], f.label);

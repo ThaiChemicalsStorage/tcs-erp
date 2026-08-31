@@ -1,9 +1,20 @@
 import type { ProductionOrder } from "../../lib/productionOrder";
+import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatQuoteDateThai } from "../../lib/quotes";
 
 /**
  * ฟอร์มพิมพ์ใบสั่งผลิต — คัดตามฟอร์มจริง FM-PD-02 Rev.00 : 01/11/64
  * (reference/company/ใบสั่งผลิต(Production Order).pdf ซึ่ง gitignore ไว้)
+ *
+ * **2026-08-31: ทาบกับกระดาษตัวจริงแล้ว** ไฟล์อ้างอิงเป็น PDF ภาพสแกนไม่มีชั้นข้อความ เอกสาร
+ * โมดูลจึงเคยบันทึกไว้ว่า "print layout has not been compared against the physical form" รอบนี้
+ * เรนเดอร์ภาพออกมาดูแล้วเทียบทีละส่วน สิ่งที่ต่างจากกระดาษและถูกแก้รอบนี้:
+ *   - กระดาษมีโลโก้บริษัทตัวใหญ่อยู่ทางขวาของบล็อกหัวเอกสาร (ทับเส้นบรรทัด) — เดิมไม่มีเลย
+ *   - กระดาษมีแถวที่ไม่มีเลขลำดับแต่มีจำนวน/หน่วยของตัวเอง ("3 หน้าแปลน 20A | 2 ตัว" แล้ว
+ *     "หน้าแปลน 50A | 3 ตัว", "หน้าแปลน 100A | 1 ตัว") — เดิมเก็บได้แค่ subDetails ที่เป็นข้อความล้วน
+ *     จำนวนของแถวพวกนั้นจึงหายไปทั้งหมด ตอนนี้เป็น ProductionOrderLine.isContinuation
+ *   - บรรทัดย่อยบนกระดาษไม่ได้เยื้องเข้ามา — เดิมเยื้อง 12px
+ *   - ฟอนต์บนกระดาษเป็น serif เหมือนใบพิมพ์อื่นทุกใบในระบบ — เดิมไฟล์นี้ใช้ sans-serif อยู่ใบเดียว
  *
  * Always renders in Thai regardless of the user's UI language — same rule every other print
  * component in this app follows (see docs/CLAUDE.md's i18n policy): a printed business document
@@ -22,9 +33,17 @@ const MIN_BODY_ROWS = 18;
 
 const FORM_CODE = "FM-PD-02 Rev.00 : 01/11/64";
 
-export function ProductionOrderPrintDocument({ doc }: { doc: ProductionOrder }) {
+/**
+ * ตารางกว้าง 100% + `border-collapse: collapse` ทำให้เส้นขอบขวาสุดถูกวาดเลยขอบพื้นที่พิมพ์ของ A4
+ * แล้วหายไปทั้งเส้น — พบตอนพิมพ์จริง 2026-08-31 (เลขที่ใบสั่งผลิตชิดขวาก็โดนตัดไปด้วย)
+ * บทเรียนเดียวกับ CostControlPrintDocument.tsx (commit f1509da)
+ */
+const EDGE_GUARD = "2px";
+
+export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: ProductionOrder; companyHeader: CompanyHeaderInfo }) {
   let seq = 0;
-  const rows = doc.lines.map((l) => ({ line: l, seq: l.isSectionHeader ? null : ++seq }));
+  // บรรทัดหัวข้อและบรรทัดต่อต่างก็ไม่กินเลขลำดับ — แทรกอย่างใดอย่างหนึ่งแล้วเลขข้างล่างไม่เลื่อน
+  const rows = doc.lines.map((l) => ({ line: l, seq: l.isSectionHeader || l.isContinuation ? null : ++seq }));
   const padding = Math.max(0, MIN_BODY_ROWS - rows.length);
 
   const cell: React.CSSProperties = { border: "1px solid #000", padding: "3px 5px", verticalAlign: "top" };
@@ -43,7 +62,7 @@ export function ProductionOrderPrintDocument({ doc }: { doc: ProductionOrder }) 
   );
 
   return (
-    <div className="hidden print:block" style={{ fontFamily: "'Noto Sans Thai', 'Sarabun', sans-serif", fontSize: "11px", color: "#000" }}>
+    <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", fontSize: "11px", color: "#000", background: "#fff", paddingRight: EDGE_GUARD }}>
       <style>{`@media print { @page { size: A4 portrait; margin: 12mm; } }`}</style>
 
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -57,8 +76,14 @@ export function ProductionOrderPrintDocument({ doc }: { doc: ProductionOrder }) 
                 เลขที่ใบสั่งผลิต : {doc.documentNumber || doc.id}
               </p>
 
-              {/* หัวเอกสาร — ฟอร์มจริงเป็นบรรทัดมีเส้นใต้ ไม่ใช่ตาราง */}
-              <div style={{ borderTop: "1px solid #000", borderLeft: "1px solid #000", borderRight: "1px solid #000" }}>
+              {/* หัวเอกสาร — ฟอร์มจริงเป็นบรรทัดมีเส้นใต้ ไม่ใช่ตาราง และมีโลโก้ทับอยู่ทางขวา
+                  โลโก้วางแบบ absolute เพราะบนกระดาษมันคร่อมเส้นบรรทัดอยู่จริง ไม่ได้อยู่ในคอลัมน์ของตัวเอง */}
+              <div style={{ position: "relative", borderTop: "1px solid #000", borderLeft: "1px solid #000", borderRight: "1px solid #000" }}>
+                <img
+                  src={companyHeader.logoDataUrl || "/logo.png"}
+                  alt=""
+                  style={{ position: "absolute", right: "10px", top: "2px", width: "62px", height: "62px", objectFit: "contain" }}
+                />
                 {[
                   ["ชื่อลูกค้า", doc.customerCompanyName],
                   ["รหัสงาน", doc.jobCode],
@@ -94,9 +119,9 @@ export function ProductionOrderPrintDocument({ doc }: { doc: ProductionOrder }) 
                       <td style={{ ...cell, textAlign: "center" }}>{n ?? ""}</td>
                       <td style={{ ...cell, fontWeight: line.isSectionHeader ? 700 : 400, textAlign: line.isSectionHeader ? "center" : "left" }}>
                         {line.description}
-                        {/* บรรทัดย่อยใต้รายการหลัก เยื้องเข้ามาเล็กน้อยตามฟอร์มจริง */}
+                        {/* บรรทัดย่อยใต้รายการหลัก — กระดาษจริงไม่ได้เยื้องเข้ามา ชิดซ้ายเท่ากับคำอธิบาย */}
                         {line.subDetails.map((sd, i) => (
-                          <p key={i} style={{ margin: "1px 0 0 12px", fontWeight: 400 }}>{sd}</p>
+                          <p key={i} style={{ margin: "1px 0 0", fontWeight: 400 }}>{sd}</p>
                         ))}
                       </td>
                       <td style={{ ...cell, textAlign: "center" }}>{line.qty ?? ""}</td>

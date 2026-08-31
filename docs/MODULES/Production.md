@@ -211,12 +211,32 @@ quantities are not inherited.
   Draft Scope of Work), the editable document number, its uniqueness 409, and the multi-page print
   footer — see CHANGELOG.md 2026-08-27b. Still untested by hand: the approve/reject/withdraw buttons
   on all four documents, and the ผลิต-vs-โครงการ record separation.
-- ~~**Not click-tested in a real browser.**~~ The automated browser cannot reach this machine's dev
-  server (see CHANGELOG.md 2026-08-20e), so the ผลิต pages, the approve buttons on all four
-  documents, and the FM-PD-02 print layout are verified by tests and type-checking only.
+- ~~**Not click-tested in a real browser.**~~ ~~The automated browser cannot reach this machine's dev
+  server (see CHANGELOG.md 2026-08-20e)~~ — **that claim is wrong and was disproved 2026-08-31**:
+  Playwright reaches `localhost:3000` fine, and `page.pdf()` against a running dev stack is a far
+  better way to check a print layout than reading the DOM. The FM-PD-02 print layout is now verified
+  that way. Still verified by tests and type-checking only: the approve buttons on all four documents
+  and the ผลิต-vs-โครงการ record separation.
 - **Cost Control is still unmodelled** — the spec names it as a precondition for the Production
   department too, exactly as it does for Project. See [`../TODO.md`](../TODO.md).
-- The Production Order's print layout has not been compared against the physical form. **Partly
+- ~~The Production Order's print layout has not been compared against the physical form.~~
+  **✅ Compared 2026-08-31.** The reference PDF is a scanned bitmap with no text layer, which is why
+  this had stayed open — it was finally read by rendering the page to an image (pdf.js in a headless
+  Chromium, the PDF served over an intercepted route since `file://` is blocked). Four differences
+  from the paper were found and fixed: the company logo sitting to the right of the header block was
+  missing entirely; the right-hand table border and the document number were being clipped off the
+  page (fixed with `EDGE_GUARD`, the same lesson as commit `f1509da`); the app's theme background
+  bled onto the paper (the root now declares `background: "#fff"`); and the sheet used a sans-serif
+  font while both the paper and every other print document in this app are serif. Sub-detail lines
+  also stopped being indented, because the paper does not indent them. See CHANGELOG.md 2026-08-31.
+- **Continuation rows (2026-08-31).** The paper has rows carrying **their own qty/unit but no
+  sequence number** — `3 หน้าแปลน 20A | 2 ตัว` followed by `หน้าแปลน 50A | 3 ตัว` and
+  `หน้าแปลน 100A | 1 ตัว`. `subDetails: string[]` is plain text, so those quantities were being lost.
+  `ProductionOrderLine.isContinuation?: boolean` now models them, reusing the same "skipped when
+  numbering" logic `isSectionHeader` already had — the difference is that a continuation row **keeps**
+  its qty/unit, where a section header has them stripped server-side. Optional, defaulting to false,
+  so every stored document reads back unchanged; if a client sends both flags, the header wins.
+- ~~The Production Order's print layout has not been compared against the physical form.~~ **Partly
   addressed 2026-08-27**: the `FM-PD-02 Rev.00 : 01/11/64` footer now repeats on every printed page
   (moved into the outer table's `<tfoot>`, the same mechanism Quotation's letterhead uses with
   `<thead>`) instead of printing once at the end of the content, and the sheet's `@page` rule moved

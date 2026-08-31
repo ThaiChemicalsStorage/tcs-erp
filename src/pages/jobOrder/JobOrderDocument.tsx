@@ -19,6 +19,7 @@ import { useI18n } from "../../lib/i18n";
 import { getRevisionNumber } from "../../lib/revisionDiff";
 import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCard";
 import { fetchDepartments, type Department } from "../../lib/departments";
+import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -50,6 +51,7 @@ function toUpdateFields(j: JobOrder): JobOrderUpdateFields {
 // Job Order editor: header fields, free-typed line table, scope-of-work checklist, and signatories.
 export function JobOrderDocument({
   jobOrderId,
+  company,
   currentUserId,
   canEdit,
   canFinalize,
@@ -61,6 +63,8 @@ export function JobOrderDocument({
   showToast,
 }: {
   jobOrderId: string;
+  /** โปรไฟล์บริษัทสำหรับหัวจดหมายบนใบพิมพ์ — FM-PJ-01 ตัวจริงมีโลโก้กับชื่อบริษัทอยู่หัวกระดาษ */
+  company: Company;
   currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
@@ -231,14 +235,23 @@ export function JobOrderDocument({
   const isDraftStatus = doc.status === "Draft";
   const editable = canEdit && isDraftStatus;
 
+  // หัวจดหมายของใบพิมพ์ — ใบสั่งงานใช้แค่โลโก้กับชื่อบริษัท ที่เหลือถูกส่งไปเพื่อให้ชนิดครบเท่านั้น
+  // สร้าง inline แบบเดียวกับที่ใบเบิกพัสดุและใบส่งมอบสินค้าทำ (ยังไม่มีตัวช่วยกลางสำหรับเรื่องนี้)
+  const companyHeader: CompanyHeaderInfo = {
+    name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
+    branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
+  };
+
   const updateLine = (id: string, patch: Partial<JobOrderLine>) => {
     setDraft((prev) => prev && { ...prev, lines: prev.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
   };
   const removeLine = (id: string) => {
     setDraft((prev) => prev && { ...prev, lines: prev.lines.filter((l) => l.id !== id) });
   };
-  const addLine = () => {
-    setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankJobOrderLine()] });
+  const addLine = (isContinuation = false) => {
+    setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankJobOrderLine(isContinuation)] });
   };
 
   const finalize = async () => {
@@ -429,9 +442,16 @@ export function JobOrderDocument({
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("jobOrderDoc.linesTitle")}</h2>
             {editable && (
-              <button onClick={addLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-                <Plus size={13} /> {t("jobOrderDoc.addLine")}
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => addLine()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                  <Plus size={13} /> {t("jobOrderDoc.addLine")}
+                </button>
+                {/* บรรทัดต่อ — ฟอร์ม FM-PJ-01 ตัวจริงมีแถวที่ไม่มีเลขลำดับแต่มีจำนวน/หน่วยของตัวเอง
+                    เช่น "1 Flexible Joint" แล้วตามด้วย "Ø 650 | 15 | PCS" (ยืนยันจากตัวอย่างจริง 2026-08-31) */}
+                <button onClick={() => addLine(true)} title={t("jobOrderDoc.continuationHint")} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                  <CornerDownRight size={13} /> {t("jobOrderDoc.addContinuationLine")}
+                </button>
+              </div>
             )}
           </div>
           {draft.lines.length === 0 ? (
@@ -451,8 +471,22 @@ export function JobOrderDocument({
                     <Fragment key={line.id}>
                     <tr className="border-b border-border/50">
                       <td className="px-3 py-2 min-w-[200px]">
-                        <input disabled={!editable} value={line.description} onChange={(e) => updateLine(line.id, { description: e.target.value })}
-                          className="w-full text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
+                        <div className="flex items-center gap-1.5">
+                          {/* ปุ่มสลับชนิดบรรทัด — ไอคอนบอกสถานะ ไม่ใช่แค่ตกแต่ง */}
+                          <button
+                            type="button"
+                            disabled={!editable}
+                            onClick={() => updateLine(line.id, { isContinuation: !line.isContinuation })}
+                            title={t("jobOrderDoc.continuationHint")}
+                            aria-pressed={line.isContinuation === true}
+                            aria-label={t("jobOrderDoc.addContinuationLine")}
+                            className={`flex-shrink-0 transition-colors disabled:opacity-40 ${line.isContinuation ? "text-[#c9a84c]" : "text-muted-foreground opacity-40 hover:opacity-100"}`}
+                          >
+                            <CornerDownRight size={13} />
+                          </button>
+                          <input disabled={!editable} value={line.description} onChange={(e) => updateLine(line.id, { description: e.target.value })}
+                            className={`w-full text-xs text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70 ${line.isContinuation ? "ml-3" : ""}`} />
+                        </div>
                       </td>
                       <td className="px-2 py-1.5">
                         <input type="number" disabled={!editable} value={line.quantity ?? ""} onChange={(e) => updateLine(line.id, { quantity: e.target.value === "" ? null : Number(e.target.value) })}
@@ -569,7 +603,7 @@ export function JobOrderDocument({
         </div>
       </div>
 
-      {showPrint && <JobOrderPrintDocument jobOrder={doc} />}
+      {showPrint && <JobOrderPrintDocument jobOrder={doc} companyHeader={companyHeader} />}
 
       <ConfirmDialog
         open={confirmDelete}

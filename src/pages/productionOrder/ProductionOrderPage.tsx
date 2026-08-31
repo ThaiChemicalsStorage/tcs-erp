@@ -8,12 +8,15 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import type { Company } from "../../lib/storage";
 
 // หน้าจัดการใบสั่งผลิตแบบแยกอิสระ — สร้างจาก Scope of Work ที่อนุมัติแล้วโดยตรง (ไม่ผ่านโครงการ)
 export function ProductionOrderPage({
-  canEdit, canApprove, canPrint, canDelete, canCreate,
+  company, canEdit, canApprove, canPrint, canDelete, canCreate,
   initialProductionOrderId, onProductionOrderIdConsumed,
 }: {
+  /** ส่งต่อให้ใบพิมพ์ FM-PD-02 ใช้วางโลโก้บนหัวเอกสาร */
+  company: Company;
   canEdit: boolean;
   canApprove: boolean;
   canPrint: boolean;
@@ -77,6 +80,7 @@ export function ProductionOrderPage({
         <ProductionOrderDocument
           key={selectedId}
           productionOrderId={selectedId}
+          company={company}
           canEdit={canEdit}
           canApprove={canApprove}
           canPrint={canPrint}

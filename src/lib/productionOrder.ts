@@ -32,8 +32,19 @@ export interface ProductionOrderLine {
   id: string;
   isSectionHeader: boolean;
   description: string;
-  /** บรรทัดรายละเอียดย่อยใต้รายการหลัก — พิมพ์เยื้องเข้ามาใต้คำอธิบาย */
+  /** บรรทัดรายละเอียดย่อยใต้รายการหลัก — พิมพ์ใต้คำอธิบายในช่องเดียวกัน */
   subDetails: string[];
+  /**
+   * บรรทัดต่อของรายการก่อนหน้า — **ไม่กินเลขลำดับ แต่ยังมีจำนวน/หน่วยของตัวเอง**
+   *
+   * ต่างจาก `subDetails` ตรงที่ subDetails เป็นข้อความล้วน ๆ ใต้คำอธิบายเท่านั้น ฟอร์มกระดาษจริง
+   * ทั้งสองใบมีแถวแบบนี้อยู่จริง และก่อน 2026-08-31 ระบบเก็บไม่ได้เลย:
+   *   FM-PJ-01  "1 | Flexible Joint" (ไม่มีจำนวน) แล้วตามด้วย "Ø 650 | 15 | PCS" ที่ไม่มีเลขลำดับ
+   *   FM-PD-02  "3 | หน้าแปลน 20A | 2 ตัว" แล้ว "หน้าแปลน 50A | 3 ตัว" ที่ไม่มีเลขลำดับ
+   *
+   * optional และ default เป็น false — เอกสารเก่าทุกใบอ่านออกมาเหมือนเดิมทุกประการ ไม่ต้อง migrate
+   */
+  isContinuation?: boolean;
   qty: number | null;
   unit: string;
   remark: string;
@@ -109,8 +120,8 @@ export interface ProductionOrderSummary {
   updatedAt: string;
 }
 
-export function blankProductionOrderLine(id: string, isSectionHeader = false): ProductionOrderLine {
-  return { id, isSectionHeader, description: "", subDetails: [], qty: null, unit: "", remark: "" };
+export function blankProductionOrderLine(id: string, isSectionHeader = false, isContinuation = false): ProductionOrderLine {
+  return { id, isSectionHeader, isContinuation: isSectionHeader ? false : isContinuation, description: "", subDetails: [], qty: null, unit: "", remark: "" };
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────

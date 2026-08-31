@@ -8,11 +8,13 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import type { Company } from "../../lib/storage";
 
 // หน้าจัดการใบขอซื้อแบบแยกอิสระ (ไม่ผูกกับหน้าโครงการ — เข้าถึงได้โดยตรง)
 // Standalone Purchase Request management page — not nested under Project, same reasoning as
 // Material Requisition's own standalone page.
 export function PurchaseRequestPage({
+  company,
   canRequestProductCode,
   currentUserId,
   canEdit,
@@ -31,6 +33,8 @@ export function PurchaseRequestPage({
   canDelete: boolean;
   canCreate: boolean;
   /** สิทธิ์ productRequest:create — คุมปุ่ม "ขอรหัสสินค้า" บนบรรทัดที่พิมพ์เอง */
+  /** ส่งต่อให้ใบพิมพ์ FM-PU-05 ใช้ทำหัวจดหมายไทย */
+  company: Company;
   canRequestProductCode: boolean;
   /** แผนกเจ้าของ — หน้านี้ถูกเมาต์ 3 ครั้ง (โครงการ/ผลิต/จัดซื้อ) และเห็นคนละชุดข้อมูล (2026-08-20, 2026-08-28).
    *  ฝั่งผลิตออกเอกสารจากใบสั่งผลิต ฝั่งโครงการออกจากรายการในโครงการ ส่วน `"all"` คือกล่องงานเข้า
@@ -124,6 +128,7 @@ export function PurchaseRequestPage({
         <PurchaseRequestDocument
           key={selectedId}
           purchaseRequestId={selectedId}
+          company={company}
           canRequestProductCode={canRequestProductCode}
           currentUserId={currentUserId}
           canEdit={canEdit}

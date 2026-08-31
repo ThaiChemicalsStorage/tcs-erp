@@ -122,6 +122,9 @@ function sanitizeLines(raw: unknown): ProductionOrderLine[] {
     return {
       id: typeof r.id === "string" && r.id ? r.id : newId("poline"),
       isSectionHeader,
+      // บรรทัดต่อ — ไม่กินเลขลำดับเหมือนบรรทัดหัวข้อ แต่**เก็บจำนวน/หน่วยไว้** ("หน้าแปลน 50A | 3 ตัว")
+      // บรรทัดหัวข้อชนะเสมอถ้าฝั่งหน้าจอส่งมาทั้งคู่ เพราะหัวข้อคือชนิดที่ล้างค่ามากกว่า
+      isContinuation: !isSectionHeader && r.isContinuation === true,
       description: sanitizeShortText(r.description, `รายการลำดับที่ ${idx + 1}`),
       subDetails: (Array.isArray(r.subDetails) ? r.subDetails : [])
         .map((sd, i) => sanitizeShortText(sd, `รายละเอียดย่อยลำดับที่ ${idx + 1}.${i + 1}`))

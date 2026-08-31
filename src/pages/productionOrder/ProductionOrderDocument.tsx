@@ -12,6 +12,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ApiError } from "../../lib/apiClient";
 import { newId } from "../../lib/products";
 import { useI18n } from "../../lib/i18n";
+import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { getRevisionNumber } from "../../lib/revisionDiff";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
@@ -33,9 +34,11 @@ function toUpdateFields(d: ProductionOrder): ProductionOrderUpdateFields {
 
 // หน้าแก้ไขใบสั่งผลิต (FM-PD-02) — แก้ได้เฉพาะฉบับร่าง อนุมัติแล้วล็อก เหมือนเอกสารอื่นในระบบ
 export function ProductionOrderDocument({
-  productionOrderId, canEdit, canApprove, canPrint, canDelete, onBack, onDeleted, onOpenOther, showToast,
+  productionOrderId, company, canEdit, canApprove, canPrint, canDelete, onBack, onDeleted, onOpenOther, showToast,
 }: {
   productionOrderId: string;
+  /** โปรไฟล์บริษัทสำหรับโลโก้บนใบพิมพ์ FM-PD-02 */
+  company: Company;
   canEdit: boolean;
   canApprove: boolean;
   canPrint: boolean;
@@ -205,6 +208,14 @@ export function ProductionOrderDocument({
   }
 
   const editable = canEdit && doc.status === "Draft";
+  // หัวจดหมายของใบพิมพ์ — FM-PD-02 ใช้แค่โลโก้ ที่เหลือส่งไปเพื่อให้ชนิดครบเท่านั้น
+  // สร้าง inline แบบเดียวกับใบเบิกพัสดุ/ใบส่งมอบสินค้า (ยังไม่มีตัวช่วยกลางสำหรับเรื่องนี้)
+  const companyHeader: CompanyHeaderInfo = {
+    name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
+    branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
+  };
 
   const setLines = (fn: (lines: ProductionOrderLine[]) => ProductionOrderLine[]) =>
     setDraft((prev) => prev && { ...prev, lines: fn(prev.lines) });
@@ -369,10 +380,12 @@ export function ProductionOrderDocument({
           {draft.lines.length === 0 && <p className="text-xs text-muted-foreground">{t("productionOrderDoc.noLines")}</p>}
 
           {draft.lines.map((l, idx) => (
-            <div key={l.id} className={`rounded-lg border p-2 space-y-1.5 ${l.isSectionHeader ? "border-[#c9a84c]/40 bg-[#c9a84c]/5" : "border-border/60"}`}>
+            <div key={l.id} className={`rounded-lg border p-2 space-y-1.5 ${l.isSectionHeader ? "border-[#c9a84c]/40 bg-[#c9a84c]/5" : "border-border/60"} ${l.isContinuation ? "ml-6" : ""}`}>
               <div className="flex items-center gap-2">
+                {/* บรรทัดต่อไม่กินเลขลำดับเหมือนบรรทัดหัวข้อ แต่ยังมีจำนวน/หน่วยของตัวเอง
+                    ("3 หน้าแปลน 20A | 2 ตัว" แล้ว "หน้าแปลน 50A | 3 ตัว" บนฟอร์ม FM-PD-02 ตัวจริง) */}
                 <span className="text-xs font-mono text-muted-foreground w-6 flex-shrink-0 text-center">
-                  {l.isSectionHeader ? "—" : draft.lines.slice(0, idx + 1).filter((x) => !x.isSectionHeader).length}
+                  {l.isSectionHeader || l.isContinuation ? "—" : draft.lines.slice(0, idx + 1).filter((x) => !x.isSectionHeader && !x.isContinuation).length}
                 </span>
                 <input
                   disabled={!editable} value={l.description}
@@ -442,6 +455,9 @@ export function ProductionOrderDocument({
               <button onClick={() => setLines((lines) => [...lines, blankProductionOrderLine(newId("poline"), true)])} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
                 <Heading size={13} /> {t("productionOrderDoc.line.addHeader")}
               </button>
+              <button onClick={() => setLines((lines) => [...lines, blankProductionOrderLine(newId("poline"), false, true)])} title={t("productionOrderDoc.line.continuationHint")} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                <CornerDownRight size={13} /> {t("productionOrderDoc.line.addContinuation")}
+              </button>
             </div>
           )}
         </div>
@@ -476,7 +492,7 @@ export function ProductionOrderDocument({
         </div>
       </div>
 
-      {showPrint && <ProductionOrderPrintDocument doc={doc} />}
+      {showPrint && <ProductionOrderPrintDocument doc={doc} companyHeader={companyHeader} />}
 
       <ConfirmDialog
         open={confirmDelete}

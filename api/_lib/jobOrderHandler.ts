@@ -60,6 +60,9 @@ function sanitizeLines(raw: unknown): JobOrderLine[] {
   if (raw.length > MAX_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_LINES} รายการ`);
   return (raw as Record<string, unknown>[]).map((r, idx) => ({
     id: typeof r.id === "string" && r.id ? r.id : newId("joline"),
+    // บรรทัดต่อไม่กินเลขลำดับตอนพิมพ์ แต่**ยังมีจำนวน/หน่วยของตัวเอง** จึงไม่ล้างค่าเหมือน
+    // isSectionHeader ของใบสั่งผลิต — ฟอร์ม FM-PJ-01 ตัวจริงมีแถวแบบนี้ ("Ø 650 | 15 | PCS")
+    isContinuation: r.isContinuation === true,
     description: sanitizeShortText(r.description, `รายละเอียดลำดับที่ ${idx + 1}`),
     // บรรทัดว่างถูกตัดทิ้ง เหมือน ProductionOrderLine.subDetails ที่มีเทสต์คุมพฤติกรรมนี้อยู่
     subDetails: (Array.isArray(r.subDetails) ? r.subDetails : [])
@@ -100,7 +103,10 @@ function sanitizeChecklist(raw: unknown, currentRaw: ChecklistGroup[]): Checklis
             .filter(Boolean)
         : [];
       if (baseOpt.value === undefined) return { ...baseOpt, checked, details };
-      return { ...baseOpt, checked, details, value: sanitizeShortText(r.value, `รายละเอียด (${baseOpt.label})`) };
+      const withValue = { ...baseOpt, checked, details, value: sanitizeShortText(r.value, `รายละเอียด (${baseOpt.label})`) };
+      // ช่องกรอกที่สอง (ความหนาไมครอนของบรรทัดงานสี) — ถ้าไม่รับตรงนี้ ค่าจะถูกทิ้งเงียบ ๆ ตอนบันทึก
+      if (baseOpt.value2 === undefined) return withValue;
+      return { ...withValue, value2: sanitizeShortText(r.value2, `รายละเอียดเพิ่มเติม (${baseOpt.label})`) };
     });
     return { ...base, options };
   });

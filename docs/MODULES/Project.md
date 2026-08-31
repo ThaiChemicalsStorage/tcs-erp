@@ -429,6 +429,10 @@ migration. If that function is wrong, a job order that already had ticks silentl
 so `tests/jobOrderChecklist.test.ts` (9 tests) pins it: ticks survive, fill-in values survive, no key
 is lost, a retired option is kept rather than dropped, and applying it twice is stable.
 
+> ⚠️ **The six headings were undone on 2026-08-31 — see "Job Order: matched against the real
+> FM-PJ-01" below.** The paper form has no headings at all. This section is kept because documents
+> saved between 2026-08-27 and 2026-08-31 carry that shape on disk and are still read back from it.
+
 ⚠️ **The grouping is inferred from what each option means, not read off the paper form** — `reference/`
 is gitignored. Titles and ordering still need checking against a real FM-PJ-01. See TODO.md.
 
@@ -562,3 +566,64 @@ Covered by `tests/api/projectAtomicity.test.ts`: Draft refused, PendingApproval 
 accepted. Adding the gate also broke 8 pre-existing tests whose fixture was `status: "Draft"`,
 confirming it genuinely bites; that fixture is now `"Final"` since those tests target the
 item-to-sub-document link rather than approval.
+
+## Job Order: matched against the real FM-PJ-01 (2026-08-31)
+
+The owner supplied the real form for the first time — a blank `FM-PJ-01 ใบสั่งงาน Rev1 (1).pdf` plus
+`(3).xlsx` with three filled examples. `reference/` is gitignored, so the transcribed layout lives in
+`src/lib/jobOrder.ts`'s `buildJobOrderChecklistGroups()` doc comment and in
+`src/pages/jobOrder/JobOrderPrintDocument.tsx`'s — **those are the durable record**, the same
+convention `productionOrder.ts` already follows. Do not expect to reopen the PDF.
+
+### The six headings were an invention; the paper has none
+
+The 2026-08-27 pass split the 23 options into six headings and said so in its own comment: *"การจัด
+กลุ่มเป็นการอนุมานจากความหมาย ไม่ได้อ่านจากฟอร์มกระดาษจริง"*. The paper turns out to be **one flat
+list in two columns, 11 left and 12 right, with no heading anywhere**, so the grouping was undone.
+
+`buildJobOrderChecklistGroups()` now returns a single group whose `title` is `""`, and
+`ChecklistGroupCard` skips the heading bar entirely when a title is blank rather than rendering an
+empty one. `SCOPE_COLUMN_SPLIT = 11` marks the column boundary; the print document slices on it.
+**Reordering `options` without moving that constant will print the columns wrong.**
+
+Every `ChecklistOption.key` is unchanged, so `withJobOrderChecklistGroups()` reads all three shapes
+that have ever reached the database — one group (before 2026-08-27), six groups (2026-08-27 to
+2026-08-31), and one untitled group (since) — without losing a tick.
+`tests/jobOrderChecklist.test.ts` grew from 9 to 16 tests and now pins **both** directions, plus the
+paper's exact option order.
+
+### Two fill-in blanks on the paint lines
+
+`PRIMER COAT : ______ / ______ MICRON` has two blanks, and `ChecklistOption` had room for one, so the
+micron figure had to be typed into the same box as the paint name. Added `value2`, plus `unit`/`unit2`
+for the units already printed on the form (`BAR`, `TON`, `MICRON`). All three are optional; Scope of
+Work never sets them. `unit`/`unit2` are rebuilt from code on every read and never read back from the
+database — they are form text, not user data.
+
+### `รหัสงาน` was printing the wrong field
+
+`JobOrderPrintDocument.tsx` rendered `j.id` (`JO-2569-0006`) into the "รหัสงาน" box. All three filled
+examples put the PQ number there (`PQ202305-087-VT-SK`), which `JobOrder.jobCode` already holds. A
+bug, not a cosmetic difference.
+
+### Continuation rows
+
+The paper has `1 Flexible Joint` (no quantity) followed by `Ø 650 | 15 | PCS`, `Ø 600 mm. | 2 | PCS`
+… — rows with **their own qty/unit but no sequence number**. `subDetails: string[]` is plain text, so
+those quantities could not be stored at all. `JobOrderLine.isContinuation?: boolean` models them,
+sharing the concept with `ProductionOrderLine` (see [`Production.md`](./Production.md)). Optional and
+defaulting to false, so stored documents read back unchanged.
+
+### Print layout
+
+Rebuilt against the paper: logo + Thai company name centred at the top (no address, so **not**
+`PrintLetterhead`), a filled pale-cyan title bar, English sub-labels under every header field, a
+12-row item grid with blank rows left to write in, the two-column scope list, Out-of-Scope ruled lines
+that print whether or not anything was typed, and the two-row signature block the paper actually uses
+(ผู้ร้องขอ alone on top, then ผู้อนุมัติ and ผู้รับเอกสาร side by side) rather than three equal columns.
+
+The typos `(Finshed Date)` and `INTERMIDIATE COAT` are on the paper and are reproduced deliberately.
+
+Verified by printing a real job order to PDF from the dev stack and comparing the rendered pages
+against the form image — which is how the missing white background, the empty fill-ins printing as
+`: BAR`, and the scope list splitting mid-column were caught. See CHANGELOG.md 2026-08-31.

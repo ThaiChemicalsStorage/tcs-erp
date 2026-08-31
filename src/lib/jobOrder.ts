@@ -7,9 +7,9 @@
  * varies per job. The "ขอบเขตงาน (Scope of work)" section is a flat 23-item checklist reusing
  * ChecklistGroup/ChecklistOption from documentRequirements.ts (the same shape Scope of Work uses) —
  * several options need an associated fill-in value (micron figures, BAR/TON values, free text), which
- * is what ChecklistOption.value (added alongside this file) is for. Deliberately ONE flat group, not
- * split into the PDF's two visual columns — the source form gives those columns no explicit title/
- * business meaning of their own, so inventing one would be adding structure the source doesn't have.
+ * is what ChecklistOption.value/value2 are for. ONE flat group with no heading, because that is
+ * literally what the paper form is — confirmed 2026-08-31 against the real blank form and three
+ * filled examples; see buildJobOrderChecklistGroups() for the transcribed layout.
  */
 
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
@@ -33,6 +33,17 @@ export interface JobOrderLine {
    * ถ้าไม่มีฟิลด์นี้ สเปกจะหายเงียบ ๆ ตอนสร้างเอกสาร
    */
   subDetails: string[];
+  /**
+   * บรรทัดต่อของรายการก่อนหน้า — **ไม่กินเลขลำดับ แต่ยังมีจำนวน/หน่วยของตัวเอง**
+   *
+   * ต่างจาก `subDetails` ตรงที่ subDetails เป็นข้อความล้วน ๆ ใต้คำอธิบายเท่านั้น ฟอร์มกระดาษจริง
+   * ทั้งสองใบมีแถวแบบนี้อยู่จริง และก่อน 2026-08-31 ระบบเก็บไม่ได้เลย:
+   *   FM-PJ-01  "1 | Flexible Joint" (ไม่มีจำนวน) แล้วตามด้วย "Ø 650 | 15 | PCS" ที่ไม่มีเลขลำดับ
+   *   FM-PD-02  "3 | หน้าแปลน 20A | 2 ตัว" แล้ว "หน้าแปลน 50A | 3 ตัว" ที่ไม่มีเลขลำดับ
+   *
+   * optional และ default เป็น false — เอกสารเก่าทุกใบอ่านออกมาเหมือนเดิมทุกประการ ไม่ต้อง migrate
+   */
+  isContinuation?: boolean;
 }
 
 export interface JobOrder {
@@ -176,102 +187,112 @@ export async function deleteJobOrder(id: string): Promise<void> {
 }
 // สร้างรายการเปล่าสำหรับตารางที่พิมพ์เองอิสระ (ไม่ผูกกับแคตตาล็อก)
 // Builds a blank free-typed line (not catalog-linked, unlike Material Requisition's lines)
-export function blankJobOrderLine(): JobOrderLine {
-  return { id: `joline-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, description: "", subDetails: [], quantity: null, unit: "", remark: "" };
+export function blankJobOrderLine(isContinuation = false): JobOrderLine {
+  return { id: `joline-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, isContinuation, description: "", subDetails: [], quantity: null, unit: "", remark: "" };
 }
 
-/** Builds the default "ขอบเขตงาน (Scope of work)" checklist, in the reference PDF's own reading
- * order (left column top-to-bottom, then right column top-to-bottom). Every option starts unchecked
- * with a blank value — nothing is pre-selected, same "don't guess" convention Scope of Work's own
- * default-checklist builder follows. */
 /**
- * เช็คลิสต์ขอบเขตงานของ FM-PJ-01 — **แบ่งเป็นหลายหัวข้อตั้งแต่ 2026-08-27** ตามที่ฝ่ายโครงการขอ
- * ("ติ๊กเลือกได้ว่าจะเอาตัวไหน แบบหลายหัวข้อ") เดิมเป็นกลุ่มเดียว 23 ตัวเลือกเรียงยาว
+ * เช็คลิสต์ "ขอบเขตงาน (Scope of work)" ของ FM-PJ-01 — **กลุ่มเดียว 23 ตัวเลือก ไม่มีหัวข้อย่อย**
  *
- * ⚠️ **`key` ของทุกตัวเลือกคงเดิมทุกตัว** — `withJobOrderChecklistGroups()` ด้านล่างใช้ key จับคู่
- * ย้ายค่าที่ติ๊กไว้แล้วเข้ากลุ่มใหม่ ใบสั่งงานเก่าจึงไม่เสียข้อมูล ห้ามเปลี่ยน key เด็ดขาด
+ * ระหว่าง 2026-08-27 ถึง 2026-08-31 เคยถูกแตกเป็น 6 หัวข้อ (แบบและการคำนวณ / วัสดุและงานผลิต /
+ * การตรวจสอบและทดสอบ / งานสี / ขนส่งและงานหน้างาน / อื่น ๆ) ซึ่งตอนนั้นเขียนกำกับไว้เองว่าเป็น
+ * **การอนุมานจากความหมาย ไม่ได้อ่านจากฟอร์มกระดาษจริง** 2026-08-31 เจ้าของส่งฟอร์มจริงมาให้
+ * (`reference/company/FM-PJ-01 ใบสั่งงาน Rev1 (1).pdf` เปล่า + `(3).xlsx` ที่กรอกแล้ว 3 ใบ)
+ * ปรากฏว่ากระดาษเป็นรายการเรียงยาวสองคอลัมน์ ไม่มีหัวข้อย่อยแม้แต่หัวข้อเดียว จึงยุบกลับตามกระดาษ
  *
- * ⚠️ **การจัดกลุ่มเป็นการอนุมานจากความหมายของแต่ละหัวข้อ ไม่ได้อ่านจากฟอร์มกระดาษจริง**
- * (`reference/` ถูก gitignore ไว้) ลำดับและชื่อหัวข้อควรถูกตรวจกับฟอร์มจริงอีกครั้ง — ดู TODO.md
+ * `reference/` ถูก gitignore ไว้ ผังด้านล่างนี้จึงเป็น**บันทึกถาวรของฟอร์ม** แบบเดียวกับที่
+ * `productionOrder.ts` ทำไว้ ลำดับบนกระดาษคือ:
+ *
+ * | ซ้าย (11 ข้อ)                   | ขวา (12 ข้อ)                              |
+ * |---------------------------------|-------------------------------------------|
+ * | DESIGN AND CALCULATION SHEET    | PAINTING SYSTEM : ______                  |
+ * | FABRICATION DRAWING             | SANDBLASTING SA : ______                  |
+ * | SHOP DETAIL AND CUTTING PLAN    | PRIMER COAT : ______ / ______ MICRON      |
+ * | RAW MATERIAL SUPPLY             | INTERMIDIATE COAT : ______ / ______ MICRON|
+ * | SHOP FABRICATION AND CONSUMABLE | FINISHED COAT : ______ / ______ MICRON    |
+ * | PT OR MT                        | HOT DIP GALVANIZED                        |
+ * | RT 10%                          | WRAPPING                                  |
+ * | HYDRO - TEST ……… BAR            | TRANSPORTATION                            |
+ * | PNEUMATIC TEST ……… BAR          | SITE INSTALLATION                         |
+ * | MANPOWER SUPPLY                 | EXCAVATION                                |
+ * | MOBILE CRANE ……… TON            | SCAFFOLDING                               |
+ * |                                 | OTHER ______                              |
+ *
+ * `SCOPE_COLUMN_SPLIT` ด้านล่างคือจุดตัดระหว่างสองคอลัมน์ — ใบพิมพ์ใช้ค่านี้แบ่งคอลัมน์
+ * ห้ามเรียงลำดับ `options` ใหม่โดยไม่ขยับค่านี้ตาม ไม่งั้นใบพิมพ์จะแบ่งคอลัมน์ผิดจากกระดาษ
+ *
+ * "INTERMIDIATE" กับ "Finshed Date" บนหัวเอกสารสะกดผิดบนกระดาษจริง — พิมพ์ตามกระดาษโดยตั้งใจ
+ *
+ * ⚠️ **`key` ของทุกตัวเลือกคงเดิมทุกตัว** — `withJobOrderChecklistGroups()` ใช้ key จับคู่ค่าที่
+ * ติ๊กไว้แล้วของเอกสารเก่า ทั้งใบที่บันทึกตอนเป็นกลุ่มเดียว (ก่อน 2026-08-27) และใบที่บันทึกตอนเป็น
+ * 6 หัวข้อ (2026-08-27 ถึง 2026-08-31) จึงอ่านกลับมาได้ครบทั้งคู่ ห้ามเปลี่ยน key เด็ดขาด
+ * — มี `tests/jobOrderChecklist.test.ts` คุมทั้งสองทิศทางอยู่
  */
+
+/** จำนวนตัวเลือกในคอลัมน์ซ้ายของฟอร์มจริง — ที่เหลือคือคอลัมน์ขวา */
+export const SCOPE_COLUMN_SPLIT = 11;
+
 export function buildJobOrderChecklistGroups(): ChecklistGroup[] {
-  const opt = (key: string, label: string, hasValue = false): ChecklistOption =>
-    hasValue
-      ? { key, label, checked: false, value: "", details: [] }
-      : { key, label, checked: false, details: [] };
+  // opt(key, label)                     ช่องติ๊กเปล่า ๆ
+  // opt(key, label, { unit })           มีช่องกรอกหนึ่งช่อง (หน่วยพิมพ์ต่อท้าย ถ้ามี)
+  // opt(key, label, { unit, unit2 })    มีช่องกรอกสองช่อง เช่นบรรทัดงานสี
+  const opt = (
+    key: string,
+    label: string,
+    fill?: { unit?: string; unit2?: string },
+  ): ChecklistOption => {
+    if (!fill) return { key, label, checked: false, details: [] };
+    const base: ChecklistOption = { key, label, checked: false, value: "", details: [] };
+    if (fill.unit) base.unit = fill.unit;
+    if (fill.unit2 !== undefined) { base.value2 = ""; base.unit2 = fill.unit2; }
+    return base;
+  };
   return [
     {
       key: "scopeOfWork",
-      title: "แบบและการคำนวณ (Design & Drawing)",
+      // ไม่มีหัวข้อบนกระดาษ — ChecklistGroupCard ซ่อนแถบหัวข้อเมื่อ title ว่าง
+      title: "",
       selectionType: "multiple",
       options: [
+        // ── คอลัมน์ซ้าย (11 ข้อ) ────────────────────────────────────────────
         opt("designAndCalculationSheet", "DESIGN AND CALCULATION SHEET"),
         opt("fabricationDrawing", "FABRICATION DRAWING"),
         opt("shopDetailAndCuttingPlan", "SHOP DETAIL AND CUTTING PLAN"),
-      ],
-    },
-    {
-      key: "scopeMaterialFabrication",
-      title: "วัสดุและงานผลิต (Material & Fabrication)",
-      selectionType: "multiple",
-      options: [
         opt("rawMaterialSupply", "RAW MATERIAL SUPPLY"),
         opt("shopFabricationAndConsumable", "SHOP FABRICATION AND CONSUMABLE"),
-        opt("hotDipGalvanized", "HOT DIP GALVANIZED"),
-      ],
-    },
-    {
-      key: "scopeInspectionTesting",
-      title: "การตรวจสอบและทดสอบ (Inspection & Testing)",
-      selectionType: "multiple",
-      options: [
         opt("ptOrMt", "PT OR MT"),
         opt("rt10", "RT 10%"),
-        opt("hydroTest", "HYDRO-TEST", true),
-        opt("pneumaticTest", "PNEUMATIC TEST", true),
-      ],
-    },
-    {
-      key: "scopePainting",
-      title: "งานสี (Painting)",
-      selectionType: "multiple",
-      options: [
-        opt("sandblastingSa", "SANDBLASTING SA", true),
-        opt("paintingSystem", "PAINTING SYSTEM", true),
-        opt("primerCoat", "PRIMER COAT", true),
-        opt("intermediateCoat", "INTERMIDIATE COAT", true),
-        opt("finishedCoat", "FINISHED COAT", true),
-      ],
-    },
-    {
-      key: "scopeSiteWork",
-      title: "ขนส่งและงานหน้างาน (Transport & Site)",
-      selectionType: "multiple",
-      options: [
+        opt("hydroTest", "HYDRO - TEST", { unit: "BAR" }),
+        opt("pneumaticTest", "PNEUMATIC TEST", { unit: "BAR" }),
+        opt("manpowerSupply", "MANPOWER SUPPLY"),
+        opt("mobileCrane", "MOBILE CRANE", { unit: "TON" }),
+        // ── คอลัมน์ขวา (12 ข้อ) ─────────────────────────────────────────────
+        opt("paintingSystem", "PAINTING SYSTEM", {}),
+        opt("sandblastingSa", "SANDBLASTING SA", {}),
+        opt("primerCoat", "PRIMER COAT", { unit2: "MICRON" }),
+        opt("intermediateCoat", "INTERMIDIATE COAT", { unit2: "MICRON" }),
+        opt("finishedCoat", "FINISHED COAT", { unit2: "MICRON" }),
+        opt("hotDipGalvanized", "HOT DIP GALVANIZED"),
         opt("wrapping", "WRAPPING"),
         opt("transportation", "TRANSPORTATION"),
         opt("siteInstallation", "SITE INSTALLATION"),
         opt("excavation", "EXCAVATION"),
         opt("scaffolding", "SCAFFOLDING"),
-        opt("mobileCrane", "MOBILE CRANE", true),
-        opt("manpowerSupply", "MANPOWER SUPPLY"),
+        opt("other", "OTHER", {}),
       ],
-    },
-    {
-      key: "scopeOther",
-      title: "อื่น ๆ (Other)",
-      selectionType: "multiple",
-      options: [opt("other", "OTHER", true)],
     },
   ];
 }
 
 /**
- * จัดกลุ่มเช็คลิสต์ของเอกสารเดิมให้เข้ากับโครงสร้างหัวข้อปัจจุบัน โดย**คงค่าที่ติ๊กไว้แล้วทุกตัว**
+ * อ่านเช็คลิสต์ของเอกสารเดิมเข้าโครงสร้างปัจจุบัน โดย**คงค่าที่ติ๊กไว้แล้วทุกตัว**
  *
- * จับคู่ด้วย `ChecklistOption.key` ไม่ใช่ตำแหน่งหรือกลุ่ม — ใบสั่งงานที่บันทึกไว้ก่อน 2026-08-27
- * มีกลุ่มเดียวชื่อ `scopeOfWork` ที่บรรจุ 23 ตัวเลือก ฟังก์ชันนี้จะกระจายมันเข้าหัวข้อใหม่ให้เอง
- * โดยที่ `checked`/`value`/`details` เดิมติดไปด้วย ทำงานตอนอ่านทุกครั้ง ไม่ต้อง migrate ฐานข้อมูล
+ * จับคู่ด้วย `ChecklistOption.key` ไม่ใช่ตำแหน่งหรือกลุ่ม จึงรับได้ทั้งสามรูปแบบที่เคยถูกบันทึกลง
+ * ฐานข้อมูล: กลุ่มเดียว 23 ตัวเลือก (ก่อน 2026-08-27), 6 หัวข้อ (2026-08-27 ถึง 2026-08-31)
+ * และกลุ่มเดียวไม่มีหัวข้อตามฟอร์มจริง (ตั้งแต่ 2026-08-31) — ทำงานตอนอ่านทุกครั้ง ไม่ต้อง migrate
+ *
+ * ป้าย/หน่วย/การแบ่งกลุ่มถูกสร้างใหม่จาก `buildJobOrderChecklistGroups()` เสมอ มีแต่สิ่งที่ผู้ใช้
+ * กรอกเอง (`checked`/`value`/`value2`/`details`) ที่ถูกยกมาจากเอกสารเดิม
  *
  * ตัวเลือกแปลกปลอมที่ไม่มีในโครงสร้างปัจจุบันจะถูกยกไปไว้ท้ายกลุ่มสุดท้าย แทนที่จะถูกทิ้งเงียบ ๆ
  * (แนวเดียวกับ `withDefaultChecklistGroups()` ของ Scope of Work)
@@ -292,6 +313,7 @@ export function withJobOrderChecklistGroups(existing: ChecklistGroup[] | undefin
         ...defOpt,
         checked: saved.checked,
         ...(defOpt.value !== undefined ? { value: saved.value ?? "" } : {}),
+        ...(defOpt.value2 !== undefined ? { value2: saved.value2 ?? "" } : {}),
         details: saved.details ?? [],
       };
     }),

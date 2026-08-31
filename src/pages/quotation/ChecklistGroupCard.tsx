@@ -30,9 +30,16 @@ export function ChecklistGroupCard({
 
   return (
     <div className={`border rounded-lg p-3 bg-secondary/30 ${error ? "border-[#e05252]/50" : "border-border"}`}>
-      <p className="text-xs font-semibold text-foreground mb-2">
-        {group.title} {required && <span className="text-[#e05252]">*</span>}
-      </p>
+      {/* ใบสั่งงานส่งกลุ่มที่ไม่มีหัวข้อมา (2026-08-31) เพราะฟอร์ม FM-PJ-01 ตัวจริงเป็นรายการ
+          เรียงยาวไม่มีหัวข้อย่อยเลย — เว้นแถบหัวข้อไปทั้งแถบ ไม่ใช่เรนเดอร์หัวข้อว่างทิ้งช่องไว้
+          เครื่องหมาย * ยังต้องได้ที่ยืน จึงเรนเดอร์เดี่ยว ๆ เมื่อกลุ่มบังคับแต่ไม่มีหัวข้อ */}
+      {group.title.trim() !== "" ? (
+        <p className="text-xs font-semibold text-foreground mb-2">
+          {group.title} {required && <span className="text-[#e05252]">*</span>}
+        </p>
+      ) : required ? (
+        <p className="text-xs font-semibold text-[#e05252] mb-2">*</p>
+      ) : null}
       <div className="space-y-1.5">
         {group.options.map((opt) => (
           <div key={opt.key} className="space-y-1">
@@ -49,11 +56,29 @@ export function ChecklistGroupCard({
                 <input
                   disabled={disabled}
                   value={opt.value}
+                  aria-label={opt.label}
                   onClick={(e) => e.preventDefault()}
                   onChange={(e) => onChange({ ...group, options: group.options.map((o) => (o.key === opt.key ? { ...o, value: e.target.value } : o)) })}
                   className="flex-1 min-w-0 text-xs text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
                 />
               )}
+              {/* หน่วยที่พิมพ์อยู่บนฟอร์มอยู่แล้ว (BAR / TON) — เป็นป้าย ไม่ใช่ช่องกรอก */}
+              {opt.unit && <span className="text-xs text-muted-foreground flex-shrink-0">{opt.unit}</span>}
+              {/* ช่องกรอกที่สอง — บรรทัดงานสีของ FM-PJ-01 เว้นช่องไว้สองช่อง (ชื่อสี / ความหนา) */}
+              {opt.value2 !== undefined && (
+                <>
+                  <span className="text-xs text-muted-foreground flex-shrink-0">/</span>
+                  <input
+                    disabled={disabled}
+                    value={opt.value2}
+                    aria-label={`${opt.label} — ${opt.unit2 ?? ""}`.trim()}
+                    onClick={(e) => e.preventDefault()}
+                    onChange={(e) => onChange({ ...group, options: group.options.map((o) => (o.key === opt.key ? { ...o, value2: e.target.value } : o)) })}
+                    className="w-20 flex-shrink-0 text-xs text-foreground bg-secondary border border-border rounded px-2 py-1 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                  />
+                </>
+              )}
+              {opt.unit2 && <span className="text-xs text-muted-foreground flex-shrink-0">{opt.unit2}</span>}
             </label>
             {/* บรรทัดย่อยใต้ตัวเลือก — เพิ่มมา 2026-08-27 สำหรับใบสั่งงาน
                 อยู่**นอก** <label> โดยตั้งใจ ไม่งั้นคลิกในช่องกรอกจะไปสลับเช็คบ็อกซ์

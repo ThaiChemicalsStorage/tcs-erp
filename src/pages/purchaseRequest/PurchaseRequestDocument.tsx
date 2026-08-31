@@ -18,6 +18,7 @@ import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { PurchaseRequestPrintDocument } from "./PurchaseRequestPrintDocument";
+import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { useI18n } from "../../lib/i18n";
 import { getRevisionNumber } from "../../lib/revisionDiff";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
@@ -32,10 +33,15 @@ function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
     lines: p.lines,
     revisionNote: p.revisionNote,
     vendorName: p.vendorName,
+    vendorPhone: p.vendorPhone,
+    issueDate: p.issueDate,
     neededByDate: p.neededByDate,
     creditDays: p.creditDays,
     shippingMethod: p.shippingMethod,
     deliveryLocation: p.deliveryLocation,
+    deliveryContact: p.deliveryContact,
+    deliveryPhone: p.deliveryPhone,
+    headerRemark: p.headerRemark,
     requestedBy: p.requestedBy,
     requestedAt: p.requestedAt,
     approvedBy: p.approvedBy,
@@ -49,6 +55,7 @@ function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
 // Purchase Request editor: header fields, a line table (catalog-linked or free-typed), and signatories.
 export function PurchaseRequestDocument({
   purchaseRequestId,
+  company,
   currentUserId,
   canEdit,
   canRequestProductCode,
@@ -61,6 +68,8 @@ export function PurchaseRequestDocument({
   showToast,
 }: {
   purchaseRequestId: string;
+  /** โปรไฟล์บริษัทสำหรับหัวจดหมายไทยบนใบพิมพ์ FM-PU-05 (ชื่อ/ที่อยู่/โทร./เลขผู้เสียภาษี) */
+  company: Company;
   currentUserId: string;
   canEdit: boolean;
   canRequestProductCode: boolean;
@@ -232,6 +241,14 @@ export function PurchaseRequestDocument({
 
   const isDraftStatus = doc.status === "Draft";
   const editable = canEdit && isDraftStatus;
+
+  // หัวจดหมายของใบพิมพ์ — สร้าง inline แบบเดียวกับใบเบิกพัสดุ/ใบส่งมอบสินค้า
+  const companyHeader: CompanyHeaderInfo = {
+    name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
+    branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
+  };
 
   const updateLine = (id: string, patch: Partial<PurchaseRequestLine>) => {
     setDraft((prev) => prev && { ...prev, lines: prev.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
@@ -406,6 +423,18 @@ export function PurchaseRequestDocument({
                 className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
             </div>
             <div>
+              <label htmlFor="pr-vendorPhone" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.vendorPhone")}</label>
+              <input id="pr-vendorPhone" disabled={!editable} value={draft.vendorPhone}
+                onChange={(e) => setDraft({ ...draft, vendorPhone: e.target.value })}
+                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+            </div>
+            <div>
+              <label htmlFor="pr-issueDate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.issueDate")}</label>
+              <input id="pr-issueDate" type="date" disabled={!editable} value={draft.issueDate}
+                onChange={(e) => setDraft({ ...draft, issueDate: e.target.value })}
+                className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+            </div>
+            <div>
               <label htmlFor="pr-neededByDate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.neededByDate")}</label>
               <input id="pr-neededByDate" type="date" disabled={!editable} value={draft.neededByDate}
                 onChange={(e) => setDraft({ ...draft, neededByDate: e.target.value })}
@@ -428,6 +457,24 @@ export function PurchaseRequestDocument({
               <input id="pr-deliveryLocation" disabled={!editable} value={draft.deliveryLocation}
                 onChange={(e) => setDraft({ ...draft, deliveryLocation: e.target.value })}
                 className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+            </div>
+            <div>
+              <label htmlFor="pr-deliveryContact" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.deliveryContact")}</label>
+              <input id="pr-deliveryContact" disabled={!editable} value={draft.deliveryContact}
+                onChange={(e) => setDraft({ ...draft, deliveryContact: e.target.value })}
+                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+            </div>
+            <div>
+              <label htmlFor="pr-deliveryPhone" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.deliveryPhone")}</label>
+              <input id="pr-deliveryPhone" disabled={!editable} value={draft.deliveryPhone}
+                onChange={(e) => setDraft({ ...draft, deliveryPhone: e.target.value })}
+                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+            </div>
+            <div className="sm:col-span-2">
+              <label htmlFor="pr-headerRemark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.headerRemark")}</label>
+              <textarea id="pr-headerRemark" rows={3} disabled={!editable} value={draft.headerRemark}
+                onChange={(e) => setDraft({ ...draft, headerRemark: e.target.value })}
+                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors resize-y leading-relaxed disabled:opacity-70" />
             </div>
           </div>
         </div>
@@ -614,7 +661,7 @@ export function PurchaseRequestDocument({
         </div>
       </div>
 
-      {showPrint && <PurchaseRequestPrintDocument purchaseRequest={doc} />}
+      {showPrint && <PurchaseRequestPrintDocument purchaseRequest={doc} companyHeader={companyHeader} />}
 
       <ProductPickerModal open={pickerOpen} products={filteredProducts} categories={categories} onSelect={addProduct} onClose={() => setPickerOpen(false)} />
 

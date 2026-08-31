@@ -157,11 +157,27 @@ each showing only the items the preparer marks as covered by that shipment.
 5. **Print** (`DeliveryOrderPrintDocument.tsx`) is **per milestone** (since 2026-07-24): each
    installment card has its own "พิมพ์ใบส่งมอบงวดนี้" button that prints one independent Delivery
    Note containing only that milestone's page — its เลขที่/วันที่, its ticked items, its Remark, and
-   a "งวดชำระ" header line naming the milestone (`{pct}% {label}`) — never a sibling milestone's
-   data. There is no combined-print toolbar button anymore. Each page renders as a
-   `<table className="hidden print:table ...">` with `style={{ breakAfter: "page" }}`; a raw browser
-   Ctrl+P (no button clicked) falls back to rendering every milestone's page, each still fully
-   self-contained. Company letterhead is a **mix**: logo and (2026-08-04) Facebook/Line/website come
+   its own header block — never a sibling milestone's data. There is no combined-print toolbar button
+   anymore.
+
+   **Corrected 2026-08-31 (this section had drifted).** It says the page renders as a
+   `<table className="hidden print:table ...">` and that the header carries a "งวดชำระ" line naming
+   the milestone. Neither has been true for some time: the page is a `<div className="hidden
+   print:block">`, and the งวดชำระ line was removed (the Status section above already recorded that;
+   this paragraph was never updated).
+
+   **A milestone can span several printed pages, and pagination is done in code, not by the browser
+   (2026-08-31).** The owner sent back a delivery note they had printed: a 12-item milestone spilled
+   onto a second page, and **that page had no letterhead, no เรียน/เลขที่/วันที่/WORK ORDER block and
+   no column headers** — unreadable as a document. The `<thead>` that should have repeated did not,
+   which `UI_GUIDELINES.md` §Print/PDF already warns about for a tall `<thead>`. `paginateItems()`
+   now packs items into page-sized chunks itself and renders one full page per chunk via the extracted
+   `PageHead`, so every page carries the header; an item and its specifications are never split across
+   pages; item numbers continue across pages instead of restarting; and Remark + signatures appear only
+   on a milestone's last page. `SINGLE_PAGE_ROW_TARGET` became `PAGE_ROW_CAPACITY` because filler rows
+   were being counted per *milestone* — wrong for any milestone longer than one page — and are now
+   counted per *page*. A raw browser Ctrl+P (no button clicked) still falls back to rendering every
+   milestone, each still fully self-contained. Company letterhead is a **mix**: logo and (2026-08-04) Facebook/Line/website come
    from the live Settings → Company Info singleton (`CompanyHeaderInfo`, same convention
    `PrintDocument.tsx`/`ScopeOfWorkPrintDocument.tsx` already use — so those 4 fields stay in sync if
    Settings changes), while name/address/tel/email stay a fixed `LETTERHEAD` constant matching the

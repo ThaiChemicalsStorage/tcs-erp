@@ -68,6 +68,24 @@ export interface PurchaseRequest {
   jobCode: string;
   /** "ผู้จำหน่าย" — starts blank; Purchasing fills this in, not Project. */
   vendorName: string;
+  /**
+   * ห้าช่องด้านล่างนี้เพิ่มเมื่อ 2026-08-31 หลังได้เห็นใบขอซื้อจริงที่กรอกและเซ็นแล้ว
+   * (`reference/company/ED6908038.pdf`, FM-PU-05 Rev.02 : 03/11/68) ซึ่งมีช่องพวกนี้อยู่บนฟอร์ม
+   * แต่ระบบไม่เคยมีที่เก็บ ตอนพิมพ์จึงออกมาเป็นฟอร์มที่ขาดช่องไปดื้อ ๆ
+   *
+   * เอกสารที่บันทึกก่อนหน้านั้นไม่มีฟิลด์เหล่านี้ — `toClient()` เติมเป็น "" ตอนอ่าน ไม่ได้ทำ migration
+   * (แนวเดียวกับ `subDetails` และ `revisionNote` ที่ทำไว้ก่อนแล้ว)
+   */
+  /** "โทร." ใต้ชื่อผู้จำหน่าย */
+  vendorPhone: string;
+  /** "วันที่" บนหัวเอกสาร — วันที่ของใบขอซื้อเอง คนละอันกับ `requestedAt` ซึ่งเป็นวันที่ผู้ขอเซ็น */
+  issueDate: string;
+  /** "ติดต่อ" — ชื่อผู้ประสานงานที่ปลายทางส่งของ */
+  deliveryContact: string;
+  /** "โทร." ใต้สถานที่ส่งของ */
+  deliveryPhone: string;
+  /** กล่อง "หมายเหตุ" ใต้ตาราง — คนละอันกับ `jobCode` ซึ่งอยู่ตรงป้าย "หมายเหตุ" บนหัวเอกสาร */
+  headerRemark: string;
   /** "วันที่รับของ" */
   neededByDate: string;
   /** "เครดิต" (days) */

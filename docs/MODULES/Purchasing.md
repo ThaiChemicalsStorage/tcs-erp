@@ -1,6 +1,6 @@
 # Module: Purchasing (จัดซื้อ)
 
-## Status: ✅ Built 2026-08-28 — ใบสั่งซื้อ (new) plus ใบขอซื้อ opened to every department. Click-tested in a real browser end to end. **Print layout is a placeholder** awaiting the owner's real form. ⚠️ **ใบตรวจรับสินค้า and ใบรับวางบิล were built the same day and removed hours later at the owner's instruction — see "Removed 2026-08-28" below.**
+## Status: ✅ Built 2026-08-28 — ใบสั่งซื้อ (new) plus ใบขอซื้อ opened to every department. Click-tested in a real browser end to end. **ใบขอซื้อ's print layout was matched against the real FM-PU-05 on 2026-08-31; ใบสั่งซื้อ's is still a placeholder** awaiting the owner's real form. ⚠️ **ใบตรวจรับสินค้า and ใบรับวางบิล were built the same day and removed hours later at the owner's instruction — see "Removed 2026-08-28" below.**
 
 Serves the **Purchasing (จัดซื้อ) department**, which until this date had **no module of its own** —
 it existed in the system only as a signature box on ใบขอซื้อ (`purchasingDeptBy`, editable only
@@ -122,6 +122,30 @@ these on the roles page by hand.** No RBAC migration was written; `api/_lib/rbac
 run-once mechanism if that decision is ever reversed.
 
 ## Print documents
+
+`PurchaseRequestPrintDocument.tsx` was matched against the **real filled FM-PU-05 Rev.02 : 03/11/68**
+on 2026-08-31 (`reference/company/ED6908038.pdf`, gitignored — its layout is transcribed in that
+file's doc comment, which is the durable record). It had described itself as a "first-pass … not yet
+pixel-calibrated" reproduction. What changed:
+
+- A **Thai letterhead** (company name, address, phone, tax ID) on the left, with `ใบขอซื้อ` and the
+  owning department in parentheses on the right — `(ฝ่ายโครงการ)` or `(ฝ่ายผลิต)`, read from
+  `ownerDepartment`, since both departments share the one form.
+- Five fields the paper has and the model had nowhere to put, all optional on disk and normalised to
+  `""` on read (no migration): `issueDate`, `vendorPhone`, `deliveryContact`, `deliveryPhone`, and
+  `headerRemark` (the หมายเหตุ box under the table, distinct from the `หมายเหตุ` header label, which
+  the paper uses for the job code).
+- The 7th column is **`ให้ซื้อ`, left blank for Purchasing to write in** — it is not the requester's
+  estimate. `estimatedCost` is still captured and stored, it is simply no longer printed. **If
+  Purchasing turns out to rely on a printed price, add an 8th column; do not overwrite `ให้ซื้อ`.**
+- `จำนวนขอซื้อ` prints quantity and unit in one cell (`1.00 ครั้ง`), as the paper does.
+- Signature names print **above** the rule with the label below it, and dates as `____/____/______`.
+- The closing `พิมพ์โดย … วันที่ … บันทึกโดย …` line. The paper's `พิมพ์ครั้งที่ N` comes from the old
+  Express software; this system writes a print audit entry but never reads the count back to the
+  client, so **that number is left off rather than guessed**.
+
+The letterhead now depends on Settings → Company Info actually having an address, phone and tax ID
+filled in; the local dev database still holds placeholder strings there.
 
 `PurchaseOrderPrintDocument.tsx` is a **⚠️ placeholder**. The owner said the real forms would come
 later; `DESIGN.md` is explicit that the paper form is the authority on a print layout, not the app's

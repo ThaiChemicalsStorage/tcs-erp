@@ -258,6 +258,27 @@ describe("Material Requisition/Job Order/Purchase Request: immediate re-save aft
     expect(saved.statusCode, JSON.stringify(saved.body)).toBe(200);
   });
 
+  // ฟอร์ม FM-PJ-01 ตัวจริงมีแถวแบบนี้: "1 Flexible Joint" (ไม่มีจำนวน) แล้ว "Ø 650 | 15 | PCS"
+  // ที่ไม่มีเลขลำดับแต่มีจำนวนของตัวเอง ก่อน 2026-08-31 ระบบเก็บจำนวนของแถวพวกนี้ไม่ได้เลย
+  it("keeps qty/unit on a Job Order continuation row", async () => {
+    const project = await createProject();
+    const created = await call("POST", "/api/job-orders", { projectId: project.id, itemId: project.items[0].id });
+    const jobOrder = (created.body as { jobOrder: { id: string } }).jobOrder;
+
+    const saved = await call("PATCH", `/api/job-orders/${jobOrder.id}`, {
+      lines: [
+        { description: "Flexible Joint", quantity: null, unit: "" },
+        { isContinuation: true, description: "Ø 650", quantity: 15, unit: "PCS" },
+      ],
+    });
+    expect(saved.statusCode, JSON.stringify(saved.body)).toBe(200);
+    const lines = (saved.body as { jobOrder: { lines: { isContinuation?: boolean; quantity: number | null; unit: string }[] } }).jobOrder.lines;
+    expect(lines[0].isContinuation).toBe(false);
+    expect(lines[1].isContinuation, "the row must survive as a continuation").toBe(true);
+    expect(lines[1].quantity, "a continuation row keeps its own quantity").toBe(15);
+    expect(lines[1].unit).toBe("PCS");
+  });
+
   it("a freshly-created Purchase Request can be saved (PATCH) without editing requestedAt", async () => {
     const project = await createProject();
     const itemId = project.items[0].id;
@@ -267,6 +288,29 @@ describe("Material Requisition/Job Order/Purchase Request: immediate re-save aft
 
     const saved = await call("PATCH", `/api/purchase-requests/${purchaseRequest.id}`, { lines: [] });
     expect(saved.statusCode, JSON.stringify(saved.body)).toBe(200);
+  });
+
+  // ช่องที่ฟอร์ม FM-PU-05 ตัวจริงมีแต่ระบบไม่เคยมีที่เก็บ จนกระทั่งทาบกับ ED6908038.pdf เมื่อ 2026-08-31
+  it("stores the FM-PU-05 header fields the paper form has", async () => {
+    const project = await createProject();
+    const created = await call("POST", "/api/purchase-requests", { projectId: project.id, itemId: project.items[0].id });
+    const pr = (created.body as { purchaseRequest: { id: string; issueDate: string } }).purchaseRequest;
+    expect(pr.issueDate, "วันที่บนหัวเอกสารตั้งต้นเป็นวันที่สร้าง").toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    const saved = await call("PATCH", `/api/purchase-requests/${pr.id}`, {
+      vendorPhone: "02-150-9627",
+      deliveryContact: "พล",
+      deliveryPhone: "062-549-0621",
+      headerRemark: "รับของหน้างาน\nติดต่อล่วงหน้า 1 วัน",
+      issueDate: "2026-08-26",
+    });
+    expect(saved.statusCode, JSON.stringify(saved.body)).toBe(200);
+    const doc = (saved.body as { purchaseRequest: Record<string, string> }).purchaseRequest;
+    expect(doc.vendorPhone).toBe("02-150-9627");
+    expect(doc.deliveryContact).toBe("พล");
+    expect(doc.deliveryPhone).toBe("062-549-0621");
+    expect(doc.headerRemark).toContain("ติดต่อล่วงหน้า");
+    expect(doc.issueDate).toBe("2026-08-26");
   });
 });
 
@@ -472,6 +516,23 @@ describe("Production Order", () => {
     expect(lines[0].qty, "a header row cannot carry a quantity").toBeNull();
     expect(lines[0].unit).toBe("");
     expect(lines[1].subDetails, "blank sub-details are dropped").toEqual(["หนา 7 mm. 1(V)+2(M4)/S901"]);
+
+    // บรรทัดต่อ ("หน้าแปลน 50A | 3 ตัว" ใต้ "3 หน้าแปลน 20A") — ไม่กินเลขลำดับ แต่จำนวนต้องอยู่ครบ
+    // และถ้าหน้าจอส่งมาทั้ง isSectionHeader และ isContinuation หัวข้อต้องชนะ เพราะเป็นชนิดที่ล้างค่ามากกว่า
+    const mixed = await call("PATCH", `/api/production-orders/${po.id}`, {
+      lines: [
+        { description: "หน้าแปลน 20A (JIS10K)", qty: 2, unit: "ตัว" },
+        { isContinuation: true, description: "หน้าแปลน 50A (JIS10K)", qty: 3, unit: "ตัว" },
+        { isSectionHeader: true, isContinuation: true, description: "ชิ้นส่วน", qty: 7, unit: "ชุด" },
+      ],
+    });
+    expect(mixed.statusCode, JSON.stringify(mixed.body)).toBe(200);
+    const mixedLines = (mixed.body as { productionOrder: { lines: { isSectionHeader: boolean; isContinuation?: boolean; qty: number | null; unit: string }[] } }).productionOrder.lines;
+    expect(mixedLines[1].isContinuation).toBe(true);
+    expect(mixedLines[1].qty, "a continuation row keeps its own quantity").toBe(3);
+    expect(mixedLines[1].unit).toBe("ตัว");
+    expect(mixedLines[2].isContinuation, "a section header is never also a continuation").toBe(false);
+    expect(mixedLines[2].qty).toBeNull();
 
     await call("POST", `/api/production-orders/${po.id}/submit-approval`);
     const approved = await call("POST", `/api/production-orders/${po.id}/approve`);

@@ -8,11 +8,13 @@ import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
+import type { Company } from "../../lib/storage";
 
 // หน้าจัดการใบสั่งงานแบบแยกอิสระ (ไม่ผูกกับหน้าโครงการ — เข้าถึงได้โดยตรง)
 // Standalone Job Order management page — not nested under Project, same reasoning as Material
 // Requisition's own standalone page.
 export function JobOrderPage({
+  company,
   currentUserId,
   canEdit,
   canFinalize,
@@ -22,6 +24,8 @@ export function JobOrderPage({
   initialJobOrderId,
   onJobOrderIdConsumed,
 }: {
+  /** ส่งต่อให้ใบพิมพ์ FM-PJ-01 ใช้ทำหัวจดหมาย (โลโก้ + ชื่อบริษัท) */
+  company: Company;
   currentUserId: string;
   canEdit: boolean;
   canFinalize: boolean;
@@ -94,6 +98,7 @@ export function JobOrderPage({
         <JobOrderDocument
           key={selectedId}
           jobOrderId={selectedId}
+          company={company}
           currentUserId={currentUserId}
           canEdit={canEdit}
           canFinalize={canFinalize}

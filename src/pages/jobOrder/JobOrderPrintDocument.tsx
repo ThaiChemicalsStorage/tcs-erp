@@ -1,121 +1,280 @@
 import type { JobOrder } from "../../lib/jobOrder";
+import { SCOPE_COLUMN_SPLIT } from "../../lib/jobOrder";
+import type { ChecklistOption } from "../../lib/documentRequirements";
+import type { CompanyHeaderInfo } from "../../lib/storage";
+import { formatQuoteDateThai } from "../../lib/quotes";
 
 /**
- * Print layout for FM-PJ-01 Rev.01 — plain black-on-white formal form. Deliberately NOT wired
- * through i18n: printed documents in this app always render in a fixed language regardless of the
- * preparer's own UI toggle (confirmed precedent — neither ScopeOfWorkPrintDocument.tsx nor
- * DeliveryOrderPrintDocument.tsx import useI18n either), same reasoning CLAUDE.md documents for
- * PrintDocument.tsx: translating a real business document based on the preparer's UI setting risks
- * silently sending an English document where a Thai one was expected. A first-pass structural
- * reproduction of the form, not yet pixel-calibrated (same caveat as Material Requisition's own
- * print layout).
+ * ฟอร์มพิมพ์ใบสั่งงาน — คัดตามฟอร์มจริง FM-PJ-01 Rev.01 : 10/10/65
+ *
+ * **2026-08-31: ทาบกับฟอร์มกระดาษตัวจริงแล้ว** ก่อนหน้านี้ไฟล์นี้เขียนกำกับตัวเองไว้ว่าเป็น
+ * "a first-pass structural reproduction of the form, not yet pixel-calibrated" เพราะยังไม่เคยเห็น
+ * กระดาษ เจ้าของส่ง `reference/company/FM-PJ-01 ใบสั่งงาน Rev1 (1).pdf` (ฟอร์มเปล่า) และ
+ * `(3).xlsx` (กรอกแล้ว 3 ใบ) มาให้เมื่อ 2026-08-31 โฟลเดอร์ `reference/` ถูก gitignore ไว้
+ * คอมเมนต์นี้กับ `buildJobOrderChecklistGroups()` จึงเป็น**บันทึกถาวรของฟอร์ม** แบบเดียวกับที่
+ * `productionOrder.ts` ทำ อย่าคาดหวังว่าจะกลับไปเปิด PDF อ่านซ้ำได้
+ *
+ * โครงหน้ากระดาษ เรียงจากบนลงล่าง:
+ *   1. โลโก้ + ชื่อบริษัทภาษาไทย จัดกลาง (**ไม่มีที่อยู่** จึงไม่ใช่ `PrintLetterhead` ซึ่งเป็นบล็อกเต็ม)
+ *   2. แถบหัวเรื่องพื้นฟ้าอ่อนเต็มความกว้าง "ใบสั่งงาน (JOB ORDER)"
+ *   3. หัวเอกสาร 2 คอลัมน์ × 3 แถว ทุกช่องมีป้ายอังกฤษเป็นบรรทัดที่สอง แล้วปิดด้วยเส้นดำหนา
+ *   4. ตารางรายการดำเนินงาน หัวตารางพื้นฟ้า อย่างน้อย 12 แถว (กระดาษเว้นแถวว่างไว้เขียนเพิ่ม)
+ *   5. ขอบเขตงาน — รายการเดียวเรียงยาวสองคอลัมน์ ไม่มีหัวข้อย่อย
+ *   6. รายละเอียดอื่นๆ (Out of Scope) — เส้นบรรทัดว่างเสมอ แม้ไม่มีข้อความ
+ *   7. ช่องลงนาม: ผู้ร้องขอ อยู่แถวบนเดี่ยว ๆ แล้ว ผู้อนุมัติ / ผู้รับเอกสาร อยู่แถวล่างคู่กัน
+ *   8. ท้ายหน้าชิดขวา "FM-PJ-01 Rev.01 : 10/10/65"
+ *
+ * "(Finshed Date)" กับ "INTERMIDIATE COAT" สะกดผิดบนกระดาษจริงทั้งคู่ — พิมพ์ตามกระดาษโดยตั้งใจ
+ *
+ * Always renders in Thai regardless of the user's UI language — same rule every other print
+ * component in this app follows (see docs/CLAUDE.md's i18n policy): a printed business document
+ * must not change language based on who happened to press print.
  */
-export function JobOrderPrintDocument({ jobOrder: j }: { jobOrder: JobOrder }) {
+
+const FORM_CODE = "FM-PJ-01 Rev.01 : 10/10/65";
+const DOC_FONT = "'Times New Roman', 'Noto Serif Thai', serif";
+const LINE = "1px solid #000";
+/** พื้นฟ้าอ่อนของแถบหัวเรื่องและหัวตารางบนกระดาษจริง */
+const FILL = "#ccffff";
+/** จำนวนแถวขั้นต่ำของตารางรายการ — กระดาษมี 12 แถวเว้นไว้เขียนเพิ่ม */
+const MIN_BODY_ROWS = 12;
+/**
+ * ตารางกว้าง 100% + `border-collapse: collapse` ทำให้เส้นขอบขวาสุดถูกวาดเลยขอบพื้นที่พิมพ์ของ A4
+ * ไปครึ่งพิกเซลแล้วหายไปทั้งเส้น — บทเรียนเดียวกับ CostControlPrintDocument.tsx (commit f1509da)
+ */
+const EDGE_GUARD = "2px";
+
+/** ป้ายหัวข้อของฟอร์มนี้ขีดเส้นใต้เฉพาะข้อความไทย ส่วนวงเล็บอังกฤษไม่ขีด */
+function SectionLabel({ thai, english }: { thai: string; english: string }) {
   return (
-    <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif" }}>
-      <style>{"@media print { @page { size: A4 portrait; margin: 12mm; } }"}</style>
-      <h1 className="text-center text-lg font-bold mb-3">ใบสั่งงาน (JOB ORDER)</h1>
-      <table className="w-full text-xs mb-3" style={{ borderCollapse: "collapse" }}>
-        <tbody>
-          <tr>
-            <td className="py-0.5 pr-2 font-semibold w-28">ชื่อลูกค้า:</td>
-            <td className="py-0.5 border-b border-black">{j.customerName}</td>
-            <td className="py-0.5 pl-4 pr-2 font-semibold w-28">รหัสงาน:</td>
-            <td className="py-0.5 border-b border-black w-32">{j.id}</td>
-          </tr>
-          <tr>
-            <td className="py-0.5 pr-2 font-semibold">จากหน่วยงาน:</td>
-            <td className="py-0.5 border-b border-black">{j.fromSite}</td>
-            <td className="py-0.5 pl-4 pr-2 font-semibold">ถึงหน่วยงาน:</td>
-            <td className="py-0.5 border-b border-black">{j.toSite}</td>
-          </tr>
-          <tr>
-            <td className="py-0.5 pr-2 font-semibold">วันเริ่มดำเนินการ:</td>
-            <td className="py-0.5 border-b border-black">{j.startDate}</td>
-            <td className="py-0.5 pl-4 pr-2 font-semibold">วันดำเนินการแล้วเสร็จ:</td>
-            <td className="py-0.5 border-b border-black">{j.finishDate}</td>
-          </tr>
-        </tbody>
-      </table>
+    <p style={{ margin: "8px 0 3px", fontSize: "11px", fontWeight: 700 }}>
+      <span style={{ textDecoration: "underline" }}>{thai}</span> ({english})
+    </p>
+  );
+}
 
-      <table className="w-full text-[10px]" style={{ borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            {["ลำดับ", "รายละเอียด", "จำนวน", "หน่วย", "หมายเหตุ"].map((h) => (
-              <th key={h} className="border border-black px-1.5 py-1 font-semibold text-center">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {j.lines.map((line, idx) => (
-            <tr key={line.id}>
-              <td className="border border-black px-1.5 py-1 text-center">{idx + 1}</td>
-              <td className="border border-black px-1.5 py-1">
-                {line.description}
-                {/* บรรทัดย่อย เยื้องเข้ามาในช่องเดียวกัน ไม่แตกคอลัมน์ — รูปแบบเดียวกับใบสั่งผลิตและใบขอซื้อ */}
-                {(line.subDetails ?? []).map((sd, i) => (
-                  <p key={i} style={{ margin: "1px 0 0 12px" }}>{sd}</p>
-                ))}
-              </td>
-              <td className="border border-black px-1.5 py-1 text-center">{line.quantity ?? ""}</td>
-              <td className="border border-black px-1.5 py-1 text-center">{line.unit}</td>
-              <td className="border border-black px-1.5 py-1">{line.remark}</td>
+/** ช่องหัวเอกสารหนึ่งช่อง: ป้ายไทย + ค่าบนเส้นบรรทัด แล้วป้ายอังกฤษเป็นบรรทัดที่สองใต้ป้ายไทย */
+function HeaderField({ thai, english, value }: { thai: string; english: string; value: string }) {
+  return (
+    <td style={{ padding: "0 0 2px", verticalAlign: "bottom", width: "50%" }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: "6px" }}>
+        <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{thai}</span>
+        <span style={{ flex: 1, borderBottom: LINE, minHeight: "15px", padding: "0 4px 1px" }}>{value || " "}</span>
+      </div>
+      <p style={{ margin: 0, fontSize: "10px" }}>({english})</p>
+    </td>
+  );
+}
+
+/** ป้ายลงนามพร้อมจุดไข่ปลา — กระดาษใช้จุดไข่ปลา ไม่ใช่เส้นขีดใต้ */
+function SignatureField({ thai, english, value }: { thai: string; english: string; value: string }) {
+  return (
+    <p style={{ margin: "0 0 6px" }}>
+      <span style={{ fontWeight: 700 }}>{thai}</span> ({english}) :{" "}
+      <span>{value || "..................................."}</span>
+    </p>
+  );
+}
+
+/**
+ * ช่องกรอกบนกระดาษเป็นเส้นให้เขียน ("PAINTING SYSTEM : ______") เส้นจึงต้องอยู่เสมอ ไม่ว่าจะกรอก
+ * มาหรือยัง — ถ้าเรนเดอร์เฉพาะตอนมีค่า บรรทัดที่ยังว่างจะเหลือแค่ "PAINTING SYSTEM :" ห้อยไว้เฉย ๆ
+ * และบรรทัดงานสีจะกลายเป็น "PRIMER COAT / MICRON" ซึ่งอ่านไม่รู้เรื่อง
+ */
+function FillIn({ value }: { value: string }) {
+  return (
+    <span style={{ display: "inline-block", minWidth: "80px", borderBottom: LINE, textAlign: "center", padding: "0 3px" }}>
+      {value.trim() || " "}
+    </span>
+  );
+}
+
+/** หนึ่งบรรทัดของเช็คลิสต์ขอบเขตงาน — ☑/☐ + ป้าย + ช่องกรอก (พร้อมหน่วยที่พิมพ์อยู่บนฟอร์ม) */
+function ScopeLine({ opt }: { opt: ChecklistOption }) {
+  return (
+    <div style={{ breakInside: "avoid" }}>
+      <p style={{ margin: 0, lineHeight: 1.6 }}>
+        {opt.checked ? "☑" : "☐"} {opt.label}
+        {opt.value !== undefined && <> : <FillIn value={opt.value} /></>}
+        {opt.unit ? ` ${opt.unit}` : ""}
+        {opt.value2 !== undefined && <> / <FillIn value={opt.value2} /></>}
+        {opt.unit2 ? ` ${opt.unit2}` : ""}
+      </p>
+      {(opt.details ?? []).map((d, i) => (
+        <p key={i} style={{ margin: "0 0 0 16px", lineHeight: 1.5 }}>- {d}</p>
+      ))}
+    </div>
+  );
+}
+
+export function JobOrderPrintDocument({
+  jobOrder: j,
+  companyHeader,
+}: {
+  jobOrder: JobOrder;
+  companyHeader: CompanyHeaderInfo;
+}) {
+  // เลขลำดับข้ามบรรทัดต่อ เหมือนที่ใบสั่งผลิตข้ามบรรทัดหัวข้อ — แทรกบรรทัดต่อแล้วเลขข้างล่างไม่เลื่อน
+  let seq = 0;
+  const rows = j.lines.map((line) => ({ line, seq: line.isContinuation ? null : ++seq }));
+  const padding = Math.max(0, MIN_BODY_ROWS - rows.length);
+
+  // เช็คลิสต์ทั้งใบเป็นกลุ่มเดียวไม่มีหัวข้อ (ดู buildJobOrderChecklistGroups) — แต่ยังวนทุกกลุ่ม
+  // เผื่อเอกสารเก่าที่มีตัวเลือกแปลกปลอมถูกยกไปต่อท้าย และเพื่อไม่ให้พังถ้าโครงสร้างเปลี่ยนอีก
+  const scopeOptions = j.scopeChecklist.flatMap((g) => g.options);
+  const leftColumn = scopeOptions.slice(0, SCOPE_COLUMN_SPLIT);
+  const rightColumn = scopeOptions.slice(SCOPE_COLUMN_SPLIT);
+
+  const cell: React.CSSProperties = { border: LINE, padding: "2px 5px", verticalAlign: "top" };
+  const headCell: React.CSSProperties = { ...cell, background: FILL, textAlign: "center", fontWeight: 700 };
+
+  return (
+    <div
+      className="hidden print:block"
+      style={{ fontFamily: DOC_FONT, fontSize: "11px", color: "#000", background: "#fff", paddingRight: EDGE_GUARD }}
+    >
+      {/* พื้นสีของแถบหัวเรื่อง/หัวตารางจะหายไปตอนพิมพ์ ถ้าไม่บอกเบราว์เซอร์ว่าต้องพิมพ์พื้นหลังด้วย
+          (ค่าเริ่มต้นของ Chrome คือไม่พิมพ์ จนกว่าผู้ใช้จะไปติ๊ก "Background graphics" เอง) */}
+      <style>{"@media print { @page { size: A4 portrait; margin: 12mm } .jo-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact } }"}</style>
+
+      <div className="jo-print">
+        {/* 1. หัวจดหมาย — โลโก้ + ชื่อบริษัทไทย ไม่มีที่อยู่ ตรงตามกระดาษ */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", marginBottom: "8px" }}>
+          <img src={companyHeader.logoDataUrl || "/logo.png"} alt="" style={{ width: "52px", height: "52px", objectFit: "contain" }} />
+          <p style={{ margin: 0, fontSize: "17px", fontWeight: 700 }}>{companyHeader.name}</p>
+        </div>
+
+        {/* 2. แถบหัวเรื่อง */}
+        <div style={{ border: LINE, background: FILL, textAlign: "center", padding: "3px 0", marginBottom: "6px" }}>
+          <span style={{ fontSize: "14px", fontWeight: 700 }}>ใบสั่งงาน (JOB ORDER)</span>
+        </div>
+
+        {/* 3. หัวเอกสาร — "รหัสงาน" คือเลขงาน (PQ…) ตามที่กรอกบนกระดาษ ไม่ใช่เลข JO- ของระบบ */}
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <tbody>
+            <tr>
+              <HeaderField thai="ชื่อลูกค้า :" english="Job name." value={j.customerName} />
+              <HeaderField thai="รหัสงาน" english="Job order." value={j.jobCode} />
             </tr>
-          ))}
-        </tbody>
-      </table>
+            <tr>
+              <HeaderField thai="จากหน่วยงาน :" english="From Site" value={j.fromSite} />
+              <HeaderField thai="ถึงหน่วยงาน :" english="To Site" value={j.toSite} />
+            </tr>
+            <tr>
+              <HeaderField thai="วันเริ่มดำเนินการ :" english="Start Date" value={formatQuoteDateThai(j.startDate)} />
+              {/* สะกดตามกระดาษ */}
+              <HeaderField thai="วันดำเนินการแล้วเสร็จ :" english="Finshed Date" value={formatQuoteDateThai(j.finishDate)} />
+            </tr>
+          </tbody>
+        </table>
+        <div style={{ borderTop: "2px solid #000", marginTop: "4px" }} />
 
-      <p className="text-xs font-semibold mt-4 mb-1">ขอบเขตงาน (Scope of work)</p>
-      {/* แยกเป็นหัวข้อตั้งแต่ 2026-08-27 — เดิมยุบตัวเลือกทุกกลุ่มมาเรียงรวมเป็นตารางสองคอลัมน์เดียว
-          ตอนนี้พิมพ์ชื่อหัวข้อกำกับ และมีบรรทัดย่อยใต้ข้อที่ติ๊กไว้ */}
-      {j.scopeChecklist.map((g) => (
-        <div key={g.key} className="mb-1.5">
-          <p className="text-[10px] font-semibold">{g.title}</p>
-          <div className="text-[10px] grid grid-cols-2 gap-x-4">
-            {g.options.map((opt) => (
-              <div key={opt.key}>
-                <p>{opt.checked ? "☑" : "☐"} {opt.label}{opt.value ? `: ${opt.value}` : ""}</p>
-                {(opt.details ?? []).map((d, i) => (
-                  <p key={i} style={{ margin: "0 0 0 12px" }}>- {d}</p>
-                ))}
-              </div>
+        {/* 4. ตารางรายการดำเนินงาน */}
+        <SectionLabel thai="รายการดำเนินงาน" english="Details of Work" />
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10px" }}>
+          <colgroup>
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "44%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "32%" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              {([
+                ["ลำดับ", "Item"],
+                ["รายละเอียด", "Description"],
+                ["จำนวน", "Q'ty"],
+                ["หน่วย", "Unit"],
+                ["หมายเหตุ", "remark"],
+              ] as const).map(([thai, english]) => (
+                <th key={thai} style={headCell}>
+                  <span style={{ display: "block" }}>{thai}</span>
+                  <span style={{ display: "block", fontWeight: 400 }}>({english})</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ line, seq: n }) => (
+              <tr key={line.id}>
+                <td style={{ ...cell, textAlign: "center" }}>{n ?? ""}</td>
+                <td style={cell}>
+                  {line.description}
+                  {/* บรรทัดย่อยที่เป็นข้อความล้วน อยู่ในช่องเดียวกัน ไม่แตกคอลัมน์ */}
+                  {(line.subDetails ?? []).map((sd, i) => (
+                    <p key={i} style={{ margin: "1px 0 0 12px" }}>{sd}</p>
+                  ))}
+                </td>
+                <td style={{ ...cell, textAlign: "center" }}>{line.quantity ?? ""}</td>
+                <td style={{ ...cell, textAlign: "center" }}>{line.unit}</td>
+                <td style={cell}>{line.remark}</td>
+              </tr>
             ))}
+            {/* แถวว่างให้ครบตามกระดาษ ซึ่งเว้นช่องไว้ให้เขียนเพิ่มด้วยมือ */}
+            {Array.from({ length: padding }, (_, i) => (
+              <tr key={`pad-${i}`}>
+                <td style={{ ...cell, height: "17px" }} />
+                <td style={cell} />
+                <td style={cell} />
+                <td style={cell} />
+                <td style={cell} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* 5. ขอบเขตงาน — สองคอลัมน์ตามกระดาษ ไม่มีหัวข้อย่อย */}
+        <SectionLabel thai="ขอบเขตงาน" english="Scope of work" />
+        <div style={{ display: "flex", gap: "18px", fontSize: "10px", breakInside: "avoid" }}>
+          <div style={{ width: "48%" }}>
+            {leftColumn.map((opt) => <ScopeLine key={opt.key} opt={opt} />)}
+          </div>
+          <div style={{ flex: 1 }}>
+            {rightColumn.map((opt) => <ScopeLine key={opt.key} opt={opt} />)}
           </div>
         </div>
-      ))}
 
-      {j.outOfScope.trim() && (
-        <>
-          <p className="text-xs font-semibold mt-4 mb-1">รายละเอียดอื่นๆ (Out of Scope)</p>
-          <p className="text-[10px] whitespace-pre-line">{j.outOfScope}</p>
-        </>
-      )}
-      {/* หมายเหตุการแก้ไข — พิมพ์จริงตามที่ฝ่ายผลิตขอ ("สามารถดูในใบปริ้นได้") ซ่อนเมื่อว่าง */}
-      {(j.revisionNote ?? "").trim() !== "" && (
-        <div className="border border-black px-2 py-1 mt-2 text-[10px]" style={{ whiteSpace: "pre-wrap" }}>
-          <span className="font-semibold">หมายเหตุการแก้ไข :</span> {j.revisionNote}
+        {/* 6. รายละเอียดอื่นๆ — กระดาษมีเส้นบรรทัดว่างเสมอ ไม่ได้ซ่อนเมื่อไม่มีข้อความ */}
+        <SectionLabel thai="รายละเอียดอื่นๆ" english="Out of Scope" />
+        {(() => {
+          const written = j.outOfScope.split(/\r?\n/).filter((l) => l.trim() !== "");
+          const lines = [...written, ...Array.from({ length: Math.max(0, 4 - written.length) }, () => "")];
+          return lines.map((text, i) => (
+            <p key={i} style={{ margin: 0, fontSize: "10px", borderBottom: LINE, minHeight: "15px", padding: "1px 2px" }}>
+              {text || " "}
+            </p>
+          ));
+        })()}
+
+        {/* หมายเหตุการแก้ไข — ไม่มีบนกระดาษ แต่ฝ่ายผลิตขอไว้เอง 2026-08-27 ("สามารถดูในใบปริ้นได้") */}
+        {(j.revisionNote ?? "").trim() !== "" && (
+          <div style={{ border: LINE, padding: "3px 6px", marginTop: "6px", fontSize: "10px", whiteSpace: "pre-wrap" }}>
+            <span style={{ fontWeight: 700 }}>หมายเหตุการแก้ไข :</span> {j.revisionNote}
+          </div>
+        )}
+
+        {/* 7. ช่องลงนาม — ผู้ร้องขออยู่แถวบนเดี่ยว ๆ ตามกระดาษ ไม่ใช่สามช่องเรียงกัน */}
+        <div style={{ marginTop: "16px", breakInside: "avoid" }}>
+          <div style={{ width: "50%" }}>
+            <SignatureField thai="ผู้ร้องขอ" english="Requested By" value={j.requestedBy} />
+            <SignatureField thai="วันที่" english="Date" value={formatQuoteDateThai(j.requestedAt)} />
+          </div>
+          <div style={{ display: "flex", gap: "18px", marginTop: "14px" }}>
+            <div style={{ width: "50%" }}>
+              <SignatureField thai="ผู้อนุมัติ" english="Approved By" value={j.approvedBy} />
+              <SignatureField thai="วันที่" english="Date" value={formatQuoteDateThai(j.approvedAt)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <SignatureField thai="ผู้รับเอกสาร" english="document recipient By" value={j.documentRecipientBy} />
+              <SignatureField thai="วันที่" english="Date" value={formatQuoteDateThai(j.documentRecipientAt)} />
+            </div>
+          </div>
         </div>
-      )}
 
-
-      <table className="w-full text-xs mt-6" style={{ borderCollapse: "collapse" }}>
-        <tbody>
-          <tr>
-            {([
-              ["ผู้ร้องขอ", j.requestedBy, j.requestedAt],
-              ["ผู้อนุมัติ", j.approvedBy, j.approvedAt],
-              ["ผู้รับเอกสาร", j.documentRecipientBy, j.documentRecipientAt],
-            ] as const).map(([label, name, date]) => (
-              <td key={label} className="w-1/3 py-2 text-center align-top">
-                <div className="border-b border-black h-8 mb-1" />
-                <p>{label}: {name}</p>
-                <p>วันที่: {date}</p>
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-      <p className="text-[9px] text-right mt-4">FM-PJ-01 Rev.01 : 10/10/65</p>
+        {/* 8. รหัสฟอร์ม */}
+        <p style={{ textAlign: "right", margin: "12px 0 0", fontSize: "9px" }}>{FORM_CODE}</p>
+      </div>
     </div>
   );
 }
