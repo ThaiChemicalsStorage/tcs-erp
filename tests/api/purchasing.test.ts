@@ -252,3 +252,80 @@ describe("สิทธิ์ — บทบาทที่ไม่มีสิ�
     }
   });
 });
+
+/**
+ * ทะเบียนผู้ขาย (2026-08-31) — เจ้าของขอไว้ 2026-08-28 พร้อมรหัสผู้ขาย
+ *
+ * สิ่งที่ตรึงไว้คือ **ความซ้ำของรหัส** ซึ่งเป็นข้อเดียวที่แก้ทีหลังแล้วเจ็บ: ต้องกันแบบไม่สนตัวพิมพ์
+ * ("v-001" กับ "V-001" คืออันเดียวกัน) ต้องไม่ชนกับตัวเองตอนแก้ และรหัสว่างต้องมีได้หลายราย
+ */
+type VendorDoc = { id: string; name: string; code: string; contactName: string; isActive: boolean; isDeleted: boolean };
+
+async function createVendor(body: Record<string, unknown>): Promise<Response> {
+  return api("/api/vendors", { method: "POST", body: JSON.stringify(body) });
+}
+
+describe("ทะเบียนผู้ขาย", () => {
+  it("สร้างผู้ขายพร้อมรหัส แล้วรหัสถูกเก็บเป็นตัวพิมพ์ใหญ่", async () => {
+    const res = await createVendor({ name: "บริษัท เหล็กดี จำกัด", code: "v-001", contactName: "คุณเอ", phone: "02-111-2222" });
+    expect(res.status).toBe(201);
+    const vendor = (await json<{ vendor: VendorDoc }>(res)).vendor;
+    expect(vendor.name).toBe("บริษัท เหล็กดี จำกัด");
+    expect(vendor.code, "รหัสถูก normalize เป็นตัวพิมพ์ใหญ่ ทั้ง regex และ unique index จึงเห็นค่าเดียวกัน").toBe("V-001");
+    expect(vendor.isActive).toBe(true);
+    expect(vendor.isDeleted).toBe(false);
+  });
+
+  it("รหัสซ้ำแบบไม่สนตัวพิมพ์ถูกปฏิเสธด้วย 409 ไม่ใช่ 500", async () => {
+    expect((await createVendor({ name: "รายแรก", code: "DUP-9" })).status).toBe(201);
+    const clash = await createVendor({ name: "รายที่สอง", code: "dup-9" });
+    expect(clash.status).toBe(409);
+    expect((await json<{ error: string }>(clash)).error).toContain("รหัสผู้ขาย");
+  });
+
+  it("รหัสว่างมีได้หลายราย — ไม่ใช่ทุกคนมีรหัสตั้งแต่วันแรก", async () => {
+    expect((await createVendor({ name: "ไม่มีรหัส ก" })).status).toBe(201);
+    expect((await createVendor({ name: "ไม่มีรหัส ข" })).status).toBe(201);
+  });
+
+  it("ชื่อผู้ขายเป็นฟิลด์บังคับ", async () => {
+    expect((await createVendor({ code: "NO-NAME" })).status).toBe(400);
+  });
+
+  it("แก้ไขผู้ขายโดยคงรหัสเดิมไว้ได้ — ต้องไม่ชนกับตัวเอง", async () => {
+    const created = (await json<{ vendor: VendorDoc }>(await createVendor({ name: "รายที่แก้", code: "SELF-1" }))).vendor;
+    const patched = await api(`/api/vendors/${encodeURIComponent(created.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ code: "SELF-1", contactName: "คุณบี" }),
+    });
+    expect(patched.status, JSON.stringify(await patched.clone().json())).toBe(200);
+    expect((await json<{ vendor: VendorDoc }>(patched)).vendor.contactName).toBe("คุณบี");
+  });
+
+  it("แก้รหัสไปชนรายอื่นยังโดน 409", async () => {
+    await createVendor({ name: "เจ้าของรหัส", code: "TAKEN-1" });
+    const other = (await json<{ vendor: VendorDoc }>(await createVendor({ name: "อีกราย", code: "FREE-1" }))).vendor;
+    const clash = await api(`/api/vendors/${encodeURIComponent(other.id)}`, { method: "PATCH", body: JSON.stringify({ code: "taken-1" }) });
+    expect(clash.status).toBe(409);
+  });
+
+  it("เก็บถาวรแล้วยังอยู่ในฐานข้อมูล — ใบสั่งซื้อเก่าอ้างชื่อผู้ขายไว้", async () => {
+    const created = (await json<{ vendor: VendorDoc }>(await createVendor({ name: "รายที่เก็บถาวร", code: "ARCH-1" }))).vendor;
+    const archived = await api(`/api/vendors/${encodeURIComponent(created.id)}/archive`, { method: "POST", body: JSON.stringify({ isDeleted: true }) });
+    expect(archived.status).toBe(200);
+    expect((await json<{ vendor: VendorDoc }>(archived)).vendor.isDeleted).toBe(true);
+
+    const restored = await api(`/api/vendors/${encodeURIComponent(created.id)}/archive`, { method: "POST", body: JSON.stringify({ isDeleted: false }) });
+    expect((await json<{ vendor: VendorDoc }>(restored)).vendor.isDeleted).toBe(false);
+  });
+
+  it("อ่านรายการผู้ขายผ่าน Express route ได้จริง", async () => {
+    const res = await api("/api/vendors");
+    expect(res.status, "server/app.ts ต้องมีบรรทัด vendors ไม่งั้นจะ 404 เฉพาะบนเครื่อง").toBe(200);
+    const { vendors } = await json<{ vendors: VendorDoc[] }>(res);
+    expect(vendors.length).toBeGreaterThan(0);
+    // ไม่ตรึงลำดับการเรียงไว้: เซิร์ฟเวอร์ใช้ sort({ name: 1 }) ของ MongoDB ซึ่งเทียบแบบไบนารี
+    // ส่วน localeCompare ของ JS เทียบตามภาษา — ชื่อไทยปนอังกฤษจะได้คนละลำดับ และไม่ใช่ลำดับที่
+    // ผูกพันกับใคร (หน้าจอกรอง/ค้นเองอยู่แล้ว) สิ่งที่ต้องตรึงจริงคือ route ใช้งานได้
+  });
+});

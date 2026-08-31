@@ -645,6 +645,18 @@ full, so a new `api/handlers/*.ts` file is not available. Every route below need
 rewrite pair in `vercel.json` **and** an `API_ROUTES` entry in `server/app.ts`; if those two
 disagree, local dev and production behave differently. See [MODULES/Purchasing.md](./MODULES/Purchasing.md).
 
+### Vendors (`api/_lib/vendorsHandler.ts`, mounted at `/api/vendors` via `api/handlers/customers.ts`)
+
+Added 2026-08-31. Master data, not a document — four permissions, no approval workflow, no printing.
+
+| Route | Permission | Notes |
+|---|---|---|
+| `GET /api/vendors` | `vendor:view` **or** `purchaseOrder:view` / `purchaseRequest:view` | The carve-out matters: without it the vendor dropdown on a purchase order is empty for the people who actually use it. Callers without `vendor:view` see only active, non-archived rows. Sorted by name. |
+| `POST /api/vendors` | `vendor:create` | `name` required. `code` optional; if set it is upper-cased and must be unique case-insensitively → `409` "รหัสผู้ขายนี้มีผู้ใช้งานแล้ว". `201`. |
+| `GET /api/vendors/:id` | `vendor:view` | |
+| `PATCH /api/vendors/:id` | `vendor:edit` | Partial. The uniqueness check excludes the row itself, so re-saving without changing the code is fine. |
+| `POST /api/vendors/:id/archive` | `vendor:archive` | Body `{ isDeleted }`. Soft-delete both ways — a vendor row is never actually removed, because purchase orders reference the name. |
+
 ### Purchase Order (`api/_lib/purchaseOrderHandler.ts`, mounted at `/api/purchase-orders` via `api/handlers/quotes.ts`)
 
 | Method & Path | Auth | Notes |

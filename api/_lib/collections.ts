@@ -376,6 +376,31 @@ export async function customersCollection() {
   return db.collection<CustomerFields>("customers");
 }
 
+/**
+ * ทะเบียนผู้ขายของฝ่ายจัดซื้อ (2026-08-31) — ชุดฟิลด์ตรงกับที่ใบสั่งซื้อมีอยู่แล้ว 5 ช่อง
+ * บวก `code` (รหัสผู้ขาย) ที่เจ้าของขอไว้ · `code` ว่างได้ แต่ถ้ากรอกแล้วห้ามซ้ำ
+ * (unique partial index — ดู `ensureVendorIndexes()` ใน vendorsHandler.ts)
+ */
+export interface VendorFields {
+  name: string;
+  code: string;
+  contactName: string;
+  phone: string;
+  taxId: string;
+  address: string;
+  note: string;
+  isActive: boolean;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}
+export async function vendorsCollection() {
+  const db = await getDb();
+  return db.collection<VendorFields>("vendors");
+}
+
 export interface CustomerContactFields {
   customerId: string;
   name: string;

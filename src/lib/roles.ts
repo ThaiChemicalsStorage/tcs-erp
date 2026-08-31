@@ -108,8 +108,15 @@ export const defaultRoles: Role[] = [
       "purchaseOrder:finalize",
       "purchaseOrder:print",
       "purchaseOrder:delete",
-      // Cost Control (แผนก BD, 2026-08-28) — เหมือนทุกโมดูลหลัง 2026-08-25 คือใส่ใน defaultRoles
-      // ให้ระบบที่ติดตั้งใหม่เท่านั้น เครื่องจริงต้องเข้าไปติ๊กเองที่หน้าบทบาทและสิทธิ์
+      // ทะเบียนผู้ขาย (2026-08-31) — ข้อมูลหลักของฝ่ายจัดซื้อ
+      "vendor:view",
+      "vendor:create",
+      "vendor:edit",
+      "vendor:archive",
+      // Cost Control (แผนก BD, 2026-08-28)
+      // ⚠️ ตั้งแต่ 2026-08-31 โมดูลใหม่**มี RBAC migration ให้ด้วย** (เจ้าของเปลี่ยนการตัดสินใจ)
+      // — `defaultRoles` มีผลกับการติดตั้งใหม่เท่านั้น ฐานข้อมูลที่ provision ไปแล้วต้องพึ่ง migration
+      // ดู `api/_lib/rbacSeed.ts` รายการ "purchasing-registers-permissions-2026-08-31"
       "costControl:view",
       "costControl:viewAll",
       "costControl:create",

@@ -12,6 +12,8 @@ import { ApiError } from "../../lib/apiClient";
 import { newId } from "../../lib/products";
 import { fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
+import { Combobox } from "../../components/Combobox";
+import { type Vendor, fetchVendors, vendorComboboxOptions } from "../../lib/vendors";
 import {
   type PurchaseOrder, type PurchaseOrderUpdateFields, blankPurchaseOrderLine, purchaseOrderSubtotal,
   fetchPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, rewritePurchaseOrder, logPurchaseOrderPrinted,
@@ -69,6 +71,9 @@ export function PurchaseOrderDocument({
   const [showPrint, setShowPrint] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
+  // ทะเบียนผู้ขาย — ดึงในหน้านี้เอง แบบเดียวกับที่ใบสั่งงานดึงรายชื่อแผนก (fetchDepartments)
+  // GET /vendors เปิดให้คนที่มี purchaseOrder:view อ่านได้ ไม่ต้องมีสิทธิ์ดูแลทะเบียน
+  const [vendors, setVendors] = useState<Vendor[]>([]);
 
   // hooks ทุกตัวต้องประกาศเหนือ early return — กฎของ React
   const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
@@ -86,6 +91,15 @@ export function PurchaseOrderDocument({
       .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
     return () => { cancelled = true; };
   }, [purchaseOrderId, dirty]);
+
+  // ทะเบียนผู้ขายเป็นแค่ตัวช่วยเติมข้อมูล — โหลดล้มก็ปล่อยว่าง ผู้ใช้ยังพิมพ์ชื่อผู้ขายเองได้ตามปกติ
+  useEffect(() => {
+    let cancelled = false;
+    fetchVendors()
+      .then((list) => { if (!cancelled) setVendors(list); })
+      .catch(() => { if (!cancelled) setVendors([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   const editable = !!draft && canEdit && draft.status === "Draft";
   // เลขที่เป็นฟิลด์บังคับ — ระหว่างที่ผู้ใช้ลบทิ้งเพื่อพิมพ์ใหม่ บันทึกอัตโนมัติจะยิงพอดีแล้วโดน 400
@@ -278,7 +292,28 @@ export function PurchaseOrderDocument({
             <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseOrderDoc.sectionVendor")}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label={t("purchaseOrderDoc.vendorName")}>
-                <input className={inputCls} disabled={!editable} value={draft.vendorName} onChange={(e) => set("vendorName", e.target.value)} />
+                <Combobox
+                  className={inputCls}
+                  disabled={!editable}
+                  value={draft.vendorName}
+                  onChange={(next) => set("vendorName", next)}
+                  options={vendorComboboxOptions(vendors)}
+                  ariaLabel={t("purchaseOrderDoc.vendorName")}
+                  // เลือกจากทะเบียนแล้วเติมช่องที่เหลือให้ — นั่นคือเหตุผลที่มีทะเบียน
+                  // ทับของเดิมโดยตั้งใจ: การกดเลือกผู้ขายคือการบอกว่า "เอารายนี้" ทั้งราย
+                  onPick={(opt) => {
+                    const v = vendors.find((x) => x.name === opt.value);
+                    if (!v) return;
+                    setDraft((d) => d && {
+                      ...d,
+                      vendorName: v.name,
+                      vendorContact: v.contactName,
+                      vendorPhone: v.phone,
+                      vendorTaxId: v.taxId,
+                      vendorAddress: v.address,
+                    });
+                  }}
+                />
               </Field>
               <Field label={t("purchaseOrderDoc.vendorContact")}>
                 <input className={inputCls} disabled={!editable} value={draft.vendorContact} onChange={(e) => set("vendorContact", e.target.value)} />

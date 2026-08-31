@@ -5,6 +5,7 @@ import { handleSearch } from "../_lib/searchHandler.js";
 import { handleServiceTemplate } from "../_lib/serviceTemplateHandler.js";
 import { handleServiceReport } from "../_lib/serviceReportHandler.js";
 import { handleLineWebhook } from "../_lib/lineHandler.js";
+import { handleVendors } from "../_lib/vendorsHandler.js";
 
 /**
  * Customer master data — see `api/_lib/customersHandler.ts` for the actual list/create/get/patch/
@@ -29,6 +30,10 @@ import { handleLineWebhook } from "../_lib/lineHandler.js";
  * `customerSnapshot`, the same entity this file already owns; a Service Report is created
  * directly against a Customer, not derived from a quotation. Logic lives in
  * `api/_lib/serviceTemplateHandler.ts`/`api/_lib/serviceReportHandler.ts`.
+ *
+ * **ทะเบียนผู้ขาย (2026-08-31)** ใช้สล็อตนี้ร่วมด้วยด้วยเหตุผลเดียวกัน — และเพราะทะเบียนผู้ขาย
+ * เป็นข้อมูลหลักคู่ขนานกับทะเบียนลูกค้าที่ไฟล์นี้ดูแลอยู่แล้ว ตรรกะจริงอยู่ที่
+ * `api/_lib/vendorsHandler.ts`
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   await withErrorHandling(req, res, async () => {
@@ -36,6 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (pathname === "/api/search") return handleSearch(req, res);
     if (pathname === "/api/service-templates" || pathname.startsWith("/api/service-templates/")) return handleServiceTemplate(req, res);
     if (pathname === "/api/service-reports" || pathname.startsWith("/api/service-reports/")) return handleServiceReport(req, res);
+    if (pathname === "/api/vendors" || pathname.startsWith("/api/vendors/")) return handleVendors(req, res);
     // LINE OA webhook (2026-08-10) — Express runtime only: server/app.ts routes /api/line/* here
     // and captures the raw body its signature check needs; vercel.json deliberately has no
     // /api/line rewrite (the demo can't verify signatures — see api/_lib/lineHandler.ts).

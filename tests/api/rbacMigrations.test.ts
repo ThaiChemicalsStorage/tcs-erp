@@ -21,14 +21,30 @@ let markers: Collection<{ _id: string; appliedAt: string; appliedRoleKeys: strin
 let syncDefaultRoles: () => Promise<void>;
 let applyRbacMigrations: () => Promise<void>;
 
-/** The roles collection as it looks on a database provisioned before the Service module shipped. */
+/**
+ * ทะเบียนผู้ขาย + ของที่ค้างจาก 2026-08-28 (ดู rbacSeed.ts รายการ purchasing-registers-…)
+ *
+ * รอบนี้ต่างจาก Service ตรงที่ **ไม่ได้จำลองสถานการณ์ขึ้นมาเอง** — เช็คฐานข้อมูล dev จริงเมื่อ
+ * 2026-08-31 แล้วพบว่าทุก role มี purchaseOrder:* และ costControl:* เป็นศูนย์จริง ๆ เมนู "จัดซื้อ"
+ * กับ "BD" จึงมองไม่เห็นเลยตั้งแต่วันที่สร้างโมดูล
+ */
+const PURCHASING_MIGRATION_ID = "purchasing-registers-permissions-2026-08-31";
+const PURCHASING_PERMISSION = /^(vendor|purchaseOrder|costControl):/;
+
+/**
+ * The roles collection as it looks on a database provisioned before the Service module shipped —
+ * and, since 2026-08-31, also before the purchasing/vendor/cost-control permissions existed.
+ */
 async function seedLegacyRoles(): Promise<void> {
   await roles.deleteMany({});
   await markers.deleteMany({});
   await roles.insertMany(
     defaultRoles
       .filter((r) => r.key !== "service_engineer")
-      .map((r) => ({ ...r, permissions: r.permissions.filter((p) => !SERVICE_PERMISSION.test(p)) })),
+      .map((r) => ({
+        ...r,
+        permissions: r.permissions.filter((p) => !SERVICE_PERMISSION.test(p) && !PURCHASING_PERMISSION.test(p)),
+      })),
   );
 }
 
@@ -227,5 +243,63 @@ describe("applyRbacMigrations (Product Stock permissions, 2026-08-18)", () => {
 
     expect(await permissionsOf("accounting_user")).not.toContain("stock:adjust");
     expect(await permissionsOf("accounting_user")).toContain("stock:view");
+  });
+});
+
+/**
+ * ทะเบียนผู้ขาย + สิทธิ์ที่ค้างมาตั้งแต่ 2026-08-28 (`purchasing-registers-permissions-2026-08-31`)
+ *
+ * รายการนี้ต่างจากรายการอื่นตรงที่ **ปิดบั๊กที่เกิดขึ้นจริงบนเครื่องแล้ว** ไม่ใช่แค่รองรับโมดูลใหม่:
+ * เช็ค DB dev เมื่อ 2026-08-31 พบว่าทุก role มี `purchaseOrder:*` = 0 และ `costControl:*` = 0
+ * ทำให้กลุ่มเมนู "จัดซื้อ" กับ "BD" ซ่อนตัวเองไปทั้งกลุ่มตั้งแต่วันที่สร้างโมดูล
+ */
+describe("applyRbacMigrations (vendor register + the purchasing/cost-control backfill)", () => {
+  it("gives Administrator every vendor permission a fresh install would have", async () => {
+    await applyRbacMigrations();
+    const granted = (await permissionsOf("administrator")).filter((p) => p.startsWith("vendor:")).sort();
+    expect(granted).toEqual(["vendor:archive", "vendor:create", "vendor:edit", "vendor:view"]);
+  });
+
+  it("restores the purchaseOrder and costControl permissions that were missing on the real database", async () => {
+    // ก่อนรัน: ไม่มีสักตัว — ตรงกับที่เจอบนเครื่องจริง
+    expect((await permissionsOf("administrator")).filter((p) => p.startsWith("purchaseOrder:"))).toEqual([]);
+    expect((await permissionsOf("administrator")).filter((p) => p.startsWith("costControl:"))).toEqual([]);
+
+    await applyRbacMigrations();
+
+    const after = await permissionsOf("administrator");
+    expect(after.filter((p) => p.startsWith("purchaseOrder:")).sort()).toEqual(
+      (defaultRoles.find((r) => r.key === "administrator")?.permissions ?? []).filter((p) => p.startsWith("purchaseOrder:")).sort(),
+    );
+    expect(after.filter((p) => p.startsWith("costControl:")).sort()).toEqual(
+      (defaultRoles.find((r) => r.key === "administrator")?.permissions ?? []).filter((p) => p.startsWith("costControl:")).sort(),
+    );
+  });
+
+  it("does not widen any other role — only Administrator is granted", async () => {
+    await applyRbacMigrations();
+    for (const key of ["sales_user", "viewer", "approver_1", "accounting_user"]) {
+      expect((await permissionsOf(key)).filter((p) => PURCHASING_PERMISSION.test(p)), key).toEqual([]);
+    }
+  });
+
+  it("records the migration so a second run is a complete no-op", async () => {
+    await applyRbacMigrations();
+    const marker = await markers.findOne({ _id: PURCHASING_MIGRATION_ID });
+    expect(marker?.appliedRoleKeys).toEqual(["administrator"]);
+
+    const snapshot = await permissionsOf("administrator");
+    await applyRbacMigrations();
+    expect(await permissionsOf("administrator")).toEqual(snapshot);
+  });
+
+  it("a permission an admin revokes afterward stays revoked", async () => {
+    await applyRbacMigrations();
+    await roles.updateOne({ key: "administrator" }, { $pull: { permissions: "vendor:archive" } });
+
+    await applyRbacMigrations();
+
+    expect(await permissionsOf("administrator")).not.toContain("vendor:archive");
+    expect(await permissionsOf("administrator")).toContain("vendor:view");
   });
 });

@@ -125,7 +125,13 @@ export type Permission =
   | "costControl:edit"
   | "costControl:finalize"
   | "costControl:print"
-  | "costControl:delete";
+  | "costControl:delete"
+  // ทะเบียนผู้ขาย (2026-08-31) — ข้อมูลหลักของฝ่ายจัดซื้อ ไม่ใช่เอกสาร จึงมีแค่ 4 สิทธิ์
+  // แบบเดียวกับ customers:* ไม่ใช่ 7 สิทธิ์แบบเอกสารที่มี finalize/print
+  | "vendor:view"
+  | "vendor:create"
+  | "vendor:edit"
+  | "vendor:archive";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -251,6 +257,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "costControl:finalize",
   "costControl:print",
   "costControl:delete",
+  "vendor:view",
+  "vendor:create",
+  "vendor:edit",
+  "vendor:archive",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -377,6 +387,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "costControl:finalize": "อนุมัติ Cost Control",
   "costControl:print": "พิมพ์ / ส่งออก Cost Control",
   "costControl:delete": "ลบ Cost Control",
+  "vendor:view": "ดูทะเบียนผู้ขาย",
+  "vendor:create": "เพิ่มผู้ขาย",
+  "vendor:edit": "แก้ไขผู้ขาย",
+  "vendor:archive": "เก็บถาวร/กู้คืนผู้ขาย",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -503,6 +517,10 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "costControl:finalize": "permission.costControlFinalize",
   "costControl:print": "permission.costControlPrint",
   "costControl:delete": "permission.costControlDelete",
+  "vendor:view": "permission.vendorView",
+  "vendor:create": "permission.vendorCreate",
+  "vendor:edit": "permission.vendorEdit",
+  "vendor:archive": "permission.vendorArchive",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -629,6 +647,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
     permissions: [
       "purchaseOrder:view", "purchaseOrder:viewAll", "purchaseOrder:create", "purchaseOrder:edit",
       "purchaseOrder:finalize", "purchaseOrder:print", "purchaseOrder:delete",
+      "vendor:view", "vendor:create", "vendor:edit", "vendor:archive",
     ],
   },
   {

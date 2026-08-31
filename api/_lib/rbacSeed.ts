@@ -54,6 +54,27 @@ interface RbacMigration {
  */
 const RBAC_MIGRATIONS: RbacMigration[] = [
   {
+    // ทะเบียนผู้ขาย (2026-08-31) **บวกของที่ค้างมาตั้งแต่ 2026-08-28**
+    //
+    // เช็คฐานข้อมูลจริงเมื่อ 2026-08-31: ทุก role มี `purchaseOrder:*` = 0 และ `costControl:*` = 0
+    // แปลว่ากลุ่มเมนู "จัดซื้อ" กับ "BD" มองไม่เห็นเลยตั้งแต่วันที่สร้างโมดูล (กลุ่มซ่อนตัวเองเมื่อ
+    // ไม่มีสิทธิ์ดูสักรายการ) — Super Admin ไม่เจออาการเพราะได้ทุกสิทธิ์อัตโนมัติ จึงไม่มีใครสังเกต
+    //
+    // ตั้งแต่ 2026-08-25 เจ้าของเลือกว่าจะไปติ๊กเองไม่ต้องเขียน migration แต่**เปลี่ยนการตัดสินใจ
+    // เมื่อ 2026-08-31** หลังเห็นว่าสองโมดูลติดต่อกันเงียบหายไปทั้งคู่ รายการนี้จึงเก็บทั้งสามชุดไว้
+    // ด้วยกัน — ไม่รวม `project:*` 28 ตัวที่ยังค้างอยู่ เพราะเจ้าของยังไม่ได้เปลี่ยนใจเรื่องนั้น
+    id: "purchasing-registers-permissions-2026-08-31",
+    grants: {
+      administrator: [
+        "vendor:view", "vendor:create", "vendor:edit", "vendor:archive",
+        "purchaseOrder:view", "purchaseOrder:viewAll", "purchaseOrder:create", "purchaseOrder:edit",
+        "purchaseOrder:finalize", "purchaseOrder:print", "purchaseOrder:delete",
+        "costControl:view", "costControl:viewAll", "costControl:create", "costControl:edit",
+        "costControl:finalize", "costControl:print", "costControl:delete",
+      ],
+    },
+  },
+  {
     // ใบสั่งผลิต (2026-08-20) — เพิ่ม 7 สิทธิ์เข้า defaultRoles แต่ฐานข้อมูลที่ provision ไปแล้ว
     // มี role document อยู่ครบ syncDefaultRoles() จึงไม่แตะให้ ต้องมี migration นี้เท่านั้น
     // ไม่งั้น Administrator บนเครื่องจริงจะเข้าเมนู "ผลิต" ไม่ได้เลย

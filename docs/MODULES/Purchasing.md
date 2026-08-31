@@ -153,10 +153,46 @@ design system, so it is a plain bordered table that holds the right fields rathe
 FM-PU-xx layout. It hardcodes Thai and never calls `useI18n`, like every other print document.
 `PrintLetterhead` is deliberately not used until a real form shows a company letterhead.
 
+## ทะเบียนผู้ขาย (Vendor register, 2026-08-31)
+
+The owner asked for this on 2026-08-28: *"มีหน้าเพิ่มผู้ขายสำหรับจัดซื้อเพราะมันจะมีรหัสผู้ขายด้วย"*.
+It closes gap #1 below ("No vendor master").
+
+| Layer | Path |
+|---|---|
+| Page | `src/pages/vendors/VendorsPage.tsx` (nav group **จัดซื้อ**) |
+| Client lib | `src/lib/vendors.ts` — incl. `vendorComboboxOptions()` |
+| Handler | `api/_lib/vendorsHandler.ts` (`handleVendors`), mounted in `api/handlers/customers.ts` |
+| Validation | `api/_lib/vendorValidation.ts` |
+| Collection | `vendors` — `VendorFields` in `api/_lib/collections.ts` |
+| Permissions | `vendor:view` / `:create` / `:edit` / `:archive` — four, like `customers:*`, not seven; this is master data, not a document |
+
+Cloned wholesale from `customersHandler` / `customerValidation` / `CustomersPage` — the newest and
+only complete master-data template (real permission props, full TH+EN i18n, `EmptyState`,
+`ConfirmDialog`, `useDialogA11y`, audit on every write, soft-delete). `DepartmentManagementPage` was
+deliberately **not** used as the base: no permission props, no audit, no confirm dialog.
+
+**Vendor code — optional, but unique if set.** Two layers that deliberately agree:
+`validateVendorDraft` upper-cases the code first, then a case-insensitive `$regex` check produces the
+readable 409, and a `unique` **partial** index (`code` present and non-empty) catches the
+concurrent-insert race, with `E11000` re-thrown as the same 409. Note this is stricter than
+`departmentsHandler.ts`, whose regex is case-insensitive while its index is case-sensitive — the two
+layers there do not actually agree.
+
+**`vendorName` on a purchase order stays a plain string**, with the register as a shortcut rather than
+a gate: old documents read back unchanged, no migration, and a buyer can still type a vendor that is
+not registered yet. Picking one from the dropdown fills contact/phone/taxId/address — overwriting
+whatever was there, deliberately, because picking a vendor means "this one, all of it".
+
+`GET /api/vendors` is readable by `purchaseOrder:view`/`purchaseRequest:view` as well as
+`vendor:view` — the same carve-out `customersHandler` makes for quotation writers. Without it the
+dropdown would be empty for exactly the people who use it.
+
 ## Known gaps
 
-1. **No vendor master.** `vendorName` is free text on both documents, exactly as it already was
-   on ใบขอซื้อ. No vendor record, credit terms, address or tax ID exists anywhere in the system.
+1. ~~**No vendor master.**~~ **✅ Built 2026-08-31** — see "ทะเบียนผู้ขาย" above. `vendorName` is
+   still free text by design; the register supplies suggestions and auto-fill, it does not constrain.
+   Credit terms are still not modelled per vendor.
 2. **The per-department approver table from the chart is not data.** Existing permissions and
    departments are used instead, as agreed. Delegation is therefore whatever the roles page allows.
 3. **Nobody is in the Purchasing department in the live database** (`docs/TODO.md`). The existing
