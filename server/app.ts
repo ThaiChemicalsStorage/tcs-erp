@@ -53,6 +53,7 @@ const API_ROUTES: Record<string, ApiHandler> = {
   "quotation-templates": jobtypesHandler,
   customers: customersHandler,
   vendors: customersHandler,
+  "code-entries": customersHandler,
   search: customersHandler,
   "service-templates": customersHandler,
   "service-reports": customersHandler,

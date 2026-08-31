@@ -57,7 +57,9 @@
     { "source": "/api/service-reports", "destination": "/api/handlers/customers" },
     { "source": "/api/service-reports/:path*", "destination": "/api/handlers/customers" },
     { "source": "/api/vendors", "destination": "/api/handlers/customers" },
-    { "source": "/api/vendors/:path*", "destination": "/api/handlers/customers" }
+    { "source": "/api/vendors/:path*", "destination": "/api/handlers/customers" },
+    { "source": "/api/code-entries", "destination": "/api/handlers/customers" },
+    { "source": "/api/code-entries/:path*", "destination": "/api/handlers/customers" }
   ],
   "functions": {
     "api/handlers/jobtypes.ts": {

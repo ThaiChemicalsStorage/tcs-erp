@@ -11,6 +11,7 @@ import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { ApiError } from "../../lib/apiClient";
 import { newId } from "../../lib/products";
 import { fmt } from "../../lib/quotes";
+import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { useI18n } from "../../lib/i18n";
 import { Combobox } from "../../components/Combobox";
 import { type Vendor, fetchVendors, vendorComboboxOptions } from "../../lib/vendors";
@@ -77,6 +78,8 @@ export function PurchaseOrderDocument({
   // ทะเบียนผู้ขาย — ดึงในหน้านี้เอง แบบเดียวกับที่ใบสั่งงานดึงรายชื่อแผนก (fetchDepartments)
   // GET /vendors เปิดให้คนที่มี purchaseOrder:view อ่านได้ ไม่ต้องมีสิทธิ์ดูแลทะเบียน
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  // ทะเบียนรหัสแผนก/บัญชี — ตัวช่วยเติมเหมือนกัน โหลดล้มก็ยังพิมพ์รหัสเองได้
+  const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([]);
 
   // hooks ทุกตัวต้องประกาศเหนือ early return — กฎของ React
   const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
@@ -101,6 +104,12 @@ export function PurchaseOrderDocument({
     fetchVendors()
       .then((list) => { if (!cancelled) setVendors(list); })
       .catch(() => { if (!cancelled) setVendors([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchCodeEntries().then((codes) => { if (!cancelled) setCodeEntries(codes); }).catch(() => { /* เติมรหัสให้ไม่ได้ ก็พิมพ์เองได้ */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -362,6 +371,7 @@ export function PurchaseOrderDocument({
                 <thead>
                   <tr className="border-y border-border bg-muted/40">
                     {["#", t("purchaseOrderDoc.col.code"), t("purchaseOrderDoc.col.description"), t("purchaseOrderDoc.col.unit"),
+                      t("purchaseOrderDoc.col.department"), t("purchaseOrderDoc.col.costCode"),
                       t("purchaseOrderDoc.col.qty"), t("purchaseOrderDoc.col.unitPrice"), t("purchaseOrderDoc.col.discount"),
                       t("purchaseOrderDoc.col.amount"), ""].map((h, i) => (
                       <th key={i} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
@@ -370,13 +380,25 @@ export function PurchaseOrderDocument({
                 </thead>
                 <tbody>
                   {draft.lines.length === 0 ? (
-                    <tr><td colSpan={9} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("purchaseOrderDoc.noLines")}</td></tr>
+                    <tr><td colSpan={11} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("purchaseOrderDoc.noLines")}</td></tr>
                   ) : draft.lines.map((l, i) => (
                     <tr key={l.id} className="border-b border-border/50">
                       <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{i + 1}</td>
                       <td className="px-1 py-1"><input className={cellCls} disabled={!editable} value={l.productCode} onChange={(e) => setLine(l.id, { productCode: e.target.value })} /></td>
                       <td className="px-1 py-1"><input className={cellCls} disabled={!editable} value={l.description} onChange={(e) => setLine(l.id, { description: e.target.value })} /></td>
                       <td className="px-1 py-1 w-24"><input className={cellCls} disabled={!editable} value={l.unit} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
+                      {/* รหัสแผนก/บัญชีที่ดึงมาจากใบขอซื้อ — ก่อนหน้านี้คัดลอกมาแล้วแต่ไม่มีที่ให้เห็นหรือแก้
+                          จัดซื้อมักต้องแก้รหัสบัญชีที่ผู้ขอกรอกมาผิดหมวด จึงต้องแก้ได้บนใบสั่งซื้อด้วย */}
+                      <td className="px-1 py-1">
+                        <Combobox disabled={!editable} value={l.departmentCode ?? ""} onChange={(next) => setLine(l.id, { departmentCode: next })}
+                          options={codeComboboxOptions(codeEntries, "department")} ariaLabel={t("purchaseOrderDoc.col.department")}
+                          className={`${cellCls} w-24 font-mono`} />
+                      </td>
+                      <td className="px-1 py-1">
+                        <Combobox disabled={!editable} value={l.costCode ?? ""} onChange={(next) => setLine(l.id, { costCode: next })}
+                          options={codeComboboxOptions(codeEntries, "account")} ariaLabel={t("purchaseOrderDoc.col.costCode")}
+                          className={`${cellCls} w-28 font-mono`} />
+                      </td>
                       <td className="px-1 py-1 w-24"><input type="number" className={`${cellCls} text-right font-mono`} disabled={!editable} value={l.qty ?? ""} onChange={(e) => setLine(l.id, { qty: e.target.value === "" ? null : Number(e.target.value) })} /></td>
                       <td className="px-1 py-1 w-28"><input type="number" className={`${cellCls} text-right font-mono`} disabled={!editable} value={l.unitPrice ?? ""} onChange={(e) => setLine(l.id, { unitPrice: e.target.value === "" ? null : Number(e.target.value) })} /></td>
                       {/* ส่วนลดรายบรรทัด: ตัวเลข + ปุ่มสลับ %/บาท — แนวเดียวกับใบเสนอราคา */}

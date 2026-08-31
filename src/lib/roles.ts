@@ -113,6 +113,11 @@ export const defaultRoles: Role[] = [
       "vendor:create",
       "vendor:edit",
       "vendor:archive",
+      // ทะเบียนรหัสแผนก/บัญชี (2026-08-31)
+      "codeRegister:view",
+      "codeRegister:create",
+      "codeRegister:edit",
+      "codeRegister:archive",
       // Cost Control (แผนก BD, 2026-08-28)
       // ⚠️ ตั้งแต่ 2026-08-31 โมดูลใหม่**มี RBAC migration ให้ด้วย** (เจ้าของเปลี่ยนการตัดสินใจ)
       // — `defaultRoles` มีผลกับการติดตั้งใหม่เท่านั้น ฐานข้อมูลที่ provision ไปแล้วต้องพึ่ง migration

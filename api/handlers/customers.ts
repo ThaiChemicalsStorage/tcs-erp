@@ -6,6 +6,7 @@ import { handleServiceTemplate } from "../_lib/serviceTemplateHandler.js";
 import { handleServiceReport } from "../_lib/serviceReportHandler.js";
 import { handleLineWebhook } from "../_lib/lineHandler.js";
 import { handleVendors } from "../_lib/vendorsHandler.js";
+import { handleCodeEntries } from "../_lib/codeEntriesHandler.js";
 
 /**
  * Customer master data — see `api/_lib/customersHandler.ts` for the actual list/create/get/patch/
@@ -42,6 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (pathname === "/api/service-templates" || pathname.startsWith("/api/service-templates/")) return handleServiceTemplate(req, res);
     if (pathname === "/api/service-reports" || pathname.startsWith("/api/service-reports/")) return handleServiceReport(req, res);
     if (pathname === "/api/vendors" || pathname.startsWith("/api/vendors/")) return handleVendors(req, res);
+    if (pathname === "/api/code-entries" || pathname.startsWith("/api/code-entries/")) return handleCodeEntries(req, res);
     // LINE OA webhook (2026-08-10) — Express runtime only: server/app.ts routes /api/line/* here
     // and captures the raw body its signature check needs; vercel.json deliberately has no
     // /api/line rewrite (the demo can't verify signatures — see api/_lib/lineHandler.ts).

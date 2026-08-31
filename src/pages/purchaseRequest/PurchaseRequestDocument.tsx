@@ -19,6 +19,8 @@ import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { PurchaseRequestPrintDocument } from "./PurchaseRequestPrintDocument";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
+import { Combobox } from "../../components/Combobox";
+import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { useI18n } from "../../lib/i18n";
 import { getRevisionNumber } from "../../lib/revisionDiff";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
@@ -94,6 +96,8 @@ export function PurchaseRequestDocument({
   const [rewriting, setRewriting] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // ทะเบียนรหัสแผนก/บัญชี — เป็นแค่ตัวช่วยเติม โหลดล้มก็ยังพิมพ์รหัสเองได้ตามปกติ
+  const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([]);
   const [showPrint, setShowPrint] = useState(false);
   const [requestingCodeFor, setRequestingCodeFor] = useState<string | null>(null);
 
@@ -115,6 +119,13 @@ export function PurchaseRequestDocument({
       });
     return () => { cancelled = true; };
   }, [purchaseRequestId, reloadKey, t, dirty]);
+
+  // ทะเบียนรหัสโหลดแยกจากตัวเอกสาร — ถ้าทะเบียนล่มก็ยังเปิดใบขอซื้อและพิมพ์รหัสเองได้
+  useEffect(() => {
+    let cancelled = false;
+    fetchCodeEntries().then((codes) => { if (!cancelled) setCodeEntries(codes); }).catch(() => { /* เติมรหัสให้ไม่ได้ ก็พิมพ์เองได้ */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="prdoc-actions"]', popover: { title: t("tour.prdoc.actions.title"), description: t("tour.prdoc.actions.desc"), side: "bottom" } },
@@ -479,7 +490,8 @@ export function PurchaseRequestDocument({
                     {[
                       t("purchaseRequestDoc.col.productCode"), t("purchaseRequestDoc.col.description"), t("purchaseRequestDoc.col.unit"),
                       t("purchaseRequestDoc.col.warehouseRemaining"), t("purchaseRequestDoc.col.qtyRequested"), t("purchaseRequestDoc.col.neededByDate"),
-                      t("purchaseRequestDoc.col.department"), t("purchaseRequestDoc.col.estimatedCost"), "",
+                      t("purchaseRequestDoc.col.department"), t("purchaseRequestDoc.col.costCode"),
+                      t("purchaseRequestDoc.col.estimatedCost"), "",
                     ].map((h) => (
                       <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
@@ -522,8 +534,27 @@ export function PurchaseRequestDocument({
                             className="w-32 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
                         </td>
                         <td className="px-2 py-1.5">
-                          <input disabled={!editable} value={line.departmentCode} onChange={(e) => updateLine(line.id, { departmentCode: e.target.value })}
-                            className="w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70" />
+                          {/* พิมพ์รหัสเองได้เหมือนเดิม แต่พิมพ์ไม่กี่ตัวก็ขึ้นรายการจากทะเบียนให้เลือก */}
+                          <Combobox
+                            disabled={!editable}
+                            value={line.departmentCode}
+                            onChange={(next) => updateLine(line.id, { departmentCode: next })}
+                            options={codeComboboxOptions(codeEntries, "department")}
+                            ariaLabel={t("purchaseRequestDoc.col.department")}
+                            className="w-24 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
+                          />
+                        </td>
+                        {/* รหัสบัญชี — เก็บและ sanitize มาตั้งแต่ 2026-08-27 แต่ไม่เคยมีช่องกรอก
+                            จนกระทั่งมีทะเบียนรหัสให้เลือก (ฟิลด์ตายที่เพิ่งได้ใช้จริง) */}
+                        <td className="px-2 py-1.5">
+                          <Combobox
+                            disabled={!editable}
+                            value={line.costCode}
+                            onChange={(next) => updateLine(line.id, { costCode: next })}
+                            options={codeComboboxOptions(codeEntries, "account")}
+                            ariaLabel={t("purchaseRequestDoc.col.costCode")}
+                            className="w-28 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
+                          />
                         </td>
                         <td className="px-2 py-1.5">
                           <input type="number" disabled={!editable} value={line.estimatedCost ?? ""} onChange={(e) => updateLine(line.id, { estimatedCost: e.target.value === "" ? null : Number(e.target.value) })}

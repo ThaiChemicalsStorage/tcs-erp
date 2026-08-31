@@ -231,6 +231,49 @@ whatever was there, deliberately, because picking a vendor means "this one, all 
 `vendor:view` — the same carve-out `customersHandler` makes for quotation writers. Without it the
 dropdown would be empty for exactly the people who use it.
 
+## ทะเบียนรหัส (Code register, 2026-08-31)
+
+The owner asked for this on 2026-08-28: *"เพิ่มหน้าสร้างรหัสแผนก เพื่อเอาไว้ใช้สำหรับใบ PR กับ PO"*
+and *"เพิ่มช่องใส่รหัสแผนกในหน้าใบขอซื้อ ก็คือมันจะดึงข้อมูลรหัสที่เราใส่ไปออกมาจากหน้าสร้าง"*.
+
+| Layer | Path |
+|---|---|
+| Page | `src/pages/codeRegister/CodeRegisterPage.tsx` (nav group **จัดซื้อ**, two tabs) |
+| Client lib | `src/lib/codeRegister.ts` — incl. `parseGlChartRows()` and `codeComboboxOptions()` |
+| Handler | `api/_lib/codeEntriesHandler.ts` (`handleCodeEntries`), mounted in `api/handlers/customers.ts` |
+| Collection | `code_entries` — `CodeEntryFields` in `api/_lib/collections.ts` |
+| Permissions | `codeRegister:view` / `:create` / `:edit` / `:archive` — four, like `vendor:*` |
+
+**Two registers, one module.** `kind: "department"` holds the `G143`-style code the real filled-in
+purchase request (`ED6908038.pdf`) puts in its แผนก box; `kind: "account"` holds the 479-row chart
+of accounts the owner supplied. They are unrelated sets — confirmed with the owner, since the file
+was named `รหัสสินค้าทั้งหมด.xlsx` but contains neither product codes nor `G143`. One module with
+two tabs, rather than two modules, because they share the entire surface and differ only in four
+optional account-side fields.
+
+**Uniqueness is per `kind`.** `{ kind, code }`, not `{ code }`: the same string may legitimately
+exist in both registers. Codes are upper-cased on write so the case-insensitive `$regex` check (which
+produces the readable Thai 409) and the unique index agree on what a duplicate is — the same
+discipline as `vendors`, and still more than `departmentsHandler` manages.
+
+**Importing the chart of accounts.** The `GLCHART` sheet is not a table — it is a fixed-width
+character report crammed into one column, 570 rows including report headers, rules and footers.
+`parseGlChartRows()` takes `string[]` (first cell of each row), keeps only lines starting with an
+account code, and splits the tail on runs of two-or-more spaces. It is pure and never touches
+`xlsx`, so it is testable against a synthetic fixture — the real file lives in gitignored
+`reference/`. Same split as `costControlImport.ts`. **Existing codes are skipped on import, never
+overwritten**, because re-importing a longer file is expected and overwriting would eat admin edits.
+
+**Control accounts are listed but not offered.** `isControl: true` marks a grouping account that
+cannot be posted to. The register page shows them with a label; `codeComboboxOptions()` filters them
+out of the PR/PO line dropdowns.
+
+**Where the codes are used.** Both `departmentCode` and `costCode` on purchase request lines, and
+the same two on purchase order lines. `costCode` had been stored and sanitized since 2026-08-27 with
+no input anywhere — a dead field until this register existed. The purchase order copies both from the
+purchase request but keeps them editable, because Purchasing routinely corrects an account code the
+requester put in the wrong bucket.
+
 ## Known gaps
 
 1. ~~**No vendor master.**~~ **✅ Built 2026-08-31** — see "ทะเบียนผู้ขาย" above. `vendorName` is
@@ -238,12 +281,16 @@ dropdown would be empty for exactly the people who use it.
    Credit terms are still not modelled per vendor.
 2. **The per-department approver table from the chart is not data.** Existing permissions and
    departments are used instead, as agreed. Delegation is therefore whatever the roles page allows.
-3. **Nobody is in the Purchasing department in the live database** (`docs/TODO.md`). The existing
+3. **Department codes are not connected to the `departments` collection.** `kind: "department"`
+   rows are free-standing strings; nothing links `G143` to a row in `departments`, which has its
+   own `code`. The owner has not supplied the department-code list, so the register starts empty
+   and codes are typed in by hand. Reconciling the two is a decision, not a bug.
+4. **Nobody is in the Purchasing department in the live database** (`docs/TODO.md`). The existing
    "ใบขอซื้ออนุมัติแล้ว" notification has therefore never reached anyone, and this module inherits
    that: it stays silent until employees are assigned to the department on the user-management page.
    Department matching is also by **name**, not `code` — renaming the department silently stops the
    hand-off.
-4. **No guided tour** for the new document (`useModuleTour` is wired for ใบขอซื้อ only).
+5. **No guided tour** for the new document (`useModuleTour` is wired for ใบขอซื้อ only).
 
 ## Removed 2026-08-28 — ใบตรวจรับสินค้า (GR) และใบรับวางบิล (BR)
 

@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import {
   LayoutDashboard, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
-  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, BookOpen, Wrench, Receipt,
+  LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
   Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
@@ -10,6 +10,7 @@ import { type Product, type ProductCategory, fetchProducts, fetchCategories } fr
 import { type JobType, fetchJobTypes } from "./lib/jobTypes";
 import { type Customer, fetchCustomers } from "./lib/customers";
 import { type Vendor, fetchVendors } from "./lib/vendors";
+import { type CodeEntry, fetchCodeEntries } from "./lib/codeRegister";
 import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes";
 import { type User, fetchUsers, initials } from "./lib/users";
 import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
@@ -52,6 +53,7 @@ const DepartmentManagementPage = lazy(() => import("./pages/admin/DepartmentMana
 const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) => ({ default: m.AuditLogPage })));
 const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then((m) => ({ default: m.CustomersPage })));
 const VendorsPage = lazy(() => import("./pages/vendors/VendorsPage").then((m) => ({ default: m.VendorsPage })));
+const CodeRegisterPage = lazy(() => import("./pages/codeRegister/CodeRegisterPage").then((m) => ({ default: m.CodeRegisterPage })));
 const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateManagementPage").then((m) => ({ default: m.TemplateManagementPage })));
 const ScopeOfWorkPage = lazy(() => import("./pages/scopeOfWork/ScopeOfWorkPage").then((m) => ({ default: m.ScopeOfWorkPage })));
 const DeliveryOrderPage = lazy(() => import("./pages/deliveryOrder/DeliveryOrderPage").then((m) => ({ default: m.DeliveryOrderPage })));
@@ -141,9 +143,9 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "vendors" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
-type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors";
+type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
 
 const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
@@ -153,6 +155,7 @@ const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
   stock: ["products", "categories"],
   customers: ["customers"],
   vendors: ["vendors"],
+  codeRegister: ["codeEntries"],
   users: ["users", "roles", "departments", "teams"],
   roles: ["roles", "users"],
   departments: ["departments", "teams"],
@@ -161,7 +164,7 @@ const NAV_RESOURCES: Partial<Record<NavKey, ResourceKey[]>> = {
 
 const INITIAL_RESOURCE_STATUS: Record<ResourceKey, ResourceState> = {
   users: "loading", roles: "loading", departments: "loading", teams: "loading", company: "loading", products: "loading", categories: "loading",
-  notifications: "loading", quotes: "loading", jobTypes: "loading", customers: "loading", vendors: "loading",
+  notifications: "loading", quotes: "loading", jobTypes: "loading", customers: "loading", vendors: "loading", codeEntries: "loading",
 };
 
 const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -200,6 +203,7 @@ const navItems: NavItem[] = [
   { key: "purchasingRequestInbox", icon: ShoppingCart, labelKey: "nav.purchasingRequestInbox", permission: "purchaseRequest:view" },
   { key: "purchaseOrder", icon: ShoppingBag, labelKey: "nav.purchaseOrder", permission: "purchaseOrder:view" },
   { key: "vendors", icon: Store, labelKey: "nav.vendors", permission: "vendor:view" },
+  { key: "codeRegister", icon: Hash, labelKey: "nav.codeRegister", permission: "codeRegister:view" },
   { key: "costControl", icon: Calculator, labelKey: "nav.costControl", permission: "costControl:view" },
   { key: "productionRequisition", icon: Package2, labelKey: "nav.materialRequisition", permission: "materialRequisition:view" },
   { key: "productionPurchase", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
@@ -231,7 +235,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   // แผนกเข้าถึงได้จากหมวดของตัวเองแทนที่จะต้องไปหาใต้ "ขาย"
   { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest", "deliveryOrder"] },
   { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "productionPurchase", "deliveryOrder"] },
-  { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "purchaseOrder", "vendors"] },
+  { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
   { labelKey: "nav.group.inventory", keys: ["products", "stock", "productRequest"] },
@@ -268,6 +272,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   productRequest: "nav.productRequest",
   customers: "nav.customers",
   vendors: "nav.vendors",
+  codeRegister: "nav.codeRegister",
   users: "nav.users",
   roles: "nav.roles",
   departments: "nav.departments",
@@ -367,6 +372,7 @@ export default function App() {
   const [jobTypes, setJobTypes] = useState<JobType[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([]);
 
   const [resourceStatus, setResourceStatus] = useState<Record<ResourceKey, ResourceState>>(INITIAL_RESOURCE_STATUS);
   const [bootError, setBootError] = useState(false);
@@ -400,6 +406,7 @@ export default function App() {
     trackResource("jobTypes", fetchJobTypes(), setJobTypes);
     trackResource("customers", fetchCustomers().catch(() => []), setCustomers);
     trackResource("vendors", fetchVendors().catch(() => []), setVendors);
+    trackResource("codeEntries", fetchCodeEntries().catch(() => []), setCodeEntries);
   }, [trackResource]);
 
   useEffect(() => {
@@ -780,6 +787,9 @@ export default function App() {
   const canCreateVendors = hasPermission(currentUser, roles, "vendor:create");
   const canEditVendors = hasPermission(currentUser, roles, "vendor:edit");
   const canArchiveVendors = hasPermission(currentUser, roles, "vendor:archive");
+  const canCreateCodes = hasPermission(currentUser, roles, "codeRegister:create");
+  const canEditCodes = hasPermission(currentUser, roles, "codeRegister:edit");
+  const canArchiveCodes = hasPermission(currentUser, roles, "codeRegister:archive");
   const canCreateScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:create");
   const canEditScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:edit");
   const canFinalizeScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:finalize");
@@ -1090,6 +1100,8 @@ export default function App() {
               ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} canViewProject={canViewProject} canCreateProject={canCreateProject} onOpenProject={navigateToProject} />
               : effectiveNav === "quotationTemplates"
               ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} currentUserId={currentUser.id} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
+              : effectiveNav === "codeRegister"
+              ? <CodeRegisterPage codes={codeEntries} onCodesChange={setCodeEntries} canCreate={canCreateCodes} canEdit={canEditCodes} canArchive={canArchiveCodes} />
               : effectiveNav === "vendors"
               ? <VendorsPage vendors={vendors} onVendorsChange={setVendors} canCreate={canCreateVendors} canEdit={canEditVendors} canArchive={canArchiveVendors} />
               : effectiveNav === "customers"

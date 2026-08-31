@@ -657,6 +657,29 @@ Added 2026-08-31. Master data, not a document — four permissions, no approval 
 | `PATCH /api/vendors/:id` | `vendor:edit` | Partial. The uniqueness check excludes the row itself, so re-saving without changing the code is fine. |
 | `POST /api/vendors/:id/archive` | `vendor:archive` | Body `{ isDeleted }`. Soft-delete both ways — a vendor row is never actually removed, because purchase orders reference the name. |
 
+### Code register (`api/_lib/codeEntriesHandler.ts`, mounted at `/api/code-entries` via `api/handlers/customers.ts`)
+
+Added 2026-08-31. Master data like Vendors, but **two unrelated registers in one collection**,
+separated by `kind`:
+
+- `department` — the `G143`-style code that goes in a purchase request line's แผนก box.
+- `account` — the 479-row chart of accounts (`5230-15`) the owner supplied as `รหัสสินค้าทั้งหมด.xlsx`.
+
+They share one handler because they share the whole surface — same permissions, same duplicate
+check, same archive semantics — and differ only in four optional account-side fields. Uniqueness
+is on `{ kind, code }`, **not `code` alone**: the two sets are unrelated, so the same string may
+legitimately exist in both.
+
+| Route | Permission | Notes |
+|---|---|---|
+| `GET /api/code-entries` | `codeRegister:view` **or** `purchaseRequest:view` / `purchaseOrder:view` | Same carve-out as Vendors, and for the same reason — without it the code dropdowns on PR/PO lines are empty for the people who fill them in. Callers without `codeRegister:view` see only active, non-archived rows. Sorted by `kind` then `code`. |
+| `POST /api/code-entries` | `codeRegister:create` | `kind`, `code`, `name` required. `code` is upper-cased on write and must be unique within its `kind`, compared case-insensitively → `409` "รหัสนี้มีอยู่แล้วในทะเบียน". `201`. |
+| `POST /api/code-entries/import` | `codeRegister:create` | Body `{ kind, entries[] }`, max 2000 rows. **Existing codes are skipped, never overwritten** — re-importing a longer chart of accounts is expected, and overwriting would eat names an admin edited. Returns `{ created, skipped }`. |
+| `PATCH /api/code-entries/:id` | `codeRegister:edit` | Partial. `kind` in the body is ignored — moving a code between registers is a create, not an edit. The uniqueness check excludes the row itself. |
+| `POST /api/code-entries/:id/archive` | `codeRegister:archive` | Body `{ isDeleted }`. Soft-delete both ways; documents keep the string they stored. |
+
+`isControl: true` marks a grouping account that cannot be posted to. Such rows are listed on the
+register page but filtered out of the PR/PO dropdowns by `codeComboboxOptions()`.
 ### Purchase Order (`api/_lib/purchaseOrderHandler.ts`, mounted at `/api/purchase-orders` via `api/handlers/quotes.ts`)
 
 | Method & Path | Auth | Notes |

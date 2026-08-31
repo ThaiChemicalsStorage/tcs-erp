@@ -67,6 +67,7 @@ const RBAC_MIGRATIONS: RbacMigration[] = [
     grants: {
       administrator: [
         "vendor:view", "vendor:create", "vendor:edit", "vendor:archive",
+        "codeRegister:view", "codeRegister:create", "codeRegister:edit", "codeRegister:archive",
         "purchaseOrder:view", "purchaseOrder:viewAll", "purchaseOrder:create", "purchaseOrder:edit",
         "purchaseOrder:finalize", "purchaseOrder:print", "purchaseOrder:delete",
         "costControl:view", "costControl:viewAll", "costControl:create", "costControl:edit",

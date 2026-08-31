@@ -401,6 +401,31 @@ export async function vendorsCollection() {
   return db.collection<VendorFields>("vendors");
 }
 
+/**
+ * ทะเบียนรหัสสำหรับใบ PR/PO (2026-08-31) — **สองชุดใน collection เดียว แยกด้วย `kind`**
+ * `department` คือรหัสแผนกแบบ `G143` · `account` คือผังบัญชีแบบ `5230-15` (สี่ฟิลด์ล่างใช้เฉพาะฝั่งบัญชี)
+ * รหัสห้ามซ้ำ**ภายในชนิดเดียวกัน** — unique index จึงเป็น `{ kind, code }` ไม่ใช่ `{ code }` เดี่ยว
+ */
+export interface CodeEntryFields {
+  kind: "department" | "account";
+  code: string;
+  name: string;
+  category: string;
+  level: number | null;
+  isControl: boolean;
+  parentCode: string;
+  isActive: boolean;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+}
+export async function codeEntriesCollection() {
+  const db = await getDb();
+  return db.collection<CodeEntryFields>("code_entries");
+}
+
 export interface CustomerContactFields {
   customerId: string;
   name: string;

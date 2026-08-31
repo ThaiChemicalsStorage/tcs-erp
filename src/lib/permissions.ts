@@ -131,7 +131,12 @@ export type Permission =
   | "vendor:view"
   | "vendor:create"
   | "vendor:edit"
-  | "vendor:archive";
+  | "vendor:archive"
+  // ทะเบียนรหัสแผนก/บัญชีสำหรับใบ PR/PO (2026-08-31) — ข้อมูลหลักเหมือนทะเบียนผู้ขาย 4 สิทธิ์
+  | "codeRegister:view"
+  | "codeRegister:create"
+  | "codeRegister:edit"
+  | "codeRegister:archive";
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
@@ -261,6 +266,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "vendor:create",
   "vendor:edit",
   "vendor:archive",
+  "codeRegister:view",
+  "codeRegister:create",
+  "codeRegister:edit",
+  "codeRegister:archive",
 ];
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -391,6 +400,10 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "vendor:create": "เพิ่มผู้ขาย",
   "vendor:edit": "แก้ไขผู้ขาย",
   "vendor:archive": "เก็บถาวร/กู้คืนผู้ขาย",
+  "codeRegister:view": "ดูทะเบียนรหัส",
+  "codeRegister:create": "เพิ่มรหัส",
+  "codeRegister:edit": "แก้ไขรหัส",
+  "codeRegister:archive": "เก็บถาวร/กู้คืนรหัส",
 };
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
@@ -521,6 +534,10 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "vendor:create": "permission.vendorCreate",
   "vendor:edit": "permission.vendorEdit",
   "vendor:archive": "permission.vendorArchive",
+  "codeRegister:view": "permission.codeRegisterView",
+  "codeRegister:create": "permission.codeRegisterCreate",
+  "codeRegister:edit": "permission.codeRegisterEdit",
+  "codeRegister:archive": "permission.codeRegisterArchive",
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
@@ -648,6 +665,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "purchaseOrder:view", "purchaseOrder:viewAll", "purchaseOrder:create", "purchaseOrder:edit",
       "purchaseOrder:finalize", "purchaseOrder:print", "purchaseOrder:delete",
       "vendor:view", "vendor:create", "vendor:edit", "vendor:archive",
+      "codeRegister:view", "codeRegister:create", "codeRegister:edit", "codeRegister:archive",
     ],
   },
   {
