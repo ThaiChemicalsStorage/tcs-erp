@@ -21,6 +21,10 @@
  */
 
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
+// ยืมเฉพาะตัวคิดส่วนลดมาใช้ ไม่ยืม computeTotals เพราะมันฮาร์ดโค้ด VAT 7% (ดู purchaseOrderTotals)
+import { resolveDiscountAmount, lineDiscountAmount, lineSubtotal, type DiscountMode, type QuoteAmountLine } from "./quoteMath.js";
+
+export type { DiscountMode };
 
 export type PurchaseOrderStatus = "Draft" | "PendingApproval" | "Final";
 
@@ -43,6 +47,23 @@ export interface PurchaseOrderLine {
   qty: number | null;
   /** ราคาต่อหน่วยที่ตกลงกับผู้ขาย — null = ยังไม่ระบุ */
   unitPrice: number | null;
+  /**
+   * ส่วนลดของบรรทัดนี้ (2026-08-31) — ตีความเป็น % หรือบาท ตาม `discountMode`
+   * รูปแบบเดียวกับ `QuoteLine.discount`/`discountMode` เป๊ะ ๆ เพื่อให้ใช้ตัวคำนวณร่วมกันได้
+   * null/ไม่มีค่า = ไม่มีส่วนลด — เอกสารเก่าอ่านออกมาเหมือนเดิม ไม่ต้อง migrate
+   */
+  discount?: number | null;
+  /** ไม่ระบุ = ตีความเป็นเปอร์เซ็นต์ (ตรงกับที่ใบเสนอราคาทำอยู่) */
+  discountMode?: DiscountMode;
+  /**
+   * สามช่องนี้ดึงมาจากใบขอซื้อ (2026-08-31) — เจ้าของขอไว้ว่า *"ใบสั่งซื้อให้มีรายละเอียดด้วย
+   * ที่ดึงมาจากใบขอซื้อ"* เดิมตัวก๊อป PR→PO ทิ้งทั้งสามช่องนี้ไปเงียบ ๆ เพราะ PO ไม่มีที่เก็บ
+   */
+  neededByDate?: string;
+  /** "แผนก" — รหัสแผนกที่ขอซื้อ ต่อบรรทัด (ของใบขอซื้อเรียก departmentCode เหมือนกัน) */
+  departmentCode?: string;
+  /** รหัสบัญชี/ศูนย์ต้นทุน — บนใบขอซื้อยังเป็นฟิลด์ตายอยู่ ที่นี่ก๊อปมาเก็บไว้ให้ครบสาย */
+  costCode?: string;
   remark: string;
 }
 
@@ -81,6 +102,12 @@ export interface PurchaseOrder {
   lines: PurchaseOrderLine[];
   /** อัตราภาษีมูลค่าเพิ่ม (%) — null = ยังไม่ระบุ ยอดรวมคำนวณตอนแสดงผล ไม่ได้เก็บไว้ */
   vatRate: number | null;
+  /**
+   * ส่วนลดท้ายใบ (2026-08-31) — เจ้าของขอไว้ *"มีส่วนลดท้ายใบด้วย"*
+   * คิดจากยอดหลังหักส่วนลดรายบรรทัดแล้ว และคิดก่อน VAT — ลำดับเดียวกับใบเสนอราคา
+   */
+  discount?: number | null;
+  discountMode?: DiscountMode;
   remarks: string;
 
   status: PurchaseOrderStatus;
@@ -120,18 +147,49 @@ export interface PurchaseOrderSummary {
 }
 
 export function blankPurchaseOrderLine(id: string): PurchaseOrderLine {
-  return { id, productId: null, productCode: "", description: "", subDetails: [], unit: "", qty: null, unitPrice: null, remark: "" };
+  return { id, productId: null, productCode: "", description: "", subDetails: [], unit: "", qty: null, unitPrice: null, discount: null, discountMode: "percent", neededByDate: "", departmentCode: "", costCode: "", remark: "" };
 }
 
 /**
- * ยอดรวมก่อนภาษี — คำนวณตอนแสดงผลเสมอ **ไม่เก็บลงฐานข้อมูล**
+ * ยอดรวมก่อนภาษีหลังหักส่วนลดรายบรรทัดแล้ว — คำนวณตอนแสดงผลเสมอ **ไม่เก็บลงฐานข้อมูล**
  *
- * ตั้งใจไม่ไปใช้ `quoteMath.ts` (เครื่องคิดเงินของใบเสนอราคา) เพราะนั่นมีส่วนลดต่อบรรทัด/ต่อเอกสาร
- * และกฎ VAT ของฝั่งขาย ซึ่งใบสั่งซื้อยังไม่รู้ว่าต้องใช้แบบไหนจนกว่าฟอร์มจริงจะมา — เอาสูตรของ
- * ฝั่งขายมาใช้ก่อนแล้วมาแก้ทีหลัง เสี่ยงกว่าการบวกเลขตรง ๆ ตรงนี้
+ * **2026-08-31**: เดิมคอมเมนต์ตรงนี้เขียนไว้ว่าจงใจไม่ใช้ `quoteMath.ts` เพราะ "ใบสั่งซื้อยังไม่รู้ว่า
+ * ต้องใช้ส่วนลดแบบไหน" — ตอนนี้รู้แล้ว เจ้าของขอไว้ 2026-08-28 ว่าต้องมีส่วนลด**ทั้งแบบเปอร์เซ็นต์
+ * และแบบจำนวนเงิน ทั้งรายบรรทัดและท้ายใบ** จึงยืมเฉพาะตัวคิดส่วนลดของ `quoteMath.ts` มาใช้
+ *
+ * ⚠️ **แต่ยังใช้ `computeTotals()` ของที่นั่นไม่ได้** เพราะมันฮาร์ดโค้ด `VAT_RATE = 7` ขณะที่
+ * ใบสั่งซื้อมี `vatRate` ที่ผู้ใช้แก้เองได้ต่อใบ (ซื้อจากผู้ขายที่ไม่จด VAT ก็มี) — จึงต้องมี
+ * `purchaseOrderTotals()` ของตัวเองด้านล่าง
  */
 export function purchaseOrderSubtotal(lines: PurchaseOrderLine[]): number {
-  return lines.reduce((sum, l) => sum + (l.qty ?? 0) * (l.unitPrice ?? 0), 0);
+  return lines.reduce((sum, l) => sum + lineSubtotal(toAmountLine(l)), 0);
+}
+
+/** แปลงบรรทัดของใบสั่งซื้อให้เข้ารูปที่ quoteMath คิดได้ — ใบสั่งซื้อใช้ null ส่วนใบเสนอราคาใช้ 0 */
+function toAmountLine(l: PurchaseOrderLine): QuoteAmountLine {
+  return { qty: l.qty ?? 0, unitPrice: l.unitPrice ?? 0, discount: l.discount ?? 0, discountMode: l.discountMode };
+}
+
+/** ส่วนลดรายบรรทัดคิดเป็นเงินแล้ว — ใช้แสดงในคอลัมน์ของตาราง */
+export function purchaseOrderLineDiscount(l: PurchaseOrderLine): number {
+  return lineDiscountAmount(toAmountLine(l));
+}
+
+/** ยอดสุทธิของหนึ่งบรรทัด หลังหักส่วนลดของบรรทัดนั้นแล้ว */
+export function purchaseOrderLineTotal(l: PurchaseOrderLine): number {
+  return lineSubtotal(toAmountLine(l));
+}
+
+/**
+ * ยอดรวมทั้งใบ — เหมือน `computeTotals()` ของใบเสนอราคาทุกขั้น **ยกเว้นอัตรา VAT**
+ * ซึ่งอ่านจาก `vatRate` ของเอกสารเอง (null = ยังไม่ระบุ = ไม่คิดภาษี)
+ */
+export function purchaseOrderTotals(doc: Pick<PurchaseOrder, "lines" | "vatRate" | "discount" | "discountMode">) {
+  const subtotal = purchaseOrderSubtotal(doc.lines);
+  const discountAmt = resolveDiscountAmount(subtotal, doc.discount ?? 0, doc.discountMode);
+  const afterDiscount = subtotal - discountAmt;
+  const vatAmt = doc.vatRate !== null && doc.vatRate !== undefined ? (afterDiscount * doc.vatRate) / 100 : 0;
+  return { subtotal, discountAmt, afterDiscount, vatAmt, total: afterDiscount + vatAmt };
 }
 
 // ── API ──────────────────────────────────────────────────────────────────────

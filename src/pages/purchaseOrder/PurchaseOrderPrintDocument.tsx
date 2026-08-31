@@ -1,6 +1,6 @@
 import type { PurchaseOrder } from "../../lib/purchaseOrder";
 import { fmt } from "../../lib/quotes";
-import { purchaseOrderSubtotal } from "../../lib/purchaseOrder";
+import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
 
 /**
  * ⚠️ **ใบพิมพ์ชั่วคราว — รอฟอร์มจริง**
@@ -17,8 +17,8 @@ import { purchaseOrderSubtotal } from "../../lib/purchaseOrder";
  * ตามการตั้งค่าของคนกดพิมพ์ (ดู docs/CLAUDE.md)
  */
 export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
-  const subtotal = purchaseOrderSubtotal(doc.lines);
-  const vat = doc.vatRate !== null ? (subtotal * doc.vatRate) / 100 : 0;
+  // ยอดทุกตัวมาจากตัวคิดตัวเดียวกับหน้าแก้ไข (purchaseOrderTotals) — เดิมสูตรถูกเขียนซ้ำสองที่
+  const totals = purchaseOrderTotals(doc);
 
   const cell: React.CSSProperties = { border: "1px solid #000", padding: "4px 6px", verticalAlign: "top" };
   const head: React.CSSProperties = { ...cell, fontWeight: 700, textAlign: "center", background: "#eee" };
@@ -69,6 +69,7 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
             <th style={{ ...head, width: 55 }}>หน่วย</th>
             <th style={{ ...head, width: 55 }}>จำนวน</th>
             <th style={{ ...head, width: 75 }}>ราคา/หน่วย</th>
+            <th style={{ ...head, width: 60 }}>ส่วนลด</th>
             <th style={{ ...head, width: 85 }}>จำนวนเงิน</th>
           </tr>
         </thead>
@@ -86,20 +87,32 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
               <td style={{ ...cell, textAlign: "center" }}>{l.unit}</td>
               <td style={{ ...cell, textAlign: "right" }}>{l.qty ?? ""}</td>
               <td style={{ ...cell, textAlign: "right" }}>{l.unitPrice !== null ? fmt(l.unitPrice) : ""}</td>
-              <td style={{ ...cell, textAlign: "right" }}>{fmt((l.qty ?? 0) * (l.unitPrice ?? 0))}</td>
+              {/* ส่วนลดพิมพ์ตามที่กรอก (10% หรือ 500) ไม่ใช่ยอดที่คิดแล้ว — คนอ่านใบต้องเห็นเงื่อนไข */}
+              <td style={{ ...cell, textAlign: "right" }}>
+                {l.discount ? `${fmt(l.discount)}${l.discountMode === "amount" ? "" : "%"}` : ""}
+              </td>
+              <td style={{ ...cell, textAlign: "right" }}>{fmt(purchaseOrderLineTotal(l))}</td>
             </tr>
           ))}
           <tr>
-            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={6}>รวมเป็นเงิน</td>
-            <td style={{ ...cell, textAlign: "right" }}>{fmt(subtotal)}</td>
+            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={7}>รวมเป็นเงิน</td>
+            <td style={{ ...cell, textAlign: "right" }}>{fmt(totals.subtotal)}</td>
+          </tr>
+          {totals.discountAmt > 0 && (
+            <tr>
+              <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={7}>
+                ส่วนลดท้ายใบ{doc.discountMode === "amount" ? "" : ` ${fmt(doc.discount ?? 0)}%`}
+              </td>
+              <td style={{ ...cell, textAlign: "right" }}>-{fmt(totals.discountAmt)}</td>
+            </tr>
+          )}
+          <tr>
+            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={7}>ภาษีมูลค่าเพิ่ม {doc.vatRate ?? 0}%</td>
+            <td style={{ ...cell, textAlign: "right" }}>{fmt(totals.vatAmt)}</td>
           </tr>
           <tr>
-            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={6}>ภาษีมูลค่าเพิ่ม {doc.vatRate ?? 0}%</td>
-            <td style={{ ...cell, textAlign: "right" }}>{fmt(vat)}</td>
-          </tr>
-          <tr>
-            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={6}>ยอดสุทธิ</td>
-            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }}>{fmt(subtotal + vat)}</td>
+            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }} colSpan={7}>ยอดสุทธิ</td>
+            <td style={{ ...cell, textAlign: "right", fontWeight: 700 }}>{fmt(totals.total)}</td>
           </tr>
         </tbody>
       </table>

@@ -205,15 +205,17 @@ export async function searchPurchaseRequests(query: string, ctx: AuthContext, li
   const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "purchaseRequest:viewAll"), "createdBy");
   const docs = await col.find(
     docFilter(ownership, [
-      { _id: rx }, { vendorName: rx }, { jobCode: rx }, { deliveryLocation: rx },
-      { shippingMethod: rx }, { "lines.productCode": rx }, { "lines.description": rx },
+      // ผู้จำหน่าย/ขนส่งโดย ถูกถอดออกจากใบขอซื้อ 2026-08-31 — ค้นด้วยผู้ขอซื้อแทน ซึ่งเป็นสิ่งที่
+      // คนหาใบขอซื้อนึกออกจริง ๆ (อีกอย่างคือรหัสงาน ซึ่งอยู่ในคอลัมน์ lineage อยู่แล้ว)
+      { _id: rx }, { requestedBy: rx }, { jobCode: rx }, { deliveryLocation: rx },
+      { "lines.productCode": rx }, { "lines.description": rx },
     ]) as never,
     { sort: SORT_RECENT, limit },
   ).toArray();
   return docs.map((d) => ({
     id: d._id.toString(),
     docNumber: d._id.toString(),
-    party: d.vendorName ?? "",
+    party: d.requestedBy ?? "",
     lineage: d.jobCode ?? "",
     status: d.status ?? "",
     date: isoOf(d),
@@ -434,7 +436,7 @@ export async function searchByDocNumber(
       const docs = await col.find({ isDeleted: false, $and: [ownership, { _id: anchored }] } as never, { limit: 1 }).toArray();
       return first("purchaseRequest", docs.map((d) => ({
         id: d._id.toString(), docNumber: d._id.toString(),
-        party: d.vendorName ?? "", lineage: d.jobCode ?? "", status: d.status ?? "", date: isoOf(d),
+        party: d.requestedBy ?? "", lineage: d.jobCode ?? "", status: d.status ?? "", date: isoOf(d),
         ownerDepartment: d.ownerDepartment === "production" ? ("production" as const)
           : d.ownerDepartment === "general" ? ("general" as const) : ("project" as const),
       })));

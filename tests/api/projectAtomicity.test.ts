@@ -298,7 +298,6 @@ describe("Material Requisition/Job Order/Purchase Request: immediate re-save aft
     expect(pr.issueDate, "วันที่บนหัวเอกสารตั้งต้นเป็นวันที่สร้าง").toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
     const saved = await call("PATCH", `/api/purchase-requests/${pr.id}`, {
-      vendorPhone: "02-150-9627",
       deliveryContact: "พล",
       deliveryPhone: "062-549-0621",
       headerRemark: "รับของหน้างาน\nติดต่อล่วงหน้า 1 วัน",
@@ -306,7 +305,8 @@ describe("Material Requisition/Job Order/Purchase Request: immediate re-save aft
     });
     expect(saved.statusCode, JSON.stringify(saved.body)).toBe(200);
     const doc = (saved.body as { purchaseRequest: Record<string, string> }).purchaseRequest;
-    expect(doc.vendorPhone).toBe("02-150-9627");
+    // vendorPhone ถูกถอดออกพร้อมผู้จำหน่าย/เครดิต/ขนส่งโดย เมื่อ 2026-08-31 ตามที่เจ้าของสั่ง
+    // (ตรึงไว้แล้วที่ tests/api/purchasing.test.ts "ช่องที่ถอดออกแล้ว")
     expect(doc.deliveryContact).toBe("พล");
     expect(doc.deliveryPhone).toBe("062-549-0621");
     expect(doc.headerRemark).toContain("ติดต่อล่วงหน้า");

@@ -153,6 +153,49 @@ design system, so it is a plain bordered table that holds the right fields rathe
 FM-PU-xx layout. It hardcodes Thai and never calls `useI18n`, like every other print document.
 `PrintLetterhead` is deliberately not used until a real form shows a company letterhead.
 
+## ใบขอซื้อ: four fields removed, and what that broke (2026-08-31)
+
+The owner's instruction from 2026-08-28 was blunt: *"ใบขอซื้อไม่ต้องมีผู้จำหน่าย เครดิต ขนส่งโดย"*.
+The real signed FM-PU-05 agrees — those boxes exist on the paper and are **left blank**, because the
+requester is not the person who fills them. `vendorPhone`, added earlier the same day while matching
+the printed form, belongs to the same group and went with them.
+
+Removing them was not a UI deletion. Three things depended on those fields:
+
+1. **`purchaseOrderHandler.handleCreate()` copied exactly those three** onto a new PO. It no longer
+   does; a PO starts with an empty vendor and Purchasing picks one from the register, which carries
+   more than the PR ever could (contact, phone, tax ID, address).
+2. **`tests/api/purchasing.test.ts` pinned the copy** — rewritten to pin the new behaviour instead,
+   plus a new case asserting the server drops the fields even if a client sends them.
+3. **`searchDocuments.ts` used `vendorName` as the PR's `party` column.** It is now `requestedBy`,
+   which is what someone hunting a ใบขอซื้อ actually remembers (the job code is already `lineage`).
+
+Values already stored on old documents are **left in MongoDB untouched** — simply unread. No
+destructive migration, so the decision is reversible.
+
+## ส่วนลดใบสั่งซื้อ (2026-08-31)
+
+*"เพิ่มส่วนลดเพิ่มเติมไปในใบสั่งซื้อเป็นได้ทั้งเปอร์เซ็นและเงิน ละก็มีส่วนลดท้ายใบด้วย"*
+
+`discount` + `discountMode` on both `PurchaseOrderLine` and the document header, the same pair
+`QuoteLine`/`Quote` use. Both optional; absent means no discount, so stored documents read unchanged.
+
+**`purchaseOrderSubtotal()`'s old comment was right and is now half-obsolete.** It said it
+deliberately avoided `quoteMath.ts` because the PO "did not yet know what kind of discount it needed".
+It does now, so the discount helpers (`resolveDiscountAmount`, `lineDiscountAmount`, `lineSubtotal`)
+are borrowed — but **`computeTotals()` still cannot be used**: it hardcodes `VAT_RATE = 7`, while a
+PO carries its own editable `vatRate` (buying from a non-VAT-registered vendor is normal). Hence
+`purchaseOrderTotals()`, which is `computeTotals()` step for step except for that one rate.
+
+`tests/purchaseOrderTotals.test.ts` pins precisely that: a PO at `vatRate: 10` must produce 100, not
+70, and must **not** equal what `computeTotals()` would return — so swapping to it "because the
+formula looks the same" fails loudly rather than silently taxing the wrong amount.
+
+On the printed sheet the discount shows **as entered** (`10%` / `500`), not as a resolved figure —
+the reader needs the agreed term, not just its effect. The document-discount row hides when unused.
+
+Totals had been duplicated between the editor and the print sheet; both now call the one function.
+
 ## ทะเบียนผู้ขาย (Vendor register, 2026-08-31)
 
 The owner asked for this on 2026-08-28: *"มีหน้าเพิ่มผู้ขายสำหรับจัดซื้อเพราะมันจะมีรหัสผู้ขายด้วย"*.

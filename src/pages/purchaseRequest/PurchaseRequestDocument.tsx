@@ -32,12 +32,8 @@ function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
   return {
     lines: p.lines,
     revisionNote: p.revisionNote,
-    vendorName: p.vendorName,
-    vendorPhone: p.vendorPhone,
     issueDate: p.issueDate,
     neededByDate: p.neededByDate,
-    creditDays: p.creditDays,
-    shippingMethod: p.shippingMethod,
     deliveryLocation: p.deliveryLocation,
     deliveryContact: p.deliveryContact,
     deliveryPhone: p.deliveryPhone,
@@ -416,18 +412,8 @@ export function PurchaseRequestDocument({
             <p className="text-[#a8bed8] text-xs mt-1">{t("purchaseRequestDoc.jobCodePrefix")} {doc.jobCode}</p>
           </div>
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="pr-vendorName" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.vendorName")}</label>
-              <input id="pr-vendorName" disabled={!editable} value={draft.vendorName}
-                onChange={(e) => setDraft({ ...draft, vendorName: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
-            </div>
-            <div>
-              <label htmlFor="pr-vendorPhone" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.vendorPhone")}</label>
-              <input id="pr-vendorPhone" disabled={!editable} value={draft.vendorPhone}
-                onChange={(e) => setDraft({ ...draft, vendorPhone: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
-            </div>
+            {/* ผู้จำหน่าย / โทร.ผู้จำหน่าย / เครดิต / ขนส่งโดย ถูกถอดออก 2026-08-31 ตามที่เจ้าของสั่ง
+                — คนขอซื้อไม่ใช่คนกรอกช่องพวกนี้ ฝ่ายจัดซื้อกรอกตอนออกใบสั่งซื้อจากทะเบียนผู้ขาย */}
             <div>
               <label htmlFor="pr-issueDate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.issueDate")}</label>
               <input id="pr-issueDate" type="date" disabled={!editable} value={draft.issueDate}
@@ -440,18 +426,7 @@ export function PurchaseRequestDocument({
                 onChange={(e) => setDraft({ ...draft, neededByDate: e.target.value })}
                 className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
             </div>
-            <div>
-              <label htmlFor="pr-creditDays" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.creditDays")}</label>
-              <input id="pr-creditDays" type="number" disabled={!editable} value={draft.creditDays ?? ""}
-                onChange={(e) => setDraft({ ...draft, creditDays: e.target.value === "" ? null : Number(e.target.value) })}
-                className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
-            </div>
-            <div>
-              <label htmlFor="pr-shippingMethod" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.shippingMethod")}</label>
-              <input id="pr-shippingMethod" disabled={!editable} value={draft.shippingMethod}
-                onChange={(e) => setDraft({ ...draft, shippingMethod: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
-            </div>
+
             <div className="sm:col-span-2">
               <label htmlFor="pr-deliveryLocation" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.field.deliveryLocation")}</label>
               <input id="pr-deliveryLocation" disabled={!editable} value={draft.deliveryLocation}

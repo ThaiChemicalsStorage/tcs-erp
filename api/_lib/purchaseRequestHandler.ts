@@ -99,7 +99,6 @@ function toClient(doc: PurchaseRequestFields & { _id: string }) {
     lines: (doc.lines ?? []).map((l) => ({ ...l, subDetails: l.subDetails ?? [] })),
     revisionNote: doc.revisionNote ?? "",
     // ช่องที่เพิ่มมาพร้อมการทาบกับฟอร์ม FM-PU-05 ตัวจริง 2026-08-31 — เอกสารเก่าไม่มี เติมตอนอ่าน
-    vendorPhone: doc.vendorPhone ?? "",
     issueDate: doc.issueDate ?? "",
     deliveryContact: doc.deliveryContact ?? "",
     deliveryPhone: doc.deliveryPhone ?? "",
@@ -204,8 +203,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     projectId: source.projectId, scopeOfWorkId: source.scopeOfWorkId, jobCode: source.jobCode,
     ownerDepartment: standalone ? "general" : fromProduction ? "production" : "project",
     productionOrderId: fromProduction ? productionOrderId : "",
-    vendorName: "", neededByDate: "", creditDays: null, shippingMethod: "", deliveryLocation: "",
-    vendorPhone: "", deliveryContact: "", deliveryPhone: "", headerRemark: "",
+    neededByDate: "", deliveryLocation: "",
+    deliveryContact: "", deliveryPhone: "", headerRemark: "",
     // วันที่บนหัวเอกสารตั้งต้นเป็นวันที่สร้าง แก้ได้ — ใบจริงพิมพ์วันที่ที่ออกเอกสาร ไม่ใช่วันที่เซ็น
     issueDate: now.slice(0, 10),
     lines: [], status: "Draft",
@@ -247,9 +246,7 @@ async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string)
 }
 
 const SHORT_TEXT_FIELDS: { key: keyof PurchaseRequestFields; label: string }[] = [
-  { key: "vendorName", label: "ผู้จำหน่าย" },
-  { key: "vendorPhone", label: "โทร. ผู้จำหน่าย" },
-  { key: "shippingMethod", label: "ขนส่งโดย" },
+  // ผู้จำหน่าย / โทร.ผู้จำหน่าย / ขนส่งโดย ถูกถอดออก 2026-08-31 — ดู src/lib/purchaseRequest.ts
   { key: "deliveryLocation", label: "สถานที่ส่งของ" },
   { key: "deliveryContact", label: "ผู้ติดต่อปลายทาง" },
   { key: "deliveryPhone", label: "โทร. ปลายทาง" },
@@ -284,7 +281,6 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("lines" in body) update.lines = await sanitizeLines(body.lines);
   if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   if ("headerRemark" in body) update.headerRemark = sanitizeLongText(body.headerRemark, "หมายเหตุ");
-  if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)");
   for (const f of SHORT_TEXT_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = sanitizeShortText(body[f.key], f.label);
   for (const f of DATE_FIELDS) if (f.key in body) (update as Record<string, unknown>)[f.key] = validateIsoDateOrEmpty(body[f.key], f.label);
 

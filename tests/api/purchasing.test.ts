@@ -62,9 +62,8 @@ async function approvedPurchaseRequest(): Promise<PurchaseRequestDoc> {
   const patched = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
     method: "PATCH",
     body: JSON.stringify({
-      vendorName: "บริษัท ผู้ขาย จำกัด",
       lines: [
-        { id: "l1", productId: null, productCode: "P-001", description: "ปั๊มเคมี", subDetails: [], unit: "ตัว", qtyRequested: 2, estimatedCost: 15000, remark: "" },
+        { id: "l1", productId: null, productCode: "P-001", description: "ปั๊มเคมี", subDetails: [], unit: "ตัว", qtyRequested: 2, estimatedCost: 15000, neededByDate: "2026-09-15", departmentCode: "G143", costCode: "5150-13", remark: "" },
         { id: "l2", productId: null, productCode: "", description: "ท่อ PVC", subDetails: [], unit: "เส้น", qtyRequested: 10, estimatedCost: 250, remark: "" },
       ],
     }),
@@ -158,7 +157,9 @@ describe("ใบสั่งซื้อ (PO)", () => {
     const po = await createPurchaseOrder({ purchaseRequestId: pr.id });
 
     expect(po.purchaseRequestId).toBe(pr.id);
-    expect(po.vendorName).toBe("บริษัท ผู้ขาย จำกัด");
+    // ผู้ขายไม่สืบทอดมาจากใบขอซื้ออีกแล้ว (2026-08-31) — ใบขอซื้อไม่มีช่องนั้นแล้วตามที่เจ้าของสั่ง
+    // ฝ่ายจัดซื้อเลือกเองจากทะเบียนผู้ขายบนใบสั่งซื้อ
+    expect(po.vendorName).toBe("");
     expect(po.lines).toHaveLength(2);
     expect(po.lines[0].description).toBe("ปั๊มเคมี");
     expect(po.lines[0].qty).toBe(2);
@@ -264,6 +265,73 @@ type VendorDoc = { id: string; name: string; code: string; contactName: string; 
 async function createVendor(body: Record<string, unknown>): Promise<Response> {
   return api("/api/vendors", { method: "POST", body: JSON.stringify(body) });
 }
+
+/**
+ * ช่องที่ถอดออกจากใบขอซื้อ 2026-08-31 ตามที่เจ้าของสั่ง: *"ใบขอซื้อไม่ต้องมีผู้จำหน่าย เครดิต ขนส่งโดย"*
+ *
+ * ตรึงไว้เพราะการถอดไม่ใช่แค่ลบช่องบนหน้าจอ — เดิม `purchaseOrderHandler` ก๊อปสามช่องนี้จากใบขอซื้อ
+ * ไปใบสั่งซื้อ ถ้าใครเผลอเอากลับมา เส้นทางนั้นจะกลับมาเงียบ ๆ โดยไม่มีอะไรฟ้อง
+ */
+describe("ใบขอซื้อ — ช่องที่ถอดออกแล้ว", () => {
+  it("เซิร์ฟเวอร์ไม่บันทึกผู้จำหน่าย/เครดิต/ขนส่งโดย แม้จะส่งมา", async () => {
+    const pr = await createStandalonePurchaseRequest();
+    const patched = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ vendorName: "ห้ามเก็บ", vendorPhone: "02-000-0000", creditDays: 45, shippingMethod: "ห้ามเก็บ", deliveryLocation: "โรงงาน" }),
+    });
+    expect(patched.status).toBe(200);
+    const doc = (await json<{ purchaseRequest: Record<string, unknown> }>(patched)).purchaseRequest;
+    expect(doc.vendorName, "ฟิลด์ที่ถอดออกแล้วต้องไม่โผล่กลับมาในคำตอบ").toBeUndefined();
+    expect(doc.vendorPhone).toBeUndefined();
+    expect(doc.creditDays).toBeUndefined();
+    expect(doc.shippingMethod).toBeUndefined();
+    expect(doc.deliveryLocation, "ส่วนที่ยังอยู่บนฟอร์มต้องยังบันทึกได้").toBe("โรงงาน");
+  });
+
+  it("ใบสั่งซื้อที่สร้างจากใบขอซื้อเริ่มด้วยผู้ขายว่าง รอฝ่ายจัดซื้อเลือกจากทะเบียน", async () => {
+    const pr = await approvedPurchaseRequest();
+    const po = await createPurchaseOrder({ purchaseRequestId: pr.id });
+    expect(po.vendorName).toBe("");
+    // แต่สิ่งที่ควรสืบทอดยังสืบทอดอยู่
+    expect(po.purchaseRequestId).toBe(pr.id);
+    expect(po.lines.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * *"ใบสั่งซื้อให้มีรายละเอียดด้วยที่ดึงมาจากใบขอซื้อ"* (เจ้าของ 2026-08-28)
+ *
+ * เดิมตัวก๊อป PR→PO ทิ้ง `neededByDate`/`departmentCode`/`costCode` ต่อบรรทัดไปเงียบ ๆ เพราะ
+ * ใบสั่งซื้อไม่มีที่เก็บ — ตอนนี้มีแล้ว และตรึงไว้ว่าต้องมาถึงจริง
+ */
+describe("ใบสั่งซื้อ — รายละเอียดต่อบรรทัดที่ดึงมาจากใบขอซื้อ และส่วนลด", () => {
+  it("ก๊อปวันต้องการ / รหัสแผนก / รหัสบัญชี ต่อบรรทัดมาด้วย", async () => {
+    const pr = await approvedPurchaseRequest();
+    const po = await createPurchaseOrder({ purchaseRequestId: pr.id });
+    const first = po.lines[0] as unknown as Record<string, unknown>;
+    expect(first.neededByDate).toBe("2026-09-15");
+    expect(first.departmentCode).toBe("G143");
+    expect(first.costCode).toBe("5150-13");
+  });
+
+  it("บันทึกส่วนลดรายบรรทัดและส่วนลดท้ายใบได้ และโหมดที่ไม่รู้จักถือเป็นเปอร์เซ็นต์", async () => {
+    const po = await createPurchaseOrder({});
+    const patched = await api(`/api/purchase-orders/${encodeURIComponent(po.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        discount: 5, discountMode: "amount",
+        lines: [{ id: "x1", productId: null, productCode: "", description: "ของ", subDetails: [], unit: "ชิ้น", qty: 1, unitPrice: 100, discount: 10, discountMode: "เดาไม่ถูก", remark: "" }],
+      }),
+    });
+    expect(patched.status, JSON.stringify(await patched.clone().json())).toBe(200);
+    const saved = (await json<{ purchaseOrder: Record<string, unknown> }>(patched)).purchaseOrder;
+    expect(saved.discount).toBe(5);
+    expect(saved.discountMode).toBe("amount");
+    const savedLine = (saved.lines as Record<string, unknown>[])[0];
+    expect(savedLine.discount).toBe(10);
+    expect(savedLine.discountMode, "โหมดแปลก ๆ ต้องกลายเป็น percent ไม่ใช่เก็บดิบ").toBe("percent");
+  });
+});
 
 describe("ทะเบียนผู้ขาย", () => {
   it("สร้างผู้ขายพร้อมรหัส แล้วรหัสถูกเก็บเป็นตัวพิมพ์ใหญ่", async () => {

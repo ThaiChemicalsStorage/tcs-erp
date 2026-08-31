@@ -103,6 +103,13 @@ async function sanitizeLines(raw: unknown): Promise<PurchaseOrderLine[]> {
       unit: product ? product.unit : sanitizeShortText(r.unit, `หน่วยลำดับที่ ${idx + 1}`),
       qty: sanitizeNullableNumber(r.qty, `จำนวนลำดับที่ ${idx + 1}`),
       unitPrice: sanitizeNullableNumber(r.unitPrice, `ราคาต่อหน่วยลำดับที่ ${idx + 1}`),
+      // ส่วนลดรายบรรทัด (2026-08-31) — โหมดที่ไม่รู้จักถือเป็นเปอร์เซ็นต์ ตรงกับที่ quoteMath ทำ
+      discount: sanitizeNullableNumber(r.discount, `ส่วนลดลำดับที่ ${idx + 1}`),
+      discountMode: r.discountMode === "amount" ? "amount" as const : "percent" as const,
+      // สามช่องที่ดึงมาจากใบขอซื้อ
+      neededByDate: validateIsoDateOrEmpty(r.neededByDate, `วันต้องการลำดับที่ ${idx + 1}`),
+      departmentCode: sanitizeShortText(r.departmentCode, `แผนกลำดับที่ ${idx + 1}`),
+      costCode: sanitizeShortText(r.costCode, `รหัสบัญชีลำดับที่ ${idx + 1}`),
       remark: sanitizeShortText(r.remark, `หมายเหตุลำดับที่ ${idx + 1}`),
     };
   });
@@ -165,10 +172,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const purchaseRequestId = typeof body.purchaseRequestId === "string" ? body.purchaseRequestId : "";
 
   let jobCode = "";
-  let vendorName = "";
   let neededByDate = "";
-  let creditDays: number | null = null;
-  let shippingMethod = "";
   let deliveryLocation = "";
   let lines: PurchaseOrderLine[] = [];
 
@@ -181,11 +185,12 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     if (pr.status !== "Final") throw new HttpError(400, "ใบขอซื้อต้องได้รับอนุมัติก่อนจึงจะออกใบสั่งซื้อได้");
 
     jobCode = pr.jobCode ?? "";
-    vendorName = pr.vendorName ?? "";
     neededByDate = pr.neededByDate ?? "";
-    creditDays = pr.creditDays ?? null;
-    shippingMethod = pr.shippingMethod ?? "";
     deliveryLocation = pr.deliveryLocation ?? "";
+    // ⚠️ **ไม่ก๊อป ผู้จำหน่าย / เครดิต / ขนส่งโดย จากใบขอซื้ออีกแล้ว (2026-08-31)** —
+    // สามช่องนั้นถูกถอดออกจากใบขอซื้อตามที่เจ้าของสั่ง ("ใบขอซื้อไม่ต้องมีผู้จำหน่าย เครดิต ขนส่งโดย")
+    // ฝ่ายจัดซื้อเลือกผู้ขายเองบนใบสั่งซื้อจากทะเบียนผู้ขาย (src/lib/vendors.ts) ซึ่งเติม
+    // ผู้ติดต่อ/โทร/เลขภาษี/ที่อยู่ ให้ครบกว่าที่ใบขอซื้อเคยส่งต่อมาได้
     // snapshot ของรายการ ณ ตอนสร้าง — แก้ PO ทีหลังไม่กระทบใบขอซื้อ และแก้ใบขอซื้อไม่ย้อนมาแก้ PO
     lines = (pr.lines ?? []).map((l) => ({
       id: newId("poline"),
@@ -196,6 +201,13 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       unit: l.unit ?? "",
       qty: l.qtyRequested ?? null,
       unitPrice: l.estimatedCost ?? null,
+      discount: null,
+      discountMode: "percent" as const,
+      // เจ้าของขอไว้ 2026-08-28: "ใบสั่งซื้อให้มีรายละเอียดด้วยที่ดึงมาจากใบขอซื้อ" — เดิมสามช่องนี้
+      // ถูกทิ้งไปเงียบ ๆ ตอนก๊อป เพราะใบสั่งซื้อไม่มีที่เก็บ
+      neededByDate: l.neededByDate ?? "",
+      departmentCode: l.departmentCode ?? "",
+      costCode: l.costCode ?? "",
       remark: "",
     }));
   }
@@ -209,7 +221,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     documentNumber: id,
     purchaseRequestId,
     jobCode,
-    vendorName,
+    // ผู้ขายเริ่มว่างเสมอตั้งแต่ 2026-08-31 — ฝ่ายจัดซื้อเลือกเองจากทะเบียนผู้ขายบนหน้าใบสั่งซื้อ
+    vendorName: "",
     vendorContact: "",
     vendorPhone: "",
     vendorTaxId: "",
@@ -217,11 +230,13 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     vendorQuotationRef: "",
     orderDate: now.slice(0, 10),
     neededByDate,
-    creditDays,
-    shippingMethod,
+    creditDays: null,
+    shippingMethod: "",
     deliveryLocation,
     lines,
     vatRate: null,
+    discount: null,
+    discountMode: "percent" as const,
     remarks: "",
     status: "Draft",
     orderedBy: ctx.user.fullName,
@@ -294,6 +309,8 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("lines" in body) update.lines = await sanitizeLines(body.lines);
   if ("creditDays" in body) update.creditDays = sanitizeNullableNumber(body.creditDays, "เครดิต (วัน)");
   if ("vatRate" in body) update.vatRate = sanitizeNullableNumber(body.vatRate, "อัตราภาษี (%)");
+  if ("discount" in body) update.discount = sanitizeNullableNumber(body.discount, "ส่วนลดท้ายใบ");
+  if ("discountMode" in body) update.discountMode = body.discountMode === "amount" ? "amount" : "percent";
   if ("documentNumber" in body) {
     const next = sanitizeShortText(body.documentNumber, "เลขที่ใบสั่งซื้อ", true);
     if (next !== doc.documentNumber) {

@@ -14,8 +14,9 @@ import { fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 import { Combobox } from "../../components/Combobox";
 import { type Vendor, fetchVendors, vendorComboboxOptions } from "../../lib/vendors";
+import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
 import {
-  type PurchaseOrder, type PurchaseOrderUpdateFields, blankPurchaseOrderLine, purchaseOrderSubtotal,
+  type PurchaseOrder, type PurchaseOrderUpdateFields, blankPurchaseOrderLine,
   fetchPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, rewritePurchaseOrder, logPurchaseOrderPrinted,
   submitPurchaseOrderApproval, approvePurchaseOrder, rejectPurchaseOrder, withdrawPurchaseOrderApproval,
 } from "../../lib/purchaseOrder";
@@ -42,6 +43,8 @@ function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
     deliveryLocation: d.deliveryLocation,
     lines: d.lines,
     vatRate: d.vatRate,
+    discount: d.discount,
+    discountMode: d.discountMode,
     remarks: d.remarks,
     orderedBy: d.orderedBy,
     approvedBy: d.approvedBy,
@@ -188,8 +191,8 @@ export function PurchaseOrderDocument({
   const setLine = (id: string, patch: Partial<PurchaseOrder["lines"][number]>) =>
     setDraft((p) => (p ? { ...p, lines: p.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) } : p));
 
-  const subtotal = purchaseOrderSubtotal(draft.lines);
-  const vat = draft.vatRate !== null ? (subtotal * draft.vatRate) / 100 : 0;
+  // ยอดทั้งใบคิดที่เดียว แล้วใบพิมพ์เรียกตัวเดียวกัน — เดิมสูตรถูกเขียนซ้ำสองที่ ทั้งที่นี่และในใบพิมพ์
+  const totals = purchaseOrderTotals(draft);
 
   return (
     <>
@@ -359,14 +362,15 @@ export function PurchaseOrderDocument({
                 <thead>
                   <tr className="border-y border-border bg-muted/40">
                     {["#", t("purchaseOrderDoc.col.code"), t("purchaseOrderDoc.col.description"), t("purchaseOrderDoc.col.unit"),
-                      t("purchaseOrderDoc.col.qty"), t("purchaseOrderDoc.col.unitPrice"), t("purchaseOrderDoc.col.amount"), ""].map((h, i) => (
+                      t("purchaseOrderDoc.col.qty"), t("purchaseOrderDoc.col.unitPrice"), t("purchaseOrderDoc.col.discount"),
+                      t("purchaseOrderDoc.col.amount"), ""].map((h, i) => (
                       <th key={i} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {draft.lines.length === 0 ? (
-                    <tr><td colSpan={8} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("purchaseOrderDoc.noLines")}</td></tr>
+                    <tr><td colSpan={9} className="px-5 py-10 text-center text-sm text-muted-foreground">{t("purchaseOrderDoc.noLines")}</td></tr>
                   ) : draft.lines.map((l, i) => (
                     <tr key={l.id} className="border-b border-border/50">
                       <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{i + 1}</td>
@@ -375,7 +379,22 @@ export function PurchaseOrderDocument({
                       <td className="px-1 py-1 w-24"><input className={cellCls} disabled={!editable} value={l.unit} onChange={(e) => setLine(l.id, { unit: e.target.value })} /></td>
                       <td className="px-1 py-1 w-24"><input type="number" className={`${cellCls} text-right font-mono`} disabled={!editable} value={l.qty ?? ""} onChange={(e) => setLine(l.id, { qty: e.target.value === "" ? null : Number(e.target.value) })} /></td>
                       <td className="px-1 py-1 w-28"><input type="number" className={`${cellCls} text-right font-mono`} disabled={!editable} value={l.unitPrice ?? ""} onChange={(e) => setLine(l.id, { unitPrice: e.target.value === "" ? null : Number(e.target.value) })} /></td>
-                      <td className="px-3 py-2 text-right text-xs font-mono text-foreground whitespace-nowrap">{fmt((l.qty ?? 0) * (l.unitPrice ?? 0))}</td>
+                      {/* ส่วนลดรายบรรทัด: ตัวเลข + ปุ่มสลับ %/บาท — แนวเดียวกับใบเสนอราคา */}
+                      <td className="px-1 py-1 w-32">
+                        <div className="flex items-center gap-1">
+                          <input type="number" className={`${cellCls} text-right font-mono`} disabled={!editable} value={l.discount ?? ""}
+                            aria-label={t("purchaseOrderDoc.col.discount")}
+                            onChange={(e) => setLine(l.id, { discount: e.target.value === "" ? null : Number(e.target.value) })} />
+                          <button type="button" disabled={!editable}
+                            onClick={() => setLine(l.id, { discountMode: l.discountMode === "amount" ? "percent" : "amount" })}
+                            title={t("purchaseOrderDoc.discountModeToggle")}
+                            aria-label={t("purchaseOrderDoc.discountModeToggle")}
+                            className="px-1.5 py-1 text-xs font-mono text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-colors disabled:opacity-50">
+                            {l.discountMode === "amount" ? "฿" : "%"}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs font-mono text-foreground whitespace-nowrap">{fmt(purchaseOrderLineTotal(l))}</td>
                       <td className="px-2 py-1 w-8">
                         {editable && (
                           <button onClick={() => set("lines", draft.lines.filter((x) => x.id !== l.id))}
@@ -391,14 +410,30 @@ export function PurchaseOrderDocument({
               </table>
             </div>
             <div className="flex flex-col items-end gap-1 px-5 py-4 border-t border-border">
-              <Total label={t("purchaseOrderDoc.subtotal")} value={fmt(subtotal)} />
+              <Total label={t("purchaseOrderDoc.subtotal")} value={fmt(totals.subtotal)} />
+              {/* ส่วนลดท้ายใบ — คิดจากยอดหลังหักส่วนลดรายบรรทัดแล้ว และคิดก่อน VAT */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{t("purchaseOrderDoc.docDiscount")}</span>
+                <input type="number" className="w-20 px-2 py-1 text-xs text-right font-mono bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 disabled:opacity-60"
+                  disabled={!editable} value={draft.discount ?? ""} aria-label={t("purchaseOrderDoc.docDiscount")}
+                  onChange={(e) => set("discount", e.target.value === "" ? null : Number(e.target.value))} />
+                <button type="button" disabled={!editable}
+                  onClick={() => set("discountMode", draft.discountMode === "amount" ? "percent" : "amount")}
+                  title={t("purchaseOrderDoc.discountModeToggle")}
+                  aria-label={t("purchaseOrderDoc.discountModeToggle")}
+                  className="px-1.5 py-1 text-xs font-mono text-muted-foreground border border-border rounded hover:text-foreground hover:border-[#c9a84c]/40 transition-colors disabled:opacity-50">
+                  {draft.discountMode === "amount" ? "฿" : "%"}
+                </button>
+                <span className="text-xs font-mono text-muted-foreground w-28 text-right">-{fmt(totals.discountAmt)}</span>
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">{t("purchaseOrderDoc.vatRate")}</span>
                 <input type="number" className="w-20 px-2 py-1 text-xs text-right font-mono bg-secondary border border-border rounded outline-none focus:border-[#c9a84c]/50 disabled:opacity-60"
-                  disabled={!editable} value={draft.vatRate ?? ""} onChange={(e) => set("vatRate", e.target.value === "" ? null : Number(e.target.value))} />
-                <span className="text-xs font-mono text-muted-foreground w-28 text-right">{fmt(vat)}</span>
+                  disabled={!editable} value={draft.vatRate ?? ""} aria-label={t("purchaseOrderDoc.vatRate")}
+                  onChange={(e) => set("vatRate", e.target.value === "" ? null : Number(e.target.value))} />
+                <span className="text-xs font-mono text-muted-foreground w-28 text-right">{fmt(totals.vatAmt)}</span>
               </div>
-              <Total label={t("purchaseOrderDoc.grandTotal")} value={fmt(subtotal + vat)} strong />
+              <Total label={t("purchaseOrderDoc.grandTotal")} value={fmt(totals.total)} strong />
             </div>
           </section>
 
