@@ -1,4 +1,4 @@
-import { type CostControl, costControlTotalCost, lineTotalCost } from "../../lib/costControl";
+import { type CostControl, lineTotalCost } from "../../lib/costControl";
 import type { Company } from "../../lib/storage";
 import { fmt } from "../../lib/quotes";
 
@@ -53,15 +53,11 @@ const ITEM_BG = "#92D050";
 const money = (n: number): string => (n === 0 ? "-" : fmt(n));
 
 export function CostControlPrintDocument({ costControl: c, company }: { costControl: CostControl; company: Company }) {
-  const totalCost = costControlTotalCost(c.lines);
-
   const cell: React.CSSProperties = { border: LINE, padding: "2px 4px", verticalAlign: "middle" };
   const num: React.CSSProperties = { ...cell, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
   // ฿ กับตัวเลขอยู่ในช่องเดียวกัน ดันคนละฝั่ง — เคยแยกเป็นสองช่องแล้วมีเส้นคั่นกลางซึ่งฟอร์มจริงไม่มี
   const bahtRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: "6px" };
-  const sumLabel: React.CSSProperties = { padding: "2px 6px", whiteSpace: "nowrap" };
-  const sumBaht: React.CSSProperties = { padding: "2px 2px", textAlign: "left", width: "14px" };
-  const sumValue: React.CSSProperties = { padding: "2px 6px", textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", minWidth: "110px" };
+  // สไตล์ของบล็อกสรุป (sumLabel/sumBaht/sumValue) ถูกลบไปพร้อมบล็อกเมื่อ 2026-08-31
 
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif", color: "#000", fontSize: "11px", paddingRight: EDGE_GUARD }}>
@@ -153,20 +149,13 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
       </table>
 
       {/*
-        บล็อกสรุปท้ายใบ (1. ราคาต้นทุน … 5. ราคาขาย + กำไร + คิดเป็น%) **ถอดออก 2026-08-31**
-        ตามที่เจ้าของสั่ง — ใบนี้จึงต่างจากฟอร์มจริง FM-SL-06 ตรงจุดนี้จุดเดียว โดยตั้งใจ ไม่ใช่ตกหล่น
-        เหลือไว้แค่ยอดรวมต้นทุนบรรทัดเดียว เพราะตารางรายการด้านบนไม่มีแถวรวมของตัวเอง
-      */}
-      <table style={{ borderCollapse: "collapse", marginTop: "14px", marginLeft: "60px" }}>
-        <tbody>
-          <tr>
-            <td style={sumLabel}>ราคาต้นทุนรวม</td>
-            <td style={sumBaht}>฿</td>
-            <td style={sumValue}>{money(totalCost)}</td>
-          </tr>
-        </tbody>
-      </table>
+        บล็อกสรุปท้ายใบทั้งบล็อก (1. ราคาต้นทุน … 5. ราคาขาย + กำไร + คิดเป็น%) **ถอดออก 2026-08-31**
+        ตามที่เจ้าของสั่ง รวมถึงยอดรวมต้นทุนที่เหลือไว้บรรทัดเดียวตอนแรก ซึ่งเจ้าของสั่งให้เอาออกด้วย
+        ("ทำไมยังมีต้นทุนรวมอยู่ เอาออกไปด้วย")
 
+        **ใบนี้จึงต่างจากฟอร์มจริง FM-SL-06 ตรงนี้ โดยตั้งใจ ไม่ใช่ตกหล่น** — ใบพิมพ์จบที่ตารางรายการ
+        แล้วต่อด้วยหมายเหตุ/ผู้ลงนามเลย ไม่มียอดรวมที่ไหนอีก · คนอ่านยังเห็นต้นทุนรายบรรทัดในตาราง
+      */}
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "16px" }}>
         <tbody>
           <tr>

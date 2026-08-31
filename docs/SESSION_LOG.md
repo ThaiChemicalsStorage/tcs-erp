@@ -63,6 +63,11 @@ question.** It does not fail loudly, it just sits there looking authoritative an
 change (drop the prices) made the second one inevitable, and it would have been better to see that
 in one step rather than two.
 
+And then it happened again one level down: the first pass kept a single ราคาต้นทุนรวม line, on the
+reasoning that a cost document with no total anywhere reads oddly. The owner asked why it was still
+there. **A partial removal is its own kind of leftover** — when the reason for a number is gone, the
+number is gone, and keeping one "obviously useful" survivor just buys a second round trip.
+
 The removal itself deliberately deviates from the paper form for the first time in this module —
 FM-SL-06 has that block, this print no longer does. That is the kind of thing a future session
 fixes back unless it is written down in the file and the module doc, so it is written in both.

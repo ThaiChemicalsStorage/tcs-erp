@@ -10,8 +10,8 @@ import type { AddressInfo } from "node:net";
  * The things pinned here are the ones that would hurt to change later or that guard real money:
  *
  *   1. **เลขที่เอกสาร** `CC-{พ.ศ.}-{NNNN}` — it ends up printed on a document the owner signs.
- *   2. **ไม่เก็บยอดรวมลงฐานข้อมูล** — the list route derives `totalCost` from the lines every time,
- *      so a stored total can never drift away from the lines that produced it.
+ *   2. **ไม่มียอดรวมเลย** — the list route sends no total at all (2026-08-31, the owner had every
+ *      total removed); the lines are the only place cost lives, so nothing can drift from them.
  *   3. **สถานะที่ไม่ใช่ร่างแก้ไม่ได้** — both `Final` and `PendingApproval`, because approving
  *      content that changed while it sat in the queue is the failure the lock exists for.
  *   4. **Rewrite** — `-R1` is a fresh Draft and the approved original is untouched.
@@ -43,7 +43,7 @@ type CostControlDoc = {
   id: string; documentNumber: string; status: string; jobName: string; workType: string;
   jobOrder: string; docDate: string; lines: Line[]; sourceFileName: string; importedAt: string;
 };
-type SummaryRow = { id: string; totalCost: number };
+type SummaryRow = { id: string };
 
 const LINES: Line[] = [
   { id: "l0", kind: "group", seq: "", description: "งาน Dust Collector", model: "", supplierName: "", qty: null, unit: "", unitCost: null },
@@ -120,21 +120,17 @@ describe("Cost Control", () => {
     expect(res.status).toBe(400);
   });
 
-  it("ยอดรวมคำนวณจากบรรทัดทุกครั้ง ไม่ได้เก็บไว้ในฐานข้อมูล", async () => {
+  it("รายการไม่ส่งยอดรวมมาเลย — ต้นทุนอยู่ที่บรรทัดอย่างเดียว", async () => {
     const doc = await createCostControl();
     const list = await json<{ costControls: SummaryRow[] }>(await api("/api/cost-controls"));
     const row = list.costControls.find((r) => r.id === doc.id);
-    // 1×931,020 + 2×8,000 — หัวกลุ่มไม่นับ
-    expect(row?.totalCost).toBe(947020);
+    expect(row).toBeTruthy();
+    expect(row).not.toHaveProperty("totalCost");
+    expect(row).not.toHaveProperty("sellingPrice");
 
-    // แก้ราคาแล้วยอดต้องขยับตาม โดยไม่ต้องมีใครไปอัปเดตช่องยอดรวม
-    const patched = await api(`/api/cost-controls/${encodeURIComponent(doc.id)}`, {
-      method: "PATCH",
-      body: JSON.stringify({ lines: [{ ...LINES[1], unitCost: 1000 }] }),
-    });
-    expect(patched.status).toBe(200);
-    const after = await json<{ costControls: SummaryRow[] }>(await api("/api/cost-controls"));
-    expect(after.costControls.find((r) => r.id === doc.id)?.totalCost).toBe(1000);
+    // ต้นทุนที่กรอกไว้ยังอยู่ครบที่ตัวเอกสาร ไม่ได้หายไปกับยอดรวม
+    const full = await json<{ costControl: CostControlDoc }>(await api(`/api/cost-controls/${encodeURIComponent(doc.id)}`));
+    expect(full.costControl.lines[1].unitCost).toBe(931020);
   });
 
   it("แก้ไม่ได้ทั้งตอนรออนุมัติและตอนอนุมัติแล้ว", async () => {

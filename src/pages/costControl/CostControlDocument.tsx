@@ -15,7 +15,7 @@ import { useI18n } from "../../lib/i18n";
 import type { Company } from "../../lib/storage";
 import {
   type CostControl, type CostControlUpdateFields, type CostControlLineKind,
-  blankCostControlLine, costControlTotalCost, lineTotalCost,
+  blankCostControlLine, lineTotalCost,
   fetchCostControl, updateCostControl, deleteCostControl, rewriteCostControl, logCostControlPrinted,
   submitCostControlApproval, approveCostControl, rejectCostControl, withdrawCostControlApproval,
 } from "../../lib/costControl";
@@ -158,7 +158,6 @@ export function CostControlDocument({
     setDraft((p) => (p ? { ...p, lines: [...p.lines, blankCostControlLine(newId("ccline"), kind)] } : p));
   const removeLine = (id: string) =>
     setDraft((p) => (p ? { ...p, lines: p.lines.filter((l) => l.id !== id) } : p));
-  const totalCost = costControlTotalCost(draft.lines);
   const inputCls = "w-full px-2.5 py-1.5 text-xs text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
   const numCls = `${inputCls} text-right font-mono`;
 
@@ -362,14 +361,8 @@ export function CostControlDocument({
 
           <section className="bg-card border border-border rounded-xl p-5">
             <h2 className="text-sm font-semibold text-foreground mb-4">{t("costControlDoc.section.summary")}</h2>
-            <div className="space-y-2 max-w-xl ml-auto">
-              <div className="flex items-center gap-3 text-xs">
-                <span className="flex-1 text-muted-foreground">{t("costControlDoc.summary.totalCost")}</span>
-                <span className="w-36 text-right font-mono text-foreground">{fmt(totalCost)}</span>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 pt-5 border-t border-border">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="text-xs text-muted-foreground space-y-1 block sm:col-span-2">
                 <span>{t("costControlDoc.field.remarks")}</span>
                 <textarea rows={2} className={inputCls} disabled={!editable} value={draft.remarks}

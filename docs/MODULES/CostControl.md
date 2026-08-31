@@ -4,11 +4,13 @@
 
 Every cost line a job carries, gathered into one document and totalled.
 
-⚠️ **It no longer computes profit.** It was built (2026-08-28) to do exactly that — cost + markups
-against a selling price, giving กำไร and คิดเป็น% — and the owner had that whole block removed on
-2026-08-31, pointing at the printed summary and saying *"เอาออก"*. See "Prices are not imported" and
-"The markup / profit block, removed" below. Anything in this file describing profit arithmetic is
-history, kept because it explains why the code looks the way it does.
+⚠️ **It computes no totals at all.** It was built (2026-08-28) to do exactly that — cost + markups
+against a selling price, giving กำไร and คิดเป็น% — and on 2026-08-31 the owner had the whole block
+removed (*"เอาออก"*), then had the one remaining cost total removed too (*"ทำไมยังมีต้นทุนรวมอยู่
+เอาออกไปด้วย"*). What is left is a list of cost lines, each showing จำนวน × ต้นทุน, and nothing that
+adds them up. See "Prices are not imported" and "The markup / profit block, removed" below. Anything
+in this file describing profit or total arithmetic is history, kept because it explains why the code
+looks the way it does.
 
 ## This closed a gap the repo had carried since 2026-08-20
 
@@ -185,13 +187,17 @@ whole thing, from **both the printed form and the document page**.
 
 So the module lost its margin arithmetic entirely:
 
+It happened in two steps, an hour apart. First the margin block; then, when the owner saw that a
+lone ราคาต้นทุนรวม line had been kept, that too.
+
 | Gone | Kept |
 |---|---|
 | `operatingCost`/`operatingPct`, `bubbleCost`/`bubblePct`, `entertainmentCost`, `sellingPrice` | the cost lines |
-| `costControlTotals()` → replaced by `costControlTotalCost(lines)` | ราคาต้นทุนรวม, still derived, never stored |
-| the summary editor on the document page | หมายเหตุ / Submitted by / Approved by |
-| summary rows 1-5 + กำไร + คิดเป็น% on the print form | one ราคาต้นทุนรวม line |
-| ราคาขาย and กำไร columns on the list page | ต้นทุนรวม column |
+| `costControlTotals()` → `costControlTotalCost()` → **removed entirely** | `lineTotalCost()` — จำนวน × ต้นทุน per row, a cell in the grid, not a document total |
+| the summary editor on the document page, then the total line under it | หมายเหตุ / Submitted by / Approved by (the section is now called "หมายเหตุและผู้ลงนาม") |
+| summary rows 1-5 + กำไร + คิดเป็น% on the print form, then the ราคาต้นทุนรวม line | the print form now ends at the line table, then หมายเหตุ / signatures |
+| ราคาขาย, กำไร **and ราคาต้นทุน** columns on the list page | เลขที่ / ชื่องาน / เลขที่งาน / สถานะ / แก้ไขล่าสุด |
+| `CostControlSummary.totalCost` and the `toSummary()` computation behind it | — |
 | the `#FFFF00` highlight (it only ever highlighted ราคาขาย and คิดเป็น%) | the group/item fills |
 
 **The print form now deviates from FM-SL-06 at exactly this one point, deliberately.** That is worth
@@ -203,13 +209,10 @@ the code, leave the data. The API simply stopped accepting those keys: sending t
 way any unknown key is.
 
 ```
-ต้นทุนรวมของบรรทัด = จำนวน × ต้นทุน          (หัวกลุ่มไม่นับ)
-ราคาต้นทุนรวม      = ผลรวมของทุกบรรทัด        ← สิ่งเดียวที่ยังคำนวณ
+ต้นทุนรวมของบรรทัด = จำนวน × ต้นทุน          (หัวกลุ่มไม่นับ)   ← สิ่งเดียวที่ยังคำนวณ
 ```
 
-**No total is ever stored**, unchanged: `costControlTotalCost()` derives it at render time and the
-list route computes it per row on read, the same rule `Quote.amount` and `purchaseOrderSubtotal()`
-follow.
+There is no document-level total anywhere: not stored, not derived on read, not sent with the list.
 
 ### What the profit formula used to be
 
@@ -246,8 +249,9 @@ The owner's instruction was explicit: *"รูปแบบ pdf ต้องอ�
 - the nine-column grid, with fills applied **only to the description cell** as in the original
 - `฿` in its own narrow column, numbers right-aligned, zero printed as `-`
 - ~~summary rows 1-5 unbordered with the selling price highlighted; กำไร and คิดเป็น% in a bordered
-  box with the percentage highlighted~~ — **removed 2026-08-31**, replaced by a single
-  ราคาต้นทุนรวม line. The one deliberate deviation from the paper form
+  box with the percentage highlighted~~ — **removed 2026-08-31**, and the single ราคาต้นทุนรวม line
+  that briefly replaced them was removed the same day. The print form now goes straight from the
+  line table to หมายเหตุ. **The one deliberate deviation from the paper form** — do not "fix" it back
 - หมายเหตุ rule, Submitted by / Approved by with Date (ว/ด/ป), and the form code bottom-right
 
 Fixed Thai, no `useI18n`, per the print policy in [`../CLAUDE.md`](../CLAUDE.md).

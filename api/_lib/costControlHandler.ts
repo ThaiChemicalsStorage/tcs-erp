@@ -13,7 +13,7 @@ import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText, validateIsoDateOrEmpty } from "./quoteValidation.js";
 import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
 import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
-import { costControlTotalCost, type CostControlLine, type CostControlLineKind, type CostControlSummary } from "../../src/lib/costControl.js";
+import { type CostControlLine, type CostControlLineKind, type CostControlSummary } from "../../src/lib/costControl.js";
 
 /**
  * Cost Control (แผนก BD) API — added 2026-08-28. Mounted from `api/handlers/quotes.ts` alongside
@@ -110,8 +110,7 @@ function toClient(doc: CostControlFields & { _id: string }) {
 
 function toSummary(doc: CostControlFields & { _id: string }): CostControlSummary {
   const full = withStringId(doc);
-  // ยอดรวมไม่ได้เก็บในฐานข้อมูล — คำนวณตอนส่งออกไป เหมือนที่หน้าเอกสารคำนวณเอง
-  const totalCost = costControlTotalCost(full.lines);
+  // ไม่มียอดรวมส่งไปกับรายการอีกแล้ว (2026-08-31) — เอกสารนี้ไม่รวมยอดที่ไหนเลย
   return {
     id: full.id,
     documentNumber: full.documentNumber || full.id,
@@ -120,7 +119,6 @@ function toSummary(doc: CostControlFields & { _id: string }): CostControlSummary
     workType: full.workType,
     docDate: full.docDate,
     status: full.status,
-    totalCost,
     updatedAt: full.updatedAt,
   };
 }

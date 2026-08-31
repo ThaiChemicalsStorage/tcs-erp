@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Calculator, Search, X } from "lucide-react";
 import { EmptyState } from "../../components/EmptyState";
 import { type CostControlSummary, type CostControlStatus } from "../../lib/costControl";
-import { formatQuoteDateThai, fmt } from "../../lib/quotes";
+import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 
 const FILTER_ALL = "all";
@@ -84,7 +84,6 @@ export function CostControlList({ costControls, onOpen, headerAction }: {
               <thead>
                 <tr className="border-b border-border bg-muted/40">
                   {[t("costControl.col.id"), t("costControl.col.jobName"), t("costControl.col.jobOrder"),
-                    t("costControl.col.totalCost"),
                     t("costControl.col.status"), t("costControl.col.updatedAt")].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
@@ -105,7 +104,6 @@ export function CostControlList({ costControls, onOpen, headerAction }: {
                       <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{c.documentNumber || c.id}</td>
                       <td className="px-4 py-3.5 text-sm text-foreground max-w-[260px] truncate" title={c.jobName}>{c.jobName || "—"}</td>
                       <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{c.jobOrder || "—"}</td>
-                      <td className="px-4 py-3.5 text-xs font-mono text-right text-muted-foreground whitespace-nowrap">{fmt(c.totalCost)}</td>
                       <td className="px-4 py-3.5">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[c.status]}`}>
                           {statusLabel[c.status]}

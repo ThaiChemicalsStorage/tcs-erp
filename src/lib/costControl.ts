@@ -1,10 +1,11 @@
 /**
  * Cost Control (แผนก BD) — added 2026-08-28.
  *
- * The document that decides whether a job is worth taking: every cost line the estimate produced,
- * totalled, marked up, and compared against the intended selling price. It is the last thing that
- * happens before a quotation goes out and the first thing anyone asks for when a job turns out to
- * have lost money.
+ * รวบรวมต้นทุนทุกบรรทัดของงานไว้ในเอกสารเดียว ทำก่อนใบเสนอราคาออก
+ *
+ * ⚠️ **ตอนสร้างโมดูลนี้คิดกำไรให้ด้วย** (ต้นทุน + ค่าดำเนินการ/Bubble/Entertainment เทียบราคาขาย
+ * ออกมาเป็นกำไรและคิดเป็น%) — เจ้าของสั่งถอดออกทั้งหมดเมื่อ 2026-08-31 แล้วสั่งเพิ่มให้เอาแม้แต่
+ * ยอดต้นทุนรวมออกด้วย · **ตอนนี้เอกสารนี้ไม่รวมยอดที่ไหนเลย** มีแต่ต้นทุนรายบรรทัดในตาราง
  *
  * **This module closes a gap the repo had been carrying since 2026-08-20.** Both the Project and
  * the Production specs open with "เมื่อได้รับ Scope of Work, **Cost Control** แล้ว …", and five
@@ -19,9 +20,8 @@
  *
  * Numbering is `CC-{พ.ศ.}-{NNNN}`, Buddhist year, matching PR/PO/MR/JO.
  *
- * **No total is ever stored.** `costControlTotals()` derives every figure from the lines and the
- * five markup fields at render time, the same rule `Quote.amount` and `purchaseOrderSubtotal()`
- * follow — a stored total is a total that can disagree with its own lines.
+ * **ไม่มียอดรวมที่ไหนเลย ไม่ว่าจะเก็บไว้หรือคำนวณตอนแสดงผล** — เหลือแค่ `lineTotalCost()`
+ * (จำนวน × ต้นทุน) ซึ่งเป็นช่องหนึ่งในตารางรายการตามฟอร์มจริง ไม่ใช่ยอดของทั้งใบ
  */
 
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
@@ -108,8 +108,6 @@ export interface CostControlSummary {
   workType: string;
   docDate: string;
   status: CostControlStatus;
-  /** ราคาต้นทุนรวม — เซิร์ฟเวอร์คำนวณให้หน้ารายการ ไม่ได้เก็บในฐานข้อมูล */
-  totalCost: number;
   updatedAt: string;
 }
 
@@ -123,16 +121,12 @@ export function lineTotalCost(line: CostControlLine): number {
   return (line.qty ?? 0) * (line.unitCost ?? 0);
 }
 
-/**
- * ราคาต้นทุนรวมทั้งใบ — คำนวณตอนแสดงผลเสมอ ไม่เก็บลงฐานข้อมูล
- *
- * **เคยมี `costControlTotals()` ที่คืนค่าดำเนินการ/Bubble/Entertainment/ราคาขาย/กำไร/คิดเป็น% ด้วย
- * ถูกถอดออกทั้งชุดเมื่อ 2026-08-31** ตามที่เจ้าของสั่ง ("เอาออก" ชี้ที่บล็อกสรุปท้ายใบพิมพ์) —
- * เอกสารนี้เหลือหน้าที่เดียวคือรวบรวมต้นทุนของงาน ส่วนการคิดกำไรไม่อยู่ในระบบอีกต่อไป
- */
-export function costControlTotalCost(lines: CostControlLine[]): number {
-  return lines.reduce((sum, l) => sum + lineTotalCost(l), 0);
-}
+// เอกสารนี้ **ไม่มีการรวมยอดใด ๆ ทั้งสิ้น** (2026-08-31)
+//
+// เดิมมี `costControlTotals()` ที่คิดค่าดำเนินการ/Bubble/Entertainment/ราคาขาย/กำไร/คิดเป็น% แล้ว
+// ถูกลดเหลือ `costControlTotalCost()` ที่คิดแค่ยอดต้นทุนรวม แล้วเจ้าของสั่งให้เอายอดนั้นออกอีกที
+// ("ทำไมยังมีต้นทุนรวมอยู่ เอาออกไปด้วย") — เหลือแค่ `lineTotalCost()` ที่คิด จำนวน × ต้นทุน
+// ของแต่ละบรรทัด ซึ่งเป็นช่องหนึ่งในตารางรายการ ไม่ใช่ยอดของทั้งใบ
 
 // ── API ──────────────────────────────────────────────────────────────────────
 

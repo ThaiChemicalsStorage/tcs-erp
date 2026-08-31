@@ -3,7 +3,7 @@ import {
   classifySheet, classifySheetName, classifySheetRows, mergeCostControlImports,
   parseCostControlSheet, parseNumericCell, parseSheetDate, stripImportedPrices,
 } from "../src/lib/costControlImport";
-import { costControlTotalCost, lineTotalCost } from "../src/lib/costControl";
+import { lineTotalCost } from "../src/lib/costControl";
 
 /**
  * Unit tests for the Cost Control workbook parser (`src/lib/costControlImport.ts`).
@@ -236,25 +236,29 @@ describe("ชีต SC — แกะเป็นบล็อก", () => {
 });
 
 /**
- * ยอดต้นทุนรวม — สิ่งเดียวที่โมดูลนี้ยังคำนวณ
+ * ต้นทุนรายบรรทัด — การคำนวณอย่างเดียวที่โมดูลนี้ยังมี
  *
- * เคยมี `costControlTotals()` ที่คืนค่าดำเนินการ/Bubble/Entertainment/ราคาขาย/กำไร/คิดเป็น% ด้วย
- * ถอดออกทั้งชุดเมื่อ 2026-08-31 ตามที่เจ้าของสั่ง ("เอาออก" ชี้ที่บล็อกสรุปท้ายใบพิมพ์)
+ * เคยมี `costControlTotals()` (ค่าดำเนินการ/Bubble/Entertainment/ราคาขาย/กำไร/คิดเป็น%) แล้วถูกลด
+ * เหลือ `costControlTotalCost()` แล้วถูกถอดออกอีกทีเมื่อ 2026-08-31 ตามที่เจ้าของสั่ง — เอกสารนี้
+ * ไม่รวมยอดที่ไหนเลย เหลือแค่ จำนวน × ต้นทุน ของแต่ละบรรทัด ซึ่งเป็นช่องหนึ่งในตารางตามฟอร์มจริง
  */
-describe("costControlTotalCost", () => {
-  const lines = [
-    { id: "a", kind: "group" as const, seq: "", description: "งาน", model: "", supplierName: "", qty: null, unit: "", unitCost: null },
-    { id: "b", kind: "item" as const, seq: "1", description: "x", model: "", supplierName: "", qty: 2, unit: "Set", unitCost: 100 },
-    { id: "c", kind: "sub" as const, seq: "", description: "- y", model: "", supplierName: "", qty: 3, unit: "Set", unitCost: 50 },
-  ];
-
-  it("รวมต้นทุนจากทุกบรรทัด ยกเว้นหัวกลุ่ม", () => {
-    expect(costControlTotalCost(lines)).toBe(350); // 2×100 + 3×50
+describe("lineTotalCost", () => {
+  const line = (patch: Record<string, unknown>) => ({
+    id: "x", kind: "item" as const, seq: "1", description: "x", model: "", supplierName: "",
+    qty: null as number | null, unit: "", unitCost: null as number | null, ...patch,
   });
 
-  it("ใบที่ยังไม่กรอกต้นทุนเลยได้ศูนย์ ไม่ใช่ NaN", () => {
-    expect(costControlTotalCost(lines.map((l) => ({ ...l, unitCost: null })))).toBe(0);
-    expect(costControlTotalCost([])).toBe(0);
+  it("จำนวน × ต้นทุน", () => {
+    expect(lineTotalCost(line({ qty: 2, unitCost: 100 }))).toBe(200);
+  });
+
+  it("หัวกลุ่มไม่มีต้นทุน แม้จะเผลอกรอกตัวเลขไว้", () => {
+    expect(lineTotalCost(line({ kind: "group", qty: 2, unitCost: 100 }))).toBe(0);
+  });
+
+  it("ยังไม่กรอกต้นทุนได้ศูนย์ ไม่ใช่ NaN", () => {
+    expect(lineTotalCost(line({ qty: 2, unitCost: null }))).toBe(0);
+    expect(lineTotalCost(line({ qty: null, unitCost: 100 }))).toBe(0);
   });
 });
 
@@ -458,7 +462,7 @@ describe("stripImportedPrices — ตัดราคาออก เหลือ
     expect(out.warnings.some((w) => w.includes("แต่ละชุดคั่นด้วยหัวกลุ่มชื่อชีต"))).toBe(true);
   });
 
-  it("ใบที่ไม่มีราคาเลยยังคิดยอดได้ ไม่พังและไม่เป็น NaN", () => {
-    expect(costControlTotalCost(stripped.lines)).toBe(0);
+  it("ใบที่ไม่มีราคาเลยยังคิดต้นทุนรายบรรทัดได้ ไม่พังและไม่เป็น NaN", () => {
+    expect(stripped.lines.every((l) => lineTotalCost(l) === 0)).toBe(true);
   });
 });
