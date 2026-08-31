@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing, Briefcase } from "lucide-react";
+import { ChevronRight, Printer, Copy, Save, CheckCircle2, RotateCw, Trash2, Loader2, AlertTriangle, GitBranch, Plus, Send, Wand2, Truck, BellRing, Briefcase, Calculator } from "lucide-react";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import {
@@ -13,6 +13,7 @@ import {
   chaseScopeOfWorkPo, scopePoNumbers, scopeQuotationNumbers,
 } from "../../lib/scopeOfWork";
 import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOrderFromScope } from "../../lib/deliveryOrder";
+import { type CostControlSummary, fetchCostControlsByScope, createCostControlFromScope } from "../../lib/costControl";
 import { type ProjectSummary, fetchProjectsByScope, createProjectFromScope } from "../../lib/project";
 import { getRevisionPredecessorId, getRevisionNumber, generateScopeOfWorkRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import { compressImageFile, isCompressibleImage } from "../../lib/imageCompression";
@@ -302,6 +303,9 @@ export function ScopeOfWorkDocument({
   canViewProject,
   canCreateProject,
   onOpenProject,
+  canViewCostControl,
+  canCreateCostControl,
+  onOpenCostControl,
   onBack,
   backLabel,
   onDuplicated,
@@ -324,6 +328,9 @@ export function ScopeOfWorkDocument({
   canViewProject: boolean;
   canCreateProject: boolean;
   onOpenProject: (projectId: string) => void;
+  canViewCostControl: boolean;
+  canCreateCostControl: boolean;
+  onOpenCostControl: (costControlId: string) => void;
   onBack: () => void;
   backLabel?: string;
   onDuplicated: (newId: string) => void;
@@ -374,6 +381,20 @@ export function ScopeOfWorkDocument({
       .catch(() => { if (!cancelled) setExistingProject(null); });
     return () => { cancelled = true; };
   }, [scopeOfWorkId, canViewProject]);
+
+  // Cost Control ที่ผูกกับ Scope ใบนี้ (2026-08-31) — เจ้าของขอให้ใบต้นทุน "ไปพร้อมกัน" ตอนส่ง
+  // เอกสารให้คนอื่น ปุ่มนี้จึงเป็นทั้งทางสร้างและทางเปิด และผลของมันไปโผล่ในการ์ดผู้รับเอกสารด้วย
+  // เรียกได้แม้ Scope ยังเป็นร่าง — เจ้าของยืนยันว่า "สถานะไหนก็สร้างได้"
+  const [existingCostControl, setExistingCostControl] = useState<CostControlSummary | null>(null);
+  const [costControlBusy, setCostControlBusy] = useState(false);
+  useEffect(() => {
+    if (!canViewCostControl) return;
+    let cancelled = false;
+    fetchCostControlsByScope(scopeOfWorkId)
+      .then((list) => { if (!cancelled) setExistingCostControl(list[0] ?? null); })
+      .catch(() => { if (!cancelled) setExistingCostControl(null); });
+    return () => { cancelled = true; };
+  }, [scopeOfWorkId, canViewCostControl]);
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) ─────────────────────────────────────────────────────
   // toFollowUpFields เป็นสับเซ็ตของ toUpdateFields จึงใช้ payload เดียวครอบคลุมได้ทั้งเฟสร่างและเฟสติดตามผล
@@ -659,6 +680,25 @@ export function ScopeOfWorkDocument({
     }
   };
 
+  // เปิด Cost Control ที่ผูกอยู่แล้ว หรือสร้างใบใหม่ที่ผูกกับ Scope นี้แล้วเปิดขึ้นมา
+  // Opens the linked Cost Control, or creates one bound to this Scope of Work and opens it
+  const handleCostControlClick = async () => {
+    if (!scope || costControlBusy) return;
+    if (existingCostControl) {
+      onOpenCostControl(existingCostControl.id);
+      return;
+    }
+    setCostControlBusy(true);
+    try {
+      const created = await createCostControlFromScope(scope.id);
+      onOpenCostControl(created.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("scopeOfWorkDoc.createCostControlFailed"));
+    } finally {
+      setCostControlBusy(false);
+    }
+  };
+
   // ตรวจสอบความครบถ้วน บันทึกการพิมพ์ที่เซิร์ฟเวอร์ แล้วเปิดหน้าต่างพิมพ์ของเบราว์เซอร์
   // Validates completeness, logs the print on the server, then opens the browser print dialog
   const handlePrint = async () => {
@@ -851,6 +891,11 @@ export function ScopeOfWorkDocument({
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Briefcase size={13} /> {existingProject ? t("scopeOfWorkDoc.openProject") : t("scopeOfWorkDoc.createProject")}
+            </button>
+          )}
+          {canViewCostControl && canCreateCostControl && (
+            <button onClick={handleCostControlClick} disabled={costControlBusy} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+              <Calculator size={13} /> {existingCostControl ? t("scopeOfWorkDoc.openCostControl") : t("scopeOfWorkDoc.createCostControl")}
             </button>
           )}
           {editable && (
@@ -1083,6 +1128,18 @@ export function ScopeOfWorkDocument({
         />
         {canEdit && documentsToSendGroup && (
           <div className="flex flex-col items-end gap-1.5 print:hidden -mt-2">
+            {/* บอกให้เห็นก่อนกดส่งว่ามีใบต้นทุนไปด้วยไหม — ผู้รับเห็นใบนี้ในรายการของตัวเองทันที
+                ที่ถูกเลือกเป็นผู้รับ ไม่ได้รอปุ่มส่ง แต่คนกดควรรู้ว่ากำลังแจกอะไรออกไปบ้าง */}
+            {canViewCostControl && existingCostControl && (
+              <button
+                type="button"
+                onClick={() => onOpenCostControl(existingCostControl.id)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Calculator size={12} className="text-[#c9a84c]" />
+                {t("scopeOfWorkDoc.costControlGoesAlong")}: {existingCostControl.documentNumber}
+              </button>
+            )}
             <button
               onClick={handleSendDocuments}
               disabled={!hasDocumentRecipientsToSend || sendingDocs}

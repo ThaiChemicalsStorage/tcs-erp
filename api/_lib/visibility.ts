@@ -1,6 +1,8 @@
 import { usersCollection } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import type { AuthContext } from "./auth.js";
+import { scopeOfWorksCollection } from "./collections.js";
+import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 
 export type VisibilityScope = "own" | "team" | "department" | "all";
 
@@ -58,4 +60,45 @@ export async function buildOwnershipClause(
 export function buildSimpleOwnershipClause(userId: string, hasViewAll: boolean, ownerField: string): Record<string, unknown> {
   if (hasViewAll) return {};
   return { $or: [{ [ownerField]: userId }, { [ownerField]: "" }] };
+}
+
+/**
+ * id ของ Scope of Work ทุกใบที่ผู้ใช้คนนี้ถูกเลือกไว้เป็น "ผู้รับเอกสาร" — ว่างได้ (2026-08-31)
+ *
+ * เกิดจากคำสั่งของเจ้าของว่า *"Scope of work เวลาที่จะส่งไปให้คนอื่น มันจะมาพร้อมกับ Cost control ด้วย"*
+ * Cost Control เดิมมองเห็นได้แค่สองทาง — เป็นคนสร้างเอง หรือมี `costControl:viewAll` — คนที่ถูกส่ง
+ * Scope ถึงจึงไม่มีทางเจอใบต้นทุนที่ผูกกับ Scope ใบนั้น · เอาผลของฟังก์ชันนี้ไปรวมกับ clause เดิม
+ * ในรูป `{ scopeOfWorkId: { $in: ids } }`
+ *
+ * `$or` สร้างจาก `ALL_RECIPIENT_KEYS` เสมอ ไม่ใช่จากรายชื่อแผนกอย่างเดียว ไม่งั้นคนที่ถูกเลือกผ่าน
+ * "ผู้รับเพิ่มเติม" จะได้กระดิ่งแต่หาเอกสารไม่เจอ — กติกาเดียวกับที่คอมเมนต์ของ `ALL_RECIPIENT_KEYS`
+ * (`src/lib/documentRequirements.ts`) ระบุไว้
+ *
+ * **ต้องใช้ทุกที่ที่กรองการมองเห็นของ Cost Control** — วันนี้คือรายการของโมดูล และ Global Search
+ * ทั้งสองทาง (ค้นทั่วไป + ทางลัดค้นด้วยเลขเอกสาร) ที่ไหนพลาดไป ที่นั่นจะกลายเป็น
+ * "เห็นในรายการแต่ค้นไม่เจอ"
+ */
+export async function recipientScopeOfWorkIds(ctx: AuthContext): Promise<string[]> {
+  const scopes = await scopeOfWorksCollection();
+  const docs = await scopes.find(
+    { isDeleted: false, $or: ALL_RECIPIENT_KEYS.map((key) => ({ [`documentRecipients.${key}`]: ctx.user.id })) },
+    { projection: { _id: 1 } },
+  ).toArray();
+  return docs.map((d) => d._id.toString());
+}
+
+/**
+ * clause การมองเห็นของ Cost Control — เจ้าของใบ / `costControl:viewAll` / **เป็นผู้รับเอกสารของ
+ * Scope ที่ใบนั้นผูกอยู่** (ทางที่สาม เพิ่ม 2026-08-31)
+ *
+ * รวมเข้าไปใน `$or` เดิม **ไม่ spread ทับ** — การ spread สองอันจะทำให้อันหลังลบอันแรกทิ้งเงียบ ๆ
+ * (บั๊กเดียวกับที่แก้ใน MR/PR เมื่อ 2026-08-20i) · clause เดิมเป็น `{}` แปลว่ามี `viewAll`
+ * เห็นทุกใบอยู่แล้ว ไม่ต้องรวมอะไร
+ */
+export async function buildCostControlVisibilityClause(ctx: AuthContext, hasViewAll: boolean): Promise<Record<string, unknown>> {
+  const ownership = buildSimpleOwnershipClause(ctx.user.id, hasViewAll, "createdBy");
+  if (!("$or" in ownership)) return ownership;
+  const scopeIds = await recipientScopeOfWorkIds(ctx);
+  if (scopeIds.length === 0) return ownership;
+  return { $or: [...(ownership.$or as Record<string, unknown>[]), { scopeOfWorkId: { $in: scopeIds } }] };
 }

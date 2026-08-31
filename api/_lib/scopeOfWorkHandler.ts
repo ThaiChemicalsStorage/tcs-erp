@@ -7,7 +7,7 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildOwnershipClause } from "./visibility.js";
 import {
   scopeOfWorksCollection, quotesCollection, usersCollection, countersCollection, auditLogCollection,
-  notificationsCollection, scopeAttachmentFilesCollection, toObjectId, withStringId,
+  notificationsCollection, scopeAttachmentFilesCollection, costControlsCollection, toObjectId, withStringId,
   type ScopeOfWorkFields, type QuoteFields,
 } from "./collections.js";
 import { Binary } from "mongodb";
@@ -1312,6 +1312,16 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
     { projection: { email: 1, fullName: 1 } },
   ).toArray();
 
+  // Cost Control ที่ผูกกับ Scope ใบนี้ "ไปพร้อมกัน" ด้วย (2026-08-31) ตามที่เจ้าของสั่ง —
+  // *"Scope of work เวลาที่จะส่งไปให้คนอื่น มันจะมาพร้อมกับ Cost control ด้วย"*
+  // ตัวที่ทำให้ผู้รับเห็นใบต้นทุนจริง ๆ คือ clause ผู้รับใน `costControlHandler.handleList()`
+  // ซึ่งทำงานจากการ "ถูกเลือกเป็นผู้รับ" อยู่แล้ว · ตรงนี้แค่บอกให้เขารู้ว่ามีอะไรแนบมา
+  const costControls = await costControlsCollection();
+  const linkedCostControls = await costControls
+    .find({ scopeOfWorkId: id, isDeleted: false }, { projection: { documentNumber: 1 } })
+    .sort({ updatedAt: -1 }).toArray();
+  const costControlNumbers = linkedCostControls.map((c) => c.documentNumber || c._id).filter(Boolean);
+
   // In-app notification (bell) — the only delivery channel since 2026-08-07 (email removed, see
   // the function doc comment). Hand-rolled here rather than calling
   // `notifyScopeOfWorkDocumentSent()` (src/lib/notifications.ts), same convention
@@ -1326,8 +1336,13 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
     recipientUserId: u._id.toString(),
     type: "scope_of_work_document_sent",
     title: "มีเอกสาร Scope of Work ส่งถึงคุณ",
-    description: `${ctx.user.fullName} ส่งเอกสาร Scope of Work ${doc.scopeNumber} (${doc.customerSnapshot.companyName}) ถึงคุณ`,
+    description: `${ctx.user.fullName} ส่งเอกสาร Scope of Work ${doc.scopeNumber} (${doc.customerSnapshot.companyName}) ถึงคุณ`
+      + (costControlNumbers.length > 0 ? ` · แนบ Cost Control ${costControlNumbers.join(", ")}` : ""),
     module: "Scope of Work",
+    // ⚠️ **ห้ามใส่ `relatedCostControlId` ที่นี่** แม้จะมี Cost Control แนบมาก็ตาม —
+    // ตัวเลือกเส้นทางของกระดิ่ง (`src/App.tsx`) ตรวจ `relatedCostControlId` **ก่อน** `relatedScopeId`
+    // ใส่ทั้งสองค่าแล้วคนกดจะถูกพาไปหน้า Cost Control แทนหน้า Scope ซึ่งขัดกับข้อความของแจ้งเตือนเอง
+    // ปลายทางที่ถูกคือหน้า Scope ซึ่งมีปุ่ม "เปิด Cost Control" อยู่แล้ว
     relatedScopeId: id,
     relatedScopeNumber: doc.scopeNumber,
     createdAt: notifCreatedAt,
@@ -1340,7 +1355,8 @@ async function handleSendDocumentNotifications(req: VercelRequest, res: VercelRe
 
   await writeScopeAuditEntry(
     ctx, "Scope of Work Document Notification Sent",
-    `ส่งแจ้งเตือนผู้รับเอกสารของ Scope of Work ${doc.scopeNumber} (${userDocs.length} คน)`,
+    `ส่งแจ้งเตือนผู้รับเอกสารของ Scope of Work ${doc.scopeNumber} (${userDocs.length} คน)`
+      + (costControlNumbers.length > 0 ? ` · แนบ Cost Control ${costControlNumbers.join(", ")}` : ""),
     { scopeId: id, scopeNumber: doc.scopeNumber, quoteId: doc.quotationId },
   );
 

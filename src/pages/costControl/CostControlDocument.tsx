@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, FileSpreadsheet, Loader2, Plus, Printer, Save, Trash2, PenLine } from "lucide-react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
@@ -9,6 +9,8 @@ import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { ApiError } from "../../lib/apiClient";
+import { Combobox } from "../../components/Combobox";
+import { type ScopeOfWorkListItem, fetchAllScopeOfWorks } from "../../lib/scopeOfWork";
 import { newId } from "../../lib/products";
 import { fmt } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
@@ -26,6 +28,7 @@ function toUpdateFields(d: CostControl): CostControlUpdateFields {
   return {
     documentNumber: d.documentNumber,
     jobName: d.jobName, workType: d.workType, jobOrder: d.jobOrder, docDate: d.docDate,
+    scopeOfWorkId: d.scopeOfWorkId,
     lines: d.lines,
     remarks: d.remarks, submittedBy: d.submittedBy, approvedBy: d.approvedBy,
     revisionNote: d.revisionNote,
@@ -33,10 +36,12 @@ function toUpdateFields(d: CostControl): CostControlUpdateFields {
 }
 
 export function CostControlDocument({
-  costControlId, canEdit, canApprove, canPrint, canDelete, canCreate, company, onBack, onDeleted, onOpenOther, showToast,
+  costControlId, canEdit, canApprove, canPrint, canDelete, canCreate, canViewScopeOfWork, company,
+  onBack, onDeleted, onOpenOther, showToast,
 }: {
   costControlId: string;
   canEdit: boolean;
+  canViewScopeOfWork: boolean;
   canApprove: boolean;
   canPrint: boolean;
   canDelete: boolean;
@@ -57,14 +62,49 @@ export function CostControlDocument({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
 
+  /**
+   * รายการ Scope of Work สำหรับช่อง "ผูกกับ Scope of Work" (2026-08-31)
+   *
+   * การผูกนี้ไม่ใช่แค่ทางลัดสำหรับเปิดเอกสาร — มันคือสิ่งที่ทำให้คนที่ถูกเลือกเป็น **ผู้รับเอกสาร**
+   * ของ Scope ใบนั้นมองเห็นใบต้นทุนใบนี้ในรายการของตัวเองและเปิดอ่านได้ ตามที่เจ้าของสั่งไว้ว่า
+   * *"Scope of work เวลาที่จะส่งไปให้คนอื่น มันจะมาพร้อมกับ Cost control ด้วย"*
+   * ล้างช่องนี้ = ตัดสิทธิ์นั้นทันที
+   */
+  const [scopes, setScopes] = useState<ScopeOfWorkListItem[]>([]);
+  // ช่องนี้ให้คน "พิมพ์เลข Scope" แต่สิ่งที่เก็บจริงคือ id — จับคู่ด้วยเลข Scope แบบไม่สนตัวพิมพ์
+  // พิมพ์อะไรที่ไม่ตรงกับ Scope ใบไหนเลย = ไม่ผูก (`""`) ไม่มีการเดาให้
+  const scopeOptions = useMemo(
+    () => scopes.map((s) => ({ value: s.scopeNumber, label: s.scopeNumber, hint: s.customerName })),
+    [scopes],
+  );
+  const scopeIdByNumber = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of scopes) map.set(s.scopeNumber.trim().toLowerCase(), s.id);
+    return map;
+  }, [scopes]);
+  // `null` = ยังไม่มีใครพิมพ์ ให้แสดงเลข Scope ที่ได้จาก id ที่บันทึกไว้ · พอพิมพ์แล้วสิ่งที่พิมพ์ชนะ
+  // (คำนวณตอนเรนเดอร์ ไม่ใช่ setState ใน effect ซึ่งทำให้เกิดการเรนเดอร์ซ้อน)
+  const [scopeTyped, setScopeTyped] = useState<string | null>(null);
+  useEffect(() => {
+    if (!canViewScopeOfWork) return;
+    let cancelled = false;
+    fetchAllScopeOfWorks()
+      .then((list) => { if (!cancelled) setScopes(list); })
+      .catch(() => { if (!cancelled) setScopes([]); });
+    return () => { cancelled = true; };
+  }, [canViewScopeOfWork]);
+
   const dirty = useDirtyTracker(draft && canEdit ? toUpdateFields(draft) : null);
+  const scopeQuery = scopeTyped ?? (draft?.scopeOfWorkId
+    ? scopes.find((s) => s.id === draft.scopeOfWorkId)?.scopeNumber ?? ""
+    : "");
 
   useEffect(() => {
     let cancelled = false;
     fetchCostControl(costControlId)
       .then((d) => {
         if (cancelled) return;
-        setDoc(d); setDraft(d); setLoading(false);
+        setDoc(d); setDraft(d); setLoading(false); setScopeTyped(null);
         dirty.markSaved(toUpdateFields(d));
       })
       .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
@@ -247,6 +287,28 @@ export function CostControlDocument({
                 <input className={inputCls} disabled={!editable} value={draft.jobOrder}
                   onChange={(e) => set("jobOrder", e.target.value)} />
               </label>
+              {canViewScopeOfWork && (
+                <label className="text-xs text-muted-foreground space-y-1 block">
+                  <span>{t("costControlDoc.field.scopeOfWork")}</span>
+                  <Combobox
+                    className={inputCls}
+                    disabled={!editable}
+                    value={scopeQuery}
+                    options={scopeOptions}
+                    placeholder={t("costControlDoc.field.scopeOfWorkPlaceholder")}
+                    ariaLabel={t("costControlDoc.field.scopeOfWork")}
+                    onChange={(next) => {
+                      setScopeTyped(next);
+                      set("scopeOfWorkId", scopeIdByNumber.get(next.trim().toLowerCase()) ?? "");
+                    }}
+                  />
+                  <span className="block text-xs leading-snug text-muted-foreground/80">
+                    {draft.scopeOfWorkId
+                      ? t("costControlDoc.field.scopeOfWorkLinked")
+                      : t("costControlDoc.field.scopeOfWorkHint")}
+                  </span>
+                </label>
+              )}
               <label className="text-xs text-muted-foreground space-y-1 block sm:col-span-2">
                 <span>{t("costControlDoc.field.jobName")}</span>
                 <input className={inputCls} disabled={!editable} value={draft.jobName}

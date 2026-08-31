@@ -58,9 +58,13 @@ export const DOCUMENT_RECIPIENT_DEPARTMENTS: { key: string; label: string }[] = 
 ];
 
 /** Every key `documentRecipients` may carry — the 6 department keys + the free-pick `additional`
- * key. The server-side recipient-visibility filters (scope list, Global Search, dashboard counts)
- * must build their `$or` from THIS list, or a person picked only under "ผู้รับเพิ่มเติม" could
- * receive the email yet be unable to find the record in the app. */
+ * key. The server-side recipient-visibility filters must build their `$or` from THIS list, or a
+ * person picked only under "ผู้รับเพิ่มเติม" could get the bell notification yet be unable to find
+ * the record in the app. Four call sites today: the Scope of Work list
+ * (`api/_lib/scopeOfWorkHandler.ts`), Global Search (`api/_lib/searchDocuments.ts`), the dashboard
+ * counts (`api/dashboard/index.ts`), and — since 2026-08-31 — `recipientScopeOfWorkIds()` in
+ * `api/_lib/visibility.ts`, which is what lets a Scope's recipients see the **Cost Control** linked
+ * to it ("Scope of work เวลาที่จะส่งไปให้คนอื่น มันจะมาพร้อมกับ Cost control ด้วย"). */
 export const ALL_RECIPIENT_KEYS: string[] = [...DOCUMENT_RECIPIENT_DEPARTMENTS.map((d) => d.key), ADDITIONAL_RECIPIENT_KEY];
 
 export interface ChecklistGroup {

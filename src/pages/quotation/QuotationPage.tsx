@@ -42,6 +42,9 @@ export function QuotationPage({
   onNotify,
   canCreateTemplate,
   onCreateTemplateForJobType,
+  canViewCostControl,
+  canCreateCostControl,
+  onOpenCostControl,
   canViewDeliveryOrder,
   canCreateDeliveryOrder,
   onOpenDeliveryOrder,
@@ -68,6 +71,9 @@ export function QuotationPage({
   onNotify: () => void;
   canCreateTemplate: boolean;
   onCreateTemplateForJobType: (jobTypeCode: string, jobTypeName: string) => void;
+  canViewCostControl: boolean;
+  canCreateCostControl: boolean;
+  onOpenCostControl: (costControlId: string) => void;
   canViewDeliveryOrder: boolean;
   canCreateDeliveryOrder: boolean;
   onOpenDeliveryOrder: (deliveryOrderId: string) => void;
@@ -263,6 +269,9 @@ export function QuotationPage({
           canDelete={canDeleteScopeOfWork}
           canCreate={canCreateScopeOfWork}
           canChasePo={hasPermission(currentUser, roles, "scopeOfWork:chasePo")}
+          canViewCostControl={canViewCostControl}
+          canCreateCostControl={canCreateCostControl}
+          onOpenCostControl={onOpenCostControl}
           canViewDeliveryOrder={canViewDeliveryOrder}
           canCreateDeliveryOrder={canCreateDeliveryOrder}
           onOpenDeliveryOrder={onOpenDeliveryOrder}

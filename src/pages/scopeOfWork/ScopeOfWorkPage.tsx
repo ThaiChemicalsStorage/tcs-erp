@@ -20,6 +20,9 @@ export function ScopeOfWorkPage({
   canDelete,
   canCreate,
   canChasePo,
+  canViewCostControl,
+  canCreateCostControl,
+  onOpenCostControl,
   canViewDeliveryOrder,
   canCreateDeliveryOrder,
   onOpenDeliveryOrder,
@@ -38,6 +41,9 @@ export function ScopeOfWorkPage({
   canDelete: boolean;
   canCreate: boolean;
   canChasePo: boolean;
+  canViewCostControl: boolean;
+  canCreateCostControl: boolean;
+  onOpenCostControl: (costControlId: string) => void;
   canViewDeliveryOrder: boolean;
   canCreateDeliveryOrder: boolean;
   onOpenDeliveryOrder: (deliveryOrderId: string) => void;
@@ -111,6 +117,9 @@ export function ScopeOfWorkPage({
           canDelete={canDelete}
           canCreate={canCreate}
           canChasePo={canChasePo}
+          canViewCostControl={canViewCostControl}
+          canCreateCostControl={canCreateCostControl}
+          onOpenCostControl={onOpenCostControl}
           canViewDeliveryOrder={canViewDeliveryOrder}
           canCreateDeliveryOrder={canCreateDeliveryOrder}
           onOpenDeliveryOrder={onOpenDeliveryOrder}

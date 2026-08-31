@@ -4,7 +4,57 @@
 
 ---
 
-## Session — 2026-08-31g (absolute latest), Three fields that were narrower than the work
+## Session — 2026-08-31i (absolute latest), When "attach" turned out to mean "let them see it"
+
+The question arrived as a plumbing question — *"คือตัว cost control อะมันต้องแนบไปกับ scope of work
+ทำยังไงได้บ้าง"* — and three linking styles were offered. The owner rejected all three and typed
+the requirement instead: **"คือ Scope of work เวลาที่จะส่งไปให้คนอื่นอะมันจะมาพร้อมกับ Cost control
+ด้วย"**. That reframed the task from *navigation* to *distribution*, and the two need different code.
+
+### The obvious answer was the wrong size
+
+A foreign key plus a toolbar button is what the codebase's own pattern suggests, and it is what the
+first three options all described. But tracing the send path showed the button changes nothing for
+the people the sentence is about: Cost Control's list filter is own-vs-`viewAll` and nothing else,
+so a colleague who is sent a Scope of Work has no way to reach the cost sheet attached to it. **The
+feature the owner asked for was a visibility rule; the FK was just its prerequisite.**
+
+Delivery Order had already solved the identical problem on 2026-08-20 (`sentToDepartmentIds` merged
+into the ownership `$or`, plus `assertNotDepartmentRecipientOnly()`), so the shape was copied
+rather than invented — including the two traps that pattern carries: merging into a `$or` instead
+of spreading over it, and the `{}` clause a `viewAll` holder produces, where a careless merge
+*narrows* an all-seeing user down to their own Scopes.
+
+### The test that found the real hole
+
+The read-only assertion failed on first run: the recipient edited the document successfully. Cause:
+`canEdit()` lets **any** `costControl:finalize` holder edit **any** cost sheet. That was harmless
+while such a person could not discover other people's documents — the new visibility path removed
+exactly that protection. The fix is a single chokepoint on the router (not per-handler, because the
+approval routes run through the shared engine whose `canEdit` hook is synchronous while this check
+needs the database). Worth remembering: **widening who can see a document can silently widen who
+can change it**, when authority elsewhere is expressed as "anyone who can approve".
+
+### Two things deliberately left alone
+
+- `GET /api/cost-controls/:id` still has no ownership check. Neither does Scope of Work's, nor
+  Delivery Order's. In this codebase the visibility clause is a **discovery** filter, and adding a
+  per-document gate to one module would make it the odd one out without closing anything real.
+- A Scope rewritten to `-R1` does not drag its Cost Control along — matching Delivery Order and
+  Project exactly. That was the open question `TODO.md` had used to justify not building this at
+  all; the answer turned out to be "do what the neighbours already do", and it is now written down
+  instead of being asked again.
+
+### Next
+
+- Push is still pending an explicit go-ahead — four commits now (`01f2f85`, `1fe492a`, `343e2c5`,
+  and this one).
+- **Owner decision needed:** which roles get `costControl:view`. The feature grants no permission
+  by design; until Purchasing/Project/Factory hold it, they will see nothing and it will look broken.
+
+---
+
+## Session — 2026-08-31g, Three fields that were narrower than the work
 
 Three unrelated-sounding requests in one message turned out to be the same bug three times: **a
 field shape that was decided by the UI, not by the business.**

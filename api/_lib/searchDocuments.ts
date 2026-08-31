@@ -5,7 +5,7 @@ import {
   productionOrdersCollection, productRequestsCollection, arDocumentsCollection,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
-import { buildOwnershipClause, buildSimpleOwnershipClause } from "./visibility.js";
+import { buildOwnershipClause, buildSimpleOwnershipClause, buildCostControlVisibilityClause } from "./visibility.js";
 import { containsRegex, startsWithRegex, type DocNumberFamily } from "./searchShared.js";
 import { departmentIdForUser } from "./deliveryOrderHandler.js";
 import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
@@ -257,7 +257,8 @@ export async function searchPurchaseOrders(query: string, ctx: AuthContext, limi
 export async function searchCostControls(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
   const col = await costControlsCollection();
   const rx = containsRegex(query);
-  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "costControl:viewAll"), "createdBy");
+  // รวมทางที่สาม "เป็นผู้รับเอกสารของ Scope ที่ใบนี้ผูกอยู่" ด้วย ไม่งั้นจะเห็นในรายการแต่ค้นไม่เจอ
+  const ownership = await buildCostControlVisibilityClause(ctx, roleHasPermission(ctx.role, "costControl:viewAll"));
   const docs = await col.find(
     docFilter(ownership, [
       { _id: rx }, { documentNumber: rx }, { jobName: rx }, { jobOrder: rx }, { workType: rx },
@@ -456,7 +457,7 @@ export async function searchByDocNumber(
     }
     case "costControl": {
       const col = await costControlsCollection();
-      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "costControl:viewAll"), "createdBy");
+      const ownership = await buildCostControlVisibilityClause(ctx, roleHasPermission(ctx.role, "costControl:viewAll"));
       const docs = await col.find(
         { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
         { limit: 1 },

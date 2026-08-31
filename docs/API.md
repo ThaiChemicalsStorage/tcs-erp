@@ -743,6 +743,13 @@ from the Setup Wizard and would never fire on an already-provisioned database.
 ## Cost Control (BD) — added 2026-08-28
 
 `api/_lib/costControlHandler.ts`, mounted at `/api/cost-controls` via `api/handlers/quotes.ts`
+
+⚠️ **Every write route sits behind one chokepoint** (`assertNotScopeRecipientOnly()`, on the router
+itself rather than inside each handler, because the approval routes run through the shared engine
+whose `canEdit` hook is synchronous while this check reads the database). A caller whose *only*
+claim to the document is being a recipient of its linked Scope of Work gets `403` on PATCH, DELETE,
+rewrite and all four approval routes — **even holding `:edit`/`:finalize`/`:delete`** — matching
+Delivery Order's `assertNotDepartmentRecipientOnly()`. Owners and `:viewAll` holders are unaffected.
 (the Vercel 12-function budget is full). See [MODULES/CostControl.md](./MODULES/CostControl.md).
 
 **The server never receives a file.** The browser parses the workbook, shows a preview the person
@@ -751,10 +758,11 @@ base64 payload, and no body-size ceiling to design around.
 
 | Method & Path | Auth | Notes |
 |---|---|---|
-| `GET /api/cost-controls` | `costControl:view` | Own documents only without `:viewAll`. `totalCost` is **computed per row on read** — no total is stored anywhere. |
-| `POST /api/cost-controls` | `costControl:create` | Body `{ jobName?, workType?, jobOrder?, docDate?, lines?, sourceFileName? }` — every field optional, so an empty body opens a blank document. `lines[].kind` is whitelisted to `group`/`item`/`sub` (`400` otherwise). `201`. |
+| `GET /api/cost-controls` | `costControl:view` | No total of any kind is returned (2026-08-31 — every total was removed from the module). Visible rows = own **or** `:viewAll` **or** linked to a Scope of Work the caller is a document recipient of (2026-08-31, `buildCostControlVisibilityClause()` in `api/_lib/visibility.ts`, shared with Global Search so a row can never be listed-but-unsearchable). |
+| `GET /api/cost-controls?scopeOfWorkId=` | `costControl:view` | "Does this Scope already have one?" mode, used by the Scope of Work toolbar. **Deliberately NOT ownership-filtered**, exactly like the identical Delivery Order route: an existence check that hides a colleague's record invites a duplicate. |
+| `POST /api/cost-controls` | `costControl:create` | Body `{ jobName?, workType?, jobOrder?, docDate?, lines?, sourceFileName?, scopeOfWorkId? }` — every field optional, so an empty body opens a blank document. `lines[].kind` is whitelisted to `group`/`item`/`sub` (`400` otherwise). A `scopeOfWorkId` that names no live Scope is `400`, never a dangling FK; passing one also requires `scopeOfWork:view` and back-fills `jobOrder`/`jobName`/`workType` from that Scope **only where the body left them blank**. `201`. |
 | `GET /api/cost-controls/:id` | `costControl:view` | |
-| `PATCH /api/cost-controls/:id` | `costControl:edit` + owner | `400` unless `Draft` — **both** `Final` and `PendingApproval` are locked. `?autoSave=1` suppresses the audit entry and returns `409` on a non-Draft target. Duplicate `documentNumber` → `409`. |
+| `PATCH /api/cost-controls/:id` | `costControl:edit` + owner | `scopeOfWorkId` is patchable — `""` unlinks, which revokes the Scope recipients' sight of the document immediately. `400` unless `Draft` — **both** `Final` and `PendingApproval` are locked. `?autoSave=1` suppresses the audit entry and returns `409` on a non-Draft target. Duplicate `documentNumber` → `409`. |
 | `POST /api/cost-controls/:id/submit-approval` | `costControl:edit` | Shared engine (`api/_lib/documentApproval.ts`). |
 | `POST /api/cost-controls/:id/approve` (alias `/finalize`) | `costControl:finalize` | |
 | `POST /api/cost-controls/:id/reject` | `costControl:finalize` | Body `{ comment }` — required. |

@@ -12,6 +12,48 @@ adds them up. See "Prices are not imported" and "The markup / profit block, remo
 in this file describing profit or total arithmetic is history, kept because it explains why the code
 looks the way it does.
 
+## Linked to Scope of Work (added 2026-08-31)
+
+`scopeOfWorkId` is a real FK to `scope_of_works`; `""` means the sheet stands alone. It was added
+because the owner wanted the cost sheet to travel with its Scope of Work: **"คือ Scope of work
+เวลาที่จะส่งไปให้คนอื่นอะมันจะมาพร้อมกับ Cost control ด้วย"**.
+
+**It does not replace `jobOrder`, and the two are not redundant.** `jobOrder` is free text — what a
+person types, and what the Excel header carries on a sheet that was dropped in before anyone linked
+anything. The FK is what the *system* acts on. Keeping both means an imported sheet is never
+half-linked: it arrives with the job number as text, and someone attaches it to the real record
+afterwards from the **ผูกกับ Scope of Work** field in the header.
+
+| | |
+|---|---|
+| Created from the Scope of Work toolbar | The server back-fills `jobOrder`/`jobName`/`workType` from the Scope, **only where the request left them blank** |
+| Created from an Excel drop, or blank | `scopeOfWorkId` starts `""`; link it later from the header field |
+| Any Scope status | No Final gate — the owner confirmed *"สถานะไหนก็สร้างได้"* |
+| More than one per Scope | Allowed. **No unique index**, per *"ปกติใบเดียว แต่ไม่บังคับ"* — the same non-enforced convention `deliveryOrders`/`projects` follow. The toolbar button opens the most recently updated one |
+| Scope rewritten to `-R1` | The link **stays on the original revision**, matching what Delivery Order and Project already do (`handleRewrite` mints a new `_id` and never touches child documents). Re-point it by hand if the new revision should own it |
+
+**The reason this was more than a foreign key.** Before it, a Cost Control was visible two ways —
+you made it, or you hold `costControl:viewAll`. So linking alone would have changed nothing for the
+people the owner meant by "คนอื่น". The module therefore gained a **third visibility path** (a
+recipient of the linked Scope) and, with it, a read-only guard: `assertNotScopeRecipientOnly()`
+blocks every write route for a caller whose only claim is that path — **including one whose role
+holds `:finalize`**, which `canEdit()` would otherwise treat as a licence to edit anything. Both
+live in `api/_lib/visibility.ts` / `api/_lib/costControlHandler.ts`; see [RBAC.md](../RBAC.md).
+
+**Unlinking is a permission change.** Clearing the field (`scopeOfWorkId: ""`) revokes those
+recipients' sight of the document on the next request. That is the intended escape hatch, not a
+side effect.
+
+🔸 **Known rough edge, shared with Delivery Order.** The document page still renders บันทึก / ลบ /
+ส่งขออนุมัติ for a recipient, because the client decides those from the caller's *role*, and the
+role does hold `:edit`. The server refuses each one with
+*"เอกสารนี้ถูกส่งมาให้คุณพร้อมกับ Scope of Work เพื่อดูและพิมพ์เท่านั้น ไม่สามารถแก้ไขได้"* — verified
+in the browser — so nothing is at risk, but the button should not have been offered. Delivery Order
+has had the identical gap since its department-routing landed on 2026-08-20 (`sentToDepartmentIds`
+is on the client type but nothing reads it), so the fix belongs to both modules at once: the GET
+response would need to tell the client whether *this caller* may write, rather than the client
+inferring it from permissions alone.
+
 ## This closed a gap the repo had carried since 2026-08-20
 
 Both the Project and the Production specs open with *"เมื่อได้รับ Scope of Work, **Cost Control**

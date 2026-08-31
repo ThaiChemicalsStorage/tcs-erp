@@ -17,9 +17,12 @@ import { useI18n } from "../../lib/i18n";
  * ("cost control ไม่ต้องโยนไฟล์ก็สร้างเองได้ด้วยดิ") เผื่องานที่ยังไม่มีไฟล์ประเมินราคา
  */
 export function CostControlPage({
-  canCreate, canEdit, canApprove, canPrint, canDelete, company, initialCostControlId, onCostControlIdConsumed,
+  canCreate, canEdit, canApprove, canPrint, canDelete, canViewScopeOfWork, company,
+  initialCostControlId, onCostControlIdConsumed,
 }: {
   canCreate: boolean;
+  /** เห็นรายการ Scope of Work ได้ไหม — ตัดสินว่าช่อง "ผูกกับ Scope of Work" จะเลือกได้หรือแค่แสดงผล */
+  canViewScopeOfWork: boolean;
   canEdit: boolean;
   canApprove: boolean;
   canPrint: boolean;
@@ -96,6 +99,7 @@ export function CostControlPage({
           canPrint={canPrint}
           canDelete={canDelete}
           canCreate={canCreate}
+          canViewScopeOfWork={canViewScopeOfWork}
           company={company}
           onBack={backToList}
           onDeleted={backToList}

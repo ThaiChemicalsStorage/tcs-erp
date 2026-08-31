@@ -137,6 +137,36 @@ describe("POST /api/scope-of-works/:id/send-documents", () => {
     expect(String((notif as { description?: string })?.description)).toContain("Admin Sender");
   });
 
+  /**
+   * Cost Control ที่ผูกกับ Scope "ไปพร้อมกัน" ตอนส่ง (2026-08-31) — เจ้าของสั่งว่า
+   * *"Scope of work เวลาที่จะส่งไปให้คนอื่น มันจะมาพร้อมกับ Cost control ด้วย"*
+   *
+   * เทสต์นี้ตรึงกับดักไว้สองอย่าง: ต้องบอกเลขใบต้นทุนในข้อความ **และ** ต้อง**ไม่**ตั้ง
+   * `relatedCostControlId` เพราะตัวเลือกเส้นทางของกระดิ่ง (`src/App.tsx`) ตรวจฟิลด์นั้นก่อน
+   * `relatedScopeId` — ใส่ทั้งสองค่าเมื่อไหร่ คนกดจะถูกพาไปผิดหน้าทันที
+   */
+  it("carries the linked Cost Control's number, without hijacking the deep link", async () => {
+    const scopeId = await insertScope({ documentRecipients: { additional: [recipientAId] } });
+
+    const { costControlsCollection, notificationsCollection } = await import("../../api/_lib/collections.js");
+    const costControls = await costControlsCollection();
+    await costControls.insertOne({
+      _id: "CC-2569-8888", documentNumber: "CC-2569-8888", scopeOfWorkId: scopeId,
+      jobName: "ACME Co.", workType: "", jobOrder: "", docDate: "2026-08-31", lines: [],
+      remarks: "", submittedBy: "", approvedBy: "", sourceFileName: "", importedAt: "",
+      status: "Draft", approvedByUserId: "", approvedAt: "", rejectionComment: "", revisionNote: "",
+      createdAt: "", updatedAt: "", createdBy: "", updatedBy: "", isDeleted: false,
+    } as never);
+
+    const r = await sendDocuments(scopeId);
+    expect(r.status).toBe(200);
+
+    const col = await notificationsCollection();
+    const notif = await col.findOne({ recipientUserId: recipientAId, relatedScopeId: scopeId });
+    expect(String((notif as { description?: string })?.description)).toContain("CC-2569-8888");
+    expect(notif).not.toHaveProperty("relatedCostControlId");
+  });
+
   it("400 when no recipient is effectively selected (unchecked department only)", async () => {
     const scopeId = await insertScope({ documentRecipients: { purchase: [recipientBId] } });
     const r = await sendDocuments(scopeId);

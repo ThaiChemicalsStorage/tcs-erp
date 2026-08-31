@@ -66,8 +66,19 @@ export interface CostControl {
   jobName: string;
   /** Work type (เช่น "Wet Scrubber 2 System") */
   workType: string;
-  /** Job order — เลขที่งานต้นทาง เช่น "PQ202608-222-SC-SK" เก็บเป็นข้อความ ไม่ผูก FK กับ Scope of Work */
+  /** Job order — เลขที่งานต้นทาง เช่น "PQ202608-222-SC-SK" · **ข้อความล้วน** พิมพ์เองหรือแกะมาจากหัวชีต */
   jobOrder: string;
+  /**
+   * Scope of Work ต้นทาง — `""` ถ้าเป็นใบเดี่ยว (เพิ่ม 2026-08-31)
+   *
+   * **นี่คือ FK จริง ต่างจาก `jobOrder` ข้างบนที่เป็นข้อความล้วน** และมันคือสิ่งที่ทำให้ Cost Control
+   * "ไปพร้อมกับ" Scope of Work ตอนกดส่งแจ้งเตือนผู้รับเอกสาร — คนที่ถูกเลือกเป็นผู้รับของ Scope ใบนั้น
+   * จะเห็นใบนี้ในรายการของตัวเองและเปิดอ่าน/พิมพ์ได้ แต่แก้ไม่ได้ (ดู `api/_lib/costControlHandler.ts`)
+   *
+   * ผูกกี่ใบต่อหนึ่ง Scope ก็ได้ **ไม่มี unique index** ตามที่เจ้าของสั่ง ("ปกติใบเดียว แต่ไม่บังคับ") —
+   * ธรรมเนียมเดียวกับ `scopeOfWorkId` ของใบส่งมอบสินค้าและโครงการ
+   */
+  scopeOfWorkId: string;
   /** Date บนหัวใบ (YYYY-MM-DD) */
   docDate: string;
 
@@ -105,6 +116,7 @@ export interface CostControlSummary {
   documentNumber: string;
   jobName: string;
   jobOrder: string;
+  scopeOfWorkId: string;
   workType: string;
   docDate: string;
   status: CostControlStatus;
@@ -148,6 +160,28 @@ export interface CostControlCreateFields {
   docDate: string;
   lines: CostControlLine[];
   sourceFileName: string;
+  /** ผูกกับ Scope of Work ตั้งแต่ตอนสร้าง — ไม่ส่งมาก็ได้ แปลว่าเป็นใบเดี่ยว */
+  scopeOfWorkId?: string;
+}
+
+/**
+ * ใบที่ผูกกับ Scope of Work ใบหนึ่ง — ใช้ตรวจว่ามีอยู่แล้วหรือยัง ก่อนจะกดสร้างซ้ำ
+ * **ตั้งใจไม่กรองตามคนสร้างฝั่งเซิร์ฟเวอร์** ด้วยเหตุผลเดียวกับรายการใบส่งมอบสินค้า:
+ * การเช็คว่ามีอยู่แล้วไหมต้องไม่ซ่อนใบของเพื่อนร่วมงานจนคนกดสร้างซ้ำ
+ */
+export async function fetchCostControlsByScope(scopeOfWorkId: string): Promise<CostControlSummary[]> {
+  const { costControls } = await apiFetch<{ costControls: CostControlSummary[] }>(
+    `/cost-controls?scopeOfWorkId=${encodeURIComponent(scopeOfWorkId)}`,
+  );
+  return costControls;
+}
+
+/** เปิดใบเปล่าที่ผูกกับ Scope of Work ใบนี้ — หัวใบ (ชื่องาน/เลขที่งาน/ประเภทงาน) เซิร์ฟเวอร์เติมให้จาก Scope */
+export async function createCostControlFromScope(scopeOfWorkId: string): Promise<CostControl> {
+  const { costControl } = await apiFetch<{ costControl: CostControl }>("/cost-controls", {
+    method: "POST", body: JSON.stringify({ scopeOfWorkId }),
+  });
+  return costControl;
 }
 
 /**

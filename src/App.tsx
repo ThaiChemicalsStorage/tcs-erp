@@ -839,6 +839,7 @@ export default function App() {
   const canEditCodes = hasPermission(currentUser, roles, "codeRegister:edit");
   const canArchiveCodes = hasPermission(currentUser, roles, "codeRegister:archive");
   const canCreateScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:create");
+  const canViewScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:view");
   const canEditScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:edit");
   const canFinalizeScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:finalize");
   const canPrintScopeOfWork = hasPermission(currentUser, roles, "scopeOfWork:print");
@@ -876,6 +877,7 @@ export default function App() {
   const canApprovePurchaseOrder = hasPermission(currentUser, roles, "purchaseOrder:finalize");
   const canPrintPurchaseOrder = hasPermission(currentUser, roles, "purchaseOrder:print");
   const canDeletePurchaseOrder = hasPermission(currentUser, roles, "purchaseOrder:delete");
+  const canViewCostControl = hasPermission(currentUser, roles, "costControl:view");
   const canCreateCostControl = hasPermission(currentUser, roles, "costControl:create");
   const canEditCostControl = hasPermission(currentUser, roles, "costControl:edit");
   const canApproveCostControl = hasPermission(currentUser, roles, "costControl:finalize");
@@ -1109,7 +1111,7 @@ export default function App() {
               : effectiveNav === "auditLog"
               ? <AuditLogPage currentUserId={currentUser.id} />
               : effectiveNav === "scopeOfWork"
-              ? <ScopeOfWorkPage company={company} users={users} currentUserId={currentUser.id} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canChasePo={canChasePoScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} canViewProject={canViewProject} canCreateProject={canCreateProject} onOpenProject={navigateToProject} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
+              ? <ScopeOfWorkPage company={company} users={users} currentUserId={currentUser.id} canEdit={canEditScopeOfWork} canFinalize={canFinalizeScopeOfWork} canPrint={canPrintScopeOfWork} canDelete={canDeleteScopeOfWork} canCreate={canCreateScopeOfWork} canChasePo={canChasePoScopeOfWork} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} canViewProject={canViewProject} canCreateProject={canCreateProject} onOpenProject={navigateToProject} canViewCostControl={canViewCostControl} canCreateCostControl={canCreateCostControl} onOpenCostControl={navigateToCostControl} initialScopeOfWorkId={scopeOfWorkDeepLinkId} onScopeOfWorkIdConsumed={() => setScopeOfWorkDeepLinkId(null)} />
               : effectiveNav === "deliveryOrder"
               ? <DeliveryOrderPage company={company} currentUserId={currentUser.id} canEdit={canEditDeliveryOrder} canFinalize={canFinalizeDeliveryOrder} canPrint={canPrintDeliveryOrder} canDelete={canDeleteDeliveryOrder} canCreate={canCreateDeliveryOrder} initialDeliveryOrderId={deliveryOrderDeepLinkId} onDeliveryOrderIdConsumed={() => setDeliveryOrderDeepLinkId(null)} />
               : effectiveNav === "project"
@@ -1131,7 +1133,7 @@ export default function App() {
               : effectiveNav === "purchaseOrder"
               ? <PurchaseOrderPage canCreate={canCreatePurchaseOrder} canEdit={canEditPurchaseOrder} canApprove={canApprovePurchaseOrder} canPrint={canPrintPurchaseOrder} canDelete={canDeletePurchaseOrder} canViewPurchaseRequest={canViewPurchaseRequest} initialPurchaseOrderId={purchaseOrderDeepLinkId} onPurchaseOrderIdConsumed={() => setPurchaseOrderDeepLinkId(null)} />
               : effectiveNav === "costControl"
-              ? <CostControlPage canCreate={canCreateCostControl} canEdit={canEditCostControl} canApprove={canApproveCostControl} canPrint={canPrintCostControl} canDelete={canDeleteCostControl} company={company} initialCostControlId={costControlDeepLinkId} onCostControlIdConsumed={() => setCostControlDeepLinkId(null)} />
+              ? <CostControlPage canCreate={canCreateCostControl} canEdit={canEditCostControl} canApprove={canApproveCostControl} canPrint={canPrintCostControl} canDelete={canDeleteCostControl} canViewScopeOfWork={canViewScopeOfWork} company={company} initialCostControlId={costControlDeepLinkId} onCostControlIdConsumed={() => setCostControlDeepLinkId(null)} />
               : effectiveNav === "service"
               ? <ServicePage currentUserId={currentUser.id} company={company} canCreate={canCreateService} canEdit={canEditService} canComplete={canCompleteService} canDelete={canDeleteService} canPrint={canPrintService} initialServiceReportId={serviceReportDeepLinkId} onServiceReportIdConsumed={() => setServiceReportDeepLinkId(null)} />
               : effectiveNav === "serviceTemplates"
@@ -1153,7 +1155,7 @@ export default function App() {
               : pageDataLoading || pageDataError
               ? <SectionLoading error={pageDataError} onRetry={loadDomainData} />
               : effectiveNav === "quotations"
-              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} canViewProject={canViewProject} canCreateProject={canCreateProject} onOpenProject={navigateToProject} />
+              ? <QuotationPage quotes={quotes} setQuotes={setQuotes} company={company} currentUser={currentUser} users={users} roles={roles} products={products} categories={categories} jobTypes={jobTypes} customers={customers} initialFilter={quotationListFilter} onFilterConsumed={() => setQuotationListFilter(null)} initialQuoteId={quotationDeepLinkId} onQuoteIdConsumed={() => setQuotationDeepLinkId(null)} initialTemplateSelection={quotationTemplateDeepLink} onTemplateSelectionConsumed={() => setQuotationTemplateDeepLink(null)} onNotify={refreshNotifications} canCreateTemplate={canCreateTemplates} onCreateTemplateForJobType={navigateToCreateTemplateForJobType} canViewDeliveryOrder={canViewDeliveryOrder} canCreateDeliveryOrder={canCreateDeliveryOrder} onOpenDeliveryOrder={navigateToDeliveryOrder} canViewProject={canViewProject} canCreateProject={canCreateProject} onOpenProject={navigateToProject} canViewCostControl={canViewCostControl} canCreateCostControl={canCreateCostControl} onOpenCostControl={navigateToCostControl} />
               : effectiveNav === "quotationTemplates"
               ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} currentUserId={currentUser.id} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "codeRegister"

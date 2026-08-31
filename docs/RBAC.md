@@ -975,6 +975,34 @@ why this document has an approval flow at all.
 used: the permissions go into `defaultRoles` (Administrator/Super Admin), which affects **fresh
 installs only**, and the live database needs the boxes ticked by hand.
 
-**Who should get what.** Cost Control carries the company's true margin on every job, so
+**Who should get what.** Cost Control carries the company's cost figures on every job, so
 `:viewAll` is the sensitive one — grant it to BD and management, not to whoever merely needs to
 raise a document. The nav group hides itself when a role holds no `costControl:view`.
+
+### A third visibility path: recipients of the linked Scope of Work (2026-08-31)
+
+Until 2026-08-31 a Cost Control was visible two ways only — you created it, or you hold
+`costControl:viewAll`. The owner then asked for the document to travel with its Scope of Work
+(*"Scope of work เวลาที่จะส่งไปให้คนอื่น มันจะมาพร้อมกับ Cost control ด้วย"*), which needs a third:
+
+> **you are picked as a document recipient of the Scope of Work that this Cost Control's
+> `scopeOfWorkId` points at.**
+
+Three things worth knowing before touching it:
+
+1. **It grants sight, not power.** A caller who is only a recipient gets `403` on every write route
+   — PATCH, DELETE, rewrite, and all four approval routes — **even if their role holds
+   `:edit`/`:finalize`/`:delete`**. Enforced by `assertNotScopeRecipientOnly()` as a single
+   chokepoint on the router, the same shape as Delivery Order's department-recipient rule. Without
+   it, a recipient whose role happens to carry `:finalize` could edit the document outright, since
+   `canEdit()` lets any `:finalize` holder edit anything.
+2. **It grants nothing to a role without `costControl:view`.** This feature hands out no
+   permission. If Purchasing/Project/Factory should see cost figures, someone has to tick that box
+   in Role Management — a decision about who sees costs, which belongs to the owner, not to the
+   feature.
+3. **It must be applied everywhere the module filters visibility**, or a document becomes listed
+   but unsearchable. Both call sites go through `buildCostControlVisibilityClause()`
+   (`api/_lib/visibility.ts`): the module list, and Global Search (both its general query and its
+   document-number fast path). Note the guard inside it — with `:viewAll` the ownership clause is
+   `{}` with no `$or`, and merging into that would *narrow* an all-seeing user down to their own
+   Scopes.

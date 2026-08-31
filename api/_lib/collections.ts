@@ -1054,6 +1054,9 @@ export async function ensureIndexes() {
     costControls.createIndex({ isDeleted: 1 }),
     costControls.createIndex({ createdBy: 1 }),
     costControls.createIndex({ jobOrder: 1 }),
+    // FK ไป Scope of Work (2026-08-31) — ใช้ทั้งตอนเช็คว่า Scope ใบนี้มี Cost Control แล้วหรือยัง
+    // และตอนกรองใบที่ผู้ใช้เห็นได้เพราะถูกส่ง Scope ถึง · ไม่ unique โดยตั้งใจ ("ปกติใบเดียว แต่ไม่บังคับ")
+    costControls.createIndex({ scopeOfWorkId: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

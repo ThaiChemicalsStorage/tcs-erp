@@ -2,9 +2,10 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { Collection } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
-import { buildSimpleOwnershipClause } from "./visibility.js";
+import { buildCostControlVisibilityClause, recipientScopeOfWorkIds } from "./visibility.js";
 import {
   costControlsCollection, countersCollection, auditLogCollection, withStringId,
+  scopeOfWorksCollection, toObjectId,
   type CostControlFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
@@ -66,6 +67,48 @@ async function writeAuditEntry(ctx: AuthContext, action: string, details: string
   });
 }
 
+/**
+ * ผู้ที่เห็นใบนี้ได้**เพราะถูกส่ง Scope of Work ถึงเท่านั้น** — ดูและพิมพ์ได้ แก้ไม่ได้ (2026-08-31)
+ *
+ * ทางมองเห็นทางที่สาม (`buildCostControlVisibilityClause`) เปิดให้ผู้รับเอกสารของ Scope เจอใบต้นทุน
+ * ที่ผูกอยู่ ตามที่เจ้าของสั่งว่ามันต้อง "ไปพร้อมกัน" — แต่การเห็นกับการแก้เป็นคนละเรื่อง
+ * ถ้าไม่มีด่านนี้ ผู้รับที่บทบาทถือ `costControl:finalize` จะแก้ใบของคนอื่นได้ทันที เพราะ
+ * `canEdit()` ยอมให้ผู้ถือ finalize แก้ได้ทุกใบอยู่แล้ว
+ *
+ * รูปแบบและถ้อยคำลอกมาจาก `assertNotDepartmentRecipientOnly()` ของใบส่งมอบสินค้า ซึ่งแก้โจทย์
+ * เดียวกันเมื่อ 2026-08-20 · **จงใจกันแม้ผู้ใช้จะถือ :edit/:finalize/:delete ครบ** — ด่านนี้ต้อง
+ * ยืนอยู่ได้ด้วยตัวเอง ไม่ใช่รอดเพราะบังเอิญตั้งบทบาทไว้แคบ
+ *
+ * เจ้าของใบ และผู้ถือ `costControl:viewAll` ไม่ถูกกระทบ — สิทธิ์ของเขาไม่ได้มาจากทางที่สาม
+ */
+async function assertNotScopeRecipientOnly(ctx: AuthContext, doc: CostControlFields & { _id: string }): Promise<void> {
+  if (isOwnerOf(ctx, doc)) return;
+  if (roleHasPermission(ctx.role, "costControl:viewAll")) return;
+  const scopeOfWorkId = doc.scopeOfWorkId ?? "";
+  if (!scopeOfWorkId) return;
+  const ids = await recipientScopeOfWorkIds(ctx);
+  if (ids.includes(scopeOfWorkId)) {
+    throw new HttpError(403, "เอกสารนี้ถูกส่งมาให้คุณพร้อมกับ Scope of Work เพื่อดูและพิมพ์เท่านั้น ไม่สามารถแก้ไขได้");
+  }
+}
+
+/** ตรวจว่า id ที่ส่งมาเป็น Scope of Work ที่มีอยู่จริง — `""` แปลว่าไม่ผูก ปล่อยผ่าน */
+async function sanitizeScopeOfWorkId(raw: unknown): Promise<string> {
+  const id = sanitizeShortText(raw, "Scope of Work");
+  if (!id) return "";
+  const scopes = await scopeOfWorksCollection();
+  // id ที่ไม่ใช่รูปแบบ ObjectId ทำให้ toObjectId() โยน 400 "Invalid id" ออกไปตรง ๆ — ดักไว้เพื่อให้
+  // ผู้ใช้เห็นเรื่องจริง (เลือก Scope ผิด/ถูกลบไปแล้ว) แทนศัพท์ของฐานข้อมูล
+  let doc: { isDeleted?: boolean } | null;
+  try {
+    doc = await scopes.findOne({ _id: toObjectId(id) });
+  } catch {
+    doc = null;
+  }
+  if (!doc || doc.isDeleted) throw new HttpError(400, "ไม่พบ Scope of Work ที่ระบุ");
+  return id;
+}
+
 function isOwnerOf(ctx: AuthContext, doc: { createdBy: string }): boolean {
   return !doc.createdBy || doc.createdBy === ctx.user.id;
 }
@@ -105,6 +148,8 @@ function toClient(doc: CostControlFields & { _id: string }) {
     documentNumber: doc.documentNumber || doc._id,
     lines: doc.lines ?? [],
     revisionNote: doc.revisionNote ?? "",
+    // เอกสารก่อน 2026-08-31 ไม่มีฟิลด์นี้ — เติมตอนอ่าน ไม่มีสคริปต์ migrate (ธรรมเนียมของ repo)
+    scopeOfWorkId: doc.scopeOfWorkId ?? "",
   }));
 }
 
@@ -116,6 +161,7 @@ function toSummary(doc: CostControlFields & { _id: string }): CostControlSummary
     documentNumber: full.documentNumber || full.id,
     jobName: full.jobName,
     jobOrder: full.jobOrder,
+    scopeOfWorkId: full.scopeOfWorkId ?? "",
     workType: full.workType,
     docDate: full.docDate,
     status: full.status,
@@ -133,9 +179,22 @@ async function loadOrThrow(id: string) {
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "costControl:view");
-  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "costControl:viewAll"), "createdBy");
+  const scopeOfWorkId = typeof req.query.scopeOfWorkId === "string" ? req.query.scopeOfWorkId : "";
   const costControls = await costControlsCollection();
-  const docs = await costControls.find({ isDeleted: false, ...ownership }).sort({ updatedAt: -1 }).toArray();
+
+  // ส่ง `scopeOfWorkId` มา = โหมด "Scope ใบนี้มี Cost Control อยู่แล้วหรือยัง" ที่แถบเครื่องมือของ
+  // หน้า Scope of Work ใช้ · **ตั้งใจไม่กรองตามคนสร้าง** ด้วยเหตุผลเดียวกับรายการใบส่งมอบสินค้า —
+  // การเช็คว่ามีอยู่แล้วไหมต้องไม่ซ่อนใบของเพื่อนร่วมงานจนคนกดสร้างซ้ำ
+  if (scopeOfWorkId) {
+    const docs = await costControls.find({ scopeOfWorkId, isDeleted: false }).sort({ updatedAt: -1 }).toArray();
+    res.status(200).json({ costControls: docs.map(toSummary) });
+    return;
+  }
+
+  // ใบที่ผูกกับ Scope of Work ซึ่งผู้ใช้ถูกเลือกเป็นผู้รับเอกสาร ต้องโผล่ในรายการของเขาด้วย
+  // แม้จะไม่ได้เป็นคนสร้าง (2026-08-31) — clause เดียวกับที่ Global Search ใช้
+  const ownershipMatch = await buildCostControlVisibilityClause(ctx, roleHasPermission(ctx.role, "costControl:viewAll"));
+  const docs = await costControls.find({ isDeleted: false, ...ownershipMatch }).sort({ updatedAt: -1 }).toArray();
   res.status(200).json({ costControls: docs.map(toSummary) });
 }
 
@@ -148,12 +207,26 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const ctx = await requirePermission(req, "costControl:create");
   const body = (req.body ?? {}) as Record<string, unknown>;
 
-  const jobName = sanitizeShortText(body.jobName, "Job Name");
-  const workType = sanitizeShortText(body.workType, "Work type");
-  const jobOrder = sanitizeShortText(body.jobOrder, "Job order");
+  let jobName = sanitizeShortText(body.jobName, "Job Name");
+  let workType = sanitizeShortText(body.workType, "Work type");
+  let jobOrder = sanitizeShortText(body.jobOrder, "Job order");
   const docDate = validateIsoDateOrEmpty(body.docDate, "วันที่");
   const sourceFileName = sanitizeShortText(body.sourceFileName, "ชื่อไฟล์ต้นทาง");
   const lines = body.lines === undefined ? [] : sanitizeLines(body.lines);
+  const scopeOfWorkId = await sanitizeScopeOfWorkId(body.scopeOfWorkId);
+
+  // สร้างจากหน้า Scope of Work — เติมหัวใบให้จาก Scope เท่าที่ยังว่าง (ไม่ทับของที่ส่งมาเอง)
+  // อ่านเนื้อ Scope ต้องมีสิทธิ์ `scopeOfWork:view` ด้วย — ด่านซ้อนชั้นเดียวกับที่ใบส่งมอบสินค้าใช้
+  if (scopeOfWorkId && (!jobName || !jobOrder || !workType)) {
+    await requirePermission(req, "scopeOfWork:view");
+    const scopes = await scopeOfWorksCollection();
+    const scope = await scopes.findOne({ _id: toObjectId(scopeOfWorkId) });
+    if (scope) {
+      jobOrder = jobOrder || scope.scopeNumber || "";
+      jobName = jobName || scope.customerSnapshot?.companyName || "";
+      workType = workType || scope.jobTypeName || "";
+    }
+  }
 
   const counters = await countersCollection();
   const id = await nextCostControlId(counters);
@@ -162,7 +235,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   const doc: CostControlFields & { _id: string } = {
     _id: id,
     documentNumber: id,
-    jobName, workType, jobOrder,
+    jobName, workType, jobOrder, scopeOfWorkId,
     docDate: docDate || now.slice(0, 10),
     lines,
     remarks: "",
@@ -180,9 +253,12 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   await costControls.insertOne(doc);
   await writeAuditEntry(
     ctx, "Cost Control Created",
-    sourceFileName
-      ? `สร้าง ${id} จากไฟล์ "${sourceFileName}" (${lines.length} บรรทัด)`
-      : `สร้าง ${id} (${lines.length} บรรทัด)`,
+    [
+      sourceFileName
+        ? `สร้าง ${id} จากไฟล์ "${sourceFileName}" (${lines.length} บรรทัด)`
+        : `สร้าง ${id} (${lines.length} บรรทัด)`,
+      scopeOfWorkId ? `ผูกกับ Scope of Work ${jobOrder || scopeOfWorkId}` : "",
+    ].filter(Boolean).join(" · "),
   );
   res.status(201).json({ costControl: toClient(doc) });
 }
@@ -225,6 +301,8 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("remarks" in body) update.remarks = sanitizeLongText(body.remarks, "หมายเหตุ");
   if ("revisionNote" in body) update.revisionNote = sanitizeLongText(body.revisionNote, "หมายเหตุการแก้ไข");
   if ("lines" in body) update.lines = sanitizeLines(body.lines);
+  // ผูก/เลิกผูก Scope of Work — `""` = เลิกผูก ซึ่งตัดสิทธิ์การมองเห็นของผู้รับ Scope ทันที
+  if ("scopeOfWorkId" in body) update.scopeOfWorkId = await sanitizeScopeOfWorkId(body.scopeOfWorkId);
 
   if ("documentNumber" in body) {
     const documentNumber = sanitizeShortText(body.documentNumber, "เลขที่เอกสาร", true);
@@ -316,9 +394,19 @@ const approvalConfig: ApprovalConfig<CostControlFields & { _id: string }> = {
   respond: (res, doc) => res.status(200).json({ costControl: toClient(doc) }),
 };
 
+/** เส้นทางที่เขียนข้อมูล — ทุกตัวต้องผ่าน `assertNotScopeRecipientOnly()` ก่อน */
+const MUTATING_ACTIONS = new Set(["rewrite", "submit-approval", "approve", "finalize", "reject", "withdraw-approval"]);
+
 export async function handleCostControl(req: VercelRequest, res: VercelResponse): Promise<void> {
-  await requireUser(req);
+  const ctx = await requireUser(req);
   const parts = getPathSegments(req, "/api/cost-controls");
+
+  // ด่านจุดเดียวสำหรับทุกเส้นทางที่เขียนข้อมูล — วางไว้ตรงนี้แทนที่จะไปแทรกในแต่ละ handler เพราะ
+  // เส้นทางอนุมัติใช้ engine ร่วม (`documentApproval.ts`) ที่รับได้แค่ `canEdit` แบบ synchronous
+  // ส่วนด่านนี้ต้องอ่านฐานข้อมูล · รูปแบบเดียวกับ chokepoint ของใบส่งมอบสินค้า
+  if (parts.length >= 1 && (["PATCH", "DELETE"].includes(req.method ?? "") || MUTATING_ACTIONS.has(parts[1] ?? ""))) {
+    await assertNotScopeRecipientOnly(ctx, await loadOrThrow(parts[0]));
+  }
 
   if (parts.length === 0) {
     if (req.method === "POST") return handleCreate(req, res);

@@ -393,6 +393,48 @@ checklist is now backed by real people, not just a printed-form checkbox list:
 - **No setup required (2026-08-07)**: with email gone there is nothing to configure — no env var,
   no per-user credential. Anyone holding `scopeOfWork:edit` can send immediately.
 
+## Cost Control travels with the document (added 2026-08-31)
+
+The owner asked *"คือตัว cost control อะมันต้องแนบไปกับ scope of work ทำยังไงได้บ้าง"* and then
+supplied the requirement in their own words: **"คือ Scope of work เวลาที่จะส่งไปให้คนอื่นอะมันจะมา
+พร้อมกับ Cost control ด้วย"** — when a Scope of Work is sent to other people, its Cost Control goes
+with it. Asked to choose, they picked **in-app delivery**, not printing the two forms together.
+
+**The link lives on the Cost Control, not here.** `costControl.scopeOfWorkId` is a real FK; this
+record carries nothing new. That direction was chosen because a Scope may end up with several cost
+sheets (the owner: *"ปกติใบเดียว แต่ไม่บังคับ"*) and because unlinking must be possible from the
+document that is being unlinked.
+
+**What "goes with it" actually means.** Three separate things, and only the second is new work:
+
+| | Mechanism |
+|---|---|
+| The button | Scope of Work's toolbar gains **"สร้าง Cost Control" / "เปิด Cost Control CC-…"**, the same existence-check-then-create shape Delivery Order and Project already use (`GET /api/cost-controls?scopeOfWorkId=`, deliberately not ownership-filtered). **No status gate** — the owner confirmed *"สถานะไหนก็สร้างได้"*. |
+| The visibility | A Cost Control linked to this Scope becomes visible to **everyone picked in `documentRecipients`** — view and print only, never edit. See [RBAC.md](../RBAC.md), "A third visibility path". |
+| The notification | The bell text gains `· แนบ Cost Control CC-…`. |
+
+⚠️ **The notification must not carry `relatedCostControlId`.** `src/App.tsx`'s bell router checks
+that field *before* `relatedScopeId`, so setting both would silently send the reader to the Cost
+Control page while the notification's own text says a Scope of Work was sent to them. The
+destination is this page, which has the button. Pinned by a test in
+`tests/api/sendDocumentNotifications.test.ts`.
+
+**Like Print and the send action itself, visibility is not the same as authority.** Being picked as
+a recipient makes the linked Cost Control findable; it never makes it editable, no matter what the
+recipient's role holds. And it hands out no permission — a role without `costControl:view` sees
+nothing, which is deliberate: who may see cost figures is the owner's call.
+
+**Rewrite (`-R1`) does not carry the link.** `handleRewrite` mints a new `_id` and touches no child
+document — true of Delivery Orders and Projects already, and Cost Control now behaves the same. The
+new revision shows "สร้าง Cost Control"; to reuse the existing sheet, re-point it from the
+`ผูกกับ Scope of Work` field on the Cost Control page. This is the answer to the question
+`docs/TODO.md` had been holding open since 2026-08-28e.
+
+**Not done, and why:** printing both forms in one job. The owner chose in-app delivery. If it is
+ever wanted, the ingredients are all here — `ScopeOfWorkPrintDocument` is mounted unconditionally
+behind `hidden print:table`, so a sibling `hidden print:block` block would print second with no
+change to the Print button, and AR/Delivery Order already do multi-page `breakAfter: "page"` blocks.
+
 ## Attachments (added 2026-07-24, reworked to MongoDB storage the same day)
 
 Per direct user request ("อยากให้ทำให้สามารถแนบไฟล์ได้ตรงหน้า scope of work ที่จะส่งเอกสารให้ผู้อื่นให้
