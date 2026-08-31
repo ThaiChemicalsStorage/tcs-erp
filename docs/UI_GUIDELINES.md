@@ -348,6 +348,35 @@ Labels: `text-xs text-muted-foreground block mb-1`/`mb-1.5` (**2026-07-13**: `te
 
 **Field-pair grids** (two related inputs side by side, e.g. contact name/phone, issue/expiry date): always `grid-cols-1 sm:grid-cols-2`, never bare `grid-cols-2` — a bare 2-column grid forces two inputs into half a mobile screen each, which is how the quotation editor's Critical mobile-usability finding happened (2026-07-13, see CHANGELOG.md). This applies to any new field-pair grid you add, in any form.
 
+### Free-Text Combobox (`src/components/Combobox.tsx`, added 2026-08-31)
+
+A text input with a suggestion dropdown where **the typed value is the value**. Reach for this
+whenever a field has common answers but must not be limited to them — do **not** reach for
+`<datalist>` (the repo has migrated away from it twice) and do not build another one-off picker.
+
+```tsx
+<Combobox
+  className={inputCls}            // caller owns the input styling entirely
+  value={draft.vendorName}
+  onChange={(next) => set("vendorName", next)}   // fires on every keystroke; typing is never swallowed
+  options={vendorComboboxOptions(vendors)}       // { value, label?, hint? }[]
+  onPick={(o) => …}              // only when picked FROM the list (e.g. also set a vendorId)
+  maxLength={300}                // match the server cap so a long value fails at the keyboard, not on save
+  ariaLabel={…}
+/>
+```
+
+Contract worth knowing: blur and Escape never discard what was typed; Enter with no matching option
+falls through so an unregistered value submits; the dropdown is portalled to `document.body` with
+fixed coordinates so it survives `overflow-x-auto` table wrappers; full listbox ARIA and arrow-key
+navigation are built in. Empty state uses the shared `combobox.noResults` string.
+
+It differs from **Search-and-Pick Autofill** (below) on purpose: that pattern picks an existing
+record and fills a form from it, and `CustomerSelector` deliberately does not let free text through.
+
+Call sites to copy: `PurchaseOrderDocument.tsx` (form field), `PurchaseRequestDocument.tsx` (table
+cell), `QuoteDocument.tsx` (payment terms).
+
 ### Required-Field Validation Components (added 2026-07-16)
 Formalizes the pre-existing hand-repeated pattern (`<span className="text-[#e05252]">*</span>` next
 to a label, `text-xs text-[#e05252] mt-1` error text) into shared components, first used by the

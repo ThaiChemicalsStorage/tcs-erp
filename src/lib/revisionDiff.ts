@@ -1,6 +1,6 @@
 import type { Quote, QuoteLine, DiscountMode } from "./quotes";
 import type { ScopeOfWork, ScopeOfWorkItem, ScopeOfWorkPaymentConditions } from "./scopeOfWork";
-import { formatPaymentMethod } from "./scopeOfWork";
+import { formatPaymentMethod, scopePoNumbers, scopeQuotationNumbers } from "./scopeOfWork";
 import type { ChecklistGroup } from "./documentRequirements";
 import { ADDITIONAL_RECIPIENT_KEY, ADDITIONAL_RECIPIENT_LABEL, DOCUMENT_RECIPIENT_DEPARTMENTS } from "./documentRequirements";
 import type { User } from "./users";
@@ -231,7 +231,10 @@ export function generateScopeOfWorkRevisionSummary(source: ScopeOfWork, current:
   push(out, diffText("วันที่", source.issueDate, current.issueDate));
   push(out, diffText("วันที่ส่งของ/ส่งแบบอนุมัติ", source.deliveryDate, current.deliveryDate));
   push(out, diffText("รหัส Drawing", source.drawingCode, current.drawingCode));
-  push(out, diffText("เอกสารใบสั่งซื้อเลขที่ (PO)", source.customerPoNumber, current.customerPoNumber));
+  // เทียบเลขทั้งชุดเป็นข้อความเดียว ไม่ต้องแยกทีละแถว — คนอ่านสรุปการแก้ไขอยากรู้ว่า "เลขชุดนี้
+  // กลายเป็นชุดนี้" ไม่ใช่ว่าแถวที่ 2 ถูกแทรกหรือถูกเลื่อน
+  push(out, diffText("เอกสารใบสั่งซื้อเลขที่ (PO)", scopePoNumbers(source).join(", "), scopePoNumbers(current).join(", ")));
+  push(out, diffText("เลขใบเสนอราคา", scopeQuotationNumbers(source).join(", "), scopeQuotationNumbers(current).join(", ")));
   push(out, diffText("รหัสอ้างอิงท้ายงาน", source.secondaryCode, current.secondaryCode));
   push(out, diffText("สถานที่ส่งของ", source.deliveryLocation, current.deliveryLocation));
   push(out, diffText("ชื่อผู้ติดต่อส่งของ", source.shippingContact, current.shippingContact));

@@ -17,6 +17,7 @@ import {
   round2, computeDownPaymentLineAmount, computeDepositDeductionLineAmount, computeArDocumentTotals, computeDueDate,
 } from "./arCalculations.js";
 import { bahtText } from "../../src/lib/bahtText.js";
+import { normalizeStringList, scopePoNumbers } from "../../src/lib/scopeOfWork.js";
 import { nowIso } from "../../src/lib/products.js";
 import { applyStockMovement, assertProductsHaveStock } from "./stockHandler.js";
 
@@ -416,10 +417,16 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
     phone: scope.customerSnapshot.phone,
     email: scope.customerSnapshot.email,
   };
+  const poNumbers = scopePoNumbers({
+    customerPoNumber: scope.customerPoNumber ?? "",
+    additionalPoNumbers: normalizeStringList(scope.additionalPoNumbers),
+  });
   const remarks = [
     `**${milestone.pct ?? ""}%${milestone.isDownPayment ? "จากยอดเต็มค่าบริการทั้งหมด" : "จากยอดเต็มค่าบริการทั้งหมด"}=${milestone.totalContractValueExVat.toLocaleString("th-TH")}**`,
     `**${scope.scopeNumber}**`,
-    ...(scope.customerPoNumber ? [`**PO:${scope.customerPoNumber}**`] : []),
+    // เลข PO ทุกเลขของ Scope ใบนี้ (2026-08-31 — หนึ่ง Scope มี PO ได้หลายใบ) ลูกค้าที่ตรวจใบวางบิล
+    // ต้องเห็นเลขที่ตัวเองออกครบ ไม่ใช่เห็นแค่ใบแรก
+    ...(poNumbers.length > 0 ? [`**PO:${poNumbers.join(", ")}**`] : []),
   ];
 
   const counters = await countersCollection();
@@ -435,7 +442,7 @@ async function handleIssueDocuments(req: VercelRequest, res: VercelResponse) {
     dueDate,
     paymentType: milestone.paymentType,
     customerSnapshot,
-    reference: scope.customerPoNumber,
+    reference: poNumbers.join(", "),
     lines,
     ...totals,
     vatRate: 7,

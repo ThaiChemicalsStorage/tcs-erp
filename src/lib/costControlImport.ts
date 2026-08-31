@@ -67,6 +67,21 @@ export interface CostControlImportMarkups {
   sellingPrice: number | null;
 }
 
+/**
+ * ชิ้นส่วนข้อความของคำเตือนที่พูดถึง **ราคาที่อ่านมาจากไฟล์**
+ *
+ * ตั้งแต่ 2026-08-31 การนำเข้าไม่เอาราคาจากไฟล์มาแล้ว (ดู `stripImportedPrices()`) คำเตือนกลุ่มนี้
+ * จึงพูดถึงตัวเลขที่ไม่ได้ถูกนำเข้าจริง ต้องคัดทิ้งก่อนแสดง ไม่งั้นคนอ่านจะงงว่าเตือนราคาไหน
+ *
+ * ประกาศเป็นค่าคงที่แล้วเอาไปประกอบเป็นข้อความจริง เพื่อให้ตัวคัดกับตัวข้อความหลุดจากกันไม่ได้
+ * (มีเทสต์ยืนยันว่าทุกชิ้นส่วนตรงกับคำเตือนที่ตัวแกะสร้างขึ้นจริง)
+ */
+const PRICE_WARNING_FRAGMENTS = {
+  rounding: "มียอดในไฟล์ต่างจาก จำนวน × ต้นทุน",
+  blockTotalUnreadable: "อ่านยอดรวมไม่ได้",
+  sellingPriceClash: "ระบุราคาขายไว้ไม่ตรงกัน",
+} as const;
+
 export const EMPTY_MARKUPS: CostControlImportMarkups = {
   operatingCost: null, operatingPct: null, bubbleCost: null, bubblePct: null,
   entertainmentCost: null, sellingPrice: null,
@@ -317,7 +332,7 @@ function parseCostControlSheetDirect(rows: string[][], fills?: SheetFills): Cost
   if (lines.length === 0) warnings.push("อ่านชีตได้แต่ไม่พบรายการเลย — ตรวจว่าเลือกชีตถูกไหม");
   if (rounded > 0) {
     warnings.push(
-      `${rounded} บรรทัดมียอดในไฟล์ต่างจาก จำนวน × ต้นทุน (รวมต่างกัน ${roundedDelta.toFixed(2)} บาท) — ` +
+      `${rounded} บรรทัด${PRICE_WARNING_FRAGMENTS.rounding} (รวมต่างกัน ${roundedDelta.toFixed(2)} บาท) — ` +
       `ปกติเกิดจากไฟล์ต้นทางแสดงจำนวนแบบปัดเศษ ระบบนี้คำนวณยอดจากจำนวน × ต้นทุนเสมอ ` +
       `ถ้าต้องการให้ตรงกับไฟล์เป๊ะ ให้แก้จำนวนหรือต้นทุนของบรรทัดนั้น`,
     );
@@ -392,7 +407,7 @@ function parseScSheet(rows: string[][]): CostControlImportResult {
       qty: 1, unit: "Lot", unitCost: blockTotal,
     }));
     if (blockTotal === null) {
-      warnings.push(`รายการที่ ${seq} "${description}" อ่านยอดรวมไม่ได้ — ใส่ตัวเลขเองก่อนบันทึก`);
+      warnings.push(`รายการที่ ${seq} "${description}" ${PRICE_WARNING_FRAGMENTS.blockTotalUnreadable} — ใส่ตัวเลขเองก่อนบันทึก`);
     }
 
     // แถวย่อยที่มีเนื้อหา — ให้ติดมาด้วยเพื่อให้คนเลือกเก็บ/ลบ/รวมเองในหน้า preview
@@ -482,10 +497,37 @@ export function mergeCostControlImports(parts: { sheetName: string; result: Cost
 
   if (new Set(sellingPrices).size > 1) {
     warnings.push(
-      `ชีตที่เลือกระบุราคาขายไว้ไม่ตรงกัน (${sellingPrices.map((p) => p.toLocaleString("th-TH")).join(", ")}) — ` +
+      `ชีตที่เลือก${PRICE_WARNING_FRAGMENTS.sellingPriceClash} (${sellingPrices.map((p) => p.toLocaleString("th-TH")).join(", ")}) — ` +
       `ใช้ค่าของชีตแรกไว้ก่อน กรุณาตรวจก่อนสร้าง`,
     );
   }
 
   return { header, markups, lines, warnings, sheetKind: parts[0].result.sheetKind };
+}
+
+/**
+ * ตัดราคาทั้งหมดออกจากผลการนำเข้า — เหลือแต่ตัวรายการ (2026-08-31)
+ *
+ * เจ้าของสั่งไว้ว่า *"cost control เวลาโยนไฟล์เข้าไปให้เอาราคาออกให้ด้วย"* และยืนยันว่าหมายถึง
+ * **ลบราคาออก ให้เหลือแต่รายการ** แล้วไปกรอกต้นทุน/ราคาขายเองในเอกสาร · เหตุผลคือราคาในไฟล์
+ * ประเมินมักยังไม่ใช่ต้นทุนจริงที่จะใช้ตัดสินใจ การให้มันติดมาเลยทำให้คนเผลอเชื่อตัวเลขที่ยังไม่ได้ตรวจ
+ *
+ * **ตัดที่นี่ ไม่ตัดในตัวแกะไฟล์** เป็นเรื่องตั้งใจ: `parseCostControlSheet()` ต้องอ่านไฟล์ให้ตรงตามจริง
+ * ต่อไป เพราะคำเตือน "ไฟล์ระบุราคาต้นทุน X แต่รวมจากรายการที่แกะได้ Y" คือ**เครื่องมือเดียว**ที่จับได้ว่า
+ * แกะรายการมาไม่ครบ — มันคำนวณจากราคาที่อ่านมา ถ้าตัดราคาตั้งแต่ต้นทางการตรวจนั้นก็ตายไปด้วย
+ * คำเตือนนั้นจึงถูกเก็บไว้ (มันคิดเสร็จก่อนตัดราคา ยังเชื่อถือได้) ส่วนคำเตือนที่พูดถึงตัวเลขที่ไม่ได้
+ * นำเข้าแล้วจะถูกคัดทิ้ง
+ *
+ * `qty`/`unit`/`kind`/`model`/`supplierName`/`description`/`seq` ไม่ถูกแตะ — คนต้องการโครงรายการ
+ * ที่พิมพ์มาแล้ว ไม่ใช่แค่ชื่อรายการ
+ */
+export function stripImportedPrices(result: CostControlImportResult): CostControlImportResult {
+  return {
+    ...result,
+    lines: result.lines.map((line) => ({ ...line, unitCost: null })),
+    markups: { ...EMPTY_MARKUPS },
+    warnings: result.warnings.filter(
+      (w) => !Object.values(PRICE_WARNING_FRAGMENTS).some((fragment) => w.includes(fragment)),
+    ),
+  };
 }

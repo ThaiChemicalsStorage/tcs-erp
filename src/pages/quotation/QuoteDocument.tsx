@@ -7,6 +7,7 @@ import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { PromptDialog } from "../../components/PromptDialog";
+import { Combobox } from "../../components/Combobox";
 import { useDialogA11y } from "../../hooks/useDialogA11y";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import type { Product, ProductCategory } from "../../lib/products";
@@ -52,6 +53,20 @@ const VALIDATION_EXEMPT_ACTIONS = new Set<ApprovalAction>(["rejected", "cancelle
 function toGuardPayload({ status, ...rest }: QuoteDraftFields): Omit<QuoteDraftFields, "status"> {
   void status;
   return rest;
+}
+
+// รายการเงื่อนไขการชำระเงินที่ขึ้นมาให้เลือก — เป็น**ข้อเสนอแนะ** ไม่ใช่ค่าที่บังคับ ดูคอมเมนต์ที่
+// `paymentTermsOptions` ใน `lib/quotes.ts` · คงที่ทั้งไฟล์ จึงสร้างไว้นอกคอมโพเนนต์ครั้งเดียว
+const paymentTermsSuggestions = paymentTermsOptions.map((value) => ({ value }));
+
+// ยุบข้อความหลายบรรทัดให้เหลือบรรทัดเดียว — ใช้กับ "เงื่อนไขการชำระเงิน" ที่ตอนนี้เป็นช่องพิมพ์ (`<input>`)
+//
+// เทมเพลตใบเสนอราคาบางอันส่งเงื่อนไขมาเป็นหลายบรรทัด (`applyTemplate.ts` join ด้วย `\n` เช่น
+// "30% Down payment / 40% …" ของเทมเพลต Wet Scrubber) แต่ `<input>` ตัด CR/LF ทิ้งเงียบ ๆ ตามสเปก
+// HTML สเตทกับ DOM จะไม่ตรงกันทันที · ใบพิมพ์ก็ยุบขึ้นบรรทัดใหม่เป็นช่องว่างอยู่แล้ว (`PrintDocument.tsx`
+// วาง `Field` ไว้ในแถว flex ไม่มี `whitespace-pre-line`) การยุบตรงนี้จึงไม่เปลี่ยนสิ่งที่พิมพ์ออกมา
+function singleLine(text: string): string {
+  return text.replace(/\s*\r?\n\s*/g, " / ");
 }
 
 const DEFAULT_TERMS = "1. ราคานี้ยังไม่รวมค่าขนส่งและค่าติดตั้ง\n2. ราคามีผลภายใน 30 วันนับจากวันที่ในเอกสาร\n3. การส่งมอบภายใน 45 วันทำการหลังได้รับ PO\n4. การชำระเงินมัดจำ 30% ก่อนเริ่มผลิต";
@@ -159,7 +174,7 @@ export function QuoteDocument({
   const [deliveryAddress, setDeliveryAddress] = useState(customerSnapshot?.deliveryAddress ?? quote?.deliveryAddress ?? "");
   const [project, setProject] = useState(customerSnapshot?.projectName ?? quote?.project ?? "");
   const [poRef, setPoRef] = useState(quote?.poRef ?? "");
-  const [paymentTerms, setPaymentTerms] = useState(quote?.paymentTerms ?? (templateSnapshot?.paymentTerms || paymentTermsOptions[0]));
+  const [paymentTerms, setPaymentTerms] = useState(singleLine(quote?.paymentTerms ?? (templateSnapshot?.paymentTerms || paymentTermsOptions[0])));
   const [issueDate, setIssueDate] = useState(quote?.issueDate ?? todayIso());
   const [expiryDate, setExpiryDate] = useState(quote?.expiryDate ?? plusDaysIso(30));
   const [remarks, setRemarks] = useState(quote?.remarks ?? (templateSnapshot?.remarks || company.termsAndConditions || DEFAULT_TERMS));
@@ -344,7 +359,7 @@ export function QuoteDocument({
     setDeliveryAddress(d.deliveryAddress);
     setProject(d.project);
     setPoRef(d.poRef);
-    setPaymentTerms(d.paymentTerms);
+    setPaymentTerms(singleLine(d.paymentTerms));
     setIssueDate(d.issueDate);
     setExpiryDate(d.expiryDate);
     setRemarks(d.remarks);
@@ -766,9 +781,18 @@ export function QuoteDocument({
                 </div>
                 <div>
                   <RequiredFieldLabel required={false} htmlFor="quote-paymentTerms">{t("quotation.field.paymentTerms")}</RequiredFieldLabel>
-                  <select id="quote-paymentTerms" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors appearance-none disabled:opacity-60" value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
-                    {paymentTermsOptions.map((opt) => <option key={opt}>{opt}</option>)}
-                  </select>
+                  {/* พิมพ์เงื่อนไขเองได้ทั้งหมด รายการที่ขึ้นมาเป็นแค่ทางลัด ไม่ใช่ค่าที่บังคับ */}
+                  <Combobox
+                    id="quote-paymentTerms"
+                    disabled={disabled}
+                    className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60"
+                    value={paymentTerms}
+                    onChange={setPaymentTerms}
+                    options={paymentTermsSuggestions}
+                    maxLength={300}
+                    ariaLabel={t("quotation.field.paymentTerms")}
+                    placeholder={t("quotation.field.paymentTermsPlaceholder")}
+                  />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>

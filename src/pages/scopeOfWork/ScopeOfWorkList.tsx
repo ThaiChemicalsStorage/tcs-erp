@@ -3,7 +3,7 @@ import { ClipboardList, Search, X, HelpCircle } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { EmptyState } from "../../components/EmptyState";
 import { useModuleTour } from "../../components/GuidedTour";
-import type { ScopeOfWorkListItem, ScopeOfWorkStatus } from "../../lib/scopeOfWork";
+import { scopePoNumbers, scopeQuotationNumbers, type ScopeOfWorkListItem, type ScopeOfWorkStatus } from "../../lib/scopeOfWork";
 import { formatQuoteDateThai } from "../../lib/quotes";
 import { useI18n } from "../../lib/i18n";
 
@@ -52,6 +52,9 @@ export function ScopeOfWorkList({
     quotationSalesperson: s.quotationSalesperson ?? "",
     customerPoNumber: s.customerPoNumber ?? "",
     status: s.status ?? "Draft",
+    // เลขทุกเลขของใบนั้นต่อกันแล้ว — ใช้ทั้งแสดงในตารางและค้นหา (หนึ่ง Scope มีได้หลายใบเสนอราคา/PO)
+    poNumbersText: scopePoNumbers(s).join(", "),
+    quotationNumbersText: scopeQuotationNumbers(s).join(", "),
   }));
 
   const jobTypesInList = [...new Set(items.map((s) => s.jobTypeCode).filter((c) => c.trim()))].sort();
@@ -64,7 +67,7 @@ export function ScopeOfWorkList({
     .filter((s) => filterJobType === FILTER_ALL || s.jobTypeCode === filterJobType)
     .filter((s) => filterSalesperson === FILTER_ALL || s.quotationSalesperson === filterSalesperson)
     .filter((s) => !filterNoPo || !s.customerPoNumber.trim())
-    .filter((s) => !normalizedSearch || [s.scopeNumber, s.customerName, s.quotationNumber, s.jobTypeCode].some((v) => v.toLowerCase().includes(normalizedSearch)));
+    .filter((s) => !normalizedSearch || [s.scopeNumber, s.customerName, s.quotationNumbersText, s.poNumbersText, s.jobTypeCode].some((v) => v.toLowerCase().includes(normalizedSearch)));
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -221,10 +224,12 @@ export function ScopeOfWorkList({
                     <span className="text-muted-foreground">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{s.quotationNumber}</td>
+                <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{s.quotationNumbersText}</td>
                 <td className="px-4 py-3.5 text-xs whitespace-nowrap">
-                  {s.customerPoNumber.trim() ? (
-                    <span className="font-mono text-muted-foreground">{s.customerPoNumber}</span>
+                  {/* ตัวนับ/ตัวกรอง "ยังไม่มี PO" ยังตัดสินจากเลขหลักเหมือนเดิม — หน้าจอแก้ไขเขียน
+                      เลขแรกลงช่องนั้นเสมอ ใบที่มีเลขอยู่จริงจึงไม่มีทางขึ้นแบดจ์นี้ */}
+                  {s.poNumbersText ? (
+                    <span className="font-mono text-muted-foreground">{s.poNumbersText}</span>
                   ) : (
                     <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/25">{t("scopeOfWork.noPoBadge")}</span>
                   )}

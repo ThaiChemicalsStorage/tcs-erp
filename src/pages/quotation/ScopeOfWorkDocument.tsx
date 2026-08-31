@@ -10,7 +10,7 @@ import {
   refreshScopeOfWorkFromQuotation, deleteScopeOfWork, logScopeOfWorkPrinted, blankScopeOfWorkItem,
   blankPaymentInstallment, newPaymentInstallmentId, PAYMENT_TERM_PRESETS, sendScopeOfWorkDocumentNotifications,
   fetchScopeOfWorksByQuotation, uploadScopeOfWorkAttachment, deleteScopeOfWorkAttachment, MAX_ATTACHMENT_BYTES,
-  chaseScopeOfWorkPo,
+  chaseScopeOfWorkPo, scopePoNumbers, scopeQuotationNumbers,
 } from "../../lib/scopeOfWork";
 import { type DeliveryOrderSummary, fetchDeliveryOrdersByScope, createDeliveryOrderFromScope } from "../../lib/deliveryOrder";
 import { type ProjectSummary, fetchProjectsByScope, createProjectFromScope } from "../../lib/project";
@@ -50,6 +50,8 @@ function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
     deliveryDate: s.deliveryDate,
     drawingCode: s.drawingCode,
     customerPoNumber: s.customerPoNumber,
+    additionalPoNumbers: s.additionalPoNumbers,
+    additionalQuotationNumbers: s.additionalQuotationNumbers,
     secondaryCode: s.secondaryCode,
     deliveryLocation: s.deliveryLocation,
     shippingContact: s.shippingContact,
@@ -73,6 +75,9 @@ function toUpdateFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
 function toFollowUpFields(s: ScopeOfWork): ScopeOfWorkUpdateFields {
   return {
     customerPoNumber: s.customerPoNumber,
+    // เลข PO ใบที่สองขึ้นไปก็มาช้าพอ ๆ กับใบแรก จึงอยู่ในกลุ่มติดตามผลด้วย (ฝั่งเซิร์ฟเวอร์มี
+    // `FOLLOW_UP_FIELDS` ชุดเดียวกัน) · เลขใบเสนอราคาเพิ่มเติมไม่อยู่ในนี้ เพราะรู้ตั้งแต่ตอนร่าง
+    additionalPoNumbers: s.additionalPoNumbers,
     documentRecipients: s.documentRecipients,
     documentRecipientMessage: s.documentRecipientMessage,
   };
@@ -122,6 +127,67 @@ function SignatoryEditor({ label, value, onChange, users, disabled, required, er
         onChange={(e) => onChange({ ...value, date: e.target.value })}
       />
       <FieldError message={error} />
+    </div>
+  );
+}
+
+/**
+ * ช่องกรอกเลขเอกสารแบบหลายเลข พร้อมปุ่ม "+ เพิ่ม" — ใช้กับเลขใบเสนอราคาและเลข PO ของลูกค้า
+ *
+ * เจ้าของสั่งไว้ 2026-08-31: *"ใส่ตัวเลขของใบเสนอราคา 2 อันกับใบ PO 2 อันอยู่ใน Scope อันเดียว
+ * ช่วยทำปุ่มเพิ่มมาให้หน่อย"* — งานหนึ่งงานกินได้หลายใบเสนอราคา และลูกค้าก็ออก PO มาหลายใบได้
+ *
+ * **ในหน้าจอเป็นลิสต์เดียว แต่ข้างหลังเก็บเป็น "เลขหลัก + รายการเพิ่มเติม"** ผู้เรียกเป็นคนแปลงกลับ
+ * (ดู `scopePoNumbers()` ใน `lib/scopeOfWork.ts` ว่าทำไมถึงไม่รวมเป็นอาร์เรย์เดียวไปเลย) ที่นี่จึงคิด
+ * เป็นอาร์เรย์ล้วน ๆ และรับประกันว่าคืนอย่างน้อยหนึ่งช่องเสมอ เพื่อให้ "เลขหลัก" มีที่อยู่ตลอด
+ *
+ * `firstReadOnly` ใช้กับเลขใบเสนอราคา: แถวแรกคือเลขของใบต้นทางที่ผูกกันอยู่ ระบบเป็นคนเติมให้และ
+ * แก้เองไม่ได้ (เหมือนเดิมก่อนหน้านี้) ส่วนแถวที่สองขึ้นไปพิมพ์เองได้
+ */
+function DocumentNumberListEditor({ values, onChange, disabled, idPrefix, addLabel, removeLabel, placeholder, firstReadOnly = false }: {
+  values: string[];
+  onChange: (next: string[]) => void;
+  disabled: boolean;
+  idPrefix: string;
+  addLabel: string;
+  removeLabel: string;
+  placeholder?: string;
+  firstReadOnly?: boolean;
+}) {
+  const rows = values.length > 0 ? values : [""];
+  const setRow = (index: number, next: string) => onChange(rows.map((v, i) => (i === index ? next : v)));
+  // ลบแถวสุดท้ายทิ้งไม่ได้ ต้องเหลือช่องว่างไว้หนึ่งช่องเสมอ ไม่งั้น "เลขหลัก" จะหายไปจากเอกสาร
+  const removeRow = (index: number) => {
+    const next = rows.filter((_, i) => i !== index);
+    onChange(next.length > 0 ? next : [""]);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      {rows.map((value, index) => {
+        const readOnly = firstReadOnly && index === 0;
+        return (
+          <div key={index} className="flex items-center gap-1.5">
+            <input
+              id={index === 0 ? idPrefix : `${idPrefix}-${index}`}
+              disabled={!readOnly && disabled}
+              readOnly={readOnly}
+              value={value}
+              placeholder={placeholder}
+              onChange={(e) => setRow(index, e.target.value)}
+              className={`flex-1 min-w-0 text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none transition-colors ${readOnly ? "opacity-80" : "focus:border-[#c9a84c]/50 disabled:opacity-60"}`}
+            />
+            {!disabled && !readOnly && rows.length > 1 && (
+              <button type="button" onClick={() => removeRow(index)} title={removeLabel} aria-label={removeLabel} className="text-muted-foreground hover:text-[#e05252] transition-colors flex-shrink-0 p-1"><Trash2 size={13} /></button>
+            )}
+          </div>
+        );
+      })}
+      {!disabled && (
+        <button type="button" onClick={() => onChange([...rows, ""])} className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-[#c9a84c]/10 text-[#c9a84c] border border-[#c9a84c]/25 rounded-lg hover:bg-[#c9a84c]/20 transition-colors font-medium">
+          <Plus size={11} /> {addLabel}
+        </button>
+      )}
     </div>
   );
 }
@@ -797,7 +863,7 @@ export function ScopeOfWorkDocument({
               <Save size={13} /> {isDraft ? t("scopeOfWorkDoc.saveDraft") : t("scopeOfWorkDoc.saveFollowUp")}
             </button>
           )}
-          {canChasePo && !scope.customerPoNumber.trim() && (
+          {canChasePo && scopePoNumbers(scope).length === 0 && (
             <button
               onClick={handleChasePo}
               disabled={chasingPo}
@@ -871,7 +937,7 @@ export function ScopeOfWorkDocument({
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 print:hidden">
             <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">SCOPE OF WORK</h1>
             <p className="text-[#a8bed8] text-xs mt-1">
-              {t("scopeOfWorkDoc.subtitleFrom")} {scope.quotationNumber} — {t("scopeOfWorkDoc.subtitleJobType")} {scope.jobTypeCode || "-"} {scope.jobTypeName}
+              {t("scopeOfWorkDoc.subtitleFrom")} {scopeQuotationNumbers(scope).join(", ") || "-"} — {t("scopeOfWorkDoc.subtitleJobType")} {scope.jobTypeCode || "-"} {scope.jobTypeName}
               {scope.quotationSalesperson && ` — ${t("scopeOfWorkDoc.subtitleSalesperson")} ${scope.quotationSalesperson}`}
             </p>
           </div>
@@ -948,12 +1014,32 @@ export function ScopeOfWorkDocument({
               </div>
               <div>
                 <RequiredFieldLabel required={false} htmlFor="sow-customerPoNumber">{t("scopeOfWorkDoc.field.customerPoNumber")}</RequiredFieldLabel>
-                <input id="sow-customerPoNumber" disabled={!canEdit} className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={scope.customerPoNumber} onChange={(e) => updateField("customerPoNumber", e.target.value)} />
+                {/* ลูกค้าออก PO มาได้หลายใบต่อหนึ่งงาน — เก็บเลขแรกไว้ที่ `customerPoNumber` (ตัวที่
+                    KPI "ยังไม่มี PO" กับปุ่มทวง PO ใช้) ที่เหลือลง `additionalPoNumbers` */}
+                <DocumentNumberListEditor
+                  idPrefix="sow-customerPoNumber"
+                  disabled={!canEdit}
+                  values={[scope.customerPoNumber, ...scope.additionalPoNumbers]}
+                  onChange={(next) => setScope((prev) => (prev ? { ...prev, customerPoNumber: next[0] ?? "", additionalPoNumbers: next.slice(1) } : prev))}
+                  addLabel={t("scopeOfWorkDoc.addPoNumber")}
+                  removeLabel={t("scopeOfWorkDoc.removePoNumber")}
+                />
                 {canEdit && !isDraft && <p className="text-[10px] text-muted-foreground mt-1">{t("scopeOfWorkDoc.field.poHelp")}</p>}
               </div>
               <div>
                 <label htmlFor="sow-quotationNumber" className="text-xs text-muted-foreground block mb-1">{t("scopeOfWorkDoc.field.quotationNumber")}</label>
-                <input id="sow-quotationNumber" readOnly className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none opacity-80" value={scope.quotationNumber} />
+                {/* แถวแรกคือใบเสนอราคาต้นทางที่ผูกกันอยู่ (`quotationId`) ระบบเติมให้ แก้เองไม่ได้ ·
+                    แถวถัดไปคือใบเสนอราคาใบอื่นของงานเดียวกัน พิมพ์เอง เพิ่มได้เฉพาะตอนเป็นร่าง */}
+                <DocumentNumberListEditor
+                  idPrefix="sow-quotationNumber"
+                  disabled={!editable}
+                  firstReadOnly
+                  values={[scope.quotationNumber, ...scope.additionalQuotationNumbers]}
+                  onChange={(next) => updateField("additionalQuotationNumbers", next.slice(1))}
+                  addLabel={t("scopeOfWorkDoc.addQuotationNumber")}
+                  removeLabel={t("scopeOfWorkDoc.removeQuotationNumber")}
+                  placeholder={t("scopeOfWorkDoc.quotationNumberPlaceholder")}
+                />
               </div>
               <p className="text-[10px] text-muted-foreground leading-relaxed pt-2">
                 {t("scopeOfWorkDoc.field.autoFillNote")}

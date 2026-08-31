@@ -137,6 +137,37 @@ export function normalizeDocumentRecipients(raw: unknown): Record<string, string
   return out;
 }
 
+/**
+ * แปลงค่าดิบให้เป็นรายการข้อความ — ใช้กับเลขใบเสนอราคา/เลข PO ที่เพิ่มเข้ามาทีหลัง
+ *
+ * เอกสารที่บันทึกไว้ก่อน 2026-08-31 ไม่มีสองฟิลด์นี้เลย และโปรเจกต์นี้ไม่มีสคริปต์ migrate
+ * (กติกาคือ "normalize ตอนอ่าน" ดู `docs/DATABASE.md`) ของเก่าจึงต้องอ่านออกมาเป็น `[]` เสมอ
+ */
+export function normalizeStringList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean);
+}
+
+/**
+ * เลข PO ของลูกค้าทั้งหมดในใบนี้ เรียงตามลำดับที่คนกรอก — เลขหลักมาก่อนเสมอ
+ *
+ * **ทำไมถึงมีทั้งเลขหลักและรายการเพิ่มเติม** แทนที่จะเก็บเป็นอาร์เรย์เดียว: `customerPoNumber`
+ * เป็นค่าที่ระบบดึงมาจาก `Quote.poRef` ตอนสร้างและตอนกด "ดึงข้อมูลใหม่" และเป็นค่าที่ KPI
+ * "ยังไม่มี PO" บนแดชบอร์ดกับแบดจ์ในหน้ารายการใช้ตัดสิน · ส่วนเลขที่สองขึ้นไปเป็นของที่คนพิมพ์เอง
+ * ล้วน ๆ ไม่มีใครดึงให้ · แยกกันแบบนี้แล้วปุ่ม "ดึงข้อมูลใหม่" จึงลบเลขที่พิมพ์เพิ่มไม่ได้
+ *
+ * หน้าจอแก้ไขมองสองฟิลด์นี้เป็นลิสต์เดียว แล้วเขียนกลับเป็น `[0]` กับที่เหลือ — เลขหลักจึงไม่มีวัน
+ * ว่างทั้งที่ยังมีเลขอื่นอยู่
+ */
+export function scopePoNumbers(s: { customerPoNumber: string; additionalPoNumbers?: string[] }): string[] {
+  return [s.customerPoNumber, ...(s.additionalPoNumbers ?? [])].map((n) => n.trim()).filter(Boolean);
+}
+
+/** เลขใบเสนอราคาทั้งหมดในใบนี้ — ใบต้นทางที่ผูกไว้มาก่อน แล้วตามด้วยเลขที่คนพิมพ์เพิ่ม */
+export function scopeQuotationNumbers(s: { quotationNumber: string; additionalQuotationNumbers?: string[] }): string[] {
+  return [s.quotationNumber, ...(s.additionalQuotationNumbers ?? [])].map((n) => n.trim()).filter(Boolean);
+}
+
 export interface ScopeOfWorkSignatory {
   name: string;
   userId: string;
@@ -151,6 +182,8 @@ export interface ScopeOfWork {
   secondaryCode: string;
   quotationId: string;
   quotationNumber: string;
+  /** เลขใบเสนอราคาใบที่ 2 ขึ้นไป — พิมพ์เอง งานหนึ่งงานกินหลายใบเสนอราคาได้ ดู `scopeQuotationNumbers()` */
+  additionalQuotationNumbers: string[];
   jobTypeCode: string;
   jobTypeName: string;
   quotationSalesperson: string;
@@ -158,6 +191,8 @@ export interface ScopeOfWork {
   deliveryDate: string;
   drawingCode: string;
   customerPoNumber: string;
+  /** เลข PO ของลูกค้าใบที่ 2 ขึ้นไป — พิมพ์เอง ดู `scopePoNumbers()` */
+  additionalPoNumbers: string[];
   customerSnapshot: ScopeOfWorkCustomerSnapshot;
   deliveryLocation: string;
   shippingContact: string;
@@ -223,6 +258,8 @@ export interface ScopeOfWorkListItem {
   customerName: string;
   quotationSalesperson: string;
   customerPoNumber: string;
+  additionalPoNumbers: string[];
+  additionalQuotationNumbers: string[];
   issueDate: string;
   deliveryDate: string;
   status: ScopeOfWorkStatus;
@@ -235,6 +272,8 @@ export type ScopeOfWorkUpdateFields = Partial<{
   deliveryDate: string;
   drawingCode: string;
   customerPoNumber: string;
+  additionalPoNumbers: string[];
+  additionalQuotationNumbers: string[];
   secondaryCode: string;
   deliveryLocation: string;
   shippingContact: string;

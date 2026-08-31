@@ -39,16 +39,19 @@ Every readable sheet is listed with its kind and **how many lines it parses to**
 can be ticked. Merging joins them into one document with a **group heading naming each sheet** so
 a reader can still tell where a line came from. Header fields take the first non-empty value;
 **the markup block is not summed** — a selling price belongs to the job, not to a sheet — and a
-disagreement between sheets is warned about rather than silently resolved.
+disagreement between sheets is warned about rather than silently resolved. (Since 2026-08-31 neither
+the markups nor that warning survive into the dialog — the parser still computes both, and
+`stripImportedPrices()` drops them.)
 
 The default selection is a single sheet: the **leftmost one that actually parses**, preferring a
 Cost Control sheet over an estimate. It deliberately does *not* pick the sheet with the most
 lines — that rule picked `ลองๆ` ("just trying"), someone's scratch sheet, out of the real file.
 
-### The summary block comes across too
+### The summary block is read, then deliberately dropped (2026-08-31)
 
 Rows 2-5 at the foot of the sheet (ค่าดำเนินการ + %, Bubble + %, Entertainment, ราคาขาย) are read
-and sent with the create call, so an imported document arrives with its margin already computed.
+by the parser. **They no longer reach the created document** — see "Prices are not imported" below;
+an imported document now arrives with an empty margin block, to be filled in by hand.
 Rows are matched **by their number**, not their wording, which differs between files
 (`Bubble cost` vs `Bubble Cost`). Row 1 (ราคาต้นทุน) is deliberately *not* stored — it is compared
 against the parsed lines and a mismatch with no rounding to explain it is reported as **lines
@@ -72,6 +75,38 @@ year ≥ 2400 has 543 subtracted.
 `reference/` is gitignored, so **`src/lib/costControl.ts`, `src/lib/costControlImport.ts` and
 `CostControlPrintDocument.tsx` are the durable record of the form** — treat them as the source of
 truth rather than expecting to reopen the spreadsheet.
+
+## Prices are not imported (2026-08-31)
+
+*"Cost control เวลาโยนไฟล์เข้าไปให้เอาราคาออกให้ด้วย"* — confirmed with the owner to mean **strip the
+prices, keep the line items**, and **always**, with no opt-out toggle. A dropped workbook now yields
+ลำดับ / รายละเอียด / Model / supplier / จำนวน / หน่วย and nothing else; the cost column and the whole
+markup block arrive empty for a person to fill in.
+
+The reason is not technical: the prices in an estimate workbook often are not yet the costs the
+decision should be made on, and carrying them across invites people to trust a number nobody checked.
+
+### Why the strip lives in the dialog, not the parser
+
+`parseCostControlSheet()` still reads every price exactly as before. It has to: the *"ไฟล์ระบุราคา
+ต้นทุน X แต่รวมจากรายการที่แกะได้ Y"* warning is the only automatic check that the sheet was laid out
+as expected, and it is computed **from** those prices. Strip at the source and that check dies with
+them. So `stripImportedPrices()` runs afterwards, in `CostControlImportDialog.applyPicked()` — one
+chokepoint that the preview table, the summary paragraph and the create payload all read through.
+None of the parser’s ~40 tests needed changing.
+
+Warnings about money that is no longer imported are filtered out (rounding mismatch, the SC sheet’s
+per-block *"อ่านยอดรวมไม่ได้"*, clashing selling prices across merged sheets). The **lines-missed**
+warning stays — it is computed before the strip, so it is still true. The filter matches on text
+fragments declared next to the code that builds those messages, with tests asserting each one is
+present before the strip and gone after, so the two cannot drift apart silently.
+
+Nothing on the API side changed: `handleCreate` accepts `unitCost: null` and defaults all six markup
+fields to `null` when they are not sent (identical to opening a blank document), and
+`costControlTotals()` coalesces every null to 0 with the divide-by-zero already guarded.
+
+One print fix went with it: the *ต้นทุนรวมทั้งหมด* cell used to print `-` (which means **zero** on this
+form) on every row while the cost cell beside it was blank. Both are blank now until a cost is typed.
 
 ## Two ways to create one
 

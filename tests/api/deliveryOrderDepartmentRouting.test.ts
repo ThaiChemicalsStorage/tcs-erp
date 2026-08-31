@@ -114,7 +114,7 @@ beforeAll(async () => {
   const scope = await db.collection("scope_of_works").insertOne({
     scopeNumber: "TEST-SOW-01", yearMonth: "", jobSequence: 0, secondaryCode: "",
     quotationId: "Q-TEST-01", quotationNumber: "Q-TEST-01", jobTypeCode: "LI", jobTypeName: "FRP Lining",
-    quotationSalesperson: "", issueDate: "2026-08-20", deliveryDate: "", drawingCode: "", customerPoNumber: "",
+    quotationSalesperson: "", issueDate: "2026-08-20", deliveryDate: "", drawingCode: "", customerPoNumber: "", additionalPoNumbers: [], additionalQuotationNumbers: [],
     customerSnapshot: { companyName: "Test Co.", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" },
     deliveryLocation: "", shippingContact: "", shippingPhone: "", billingContact: "", billingPhone: "",
     checklistGroups: [],

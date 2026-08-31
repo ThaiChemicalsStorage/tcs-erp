@@ -143,7 +143,9 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
                     <span style={bahtRow}><span>฿</span><span>{money(l.unitCost)}</span></span>
                   )}
                 </td>
-                <td style={num}>{isGroup ? "" : money(lineTotalCost(l))}</td>
+                {/* ยังไม่กรอกต้นทุน = ยังไม่มียอดรวม ปล่อยว่างให้เหมือนช่องต้นทุน ไม่พิมพ์ "-" ซึ่ง
+                    แปลว่า "ศูนย์" บนฟอร์มนี้ — ใบที่นำเข้ามาใหม่ยังไม่มีราคาเลยทั้งใบ */}
+                <td style={num}>{isGroup || l.unitCost === null ? "" : money(lineTotalCost(l))}</td>
               </tr>
             );
           })}

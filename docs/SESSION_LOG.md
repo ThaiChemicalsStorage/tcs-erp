@@ -4,6 +4,78 @@
 
 ---
 
+## Session — 2026-08-31g (absolute latest), Three fields that were narrower than the work
+
+Three unrelated-sounding requests in one message turned out to be the same bug three times: **a
+field shape that was decided by the UI, not by the business.**
+
+### The dropdown that was never a constraint
+"เงื่อนไขการชำระเงิน" had four fixed options. Tracing it end to end, the API sanitized it as ordinary
+short text with no allow-list, the type was `string`, and validation marked it optional with no enum
+check. The restriction existed in exactly one `<select>` element. Deleting it required no API,
+schema, validation or permission change.
+
+Generalises: before planning migration work for "make this field free-form", check what the server
+already accepts. A closed dropdown over an open column is a UI decision that can be reversed alone —
+and the reverse case (an open input over a closed enum) is the one that actually costs something.
+
+The same trace surfaced a live bug for free: templates could produce a multi-line value that matched
+no `<option>`, so browsers silently displayed the first one instead. It had been sitting there
+since the templates feature shipped, invisible precisely *because* a `<select>` cannot show a value
+it does not have.
+
+### Where to put a subtraction
+"Cost control เวลาโยนไฟล์เข้าไปให้เอาราคาออก" reads like a parser change, and doing it in the parser
+would have been half the diff. It would also have killed the only automatic check that the import
+read a sheet correctly — the "file says the cost total is X but the parsed lines sum to Y" warning
+is computed *from* the prices being removed. Putting the strip one layer up, in the dialog, kept the
+parser honest, kept the check alive, and left all ~40 of its tests untouched.
+
+Generalises: when asked to remove data, ask what else is computed from it. The cheapest place to
+delete is rarely the right one — subtract at the boundary where the data stops being needed, not at
+the point where it is produced.
+
+### An array would have broken three things quietly
+"Two quotation numbers and two POs in one Scope" has an obvious modelling answer: make both fields
+arrays. Three consumers said otherwise. The dashboard's "ยังไม่มี PO" count uses
+`$in: [null, ""]`, which does not match `[]` — every existing record would have flipped to "has a
+PO" with no error anywhere. The "refresh from quotation" button overwrites the PO field on every
+press, so over one array it silently becomes a delete button. And `quotationNumber` is
+server-derived while a second quotation number is hand-typed — two kinds of data wearing one name.
+
+Keeping the singular field as the primary and adding an `additional…` array kept all three correct
+with no query changes, while the editor still presents one list and writes the first entry back into
+the primary field. The awkwardness lives in one 6-line adapter instead of in three consumers.
+
+Generalises: a schema change is only as clean as its dirtiest reader. Grep the *queries*, not just
+the types — a MongoDB predicate written for a scalar fails silently against an array rather than
+erroring, which is the worst failure mode available.
+
+### Problems Found
+- Multi-line template payment terms were being silently swallowed by the `<select>` (pre-existing).
+- The Cost Control print form printed `-` in the total column (meaning "zero" on this form) next to
+  a blank cost cell, for any line without a cost.
+- `Combobox.tsx`, added three days earlier and already used by two modules, was documented nowhere
+  in `docs/` — so the obvious-but-wrong `<datalist>` was the path of least resistance for this task.
+
+### Problems Fixed
+All three, plus the three requested features. `npx tsc --noEmit`, the api-project typecheck,
+`npm run lint` and `npm run build` are clean; `npm test` is 518/518 across 42 files (23 new).
+
+⚠️ **Machine note, not a code problem**: the default parallel `npm test` run fails 6 in-memory-Mongo
+files at `afterAll` with hook timeouts on this machine — no assertion fails. `npm test -- --no-file-parallelism` passes everything. Worth knowing before anyone chases a phantom regression.
+
+### New TODO Items
+None blocking. Optional follow-up: extra quotation numbers are free text by the owner's explicit
+choice, so nothing verifies they name real quotations — revisit only if wrong numbers show up.
+
+### Estimated Completion Percentage
+Unchanged by this session — these are field-shape corrections inside modules already counted as
+built.
+
+---
+
+
 ## Session — 2026-08-28e (absolute latest), The spec was a spreadsheet the whole time
 
 ### A blocker that five documents recorded, closed by one file

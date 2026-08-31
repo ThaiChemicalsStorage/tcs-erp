@@ -64,6 +64,7 @@ export function Combobox({
   ariaLabel,
   className = "",
   emptyMessage,
+  maxLength,
 }: {
   value: string;
   /** เรียกทุกครั้งที่พิมพ์ และตอนเลือกจากรายการ — ข้อความที่พิมพ์ไม่เคยถูกกลืน */
@@ -78,6 +79,13 @@ export function Combobox({
   /** คลาสของ `<input>` เอง — ผู้เรียกคุมหน้าตาเองทั้งหมด จะได้ฝังในตารางหรือในฟอร์มก็ได้ */
   className?: string;
   emptyMessage?: string;
+  /**
+   * จำกัดจำนวนตัวอักษรของช่องพิมพ์ — ส่งต่อให้ `<input maxLength>` ตรง ๆ
+   *
+   * มีไว้เพราะบางช่องมีเพดานฝั่งเซิร์ฟเวอร์อยู่แล้ว (เช่น `MAX_SHORT_TEXT` = 300 ของใบเสนอราคา)
+   * ให้เบราว์เซอร์กันตั้งแต่ตอนพิมพ์ ดีกว่าปล่อยไปโดน 400 ตอนกดบันทึกแล้วไม่รู้ว่าเพราะอะไร
+   */
+  maxLength?: number;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -174,6 +182,7 @@ export function Combobox({
         disabled={disabled}
         value={value}
         placeholder={placeholder}
+        maxLength={maxLength}
         onChange={(e) => { onChange(e.target.value); setOpen(true); setActiveIndex(0); }}
         onFocus={() => setOpen(true)}
         onBlur={onBlur}

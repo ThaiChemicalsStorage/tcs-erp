@@ -1,4 +1,4 @@
-import { formatPaymentMethod, type ScopeOfWork } from "../../lib/scopeOfWork";
+import { formatPaymentMethod, scopePoNumbers, scopeQuotationNumbers, type ScopeOfWork } from "../../lib/scopeOfWork";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
@@ -99,8 +99,10 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUse
                 <div className="space-y-1">
                   <Field label="วันที่" value={fmtNumericDate(s.issueDate)} />
                   <Field label="วันที่ส่งของ/ส่งแบบอนุมัติ" value={fmtNumericDate(s.deliveryDate)} />
-                  <Field label="เอกสารใบสั่งซื้อเลขที่" value={s.customerPoNumber} mono />
-                  <Field label="ใบเสนอราคา" value={s.quotationNumber} mono />
+                  {/* หนึ่งงานมีได้หลาย PO / หลายใบเสนอราคา — ต่อกันในบรรทัดเดิม ไม่เพิ่มแถว
+                      เพราะหัวใบเป็นกริดสองคอลัมน์ที่ต้องมีจำนวนแถวเท่ากันถึงจะพิมพ์ออกมาตรง */}
+                  <Field label="เอกสารใบสั่งซื้อเลขที่" value={scopePoNumbers(s).join(", ")} mono />
+                  <Field label="ใบเสนอราคา" value={scopeQuotationNumbers(s).join(", ")} mono />
                   <Field label="เบอร์โทรผู้ติดต่อส่งของ" value={s.shippingPhone} mono />
                   <Field label="เบอร์โทรผู้ติดต่อวางบิล" value={s.billingPhone} mono />
                 </div>

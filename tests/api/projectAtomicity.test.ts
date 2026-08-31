@@ -103,7 +103,7 @@ beforeAll(async () => {
   const result = await db.collection("scope_of_works").insertOne({
     scopeNumber: "TEST-SOW-01", yearMonth: "", jobSequence: 0, secondaryCode: "",
     quotationId: "Q-TEST-01", quotationNumber: "Q-TEST-01", jobTypeCode: "LI", jobTypeName: "FRP Lining",
-    quotationSalesperson: "", issueDate: "2026-08-18", deliveryDate: "", drawingCode: "", customerPoNumber: "",
+    quotationSalesperson: "", issueDate: "2026-08-18", deliveryDate: "", drawingCode: "", customerPoNumber: "", additionalPoNumbers: [], additionalQuotationNumbers: [],
     customerSnapshot: { companyName: "Test Co.", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" },
     deliveryLocation: "", shippingContact: "", shippingPhone: "", billingContact: "", billingPhone: "",
     checklistGroups: [],
@@ -327,7 +327,7 @@ describe("a project can only be opened from an approved (Final) Scope of Work", 
     const { insertedId } = await db.collection("scope_of_works").insertOne({
       scopeNumber, yearMonth: "", jobSequence: 0, secondaryCode: "",
       quotationId: "Q-GATE-01", quotationNumber: "Q-GATE-01", jobTypeCode: "LI", jobTypeName: "FRP Lining",
-      quotationSalesperson: "", issueDate: "2026-08-20", deliveryDate: "", drawingCode: "", customerPoNumber: "",
+      quotationSalesperson: "", issueDate: "2026-08-20", deliveryDate: "", drawingCode: "", customerPoNumber: "", additionalPoNumbers: [], additionalQuotationNumbers: [],
       customerSnapshot: { companyName: "Gate Co.", contactName: "", address: "", taxId: "", phone: "", email: "", projectName: "" },
       deliveryLocation: "", shippingContact: "", shippingPhone: "", billingContact: "", billingPhone: "",
       checklistGroups: [],

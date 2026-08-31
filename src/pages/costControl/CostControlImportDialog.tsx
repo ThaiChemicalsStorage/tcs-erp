@@ -6,7 +6,7 @@ import { ApiError } from "../../lib/apiClient";
 import { fmt } from "../../lib/quotes";
 import { type CostControl, type CostControlLine, createCostControl, lineTotalCost } from "../../lib/costControl";
 import {
-  classifySheet, mergeCostControlImports, parseCostControlSheet,
+  classifySheet, mergeCostControlImports, parseCostControlSheet, stripImportedPrices,
   type CostControlImportResult, type SheetFills, type SheetKind,
 } from "../../lib/costControlImport";
 
@@ -59,7 +59,8 @@ export function CostControlImportDialog({ onCreated, onClose }: {
       setLines([]);
       return;
     }
-    const merged = mergeCostControlImports(parts);
+    // ตัดราคาออกตรงนี้จุดเดียว — preview, บล็อกสรุป และ payload ตอนกดสร้าง อ่านจาก `result`/`lines` หมด
+    const merged = stripImportedPrices(mergeCostControlImports(parts));
     setResult(merged);
     setLines(merged.lines);
   };
@@ -145,7 +146,9 @@ export function CostControlImportDialog({ onCreated, onClose }: {
         // บันทึกชีตที่ใช้ไว้ด้วย — ไฟล์เดียวมีได้หลายชีตและเลือกได้หลายอัน "ชื่อไฟล์" อย่างเดียวจึงไม่พอ
         // ที่จะย้อนกลับไปดูว่าใบนี้มาจากไหน
         sourceFileName: `${fileName} — ${picked.join(", ")}`,
-        ...result.markups,
+        // ไม่ส่งบล็อกสรุป (ค่าดำเนินการ/Bubble/Entertainment/ราคาขาย) ขึ้นไปเลย — เซิร์ฟเวอร์ตั้งเป็น
+        // null ให้เองเมื่อไม่ได้ส่งมา เท่ากับใบที่เปิดเปล่า แล้วให้คนกรอกเองในเอกสาร
+        // (`stripImportedPrices()` ล้าง `result.markups` ไว้แล้ว บรรทัดนี้แค่ไม่ส่งซ้ำอีกทาง)
       });
       onCreated(doc);
     } catch (err) {
@@ -278,22 +281,8 @@ export function CostControlImportDialog({ onCreated, onClose }: {
                 </label>
               </div>
 
-              {/* บล็อกสรุปท้ายชีตที่อ่านมาได้ — แสดงให้เห็นว่าอ่านอะไรมาบ้าง แก้ต่อได้ในหน้าเอกสาร */}
-              {(result.markups.sellingPrice !== null || result.markups.operatingCost !== null) && (
-                <p className="text-xs text-muted-foreground">
-                  {t("costControlImport.markupsFromSheet")}{" "}
-                  {[
-                    result.markups.operatingCost !== null
-                      && `${t("costControlDoc.summary.operating")} ${fmt(result.markups.operatingCost)}`,
-                    result.markups.bubbleCost !== null
-                      && `${t("costControlDoc.summary.bubble")} ${fmt(result.markups.bubbleCost)}`,
-                    result.markups.entertainmentCost !== null
-                      && `${t("costControlDoc.summary.entertainment")} ${fmt(result.markups.entertainmentCost)}`,
-                    result.markups.sellingPrice !== null
-                      && `${t("costControlDoc.summary.sellingPrice")} ${fmt(result.markups.sellingPrice)}`,
-                  ].filter(Boolean).join(" · ")}
-                </p>
-              )}
+              {/* ราคาในไฟล์ไม่ถูกนำเข้าเลย — บอกไว้ตรง ๆ ไม่งั้นคนจะนึกว่าระบบอ่านราคาไม่ออก */}
+              <p className="text-xs text-muted-foreground">{t("costControlImport.pricesNotImported")}</p>
 
               <div className="bg-card border border-border rounded-xl overflow-hidden">
                 <div className="overflow-x-auto max-h-[38vh]">
@@ -332,7 +321,9 @@ export function CostControlImportDialog({ onCreated, onClose }: {
                               onChange={(e) => setLines(lines.map((x, i) => i === idx ? { ...x, unitCost: e.target.value === "" ? null : Number(e.target.value) } : x))} />
                           </td>
                           <td className="px-3 py-1.5 text-xs font-mono text-right text-foreground whitespace-nowrap">
-                            {l.kind === "group" ? "—" : fmt(lineTotalCost(l))}
+                            {/* ยังไม่กรอกต้นทุน = ยังไม่มียอดรวม ปล่อยว่าง ไม่โชว์ 0.00 ทั้งคอลัมน์
+                                ตั้งแต่ไม่นำราคาจากไฟล์เข้ามาแล้ว (ใบพิมพ์ใช้กติกาเดียวกัน) */}
+                            {l.kind === "group" ? "—" : l.unitCost === null ? "" : fmt(lineTotalCost(l))}
                           </td>
                           <td className="px-3 py-1.5">
                             <button onClick={() => setLines(lines.filter((_, i) => i !== idx))}

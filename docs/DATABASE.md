@@ -514,6 +514,16 @@ interface ScopeOfWork {
   // quote.salesperson, distinct from the editable `seller` signatory below.
   quotationSalesperson: string;
   issueDate: string; deliveryDate: string; drawingCode: string; customerPoNumber: string;
+  // additionalQuotationNumbers/additionalPoNumbers added 2026-08-31 — one Scope of Work can cover
+  // more than one quotation and more than one customer PO. **The singular fields above stay the
+  // "primary" number** and are the only ones anything else keys off: `quotationNumber` is
+  // server-derived from the source quotation, `customerPoNumber` is what the dashboard's "ยังไม่มี
+  // PO" count (`$in: [null, ""]` — which does NOT match `[]`) and the list badge test, and what
+  // `POST /refresh` re-pulls from `Quote.poRef`. The editor presents both as one list and always
+  // writes the first entry into the singular field, so a blank primary genuinely means "no number".
+  // **Optional with no migration**: a record written before 2026-08-31 has no such key at all and
+  // reads back as [] via `normalizeScope()`/`toListItem()`, exactly like `attachments` before it.
+  additionalQuotationNumbers: string[]; additionalPoNumbers: string[];
   customerSnapshot: ScopeOfWorkCustomerSnapshot; deliveryLocation: string;
   shippingContact: string; shippingPhone: string; billingContact: string; billingPhone: string;
   checklistGroups: ChecklistGroup[]; items: ScopeOfWorkItem[];
@@ -902,7 +912,9 @@ Key data-model notes for the original 7 categories:
 - **`scopeOfWorks`** (added 2026-07-15, Codex review High Priority fix — see
   [MODULES/ScopeOfWork.md](./MODULES/ScopeOfWork.md)): matches `scopeNumber`/`quotationId`/
   `quotationNumber`/`customerSnapshot.companyName`/`jobTypeCode`/`jobTypeName`/`customerPoNumber`/
-  `status` against non-deleted `scope_of_works` documents. Gated by `scopeOfWork:view` — a category
+  `status` against non-deleted `scope_of_works` documents — plus, since 2026-08-31,
+  `additionalQuotationNumbers`/`additionalPoNumbers` (a `$regex` against an array field matches any
+  element, so searching the second PO number finds the same record). Gated by `scopeOfWork:view` — a category
   the caller lacks that permission for comes back as an empty array, same convention as every other
   category here. **2026-07-23**: also scoped by `scopeOfWork:viewAll` — a caller without it only
   matches against records it created itself (`createdBy === ctx.user.id`, plus ownerless legacy

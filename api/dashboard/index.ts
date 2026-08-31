@@ -968,6 +968,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const scopeOfWorks = await scopeOfWorksCollection();
         // `noPo` (2026-07-29, the "ทวง PO" feature): records still missing a customer PO number —
         // `$in: [null, ""]` also matches a record with no `customerPoNumber` field at all.
+        // Deliberately still keyed on `customerPoNumber` alone after 2026-08-31's multi-PO change:
+        // the editor always writes the FIRST number the user typed into that field and only spills
+        // the rest into `additionalPoNumbers`, so a blank primary means the record genuinely has no
+        // PO at all. (Widening this to the array would also silently break the query — an empty
+        // array does not match `$in: [null, ""]`, so every record would count as "has a PO".)
         const [total, draft, pending, final, noPo] = await Promise.all([
           scopeOfWorks.countDocuments({ isDeleted: false, ...ownScopeClause }),
           scopeOfWorks.countDocuments({ isDeleted: false, status: "Draft", ...ownScopeClause }),

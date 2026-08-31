@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifySheet, classifySheetName, classifySheetRows, mergeCostControlImports,
-  parseCostControlSheet, parseNumericCell, parseSheetDate,
+  parseCostControlSheet, parseNumericCell, parseSheetDate, stripImportedPrices,
 } from "../src/lib/costControlImport";
 import { costControlTotals, lineTotalCost } from "../src/lib/costControl";
 
@@ -404,5 +404,107 @@ describe("รวมหลายชีตเป็นใบเดียว", () =
 
   it("เลือกชีตเดียวได้ผลเดิมเป๊ะ ไม่มีหัวกลุ่มงอกมา", () => {
     expect(mergeCostControlImports([parts[0]])).toBe(parts[0].result);
+  });
+});
+
+/**
+ * ตัดราคาออกตอนนำเข้า (2026-08-31) — เจ้าของสั่งว่าโยนไฟล์เข้ามาแล้วให้เหลือแต่รายการ
+ *
+ * เทสต์ชุดนี้ยังกันการหลุดของอีกอย่างหนึ่งด้วย: `stripImportedPrices()` คัดคำเตือนที่พูดถึงราคาทิ้ง
+ * โดยเทียบจาก**ชิ้นส่วนข้อความ** ถ้าใครไปแก้ถ้อยคำของคำเตือนแล้วลืมแก้ตัวคัด เทสต์ที่ยืนยันว่า
+ * "ก่อนตัดมี / หลังตัดไม่มี" จะฟ้องทันที
+ */
+describe("stripImportedPrices — ตัดราคาออก เหลือแต่รายการ", () => {
+  const rows: string[][] = [
+    ccRow(["Job Name : บริษัท ก", "", "", "Work type :", "Wet Scrubber"]),
+    ccRow(["ลำดับที่", "รายละเอียด", "Model", "supplier name", "จำนวน", "หน่วย", "ต้นทุน", "ต้นทุนรวมทั้งหมด"]),
+    ccRow(["1", "MAIN DUCT FRP No.1", "M-1", "TCS", "1", "Lot", "฿931,020.00", "931,020.00"]),
+    // จำนวนที่ปัดเศษไว้ในไฟล์ — ทำให้เกิดคำเตือน "ยอดในไฟล์ต่างจาก จำนวน × ต้นทุน"
+    ccRow(["", "- Packing Media Tellerette", "", "", "10.62", "Cu.m.", "฿8,000.00", "84,948.67"]),
+    ccRow(["", "1. ราคาต้นทุน", "", "฿1,015,968.67"]),
+    ccRow(["", "2. ค่าดำเนินการ (10%)", "", "฿101,596.87"]),
+    ccRow(["", "5. ราคาขาย", "", "฿1,500,000.00"]),
+  ];
+  const parsed = parseCostControlSheet(rows, "costControl");
+  const stripped = stripImportedPrices(parsed);
+
+  it("ตัวแกะยังอ่านราคามาครบเหมือนเดิม — การตัดเกิดทีหลัง ไม่ได้ทำให้ตัวแกะโง่ลง", () => {
+    expect(parsed.lines[0].unitCost).toBe(931020);
+    expect(parsed.markups.operatingCost).toBeCloseTo(101596.87, 2);
+    expect(parsed.markups.sellingPrice).toBe(1500000);
+  });
+
+  it("ทุกบรรทัดไม่มีต้นทุนเหลืออยู่เลย", () => {
+    expect(stripped.lines.every((l) => l.unitCost === null)).toBe(true);
+    expect(stripped.lines).toHaveLength(parsed.lines.length);
+  });
+
+  it("บล็อกสรุปว่างทั้งหกช่อง เท่ากับใบที่เปิดเปล่า", () => {
+    expect(stripped.markups).toEqual({
+      operatingCost: null, operatingPct: null, bubbleCost: null, bubblePct: null,
+      entertainmentCost: null, sellingPrice: null,
+    });
+  });
+
+  it("ตัดเฉพาะราคา — ลำดับ/รายละเอียด/Model/supplier/จำนวน/หน่วย/ชนิดแถว ไม่ถูกแตะ", () => {
+    expect(stripped.lines.map(({ unitCost: _unitCost, ...rest }) => rest))
+      .toEqual(parsed.lines.map(({ unitCost: _unitCost, ...rest }) => rest));
+    expect(stripped.lines[0]).toMatchObject({
+      seq: "1", description: "MAIN DUCT FRP No.1", model: "M-1", supplierName: "TCS",
+      qty: 1, unit: "Lot", kind: "item",
+    });
+    expect(stripped.header).toEqual(parsed.header);
+  });
+
+  it("คำเตือนเรื่องยอดที่ไม่ได้นำเข้าแล้วถูกคัดทิ้ง", () => {
+    expect(parsed.warnings.some((w) => w.includes("มียอดในไฟล์ต่างจาก จำนวน × ต้นทุน"))).toBe(true);
+    expect(stripped.warnings.some((w) => w.includes("มียอดในไฟล์ต่างจาก จำนวน × ต้นทุน"))).toBe(false);
+  });
+
+  it('คำเตือน "อาจมีบรรทัดที่อ่านไม่เจอ" ต้องอยู่ต่อ — เป็นตัวตรวจเดียวที่บอกว่าแกะรายการมาไม่ครบ', () => {
+    const missing = parseCostControlSheet([
+      ccRow(["ลำดับที่", "รายละเอียด", "Model", "supplier name", "จำนวน", "หน่วย", "ต้นทุน", "ต้นทุนรวมทั้งหมด"]),
+      ccRow(["1", "งานเดียวที่แกะเจอ", "", "", "1", "Job", "1,000.00", "1,000.00"]),
+      ccRow(["", "1. ราคาต้นทุน", "", "9,000.00"]),
+    ], "costControl");
+    expect(missing.warnings.some((w) => w.includes("อาจมีบรรทัดที่อ่านไม่เจอ"))).toBe(true);
+    expect(stripImportedPrices(missing).warnings.some((w) => w.includes("อาจมีบรรทัดที่อ่านไม่เจอ"))).toBe(true);
+  });
+
+  it('ชีต SC: คำเตือน "อ่านยอดรวมไม่ได้ — ใส่ตัวเลขเองก่อนบันทึก" ถูกคัดทิ้ง (ตอนนี้ต้องใส่เองทุกบรรทัดอยู่แล้ว)', () => {
+    const sc = parseCostControlSheet([
+      scRow({ seq: "ITEM", description: "DESCRIPTION" }),
+      scRow({ seq: "1", description: "MAIN DUCT FRP No.1" }),
+      scSeparator(),
+    ], "sc");
+    expect(sc.warnings.some((w) => w.includes("อ่านยอดรวมไม่ได้"))).toBe(true);
+    expect(stripImportedPrices(sc).warnings.some((w) => w.includes("อ่านยอดรวมไม่ได้"))).toBe(false);
+  });
+
+  it("รวมหลายชีต: คำเตือนราคาขายชนกันถูกคัดทิ้ง แต่คำเตือนเรื่องการรวมยังอยู่", () => {
+    const sheet = (label: string, selling: string) => [
+      ccRow(["ลำดับที่", "รายละเอียด", "Model", "supplier name", "จำนวน", "หน่วย", "ต้นทุน", "ต้นทุนรวมทั้งหมด"]),
+      ccRow(["1", "งาน " + label, "", "", "1", "Job", "1,000.00", "1,000.00"]),
+      ccRow(["", "5. ราคาขาย", "", selling]),
+    ];
+    const merged = mergeCostControlImports([
+      { sheetName: "A", result: parseCostControlSheet(sheet("A", "5,000.00"), "costControl") },
+      { sheetName: "B", result: parseCostControlSheet(sheet("B", "9,000.00"), "costControl") },
+    ]);
+    expect(merged.warnings.some((w) => w.includes("ระบุราคาขายไว้ไม่ตรงกัน"))).toBe(true);
+
+    const out = stripImportedPrices(merged);
+    expect(out.warnings.some((w) => w.includes("ระบุราคาขายไว้ไม่ตรงกัน"))).toBe(false);
+    expect(out.warnings.some((w) => w.includes("แต่ละชุดคั่นด้วยหัวกลุ่มชื่อชีต"))).toBe(true);
+  });
+
+  it("ใบที่ไม่มีราคาเลยยังคิดยอดได้ ไม่พังและไม่เป็น NaN", () => {
+    const totals = costControlTotals({
+      lines: stripped.lines,
+      operatingCost: null, bubbleCost: null, entertainmentCost: null, sellingPrice: null,
+    });
+    expect(totals.totalCost).toBe(0);
+    expect(totals.profit).toBe(0);
+    expect(totals.profitPct).toBe(0);
   });
 });

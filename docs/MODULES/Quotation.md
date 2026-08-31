@@ -200,6 +200,29 @@ always did and no migration was needed or run.
   hardcoded `(1 - discount/100)` and would have billed the wrong figure for a baht-discounted
   quotation.
 
+## Payment Terms — free text (2026-08-31)
+
+`เงื่อนไขการชำระเงิน` used to be a `<select>` over four fixed strings (`PAYMENT_TERMS` in
+`src/lib/quotes.ts`). The owner asked for it to be typed freely: *"อยากให้สามารถใส่เองได้ไม่ต้องเป็น
+dropdown ให้เลือก"*.
+
+**This was never a data constraint.** `Quote.paymentTerms` is a plain `string`, the API sanitizes it
+as ordinary short text (`sanitizeShortText`, 300 chars, no allow-list), and `quotationRequiredFields`
+marks it optional with no enum check. The four options were a UI invention, so the change touches no
+API, schema, validation or permission.
+
+It is now a `Combobox` (`src/components/Combobox.tsx`) — type anything, with the four old values
+still offered as shortcuts. `Combobox` rather than `<input list>`: the repo has migrated away from
+`<datalist>` twice already. `maxLength={300}` matches the server cap so a long paste is stopped at
+the keyboard instead of failing with a 400 on save.
+
+**A latent bug went with it.** `applyTemplate()` can produce a *multi-line* value (the seeded Wet
+Scrubber template yields a 4-line "30% Down payment / …" string), which matched no `<option>`, so the
+browser quietly displayed the first option instead. `<input>` strips CR/LF per spec, which would have
+desynced state from the DOM, so incoming values now pass through a `singleLine()` helper that joins
+lines with " / ". The print view already collapsed newlines (its `Field` row has no
+`whitespace-pre-line`), so nothing about the printed document changes.
+
 ## Auto-save — added 2026-08-25
 
 **การเตือน "ยังไม่ได้บันทึก" (2026-08-25).** เอกสารนี้ลงทะเบียนการ์ดไว้กับ `src/hooks/useNavigationGuard.ts` — ถ้าผู้ใช้จะออกจากหน้าไปทั้งที่ยังมีงานที่บันทึกอัตโนมัติช่วยไม่ได้ จะมีกล่องถามก่อนพร้อมปุ่ม บันทึก / ไม่บันทึก / กลับไปแก้ต่อ ปุ่ม "บันทึก" ในกล่องคือปุ่มบันทึกจริงของหน้านี้ (validation ครบเหมือนเดิม) และถ้าบันทึกไม่สำเร็จจะค้างอยู่หน้าเดิม ดักไว้ทุกทางในแอป — ปุ่มย้อนกลับ เมนูซ้าย เมนูผู้ใช้ ผลค้นหา กระดิ่งแจ้งเตือน และลิงก์ข้ามเอกสาร กล่องนี้จะ**ไม่**เด้งถ้าเอกสารยังเป็นฉบับร่างที่บันทึกอัตโนมัติดูแลอยู่ตามปกติ ดู [UI_GUIDELINES.md](../UI_GUIDELINES.md) หัวข้อ Unsaved-Changes Guard

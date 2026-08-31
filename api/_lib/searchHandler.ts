@@ -407,6 +407,9 @@ async function searchScopeOfWorks(query: string, ctx: AuthContext, limit: number
           { scopeNumber: rx }, { quotationId: rx }, { quotationNumber: rx },
           { "customerSnapshot.companyName": rx }, { jobTypeCode: rx }, { jobTypeName: rx },
           { customerPoNumber: rx }, { status: rx },
+          // เลขใบเสนอราคา/เลข PO ที่พิมพ์เพิ่ม (2026-08-31) — `$regex` บนฟิลด์ที่เป็นอาร์เรย์
+          // แมตช์ทีละสมาชิกให้อยู่แล้ว ค้นด้วยเลขที่สองจึงเจอใบเดียวกัน
+          { additionalPoNumbers: rx }, { additionalQuotationNumbers: rx },
         ],
       }],
     },

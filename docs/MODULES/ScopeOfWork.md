@@ -659,8 +659,8 @@ silently change an already-created Scope of Work. An explicit **"อัปเด
 (`POST /api/scope-of-works/:id/refresh`) re-pulls only the quotation-derived fields
 (`customerSnapshot`, `customerPoNumber`, `deliveryLocation`, `remarks`, `items`, `quotationNumber`,
 `quotationSalesperson`) — everything the user filled in by hand (checklist state, payment
-conditions, shipping/billing contact, signatures, `secondaryCode`, `drawingCode`, `deliveryDate`) is
-left untouched. The client shows a confirm dialog before calling this ("จะเขียนทับข้อมูล...
+conditions, shipping/billing contact, signatures, `secondaryCode`, `drawingCode`, `deliveryDate`,
+and the 2026-08-31 `additionalQuotationNumbers`/`additionalPoNumbers`) is left untouched. The client shows a confirm dialog before calling this ("จะเขียนทับข้อมูล...
 ยืนยันหรือไม่?"). Refresh requires `quotations:view` in addition to Scope of Work edit/ownership
 authorization (2026-07-15, Codex review Medium fix — matches the same check `create` already had).
 
@@ -684,6 +684,44 @@ Draft, with a fresh `issueDate`, `seller` reset to the duplicating user, `approv
 and, **since 2026-07-29**, a user-typed `scopeNumber` supplied in the POST body instead of an
 auto-minted one, see "Scope Number / Job Code").
 
+## Multiple Quotation / PO Numbers (added 2026-08-31)
+
+The owner hit a job whose Scope of Work covered **two quotations and two customer POs**: *"ใส่ตัวเลข
+ของใบเสนอราคา 2 อันกับใบ PO 2 อันอยู่ใน Scope อันเดียว ช่วยทำปุ่มเพิ่มมาให้หน่อย"*. Both fields held
+exactly one value.
+
+### Stored as "primary + extras", not as one array
+
+`quotationNumber` / `customerPoNumber` keep their meaning untouched, and two new `string[]` fields
+— `additionalQuotationNumbers` / `additionalPoNumbers` — hold the 2nd entry onward. Collapsing both
+into a single array reads cleaner and breaks three things:
+
+| What | Why an array breaks it |
+|---|---|
+| Dashboard "ยังไม่มี PO" count | `{ customerPoNumber: { $in: [null, ""] } }` does **not** match `[]`, so every pre-existing record would silently start counting as "has a PO" |
+| "อัปเดตข้อมูลจากใบเสนอราคา" | it overwrites `customerPoNumber` from `quote.poRef` every time — over one array it becomes a button that deletes numbers someone just typed, while its label promises the opposite |
+| The data itself | `quotationNumber` is **server-derived** and read-only; a second quotation number is hand-typed. They are two kinds of thing, not one thing with several values |
+
+### The editor still shows one list
+
+`DocumentNumberListEditor` (local to `ScopeOfWorkDocument.tsx`, styled off `PaymentInstallmentsEditor`)
+takes `[primary, ...extras]`, and writes back `[0]` and `.slice(1)`. Removing the first row shifts the
+others up, so **the primary field is never blank while another number exists** — which is exactly why
+the dashboard count and the list badge needed no change at all. It always renders at least one row.
+
+Row 1 of the quotation list stays `readOnly` (it is the linked source quotation); rows 2+ are free
+text, per the owner's choice — they are not validated against real quotations, same as PO numbers.
+Extra quotation numbers are editable while Draft only; extra PO numbers are `FOLLOW_UP_FIELDS` and
+stay editable after approval, because a second PO arrives just as late as the first.
+
+Every number reaches the print form (joined on the existing row — the header is a 2×6 grid that has to
+stay balanced), the list page, Global Search, the revision-note diff, and the AR document's `PO:`
+remark and `reference`. Helpers `scopePoNumbers()` / `scopeQuotationNumbers()` (`src/lib/scopeOfWork.ts`)
+are the one place that ordering and blank-trimming live.
+
+No migration, per the project rule: `normalizeScope()` and `toListItem()` default both fields to `[]`
+on read. Server-side cap is 10 numbers per field (`sanitizeAdditionalNumbers()`).
+
 ## PO Chasing — "ทวง PO" (added 2026-07-29)
 
 Built from the 2026-07-24 proposal on the owner's direct go-ahead. A customer PO number
@@ -694,7 +732,11 @@ Built from the 2026-07-24 proposal on the owner's direct go-ahead. A customer PO
   "เฉพาะที่ยังไม่มี PO" filter toggle, and a 5th summary card. Badge basis is a blank
   `customerPoNumber` only — attachments deliberately aren't consulted (no type field to tell a PO
   file apart from any other attachment).
-- **"ทวงเลข PO" toolbar button** (detail view, shown while the PO number is blank, any status) →
+  Still keyed on the primary `customerPoNumber` after 2026-08-31 made PO numbers plural: the editor
+  always writes the first number typed into that field, so a blank primary means no PO at all. The
+  column itself shows every number, joined.
+- **"ทวงเลข PO" toolbar button** (detail view, shown while the record has no PO number at all —
+  primary *or* additional, checked the same way on the client and in `handleChasePo`, any status) →
   `POST /:id/chase-po` — gated by the dedicated **`scopeOfWork:chasePo`** permission (changed
   same day 2026-07-29 from `scopeOfWork:view`, on direct owner request: chasing must be an
   explicitly-granted right; defaults to Administrator + both Approver levels, Sales User/Viewer

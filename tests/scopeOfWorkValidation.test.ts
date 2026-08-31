@@ -4,6 +4,7 @@ import {
   type ScopeOfWorkValidationInput,
 } from "../src/lib/validation/scopeOfWorkValidation";
 import { buildDefaultChecklistGroups, MANDATORY_CHECKLIST_GROUP_KEYS } from "../src/lib/documentRequirements";
+import { normalizeStringList, scopePoNumbers, scopeQuotationNumbers } from "../src/lib/scopeOfWork";
 
 /** A fully-filled, genuinely valid input — each test then breaks exactly one thing. Mandatory
  * checklist groups get their FIRST option checked (none of the first options is an "อื่น ๆ"-style
@@ -24,7 +25,7 @@ function validInput(): ScopeOfWorkValidationInput & { status: "Draft" | "Pending
     deliveryDate: "2026-08-15",
     drawingCode: "DW-01",
     secondaryCode: "",
-    customerPoNumber: "",
+    customerPoNumber: "", additionalPoNumbers: [], additionalQuotationNumbers: [],
     deliveryLocation: "โรงงานลูกค้า",
     shippingContact: "คุณรับของ", shippingPhone: "0810000000",
     billingContact: "คุณวางบิล", billingPhone: "0820000000",
@@ -152,5 +153,45 @@ describe("Scope of Work required-field validation", () => {
     });
     expect(zeroQty.valid).toBe(false);
     expect(zeroQty.fieldErrors["items.i2"]).toBeTruthy();
+  });
+});
+
+/**
+ * เลขใบเสนอราคา/เลข PO หลายเลขต่อหนึ่ง Scope (2026-08-31)
+ *
+ * เจ้าของเจองานจริงที่ใบเดียวกินสองใบเสนอราคาและสอง PO · เก็บเป็น "เลขหลัก + รายการเพิ่มเติม"
+ * ไม่ใช่อาร์เรย์เดียว — เหตุผลอยู่ในคอมเมนต์ของ `scopePoNumbers()` เทสต์นี้ล็อกพฤติกรรมสองอย่างที่
+ * ส่วนอื่นของระบบพึ่งพา: เลขหลักมาก่อนเสมอ และเอกสารเก่าที่ไม่มีฟิลด์ใหม่อ่านออกมาเป็น `[]`
+ */
+describe("เลขใบเสนอราคา/เลข PO หลายเลข", () => {
+  it("normalizeStringList: ของที่ไม่ใช่อาร์เรย์ (เอกสารก่อน 2026-08-31 ไม่มีฟิลด์นี้เลย) คืน []", () => {
+    expect(normalizeStringList(undefined)).toEqual([]);
+    expect(normalizeStringList(null)).toEqual([]);
+    expect(normalizeStringList("PO-1")).toEqual([]);
+    expect(normalizeStringList({ 0: "PO-1" })).toEqual([]);
+  });
+
+  it("normalizeStringList: ตัดค่าว่าง/ช่องว่างหัวท้าย และทิ้งของที่ไม่ใช่ข้อความ", () => {
+    expect(normalizeStringList([" PO-1 ", "", "   ", "PO-2", 42, null])).toEqual(["PO-1", "PO-2"]);
+  });
+
+  it("scopePoNumbers: เลขหลักมาก่อน แล้วตามด้วยเลขที่พิมพ์เพิ่ม ตามลำดับเดิม", () => {
+    expect(scopePoNumbers({ customerPoNumber: "PO-A", additionalPoNumbers: ["PO-B", "PO-C"] }))
+      .toEqual(["PO-A", "PO-B", "PO-C"]);
+  });
+
+  it("scopePoNumbers: ใบที่ยังไม่มีเลขเลยคืนรายการว่าง — เป็นตัวตัดสินของปุ่มทวง PO", () => {
+    expect(scopePoNumbers({ customerPoNumber: "", additionalPoNumbers: [] })).toEqual([]);
+    expect(scopePoNumbers({ customerPoNumber: "   " })).toEqual([]);
+  });
+
+  it("scopePoNumbers/scopeQuotationNumbers: เอกสารเก่าที่ไม่มีฟิลด์ใหม่ยังอ่านได้ ไม่ throw", () => {
+    expect(scopePoNumbers({ customerPoNumber: "PO-A" })).toEqual(["PO-A"]);
+    expect(scopeQuotationNumbers({ quotationNumber: "QT-1" })).toEqual(["QT-1"]);
+  });
+
+  it("scopeQuotationNumbers: ใบต้นทางมาก่อนเสมอ", () => {
+    expect(scopeQuotationNumbers({ quotationNumber: "QT-1", additionalQuotationNumbers: ["QT-2"] }))
+      .toEqual(["QT-1", "QT-2"]);
   });
 });

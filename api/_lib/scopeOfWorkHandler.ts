@@ -20,7 +20,7 @@ import { validateScopeOfWorkForFinalization, validateScopeOfWorkForPrint } from 
 import { getRevisionRoot } from "./quoteRevisions.js";
 import { assertScopeHasNoBilledMilestones } from "./arHandler.js";
 import { ADDITIONAL_RECIPIENT_KEY, ALL_RECIPIENT_KEYS, DOCUMENT_RECIPIENT_DEPARTMENTS, type ChecklistGroup } from "../../src/lib/documentRequirements.js";
-import { normalizePaymentConditions, normalizeDocumentRecipients } from "../../src/lib/scopeOfWork.js";
+import { normalizePaymentConditions, normalizeDocumentRecipients, normalizeStringList, scopePoNumbers } from "../../src/lib/scopeOfWork.js";
 import type { NotificationType } from "../../src/lib/notifications.js";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_SCOPE } from "../../src/lib/scopeOfWork.js";
 import type {
@@ -331,6 +331,23 @@ function sanitizePaymentConditions(raw: unknown): ScopeOfWorkPaymentConditions {
   };
 }
 
+/** เพดานเลขใบเสนอราคา/เลข PO ที่เพิ่มเองได้ต่อหนึ่งใบ — งานจริงที่เจ้าของยกมาคือใบละ 2 เลข
+ * ตั้ง 10 ไว้เผื่อเยอะแล้ว และมีไว้กันคนยิง payload มั่ว ไม่ใช่กติกาทางธุรกิจ */
+const MAX_ADDITIONAL_NUMBERS = 10;
+
+/**
+ * เลขเอกสารที่พิมพ์เพิ่มเอง (เลขใบเสนอราคาใบที่ 2 ขึ้นไป / เลข PO ใบที่ 2 ขึ้นไป) — 2026-08-31
+ *
+ * ตัดค่าว่างทิ้งเลย เพราะหน้าจอเป็นลิสต์ที่กด "เพิ่ม" แล้วได้แถวว่างมาก่อน ถ้าไม่ตัด ใบที่กดเพิ่มแล้ว
+ * ไม่ได้พิมพ์อะไรจะเก็บ `""` ค้างไว้ แล้วทุกที่ที่แสดงผลต้องคอยกรองเอง
+ */
+function sanitizeAdditionalNumbers(raw: unknown, label: string): string[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw new HttpError(400, `${label} ต้องเป็นรายการ`);
+  if (raw.length > MAX_ADDITIONAL_NUMBERS) throw new HttpError(400, `${label} มากเกินไป (สูงสุด ${MAX_ADDITIONAL_NUMBERS} เลข)`);
+  return raw.map((v, i) => sanitizeShortText(v, `${label} ลำดับที่ ${i + 1}`)).filter(Boolean);
+}
+
 const MAX_RECIPIENTS_PER_DEPARTMENT = 20;
 const VALID_RECIPIENT_DEPARTMENT_KEYS = new Set(ALL_RECIPIENT_KEYS);
 
@@ -409,6 +426,10 @@ function toListItem(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkListItem {
     secondaryCode: full.secondaryCode ?? "",
     quotationId: full.quotationId ?? "",
     quotationNumber: full.quotationNumber ?? "",
+    // Added 2026-08-31: a Scope can cover more than one quotation / customer PO. Defaulted here
+    // for the same reason every other field on this function is — a record written before the
+    // field existed has no key at all, and this list is what the page renders straight into.
+    additionalQuotationNumbers: normalizeStringList(full.additionalQuotationNumbers),
     jobTypeCode: full.jobTypeCode ?? "",
     jobTypeName: full.jobTypeName ?? "",
     customerName: full.customerSnapshot?.companyName ?? "",
@@ -418,6 +439,7 @@ function toListItem(doc: WithId<ScopeOfWorkFields>): ScopeOfWorkListItem {
     quotationSalesperson: full.quotationSalesperson ?? "",
     // Added 2026-07-29 for the list's "ยังไม่มี PO" badge/filter (the "ทวง PO" feature).
     customerPoNumber: full.customerPoNumber ?? "",
+    additionalPoNumbers: normalizeStringList(full.additionalPoNumbers),
     issueDate: full.issueDate ?? "",
     deliveryDate: full.deliveryDate ?? "",
     status: full.status ?? "Draft",
@@ -445,6 +467,10 @@ function normalizeScope(scope: ScopeOfWork): ScopeOfWork {
     // Pre-2026-07-24 records have no `attachments` field at all — the client type declares it
     // non-optional, so default it here rather than trusting every consumer to `?? []`.
     attachments: scope.attachments ?? [],
+    // Added 2026-08-31 — extra quotation / customer PO numbers. Same "no migration was run" rule
+    // as everything above: a record saved earlier simply has no key, and reads back as [].
+    additionalQuotationNumbers: normalizeStringList(scope.additionalQuotationNumbers),
+    additionalPoNumbers: normalizeStringList(scope.additionalPoNumbers),
   };
 }
 
@@ -526,6 +552,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     quotationSalesperson: derived.quotationSalesperson,
     issueDate, deliveryDate: "", drawingCode: "",
     customerPoNumber: derived.customerPoNumber,
+    // เลขใบเสนอราคา/เลข PO ใบที่สองขึ้นไปเป็นของที่คนพิมพ์เองเสมอ ไม่มีอะไรให้ดึงมาตอนสร้าง
+    additionalQuotationNumbers: [],
+    additionalPoNumbers: [],
     customerSnapshot: derived.customerSnapshot,
     deliveryLocation: derived.deliveryLocation,
     shippingContact: "", shippingPhone: "", billingContact: "", billingPhone: "",
@@ -614,7 +643,15 @@ async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string)
  * the very records that need it. These fields are follow-up bookkeeping, not approved document
  * content — item lists, payment terms, checklists, signatures, and the document number itself all
  * stay locked. Attachments (their own routes below) get the same exemption for the same reason. */
-const FOLLOW_UP_FIELDS = new Set(["customerPoNumber", "documentRecipients", "documentRecipientMessage"]);
+const FOLLOW_UP_FIELDS = new Set([
+  "customerPoNumber",
+  // Added 2026-08-31 alongside customerPoNumber for the same reason: a job can arrive with a second
+  // customer PO, and it arrives just as late as the first one. Extra QUOTATION numbers are NOT
+  // here — those are known while the document is still being drafted, so they stay content.
+  "additionalPoNumbers",
+  "documentRecipients",
+  "documentRecipientMessage",
+]);
 
 async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string) {
   const autoSave = isAutoSaveRequest(req);
@@ -658,6 +695,8 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
   if ("deliveryDate" in body) update.deliveryDate = validateIsoDateOrEmpty(body.deliveryDate, "วันที่ส่งของ/ส่งแบบอนุมัติ");
   if ("drawingCode" in body) update.drawingCode = sanitizeShortText(body.drawingCode, "รหัส Drawing");
   if ("customerPoNumber" in body) update.customerPoNumber = sanitizeShortText(body.customerPoNumber, "เอกสารใบสั่งซื้อเลขที่");
+  if ("additionalPoNumbers" in body) update.additionalPoNumbers = sanitizeAdditionalNumbers(body.additionalPoNumbers, "เอกสารใบสั่งซื้อเลขที่เพิ่มเติม");
+  if ("additionalQuotationNumbers" in body) update.additionalQuotationNumbers = sanitizeAdditionalNumbers(body.additionalQuotationNumbers, "เลขใบเสนอราคาเพิ่มเติม");
   if ("secondaryCode" in body) update.secondaryCode = sanitizeShortText(body.secondaryCode, "รหัสอ้างอิงท้ายงาน");
   if ("deliveryLocation" in body) update.deliveryLocation = sanitizeShortText(body.deliveryLocation, "สถานที่ส่งของ");
   if ("shippingContact" in body) update.shippingContact = sanitizeShortText(body.shippingContact, "ชื่อผู้ติดต่อส่งของ");
@@ -1003,6 +1042,9 @@ async function handleRefresh(req: VercelRequest, res: VercelResponse, id: string
     quotationSalesperson: derived.quotationSalesperson,
     customerSnapshot: derived.customerSnapshot,
     customerPoNumber: derived.customerPoNumber,
+    // `additionalPoNumbers`/`additionalQuotationNumbers` เจตนาไม่อยู่ในนี้ (2026-08-31) — เลขที่คน
+    // พิมพ์เพิ่มเองไม่มีต้นทางให้ดึงมา ถ้าเผลอเขียนทับด้วยค่าจากใบเสนอราคา ปุ่มนี้จะกลายเป็นปุ่ม
+    // "ลบเลขที่เพิ่งพิมพ์ไป" โดยที่ชื่อปุ่มไม่ได้บอกไว้เลย
     deliveryLocation: derived.deliveryLocation,
     remarks: derived.remarks,
     items: derived.items,
@@ -1325,8 +1367,13 @@ async function handleChasePo(req: VercelRequest, res: VercelResponse, id: string
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "scopeOfWork:chasePo");
   const doc = await loadScopeOrThrow(id);
-  if ((doc.customerPoNumber ?? "").trim()) {
-    throw new HttpError(400, `Scope of Work นี้มีเลข PO แล้ว (${doc.customerPoNumber.trim()})`);
+  // นับเลข PO ทุกเลขในใบ ไม่ใช่แค่เลขหลัก — ใบที่มีเลขที่สองแล้วก็คือใบที่ไม่ต้องทวงแล้วเหมือนกัน
+  const existingPoNumbers = scopePoNumbers({
+    customerPoNumber: doc.customerPoNumber ?? "",
+    additionalPoNumbers: normalizeStringList(doc.additionalPoNumbers),
+  });
+  if (existingPoNumbers.length > 0) {
+    throw new HttpError(400, `Scope of Work นี้มีเลข PO แล้ว (${existingPoNumbers.join(", ")})`);
   }
 
   const users = await usersCollection();
