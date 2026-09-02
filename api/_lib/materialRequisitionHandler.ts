@@ -16,6 +16,7 @@ import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
 import { ensureMaterialCatalogSeeded } from "./materialCatalogSeedData.js";
+import { applyStockMovement, assertProductsHaveStock } from "./stockHandler.js";
 import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary } from "../../src/lib/materialRequisition.js";
 
 /**
@@ -26,6 +27,24 @@ import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequ
  */
 
 const MAX_LINES = 100;
+
+/**
+ * จำนวนที่ต้องตัดออกจากสต๊อก รวมต่อ **รหัสสินค้า** (ไม่ใช่ต่อบรรทัด)
+ *
+ * ใช้ช่อง "เบิกของ" (`plannedQty`) ซึ่งคือจำนวนที่ขออนุมัติ — ไม่ใช่ `withdrawal1Qty/2` ที่สโตร์กรอก
+ * ตอนจ่ายของจริงทีหลัง ตอนกดอนุมัติสองช่องนั้นยังว่างเสมอ · บรรทัดที่พิมพ์เองโดยไม่ได้เลือกจาก
+ * แคตตาล็อก (ไม่มี `productId`) และบรรทัดที่ยังไม่กรอกจำนวน ถูกข้ามไป — ไม่มีสต๊อกให้ตัด
+ */
+function deductionsFor(lines: { productId?: string; plannedQty?: number | null }[]): Map<string, number> {
+  const byProduct = new Map<string, number>();
+  for (const line of lines) {
+    const productId = (line.productId ?? "").trim();
+    const qty = line.plannedQty ?? 0;
+    if (!productId || !Number.isFinite(qty) || qty <= 0) continue;
+    byProduct.set(productId, (byProduct.get(productId) ?? 0) + qty);
+  }
+  return byProduct;
+}
 const MATERIAL_CATEGORIES: readonly MaterialRequisitionCategory[] = ["chemical", "consumable", "hardware", "other"];
 
 /** Same shape as Service Report's `nextServiceReportId()` — an atomic per-Buddhist-year counter,
@@ -375,6 +394,35 @@ async function handleReturn(req: VercelRequest, res: VercelResponse, id: string)
   const materialRequisitions = await materialRequisitionsCollection();
   await materialRequisitions.updateOne({ _id: id }, { $set: update });
   const updated = await loadOrThrow(id);
+
+  /**
+   * ของที่คืนกลับเข้าสต๊อก — ด้านกลับของ "ตัดของอัตโนมัติ" (2026-09-02) ถ้าตัดออกตอนอนุมัติแล้ว
+   * ไม่รับคืนเข้า ตัวเลขคงเหลือจะต่ำกว่าของจริงตลอดไปทุกครั้งที่มีการคืน
+   *
+   * รับเข้าตาม **ส่วนต่าง** ของช่อง "คืนของ" ไม่ใช่ค่าเต็ม — route นี้ถูกยิงซ้ำได้ทุกครั้งที่แก้ตัวเลข
+   * ถ้ารับเข้าตามค่าเต็มทุกครั้ง การกดบันทึกสองรอบจะเพิ่มของเข้าคลังสองเท่าโดยไม่มีใครรู้
+   *
+   * เฉพาะใบที่อนุมัติแล้วเท่านั้น — ใบที่ยังไม่อนุมัติไม่เคยถูกตัดสต๊อก การรับคืนจึงจะเป็นการเสกของขึ้นมา
+   */
+  if (doc.status === "Final") {
+    const before = deductionsFor(doc.lines.map((l) => ({ productId: l.productId, plannedQty: l.returnQty })));
+    const after = deductionsFor(lines.map((l) => ({ productId: l.productId, plannedQty: l.returnQty })));
+    for (const [productId, qty] of after) {
+      const delta = qty - (before.get(productId) ?? 0);
+      if (delta === 0) continue;
+      try {
+        await applyStockMovement({
+          productId, kind: delta > 0 ? "receive" : "deduct", delta,
+          reason: `คืนวัสดุตามใบเบิก ${id}`,
+          sourceType: "material_requisition", sourceId: id, sourceLabel: updated.jobCode || undefined,
+          userId: ctx.user.id,
+        });
+      } catch (err) {
+        console.error("[material-requisitions] return-to-stock failed", id, productId, err);
+      }
+    }
+  }
+
   await writeAuditEntry(ctx, "Material Requisition Return Recorded", `บันทึกการคืนวัสดุของใบเบิกและใบคืนวัสดุ ${id}`, { scopeOfWorkId: updated.scopeOfWorkId });
   res.status(200).json({ materialRequisition: toClient(updated) });
 }
@@ -397,8 +445,41 @@ const approvalConfig: ApprovalConfig<MaterialRequisitionFields & { _id: string }
   load: loadOrThrow,
   canEdit,
   writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
+  /**
+   * "ตัดของอัตโนมัติ" (เจ้าของสั่ง 2026-09-02) — ด่านตรวจว่าของมีพอจริงก่อนปล่อยให้อนุมัติ
+   *
+   * ตรวจที่นี่ ไม่ใช่ใน `onApproved` เพราะ `onApproved` ทำงานหลังเอกสารเป็น Final ไปแล้ว ถ้าของไม่พอ
+   * ตรงนั้นจะได้ใบเบิกที่อนุมัติแล้วแต่ไม่มีการตัดสต๊อกเกิดขึ้น ซึ่งเป็นความล้มเหลวแบบเงียบที่แย่ที่สุด
+   * ของโมดูลนี้ (สโตร์เชื่อว่าจ่ายของแล้ว ตัวเลขบอกว่ายังไม่ได้จ่าย)
+   *
+   * รวมจำนวนต่อ**สินค้า**ก่อนเทียบ — ใบเดียวใส่สินค้าตัวเดิมสองบรรทัดได้ ถ้าเทียบทีละบรรทัดจะผ่าน
+   * ทั้งสองบรรทัดทั้งที่รวมกันแล้วเกินยอดคงเหลือ
+   *
+   * **ผลข้างเคียงที่ตั้งใจ**: ใบเบิกที่ของไม่พอจะอนุมัติไม่ได้ พร้อมข้อความบอกว่าสินค้าตัวไหนขาดเท่าไร
+   * สินค้าที่ยังไม่เคยตั้งยอดตั้งต้น (คงเหลือ 0) จะติดด่านนี้ — ต้องรับของเข้าหรือปรับสต๊อกที่หน้า
+   * "สต๊อกสินค้า" ก่อน ดู CHANGELOG 2026-09-02
+   */
+  beforeApprove: async (_ctx, doc) => {
+    await assertProductsHaveStock(deductionsFor(doc.lines ?? []));
+  },
   // อนุมัติแล้วถือว่ารายการใน Project ต้นทางถูกจัดหาเรียบร้อย (เดิมทำตอน finalize)
   onApproved: async (ctx, doc) => {
+    // ตัดสต๊อกจริง — `beforeApprove` เพิ่งยืนยันว่ายอดพอทุกตัว และ applyStockMovement() ยังมีด่าน
+    // `$gte` ของตัวเองปิดช่องแข่งที่เหลือ · best-effort ต่อบรรทัด: ถ้าบรรทัดใดพลาดจริง ๆ ให้ log ไว้
+    // แทนที่จะโยน error กลับไปหาคนกดอนุมัติ ซึ่งตอนนี้เอกสารเป็น Final ไปแล้ว ย้อนไม่ได้
+    for (const [productId, qty] of deductionsFor(doc.lines ?? [])) {
+      try {
+        await applyStockMovement({
+          productId, kind: "deduct", delta: -qty,
+          reason: `เบิกตามใบเบิก ${doc._id}`,
+          sourceType: "material_requisition", sourceId: doc._id, sourceLabel: doc.jobCode || undefined,
+          userId: ctx.user.id,
+        });
+      } catch (err) {
+        console.error("[material-requisitions] stock deduction failed after approval", doc._id, productId, err);
+      }
+    }
+
     const itemIds = doc.projectId ? await findProjectItemIdsByLink(doc.projectId, "materialRequisitionId", doc._id) : [];
     if (itemIds.length > 0) await markProjectItemsFulfilled(doc.projectId, itemIds);
 

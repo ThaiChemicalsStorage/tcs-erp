@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, Search, X, History } from "lucide-react";
-import type { Product, ProductCategory } from "../../lib/products";
+import { Boxes, Search, X, History, Printer, AlertTriangle } from "lucide-react";
+import { type Product, type ProductCategory, updateProduct } from "../../lib/products";
+import type { Company, CompanyHeaderInfo } from "../../lib/storage";
+import { StockCountSheetPrintDocument } from "./StockCountSheetPrintDocument";
 import { fetchStockMovements, createStockMovement, STOCK_MOVEMENT_KIND_LABEL_KEY, type StockMovement, type StockMovementKind } from "../../lib/stock";
 import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
@@ -19,11 +21,17 @@ export function StockPage({
   onProductsChange,
   categories,
   canAdjust,
+  company,
+  currentUserName,
 }: {
   products: Product[];
   onProductsChange: (products: Product[]) => void;
   categories: ProductCategory[];
   canAdjust: boolean;
+  /** โปรไฟล์บริษัท — ใช้เฉพาะหัวจดหมายบนใบนับสต๊อกที่พิมพ์ออกไปเดินนับของ */
+  company: Company;
+  /** ชื่อคนที่กดพิมพ์ เติมให้ในช่อง "ผู้นับ" ของใบนับ */
+  currentUserName: string;
 }) {
   const [search, setSearch] = useState("");
   const [adjustTarget, setAdjustTarget] = useState<Product | null>(null);
@@ -63,6 +71,35 @@ export function StockPage({
 
   const totalUnits = activeProducts.reduce((sum, p) => sum + p.stockQty, 0);
   const zeroStockCount = activeProducts.filter((p) => p.stockQty <= 0).length;
+  /** ของใกล้หมด = ตั้งจุดเตือนไว้แล้ว และยอดคงเหลือถึงหรือต่ำกว่าจุดนั้น (จุดเตือน 0 = ปิดการเตือน) */
+  const isLowStock = (product: Product) => (product.reorderPoint ?? 0) > 0 && product.stockQty <= (product.reorderPoint ?? 0);
+  const lowStockCount = activeProducts.filter(isLowStock).length;
+
+  /** id ของสินค้าที่กำลังบันทึกจุดเตือนอยู่ — กันกดรัวจนยิงซ้อนกัน */
+  const [savingReorderId, setSavingReorderId] = useState<string | null>(null);
+  const saveReorderPoint = async (product: Product, raw: string) => {
+    const next = Math.max(0, Math.floor(Number(raw) || 0));
+    if (next === (product.reorderPoint ?? 0)) return;
+    setSavingReorderId(product.id);
+    try {
+      const updated = await updateProduct(product.id, { reorderPoint: next });
+      onProductsChange(products.map((x) => (x.id === updated.id ? updated : x)));
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : t("stock.toast.reorderSaveFailed"));
+    } finally {
+      setSavingReorderId(null);
+    }
+  };
+
+  // พิมพ์ใบนับสต๊อก — พิมพ์ "ตามที่เห็นบนจอ" คือรวมผลค้นหาที่กรองอยู่ด้วย เพื่อให้นับทีละหมวด/ทีละคำค้นได้
+  const printedAt = new Date().toISOString().slice(0, 10);
+  // ประกอบหัวจดหมายแบบเดียวกับที่ใบเบิก/ใบส่งมอบทำ — หน้านี้ถือ Company เต็มอยู่แล้ว
+  const companyHeader: CompanyHeaderInfo = {
+    name: company.name, nameEn: "", logoDataUrl: company.logoDataUrl, address: company.address,
+    phone: company.phone, fax: "", email: company.email, website: company.website,
+    facebookName: company.facebookName, lineId: company.lineId, taxId: company.taxId,
+    branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
+  };
 
   const handleAdjustSaved = (updatedProductId: string, newQty: number) => {
     onProductsChange(products.map((p) => (p.id === updatedProductId ? { ...p, stockQty: newQty } : p)));
@@ -72,8 +109,8 @@ export function StockPage({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-5">
-      <div>
+    <div className="flex-1 overflow-y-auto p-6 space-y-5 print:p-0 print:overflow-visible">
+      <div className="print:hidden">
         <h1 className="text-2xl font-semibold text-foreground leading-tight" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("stock.title")}</h1>
         <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("stock.subtitle")}</p>
       </div>
@@ -83,6 +120,7 @@ export function StockPage({
           { label: t("stock.kpi.itemCount"), value: String(activeProducts.length) },
           { label: t("stock.kpi.totalUnits"), value: totalUnits.toLocaleString("th-TH") },
           { label: t("stock.kpi.zeroStock"), value: String(zeroStockCount) },
+          { label: t("stock.kpi.lowStock"), value: String(lowStockCount) },
         ].map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-4">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#5a7299]/15 to-[#5a7299]/5 flex items-center justify-center mb-3">
@@ -94,6 +132,7 @@ export function StockPage({
         ))}
       </div>
 
+      <div className="flex items-center gap-3 flex-wrap">
       <div className="relative h-9 w-72">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         <input
@@ -109,6 +148,14 @@ export function StockPage({
           </button>
         )}
       </div>
+        <button
+          onClick={() => window.print()}
+          disabled={filtered.length === 0}
+          className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
+        >
+          <Printer size={13} /> {t("stock.printCountSheet")}
+        </button>
+      </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         {activeProducts.length === 0 ? (
@@ -122,7 +169,7 @@ export function StockPage({
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  {[t("stock.table.code"), t("stock.table.name"), t("stock.table.category"), t("stock.table.unit"), t("stock.table.remaining"), ""].map((h, i) => (
+                  {[t("stock.table.code"), t("stock.table.name"), t("stock.table.category"), t("stock.table.unit"), t("stock.table.remaining"), t("stock.table.reorderPoint"), ""].map((h, i) => (
                     <th key={i} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -134,7 +181,27 @@ export function StockPage({
                     <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[280px] truncate" title={p.name}>{p.name}</td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{categoryName(p.categoryId)}</td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{p.unit || "—"}</td>
-                    <td className={`px-4 py-3.5 text-sm font-mono font-semibold whitespace-nowrap ${p.stockQty <= 0 ? "text-[#c23f3f]" : "text-foreground"}`}>{p.stockQty.toLocaleString("th-TH")}</td>
+                    <td className={`px-4 py-3.5 text-sm font-mono font-semibold whitespace-nowrap ${p.stockQty <= 0 ? "text-[#c23f3f]" : isLowStock(p) ? "text-[#a75d1a]" : "text-foreground"}`}>
+                      <span className="inline-flex items-center gap-1.5">
+                        {p.stockQty.toLocaleString("th-TH")}
+                        {isLowStock(p) && p.stockQty > 0 && <AlertTriangle size={12} aria-label={t("stock.lowStockBadge")} />}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      {canAdjust ? (
+                        <input
+                          type="number"
+                          min={0}
+                          defaultValue={p.reorderPoint ?? 0}
+                          disabled={savingReorderId === p.id}
+                          aria-label={`${t("stock.table.reorderPoint")} — ${p.name}`}
+                          onBlur={(e) => void saveReorderPoint(p, e.target.value)}
+                          className="w-20 h-8 px-2 text-xs font-mono text-center text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-50"
+                        />
+                      ) : (
+                        <span className="text-xs font-mono text-muted-foreground">{(p.reorderPoint ?? 0) || "—"}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => setHistoryProduct(p)} className="text-muted-foreground hover:text-foreground transition-colors" title={t("stock.action.viewHistoryTitle")}>
@@ -220,6 +287,15 @@ export function StockPage({
         />
       )}
       <Toast message={toast.message} />
+
+      {/* ใบนับสต๊อก — อยู่ใน DOM ตลอด ซ่อนอยู่จนกว่าจะพิมพ์ กด Ctrl+P ก็ได้ใบเดียวกัน */}
+      <StockCountSheetPrintDocument
+        products={filtered}
+        categories={categories}
+        companyHeader={companyHeader}
+        printedAt={printedAt}
+        countedBy={currentUserName}
+      />
     </div>
   );
 }

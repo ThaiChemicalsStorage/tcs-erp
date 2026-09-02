@@ -43,6 +43,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       // Never accepted from the client here — only /api/stock-movements (stockHandler.ts) may change
       // it, so every change is traceable through a StockMovement row. See docs/MODULES/Product.md.
       stockQty: 0,
+      reorderPoint: 0,
       createdAt: now,
       updatedAt: now,
       createdBy: ctx.user.id,
@@ -80,6 +81,10 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
     if (typeof body.description === "string") update.description = body.description;
     if (typeof body.specifications === "string") update.specifications = body.specifications;
     if (typeof body.archived === "boolean") update.archived = body.archived;
+    // จุดเตือนของใกล้หมด (2026-09-02) — ค่าติดลบไม่มีความหมาย ปัดขึ้นเป็น 0 (= ปิดการเตือน)
+    if (typeof body.reorderPoint === "number" && Number.isFinite(body.reorderPoint)) {
+      update.reorderPoint = Math.max(0, Math.floor(body.reorderPoint));
+    }
 
     if (Object.keys(update).length > 0) {
       update.updatedAt = nowIso();

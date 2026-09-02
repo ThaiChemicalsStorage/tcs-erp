@@ -101,6 +101,7 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   product_request_submitted: { label: "มีคำขอเพิ่มสินค้าใหม่", module: "คำขอเพิ่มสินค้า" },
   product_request_approved: { label: "คำขอเพิ่มสินค้าได้รับอนุมัติ", module: "คำขอเพิ่มสินค้า" },
   product_request_rejected: { label: "คำขอเพิ่มสินค้าถูกปฏิเสธ", module: "คำขอเพิ่มสินค้า" },
+  stock_low: { label: "สต๊อกใกล้หมด", module: "สต๊อกสินค้า" },
 };
 
 /** Idempotent. Mirrors the NotificationType union in src/lib/notifications.ts — scaffolding, not read by any live code path yet. */

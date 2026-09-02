@@ -6,6 +6,7 @@ import {
   type StockMovementFields, type StockMovementKind, type StockMovementSourceType,
 } from "./collections.js";
 import { nowIso } from "../../src/lib/products.js";
+import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
 
 /**
  * Product Stock (added 2026-08-18) — see the collections.ts doc comment above
@@ -104,10 +105,67 @@ export async function applyStockMovement(params: {
   };
   const movements = await stockMovementsCollection();
   const insert = await movements.insertOne(movementFields);
+
+  await notifyIfLowStock({
+    productCode: updated.code,
+    productName: updated.name,
+    balanceAfter: updated.stockQty,
+    reorderPoint: updated.reorderPoint ?? 0,
+    delta: params.delta,
+    actingUserId: params.userId,
+  });
+
   return {
     movement: withStringId({ _id: insert.insertedId, ...movementFields }),
     balanceAfter: updated.stockQty,
   };
+}
+
+/**
+ * แจ้งฝ่ายคลังสินค้าเมื่อยอดคงเหลือถูกตัดลงมาถึงจุดเตือน — เจ้าของสั่ง 2026-09-02
+ * *"เวลาของใกล้หมดให้แจ้งเตือน"*
+ *
+ * เกาะอยู่กับ `applyStockMovement()` ตัวเดียว ซึ่งเป็นทางเดียวที่ `Product.stockQty` เปลี่ยนค่าได้
+ * ทั้งระบบ — จึงครอบคลุมทั้งการตัดของอัตโนมัติจากใบเบิก การตัดจากใบกำกับภาษี และการปรับสต๊อกด้วยมือ
+ * โดยไม่ต้องไปเติมโค้ดที่ผู้เรียกทีละที่ (ซึ่งจะลืมทีละที่แน่นอน)
+ *
+ * เงื่อนไขสามข้อ ต้องครบทั้งหมดถึงจะยิง:
+ *   1. เป็นการ**ตัดออก** (`delta < 0`) — การรับของเข้าไม่ควรยิงเตือนของใกล้หมด
+ *   2. สินค้าตัวนั้น**ตั้งจุดเตือนไว้แล้ว** (`reorderPoint > 0`) — ดูเหตุผลที่ 0 = ปิด ใน products.ts
+ *   3. ยอด**หลัง**ตัดถึงหรือต่ำกว่าจุดเตือน แต่ยอด**ก่อน**ตัดยังไม่ถึง — ยิงเฉพาะตอน "ข้ามเส้น"
+ *      ไม่ใช่ทุกครั้งที่เบิกของที่ต่ำอยู่แล้ว ไม่งั้นสินค้าตัวเดียวจะยิงซ้ำทุกใบเบิกจนกระดิ่งล้น
+ *
+ * **best-effort โดยตั้งใจ** — การตัดสต๊อกสำเร็จไปแล้วตอนถึงบรรทัดนี้ ห้ามให้การแจ้งเตือนที่ส่งไม่ออก
+ * ย้อนกลับไปทำให้การตัดล้ม (แนวเดียวกับการส่งต่อหลังอนุมัติทุกจุดในระบบนี้)
+ */
+async function notifyIfLowStock(params: {
+  productCode: string;
+  productName: string;
+  balanceAfter: number;
+  reorderPoint: number;
+  delta: number;
+  actingUserId: string;
+}): Promise<void> {
+  const { productCode, productName, balanceAfter, reorderPoint, delta, actingUserId } = params;
+  if (delta >= 0 || reorderPoint <= 0) return;
+  const balanceBefore = balanceAfter - delta;
+  if (balanceAfter > reorderPoint || balanceBefore <= reorderPoint) return;
+
+  try {
+    const sent = await notifyDepartments(STORE_DEPARTMENT_NAMES, actingUserId, {
+      type: "stock_low",
+      title: "สต๊อกใกล้หมด",
+      description: `${productCode} ${productName} เหลือ ${balanceAfter} หน่วย (จุดเตือน ${reorderPoint})`,
+      module: "สต๊อกสินค้า",
+      related: {},
+    });
+    if (sent === 0) {
+      console.warn("[stock] low-stock alert for", productCode, "reached nobody —",
+        "no active user has User.department matching", STORE_DEPARTMENT_NAMES.join("/"));
+    }
+  } catch (err) {
+    console.error("[stock] failed to send low-stock alert for", productCode, err);
+  }
 }
 
 async function handleMovementsList(req: VercelRequest, res: VercelResponse) {

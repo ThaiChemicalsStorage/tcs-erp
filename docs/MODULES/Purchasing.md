@@ -73,6 +73,18 @@ prevents.
 discount, no withholding — it is a plain qty × price sum, and pulling in the quotation money engine
 would imply tax behaviour this document does not have.
 
+## ใบขอซื้อแนบไฟล์ได้ (2026-09-02)
+
+เจ้าของสั่งสั้น ๆ ว่า *"ใบขอซื้อสามารถทำให้แนบไฟล์ได้ด้วย"* — ใช้ระบบแนบไฟล์กลาง
+(`api/_lib/documentAttachments.ts`, คอลเลกชัน `document_attachment_files`) ตัวเดียวกับใบสั่งงาน
+**ไม่ได้สร้างชุดที่สี่** ระบบยังมีที่เก็บไฟล์แนบสามชุด (Scope of Work / Accounting / กลาง) เท่าเดิม
+
+- route แยกจาก PATCH โดยตั้งใจ (`POST|DELETE /api/purchase-requests/:id/attachments`) เพื่อไม่ให้
+  หน้าจอที่ถือข้อมูลเก่าเขียนทับ array จนไฟล์ที่คนอื่นเพิ่งแนบหายไป
+- route ดาวน์โหลดเปิดได้โดยไม่ต้องล็อกอิน คุมด้วย capability key ใน URL จึงต้องอยู่ก่อนด่าน `requireUser`
+- ฉบับแก้ไขที่กด Rewrite **เริ่มจากไม่มีไฟล์แนบ** เพราะสำเนาจะชี้ไฟล์ก้อนเดียวกันแล้วลบทีเดียวพังทั้งคู่
+- ไม่ล็อกตามสถานะเอกสาร แต่ล็อกตามสิทธิ์แก้ — ใบเสนอราคาผู้ขาย/แคตตาล็อกมักตามมาหลังอนุมัติแล้ว
+
 ## Routing
 
 ใบสั่งซื้อ mounts on **`api/handlers/quotes.ts`**, the documented overflow dispatch host —

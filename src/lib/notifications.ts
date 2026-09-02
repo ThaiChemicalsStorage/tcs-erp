@@ -39,7 +39,10 @@ export type NotificationType =
   // ── คำขอเพิ่มสินค้า (2026-08-27) ──
   | "product_request_submitted"
   | "product_request_approved"
-  | "product_request_rejected";
+  | "product_request_rejected"
+  // ── สต๊อกใกล้หมด (2026-09-02) — เจ้าของสั่ง "เวลาของใกล้หมดให้แจ้งเตือน"
+  //    ยิงจาก applyStockMovement() ทางเดียว จึงครอบคลุมทั้งการตัดของอัตโนมัติและการปรับสต๊อกด้วยมือ
+  | "stock_low";
 
 export interface Notification {
   id: string;

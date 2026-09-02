@@ -42,6 +42,23 @@ creates one). Requested by, and primarily serves, the **Project/Store/Factory/Pu
 departments — a different set of users than every module before it, which is why this module grants
 none of its 28 permissions to any existing default role (see "RBAC" below).
 
+## หนึ่งใบครอบหลายรายการ + เทมเพลตใบเบิก (2026-09-02)
+
+เจ้าของสั่งว่า *"แก้ใบเบิกและคืนวัสดุ / ใบขอซื้อ ของโครงการให้เหมือนกับผลิต"* — ฝ่ายผลิตออก
+**ใบเดียวต่อหนึ่งใบสั่งผลิต** มาตลอด ส่วนฝ่ายโครงการถูกบังคับให้ออก **หนึ่งใบต่อหนึ่งรายการ**
+
+- `POST /api/material-requisitions` และ `/api/purchase-requests` รับ `itemIds` (ยังรับ `itemId`
+  เดี่ยวของผู้เรียกเก่าได้) แล้วผูก/ปลด/ปิดงานรายการ **ทั้งชุด** ผ่านตัวช่วยพหูพจน์ที่มีอยู่แล้วจาก
+  รอบใบสั่งงาน (`loadPendingProjectItemsOrThrow` / `linkProjectItemsToSubDocument` /
+  `findProjectItemIdsByLink`) — ไม่ได้เขียนกลไกใหม่
+- ช่อง "ชื่อสินค้า" ต่อชื่อทุกรายการที่ติ๊ก · ปุ่มสร้างรายแถวในหน้าโครงการยังสร้างทีละรายการ
+- **เลขใบเบิกของฝ่ายผลิต** เปลี่ยนเป็น `{เลขใบสั่งผลิต}-MR{ลำดับ}` (เช่น `SC-2026-09-001-MR1`)
+  ตัวนับแยกต่อใบสั่งผลิต · ฝั่งโครงการยังเป็น `MR-{พ.ศ.}-{ลำดับ}` เพราะไม่มีใบสั่งผลิตให้อิง
+- **เทมเพลตใบเบิก** (`material_requisition_templates`) — ชุดรายการที่ตั้งชื่อไว้ มีหน้าจัดการของตัวเอง
+  และปุ่ม "ใช้เทมเพลต" บนใบเบิกซึ่ง **ต่อท้ายไม่ทับ** (ใบเดียวใช้ได้หลายชุด) · **ไม่มีสิทธิ์ชุดใหม่**
+  ใช้ `materialRequisition:view`/`:edit` เพื่อเลี่ยงกับดัก RBAC migration ที่โมดูลก่อน ๆ ตกไปแล้วสองรอบ
+- **ใบเบิกที่อนุมัติแล้วตัดสต๊อกเอง** — ดู [MODULES/Product.md](./Product.md) "อัตโนมัติและการเตือน"
+
 ## Business Flow
 
 1. A **Project** is created from a Scope of Work, snapshotting `scopeNumber`/`quotationId`/

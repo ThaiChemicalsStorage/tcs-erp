@@ -37,6 +37,7 @@ const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   product_request_submitted: <PackagePlus size={14} />,
   product_request_approved: <CheckCircle2 size={14} />,
   product_request_rejected: <XCircle size={14} />,
+  stock_low: <AlertTriangle size={14} />,
 };
 
 // แปลงเวลาเป็นข้อความ "เมื่อกี้ / ผ่านมากี่นาที/ชั่วโมง/วัน"

@@ -42,8 +42,12 @@ Server-enforced per action: `products:view`/`create`/`edit`/`delete` on the resp
 
 Closes the "Stock/inventory linkage once an Inventory module exists" item that used to sit under
 Future Improvements below — built as a direct request tied to Accounting's Tax Invoice workflow,
-not as a full standalone Inventory module (no purchase orders, no warehouse/location tracking, no
-reorder points — just an on-hand quantity per product and a ledger of what changed it).
+not as a full standalone Inventory module (no purchase orders, no warehouse/location tracking —
+just an on-hand quantity per product and a ledger of what changed it).
+
+> **อัปเดต 2026-09-02** — เจ้าของสั่งสามอย่างพร้อมกัน: *"ตัดของอัตโนมัติ และเวลาของใกล้หมดให้แจ้งเตือน
+> และสามารถปริ้นใบ Stock สินค้าออกไปเช็คกับ Stock จริงได้"* · จุดสำคัญคือทั้งสามอย่างเกาะอยู่กับ
+> `applyStockMovement()` ตัวเดิม ไม่มีทางเขียนสต๊อกทางที่สอง — ดูหัวข้อ "อัตโนมัติและการเตือน" ด้านล่าง
 
 - **`Product.stockQty`** — the current on-hand quantity. Server-set-only: defaults to `0` on create
   (`api/handlers/products.ts`), and is **never** accepted from the client via `POST`/`PATCH
@@ -70,6 +74,24 @@ reorder points — just an on-hand quantity per product and a ledger of what cha
 - **Accounting integration**: the ใบกำกับภาษี/ใบส่งสินค้า (IV) document list gained a dual-pane
   "เปิดดู / ตัดสต๊อกสินค้า" view (`ArStockPanel.tsx`) for cutting stock against an issued invoice —
   see [MODULES/Accounting.md](./Accounting.md) "Stock".
+### อัตโนมัติและการเตือน (2026-09-02)
+
+- **ใบเบิกที่อนุมัติแล้วตัดสต๊อกเอง** — `materialRequisitionHandler.ts` ตัดตามช่อง "เบิกของ"
+  (`plannedQty`) ด้วย `sourceType: "material_requisition"` · ยอดถูกตรวจใน **`beforeApprove`** ของ
+  เครื่องอนุมัติร่วม (hook ใหม่ใน `documentApproval.ts`) ไม่ใช่ `onApproved` เพราะ `onApproved` ทำงาน
+  หลังเอกสารเป็น Final ไปแล้ว การเช็คตรงนั้นจะได้ใบที่อนุมัติแล้วแต่สต๊อกไม่ถูกตัด ซึ่งย้อนไม่ได้
+  **ของไม่พอ = อนุมัติไม่ได้** พร้อมข้อความบอกว่าสินค้าตัวไหนขาดเท่าไร
+- **ของที่คืนกลับเข้าสต๊อก** — `handleReturn()` รับเข้าตาม **ส่วนต่าง** ของช่อง "คืนของ" ไม่ใช่ค่าเต็ม
+  (route ถูกยิงซ้ำได้ทุกครั้งที่แก้ตัวเลข) และเฉพาะใบสถานะ Final เท่านั้น (ใบที่ยังไม่อนุมัติไม่เคยถูกตัด)
+- **`Product.reorderPoint`** — จุดเตือนของใกล้หมด แก้ได้ทีละแถวในหน้าสต๊อก (ผ่าน `PATCH /api/products`)
+  **0 หรือไม่มีค่า = ปิดการเตือนของสินค้าตัวนั้น** ไม่ใช่ "เตือนตลอดเวลา" — ไม่งั้นสินค้าทุกตัวที่ยัง
+  ไม่เคยตั้งค่าจะยิงพร้อมกันหมดในวันแรกจนไม่มีใครอ่านกระดิ่งอีกเลย
+- **แจ้งเตือน `stock_low`** — `notifyIfLowStock()` ใน `stockHandler.ts` ยิงถึงฝ่ายคลังสินค้าเฉพาะตอน
+  **"ข้ามเส้น"** (ยอดก่อนตัดยังไม่ถึงจุดเตือน ยอดหลังตัดถึง) ไม่ใช่ทุกครั้งที่เบิกของที่ต่ำอยู่แล้ว
+  best-effort — การแจ้งเตือนที่ส่งไม่ออกต้องไม่ทำให้การตัดสต๊อกล้ม (มีเทสต์คุมทั้งสี่เงื่อนไข)
+- **ใบนับสต๊อก** — `StockCountSheetPrintDocument.tsx` คอลัมน์ "นับจริง"/"ผลต่าง" **เว้นว่างเสมอ**
+  ถ้าเติมค่าให้ คนนับจะลอกตัวเลขระบบลงไปโดยไม่ได้นับจริง · พิมพ์ตามผลค้นหาที่กรองอยู่บนจอ
+
 - **Known limitations**: no undo/reversal flow for a stock movement — correcting one requires a
   fresh opposite movement via the Stock page, there's no dedicated "undo this deduction" action; no
   bulk/CSV stock import (the picker in `ArStockPanel.tsx` also shows a "คงเหลือ" count that can go

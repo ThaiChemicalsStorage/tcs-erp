@@ -25,6 +25,16 @@ export interface Product {
    * may change it, so every change is traceable through a StockMovement row. Defaults to 0 on
    * create — see docs/MODULES/Product.md "Stock". */
   stockQty: number;
+  /**
+   * จุดเตือนของใกล้หมด (2026-09-02) — เจ้าของสั่งว่า *"เวลาของใกล้หมดให้แจ้งเตือน"*
+   *
+   * ทุกครั้งที่ยอดคงเหลือถูกตัดลงมาถึงหรือต่ำกว่าค่านี้ ระบบจะแจ้งเตือนฝ่ายคลังสินค้า
+   * **0 หรือไม่มีค่า = ปิดการเตือนของสินค้าตัวนั้น** ไม่ใช่ "เตือนตลอดเวลา" — ไม่งั้นสินค้าทุกตัว
+   * ที่ยังไม่เคยตั้งค่าจะยิงแจ้งเตือนพร้อมกันหมดในวันแรกที่เปิดใช้ จนไม่มีใครอ่านกระดิ่งอีกเลย
+   *
+   * optional เพราะสินค้าที่สร้างก่อนวันนี้ไม่มีฟิลด์นี้ — อ่านออกมาเป็น 0 ตอนใช้งาน ไม่ได้ทำ migration
+   */
+  reorderPoint?: number;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -67,7 +77,8 @@ export async function createProduct(fields: ProductFields): Promise<Product> {
 }
 // แก้ไขข้อมูลสินค้าที่มีอยู่ตาม id
 // Updates an existing product identified by id
-export async function updateProduct(id: string, fields: Partial<ProductFields & { archived: boolean }>): Promise<Product> {
+/** `reorderPoint` แก้ได้จากหน้าสต๊อก ไม่ใช่หน้าคลังสินค้า จึงไม่ได้อยู่ใน `ProductFields` */
+export async function updateProduct(id: string, fields: Partial<ProductFields & { archived: boolean; reorderPoint: number }>): Promise<Product> {
   const { product } = await apiFetch<{ product: Product }>(`/products/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return product;
 }

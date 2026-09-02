@@ -166,3 +166,83 @@ describe("assertProductsHaveStock (pre-flight for the non-transactional AR/IV cu
     ).rejects.toMatchObject({ status: 400 });
   });
 });
+
+/**
+ * แจ้งเตือน "ของใกล้หมด" (2026-09-02) — เจ้าของสั่งว่า *"เวลาของใกล้หมดให้แจ้งเตือน"*
+ *
+ * เกาะอยู่กับ `applyStockMovement()` ตัวเดียว จึงครอบคลุมทุกทางที่สต๊อกลดลง แต่นั่นแปลว่าเงื่อนไข
+ * ต้องแม่นมาก ๆ ด้วย: ถ้ายิงทุกครั้งที่ตัดของที่ต่ำอยู่แล้ว กระดิ่งจะเต็มไปด้วยเรื่องเดิมจนไม่มีใครอ่าน
+ * ซึ่งแย่กว่าไม่มีการเตือนเลย เทสต์ชุดนี้จึงคุม "ยิงเฉพาะตอนข้ามเส้น" เป็นหลัก
+ */
+describe("low-stock alert", () => {
+  const STORE_USER = new ObjectId();
+
+  async function seedStoreUser(): Promise<void> {
+    await client.db("tcs_erp").collection("users").deleteMany({});
+    await client.db("tcs_erp").collection("users").insertOne({
+      _id: STORE_USER, fullName: "สโตร์ หนึ่ง", department: "ฝ่ายคลังสินค้า", status: "active",
+    });
+    await client.db("tcs_erp").collection("notifications").deleteMany({});
+  }
+
+  async function alertCount(): Promise<number> {
+    return client.db("tcs_erp").collection("notifications").countDocuments({ type: "stock_low" });
+  }
+
+  beforeEach(async () => {
+    await seedStoreUser();
+  });
+
+  it("แจ้งเตือนเมื่อยอดถูกตัดลงมาถึงจุดเตือน", async () => {
+    await products.updateOne({ _id: PRODUCT_A }, { $set: { reorderPoint: 5 } });
+    await stock.applyStockMovement({
+      productId: PRODUCT_A.toString(), kind: "deduct", delta: -5,
+      reason: "เบิก", sourceType: "manual", userId: "someone-else",
+    });
+    expect(await qtyOf(PRODUCT_A)).toBe(5);
+    expect(await alertCount(), "ยอดหลังตัด (5) ถึงจุดเตือนพอดี ต้องแจ้ง").toBe(1);
+  });
+
+  it("ไม่แจ้งซ้ำเมื่อตัดของที่อยู่ต่ำกว่าจุดเตือนอยู่แล้ว", async () => {
+    await products.updateOne({ _id: PRODUCT_A }, { $set: { reorderPoint: 8 } });
+    await stock.applyStockMovement({
+      productId: PRODUCT_A.toString(), kind: "deduct", delta: -3,
+      reason: "เบิกครั้งแรก", sourceType: "manual", userId: "u1",
+    });
+    expect(await alertCount(), "ครั้งแรกคือการข้ามเส้น 10 -> 7").toBe(1);
+
+    await stock.applyStockMovement({
+      productId: PRODUCT_A.toString(), kind: "deduct", delta: -1,
+      reason: "เบิกครั้งที่สอง", sourceType: "manual", userId: "u1",
+    });
+    expect(await alertCount(), "7 -> 6 ยังต่ำกว่าเส้นเหมือนเดิม ไม่ใช่การข้ามเส้นใหม่").toBe(1);
+  });
+
+  it("การรับของเข้าไม่แจ้งเตือน แม้ยอดจะยังต่ำกว่าจุดเตือน", async () => {
+    await products.updateOne({ _id: PRODUCT_B }, { $set: { reorderPoint: 20 } });
+    await stock.applyStockMovement({
+      productId: PRODUCT_B.toString(), kind: "receive", delta: 2,
+      reason: "รับเข้า", sourceType: "manual", userId: "u1",
+    });
+    expect(await alertCount()).toBe(0);
+  });
+
+  it("จุดเตือน 0 หรือไม่ได้ตั้งไว้ = ปิดการเตือนของสินค้าตัวนั้น", async () => {
+    await stock.applyStockMovement({
+      productId: PRODUCT_A.toString(), kind: "deduct", delta: -10,
+      reason: "เบิกจนหมด", sourceType: "manual", userId: "u1",
+    });
+    expect(await qtyOf(PRODUCT_A)).toBe(0);
+    expect(await alertCount(), "ไม่งั้นสินค้าทุกตัวที่ยังไม่ตั้งค่าจะยิงพร้อมกันหมดในวันแรก").toBe(0);
+  });
+
+  it("การแจ้งเตือนที่ส่งไม่ออกต้องไม่ทำให้การตัดสต๊อกล้ม", async () => {
+    await client.db("tcs_erp").collection("users").deleteMany({});
+    await products.updateOne({ _id: PRODUCT_A }, { $set: { reorderPoint: 5 } });
+    await expect(stock.applyStockMovement({
+      productId: PRODUCT_A.toString(), kind: "deduct", delta: -6,
+      reason: "เบิก", sourceType: "manual", userId: "u1",
+    })).resolves.toBeTruthy();
+    expect(await qtyOf(PRODUCT_A), "สต๊อกถูกตัดจริงแม้ไม่มีใครรับแจ้งเตือน").toBe(4);
+  });
+});

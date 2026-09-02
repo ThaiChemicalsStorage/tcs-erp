@@ -70,6 +70,14 @@ export interface ApprovalConfig<TDoc extends ApprovableFields> {
   canEdit: (ctx: AuthContext, doc: TDoc) => boolean;
   /** เขียน audit log — แต่ละ handler มีฟังก์ชันของตัวเองอยู่แล้ว ส่งเข้ามาใช้ */
   writeAudit: (ctx: AuthContext, action: string, detail: string, doc: TDoc) => Promise<void>;
+  /**
+   * ด่านตรวจ **ก่อน** เปลี่ยนสถานะเป็น Final — โยน `HttpError` เพื่อปฏิเสธการอนุมัติได้
+   *
+   * ต่างจาก `onApproved` ตรงจังหวะ ซึ่งเป็นเรื่องเป็นเรื่องมาก: `onApproved` ทำงานหลังเอกสารเป็น
+   * Final ไปแล้ว การโยน error ที่นั่นจึงได้เอกสารที่อนุมัติแล้วแต่ผลข้างเคียงไม่เกิด (เช่นสต๊อกไม่ถูกตัด)
+   * ซึ่งย้อนกลับไม่ได้ · ใช้ที่นี่สำหรับเงื่อนไขที่ "ถ้าไม่ผ่านต้องไม่อนุมัติเลย"
+   */
+  beforeApprove?: (ctx: AuthContext, doc: TDoc) => Promise<void>;
   /** ทำงานเพิ่มหลังอนุมัติสำเร็จ เช่น อัปเดตสถานะรายการใน Project ให้เป็น fulfilled */
   onApproved?: (ctx: AuthContext, doc: TDoc) => Promise<void>;
   /** ส่งผลลัพธ์กลับ — แต่ละเอกสารใช้ชื่อ key ไม่เหมือนกัน (materialRequisition/jobOrder/...) */
@@ -167,6 +175,9 @@ export async function handleApprove<TDoc extends ApprovableFields>(
   const doc = await cfg.load(id);
   if (doc.status === "Final") throw new HttpError(400, `${cfg.label}นี้อนุมัติแล้ว`);
   if (doc.status !== "PendingApproval") throw new HttpError(400, `ต้องส่งขออนุมัติก่อน จึงจะอนุมัติ${cfg.label}ได้`);
+
+  // ด่านตรวจก่อนเปลี่ยนสถานะ — ถ้าไม่ผ่าน เอกสารยังคงเป็น "รออนุมัติ" ตามเดิมทั้งดวง
+  await cfg.beforeApprove?.(ctx, doc);
 
   const stamp = cfg.approvalStamp
     ? cfg.approvalStamp(ctx, doc)

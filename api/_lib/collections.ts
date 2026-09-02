@@ -816,7 +816,11 @@ export async function arDocumentsCollection() {
 // kept in sync via applyStockMovement() (api/_lib/stockHandler.ts) — the only writer, so every
 // balance change is traceable through a StockMovementFields row. See docs/MODULES/Product.md "Stock".
 export type StockMovementKind = "receive" | "deduct" | "adjust";
-export type StockMovementSourceType = "manual" | "ar_document";
+/**
+ * `material_requisition` เพิ่ม 2026-09-02 ตอนทำ "ตัดของอัตโนมัติ" — ใบเบิกที่อนุมัติแล้วตัดสต๊อกเอง
+ * (`goods_receipt` เคยมีแล้วถูกลบไปเมื่อ 2026-08-28d พร้อมกับการถอดใบตรวจรับออก)
+ */
+export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition";
 
 export interface StockMovementFields {
   productId: string;

@@ -4,6 +4,53 @@
 
 ## High Priority
 
+## High Priority — คำสั่งเจ้าของ 2026-09-02 (12 ข้อ) — โค้ดเสร็จแล้ว รอกดจริง
+
+ทั้ง 12 ข้อลงโค้ดแล้วในวันเดียวกัน ผ่าน `tsc`/`lint`/`build`/`test` (539 ข้อ) ครบ
+ดู CHANGELOG.md 2026-09-02 สำหรับเหตุผลของทุกการตัดสินใจ **รายการด้านล่างคือสิ่งที่ยังค้าง**
+
+- [ ] **🔴 ยังไม่เคยกดจริงในเบราว์เซอร์เลยสักข้อจาก 12 ข้อ (2026-09-02).**
+  บทเรียนที่ไฟล์นี้บันทึกไว้แล้วสองรอบคือ "ผ่านเทสต์ ≠ ใช้งานได้" รายการที่ต้องไล่กด:
+  - ลายเซ็นขึ้นจริงบนใบพิมพ์ทั้งเจ็ดใบ (ต้องมีผู้ใช้ที่อัปโหลดลายเซ็นไว้แล้วเป็นทั้งคนสร้างและคนอนุมัติ)
+  - กด Ctrl+P บนเอกสารทั้งหกโมดูล — ต้องได้ใบเดียวกับที่ปุ่มพิมพ์ให้ ไม่ใช่หน้าจอทั้งหน้า
+  - ติ๊กหลายรายการสร้างใบเบิก/ใบขอซื้อจากหน้าโครงการ → ได้ใบเดียว รายการในโครงการถูกปิดครบทุกตัว
+  - สลับโครงการกลางคันในกล่องเลือก → การติ๊กต้องถูกล้าง
+  - อนุมัติใบเบิกแล้วสต๊อกลดจริง · ใบที่ของไม่พอต้องขึ้นข้อความบอกว่าตัวไหนขาดเท่าไร
+  - กรอกช่อง "คืนของ" แล้วบันทึกสองรอบ → สต๊อกต้องไม่เพิ่มสองเท่า
+  - ตั้งจุดเตือนแล้วเบิกจนข้ามเส้น → กระดิ่งของฝ่ายคลังสินค้าต้องมีข้อความ (ต้องมีพนักงานอยู่ฝ่ายคลังสินค้าก่อน)
+  - พิมพ์ใบนับสต๊อก → คอลัมน์ "นับจริง"/"ผลต่าง" ต้องว่างเปล่า
+  - สร้างเทมเพลตใบเบิก → กด "ใช้เทมเพลต" สองครั้งติดกัน รายการต้องต่อท้ายไม่ทับ ไม่ชน key
+  - แนบไฟล์ในใบขอซื้อ → ดาวน์โหลดกลับมาได้ · กด Rewrite แล้วฉบับใหม่ต้องไม่มีไฟล์แนบติดไป
+  - แถบบอกขั้นตอนอ่านถูกทั้งสามสถานะ และใบที่ถูกตีกลับต้องอ่านต่างจากใบที่ยังไม่เคยส่ง
+
+- [ ] **🔸 สินค้าที่ยังไม่เคยตั้งยอดตั้งต้นจะทำให้อนุมัติใบเบิกไม่ได้ (2026-09-02).**
+  ผลข้างเคียงที่ตั้งใจของ "ตัดของอัตโนมัติ" — ใบเบิกที่ของไม่พอถูกปฏิเสธพร้อมบอกว่าตัวไหนขาดเท่าไร
+  **ต้องตั้งยอดสต๊อกตั้งต้นก่อนเริ่มใช้จริง** ที่หน้า "สต๊อกสินค้า" (รับเข้า / ปรับสต๊อก)
+  ซึ่งตอนนี้ยังทำได้ทีละตัวเท่านั้น — เกี่ยวโดยตรงกับรายการ "ยังไม่มีการนำเข้าสต๊อกทีละมาก ๆ" ด้านล่าง
+  ที่ค้างมาตั้งแต่ 2026-08-18 · ถ้าเจ้าของอยากให้อนุมัติได้ก่อนแล้วค่อยตัดทีหลัง ต้องสั่งมา
+  เพราะทางนั้นแปลว่าตัวเลขสต๊อกจะไม่ตรงกับของจริงในช่วงระหว่างนั้น
+
+- [ ] **ลายเซ็นบนเอกสารบัญชี (AR/IV/BI/RE/NCR) ยังไม่ได้ทำ — ต้องให้เจ้าของเคาะก่อน (2026-09-02).**
+  คำสั่งเขียนว่า "เอกสารไหนก็ตาม" แต่ช่องเดียวบนใบพวกนั้นคือ **"ผู้มีอำนาจลงนาม / Authorized
+  Signature"** ซึ่งเป็นกรรมการหรือผู้รับมอบอำนาจ ไม่ใช่คนที่พิมพ์เอกสาร การเอาลายเซ็นคนสร้างไปวาง
+  ตรงนั้นคือการแสดงอำนาจที่เขาไม่มีบนเอกสารที่มีผลทางกฎหมาย
+  **คำถามที่ต้องตอบก่อน**: ใครคือผู้มีอำนาจลงนามของบริษัท และจะเก็บลายเซ็นนั้นไว้ที่ไหน
+  (โปรไฟล์ของคนนั้น หรือเป็นค่าตั้งค่าระดับบริษัทเหมือนตราประทับ)
+
+- [ ] **จุดเตือนของใกล้หมดยังตั้งได้ทีละตัวเท่านั้น (2026-09-02).**
+  `Product.reorderPoint` แก้ได้ในตารางหน้าสต๊อกทีละแถว — ยังไม่มีการตั้งเป็นชุด ตั้งตามหมวด
+  หรือคำนวณจากอัตราการใช้ย้อนหลัง · ปัญหาเดียวกับการนำเข้าสต๊อกตั้งต้น คือของจริงมีหลายร้อยรายการ
+
+- [ ] **ตัดของอัตโนมัติผูกกับ "ใบเบิกอนุมัติแล้ว" เท่านั้น (2026-09-02).**
+  ตัดตามช่อง "เบิกของ" (`plannedQty`) ตอนอนุมัติ — ไม่ได้ตัดตาม "เบิกครั้งที่ 1/2" ที่สโตร์กรอก
+  ตอนจ่ายของจริงทีหลัง ถ้าสโตร์จ่ายไม่เท่าที่ขอ ตัวเลขจะไม่ตรงจนกว่าจะปรับสต๊อกเอง
+  **ทางที่ลึกกว่า**: ตัดตอนสโตร์กรอกจำนวนจ่ายจริง แต่ต้องออกแบบว่าจะจัดการกับส่วนต่างยังไง
+  และใบที่อนุมัติแล้วแต่ยังไม่จ่ายควรกันของไว้ (reserve) หรือไม่ — ต้องให้เจ้าของเคาะ
+
+- [ ] **เทมเพลตใบเบิกยังไม่มีการทำสำเนา จัดกลุ่ม หรือกำหนดว่าใครใช้ได้ (2026-09-02).**
+  ตั้งใจทำให้เล็กที่สุดก่อน (ชื่อ + คำอธิบาย + รายการ) ต่างจากเทมเพลตใบเสนอราคาที่มีสิทธิ์ของตัวเอง
+  แปดตัว การนำเข้าจาก Excel และสถานะ active/archive · ถ้าใช้จริงแล้วรู้สึกว่าไม่พอค่อยขยาย
+
 - [x] 🔸 **ติ๊กสิทธิ์ 7 ตัวของโมดูลจัดซื้อให้บทบาทบนเครื่องจริง (2026-08-28c).**
   **✅ ปิดแล้ว 2026-08-31 ด้วย RBAC migration** — เจ้าของเปลี่ยนการตัดสินใจจากที่เลือกไว้เมื่อ
   2026-08-25 หลังเห็นว่าเช็ค DB จริงแล้ว **ทุก role มี `purchaseOrder:*` = 0 และ `costControl:*` = 0**
@@ -47,6 +94,9 @@
   ไม่ได้ลบทิ้งเพราะการประกาศซ้ำไม่ได้ทำให้พัง และการลบต้องไปยืนยันใบพิมพ์ทุกใบอีกรอบ
 
 - [ ] **กดจริงในเบราว์เซอร์: กล่องติ๊กเลือกหลายรายการของใบสั่งงานและใบสั่งผลิต (2026-08-27e).**
+  **ขยายขอบเขต 2026-09-02**: ใบเบิกและใบขอซื้อของฝ่ายโครงการก็ติ๊กหลายรายการได้แล้ว (เจ้าของสั่งให้
+  "เหมือนกับผลิต") บรรทัดสุดท้ายของรายการตรวจด้านล่างที่เขียนว่าสองใบนั้น "ต้องยังเลือกทีละรายการ"
+  จึงไม่จริงอีกต่อไป — ต้องไล่กดทั้งสองใบเพิ่มด้วย
   ผ่าน `tsc`/`lint`/`build`/`test` (332 ข้อ) แล้ว แต่ยังไม่เคยกดจริง — รายการที่ต้องไล่ดู:
   - ใบสั่งงาน: กด "สร้าง" → เลือกโครงการ → **ติ๊กหลายรายการ** → กดสร้างเอกสาร → รายการที่ติ๊กควรขึ้นครบพร้อมสเปคเป็นบรรทัดย่อย
   - สลับโครงการกลางคัน → การติ๊กต้องถูกล้าง (กัน id ของโครงการเก่าติดไปกับโครงการใหม่)
@@ -178,7 +228,8 @@
 - [ ] **The per-document-type Accounting list pages load every document of their type on mount and filter the month client-side.** `ArDocumentListPage.tsx` calls `fetchArDocuments({ docType })` with no `month`, plus every RE (for the ชำระแล้ว column) and every Scope of Work (for the เลขที่งาน column), then applies the month filter in the browser — while `GET /api/ar-documents` has supported a server-side `month` filter since 2026-08-18 and nothing uses it except the monthly report page. Fine at today's document volume, linearly worse every month. Deferred out of the 2026-08-20d review pass because moving it server-side means refetching on every month change and interacts with that pass's status-card counts (which now deliberately reflect the client-side filtered set). See [CHANGELOG.md](./CHANGELOG.md) 2026-08-20d "Not fixed (deliberately)".
 - [ ] **No undo/reversal flow for a stock deduction (Product Stock module, added 2026-08-18).** Cutting stock against an IV document (`ArStockPanel.tsx`) or a manual deduct on the Stock page both write a one-way `StockMovement` row — correcting a mistaken deduction today means manually creating a fresh, equal-and-opposite "receive" movement via the Stock page; there is no dedicated "undo this movement" button anywhere. Low-severity (the ledger + `sourceId` make the correction traceable either way) but worth a real UX pass before staff hit it in practice. See [MODULES/Product.md](./MODULES/Product.md) "Stock".
 - [ ] **`ArStockPanel.tsx`'s product picker shows a stale "คงเหลือ" (remaining) count within the same panel session.** After a successful stock deduction, the dropdown's per-product remaining-quantity label doesn't refresh until the panel is reopened (the underlying `Product.stockQty` in MongoDB is correct — confirmed via direct DB check during live verification — this is purely a client-side staleness in the fetched `products` list held by the panel). Cosmetic, but could mislead someone cutting stock against the same product twice in one sitting.
-- [ ] **No bulk/CSV stock import for the Product Stock module.** Every initial stock count has to be entered one product at a time via the Stock page's "ปรับสต๊อก" (receive) dialog — fine for a handful of SKUs, painful for a real initial inventory load. Natural fit alongside the existing "Bulk import/export (CSV)" item already on Product Library's own backlog below.
+- [ ] **🔸 No bulk/CSV stock import for the Product Stock module.** *(ยกระดับความเร่งด่วน 2026-09-02:
+  การตัดของอัตโนมัติทำให้ยอดตั้งต้นกลายเป็นสิ่งที่ต้องมีก่อนเริ่มใช้จริง ไม่ใช่ของที่ค่อยทำก็ได้)* Every initial stock count has to be entered one product at a time via the Stock page's "ปรับสต๊อก" (receive) dialog — fine for a handful of SKUs, painful for a real initial inventory load. Natural fit alongside the existing "Bulk import/export (CSV)" item already on Product Library's own backlog below.
 - [ ] **Follow-up from the resolved Accounting/Project coordination risk (2026-08-20): actually wire Accounting's milestone-billing gate to a signed Delivery Order.** The coordination risk flagged 2026-08-17 (two parallel workstreams — Accounting's Invoice/Billing Note/Receipt/Tax Invoice module vs. the Project department's Material Requisition/Job Order/Purchase Request module — potentially colliding over a shared "ใบส่งมอบงาน" document) is now resolved: confirmed 2026-08-20 by two people on the business side that ใบส่งมอบงาน isn't a separate document at all, it's the existing **Delivery Order** module (FM-SL-05) under a different name — see [CLAUDE.md](./CLAUDE.md)'s coordination note and [MODULES/Project.md](./MODULES/Project.md) "Work Handover Note — removed 2026-08-20". What's still genuinely open: Accounting's "each installment's billing is gated on a signed ใบส่งมอบงาน" business rule (see [MODULES/Accounting.md](./MODULES/Accounting.md) "Real business-process reference") is currently enforced only as a manual checklist item (`deliveryNote` in `ArMilestone.checklistState`, decision #6 in Accounting.md), not a structured link to an actual Delivery Order record. Worth deciding whether to wire it for real now that Delivery Order is confirmed as the right target — e.g. requiring a specific installment's Delivery Order to exist and be marked signed before that milestone's AR/IV can be issued, instead of trusting a manually-ticked checkbox.
 - [ ] **Manually verify the 2026-08-17 sidebar re-click fix in a real browser tab.** Fixed a reported bug: clicking a module's sidebar link while already viewing that module's detail record (e.g. Scope of Work) did nothing instead of returning to the list. Verified via `tsc`/`lint`/`build` (all clean) and by reading the code path (a `navBump` counter now forces `App.tsx`'s per-page `key` to change on every sidebar click, including re-clicks of the already-active item). **Not verified live**: this session's browser-automation tab kept showing pre-fix behavior across multiple full dev-server restarts and Vite cache clears, while `curl` against the same dev server consistently confirmed the fix was served — looked like an automation-tab-specific stale-module issue, not a code problem, but never root-caused. Confirm with a normal manual click in a real browser: open a Scope of Work (or Quotation/Delivery Order/Service/Customer/Product) record, click that module's sidebar link again, confirm it returns to the list.
 
