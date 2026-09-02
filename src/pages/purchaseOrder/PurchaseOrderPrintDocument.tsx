@@ -122,7 +122,8 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
       {doc.remarks ? <div style={{ marginTop: 8 }}><b>หมายเหตุ:</b> {doc.remarks}</div> : null}
       {doc.revisionNote ? <div style={{ marginTop: 6 }}><b>หมายเหตุการแก้ไข:</b> {doc.revisionNote}</div> : null}
 
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 28 }}>
+      {/* กันบล็อกลายเซ็นถูกหั่นคร่อมหน้า — ดู PrintDocument.tsx ของใบเสนอราคา */}
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 28, breakInside: "avoid" }}>
         <tbody>
           <tr>
             {/* ลายเซ็นจริงของคนสร้างใบและคนที่กดอนุมัติ วางเหนือเส้นให้ (เจ้าของสั่ง 2026-09-02) */}

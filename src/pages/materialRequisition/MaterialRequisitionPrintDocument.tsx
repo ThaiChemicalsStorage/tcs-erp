@@ -119,7 +119,8 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
         </div>
       )}
 
-      <table className="w-full text-xs mt-6" style={{ borderCollapse: "collapse" }}>
+      {/* กันบล็อกลายเซ็นถูกหั่นคร่อมหน้า — ดู PrintDocument.tsx ของใบเสนอราคา */}
+      <table className="w-full text-xs mt-6" style={{ borderCollapse: "collapse", breakInside: "avoid" }}>
         <tbody>
           {signatureRows.map((row, rowIdx) => (
             <tr key={rowIdx}>

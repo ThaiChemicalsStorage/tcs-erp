@@ -154,7 +154,8 @@ export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: Prod
                 </div>
               )}
 
-              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "-1px", fontWeight: 700 }}>
+              {/* กันบล็อกลายเซ็นถูกหั่นคร่อมหน้า — ดู PrintDocument.tsx ของใบเสนอราคา */}
+              <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "-1px", fontWeight: 700, breakInside: "avoid" }}>
                 <tbody>
                   {signRow("ผู้สั่งผลิต", doc.orderedBy, doc.createdBy)}
                   {signRow("ผู้อนุมัติ", doc.approver, doc.approvedByUserId)}

@@ -158,7 +158,7 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
         **ใบนี้จึงต่างจากฟอร์มจริง FM-SL-06 ตรงนี้ โดยตั้งใจ ไม่ใช่ตกหล่น** — ใบพิมพ์จบที่ตารางรายการ
         แล้วต่อด้วยหมายเหตุ/ผู้ลงนามเลย ไม่มียอดรวมที่ไหนอีก · คนอ่านยังเห็นต้นทุนรายบรรทัดในตาราง
       */}
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "16px" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "16px", breakInside: "avoid" }}>
         <tbody>
           <tr>
             <td style={{ border: "none", padding: "2px 6px", width: "120px", verticalAlign: "bottom" }}>หมายเหตุ :</td>
@@ -167,7 +167,8 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
         </tbody>
       </table>
 
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px" }}>
+      {/* กันบล็อกลายเซ็นถูกหั่นคร่อมหน้า — ดู PrintDocument.tsx ของใบเสนอราคา */}
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px", breakInside: "avoid" }}>
         <tbody>
           <tr>
             {/* ลายเซ็นจริงของคนสร้างใบและคนที่กดอนุมัติ (เจ้าของสั่ง 2026-09-02) */}

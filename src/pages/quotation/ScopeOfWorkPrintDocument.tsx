@@ -45,7 +45,9 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUse
           กระดาษเองด้วย padding แทน (ซ้าย/ขวาซ้ำทุกหน้าผ่าน padding ของ table เอง, บนซ้ำทุกหน้าผ่าน
           thead ที่พิมพ์ซ้ำ, ล่างชดเชยเฉพาะหน้าสุดท้ายที่บล็อคลายเซ็นอยู่) — เหมือน PrintDocument.tsx */}
       <style>{"@media print { @page { size: A4 portrait; margin: 0 } }"}</style>
-      <table className="hidden print:table w-full border-collapse text-[#0b1d3a]" style={{ fontSize: "10.5px", padding: "0 12mm" }}>
+      {/* ระยะขอบกระดาษอยู่ที่ <div> ตัวนี้ ไม่ใช่ที่ <table> — ดู PrintDocument.tsx สำหรับเหตุผลเต็ม */}
+      <div className="hidden print:block" style={{ padding: "0 12mm" }}>
+      <table className="w-full border-collapse text-[#0b1d3a]" style={{ fontSize: "10.5px" }}>
         <colgroup>
           <col style={{ width: "6%" }} />
           <col style={{ width: "68%" }} />
@@ -194,13 +196,13 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUse
           <tr>
             <td colSpan={4} className="pt-5 pb-[12mm]" style={{ breakInside: "avoid" }}>
               <table className="w-full border-collapse border border-[#0b1d3a]/20">
-                <thead>
+                {/* แถวหัวอยู่ใน tbody ไม่ใช่ thead โดยตั้งใจ — thead ถูกเบราว์เซอร์พิมพ์ซ้ำทุกหน้า
+                    ถ้าบล็อกนี้ถูกหั่นคร่อมหน้าจะเห็นบล็อกลายเซ็นสองอันบนกระดาษ */}
+                <tbody>
                   <tr className="bg-[#1a5fb4] text-white">
                     <th className="px-2 py-1 text-[10px] font-semibold border-r border-white/20">ผู้ขาย</th>
                     <th className="px-2 py-1 text-[10px] font-semibold">ผู้อนุมัติ</th>
                   </tr>
-                </thead>
-                <tbody>
                   <tr>
                     {[{ user: sellerUser, name: s.seller.name, date: s.seller.date }, { user: approverUser, name: s.approver.name, date: s.approver.date }].map((col, i) => (
                       <td key={i} className={`px-3 py-2 align-bottom h-20 relative ${i === 0 ? "border-r border-[#0b1d3a]/20" : ""}`}>
@@ -220,6 +222,7 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUse
           </tr>
         </tbody>
       </table>
+      </div>
     </>
   );
 }

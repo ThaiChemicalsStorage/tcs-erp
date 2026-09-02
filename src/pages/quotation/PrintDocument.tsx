@@ -88,7 +88,10 @@ export function PrintDocument({
           กระดาษเองด้วย padding แทน (ซ้าย/ขวาซ้ำทุกหน้าผ่าน padding ของ table เอง, บนซ้ำทุกหน้าผ่าน
           thead ที่พิมพ์ซ้ำ, ล่างชดเชยเฉพาะหน้าสุดท้ายที่บล็อคลายเซ็นอยู่) */}
       <style>{"@media print { @page { size: A4 portrait; margin: 0 } }"}</style>
-      <table className="hidden print:table w-full border-collapse text-[#0b1d3a]" style={{ fontSize: "11px", padding: "0 12mm" }}>
+      {/* ระยะขอบกระดาษอยู่ที่ <div> ตัวนี้ ไม่ใช่ที่ <table> — padding บนตารางที่ border-collapse
+          ถูกสเปกสั่งให้ทิ้ง (CSS 2.2 §17.6.2) ของเดิมจึงพิมพ์ออกมาไม่มีขอบและโดนตัดขอบขวา */}
+      <div className="hidden print:block" style={{ padding: "0 12mm" }}>
+      <table className="w-full border-collapse text-[#0b1d3a]" style={{ fontSize: "11px" }}>
         <colgroup>
           <col style={{ width: "4%" }} />
           <col style={{ width: "33%" }} />
@@ -201,7 +204,8 @@ export function PrintDocument({
             const unitDiscount = line.qty > 0 ? lineDiscount / line.qty : lineDiscount;
             return (
               <Fragment key={line.id}>
-                <tr className="align-top">
+                {/* กันแถวรายการถูกหั่นครึ่งคร่อมหน้า — แถวที่มีบรรทัดย่อยหลายบรรทัดสูงพอที่จะโดน */}
+                <tr className="align-top" style={{ breakInside: "avoid" }}>
                   <td className="px-2 py-1.5 text-center font-mono">{itemNumbers[idx]}</td>
                   <td className="px-2 py-1.5">
                     <span className="font-semibold">{line.description}</span>
@@ -220,7 +224,7 @@ export function PrintDocument({
                   <td className="px-2 py-1.5 text-right font-mono font-semibold">{fmt(lineSubtotal(line))}</td>
                 </tr>
                 {hasDetails && (
-                  <tr>
+                  <tr style={{ breakInside: "avoid" }}>
                     <td />
                     <td colSpan={6} className="px-2 pb-2 text-[10px] text-[#3b5a85]">
                       {line.subDetails.filter((sd) => sd.text.trim()).map((sd) => (
@@ -266,16 +270,18 @@ export function PrintDocument({
           )}
 
           <tr>
-            <td colSpan={7} className="pt-5 pb-[12mm]">
+            {/* กันไม่ให้บล็อกลายเซ็นถูกหั่นคร่อมหน้า — ถ้าโดนหั่น <thead> ของตารางนี้จะถูกพิมพ์ซ้ำ
+                บนหน้าถัดไป กลายเป็นบล็อกลายเซ็นสองอันบนกระดาษ (บั๊กที่เจ้าของเจอบน production) */}
+            <td colSpan={7} className="pt-5 pb-[12mm]" style={{ breakInside: "avoid" }}>
               <table className="w-full border-collapse border border-[#0b1d3a]/20">
-                <thead>
+                {/* แถวหัวอยู่ใน tbody ไม่ใช่ thead โดยตั้งใจ — thead ถูกเบราว์เซอร์พิมพ์ซ้ำทุกหน้า
+                    ถ้าบล็อกนี้ถูกหั่นคร่อมหน้าจะเห็นบล็อกลายเซ็นสองอันบนกระดาษ */}
+                <tbody>
                   <tr className="bg-[#1a5fb4] text-white">
                     {signatureColumns.map((col, i) => (
                       <th key={col.label} className={`px-2 py-1 text-[10px] font-semibold ${i < 2 ? "border-r border-white/20" : ""}`}>{col.label}</th>
                     ))}
                   </tr>
-                </thead>
-                <tbody>
                   <tr>
                     {signatureColumns.map((col, i) => (
                       <td key={col.label} className={`px-3 py-2 align-bottom h-20 relative ${i < 2 ? "border-r border-[#0b1d3a]/20" : ""}`}>
@@ -300,6 +306,7 @@ export function PrintDocument({
           </tr>
         </tbody>
       </table>
+      </div>
     </>
   );
 }
