@@ -15,6 +15,7 @@ import type { ServiceTemplate } from "../../src/lib/serviceTemplates.js";
 import type { ServiceReport } from "../../src/lib/serviceReports.js";
 import type { Project } from "../../src/lib/project.js";
 import type { MaterialRequisition } from "../../src/lib/materialRequisition.js";
+import type { MaterialRequisitionTemplate } from "../../src/lib/materialRequisitionTemplate.js";
 import type { JobOrder } from "../../src/lib/jobOrder.js";
 import type { PurchaseRequest } from "../../src/lib/purchaseRequest.js";
 import type { ProductionOrder } from "../../src/lib/productionOrder.js";
@@ -411,6 +412,16 @@ export interface VendorFields {
 export async function vendorsCollection() {
   const db = await getDb();
   return db.collection<VendorFields>("vendors");
+}
+
+/**
+ * เทมเพลตใบเบิกและใบคืนวัสดุ (2026-09-02) — ชุดรายการที่ตั้งชื่อไว้ กดครั้งเดียวแล้วรายการทั้งชุด
+ * ไหลลงใบเบิก · ดู src/lib/materialRequisitionTemplate.ts สำหรับเหตุผลที่ไม่ทำเป็นโมดูลใหญ่
+ */
+export type MaterialRequisitionTemplateFields = Omit<MaterialRequisitionTemplate, "id">;
+export async function materialRequisitionTemplatesCollection() {
+  const db = await getDb();
+  return db.collection<MaterialRequisitionTemplateFields>("material_requisition_templates");
 }
 
 /**

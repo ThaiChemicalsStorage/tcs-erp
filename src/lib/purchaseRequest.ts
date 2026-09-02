@@ -1,4 +1,6 @@
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
+import type { DocumentAttachment } from "./documentAttachments.js";
+import { uploadDocumentAttachment, deleteDocumentAttachment, fileToBase64 } from "./documentAttachments.js";
 
 /**
  * Purchase Request (form FMPU05 Rev.02, printed footer reads "FM-PU-05") — added 2026-08-18.
@@ -102,6 +104,15 @@ export interface PurchaseRequest {
    * เอกสารเก่าที่ไม่มีฟิลด์นี้อ่านออกมาเป็น "" (normalize ตอนอ่าน ไม่ได้ทำ migration)
    */
   revisionNote: string;
+  /**
+   * ไฟล์แนบ — เจ้าของสั่ง 2026-09-02 ("ใบขอซื้อสามารถทำให้แนบไฟล์ได้ด้วย") ใช้ระบบแนบไฟล์กลาง
+   * ตัวเดียวกับใบสั่งงาน (`document_attachment_files`) ไม่ได้สร้างชุดที่สี่
+   *
+   * จัดการผ่าน route เฉพาะของมันเท่านั้น **ไม่ใช่ฟิลด์ที่ PATCH ได้** เพื่อไม่ให้หน้าจอที่ถือข้อมูลเก่า
+   * เขียนทับ array นี้จนไฟล์ที่คนอื่นเพิ่งแนบหายไป (กติกาเดียวกับใบสั่งงานและ Scope of Work)
+   * เอกสารก่อน 2026-09-02 ไม่มีฟิลด์นี้ — อ่านออกมาเป็น [] เสมอ
+   */
+  attachments: DocumentAttachment[];
   /** "ผู้ขอซื้อ" */
   requestedBy: string;
   requestedAt: string;
@@ -128,6 +139,22 @@ export interface PurchaseRequest {
  * หนึ่งใบขอซื้อครอบคลุมได้หลายรายการในโครงการ — เหตุผลเดียวกับ `createMaterialRequisition()`
  * รับ id เดี่ยวได้ด้วย เพราะปุ่มในหน้าโครงการยังสร้างทีละรายการ
  */
+/**
+ * แนบไฟล์ / ลบไฟล์แนบ — route แยก ไม่ผ่าน PATCH โดยตั้งใจ ด้วยเหตุผลเดียวกับใบสั่งงาน
+ */
+export async function uploadPurchaseRequestAttachment(id: string, file: File): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await uploadDocumentAttachment<{ purchaseRequest: PurchaseRequest }>("purchase-requests", id, {
+    fileName: file.name,
+    contentType: file.type || "application/octet-stream",
+    dataBase64: await fileToBase64(file),
+  });
+  return purchaseRequest;
+}
+export async function deletePurchaseRequestAttachment(id: string, attachmentId: string): Promise<PurchaseRequest> {
+  const { purchaseRequest } = await deleteDocumentAttachment<{ purchaseRequest: PurchaseRequest }>("purchase-requests", id, attachmentId);
+  return purchaseRequest;
+}
+
 export async function createPurchaseRequest(projectId: string, itemIds: string | string[]): Promise<PurchaseRequest> {
   const ids = Array.isArray(itemIds) ? itemIds : [itemIds];
   const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>("/purchase-requests", {

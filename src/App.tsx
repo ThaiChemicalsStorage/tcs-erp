@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Inbox, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -55,6 +55,7 @@ const DepartmentManagementPage = lazy(() => import("./pages/admin/DepartmentMana
 const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage").then((m) => ({ default: m.AuditLogPage })));
 const CustomersPage = lazy(() => import("./pages/customers/CustomersPage").then((m) => ({ default: m.CustomersPage })));
 const VendorsPage = lazy(() => import("./pages/vendors/VendorsPage").then((m) => ({ default: m.VendorsPage })));
+const MaterialRequisitionTemplatePage = lazy(() => import("./pages/materialRequisition/MaterialRequisitionTemplatePage").then((m) => ({ default: m.MaterialRequisitionTemplatePage })));
 const CodeRegisterPage = lazy(() => import("./pages/codeRegister/CodeRegisterPage").then((m) => ({ default: m.CodeRegisterPage })));
 const PendingApprovalsPage = lazy(() => import("./pages/pendingApprovals/PendingApprovalsPage").then((m) => ({ default: m.PendingApprovalsPage })));
 const TemplateManagementPage = lazy(() => import("./pages/templates/TemplateManagementPage").then((m) => ({ default: m.TemplateManagementPage })));
@@ -146,7 +147,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
@@ -215,6 +216,7 @@ const navItems: NavItem[] = [
   { key: "arMonthly", icon: CalendarDays, labelKey: "nav.arMonthly", permission: "ar:view" },
   { key: "project", icon: Briefcase, labelKey: "nav.project", permission: "project:view" },
   { key: "materialRequisition", icon: Package2, labelKey: "nav.materialRequisition", permission: "materialRequisition:view" },
+  { key: "materialRequisitionTemplates", icon: LayoutTemplate, labelKey: "nav.materialRequisitionTemplates", permission: "materialRequisition:view" },
   { key: "jobOrder", icon: Hammer, labelKey: "nav.jobOrder", permission: "jobOrder:view" },
   { key: "purchaseRequest", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "productionOrder", icon: Factory, labelKey: "nav.productionOrder", permission: "productionOrder:view" },
@@ -252,8 +254,8 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   // ใบส่งมอบสินค้าโผล่ใน 3 หมวด (ขาย/โปรเจกต์/ผลิต) โดยตั้งใจ — เป็นโมดูลเดียวกันและข้อมูลชุดเดียวกัน
   // ไม่ได้ก๊อปมาสร้างใหม่ เพราะทั้งสามแผนกใช้เอกสารใบเดียวกัน (เจ้าของยืนยัน 2026-08-20) แค่ให้แต่ละ
   // แผนกเข้าถึงได้จากหมวดของตัวเองแทนที่จะต้องไปหาใต้ "ขาย"
-  { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "jobOrder", "purchaseRequest", "deliveryOrder"] },
-  { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "productionPurchase", "deliveryOrder"] },
+  { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "materialRequisitionTemplates", "jobOrder", "purchaseRequest", "deliveryOrder"] },
+  { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "materialRequisitionTemplates", "productionPurchase", "deliveryOrder"] },
   { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
@@ -284,6 +286,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   productionOrder: "nav.productionOrder",
   purchaseOrder: "nav.purchaseOrder",
   costControl: "nav.costControl",
+  materialRequisitionTemplates: "nav.materialRequisitionTemplates",
   productionRequisition: "nav.materialRequisition",
   productionPurchase: "nav.purchaseRequest",
   purchasingRequestInbox: "nav.purchasingRequestInbox",
@@ -1162,6 +1165,8 @@ export default function App() {
               ? <TemplateManagementPage jobTypes={jobTypes} products={products} categories={categories} currentUserId={currentUser.id} canCreate={canCreateTemplates} canEdit={canEditTemplates} canDuplicate={canDuplicateTemplates} canActivate={canActivateTemplates} canArchive={canArchiveTemplates} canImport={canImportTemplates} initialCreateForJobType={templateCreateForJobType} onCreateForJobTypeConsumed={() => setTemplateCreateForJobType(null)} onCreateQuotationFromTemplate={navigateToTemplate} />
               : effectiveNav === "codeRegister"
               ? <CodeRegisterPage codes={codeEntries} onCodesChange={setCodeEntries} canCreate={canCreateCodes} canEdit={canEditCodes} canArchive={canArchiveCodes} />
+              : effectiveNav === "materialRequisitionTemplates"
+              ? <MaterialRequisitionTemplatePage canEdit={canEditMaterialRequisition} />
               : effectiveNav === "vendors"
               ? <VendorsPage vendors={vendors} onVendorsChange={setVendors} canCreate={canCreateVendors} canEdit={canEditVendors} canArchive={canArchiveVendors} />
               : effectiveNav === "customers"

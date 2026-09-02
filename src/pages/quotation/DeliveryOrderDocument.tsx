@@ -16,6 +16,7 @@ import type { DriveStep } from "driver.js";
 import { useI18n } from "../../lib/i18n";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
+import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -498,6 +499,8 @@ export function DeliveryOrderDocument({
             onDiscard={draftBackup.dismiss}
           />
         )}
+
+        <DocumentStatusStepper status={deliveryOrder.status} approverLabel={t("deliveryOrderDoc.approverLabel")} />
 
         <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2 , GitBranch } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2 , GitBranch, LayoutTemplate } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
@@ -11,12 +11,16 @@ import {
   rewriteMaterialRequisition,
 } from "../../lib/materialRequisition";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
+import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
 import { ApiError } from "../../lib/apiClient";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
+import {
+  type MaterialRequisitionTemplate, fetchMaterialRequisitionTemplates, templateLinesToRequisitionLines,
+} from "../../lib/materialRequisitionTemplate";
 import { MaterialRequisitionPrintDocument } from "./MaterialRequisitionPrintDocument";
 import { useI18n } from "../../lib/i18n";
 import { getRevisionNumber } from "../../lib/revisionDiff";
@@ -94,6 +98,9 @@ export function MaterialRequisitionDocument({
   const [confirmRewrite, setConfirmRewrite] = useState(false);
   const [rewriting, setRewriting] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  /** null = ยังไม่เคยโหลด — โหลดครั้งเดียวตอนกดปุ่มครั้งแรก ไม่ดึงทุกครั้งที่เปิดใบเบิก */
+  const [templates, setTemplates] = useState<MaterialRequisitionTemplate[] | null>(null);
   const [showPrint, setShowPrint] = useState(false);
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — ประกาศเหนือ effect โหลดข้อมูล เพื่อตั้งฐานเทียบใหม่ทุกครั้งที่ดึงเอกสาร
@@ -266,6 +273,27 @@ export function MaterialRequisitionDocument({
   const removeLine = (id: string) => {
     setDraft((prev) => prev && { ...prev, lines: prev.lines.filter((l) => l.id !== id) });
   };
+  /**
+   * "ใช้เทมเพลต" — เติมรายการทั้งชุดจากเทมเพลตที่ตั้งไว้ (เจ้าของสั่ง 2026-09-02)
+   *
+   * **ต่อท้าย ไม่ทับของเดิม** — ใบหนึ่งอาจต้องใช้หลายชุด (ชุดเคมี + ชุดน็อต) และการทับจะทำให้ของที่
+   * พิมพ์เองไว้ก่อนหายเงียบ ๆ · id ของทุกบรรทัดถูกสร้างใหม่ใน `templateLinesToRequisitionLines()`
+   * เทมเพลตเดียวกันจึงกดซ้ำได้โดยไม่ชน key
+   */
+  const applyTemplate = (template: MaterialRequisitionTemplate) => {
+    setDraft((prev) => prev && { ...prev, lines: [...prev.lines, ...templateLinesToRequisitionLines(template.lines)] });
+    setTemplatePickerOpen(false);
+    showToast(t("materialRequisitionDoc.useTemplateApplied"));
+  };
+
+  const openTemplatePicker = () => {
+    setTemplatePickerOpen(true);
+    if (templates !== null) return;
+    fetchMaterialRequisitionTemplates()
+      .then(setTemplates)
+      .catch(() => { setTemplates([]); showToast(t("materialRequisitionDoc.useTemplateError")); });
+  };
+
   const addProduct = (product: Product) => {
     const categoryName = categories.find((c) => c.id === product.categoryId)?.name ?? "";
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankMaterialRequisitionLine(product, categoryName)] });
@@ -376,6 +404,14 @@ export function MaterialRequisitionDocument({
           />
         )}
 
+        <DocumentStatusStepper
+          status={doc.status}
+          rejectionComment={doc.rejectionComment ?? ""}
+          approverLabel={t("materialRequisitionDoc.approverLabel")}
+          approvedByUserId={doc.approvedByUserId}
+          approvedByName={doc.approvedBy}
+          approvedAt={doc.approvedAt}
+        />
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
@@ -414,9 +450,14 @@ export function MaterialRequisitionDocument({
           <div data-tour="mrdoc-addline" className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("materialRequisitionDoc.linesTitle")}</h2>
             {editable && (
-              <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
-                <Plus size={13} /> {t("materialRequisitionDoc.addLine")}
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={openTemplatePicker} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                  <LayoutTemplate size={13} /> {t("materialRequisitionDoc.useTemplate")}
+                </button>
+                <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                  <Plus size={13} /> {t("materialRequisitionDoc.addLine")}
+                </button>
+              </div>
             )}
           </div>
           <div data-tour="mrdoc-lines">
@@ -560,6 +601,44 @@ export function MaterialRequisitionDocument({
       <MaterialRequisitionPrintDocument materialRequisition={doc} companyHeader={companyHeader} />
 
       <ProductPickerModal open={pickerOpen} products={filteredProducts} categories={categories} onSelect={addProduct} onClose={() => setPickerOpen(false)} />
+
+      {templatePickerOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 print:hidden">
+          <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col p-5 gap-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
+                {t("materialRequisitionDoc.useTemplateTitle")}
+              </h2>
+              <button onClick={() => setTemplatePickerOpen(false)} aria-label={t("mrTemplate.close")} title={t("mrTemplate.close")}
+                className="text-muted-foreground hover:text-foreground transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {templates === null ? (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />)}
+                </div>
+              ) : templates.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">{t("materialRequisitionDoc.useTemplateEmpty")}</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {templates.map((tpl) => (
+                    <button key={tpl.id} onClick={() => applyTemplate(tpl)}
+                      className="w-full text-left px-3 py-2.5 rounded-lg border border-border/60 hover:bg-secondary/40 hover:border-[#c9a84c]/40 transition-colors">
+                      <p className="text-sm font-medium text-foreground truncate">{tpl.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {t("mrTemplate.lineCount").replace("{n}", String(tpl.lines.length))}
+                        {tpl.description.trim() !== "" && ` · ${tpl.description}`}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmDelete}

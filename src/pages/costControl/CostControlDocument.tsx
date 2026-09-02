@@ -4,6 +4,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
+import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -267,6 +268,14 @@ export function CostControlDocument({
               onDiscard={draftBackup.dismiss}
             />
           )}
+          <DocumentStatusStepper
+            status={draft.status}
+            rejectionComment={draft.rejectionComment ?? ""}
+            approverLabel={t("costControlDoc.approverLabel")}
+            approvedByUserId={draft.approvedByUserId}
+            approvedByName={draft.approvedBy}
+            approvedAt={draft.approvedAt}
+          />
           {draft.rejectionComment ? <RejectionNotice comment={draft.rejectionComment} /> : null}
 
           <section className="bg-card border border-border rounded-xl p-5">

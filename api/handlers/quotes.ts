@@ -8,6 +8,7 @@ import { handleDeliveryOrder } from "../_lib/deliveryOrderHandler.js";
 import { handleAr } from "../_lib/arHandler.js";
 import { handleProject } from "../_lib/projectHandler.js";
 import { handleMaterialRequisition } from "../_lib/materialRequisitionHandler.js";
+import { handleMaterialRequisitionTemplates } from "../_lib/materialRequisitionTemplateHandler.js";
 import { handleJobOrder } from "../_lib/jobOrderHandler.js";
 import { handlePurchaseRequest } from "../_lib/purchaseRequestHandler.js";
 import { handleProductionOrder } from "../_lib/productionOrderHandler.js";
@@ -914,6 +915,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // mount point for the same slot-availability reason.
     if (pathname === "/api/projects" || pathname.startsWith("/api/projects/")) {
       return handleProject(req, res);
+    }
+    // เทมเพลตใบเบิก — ต้องเช็คก่อนใบเบิกจริง ถึงจะไม่โดนกฎ prefix ของใบเบิกกลืนไปในอนาคต
+    if (pathname === "/api/material-requisition-templates" || pathname.startsWith("/api/material-requisition-templates/")) {
+      return handleMaterialRequisitionTemplates(req, res);
     }
     if (pathname === "/api/material-requisitions" || pathname.startsWith("/api/material-requisitions/")) {
       return handleMaterialRequisition(req, res);

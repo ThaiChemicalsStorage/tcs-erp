@@ -8,6 +8,8 @@ import {
   toObjectId, withStringId, type PurchaseRequestFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
+import { handleAttachmentUpload, handleAttachmentDelete, handleAttachmentDownload, type AttachmentConfig } from "./documentAttachments.js";
+import type { DocumentAttachment } from "../../src/lib/documentAttachments.js";
 import { loadPendingProjectItemsOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { notifyDepartments, PURCHASING_DEPARTMENT_NAMES } from "./departmentNotify.js";
@@ -103,6 +105,8 @@ function toClient(doc: PurchaseRequestFields & { _id: string }) {
     deliveryContact: doc.deliveryContact ?? "",
     deliveryPhone: doc.deliveryPhone ?? "",
     headerRemark: doc.headerRemark ?? "",
+    // ไฟล์แนบเพิ่ม 2026-09-02 — เอกสารเก่าไม่มีฟิลด์นี้ เติมตอนอ่าน ไม่ได้ทำ migration
+    attachments: doc.attachments ?? [],
   }));
 }
 function toSummary(doc: PurchaseRequestFields & { _id: string }): PurchaseRequestSummary {
@@ -215,7 +219,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     deliveryContact: "", deliveryPhone: "", headerRemark: "",
     // วันที่บนหัวเอกสารตั้งต้นเป็นวันที่สร้าง แก้ได้ — ใบจริงพิมพ์วันที่ที่ออกเอกสาร ไม่ใช่วันที่เซ็น
     issueDate: now.slice(0, 10),
-    lines: [], status: "Draft",
+    lines: [], attachments: [], status: "Draft",
     // requestedAt seeds from a date-only slice of `now`, not the full ISO timestamp — see
     // jobOrderHandler.ts's identical fix/comment on requestedAt for why (validateIsoDateOrEmpty
     // requires strict YYYY-MM-DD; the full timestamp made every save after creation fail with 400).
@@ -405,6 +409,8 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
       approvedByUserId: "",
       rejectionComment: "",
       revisionNote: "",
+      // ไฟล์แนบไม่สืบทอด — สำเนาจะชี้ไฟล์ก้อนเดียวกันแล้วลบทีเดียวพังทั้งสองฉบับ (เหมือนใบสั่งงาน)
+      attachments: [],
       createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id, isDeleted: false,
     };
     try {
@@ -450,6 +456,19 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   throw new HttpError(405, "Method not allowed");
 }
 
+/** ไฟล์แนบของใบขอซื้อ — ใช้ระบบกลางตัวเดียวกับใบสั่งงาน (เจ้าของสั่ง 2026-09-02) */
+const attachmentConfig: AttachmentConfig<PurchaseRequestFields & { _id: string }> = {
+  label: "ใบขอซื้อ",
+  docType: "purchase-requests",
+  load: loadOrThrow,
+  canEdit,
+  collection: async () => (await purchaseRequestsCollection()) as unknown as Collection<never>,
+  idOf: (doc) => doc._id,
+  currentAttachments: (doc) => (doc.attachments ?? []) as DocumentAttachment[],
+  writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
+  respond: async (res, id) => { res.status(200).json({ purchaseRequest: toClient(await loadOrThrow(id)) }); },
+};
+
 export async function handlePurchaseRequest(req: VercelRequest, res: VercelResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/purchase-requests");
 
@@ -467,5 +486,12 @@ export async function handlePurchaseRequest(req: VercelRequest, res: VercelRespo
     if (parts.length === 2 && parts[1] === "withdraw-approval") return handleWithdrawApproval(req, res, parts[0], approvalConfig);
   if (parts.length === 2 && parts[1] === "print") return handlePrint(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "rewrite") return handleRewrite(req, res, parts[0]);
+  // ไฟล์แนบ — ตัวดาวน์โหลดตั้งใจให้เปิดได้โดยไม่ต้องล็อกอิน คุมด้วย capability key ใน URL แทน
+  // ดู api/_lib/documentAttachments.ts — route นี้จึงต้องมาก่อนด่าน requireUser ของ handler อื่น
+  if (parts.length === 4 && parts[1] === "attachments" && parts[3] === "download") {
+    return handleAttachmentDownload(req, res, "purchase-requests", parts[0], parts[2]);
+  }
+  if (parts.length === 2 && parts[1] === "attachments") return handleAttachmentUpload(req, res, parts[0], attachmentConfig);
+  if (parts.length === 3 && parts[1] === "attachments") return handleAttachmentDelete(req, res, parts[0], parts[2], attachmentConfig);
   throw new HttpError(404, "Not found");
 }

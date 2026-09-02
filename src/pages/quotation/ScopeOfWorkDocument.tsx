@@ -34,6 +34,7 @@ import { ValidationSummary } from "../../components/ValidationSummary";
 import { DocumentCompletionIndicator } from "../../components/DocumentCompletionIndicator";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
+import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -973,6 +974,14 @@ export function ScopeOfWorkDocument({
             onDiscard={draftBackup.dismiss}
           />
         )}
+
+        <DocumentStatusStepper
+          status={scope.status}
+          approverLabel={t("scopeOfWorkDoc.stepApprover")}
+          approvedByName={scope.approver.name}
+          approvedByUserId={scope.approver.userId}
+          approvedAt={scope.approver.date}
+        />
 
         <div ref={summaryRef}>
           <ValidationSummary missingCount={finalizeValidation.missingCount} messages={summaryMessages} />

@@ -8,6 +8,7 @@ import {
 } from "../../lib/productionOrder";
 import { ProductionOrderPrintDocument } from "./ProductionOrderPrintDocument";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
+import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ApiError } from "../../lib/apiClient";
 import { newId } from "../../lib/products";
@@ -338,6 +339,14 @@ export function ProductionOrderDocument({
           />
         )}
 
+        <DocumentStatusStepper
+          status={doc.status}
+          rejectionComment={doc.rejectionComment ?? ""}
+          approverLabel={t("productionOrderDoc.approverLabel")}
+          approvedByUserId={doc.approvedByUserId}
+          approvedByName={doc.approver.name}
+          approvedAt={doc.approver.date}
+        />
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
 
         <div className="bg-card border border-border rounded-xl overflow-hidden">

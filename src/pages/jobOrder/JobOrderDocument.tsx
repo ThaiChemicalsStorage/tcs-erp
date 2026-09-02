@@ -9,6 +9,7 @@ import {
   rewriteJobOrder,
 } from "../../lib/jobOrder";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
+import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -352,6 +353,14 @@ export function JobOrderDocument({
           />
         )}
 
+        <DocumentStatusStepper
+          status={doc.status}
+          rejectionComment={doc.rejectionComment ?? ""}
+          approverLabel={t("jobOrderDoc.approverLabel")}
+          approvedByUserId={doc.approvedByUserId}
+          approvedByName={doc.approvedBy}
+          approvedAt={doc.approvedAt}
+        />
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">

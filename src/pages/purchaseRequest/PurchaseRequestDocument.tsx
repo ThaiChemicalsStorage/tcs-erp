@@ -8,10 +8,12 @@ import {
   deletePurchaseRequest, blankPurchaseRequestLine,
   submitPurchaseRequestApproval, approvePurchaseRequest, rejectPurchaseRequest, withdrawPurchaseRequestApproval,
   rewritePurchaseRequest,
+  uploadPurchaseRequestAttachment, deletePurchaseRequestAttachment,
 } from "../../lib/purchaseRequest";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { createProductRequest } from "../../lib/productRequest";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
+import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -28,6 +30,7 @@ import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
 import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
+import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCard";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 
 function toUpdateFields(p: PurchaseRequest): PurchaseRequestUpdateFields {
@@ -398,6 +401,14 @@ export function PurchaseRequestDocument({
           />
         )}
 
+        <DocumentStatusStepper
+          status={doc.status}
+          rejectionComment={doc.rejectionComment ?? ""}
+          approverLabel={t("purchaseRequestDoc.approverLabel")}
+          approvedByUserId={doc.approvedByUserId}
+          approvedByName={doc.approvedBy}
+          approvedAt={doc.approvedAt}
+        />
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
@@ -604,6 +615,16 @@ export function PurchaseRequestDocument({
           )}
           </div>
         </div>
+
+        {/* ไฟล์แนบ — เจ้าของสั่งไว้ 2026-09-02 ("ใบขอซื้อสามารถทำให้แนบไฟล์ได้ด้วย")
+            ใช้ระบบแนบไฟล์กลางตัวเดียวกับใบสั่งงาน · ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้
+            เพราะใบเสนอราคาผู้ขาย/แคตตาล็อกมักตามมาหลังใบอนุมัติแล้ว */}
+        <DocumentAttachmentsCard
+          attachments={doc.attachments ?? []}
+          disabled={!canEdit}
+          onUpload={async (file) => { const updated = await uploadPurchaseRequestAttachment(doc.id, file); setDoc(updated); }}
+          onDelete={async (attachmentId) => { const updated = await deletePurchaseRequestAttachment(doc.id, attachmentId); setDoc(updated); }}
+        />
 
         {/* หมายเหตุการแก้ไข — โผล่เฉพาะเอกสารที่เป็นฉบับแก้ไข (มี -R{n} ต่อท้าย)
             ต่างจาก Scope of Work ตรงที่ข้อความนี้ถูกพิมพ์ลงบนเอกสารจริงด้วย */}
