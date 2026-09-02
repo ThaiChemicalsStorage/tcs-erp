@@ -2,6 +2,7 @@ import { formatPaymentMethod, scopePoNumbers, scopeQuotationNumbers, type ScopeO
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
+import { printText } from "../../lib/printFormat";
 import { BrandMark } from "../../components/BrandMark";
 import { FacebookIcon, LineAppIcon } from "../../components/PrintSocialIcons";
 
@@ -11,7 +12,7 @@ function Field({ label, value, mono = false }: { label: string; value: string; m
   return (
     <div className="flex gap-2 text-[10px] leading-[1.7]">
       <span className="text-[#5a7299] flex-shrink-0 w-[92px]">{label}</span>
-      <span className={`flex-1 border-b border-dotted border-[#0b1d3a]/25 min-h-[13px] ${mono ? "font-mono" : ""}`}>{value || " "}</span>
+      <span className={`flex-1 border-b border-dotted border-[#0b1d3a]/25 min-h-[13px] ${mono ? "font-mono" : ""}`}>{printText(value)}</span>
     </div>
   );
 }

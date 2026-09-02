@@ -34,8 +34,11 @@ const MAX_LINES = 100;
  * ใช้ช่อง "เบิกของ" (`plannedQty`) ซึ่งคือจำนวนที่ขออนุมัติ — ไม่ใช่ `withdrawal1Qty/2` ที่สโตร์กรอก
  * ตอนจ่ายของจริงทีหลัง ตอนกดอนุมัติสองช่องนั้นยังว่างเสมอ · บรรทัดที่พิมพ์เองโดยไม่ได้เลือกจาก
  * แคตตาล็อก (ไม่มี `productId`) และบรรทัดที่ยังไม่กรอกจำนวน ถูกข้ามไป — ไม่มีสต๊อกให้ตัด
+ *
+ * export ไว้ให้เทสต์เรียกได้โดยตรง (idiom เดียวกับ `bangkokBuddhistYyMm()` ใน documentNumbering.ts)
+ * — กฎการรวมยอดต่อสินค้าคือจุดที่พลาดแล้วสต๊อกจะเพี้ยนเงียบ ๆ จึงต้องมีเทสต์คุมแยกจาก route
  */
-function deductionsFor(lines: { productId?: string; plannedQty?: number | null }[]): Map<string, number> {
+export function deductionsFor(lines: { productId?: string; plannedQty?: number | null }[]): Map<string, number> {
   const byProduct = new Map<string, number>();
   for (const line of lines) {
     const productId = (line.productId ?? "").trim();

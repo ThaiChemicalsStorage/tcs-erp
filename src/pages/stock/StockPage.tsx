@@ -115,7 +115,7 @@ export function StockPage({
         <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("stock.subtitle")}</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 print:hidden">
         {[
           { label: t("stock.kpi.itemCount"), value: String(activeProducts.length) },
           { label: t("stock.kpi.totalUnits"), value: totalUnits.toLocaleString("th-TH") },
@@ -132,7 +132,7 @@ export function StockPage({
         ))}
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap print:hidden">
       <div className="relative h-9 w-72">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
         <input
@@ -157,7 +157,7 @@ export function StockPage({
         </button>
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
         {activeProducts.length === 0 ? (
           <EmptyState icon={Boxes} title={t("stock.empty.title")} description={t("stock.empty.description")} compact />
         ) : filtered.length === 0 ? (
@@ -225,7 +225,7 @@ export function StockPage({
         )}
       </div>
 
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
             {historyProduct ? `${t("stock.history.heading")} — ${historyProduct.name}` : t("stock.history.headingLatest")}

@@ -3,6 +3,7 @@ import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { DeliveryOrder, DeliveryOrderInstallment, DeliveryOrderItem } from "../../lib/deliveryOrder";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
 import { PrintSignatureLine } from "../../components/PrintSignature";
+import { printText } from "../../lib/printFormat";
 import { FacebookIcon, LineAppIcon } from "../../components/PrintSocialIcons";
 
 // ชื่อ/ที่อยู่/เบอร์โทร/อีเมล คงที่ตามแบบฟอร์มอ้างอิง FM-SL-05 (ภาษาอังกฤษ, ที่อยู่แยกบรรทัด) —
@@ -130,7 +131,7 @@ function PageHead({
                 {label}
               </p>
               <p style={{ flex: 1, borderBottom: LINE, textAlign: "center", lineHeight: 1.35, padding: "0 4px 1px", minHeight: "18px" }}>
-                {value || " "}
+                {printText(value)}
               </p>
             </div>
           ))}
