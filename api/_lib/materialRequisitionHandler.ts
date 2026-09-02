@@ -71,11 +71,29 @@ async function nextMaterialRequisitionId(counters: Collection<CounterFields>): P
  *
  * ใบของ**ฝ่ายโครงการ**ยังใช้ `MR-{พ.ศ.}-{ลำดับ}` เหมือนเดิม เพราะไม่มีใบสั่งผลิตให้อิง
  */
-async function nextMaterialRequisitionIdForProductionOrder(counters: Collection<CounterFields>, productionOrderId: string): Promise<string> {
+async function nextMaterialRequisitionIdForProductionOrder(
+  counters: Collection<CounterFields>,
+  /** `_id` ของใบสั่งผลิต — ใช้เป็นกุญแจตัวนับ เพราะเป็นค่าที่แก้ไม่ได้ */
+  productionOrderId: string,
+  /** เลขที่พิมพ์บนฟอร์ม (`documentNumber`) ซึ่งแก้เองได้ — ใช้เป็นเนื้อของเลขใบเบิก */
+  productionOrderNumber: string,
+): Promise<string> {
   const counterId = `material_requisition_of_${productionOrderId}`;
   const result = await counters.findOneAndUpdate({ _id: counterId }, { $inc: { seq: 1 } }, { returnDocument: "after", upsert: true });
   const seq = result?.seq ?? 1;
-  return `${productionOrderId}-MR${seq}`;
+  return `${safePrefix(productionOrderNumber) || productionOrderId}-MR${seq}`;
+}
+
+/**
+ * เลขที่ใบสั่งผลิตที่ผู้ใช้พิมพ์เอง ต้องใช้เป็น `_id` ของใบเบิกได้จริง — `_id` ตัวนี้ไปโผล่ใน URL
+ * ของ route (`/api/material-requisitions/:id/...`) ซึ่งถูกตัดด้วย `/` ดังนั้นเลขที่มีขีดทับหรือ
+ * ช่องว่างจะทำให้ route พังทั้งเส้น · เจอแบบนั้นเมื่อไหร่ให้ถอยไปใช้ `_id` ของใบสั่งผลิตแทน
+ * ซึ่งปลอดภัยเสมอเพราะระบบเป็นคนออกให้เอง (อักษรไทยใช้ได้ตามปกติ `encodeURIComponent()` รับได้)
+ */
+export function safePrefix(documentNumber: string): string {
+  const trimmed = (documentNumber ?? "").trim();
+  if (!trimmed) return "";
+  return /[/\\\s?#%]/.test(trimmed) ? "" : trimmed;
 }
 
 async function writeAuditEntry(ctx: AuthContext, action: string, details: string, related: { scopeOfWorkId?: string }): Promise<void> {
@@ -148,7 +166,12 @@ function toClient(doc: MaterialRequisitionFields & { _id: string }) {
 }
 function toSummary(doc: MaterialRequisitionFields & { _id: string }): MaterialRequisitionSummary {
   const full = withStringId(doc);
-  return { id: full.id, projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode, status: full.status, updatedAt: full.updatedAt };
+  return {
+    id: full.id, projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode,
+    // เอกสารก่อน 2026-08-20 ไม่มีฟิลด์นี้ — normalize ตอนอ่าน ไม่ได้ทำ migration
+    productionOrderId: full.productionOrderId ?? "",
+    status: full.status, updatedAt: full.updatedAt,
+  };
 }
 
 async function loadOrThrow(id: string) {
@@ -221,6 +244,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
    *  เพราะที่นั่นระบุตัวคนดูแลงานไว้จริง ๆ ถ้าใบนั้นยังว่างค่อยถอยมาใช้ชื่อคนสร้างใบเบิก */
   let source: { projectId: string; scopeOfWorkId: string; jobCode: string; customerName: string; productName: string; responsibleEmployee: string };
   let pickedItems: { name: string }[] = [];
+  /** เลขที่บนฟอร์มของใบสั่งผลิตต้นทาง — ว่างไว้เมื่อไม่ได้ออกจากใบสั่งผลิต */
+  let productionOrderNumber = "";
   let jobOrderLink = { jobOrderId: null as string | null, jobOrderCode: "" };
 
   if (fromProduction) {
@@ -231,6 +256,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     // ("ใบสั่งผลิตกับใบเบิกไม่ต้องรอ Final ก็สร้างได้") เจ้าของยืนยันให้ปลดทั้งชั้นนี้และชั้น Scope of Work → ใบสั่งผลิต
     // เดิมบังคับไว้ตั้งแต่ 2026-08-20 ด้วยเหตุผลว่าใบสั่งผลิตฉบับร่างไม่ควรสั่งเบิกของจริงได้
     if (!roleHasPermission(ctx.role, "productionOrder:view")) throw new HttpError(403, "Forbidden");
+    productionOrderNumber = po.documentNumber ?? "";
     source = {
       projectId: "", scopeOfWorkId: po.scopeOfWorkId, jobCode: po.jobCode,
       customerName: po.customerCompanyName, productName: po.productName,
@@ -254,7 +280,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 
   const counters = await countersCollection();
   const id = fromProduction
-    ? await nextMaterialRequisitionIdForProductionOrder(counters, productionOrderId)
+    ? await nextMaterialRequisitionIdForProductionOrder(counters, productionOrderId, productionOrderNumber)
     : await nextMaterialRequisitionId(counters);
   const now = nowIso();
   const doc: MaterialRequisitionFields = {

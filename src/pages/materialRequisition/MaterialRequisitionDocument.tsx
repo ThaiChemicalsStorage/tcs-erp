@@ -416,7 +416,13 @@ export function MaterialRequisitionDocument({
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("materialRequisitionDoc.title")}</h1>
-            <p className="text-[#a8bed8] text-xs mt-1">{t("materialRequisitionDoc.jobCodePrefix")} {doc.jobCode}{doc.jobOrderCode ? ` · ${t("materialRequisitionDoc.jobOrderPrefix")} ${doc.jobOrderCode}` : ""}</p>
+            {/* สายที่มาของใบนี้ทั้งเส้น: มาจากใบสั่งผลิตใบไหน และใบสั่งผลิตนั้นมาจากงาน PQ ตัวไหน
+                (เจ้าของขอ 2026-09-02) — เลขใบสั่งผลิตขึ้นเฉพาะใบของฝ่ายผลิต ฝั่งโครงการไม่มีต้นทางนี้ */}
+            <p className="text-[#a8bed8] text-xs mt-1">
+              {t("materialRequisitionDoc.jobCodePrefix")} {doc.jobCode || "—"}
+              {doc.productionOrderId ? ` · ${t("materialRequisitionDoc.productionOrderPrefix")} ${doc.productionOrderId}` : ""}
+              {doc.jobOrderCode ? ` · ${t("materialRequisitionDoc.jobOrderPrefix")} ${doc.jobOrderCode}` : ""}
+            </p>
           </div>
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>

@@ -82,7 +82,10 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
           </tr>
           <tr>
             <td className="py-0.5 pr-2 font-semibold">ชื่อพนักงานดูแล:</td>
-            <td colSpan={3} className="py-0.5 border-b border-black">{printText(m.responsibleEmployee)}</td>
+            <td className="py-0.5 border-b border-black">{printText(m.responsibleEmployee)}</td>
+            {/* สายที่มา: ใบนี้ออกจากใบสั่งผลิตใบไหน — ใบของฝ่ายโครงการไม่มีต้นทางนี้ พิมพ์ขีดกลาง */}
+            <td className="py-0.5 pl-4 pr-2 font-semibold">เลขที่ใบสั่งผลิต:</td>
+            <td className="py-0.5 border-b border-black">{printText(m.productionOrderId)}</td>
           </tr>
         </tbody>
       </table>

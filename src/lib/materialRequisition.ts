@@ -128,6 +128,14 @@ export interface MaterialRequisitionSummary {
   projectId: string;
   scopeOfWorkId: string;
   jobCode: string;
+  /**
+   * ใบสั่งผลิตต้นทาง — โชว์เป็นคอลัมน์ในหน้ารายการ (เจ้าของขอ 2026-09-02 "ให้ขึ้นโชว์ด้วย")
+   *
+   * ตั้งแต่ 2026-09-02 เลขใบเบิกของฝ่ายผลิต**อิงจากเลขใบสั่งผลิตอยู่แล้ว** แต่ใบที่ออกก่อนหน้านั้น
+   * ยังเป็น `MR-{พ.ศ.}-{ลำดับ}` ซึ่งอ่านไม่ออกว่ามาจากงานไหน คอลัมน์นี้จึงตอบให้ทั้งใบเก่าและใบใหม่
+   * `""` = ใบของฝ่ายโครงการ ซึ่งไม่มีใบสั่งผลิตต้นทาง
+   */
+  productionOrderId?: string;
   status: MaterialRequisitionStatus;
   updatedAt: string;
 }
