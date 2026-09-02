@@ -5,7 +5,7 @@ import { type Product, type ProductCategory, fetchProducts, fetchCategories } fr
 import {
   type MaterialRequisition, type MaterialRequisitionLine, type MaterialRequisitionUpdateFields,
   fetchMaterialRequisition, updateMaterialRequisition, recordMaterialRequisitionReturn,
-  finalizeMaterialRequisition, logMaterialRequisitionPrinted, deleteMaterialRequisition,
+  logMaterialRequisitionPrinted, deleteMaterialRequisition,
   blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES,
   submitMaterialRequisitionApproval, approveMaterialRequisition, rejectMaterialRequisition, withdrawMaterialRequisitionApproval,
   rewriteMaterialRequisition,
@@ -88,13 +88,11 @@ export function MaterialRequisitionDocument({
   const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savingReturn, setSavingReturn] = useState(false);
-  const [finalizing, setFinalizing] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
   const [rewriting, setRewriting] = useState(false);
-  const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
 
@@ -271,22 +269,6 @@ export function MaterialRequisitionDocument({
   const addProduct = (product: Product) => {
     const categoryName = categories.find((c) => c.id === product.categoryId)?.name ?? "";
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankMaterialRequisitionLine(product, categoryName)] });
-  };
-
-  const finalize = async () => {
-    setFinalizing(true);
-    try {
-      const updated = await finalizeMaterialRequisition(doc.id);
-      setDoc(updated);
-      setDraft(updated);
-      dirty.markSaved(toGuardPayload(updated));
-      setConfirmFinalize(false);
-      showToast(t("materialRequisitionDoc.finalized"));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorFinalize"));
-    } finally {
-      setFinalizing(false);
-    }
   };
 
   // สร้างฉบับแก้ไข แล้วเปิดฉบับใหม่ทันที — ฉบับเดิมยังอยู่ และลิงก์ในโครงการถูกย้ายมาชี้ฉบับใหม่ให้แล้ว
@@ -575,7 +557,7 @@ export function MaterialRequisitionDocument({
         </div>
       </div>
 
-      {showPrint && <MaterialRequisitionPrintDocument materialRequisition={doc} companyHeader={companyHeader} />}
+      <MaterialRequisitionPrintDocument materialRequisition={doc} companyHeader={companyHeader} />
 
       <ProductPickerModal open={pickerOpen} products={filteredProducts} categories={categories} onSelect={addProduct} onClose={() => setPickerOpen(false)} />
 
@@ -596,14 +578,6 @@ export function MaterialRequisitionDocument({
         busy={rewriting}
         onConfirm={() => void handleRewrite()}
         onCancel={() => setConfirmRewrite(false)}
-      />
-      <ConfirmDialog
-        open={confirmFinalize}
-        title={t("materialRequisitionDoc.finalizeConfirmTitle")}
-        message={t("materialRequisitionDoc.finalizeConfirmMessage")}
-        busy={finalizing}
-        onConfirm={finalize}
-        onCancel={() => setConfirmFinalize(false)}
       />
     </div>
   );

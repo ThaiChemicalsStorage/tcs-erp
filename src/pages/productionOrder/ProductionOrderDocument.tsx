@@ -492,7 +492,7 @@ export function ProductionOrderDocument({
         </div>
       </div>
 
-      {showPrint && <ProductionOrderPrintDocument doc={doc} companyHeader={companyHeader} />}
+      <ProductionOrderPrintDocument doc={doc} companyHeader={companyHeader} />
 
       <ConfirmDialog
         open={confirmDelete}

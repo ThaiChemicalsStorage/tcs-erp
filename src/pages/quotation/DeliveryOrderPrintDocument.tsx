@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { DeliveryOrder, DeliveryOrderInstallment, DeliveryOrderItem } from "../../lib/deliveryOrder";
 import { formatQuoteDateNumeric as fmtNumericDate } from "../../lib/quotes";
+import { PrintSignatureLine } from "../../components/PrintSignature";
 import { FacebookIcon, LineAppIcon } from "../../components/PrintSocialIcons";
 
 // ชื่อ/ที่อยู่/เบอร์โทร/อีเมล คงที่ตามแบบฟอร์มอ้างอิง FM-SL-05 (ภาษาอังกฤษ, ที่อยู่แยกบรรทัด) —
@@ -283,15 +284,23 @@ function InstallmentPage({
       {isLastPage && (
         <div style={{ breakInside: "avoid" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: "80px", marginTop: "10px", fontSize: "13px" }}>
+            {/* ฝั่งบริษัทวางลายเซ็นจริงของคนที่ออกใบให้ (เจ้าของสั่ง 2026-09-02) — ฝั่งลูกค้าไม่มี
+                บัญชีในระบบ จึงเว้นเส้นไว้ให้เซ็นรับของด้วยมือเหมือนเดิม */}
             {[
-              { heading: `ลงนาม ${deliveryOrder.customerCompanyName || "................................................"}`, role: "ผู้ตรวจรับสินค้าและงานบริการ" },
-              { heading: `ลงนาม ${companyHeader.name}`, role: "ผู้ส่งสินค้าและงานบริการ" },
-            ].map(({ heading, role }) => (
+              { heading: `ลงนาม ${deliveryOrder.customerCompanyName || "................................................"}`, role: "ผู้ตรวจรับสินค้าและงานบริการ", userId: "" },
+              { heading: `ลงนาม ${companyHeader.name}`, role: "ผู้ส่งสินค้าและงานบริการ", userId: deliveryOrder.createdBy },
+            ].map(({ heading, role, userId }) => (
               <div key={role}>
                 <p style={{ textAlign: "center", fontWeight: 700, fontSize: "13.5px" }}>{heading}</p>
                 <div style={{ display: "flex", alignItems: "flex-end", gap: "12px", marginTop: "18px" }}>
                   <p style={{ fontWeight: 700, whiteSpace: "nowrap" }}>ลงชื่อ</p>
-                  <div style={{ flex: 1, borderBottom: LINE }} />
+                  <div style={{ flex: 1, borderBottom: LINE, position: "relative" }}>
+                    {userId ? (
+                      <div style={{ position: "absolute", left: 0, right: 0, bottom: "1px" }}>
+                        <PrintSignatureLine userId={userId} height={30} />
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "flex-end", marginTop: "18px", marginLeft: "44px" }}>
                   <p>(</p>

@@ -180,9 +180,14 @@ export async function fetchMaterialRequisition(id: string): Promise<MaterialRequ
   const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}`);
   return materialRequisition;
 }
-export async function createMaterialRequisition(projectId: string, itemId: string): Promise<MaterialRequisition> {
+/**
+ * หนึ่งใบเบิกครอบคลุมได้หลายรายการในโครงการ (เจ้าของสั่ง 2026-09-02 "ให้เหมือนกับผลิต" — ฝ่ายผลิต
+ * ออกใบเดียวต่อหนึ่งใบสั่งผลิตอยู่แล้ว) รับ id เดี่ยวได้ด้วย เพราะปุ่มในหน้าโครงการยังสร้างทีละรายการ
+ */
+export async function createMaterialRequisition(projectId: string, itemIds: string | string[]): Promise<MaterialRequisition> {
+  const ids = Array.isArray(itemIds) ? itemIds : [itemIds];
   const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>("/material-requisitions", {
-    method: "POST", body: JSON.stringify({ projectId, itemId }),
+    method: "POST", body: JSON.stringify({ projectId, itemIds: ids }),
   });
   return materialRequisition;
 }

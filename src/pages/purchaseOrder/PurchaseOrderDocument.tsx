@@ -484,7 +484,7 @@ export function PurchaseOrderDocument({
         </div>
       </div>
 
-      {showPrint && <PurchaseOrderPrintDocument doc={draft} />}
+      <PurchaseOrderPrintDocument doc={draft} />
 
       <ConfirmDialog
         open={confirmDelete}

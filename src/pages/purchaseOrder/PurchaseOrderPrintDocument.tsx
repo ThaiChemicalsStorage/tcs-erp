@@ -1,6 +1,8 @@
 import type { PurchaseOrder } from "../../lib/purchaseOrder";
 import { fmt } from "../../lib/quotes";
 import { purchaseOrderTotals, purchaseOrderLineTotal } from "../../lib/purchaseOrder";
+import { PrintSignatureLine } from "../../components/PrintSignature";
+import { printDate, printText, printNumber } from "../../lib/printFormat";
 
 /**
  * ⚠️ **ใบพิมพ์ชั่วคราว — รอฟอร์มจริง**
@@ -36,26 +38,26 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
         <tbody>
           <tr>
             <td style={cell}><b>เลขที่:</b> {doc.documentNumber || doc.id}</td>
-            <td style={cell}><b>วันที่:</b> {doc.orderDate || "—"}</td>
-            <td style={cell}><b>อ้างอิงใบขอซื้อ:</b> {doc.purchaseRequestId || "—"}</td>
+            <td style={cell}><b>วันที่:</b> {printDate(doc.orderDate)}</td>
+            <td style={cell}><b>อ้างอิงใบขอซื้อ:</b> {printText(doc.purchaseRequestId)}</td>
           </tr>
           <tr>
-            <td style={cell} colSpan={2}><b>ผู้ขาย:</b> {doc.vendorName || "—"}</td>
-            <td style={cell}><b>รหัสงาน:</b> {doc.jobCode || "—"}</td>
+            <td style={cell} colSpan={2}><b>ผู้ขาย:</b> {printText(doc.vendorName)}</td>
+            <td style={cell}><b>รหัสงาน:</b> {printText(doc.jobCode)}</td>
           </tr>
           <tr>
-            <td style={cell} colSpan={2}><b>ที่อยู่:</b> {doc.vendorAddress || "—"}</td>
-            <td style={cell}><b>เลขผู้เสียภาษี:</b> {doc.vendorTaxId || "—"}</td>
+            <td style={cell} colSpan={2}><b>ที่อยู่:</b> {printText(doc.vendorAddress)}</td>
+            <td style={cell}><b>เลขผู้เสียภาษี:</b> {printText(doc.vendorTaxId)}</td>
           </tr>
           <tr>
-            <td style={cell}><b>ผู้ติดต่อ:</b> {doc.vendorContact || "—"}</td>
-            <td style={cell}><b>โทร:</b> {doc.vendorPhone || "—"}</td>
-            <td style={cell}><b>เครดิต:</b> {doc.creditDays !== null ? `${doc.creditDays} วัน` : "—"}</td>
+            <td style={cell}><b>ผู้ติดต่อ:</b> {printText(doc.vendorContact)}</td>
+            <td style={cell}><b>โทร:</b> {printText(doc.vendorPhone)}</td>
+            <td style={cell}><b>เครดิต:</b> {doc.creditDays !== null ? `${doc.creditDays} วัน` : "-"}</td>
           </tr>
           <tr>
-            <td style={cell}><b>วันที่ต้องการรับของ:</b> {doc.neededByDate || "—"}</td>
-            <td style={cell}><b>ขนส่งโดย:</b> {doc.shippingMethod || "—"}</td>
-            <td style={cell}><b>สถานที่ส่งของ:</b> {doc.deliveryLocation || "—"}</td>
+            <td style={cell}><b>วันที่ต้องการรับของ:</b> {printDate(doc.neededByDate)}</td>
+            <td style={cell}><b>ขนส่งโดย:</b> {printText(doc.shippingMethod)}</td>
+            <td style={cell}><b>สถานที่ส่งของ:</b> {printText(doc.deliveryLocation)}</td>
           </tr>
         </tbody>
       </table>
@@ -77,19 +79,19 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
           {doc.lines.map((l, i) => (
             <tr key={l.id}>
               <td style={{ ...cell, textAlign: "center" }}>{i + 1}</td>
-              <td style={cell}>{l.productCode}</td>
+              <td style={cell}>{printText(l.productCode)}</td>
               <td style={cell}>
                 {l.description}
                 {l.subDetails.map((sd, j) => (
                   <div key={j} style={{ paddingLeft: 12, fontSize: "10px" }}>{sd}</div>
                 ))}
               </td>
-              <td style={{ ...cell, textAlign: "center" }}>{l.unit}</td>
-              <td style={{ ...cell, textAlign: "right" }}>{l.qty ?? ""}</td>
-              <td style={{ ...cell, textAlign: "right" }}>{l.unitPrice !== null ? fmt(l.unitPrice) : ""}</td>
+              <td style={{ ...cell, textAlign: "center" }}>{printText(l.unit)}</td>
+              <td style={{ ...cell, textAlign: "right" }}>{printNumber(l.qty)}</td>
+              <td style={{ ...cell, textAlign: "right" }}>{l.unitPrice !== null ? fmt(l.unitPrice) : "-"}</td>
               {/* ส่วนลดพิมพ์ตามที่กรอก (10% หรือ 500) ไม่ใช่ยอดที่คิดแล้ว — คนอ่านใบต้องเห็นเงื่อนไข */}
               <td style={{ ...cell, textAlign: "right" }}>
-                {l.discount ? `${fmt(l.discount)}${l.discountMode === "amount" ? "" : "%"}` : ""}
+                {l.discount ? `${fmt(l.discount)}${l.discountMode === "amount" ? "" : "%"}` : "-"}
               </td>
               <td style={{ ...cell, textAlign: "right" }}>{fmt(purchaseOrderLineTotal(l))}</td>
             </tr>
@@ -123,11 +125,14 @@ export function PurchaseOrderPrintDocument({ doc }: { doc: PurchaseOrder }) {
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 28 }}>
         <tbody>
           <tr>
+            {/* ลายเซ็นจริงของคนสร้างใบและคนที่กดอนุมัติ วางเหนือเส้นให้ (เจ้าของสั่ง 2026-09-02) */}
             <td style={{ width: "50%", textAlign: "center", paddingTop: 20 }}>
+              <PrintSignatureLine userId={doc.createdBy} height={28} />
               <div>....................................................</div>
               <div>ผู้สั่งซื้อ {doc.orderedBy ? `(${doc.orderedBy})` : ""}</div>
             </td>
             <td style={{ width: "50%", textAlign: "center", paddingTop: 20 }}>
+              <PrintSignatureLine userId={doc.approvedByUserId} height={28} />
               <div>....................................................</div>
               <div>ผู้อนุมัติ {doc.approvedBy ? `(${doc.approvedBy})` : ""}</div>
             </td>

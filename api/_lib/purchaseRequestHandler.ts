@@ -8,7 +8,7 @@ import {
   toObjectId, withStringId, type PurchaseRequestFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
-import { loadPendingProjectItemOrThrow, linkProjectItemToSubDocument, markProjectItemFulfilled, unlinkProjectItem, findProjectItemIdByLink } from "./projectHandler.js";
+import { loadPendingProjectItemsOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { notifyDepartments, PURCHASING_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { nowIso, newId } from "../../src/lib/products.js";
@@ -156,7 +156,15 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
-  const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
+  /**
+   * รายการในโครงการที่ติ๊กเลือกไว้ — รับทั้ง `itemIds` (หลายรายการ) และ `itemId` เดี่ยวของผู้เรียกเก่า
+   * ดูเหตุผลเต็มที่ `handleCreate()` ของใบเบิกและใบคืนวัสดุ (คำสั่งเจ้าของข้อเดียวกัน 2026-09-02)
+   */
+  const itemIds = [...new Set(
+    Array.isArray(body.itemIds)
+      ? (body.itemIds as unknown[]).filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean)
+      : typeof body.itemId === "string" && body.itemId.trim() ? [body.itemId.trim()] : [],
+  )];
   const productionOrderId = typeof body.productionOrderId === "string" ? body.productionOrderId.trim() : "";
 
   /**
@@ -171,14 +179,14 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
    * เอกสารต้นทางให้ผูก ใบของฝ่ายอื่นจึงไม่มี projectId/scopeOfWorkId/jobCode และไม่ไปแตะ
    * linkProjectItemToSubDocument() — ผู้ใช้พิมพ์รายการเองทั้งใบ
    */
-  const standalone = !fromProduction && !projectId && !itemId;
-  if (!fromProduction && !standalone && (!projectId || !itemId)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+  const standalone = !fromProduction && !projectId && itemIds.length === 0;
+  if (!fromProduction && !standalone && (!projectId || itemIds.length === 0)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
   // สิทธิ์ project:view จำเป็นเฉพาะทางที่ต้องอ่านโครงการจริง ๆ — ถ้าบังคับทั้งก้อนเหมือนเดิม
   // ฝ่ายที่ไม่มีสิทธิ์ดูโครงการจะเปิดใบของตัวเองไม่ได้เลย ซึ่งเป็นสิ่งที่รอบนี้ตั้งใจแก้
   if (!fromProduction && !standalone && !roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
 
   let source: { projectId: string; scopeOfWorkId: string; jobCode: string };
-  let item: { name: string } | null = null;
+  let pickedItems: { name: string }[] = [];
   if (standalone) {
     source = { projectId: "", scopeOfWorkId: "", jobCode: "" };
   } else if (fromProduction) {
@@ -191,8 +199,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     if (!roleHasPermission(ctx.role, "productionOrder:view")) throw new HttpError(403, "Forbidden");
     source = { projectId: "", scopeOfWorkId: po.scopeOfWorkId, jobCode: po.jobCode };
   } else {
-    const loaded = await loadPendingProjectItemOrThrow(projectId, itemId);
-    item = loaded.item;
+    const loaded = await loadPendingProjectItemsOrThrow(projectId, itemIds);
+    pickedItems = loaded.items;
     source = { projectId, scopeOfWorkId: loaded.project.scopeOfWorkId, jobCode: loaded.project.scopeNumber };
   }
 
@@ -223,7 +231,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   // CRITICAL invariant — see materialRequisitionHandler.ts's identical comment on this same step.
   // ฝ่ายผลิตออกจากใบสั่งผลิต ไม่มีรายการในโครงการให้ผูก จึงข้ามขั้นตอนนี้
   if (!fromProduction && !standalone) {
-    await linkProjectItemToSubDocument(projectId, itemId, "purchaseRequest", "purchaseRequestId", id);
+    await linkProjectItemsToSubDocument(projectId, itemIds, "purchaseRequest", "purchaseRequestId", id);
   }
 
   await writeAuditEntry(
@@ -232,7 +240,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       ? `สร้างใบขอซื้อ ${id} (ไม่มีเอกสารต้นทาง)`
       : fromProduction
       ? `สร้างใบขอซื้อ ${id} จากใบสั่งผลิต ${productionOrderId}`
-      : `สร้างใบขอซื้อ ${id} สำหรับรายการ "${item?.name ?? ""}"`,
+      : `สร้างใบขอซื้อ ${id} สำหรับรายการ "${pickedItems.map((it) => it.name).join('", "')}"`,
     { scopeOfWorkId: source.scopeOfWorkId },
   );
   res.status(201).json({ purchaseRequest: toClient({ ...doc, _id: id }) });
@@ -318,8 +326,8 @@ const approvalConfig: ApprovalConfig<PurchaseRequestFields & { _id: string }> = 
   writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
   // อนุมัติแล้วถือว่ารายการใน Project ต้นทางถูกจัดหาเรียบร้อย (เดิมทำตอน finalize)
   onApproved: async (ctx, doc) => {
-    const itemId = doc.projectId ? await findProjectItemIdByLink(doc.projectId, "purchaseRequestId", doc._id) : null;
-    if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
+    const itemIds = doc.projectId ? await findProjectItemIdsByLink(doc.projectId, "purchaseRequestId", doc._id) : [];
+    if (itemIds.length > 0) await markProjectItemsFulfilled(doc.projectId, itemIds);
 
     // ส่งต่อให้จัดซื้อ (ฝ่ายโครงการขอไว้ 2026-08-27: "ใบขอซื้อ ให้ผู้จัดการอนุมัติแล้วส่งไปที่จัดซื้อ")
     // best-effort โดยตั้งใจ — การอนุมัติต้องไม่ล้มเพราะแจ้งเตือนส่งไม่ออก แต่ถ้าไม่มีผู้รับเลยต้องเห็นใน log
@@ -413,8 +421,8 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   }
 
   if (source.projectId) {
-    const itemId = await findProjectItemIdByLink(source.projectId, "purchaseRequestId", source._id);
-    if (itemId) await linkProjectItemToSubDocument(source.projectId, itemId, "purchaseRequest", "purchaseRequestId", created._id);
+    const itemIds = await findProjectItemIdsByLink(source.projectId, "purchaseRequestId", source._id);
+    if (itemIds.length > 0) await linkProjectItemsToSubDocument(source.projectId, itemIds, "purchaseRequest", "purchaseRequestId", created._id);
   }
 
   await writeAuditEntry(ctx, "Purchase Request Rewritten", `สร้างใบขอซื้อฉบับแก้ไข ${created._id} จาก ${source._id}`, { scopeOfWorkId: source.scopeOfWorkId });
@@ -429,8 +437,8 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
 
   const purchaseRequests = await purchaseRequestsCollection();
   await purchaseRequests.updateOne({ _id: id }, { $set: { isDeleted: true, updatedAt: nowIso(), updatedBy: ctx.user.id } });
-  const itemId = doc.projectId ? await findProjectItemIdByLink(doc.projectId, "purchaseRequestId", id) : null;
-  if (itemId) await unlinkProjectItem(doc.projectId, itemId, "purchaseRequestId");
+  const itemIds = doc.projectId ? await findProjectItemIdsByLink(doc.projectId, "purchaseRequestId", id) : [];
+  if (itemIds.length > 0) await unlinkProjectItems(doc.projectId, itemIds, "purchaseRequestId");
   await writeAuditEntry(ctx, "Purchase Request Deleted", `ลบใบขอซื้อ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
   res.status(200).json({ ok: true });
 }

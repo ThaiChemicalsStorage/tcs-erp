@@ -269,7 +269,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     jobCode: scope.scopeNumber,
     customerCompanyName: scope.customerSnapshot.companyName,
     productName: "",
-    supervisorName: "",
+    // "ชื่อพนักงานดูแลให้ขึ้นมาเลย" (เจ้าของ 2026-09-02) — เดิมเริ่มว่างแล้วแทบไม่มีใครกรอก
+    // ตั้งเป็นคนที่กดสร้างใบ ซึ่งเป็นคนที่รู้เรื่องงานนี้ที่สุดในตอนนั้น แก้ทีหลังได้ตามปกติ
+    supervisorName: ctx.user.fullName,
     startDate: "",
     dueDate: "",
     // ดึงรายการ+สเปกจากงานต้นทางมาให้เลย ผู้ใช้ลบ/แก้ต่อได้ (ก่อน 2026-08-27 เริ่มจากตารางว่าง)

@@ -3,7 +3,7 @@ import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, 
 import type { DriveStep } from "driver.js";
 import {
   type JobOrder, type JobOrderLine, type JobOrderUpdateFields,
-  fetchJobOrder, updateJobOrder, finalizeJobOrder, logJobOrderPrinted, deleteJobOrder, blankJobOrderLine,
+  fetchJobOrder, updateJobOrder, logJobOrderPrinted, deleteJobOrder, blankJobOrderLine,
   submitJobOrderApproval, approveJobOrder, rejectJobOrder, withdrawJobOrderApproval,
   uploadJobOrderAttachment, deleteJobOrderAttachment,
   rewriteJobOrder,
@@ -84,13 +84,11 @@ export function JobOrderDocument({
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [finalizing, setFinalizing] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
   const [rewriting, setRewriting] = useState(false);
-  const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) ─────────────────────────────────────────────────────
@@ -252,22 +250,6 @@ export function JobOrderDocument({
   };
   const addLine = (isContinuation = false) => {
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankJobOrderLine(isContinuation)] });
-  };
-
-  const finalize = async () => {
-    setFinalizing(true);
-    try {
-      const updated = await finalizeJobOrder(doc.id);
-      setDoc(updated);
-      setDraft(updated);
-      dirty.markSaved(toUpdateFields(updated));
-      setConfirmFinalize(false);
-      showToast(t("jobOrderDoc.finalized"));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("jobOrderDoc.errorFinalize"));
-    } finally {
-      setFinalizing(false);
-    }
   };
 
   // สร้างฉบับแก้ไข แล้วเปิดฉบับใหม่ทันที — ฉบับเดิมยังอยู่ครบ ไม่ถูกแตะต้อง
@@ -603,7 +585,7 @@ export function JobOrderDocument({
         </div>
       </div>
 
-      {showPrint && <JobOrderPrintDocument jobOrder={doc} companyHeader={companyHeader} />}
+      <JobOrderPrintDocument jobOrder={doc} companyHeader={companyHeader} />
 
       <ConfirmDialog
         open={confirmDelete}
@@ -622,14 +604,6 @@ export function JobOrderDocument({
         busy={rewriting}
         onConfirm={() => void handleRewrite()}
         onCancel={() => setConfirmRewrite(false)}
-      />
-      <ConfirmDialog
-        open={confirmFinalize}
-        title={t("jobOrderDoc.finalizeConfirmTitle")}
-        message={t("jobOrderDoc.finalizeConfirmMessage")}
-        busy={finalizing}
-        onConfirm={finalize}
-        onCancel={() => setConfirmFinalize(false)}
       />
     </div>
   );

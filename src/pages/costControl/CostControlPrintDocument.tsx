@@ -1,6 +1,8 @@
 import { type CostControl, lineTotalCost } from "../../lib/costControl";
 import type { Company } from "../../lib/storage";
 import { fmt } from "../../lib/quotes";
+import { PrintSignatureLine } from "../../components/PrintSignature";
+import { printDate, printText } from "../../lib/printFormat";
 
 /**
  * ใบพิมพ์ Cost Control — **FM-SL-06 Rev.02 : 11/09/67**
@@ -90,15 +92,15 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
           </tr>
           <tr>
             <td style={{ ...cell, width: "12%" }}>Job Name</td>
-            <td style={{ ...cell, width: "48%" }}>: {c.jobName}</td>
+            <td style={{ ...cell, width: "48%" }}>: {printText(c.jobName)}</td>
             <td style={{ ...cell, width: "14%" }}>Work type&nbsp;&nbsp;&nbsp;:</td>
-            <td style={{ ...cell, textAlign: "center" }}>{c.workType}</td>
+            <td style={{ ...cell, textAlign: "center" }}>{printText(c.workType)}</td>
           </tr>
           <tr>
             <td style={cell}>Job order</td>
-            <td style={cell}>: {c.jobOrder}</td>
+            <td style={cell}>: {printText(c.jobOrder)}</td>
             <td style={cell}>Date&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:</td>
-            <td style={{ ...cell, textAlign: "center" }}>{c.docDate}</td>
+            <td style={{ ...cell, textAlign: "center" }}>{printDate(c.docDate)}</td>
           </tr>
         </tbody>
       </table>
@@ -160,7 +162,7 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
         <tbody>
           <tr>
             <td style={{ border: "none", padding: "2px 6px", width: "120px", verticalAlign: "bottom" }}>หมายเหตุ :</td>
-            <td style={{ border: "none", padding: "2px 6px", borderBottom: LINE, verticalAlign: "bottom" }}>{c.remarks}</td>
+            <td style={{ border: "none", padding: "2px 6px", borderBottom: LINE, verticalAlign: "bottom" }}>{printText(c.remarks)}</td>
           </tr>
         </tbody>
       </table>
@@ -168,10 +170,13 @@ export function CostControlPrintDocument({ costControl: c, company }: { costCont
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px" }}>
         <tbody>
           <tr>
+            {/* ลายเซ็นจริงของคนสร้างใบและคนที่กดอนุมัติ (เจ้าของสั่ง 2026-09-02) */}
             <td style={{ border: "none", padding: "2px 6px", width: "50%" }}>
+              <PrintSignatureLine userId={c.createdBy} height={26} />
               Submitted by&nbsp; ...............................{c.submittedBy ? ` (${c.submittedBy})` : ""}
             </td>
             <td style={{ border: "none", padding: "2px 6px", width: "50%" }}>
+              <PrintSignatureLine userId={c.approvedByUserId} height={26} />
               Approved by&nbsp; ...............................{c.approvedBy ? ` (${c.approvedBy})` : ""}
             </td>
           </tr>

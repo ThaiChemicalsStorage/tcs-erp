@@ -445,7 +445,7 @@ export function CostControlDocument({
         </div>
       </div>
 
-      {showPrint && <CostControlPrintDocument costControl={draft} company={company} />}
+      <CostControlPrintDocument costControl={draft} company={company} />
 
       <ConfirmDialog
         open={confirmDelete}

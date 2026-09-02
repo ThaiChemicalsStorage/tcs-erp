@@ -76,9 +76,9 @@ export function PurchaseRequestPage({
     }
   };
 
-  const handleCreate = async (projectId: string, itemId: string) => {
+  const handleCreate = async (projectId: string, itemIds: string[]) => {
     try {
-      const created = await createPurchaseRequest(projectId, itemId);
+      const created = await createPurchaseRequest(projectId, itemIds);
       setPickerOpen(false);
       openPurchaseRequest(created.id);
     } catch (err) {
@@ -203,7 +203,8 @@ export function PurchaseRequestPage({
           title={t("purchaseRequest.createBtn")}
           description={t("project.picker.project.description")}
           onClose={() => setPickerOpen(false)}
-          onSelect={(projectId, itemIds) => void handleCreate(projectId, itemIds[0])}
+          onSelect={(projectId, itemIds) => void handleCreate(projectId, itemIds)}
+          multiSelect
         />
       ))}
       <Toast message={toast.message} />

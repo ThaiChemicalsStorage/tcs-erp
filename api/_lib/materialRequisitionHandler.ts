@@ -8,7 +8,7 @@ import {
   toObjectId, withStringId, type MaterialRequisitionFields, type CounterFields,
 } from "./collections.js";
 import { handleSubmitApproval, handleApprove, handleReject, handleWithdrawApproval, withApprovalDefaults, type ApprovalConfig } from "./documentApproval.js";
-import { loadPendingProjectItemOrThrow, linkProjectItemToSubDocument, markProjectItemFulfilled, unlinkProjectItem, findProjectItemIdByLink } from "./projectHandler.js";
+import { loadPendingProjectItemsOrThrow, linkProjectItemsToSubDocument, markProjectItemsFulfilled, unlinkProjectItems, findProjectItemIdsByLink } from "./projectHandler.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { nowIso, newId } from "../../src/lib/products.js";
 import { sanitizeShortText, validateIsoDateOrEmpty, sanitizeLongText } from "./quoteValidation.js";
@@ -37,6 +37,23 @@ async function nextMaterialRequisitionId(counters: Collection<CounterFields>): P
   const result = await counters.findOneAndUpdate({ _id: counterId }, { $inc: { seq: 1 } }, { returnDocument: "after", upsert: true });
   const seq = result?.seq ?? 1;
   return `MR-${buddhistYear}-${String(seq).padStart(4, "0")}`;
+}
+
+/**
+ * เลขที่ใบเบิกของฝ่ายผลิต — **อิงจากเลขที่ใบสั่งผลิต** ตามคำสั่งเจ้าของ 2026-09-02
+ * ("เลขใบเบิกอิงมาจากใบสั่งผลิต") เช่นใบสั่งผลิต `SC-2026-09-001` จะได้ `SC-2026-09-001-MR1`,
+ * `-MR2`, ... ตามลำดับใบเบิกที่ออกจากใบสั่งผลิตใบนั้น
+ *
+ * ตัวนับแยกต่อใบสั่งผลิต (atomic, upsert) ไม่ใช่ตัวนับรวมทั้งปี — เลขจึงอ่านออกทันทีว่าใบเบิกนี้
+ * มาจากงานไหนและเป็นใบที่เท่าไรของงานนั้น ซึ่งเป็นเหตุผลทั้งหมดของคำสั่งนี้
+ *
+ * ใบของ**ฝ่ายโครงการ**ยังใช้ `MR-{พ.ศ.}-{ลำดับ}` เหมือนเดิม เพราะไม่มีใบสั่งผลิตให้อิง
+ */
+async function nextMaterialRequisitionIdForProductionOrder(counters: Collection<CounterFields>, productionOrderId: string): Promise<string> {
+  const counterId = `material_requisition_of_${productionOrderId}`;
+  const result = await counters.findOneAndUpdate({ _id: counterId }, { $inc: { seq: 1 } }, { returnDocument: "after", upsert: true });
+  const seq = result?.seq ?? 1;
+  return `${productionOrderId}-MR${seq}`;
 }
 
 async function writeAuditEntry(ctx: AuthContext, action: string, details: string, related: { scopeOfWorkId?: string }): Promise<void> {
@@ -155,7 +172,18 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
-  const itemId = typeof body.itemId === "string" ? body.itemId.trim() : "";
+  /**
+   * รายการในโครงการที่ติ๊กเลือกไว้ — รับทั้ง `itemIds` (หลายรายการ) และ `itemId` เดี่ยวของผู้เรียกเก่า
+   *
+   * เจ้าของสั่ง 2026-09-02: *"แก้ใบเบิกและคืนวัสดุ / ใบขอซื้อ ของโครงการให้เหมือนกับผลิต"* — ฝ่ายผลิต
+   * ออกใบเดียวครอบทั้งใบสั่งผลิตอยู่แล้ว ฝั่งโครงการจึงต้องติ๊กหลายรายการแล้วได้ใบเดียวเหมือนกัน
+   * (เดิมบังคับหนึ่งใบต่อหนึ่งรายการ) รูปแบบเดียวกับใบสั่งงานที่เปลี่ยนไปแล้วเมื่อ 2026-08-27
+   */
+  const itemIds = [...new Set(
+    Array.isArray(body.itemIds)
+      ? (body.itemIds as unknown[]).filter((v): v is string => typeof v === "string").map((v) => v.trim()).filter(Boolean)
+      : typeof body.itemId === "string" && body.itemId.trim() ? [body.itemId.trim()] : [],
+  )];
   const productionOrderId = typeof body.productionOrderId === "string" ? body.productionOrderId.trim() : "";
 
   /**
@@ -164,10 +192,13 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
    *   - ใบสั่งผลิต        → ของฝ่ายผลิต, ไม่มีรายการให้ผูก จึงข้าม item-link ทั้งหมด
    */
   const fromProduction = Boolean(productionOrderId);
-  if (!fromProduction && (!projectId || !itemId)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+  if (!fromProduction && (!projectId || itemIds.length === 0)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
 
-  let source: { projectId: string; scopeOfWorkId: string; jobCode: string; customerName: string; productName: string };
-  let item: { name: string } | null = null;
+  /** `responsibleEmployee` = "ชื่อพนักงานดูแล" บนฟอร์ม — เจ้าของสั่ง 2026-09-02 ว่า "ชื่อพนักงานดูแล
+   *  ให้ขึ้นมาเลย" จึงเติมให้ตั้งแต่ตอนสร้าง (แก้ทีหลังได้) ใบของฝ่ายผลิตสืบมาจากใบสั่งผลิตก่อน
+   *  เพราะที่นั่นระบุตัวคนดูแลงานไว้จริง ๆ ถ้าใบนั้นยังว่างค่อยถอยมาใช้ชื่อคนสร้างใบเบิก */
+  let source: { projectId: string; scopeOfWorkId: string; jobCode: string; customerName: string; productName: string; responsibleEmployee: string };
+  let pickedItems: { name: string }[] = [];
   let jobOrderLink = { jobOrderId: null as string | null, jobOrderCode: "" };
 
   if (fromProduction) {
@@ -178,22 +209,31 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     // ("ใบสั่งผลิตกับใบเบิกไม่ต้องรอ Final ก็สร้างได้") เจ้าของยืนยันให้ปลดทั้งชั้นนี้และชั้น Scope of Work → ใบสั่งผลิต
     // เดิมบังคับไว้ตั้งแต่ 2026-08-20 ด้วยเหตุผลว่าใบสั่งผลิตฉบับร่างไม่ควรสั่งเบิกของจริงได้
     if (!roleHasPermission(ctx.role, "productionOrder:view")) throw new HttpError(403, "Forbidden");
-    source = { projectId: "", scopeOfWorkId: po.scopeOfWorkId, jobCode: po.jobCode, customerName: po.customerCompanyName, productName: po.productName };
+    source = {
+      projectId: "", scopeOfWorkId: po.scopeOfWorkId, jobCode: po.jobCode,
+      customerName: po.customerCompanyName, productName: po.productName,
+      responsibleEmployee: po.supervisorName?.trim() || ctx.user.fullName,
+    };
   } else {
     // Validates the item exists and is still "pending" BEFORE anything is inserted — see
     // loadPendingProjectItemOrThrow()'s own doc comment for why this ordering is what makes the
     // create-then-link sequence below safe without a real multi-document transaction.
-    const loaded = await loadPendingProjectItemOrThrow(projectId, itemId);
-    item = loaded.item;
+    const loaded = await loadPendingProjectItemsOrThrow(projectId, itemIds);
+    pickedItems = loaded.items;
     jobOrderLink = await resolveJobOrderLink(projectId, body.jobOrderId);
     source = {
       projectId, scopeOfWorkId: loaded.project.scopeOfWorkId, jobCode: loaded.project.scopeNumber,
-      customerName: loaded.project.customerCompanyName, productName: loaded.item.name,
+      customerName: loaded.project.customerCompanyName,
+      // ใบเดียวครอบได้หลายรายการแล้ว ช่อง "ชื่อสินค้า" จึงต่อชื่อทุกรายการที่ติ๊กไว้
+      productName: loaded.items.map((it) => it.name).join(", "),
+      responsibleEmployee: ctx.user.fullName,
     };
   }
 
   const counters = await countersCollection();
-  const id = await nextMaterialRequisitionId(counters);
+  const id = fromProduction
+    ? await nextMaterialRequisitionIdForProductionOrder(counters, productionOrderId)
+    : await nextMaterialRequisitionId(counters);
   const now = nowIso();
   const doc: MaterialRequisitionFields = {
     projectId: source.projectId, scopeOfWorkId: source.scopeOfWorkId, jobCode: source.jobCode,
@@ -202,7 +242,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     revisionNote: "",
     productionOrderId: fromProduction ? productionOrderId : "",
     jobOrderId: jobOrderLink.jobOrderId, jobOrderCode: jobOrderLink.jobOrderCode,
-    productName: source.productName, responsibleEmployee: "", productionStartDate: "",
+    productName: source.productName, responsibleEmployee: source.responsibleEmployee, productionStartDate: "",
     lines: [], status: "Draft",
     // preparedAt seeds from a date-only slice of `now`, not the full ISO timestamp — see
     // jobOrderHandler.ts's identical fix/comment on requestedAt for why (validateIsoDateOrEmpty
@@ -222,14 +262,14 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   // trusting any client-sent sourcingMethod/itemStatus/materialRequisitionId value.
   // ฝ่ายผลิตออกจากใบสั่งผลิต ไม่มีรายการในโครงการให้ผูก จึงข้ามขั้นตอนนี้ไป
   if (!fromProduction) {
-    await linkProjectItemToSubDocument(projectId, itemId, "requisition", "materialRequisitionId", id);
+    await linkProjectItemsToSubDocument(projectId, itemIds, "requisition", "materialRequisitionId", id);
   }
 
   await writeAuditEntry(
     ctx, "Material Requisition Created",
     fromProduction
       ? `สร้างใบเบิกและใบคืนวัสดุ ${id} จากใบสั่งผลิต ${productionOrderId}`
-      : `สร้างใบเบิกและใบคืนวัสดุ ${id} สำหรับรายการ "${item?.name ?? ""}"`,
+      : `สร้างใบเบิกและใบคืนวัสดุ ${id} สำหรับรายการ "${pickedItems.map((it) => it.name).join('", "')}"`,
     { scopeOfWorkId: source.scopeOfWorkId },
   );
   res.status(201).json({ materialRequisition: toClient({ ...doc, _id: id }) });
@@ -359,8 +399,8 @@ const approvalConfig: ApprovalConfig<MaterialRequisitionFields & { _id: string }
   writeAudit: (ctx, action, detail, doc) => writeAuditEntry(ctx, action, detail, { scopeOfWorkId: doc.scopeOfWorkId }),
   // อนุมัติแล้วถือว่ารายการใน Project ต้นทางถูกจัดหาเรียบร้อย (เดิมทำตอน finalize)
   onApproved: async (ctx, doc) => {
-    const itemId = doc.projectId ? await findProjectItemIdByLink(doc.projectId, "materialRequisitionId", doc._id) : null;
-    if (itemId) await markProjectItemFulfilled(doc.projectId, itemId);
+    const itemIds = doc.projectId ? await findProjectItemIdsByLink(doc.projectId, "materialRequisitionId", doc._id) : [];
+    if (itemIds.length > 0) await markProjectItemsFulfilled(doc.projectId, itemIds);
 
     // ส่งต่อให้สโตร์ (ฝ่ายโครงการขอไว้ 2026-08-27: "เมื่อผู้จัดการอนุมัติเสร็จจะส่งให้ Stores ของใบเบิก")
     // best-effort โดยตั้งใจ — การอนุมัติต้องไม่ล้มเพราะแจ้งเตือนส่งไม่ออก แต่ถ้าไม่มีผู้รับเลยต้องเห็นใน log
@@ -457,8 +497,8 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
 
   // ย้ายลิงก์ในโครงการมาชี้ฉบับใหม่ — เฉพาะใบฝั่งโครงการที่ผูกกับรายการอยู่จริง
   if (source.projectId) {
-    const itemId = await findProjectItemIdByLink(source.projectId, "materialRequisitionId", source._id);
-    if (itemId) await linkProjectItemToSubDocument(source.projectId, itemId, "requisition", "materialRequisitionId", created._id);
+    const itemIds = await findProjectItemIdsByLink(source.projectId, "materialRequisitionId", source._id);
+    if (itemIds.length > 0) await linkProjectItemsToSubDocument(source.projectId, itemIds, "requisition", "materialRequisitionId", created._id);
   }
 
   await writeAuditEntry(ctx, "Material Requisition Rewritten", `สร้างใบเบิกฉบับแก้ไข ${created._id} จาก ${source._id}`, { scopeOfWorkId: source.scopeOfWorkId });
@@ -473,8 +513,8 @@ async function handleDelete(req: VercelRequest, res: VercelResponse, id: string)
 
   const materialRequisitions = await materialRequisitionsCollection();
   await materialRequisitions.updateOne({ _id: id }, { $set: { isDeleted: true, updatedAt: nowIso(), updatedBy: ctx.user.id } });
-  const itemId = doc.projectId ? await findProjectItemIdByLink(doc.projectId, "materialRequisitionId", id) : null;
-  if (itemId) await unlinkProjectItem(doc.projectId, itemId, "materialRequisitionId");
+  const itemIds = doc.projectId ? await findProjectItemIdsByLink(doc.projectId, "materialRequisitionId", id) : [];
+  if (itemIds.length > 0) await unlinkProjectItems(doc.projectId, itemIds, "materialRequisitionId");
   await writeAuditEntry(ctx, "Material Requisition Deleted", `ลบใบเบิกและใบคืนวัสดุ ${id}`, { scopeOfWorkId: doc.scopeOfWorkId });
   res.status(200).json({ ok: true });
 }

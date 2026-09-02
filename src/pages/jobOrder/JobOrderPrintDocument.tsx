@@ -3,6 +3,8 @@ import { SCOPE_COLUMN_SPLIT } from "../../lib/jobOrder";
 import type { ChecklistOption } from "../../lib/documentRequirements";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatQuoteDateThai } from "../../lib/quotes";
+import { PrintSignatureLine } from "../../components/PrintSignature";
+import { printText, printNumber } from "../../lib/printFormat";
 
 /**
  * ฟอร์มพิมพ์ใบสั่งงาน — คัดตามฟอร์มจริง FM-PJ-01 Rev.01 : 10/10/65
@@ -59,20 +61,29 @@ function HeaderField({ thai, english, value }: { thai: string; english: string; 
     <td style={{ padding: "0 0 2px", verticalAlign: "bottom", width: "50%" }}>
       <div style={{ display: "flex", alignItems: "flex-end", gap: "6px" }}>
         <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{thai}</span>
-        <span style={{ flex: 1, borderBottom: LINE, minHeight: "15px", padding: "0 4px 1px" }}>{value || " "}</span>
+        <span style={{ flex: 1, borderBottom: LINE, minHeight: "15px", padding: "0 4px 1px" }}>{printText(value)}</span>
       </div>
       <p style={{ margin: 0, fontSize: "10px" }}>({english})</p>
     </td>
   );
 }
 
-/** ป้ายลงนามพร้อมจุดไข่ปลา — กระดาษใช้จุดไข่ปลา ไม่ใช่เส้นขีดใต้ */
-function SignatureField({ thai, english, value }: { thai: string; english: string; value: string }) {
+/**
+ * ป้ายลงนามพร้อมจุดไข่ปลา — กระดาษใช้จุดไข่ปลา ไม่ใช่เส้นขีดใต้
+ *
+ * `userId` (ถ้ามี) คือเจ้าของช่องเซ็นในระบบ — คนสร้างเอกสารสำหรับ "ผู้ร้องขอ" และคนที่กดอนุมัติ
+ * สำหรับ "ผู้อนุมัติ" ลายเซ็นที่เขาอัปโหลดไว้ในโปรไฟล์จะถูกวางเหนือบรรทัดให้ (เจ้าของสั่ง 2026-09-02)
+ * ช่องที่ไม่มีเจ้าของในระบบ เช่น "ผู้รับเอกสาร" ยังเป็นจุดไข่ปลาให้เซ็นมือเหมือนเดิม
+ */
+function SignatureField({ thai, english, value, userId }: { thai: string; english: string; value: string; userId?: string }) {
   return (
-    <p style={{ margin: "0 0 6px" }}>
-      <span style={{ fontWeight: 700 }}>{thai}</span> ({english}) :{" "}
-      <span>{value || "..................................."}</span>
-    </p>
+    <div style={{ margin: "0 0 6px" }}>
+      {userId ? <PrintSignatureLine userId={userId} height={26} /> : null}
+      <p style={{ margin: 0 }}>
+        <span style={{ fontWeight: 700 }}>{thai}</span> ({english}) :{" "}
+        <span>{value || "..................................."}</span>
+      </p>
+    </div>
   );
 }
 
@@ -206,9 +217,9 @@ export function JobOrderPrintDocument({
                     <p key={i} style={{ margin: "1px 0 0 12px" }}>{sd}</p>
                   ))}
                 </td>
-                <td style={{ ...cell, textAlign: "center" }}>{line.quantity ?? ""}</td>
-                <td style={{ ...cell, textAlign: "center" }}>{line.unit}</td>
-                <td style={cell}>{line.remark}</td>
+                <td style={{ ...cell, textAlign: "center" }}>{printNumber(line.quantity)}</td>
+                <td style={{ ...cell, textAlign: "center" }}>{printText(line.unit)}</td>
+                <td style={cell}>{printText(line.remark)}</td>
               </tr>
             ))}
             {/* แถวว่างให้ครบตามกระดาษ ซึ่งเว้นช่องไว้ให้เขียนเพิ่มด้วยมือ */}
@@ -257,12 +268,12 @@ export function JobOrderPrintDocument({
         {/* 7. ช่องลงนาม — ผู้ร้องขออยู่แถวบนเดี่ยว ๆ ตามกระดาษ ไม่ใช่สามช่องเรียงกัน */}
         <div style={{ marginTop: "16px", breakInside: "avoid" }}>
           <div style={{ width: "50%" }}>
-            <SignatureField thai="ผู้ร้องขอ" english="Requested By" value={j.requestedBy} />
+            <SignatureField thai="ผู้ร้องขอ" english="Requested By" value={j.requestedBy} userId={j.createdBy} />
             <SignatureField thai="วันที่" english="Date" value={formatQuoteDateThai(j.requestedAt)} />
           </div>
           <div style={{ display: "flex", gap: "18px", marginTop: "14px" }}>
             <div style={{ width: "50%" }}>
-              <SignatureField thai="ผู้อนุมัติ" english="Approved By" value={j.approvedBy} />
+              <SignatureField thai="ผู้อนุมัติ" english="Approved By" value={j.approvedBy} userId={j.approvedByUserId} />
               <SignatureField thai="วันที่" english="Date" value={formatQuoteDateThai(j.approvedAt)} />
             </div>
             <div style={{ flex: 1 }}>

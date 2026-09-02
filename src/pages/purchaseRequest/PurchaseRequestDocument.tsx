@@ -4,7 +4,7 @@ import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
   type PurchaseRequest, type PurchaseRequestLine, type PurchaseRequestUpdateFields,
-  fetchPurchaseRequest, updatePurchaseRequest, finalizePurchaseRequest, logPurchaseRequestPrinted,
+  fetchPurchaseRequest, updatePurchaseRequest, logPurchaseRequestPrinted,
   deletePurchaseRequest, blankPurchaseRequestLine,
   submitPurchaseRequestApproval, approvePurchaseRequest, rejectPurchaseRequest, withdrawPurchaseRequestApproval,
   rewritePurchaseRequest,
@@ -88,13 +88,11 @@ export function PurchaseRequestDocument({
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [finalizing, setFinalizing] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
   const [rewriting, setRewriting] = useState(false);
-  const [confirmFinalize, setConfirmFinalize] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   // ทะเบียนรหัสแผนก/บัญชี — เป็นแค่ตัวช่วยเติม โหลดล้มก็ยังพิมพ์รหัสเองได้ตามปกติ
   const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([]);
@@ -268,22 +266,6 @@ export function PurchaseRequestDocument({
   };
   const addFreeLine = () => {
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankPurchaseRequestLine()] });
-  };
-
-  const finalize = async () => {
-    setFinalizing(true);
-    try {
-      const updated = await finalizePurchaseRequest(doc.id);
-      setDoc(updated);
-      dirty.markSaved(toUpdateFields(updated));
-      setDraft(updated);
-      setConfirmFinalize(false);
-      showToast(t("purchaseRequestDoc.finalized"));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : t("purchaseRequestDoc.errorFinalize"));
-    } finally {
-      setFinalizing(false);
-    }
   };
 
   /**
@@ -667,7 +649,7 @@ export function PurchaseRequestDocument({
         </div>
       </div>
 
-      {showPrint && <PurchaseRequestPrintDocument purchaseRequest={doc} companyHeader={companyHeader} />}
+      <PurchaseRequestPrintDocument purchaseRequest={doc} companyHeader={companyHeader} />
 
       <ProductPickerModal open={pickerOpen} products={filteredProducts} categories={categories} onSelect={addProduct} onClose={() => setPickerOpen(false)} />
 
@@ -688,14 +670,6 @@ export function PurchaseRequestDocument({
         busy={rewriting}
         onConfirm={() => void handleRewrite()}
         onCancel={() => setConfirmRewrite(false)}
-      />
-      <ConfirmDialog
-        open={confirmFinalize}
-        title={t("purchaseRequestDoc.finalizeConfirmTitle")}
-        message={t("purchaseRequestDoc.finalizeConfirmMessage")}
-        busy={finalizing}
-        onConfirm={finalize}
-        onCancel={() => setConfirmFinalize(false)}
       />
     </div>
   );

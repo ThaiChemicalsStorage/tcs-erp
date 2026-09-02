@@ -124,9 +124,14 @@ export interface PurchaseRequest {
   isDeleted: boolean;
 }
 
-export async function createPurchaseRequest(projectId: string, itemId: string): Promise<PurchaseRequest> {
+/**
+ * หนึ่งใบขอซื้อครอบคลุมได้หลายรายการในโครงการ — เหตุผลเดียวกับ `createMaterialRequisition()`
+ * รับ id เดี่ยวได้ด้วย เพราะปุ่มในหน้าโครงการยังสร้างทีละรายการ
+ */
+export async function createPurchaseRequest(projectId: string, itemIds: string | string[]): Promise<PurchaseRequest> {
+  const ids = Array.isArray(itemIds) ? itemIds : [itemIds];
   const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>("/purchase-requests", {
-    method: "POST", body: JSON.stringify({ projectId, itemId }),
+    method: "POST", body: JSON.stringify({ projectId, itemIds: ids }),
   });
   return purchaseRequest;
 }

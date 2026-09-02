@@ -1,6 +1,8 @@
 import type { ProductionOrder } from "../../lib/productionOrder";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatQuoteDateThai } from "../../lib/quotes";
+import { PrintSignatureLine } from "../../components/PrintSignature";
+import { printText, printNumber } from "../../lib/printFormat";
 
 /**
  * ฟอร์มพิมพ์ใบสั่งผลิต — คัดตามฟอร์มจริง FM-PD-02 Rev.00 : 01/11/64
@@ -50,10 +52,13 @@ export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: Prod
   const headCell: React.CSSProperties = { ...cell, textAlign: "center", fontWeight: 700 };
   const shellCell: React.CSSProperties = { padding: 0, border: "none" };
 
-  const signRow = (label: string, s: { name: string; date: string }) => (
+  /** @param userId เจ้าของช่องเซ็นในระบบ (คนสร้างใบ / คนที่กดอนุมัติ) — วางรูปลายเซ็นจากโปรไฟล์ให้
+   *  ช่องที่ไม่มีเจ้าของ (ผู้ส่งมอบงาน/ผู้ตรวจรับงาน/แผนกต้นทุน) เว้นไว้ให้เซ็นมือเหมือนเดิม */
+  const signRow = (label: string, s: { name: string; date: string }, userId?: string) => (
     <tr>
       <td style={{ ...cell, width: "62%", height: "26px" }}>
-        {label} : <span style={{ fontWeight: 400 }}>{s.name}</span>
+        {userId ? <PrintSignatureLine userId={userId} height={22} /> : null}
+        {label} : <span style={{ fontWeight: 400 }}>{printText(s.name)}</span>
       </td>
       <td style={{ ...cell, width: "38%" }}>
         วันที่ : <span style={{ fontWeight: 400 }}>{s.date ? formatQuoteDateThai(s.date) : ""}</span>
@@ -91,7 +96,7 @@ export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: Prod
                   ["ชื่อพนักงานดูแล", doc.supervisorName],
                 ].map(([label, value]) => (
                   <p key={label} style={{ margin: 0, padding: "3px 6px", borderBottom: "1px solid #000" }}>
-                    {label} : {value}
+                    {label} : {printText(value)}
                   </p>
                 ))}
                 <p style={{ margin: 0, padding: "3px 6px", borderBottom: "1px solid #000", display: "flex", gap: "40px" }}>
@@ -124,9 +129,9 @@ export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: Prod
                           <p key={i} style={{ margin: "1px 0 0", fontWeight: 400 }}>{sd}</p>
                         ))}
                       </td>
-                      <td style={{ ...cell, textAlign: "center" }}>{line.qty ?? ""}</td>
-                      <td style={{ ...cell, textAlign: "center" }}>{line.unit}</td>
-                      <td style={{ ...cell, textAlign: "center", fontWeight: 700 }}>{line.remark}</td>
+                      <td style={{ ...cell, textAlign: "center" }}>{printNumber(line.qty)}</td>
+                      <td style={{ ...cell, textAlign: "center" }}>{printText(line.unit)}</td>
+                      <td style={{ ...cell, textAlign: "center", fontWeight: 700 }}>{printText(line.remark)}</td>
                     </tr>
                   ))}
                   {/* แถวว่างให้เต็มหน้า เหมือนฟอร์มกระดาษที่มีช่องว่างไว้เขียนเพิ่ม */}
@@ -151,8 +156,8 @@ export function ProductionOrderPrintDocument({ doc, companyHeader }: { doc: Prod
 
               <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "-1px", fontWeight: 700 }}>
                 <tbody>
-                  {signRow("ผู้สั่งผลิต", doc.orderedBy)}
-                  {signRow("ผู้อนุมัติ", doc.approver)}
+                  {signRow("ผู้สั่งผลิต", doc.orderedBy, doc.createdBy)}
+                  {signRow("ผู้อนุมัติ", doc.approver, doc.approvedByUserId)}
                   {signRow("ผู้ส่งมอบงาน", doc.deliveredBy)}
                   {signRow("ผู้ตรวจรับงาน", doc.receivedBy)}
                   {signRow("แผนกต้นทุน", doc.costDeptBy)}

@@ -1,6 +1,8 @@
 import type { PurchaseRequest } from "../../lib/purchaseRequest";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import { formatArDocDate } from "../../lib/accounting";
+import { PrintSignatureLine } from "../../components/PrintSignature";
+import { printText } from "../../lib/printFormat";
 
 /**
  * ฟอร์มพิมพ์ใบขอซื้อ — คัดตามฟอร์มจริง FM-PU-05 Rev.02 : 03/11/68
@@ -55,7 +57,7 @@ function Field({ label, value, labelWidth = "112px" }: { label: string; value: s
   return (
     <div style={{ display: "flex", gap: "8px", minHeight: "16px" }}>
       <span style={{ width: labelWidth, flexShrink: 0 }}>{label}</span>
-      <span style={{ flex: 1 }}>{value || " "}</span>
+      <span style={{ flex: 1 }}>{printText(value)}</span>
     </div>
   );
 }
@@ -76,9 +78,15 @@ export function PurchaseRequestPrintDocument({
   // ซึ่งลอกรูปแบบมาจากซอฟต์แวร์ Express ตัวเดียวกับที่ออกใบขอซื้อใบนี้
   const d = (iso: string) => (iso ? formatArDocDate(iso) : "");
 
-  /** ช่องเซ็นหนึ่งช่อง — ชื่ออยู่เหนือเส้น ป้ายอยู่ใต้เส้น ตรงตามกระดาษ */
-  const signCell = (label: string, name: string) => (
+  /**
+   * ช่องเซ็นหนึ่งช่อง — ลายเซ็นอยู่บนสุด ชื่ออยู่เหนือเส้น ป้ายอยู่ใต้เส้น ตรงตามกระดาษ
+   *
+   * `userId` คือเจ้าของช่องในระบบ (คนสร้างใบ / คนที่กดอนุมัติ) รูปลายเซ็นจากโปรไฟล์ของเขาจะถูกวาง
+   * เหนือชื่อให้ — เจ้าของสั่งไว้ 2026-09-02 · ช่อง "ฝ่ายจัดซื้อ" ไม่มีเจ้าของในระบบ จึงเว้นให้เซ็นมือ
+   */
+  const signCell = (label: string, name: string, userId?: string) => (
     <td style={{ width: "33.33%", padding: "0 10px", verticalAlign: "bottom", textAlign: "center" }}>
+      {userId ? <PrintSignatureLine userId={userId} height={26} /> : null}
       <p style={{ margin: 0, minHeight: "30px", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>{name || " "}</p>
       <div style={{ borderBottom: LINE }} />
       <p style={{ margin: "2px 0 0" }}>{label}</p>
@@ -114,7 +122,7 @@ export function PurchaseRequestPrintDocument({
         <div style={{ width: "52%" }}>
           {/* ป้าย "หมายเหตุ" บนหัวเอกสารของกระดาษจริงบรรจุรหัสงาน (PQ…) ไม่ใช่หมายเหตุอิสระ */}
           <Field label="หมายเหตุ" value={p.jobCode} />
-          <Field label="สถานที่ส่งของ" value={p.deliveryLocation ? p.deliveryLocation : ":-"} />
+          <Field label="สถานที่ส่งของ" value={p.deliveryLocation} />
           <Field label="โทร." value={p.deliveryPhone} />
           <Field label="ติดต่อ" value={p.deliveryContact} />
         </div>
@@ -154,13 +162,13 @@ export function PurchaseRequestPrintDocument({
                   <p key={i} style={{ margin: "1px 0 0" }}>{sd}</p>
                 ))}
               </td>
-              <td style={{ ...cell, textAlign: "center" }}>{line.warehouseRemainingQty}</td>
+              <td style={{ ...cell, textAlign: "center" }}>{printText(line.warehouseRemainingQty)}</td>
               {/* กระดาษพิมพ์จำนวนกับหน่วยรวมในช่องเดียว ("1.00  ครั้ง") */}
               <td style={{ ...cell, textAlign: "center" }}>
-                {line.qtyRequested !== null ? `${line.qtyRequested.toLocaleString()}${line.unit ? ` ${line.unit}` : ""}` : ""}
+                {line.qtyRequested !== null ? `${line.qtyRequested.toLocaleString()}${line.unit ? ` ${line.unit}` : ""}` : "-"}
               </td>
-              <td style={{ ...cell, textAlign: "center" }}>{d(line.neededByDate)}</td>
-              <td style={{ ...cell, textAlign: "center" }}>{line.departmentCode}</td>
+              <td style={{ ...cell, textAlign: "center" }}>{printText(d(line.neededByDate))}</td>
+              <td style={{ ...cell, textAlign: "center" }}>{printText(line.departmentCode)}</td>
               {/* "ให้ซื้อ" เว้นว่างเสมอ — ฝ่ายจัดซื้อเขียนเองด้วยมือ */}
               <td style={cell} />
             </tr>
@@ -189,8 +197,8 @@ export function PurchaseRequestPrintDocument({
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "18px", breakInside: "avoid" }}>
         <tbody>
           <tr>
-            {signCell("ผู้ขอซื้อ", p.requestedBy)}
-            {signCell("ผู้อนุมัติ", p.approvedBy)}
+            {signCell("ผู้ขอซื้อ", p.requestedBy, p.createdBy)}
+            {signCell("ผู้อนุมัติ", p.approvedBy, p.approvedByUserId)}
             {signCell("ฝ่ายจัดซื้อ", p.purchasingDeptBy)}
           </tr>
         </tbody>

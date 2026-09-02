@@ -61,9 +61,9 @@ export function MaterialRequisitionPage({
     }
   };
 
-  const handleCreate = async (projectId: string, itemId: string) => {
+  const handleCreate = async (projectId: string, itemIds: string[]) => {
     try {
-      const created = await createMaterialRequisition(projectId, itemId);
+      const created = await createMaterialRequisition(projectId, itemIds);
       setPickerOpen(false);
       openMaterialRequisition(created.id);
     } catch (err) {
@@ -182,7 +182,8 @@ export function MaterialRequisitionPage({
           title={t("materialRequisition.createBtn")}
           description={t("project.picker.project.description")}
           onClose={() => setPickerOpen(false)}
-          onSelect={(projectId, itemIds) => void handleCreate(projectId, itemIds[0])}
+          onSelect={(projectId, itemIds) => void handleCreate(projectId, itemIds)}
+          multiSelect
         />
       ))}
       <Toast message={toast.message} />

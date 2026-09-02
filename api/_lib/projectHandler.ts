@@ -142,7 +142,7 @@ export async function loadPendingProjectItemsOrThrow(
   return { project, items };
 }
 
-/** เวอร์ชันรายการเดียว — ใบเบิกและใบขอซื้อยังสร้างทีละรายการ */
+/** เวอร์ชันรายการเดียว — ยังใช้กับปุ่มสร้างรายแถวในหน้าโครงการ */
 export async function loadPendingProjectItemOrThrow(
   projectId: string,
   itemId: string,
@@ -197,7 +197,7 @@ export async function linkProjectItemsToSubDocument(
   if (result.matchedCount === 0) throw new HttpError(404, "ไม่พบรายการนี้ในโครงการ");
 }
 
-/** เวอร์ชันรายการเดียว — ใบเบิกและใบขอซื้อยังผูกทีละรายการ */
+/** เวอร์ชันรายการเดียว — ยังใช้กับปุ่มสร้างรายแถวในหน้าโครงการ */
 export async function linkProjectItemToSubDocument(
   projectId: string,
   itemId: string,
@@ -230,7 +230,7 @@ export async function findProjectItemIdsByLink(
   return doc.items.filter((it) => it[linkField] === subDocumentId).map((it) => it.id);
 }
 
-/** เวอร์ชันรายการเดียว — ใบเบิกและใบขอซื้อผูกทีละรายการ จึงมีได้ตัวเดียวเสมอ */
+/** เวอร์ชันรายการเดียว — คืนตัวแรกที่เจอ ใช้กับจุดที่รู้ว่าผูกรายการเดียวจริง ๆ */
 export async function findProjectItemIdByLink(
   projectId: string,
   linkField: "materialRequisitionId" | "jobOrderId" | "purchaseRequestId",
