@@ -912,6 +912,24 @@ left unaddressed, deliberately out of scope for a "fix Critical/High" pass:
 
 ## Low Priority
 
+- [ ] **เขียน `README.md` ที่รากโปรเจกต์ — ทำตอนโปรเจกต์เสร็จหมดแล้ว (เจ้าของสั่ง 2026-09-02).**
+  ตอนนี้**ยังไม่มี `README.md` เลย** รากโปรเจกต์มีแต่ `CLAUDE.md` ซึ่งเขียนไว้สำหรับ AI ที่มาทำงานต่อ
+  ไม่ใช่สำหรับคนที่เพิ่งเปิดโปรเจกต์ครั้งแรก
+
+  **จงใจเลื่อนไว้ท้ายสุดตามที่เจ้าของสั่ง** — README ที่เขียนตอนระบบยังเปลี่ยนทุกวันจะล้าสมัยเร็วกว่าที่
+  ใครจะได้อ่าน และจะกลายเป็นเอกสารที่หลอกคนอ่านมากกว่าช่วย · เขียนตอนที่โครงสร้างนิ่งแล้วครั้งเดียว
+
+  **สิ่งที่ควรมี** (ให้ต่างจาก `CLAUDE.md` และ `docs/` ที่มีอยู่แล้ว ไม่ใช่ก๊อปมาซ้ำ):
+  - ระบบนี้คืออะไร ใครใช้ ใช้ทำอะไร — สามย่อหน้าแรกที่คนนอกอ่านแล้วเข้าใจ
+  - ภาพรวมโมดูลทั้งหมดแบบตาราง พร้อมลิงก์ไปที่ `docs/MODULES/*.md` ของแต่ละตัว
+  - วิธีติดตั้งและรันในเครื่อง (`npm install` → ตั้ง `MONGODB_URI` → `npm run dev`) และคำสั่งที่ใช้บ่อย
+  - วิธีขึ้นเซิร์ฟเวอร์แบบย่อ พร้อมลิงก์ไป `docs/DEPLOYMENT.md`
+  - โครงสร้างโฟลเดอร์ระดับบนสุด (`api/` `server/` `src/` `docs/` `tests/`) ว่าอะไรอยู่ตรงไหน
+  - ลิงก์เข้า `docs/CLAUDE.md` เป็นประตูสำหรับคนที่จะลงลึกต่อ
+
+  ⚠️ **ห้ามใส่ค่าลับ** — `MONGODB_URI` ตัวจริง รหัสผ่าน หรือ token ต้องเป็นตัวอย่างปลอมเท่านั้น
+  README เป็นไฟล์แรกที่คนเปิดดูและมักถูกก๊อปไปวางที่อื่น
+
 - [ ] **[Reference, not a gap] Confirmed 2026-08-17: Global Search already has anti-overload safeguards — no action needed.** Came up in conversation (owner asking whether live-search-as-you-type would hammer the server on every keystroke). Checked the actual code: `src/components/GlobalSearch.tsx` debounces 300ms, requires ≥2 typed characters before firing, and cancels any still-in-flight request via `AbortController` when a newer keystroke arrives; `api/_lib/searchHandler.ts` additionally caps query length server-side at 100 chars. If a future search UI is added elsewhere (e.g. inside the not-yet-built Accounting module below), reuse this exact pattern rather than reinventing it.
 - [ ] **[Reference, not scoped] Load balancing / multi-replica failover — discussed 2026-08-17, explicitly just curiosity, no current need.** Owner asked about the "3 servers, if one dies the other 2 take over" pattern seen in a video (standard load-balancer + health-check failover). Explained: would need (1) multiple app instances, (2) a load balancer in front (nginx, already in the stack, could do this via an `upstream` block) with health checks, (3) MongoDB replica set for the DB tier specifically (data must actually sync, not just run independent copies). **Not pursued** — production today is a single VPS with one instance each of nginx/app/MongoDB, no redundancy at all, and that's fine for a single-company internal tool unless real downtime becomes a business problem. Revisit only if that changes.
 - [ ] Dark mode — `theme.css` only defines the light palette currently; Tailwind's `dark:` variant isn't wired up.
