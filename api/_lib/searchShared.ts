@@ -41,10 +41,12 @@ export function startsWithRegex(query: string): { $regex: string; $options: stri
 /**
  * Every document family in this ERP mints its number with a distinct prefix, so a query that looks
  * like a document number tells us which collection to check first. Sources, all server-side
- * minters: `nextQuoteId()` (api/handlers/quotes.ts, `Q#YYMMDD-NNNN`), `SR-{พ.ศ.}-{seq}`
- * (serviceReportHandler.ts), `MR-`/`JO-`/`PR-{พ.ศ.}-{seq}` (the Project-family handlers),
- * `SC-{ค.ศ.}-{MM}-{NNN}` (productionOrderHandler.ts — Gregorian, deliberately unlike the rest), and
- * `{AR|BI|RE|IV}{YY}{MM}{SEQ}` (documentNumbering.ts).
+ * minters: `nextQuoteId()` (api/handlers/quotes.ts, `Q#YYMMDD-NNNN`), `{AR|BI|RE|IV}{YY}{MM}{SEQ}`
+ * (documentNumbering.ts), and — since 2026-09-03 — one shared `{PREFIX}-{YYYYMM}-{NNNN}` shape
+ * (`nextMonthlyDocumentNumber()`, same file) for `SR-`/`MR-`/`JO-`/`PR-`/`PO-`/`CC-`/`SC-`/`RR-`.
+ * Documents minted before that date carry the older `{PREFIX}-{พ.ศ.}-{NNNN}` (or
+ * `SC-{ค.ศ.}-{MM}-{NNN}`) and are still found the same way — only the prefix matters here,
+ * never the year digits.
  *
  * Scope of Work is deliberately absent: its `scopeNumber` is free-text typed by a person with no
  * enforced format (scopeOfWorkHandler.ts), so there is no prefix to recognise. It still matches

@@ -12,7 +12,7 @@ import type { AddressInfo } from "node:net";
  * the HTTP contract the browser actually sees, not the shape of a Mongo filter. The five things
  * pinned here are the ones that hurt to change later:
  *
- *   1. **เลขที่เอกสาร** — `PO-{พ.ศ.}-{NNNN}` / `GR-…` / `BR-…`, sequential and never reused. The
+ *   1. **เลขที่เอกสาร** — `PO-{YYYYMM}-{NNNN}` (since 2026-09-03), sequential and never reused. The
  *      format ends up printed on paper, so it is fixed by test on purpose.
  *   2. **ต้นทางต้องอนุมัติแล้ว** — a Draft ใบขอซื้อ cannot become a PO; a Draft PO cannot be
  *      received or billed. That gate is the whole point of the flow chart the owner supplied.
@@ -27,8 +27,8 @@ let server: Server;
 let baseUrl: string;
 let adminCookie: string;
 
-/** ปี พ.ศ. ที่เลขที่เอกสารต้องใช้ — ค.ศ. + 543 เหมือนทุกโมดูล */
-const BUDDHIST_YEAR = new Date().getFullYear() + 543;
+/** ปีเดือน (ค.ศ., เวลาไทย) ที่เลขที่เอกสารต้องใช้ — `{PREFIX}-{YYYYMM}-{NNNN}` เหมือนทุกใบภายในตั้งแต่ 2026-09-03 */
+const YYYYMM = (() => { const d = new Date(Date.now() + 7 * 3600 * 1000); return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}`; })();
 
 async function api(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
@@ -121,7 +121,7 @@ afterAll(async () => {
 describe("ใบขอซื้อ — เปิดให้ทุกฝ่ายขอได้ (ownerDepartment: general)", () => {
   it("สร้างใบเปล่าโดยไม่มีเอกสารต้นทางได้ และได้แผนกเจ้าของเป็น general", async () => {
     const pr = await createStandalonePurchaseRequest();
-    expect(pr.id).toMatch(/^PR-\d{4}-\d{4}$/);
+    expect(pr.id).toMatch(/^PR-\d{6}-\d{4}$/);
     expect(pr.status).toBe("Draft");
     expect(pr.ownerDepartment).toBe("general");
   });
@@ -141,11 +141,11 @@ describe("ใบขอซื้อ — เปิดให้ทุกฝ่า�
 });
 
 describe("ใบสั่งซื้อ (PO)", () => {
-  it("ออกเลขที่ตามรูปแบบ PO-{พ.ศ.}-{NNNN} และเดินหน้าไม่ซ้ำ", async () => {
+  it("ออกเลขที่ตามรูปแบบ PO-{YYYYMM}-{NNNN} และเดินหน้าไม่ซ้ำ", async () => {
     const first = await createPurchaseOrder();
     const second = await createPurchaseOrder();
-    expect(first.id).toMatch(new RegExp(`^PO-${BUDDHIST_YEAR}-\\d{4}$`));
-    expect(second.id).toMatch(new RegExp(`^PO-${BUDDHIST_YEAR}-\\d{4}$`));
+    expect(first.id).toMatch(new RegExp(`^PO-${YYYYMM}-\\d{4}$`));
+    expect(second.id).toMatch(new RegExp(`^PO-${YYYYMM}-\\d{4}$`));
     const seq = (id: string) => Number(id.split("-")[2]);
     expect(seq(second.id)).toBe(seq(first.id) + 1);
     expect(first.documentNumber).toBe(first.id);

@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import type { Collection, Filter } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
@@ -28,11 +29,7 @@ import type { PurchaseRequestLine, PurchaseRequestSummary } from "../../src/lib/
 const MAX_LINES = 100;
 
 async function nextPurchaseRequestId(counters: Collection<CounterFields>): Promise<string> {
-  const buddhistYear = new Date().getFullYear() + 543;
-  const counterId = `purchase_request_${buddhistYear}`;
-  const result = await counters.findOneAndUpdate({ _id: counterId }, { $inc: { seq: 1 } }, { returnDocument: "after", upsert: true });
-  const seq = result?.seq ?? 1;
-  return `PR-${buddhistYear}-${String(seq).padStart(4, "0")}`;
+  return nextMonthlyDocumentNumber(counters, "PR", "purchase_request");
 }
 
 async function writeAuditEntry(ctx: AuthContext, action: string, details: string, related: { scopeOfWorkId?: string }): Promise<void> {

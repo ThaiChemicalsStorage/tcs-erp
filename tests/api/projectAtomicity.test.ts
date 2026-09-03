@@ -444,9 +444,9 @@ describe("Production Order", () => {
     return (res.body as { productionOrder: { id: string; documentNumber: string; jobCode: string } }).productionOrder;
   };
 
-  it("is created from an approved Scope of Work and numbered SC-YYYY-MM-NNN", async () => {
+  it("is created from an approved Scope of Work and numbered SC-YYYYMM-NNNN", async () => {
     const po = await createPo();
-    expect(po.id).toMatch(/^SC-\d{4}-\d{2}-\d{3}$/);
+    expect(po.id).toMatch(/^SC-\d{6}-\d{4}$/);
     // Gregorian year, deliberately NOT the Buddhist year the other documents use
     expect(po.id.slice(3, 7)).toBe(String(new Date().getFullYear()));
     expect(po.jobCode).toBe("TEST-SOW-01");

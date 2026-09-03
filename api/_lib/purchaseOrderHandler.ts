@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import type { Collection } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
@@ -28,11 +29,7 @@ import type { PurchaseOrderLine, PurchaseOrderSummary } from "../../src/lib/purc
 const MAX_LINES = 200;
 
 async function nextPurchaseOrderId(counters: Collection<CounterFields>): Promise<string> {
-  const buddhistYear = new Date().getFullYear() + 543;
-  const counterId = `purchase_order_${buddhistYear}`;
-  const result = await counters.findOneAndUpdate({ _id: counterId }, { $inc: { seq: 1 } }, { returnDocument: "after", upsert: true });
-  const seq = result?.seq ?? 1;
-  return `PO-${buddhistYear}-${String(seq).padStart(4, "0")}`;
+  return nextMonthlyDocumentNumber(counters, "PO", "purchase_order");
 }
 
 /**

@@ -9,7 +9,7 @@ import type { AddressInfo } from "node:net";
  *
  * The things pinned here are the ones that would hurt to change later or that guard real money:
  *
- *   1. **เลขที่เอกสาร** `CC-{พ.ศ.}-{NNNN}` — it ends up printed on a document the owner signs.
+ *   1. **เลขที่เอกสาร** `CC-{YYYYMM}-{NNNN}` — it ends up printed on a document the owner signs.
  *   2. **ไม่มียอดรวมเลย** — the list route sends no total at all (2026-08-31, the owner had every
  *      total removed); the lines are the only place cost lives, so nothing can drift from them.
  *   3. **สถานะที่ไม่ใช่ร่างแก้ไม่ได้** — both `Final` and `PendingApproval`, because approving
@@ -23,7 +23,7 @@ let server: Server;
 let baseUrl: string;
 let adminCookie: string;
 
-const BUDDHIST_YEAR = new Date().getFullYear() + 543;
+const YYYYMM = (() => { const d = new Date(Date.now() + 7 * 3600 * 1000); return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}`; })();
 
 async function api(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
@@ -94,10 +94,10 @@ afterAll(async () => {
 });
 
 describe("Cost Control", () => {
-  it("ออกเลขที่ตามรูปแบบ CC-{พ.ศ.}-{NNNN} และเดินหน้าไม่ซ้ำ", async () => {
+  it("ออกเลขที่ตามรูปแบบ CC-{YYYYMM}-{NNNN} และเดินหน้าไม่ซ้ำ", async () => {
     const first = await createCostControl();
     const second = await createCostControl();
-    expect(first.id).toMatch(new RegExp(`^CC-${BUDDHIST_YEAR}-\\d{4}$`));
+    expect(first.id).toMatch(new RegExp(`^CC-${YYYYMM}-\\d{4}$`));
     const seq = (id: string) => Number(id.split("-")[2]);
     expect(seq(second.id)).toBe(seq(first.id) + 1);
     expect(first.documentNumber).toBe(first.id);

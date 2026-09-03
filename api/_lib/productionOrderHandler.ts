@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import type { Collection } from "mongodb";
 import { HttpError, getPathSegments } from "./http.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
@@ -31,17 +32,11 @@ import type { ProductionOrderLine, ProductionOrderSignatory, ProductionOrderSumm
 const MAX_LINES = 200;
 
 /**
- * เลขที่ใบสั่งผลิต `SC-{ค.ศ.}-{เดือน}-{ลำดับ 3 หลัก}` — ตัวนับแยกต่อเดือน (atomic, upsert)
- * ต่างจากเอกสารอื่นในระบบที่นับต่อปี พ.ศ. — ตามฟอร์มจริง ยืนยันกับเจ้าของแล้ว
+ * เลขที่ใบสั่งผลิต `SC-{YYYYMM}-{NNNN}` — รูปแบบกลางของทุกใบภายในตั้งแต่ 2026-09-03 (เดิม
+ * `SC-{ค.ศ.}-{เดือน}-{ลำดับ 3 หลัก}` ตามฟอร์ม FM-PD-02 — ถ้าต้องพิมพ์ตามฟอร์มเดิมให้แก้ที่ `documentNumber`)
  */
 async function nextProductionOrderId(counters: Collection<CounterFields>): Promise<string> {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const counterId = `production_order_${year}${month}`;
-  const result = await counters.findOneAndUpdate({ _id: counterId }, { $inc: { seq: 1 } }, { returnDocument: "after", upsert: true });
-  const seq = result?.seq ?? 1;
-  return `SC-${year}-${month}-${String(seq).padStart(3, "0")}`;
+  return nextMonthlyDocumentNumber(counters, "SC", "production_order");
 }
 
 /**

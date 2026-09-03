@@ -1,4 +1,5 @@
 ﻿import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import { Binary } from "mongodb";
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
@@ -67,15 +68,7 @@ async function writeServiceAuditEntry(
  * typo/duplicate-number friction manual entry would cause there. The Buddhist year is computed
  * dynamically (unlike Quotes' hardcoded QUOTE_YEAR) so this never needs a yearly code bump. */
 async function nextServiceReportId(counters: Awaited<ReturnType<typeof countersCollection>>): Promise<string> {
-  const buddhistYear = new Date().getFullYear() + 543;
-  const counterId = `service_report_${buddhistYear}`;
-  const result = await counters.findOneAndUpdate(
-    { _id: counterId },
-    { $inc: { seq: 1 } },
-    { returnDocument: "after", upsert: true },
-  );
-  const seq = result?.seq ?? 1;
-  return `SR-${buddhistYear}-${String(seq).padStart(4, "0")}`;
+  return nextMonthlyDocumentNumber(counters, "SR", "service_report");
 }
 
 // ─── Customer snapshot resolution ──────────────────────────────────────────────────────────────
