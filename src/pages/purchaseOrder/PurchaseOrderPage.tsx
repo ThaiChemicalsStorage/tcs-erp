@@ -14,7 +14,7 @@ import { PurchaseRequestPickerDialog } from "./PurchaseRequestPickerDialog";
  * รับ deep link จากผลค้นหา/กระดิ่งผ่าน `initialPurchaseOrderId` / `onPurchaseOrderIdConsumed`
  */
 export function PurchaseOrderPage({
-  canCreate, canEdit, canApprove, canPrint, canDelete, canViewPurchaseRequest,
+  canCreate, canEdit, canApprove, canPrint, canDelete, canViewPurchaseRequest, canReceiveGoods, onOpenReceivingReport,
   initialPurchaseOrderId, onPurchaseOrderIdConsumed,
 }: {
   canCreate: boolean;
@@ -24,6 +24,9 @@ export function PurchaseOrderPage({
   canDelete: boolean;
   /** ต้องมีสิทธิ์ดูใบขอซื้อจึงจะเลือกใบต้นทางได้ — เซิร์ฟเวอร์บังคับซ้ำอีกชั้น */
   canViewPurchaseRequest: boolean;
+  /** ปุ่ม "รับสินค้า" บนใบที่อนุมัติแล้ว — ต้องมีสิทธิ์สร้างใบรับสินค้า (2026-09-03) */
+  canReceiveGoods: boolean;
+  onOpenReceivingReport: (receivingReportId: string) => void;
   initialPurchaseOrderId?: string | null;
   onPurchaseOrderIdConsumed?: () => void;
 }) {
@@ -92,6 +95,8 @@ export function PurchaseOrderPage({
           onBack={backToList}
           onDeleted={backToList}
           onOpenOther={open}
+          canReceiveGoods={canReceiveGoods}
+          onOpenReceivingReport={onOpenReceivingReport}
           showToast={toast.show}
         />
         <Toast message={toast.message} />

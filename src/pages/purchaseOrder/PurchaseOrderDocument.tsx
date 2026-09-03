@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Plus, Printer, Save, Trash2, X, GitBranch, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, PackageCheck, Printer, Save, Trash2, X, GitBranch, Loader2 } from "lucide-react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
@@ -23,6 +23,7 @@ import {
   submitPurchaseOrderApproval, approvePurchaseOrder, rejectPurchaseOrder, withdrawPurchaseOrderApproval,
 } from "../../lib/purchaseOrder";
 import { PurchaseOrderPrintDocument } from "./PurchaseOrderPrintDocument";
+import { createReceivingReport, fetchReceivingReportsByPurchaseOrder } from "../../lib/receivingReport";
 
 const inputCls = "w-full px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
 const cellCls = "px-2 py-1.5 text-sm bg-transparent border border-transparent rounded focus:bg-secondary focus:border-[#c9a84c]/50 outline-none w-full transition-colors disabled:opacity-60";
@@ -55,16 +56,20 @@ function toUpdateFields(d: PurchaseOrder): PurchaseOrderUpdateFields {
 }
 
 export function PurchaseOrderDocument({
-  purchaseOrderId, canEdit, canApprove, canPrint, canDelete, onBack, onDeleted, onOpenOther, showToast,
+  purchaseOrderId, canEdit, canApprove, canPrint, canDelete, canReceiveGoods, onBack, onDeleted, onOpenOther,
+  onOpenReceivingReport, showToast,
 }: {
   purchaseOrderId: string;
   canEdit: boolean;
   canApprove: boolean;
   canPrint: boolean;
   canDelete: boolean;
+  /** เปิด/สร้างใบรับสินค้าจากใบนี้ได้ — ต้องมีสิทธิ์ทั้งสร้างใบรับสินค้าและมีที่ให้ไปเปิด */
+  canReceiveGoods: boolean;
   onBack: () => void;
   onDeleted: () => void;
   onOpenOther: (id: string) => void;
+  onOpenReceivingReport: (receivingReportId: string) => void;
   showToast: (message: string) => void;
 }) {
   const { t } = useI18n();
@@ -76,6 +81,7 @@ export function PurchaseOrderDocument({
   const [showPrint, setShowPrint] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
+  const [receiving, setReceiving] = useState(false);
   // ทะเบียนผู้ขาย — ดึงในหน้านี้เอง แบบเดียวกับที่ใบสั่งงานดึงรายชื่อแผนก (fetchDepartments)
   // GET /vendors เปิดให้คนที่มี purchaseOrder:view อ่านได้ ไม่ต้องมีสิทธิ์ดูแลทะเบียน
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -157,6 +163,25 @@ export function PurchaseOrderDocument({
     }
   };
 
+  /**
+   * เปิดใบรับสินค้าของใบสั่งซื้อนี้ — มีอยู่แล้วก็เปิดใบเดิม ยังไม่มีก็สร้างใหม่
+   *
+   * เช็คก่อนสร้างเพราะกติกาคือ 1 ใบสั่งซื้อ = 1 ใบรับสินค้า (บังคับที่ฐานข้อมูล) ถ้ายิงสร้างเลย
+   * ทุกครั้ง ครั้งที่สองจะได้ 409 ซึ่งผู้ใช้อ่านแล้วไม่รู้จะทำอะไรต่อ
+   */
+  const openReceivingReport = async () => {
+    if (!draft) return;
+    setReceiving(true);
+    try {
+      const existing = await fetchReceivingReportsByPurchaseOrder(draft.id);
+      const target = existing[0] ?? (await createReceivingReport(draft.id));
+      onOpenReceivingReport(target.id);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("purchaseOrderDoc.errorSave"));
+    } finally {
+      setReceiving(false);
+    }
+  };
   useUnsavedChangesGuard(
     draft && canEdit
       ? {
@@ -241,6 +266,14 @@ export function PurchaseOrderDocument({
               <button onClick={() => setConfirmRewrite(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
                 <GitBranch size={13} /> {t("purchaseOrderDoc.rewrite")}
+              </button>
+            )}
+            {/* รับสินค้า (2026-09-03) — 1 ใบสั่งซื้อ = 1 ใบรับสินค้า จึงเปิดใบเดิมถ้ามีอยู่แล้ว
+                แทนที่จะสร้างใบที่สองแล้วไปชน 409 ที่ฐานข้อมูล */}
+            {canReceiveGoods && draft.status === "Final" && (
+              <button onClick={() => void openReceivingReport()} disabled={receiving}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60">
+                {receiving ? <Loader2 size={13} className="animate-spin" /> : <PackageCheck size={13} />} {t("purchaseOrderDoc.receiveGoods")}
               </button>
             )}
             {canPrint && (
