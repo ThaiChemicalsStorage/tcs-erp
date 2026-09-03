@@ -183,6 +183,42 @@ and `/api/scope-of-works/:path*` → `/api/handlers/quotes`. See
 | `DELETE /api/scope-of-works/:id/attachments/:attachmentId` | `scopeOfWork:edit` + (owner **or** `scopeOfWork:finalize`) — **any status since 2026-07-29** (same follow-up-data exemption as upload) | **Added 2026-07-24** — removes one attachment: deletes its `scope_attachment_files` document, then the metadata row. Returns `{ scopeOfWork }` and writes a `"Scope of Work Attachment Removed"` audit entry. |
 | `DELETE /api/scope-of-works/:id` | `scopeOfWork:delete` + (owner **or** `scopeOfWork:finalize`) | Soft delete (`isDeleted: true`) — filtered out of every list/get thereafter. No restore endpoint exists yet (see MODULES/ScopeOfWork.md "Remaining Business Questions"). |
 
+## Receiving Report (`api/_lib/receivingReportHandler.ts`, mounted at `/api/receiving-reports` via `api/handlers/quotes.ts` — added 2026-09-03)
+
+The Store department's ใบรับสินค้า. Shares the quotes function file like every other document
+handler (the Vercel 12-function budget is full). Full model writeup in
+[MODULES/Store.md](./MODULES/Store.md).
+
+| Route | Permission | Notes |
+|---|---|---|
+| `GET /api/receiving-reports[?purchaseOrderId=]` | `receivingReport:view` | Summary rows with ordered/received/outstanding value computed on read. The `purchaseOrderId` form is an existence check ("does this PO already have one?") and is therefore **not** scoped by `receivingReport:viewAll` — same carve-out as Purchase Order's by-request lookup. |
+| `POST /api/receiving-reports` | `receivingReport:create` + `purchaseOrder:view` | Body `{ purchaseOrderId }`. `400` unless the PO is `Final`. Snapshots the PO's lines, vendor, VAT rate and document-level discount. **`409` when the PO already has one**, with the existing document's `receivingReportId` in the error body so the client can open it instead of dead-ending; a duplicate that slips past the read is caught by the unique partial index and answered the same way. |
+| `GET /api/receiving-reports/:id` | `receivingReport:view` | Full document. |
+| `PATCH /api/receiving-reports/:id` | `receivingReport:edit` (owner or `:viewAll`) | Accepts **only** `documentNumber` (unique, `409` on collision), `remarks` and `status`. Lines and batches are never client-writable — one is a snapshot, the other is posted accounting fact. Reopening a fully received document is refused. Auto-save eligible. |
+| `DELETE /api/receiving-reports/:id` | `receivingReport:delete` | Soft delete, and **`400` if any receipt has been posted** — reverse the rounds first so stock and payables unwind properly. |
+| `POST /api/receiving-reports/:id/receipts` | `receivingReport:receive` | One round of receiving. Validates `qty ≤ outstanding` per line, at least one positive line, a non-empty `invoiceNumber`, and that every referenced product still exists — all **before** the first stock write, so a rejected round writes nothing at all. Then: `applyStockMovement(kind:"receive", unitCost, sourceType:"receiving_report")` per line that has a `productId` (a hand-typed line posts a payable but no stock) → one `ap_entries` row → push the batch → auto-close when nothing is outstanding. Returns the updated document. |
+| `DELETE /api/receiving-reports/:id/receipts/:batchId` | `receivingReport:receive` | Reverses a round: stock back out (`kind: "adjust"`), payable deleted, document reopened. **Latest round only** (`400` otherwise — the moving average walks forward through receipts) and only while the payable is `Unpaid` (`409`). ⚠️ The reversal uses the *current* average cost, so quantities always return exactly but value may not if a different-priced receipt landed in between. |
+| `POST /api/receiving-reports/:id/print` | `receivingReport:print` | Audit entry only. |
+| `POST|DELETE /api/receiving-reports/:id/attachments[/:attachmentId]` | `receivingReport:edit` | Shared attachment engine, `docType: "receiving-reports"` — scanned vendor delivery notes and tax invoices. |
+| `GET /api/receiving-reports/:id/attachments/:attachmentId/download?key=` | **none — capability URL** | Same unauthenticated capability-key rules as every other attachment download; dispatched before `requireUser`. |
+
+## Accounts Payable registers (`api/_lib/apHandler.ts`, mounted at `/api/ap-entries` — added 2026-09-03)
+
+Backs both ทะเบียนเจ้าหนี้ and ทะเบียนภาษีซื้อ. **Read-mostly by design: there is no create route.**
+Every row is written by the receiving-report receipt route.
+
+| Route | Permission | Notes |
+|---|---|---|
+| `GET /api/ap-entries?month=YYYY-MM&vendor=&status=` | `ap:view` | Sorted by `invoiceDate`. The month filter keys on the **invoice** date, not the posting date (a purchase-tax report follows the tax invoice's own month), and is applied as a `>= YYYY-MM-01` / `< next month` range rather than a regex, so it uses the index and never treats a query string as a pattern. `400` on a malformed month. |
+| `GET /api/ap-entries/summary?month=YYYY-MM` | `ap:view` | Month totals (`subtotal`/`vatAmt`/`total`/`unpaidTotal`) plus a per-vendor breakdown, sorted by outstanding descending. |
+| `PATCH /api/ap-entries/:id` | `ap:manage` | `{ status: "Paid"|"Unpaid", paymentRef }` and nothing else. Clearing a payment wipes `paidAt`/`paidBy`/`paymentRef` together rather than leaving stale traces that read as still-paid. Writes an audit entry either way. |
+
+## Team tool holdings (`api/_lib/toolHoldingsHandler.ts`, mounted at `/api/tool-holdings` via `api/handlers/products.ts` — added 2026-09-03)
+
+| Route | Permission | Notes |
+|---|---|---|
+| `GET /api/tool-holdings?departmentId=&teamId=&workTypeCode=&from=&to=` | `stock:view` | Owns no collection — aggregates `stock_movements` from material requisitions where the product has `isTool: true`, per (department, team, product): `issued`, `returned`, `held = issued − returned`, filtered to `held > 0`. |
+| `GET /api/tool-holdings?report=1&…` | `stock:view` | The individual movements inside a Bangkok-local date range (max 5000, `truncated` flag), viewed from the team's side: issuing is positive, returning negative. `400` on a malformed date. |
 ## Delivery Order (`api/_lib/deliveryOrderHandler.ts`, mounted at `/api/delivery-orders` via `api/handlers/quotes.ts` — added 2026-07-23)
 
 Shares `api/handlers/quotes.ts`'s function file (checked on the raw pathname right after the Scope

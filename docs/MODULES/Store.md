@@ -1,0 +1,257 @@
+# Store (แผนกสโตร์)
+
+> Added **2026-09-03** from a single 8-point list the owner sent, ending with
+> *"ช่วยทำในส่วนตัวนี้ขึ้นมาให้หน่อยเป็นของแผนกสโตร์"* — build this as the **Store department's** own
+> feature set. This is the department that physically receives goods, issues them to teams, takes
+> them back, and counts what is left.
+
+Related: [Product.md](./Product.md) (Stock ledger, costing, team tools), [Purchasing.md](./Purchasing.md)
+(the PO this receives against), [Accounting.md](./Accounting.md) (the payable this posts),
+[Project.md](./Project.md) (the requisition Store issues against).
+
+## Status
+
+| Piece | State |
+|---|---|
+| Unified `{PREFIX}-{YYYYMM}-{NNNN}` document numbering | ✅ Built |
+| Requisition: stock cut at issue time, outstanding tracking, department/team/work-type charging | ✅ Built |
+| Stock: return movements, moving-average cost, stock value, stock card print | ✅ Built |
+| Team tools (holdings + issue/return report) | ✅ Built |
+| **Receiving Report (RR)** + payable posting | ✅ Built |
+| Purchase-tax register + AP register | ✅ Built |
+| Delivery Order attachments | ✅ Built |
+| Real paper forms for the RR print layout | ⏳ Not supplied by the owner yet — placeholder |
+| Browser click-through of the whole flow | ⏳ Not done |
+
+## Decisions the owner made (2026-09-03)
+
+| Question | Answer |
+|---|---|
+| Document-number format | `PO-202609-0001` — Gregorian year + month, restarting at `0001` every month, for **every internal document**. Quotations (`Q#`) and accounting AR/BI/RE/IV are untouched. |
+| When a requisition cuts stock | **When Store actually issues the goods**, partial issues allowed. Approval no longer touches stock at all. |
+| *"แนบ…เหมือน cost control"* | The **Delivery Order** gains file attachments. |
+| RR ↔ PO relationship | **One PO = one RR**, created from an approved PO, several receipt rounds inside the one document. |
+
+## 1. Document numbering — `{PREFIX}-{YYYYMM}-{NNNN}`
+
+`nextMonthlyDocumentNumber()` in `api/_lib/documentNumbering.ts` is now the single minter for every
+internal document. The counter key is `${counterKey}_${yyyy}${mm}`, so each prefix restarts at `0001`
+on the first of each month, in **Bangkok local time** (`bangkokYyyyMm()` shifts by +7h before reading
+the month, so a document created at 06:00 Thai time on the 1st does not land in the previous month).
+
+Seven minters delegate to it: `PO`, `PR`, `JO`, `MR`, `SC`, `CC`, `SR` — plus `RR` (new).
+
+**The letter prefix is load-bearing.** `detectDocNumberFamily()` in `api/_lib/searchShared.ts`
+discriminates Global Search's fast path purely by prefix; a bare `202609-0001` would have silently
+broken every document-number search. Old numbers (`MR-2569-0001`, `SC-2026-08-002`) are untouched and
+still found the same way — only the prefix is ever matched, never the year digits.
+
+Not changed: quotations (`Q#YYMMDD-NNNN`), the AR/BI/RE/IV accounting series (`nextArDocNumber`),
+Scope of Work numbers (free text), and the `-R{n}` revision suffix (which appends to the new format
+exactly as it did to the old one).
+
+## 2. Requisition: cut at issue, not at approval
+
+Before this pass (2026-09-02) a requisition deducted stock inside `onApproved`, and
+`beforeApprove: assertProductsHaveStock` **blocked approval outright when stock was short**. The
+owner replaced that: a requisition must always be approvable, and the shortage must be visible on
+screen instead.
+
+- `POST /api/material-requisitions/:id/issue` — `Final` documents only, gated on **`stock:adjust`**
+  (the person issuing is Store, not the requisition's author). Body carries `withdrawal1Qty` /
+  `withdrawal2Qty` per line.
+- Deduction is computed as a **delta** between the stored issue quantities and the new ones, summed
+  per product, so posting the same numbers twice deducts nothing and lowering a number returns the
+  difference to stock. The delta loop walks the **union** of the before and after maps — walking only
+  "after" was a real bug in the old return flow, where clearing a return quantity never reversed the
+  earlier movement.
+- `assertProductsHaveStock()` runs on the increments **before** any movement is written, so a
+  short line cannot leave earlier lines half-issued behind an error response.
+- `withdrawal1Qty`/`withdrawal2Qty` are stripped from `PATCH` (`sanitizeLines(raw, existing)` copies
+  them from the stored line) — they belong to Store's issue route alone.
+
+Per line the client computes `issuedQty = w1 + w2`, `outstandingQty = max(0, planned − issued)` and
+`netHeldQty = issued − returned` (`src/lib/materialRequisition.ts`). `GET /:id` returns
+`stockByProduct` alongside the document so the editor can show live balances without loading the
+whole catalogue.
+
+### Charging a department / team / work type
+
+`chargeDepartmentId/Name`, `chargeTeamId/Name`, `chargeWorkTypeCode/Name` on the requisition, stamped
+onto **every** stock movement it produces (issue and return alike). Names are always resolved
+server-side from `departments`/`teams`/`code_entries` — never trusted from the client, because a
+client-supplied name is what makes a report disagree with the master data six months later.
+
+Work types come from the **code register** (`code_entries`, `kind: "workType"`) so the owner can add
+"งานเหล็ก / งานโรงงาน / งานผลิต" and anything else without a code change. The field is a `Combobox`:
+a code that is not in the register yet can still be typed.
+
+Defaults come from the creating user's own department/team.
+
+## 3. Stock: value, cost and the stock card
+
+- `StockMovementKind` gained `"return"` (positive delta) so returned goods read as returns in the
+  history instead of a bare adjustment.
+- `Product.avgCost` — a **moving average**, updated by `applyStockMovement()` in the same pipeline
+  update that changes the quantity, so two concurrent receipts cannot both average from the stale
+  value. Receiving with a `unitCost` re-averages; issuing, returning and adjusting use the current
+  average. Chosen over FIFO deliberately: no lots to track, and it is enough to give the stock card a
+  value column.
+- Stock value is **`stockQty × avgCost`, computed on read**, never stored.
+- Movements carry `unitCost`, `amount`, `balanceValueAfter`, and the department/team/work-type stamp.
+- **Stock card** (`StockCardPrintDocument.tsx`) — A4 landscape, accounting layout: date · document ·
+  received (qty/price/value) · issued (qty/price/value) · balance (qty/value). It needs the full
+  history of one product, so `GET /api/stock-movements` gained `?limit=` (default 200, max 2000).
+
+## 4. Team tools
+
+`Product.isTool` marks an item as a tool that must come back. `GET /api/tool-holdings` owns **no
+collection of its own** — it aggregates `stock_movements` where `sourceType: "material_requisition"`
+and the product is a tool, per (department, team, product): `held = issued − returned`, filtered to
+`held > 0`. `?report=1` returns the individual movements inside a Bangkok-local date range.
+
+The page (`src/pages/toolControl/`) has two tabs — *ในครอบครอง* and *รายงานเบิก-คืน* — with a print
+layout for each. It uses the existing **`stock:view`** permission rather than minting a new one: it
+is a different view of the stock ledger, not a new kind of record.
+
+## 5. Receiving Report (RR)
+
+The centrepiece. `receiving_reports`, keyed `_id = RR-YYYYMM-NNNN`.
+
+```ts
+ReceivingReportLine  // snapshot from the PO at creation, never changed afterwards
+  { id, poLineId, productId | null, productCode, description, subDetails, unit,
+    qtyOrdered, unitPriceOrdered, discount?, discountMode? }
+
+ReceivingBatch       // one round of receiving = one vendor invoice
+  { id, seq, receivedDate, invoiceNumber, invoiceDate, vatRate,
+    lines: { lineId, qty, unitPrice, amount }[], subtotal, vatAmt, total,
+    receivedBy, remark, postedAt, postedBy, postedByName,
+    stockMovementIds, apEntryId }
+```
+
+**One PO = one RR** is enforced by a unique partial index on `purchaseOrderId` where
+`isDeleted: false`, not merely by a code check — two tabs pressing "create" at once would otherwise
+produce two documents. A duplicate create returns **409 with the existing document's id**, and the
+UI opens that document instead of dead-ending.
+
+### Posting a receipt — `POST /:id/receipts`
+
+The order of writes is deliberate:
+
+1. Validate everything: `qty ≤ outstanding` per line, at least one positive line, `invoiceNumber`
+   required (the purchase-tax register cannot have a blank invoice column), and **every referenced
+   product still exists** — checked here so step 2 has essentially nothing left that can fail
+   mid-loop. (A receipt has no "not enough stock" failure mode by nature.)
+2. `applyStockMovement({ kind: "receive", unitCost, sourceType: "receiving_report" })` per line that
+   has a `productId`. A hand-typed line (no product code) posts a payable but writes no stock.
+3. Insert one `ap_entries` row for the round.
+4. Push the batch onto the document; close the document if every line is now fully received.
+
+There is no transaction — the self-hosted MongoDB is a standalone (see ARCHITECTURE.md). If step 3
+or 4 fails at the infrastructure level, the stock rows already written are traceable by the
+`sourceId`/`sourceLabel` stamped on every movement, and correctable with a manual stock adjustment.
+
+### Reversing a receipt — `DELETE /:id/receipts/:batchId`
+
+**Latest round only, and only while its payable is still `Unpaid`** (409 otherwise). Latest-only
+because the moving average walks forward through receipts; pulling a middle round out would leave an
+average that cannot be recomputed without lots.
+
+⚠️ The reversal moves quantity back out at the **current** average cost, not the price it came in at.
+Quantities are always exact; if a different-priced receipt of the same product landed in between, the
+stock *value* will not return to precisely its old number.
+
+### Status
+
+`Open` → `Closed`. Closing happens automatically when the last outstanding quantity reaches zero, and
+Store can also close early to cancel the remainder (the vendor is not going to ship the rest). A
+closed document can be reopened only while something is still outstanding.
+
+`PATCH` accepts exactly three fields: `documentNumber`, `remarks`, `status`. Lines and batches are
+never client-writable — they are snapshots and posted accounting facts respectively.
+
+## 6. Payables — `ap_entries`
+
+One row per receipt round, written **only** by the RR receipt route. There is deliberately no
+manual-create endpoint: the moment Accounting can hand-key a payable, the register and the stock
+ledger start walking apart with nothing to flag it.
+
+`entryType` is `"RR"` (goods receipt), the code the company's real AP sheet already uses. The other
+codes on that sheet (RM contractor, RD shipping, RO general expense …, see
+[Accounting.md](./Accounting.md) "บัญชีจ่าย") have no source document in this system yet, so the union
+holds a single member rather than guessing at codes nobody can produce.
+
+Accounting may change exactly one thing: `status` (`Unpaid` ⇄ `Paid`) with a payment reference. A
+wrong amount is fixed by reversing the receipt on the RR, which rolls back stock and payable together.
+
+- `GET /api/ap-entries?month=&vendor=&status=` — the register rows, sorted by invoice date.
+- `GET /api/ap-entries/summary?month=` — month totals plus per-vendor outstanding.
+- `PATCH /api/ap-entries/:id` — `{ status, paymentRef }`.
+
+The month filter reads **`invoiceDate`**, not the posting date — a purchase-tax report always follows
+the tax invoice's own month, and an invoice dated the 31st arriving on the 2nd is routine. It is
+applied as a `>= "YYYY-MM-01"` / `< next month` range rather than a regex, so it uses the index and
+never interprets a query string as a pattern.
+
+## 7. Screens
+
+| Page | Nav group | Permission |
+|---|---|---|
+| ใบรับสินค้า (list + document) | คลังสินค้า | `receivingReport:view` |
+| ทะเบียนภาษีซื้อ | บัญชี | `ap:view` |
+| ทะเบียนเจ้าหนี้ | บัญชี | `ap:view` (payment buttons need `ap:manage`) |
+| เครื่องมือประจำทีม | คลังสินค้า | `stock:view` |
+
+The RR document is deliberately **one page for the whole life of the order**: ordered/received/
+outstanding value cards → *รายการค้างรับ* → *รับครบแล้ว* (a line moves across on its own when its
+outstanding hits zero) → per-round receipt history with a reverse button on the newest → attachments.
+
+Auto-save covers only `documentNumber` and `remarks`. Everything else is the result of pressing
+*บันทึกรับของ*, which is an intentional act, not something typed and left.
+
+`PurchaseOrderDocument` gained a **รับสินค้า** button on approved orders: it looks for an existing RR
+first and opens it, and only creates one when there is none.
+
+## 8. RBAC
+
+Nine new permissions, split on purpose — Store receives and posts the payable, Accounting chases the
+payment; neither role should acquire the other half by default.
+
+| Permission | Group |
+|---|---|
+| `receivingReport:view / viewAll / create / edit / receive / print / delete` | คลังสินค้า |
+| `ap:view`, `ap:manage` | บัญชีลูกหนี้ |
+
+`receivingReport:receive` is separate from `:edit` because posting a receipt writes stock and creates
+a payable, which is a materially different act from correcting the form number in the header.
+
+Shipped with the append-only migration **`store-ap-permissions-2026-09-03`** in
+`api/_lib/rbacSeed.ts`: Administrator gets all nine, `accounting_user` gets `ap:*` only. Without that
+migration an already-provisioned database would never see the new menu entries — the mistake that has
+already hidden two nav groups on the live system (see [RBAC.md](../RBAC.md) "Rollout").
+
+## 9. Delivery Order attachments
+
+The owner's *"ทำให้ใบส่งมอบสามารถแนบใบส่งมอบได้ด้วยเหมือนกับ cost control"* — the third module on the
+shared attachment engine. Full writeup in [DeliveryOrder.md](./DeliveryOrder.md) "ไฟล์แนบ".
+
+## Tests
+
+| File | Covers |
+|---|---|
+| `tests/api/monthlyNumbering.test.ts` | format, month rollover, prefix isolation, Bangkok-midnight boundary |
+| `tests/api/materialRequisitionIssue.test.ts` | approve with zero stock, delta-based issuing, over-issue, insufficient stock writing nothing, return limits, org stamping |
+| `tests/api/toolHoldings.test.ts` | issued 3 returned 1 → holds 2, non-tools excluded, team filter, date-range report |
+| `tests/api/receivingReport.test.ts` | draft PO rejected, duplicate → 409 with the existing id, partial receipt, average cost across two prices, hand-typed line posts AP but no stock, auto-close, over-receive writes nothing, month totals, paid round cannot be reversed, reversal rolls back both sides |
+| `tests/api/rbacMigrations.test.ts` | the store/AP migration grants, and that Accounting does not gain receiving rights |
+
+## Known gaps
+
+- **No real paper form for the RR print layout.** It is a plain bordered table like the PO's, and is
+  expected to be replaced wholesale when the owner supplies the form.
+- **Nothing has been clicked in a browser yet** — everything above is covered by integration tests
+  against a real in-memory MongoDB, not by a click-through.
+- Reversing a receipt uses the current average cost (see above).
+- `ap_entries` only ever holds `entryType: "RR"`. The rest of the company's AP codes need their own
+  source documents first.

@@ -245,3 +245,14 @@ quantities are not inherited.
   (which applies the real print CSS), came out as **2 pages**, and decoding each page's content stream
   shows the last text drawn on **both** pages is `FM-PD-02 Rev.00 : 01/11/64`. That also confirms the
   `@page { size: A4 portrait }` rule is honoured. See CHANGELOG.md 2026-08-27b.
+
+## Numbering changed to `SC-202609-0001` (2026-09-03)
+
+The owner's instruction was *"กำหนดรหัสเอกสารทุกอันให้เรียงแบบ ปีเดือน-ใบที่เท่าไหร่ของเดือนนั้น"* —
+**every** internal document — so the Production Order's deliberate Gregorian `SC-YYYY-MM-NNN`
+exception folded into the shared `{PREFIX}-{YYYYMM}-{NNNN}` format like everything else.
+
+Existing documents keep their numbers, and `documentNumber` is still free to type over, so a paper
+FM-PD-02 that needs the old shape can still carry it. Production requisitions likewise keep
+`{SC number}-MR{n}` as the **form** number while their `_id` follows `MR-YYYYMM-NNNN` — see
+[Store.md](./Store.md).

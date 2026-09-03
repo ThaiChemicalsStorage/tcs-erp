@@ -337,3 +337,14 @@ catches a file that simply has no importers.
 `StockMovementSourceType` also lost its `"goods_receipt"` member, in **both** copies of that union
 (`api/_lib/collections.ts` and `src/lib/stock.ts` declare it independently). Nothing had ever written
 that value, so no stored movement can carry it.
+
+## PO → ใบรับสินค้า (2026-09-03)
+
+An approved Purchase Order now has somewhere to go: **one PO = one ใบรับสินค้า (RR)**, owned by the
+Store department, created from the PO with its lines snapshotted. `PurchaseOrderDocument` gained a
+**รับสินค้า** button on `Final` documents that opens the existing RR when there is one and creates it
+otherwise — pressing create blindly would hit the unique-index 409 the second time, which reads as a
+dead end to whoever pressed it.
+
+The PO itself is unchanged apart from the number format (`PO-202609-0001`). Receiving, costing, the
+payable and the purchase-tax register all live in [Store.md](./Store.md).

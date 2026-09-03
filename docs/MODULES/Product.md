@@ -177,3 +177,25 @@ approving/rejecting one notifies the requester.
 table in the live data** — so the helper accepts several spellings per department (Thai full/short and
 the legacy English values). It returns the real recipient count and logs a warning when that is zero.
 Notification failures never fail the approval itself. See TODO.md for the data fix this depends on.
+
+## Stock: costing, returns and team tools (2026-09-03)
+
+Added with the Store department's module set — see [Store.md](./Store.md) for the whole picture.
+
+- **`StockMovementKind` gained `"return"`** (positive delta) so goods coming back from a team read
+  as a return in the history rather than an anonymous adjustment. `StockMovementSourceType` gained
+  `"receiving_report"`.
+- **`Product.avgCost`** — a moving average, server-written only, like `stockQty`. `applyStockMovement()`
+  recomputes it inside the *same pipeline update* that changes the quantity, so two concurrent receipts
+  cannot both average from the stale value. Receiving with a `unitCost` re-averages; issuing, returning
+  and adjusting use the current average as the movement's unit cost. Moving average was chosen over
+  FIFO deliberately: no lots to track, and it is enough to give the stock card a value column.
+- **Stock value is `stockQty × avgCost`, computed on read** and never stored.
+- Movements now also carry `unitCost`, `amount`, `balanceValueAfter` and the department/team/work-type
+  a requisition charged them to.
+- **`Product.isTool`** marks an item that must come back. `GET /api/tool-holdings` aggregates the
+  ledger per (department, team, product) — `held = issued − returned` — with no collection of its own,
+  and is gated on the existing `stock:view` rather than a new permission.
+- **Stock card** (`StockCardPrintDocument.tsx`) — A4 landscape, accounting layout, one product's whole
+  history with received/issued/balance quantities *and* values. It needs the full history, so
+  `GET /api/stock-movements` gained `?limit=` (default 200, max 2000).

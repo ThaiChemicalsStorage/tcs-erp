@@ -677,3 +677,25 @@ block of **remarks** under the item table ("PQ202512-292-SC-SK", "PO:PO6812017",
 Covered by a round-trip test in `tests/api/arReceiptWorkflow.test.ts` (survives create-then-re-read,
 blank entries dropped, companion BI's remarks stay empty), confirmed to fail against the pre-fix
 code. **The printed output itself has not been visually checked** — see TODO.md.
+
+## Accounts Payable — the first real rows (2026-09-03)
+
+The บัญชีจ่าย flow documented above had no software behind it until now. It has a first, narrow
+implementation: **`ap_entries`**, written only by the Store department's receiving report, plus two
+read pages in the บัญชี nav group — **ทะเบียนภาษีซื้อ** (the input-VAT counterpart of the existing
+monthly sales-tax report) and **ทะเบียนเจ้าหนี้** (grouped by vendor, with a mark-paid action).
+
+Three deliberate limits:
+
+- **No manual-create route.** Every payable is the by-product of receiving goods. The moment
+  Accounting can hand-key one, the register and the stock ledger start disagreeing with nothing to
+  flag it. A wrong amount is corrected by reversing the receipt on the RR, which rolls back stock and
+  payable together.
+- **Accounting may change only `status`/`paymentRef`.** Not the amounts, not the vendor.
+- **`entryType` is `"RR"` and nothing else.** The other codes on the real AP sheet (RM contractor, RD
+  shipping, RO/RP general expenses, RH, RX, BR, OE) have no source document in this system yet, so the
+  union holds one member rather than guessing at codes nobody can produce.
+
+The month filter reads the **invoice date**, not the posting date — a purchase-tax report follows the
+tax invoice's own month, and an invoice dated the 31st arriving on the 2nd is routine. Full writeup in
+[Store.md](./Store.md).

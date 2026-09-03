@@ -644,3 +644,28 @@ The typos `(Finshed Date)` and `INTERMIDIATE COAT` are on the paper and are repr
 Verified by printing a real job order to PDF from the dev stack and comparing the rendered pages
 against the form image — which is how the missing white background, the empty fill-ins printing as
 `: BAR`, and the scope list splitting mid-column were caught. See CHANGELOG.md 2026-08-31.
+
+## ใบเบิก: stock is cut when Store issues, not at approval (2026-09-03)
+
+**This reverses the behaviour shipped the previous day.** On 2026-09-02 approval deducted stock and
+`beforeApprove: assertProductsHaveStock` blocked approval outright when stock was short. The owner
+chose the opposite: a requisition must always be approvable, with the shortage visible on screen.
+
+- `POST /api/material-requisitions/:id/issue` — `Final` only, gated on **`stock:adjust`** (the person
+  issuing is Store, not the document's author). `withdrawal1Qty`/`withdrawal2Qty` are no longer
+  accepted by `PATCH` at all.
+- Deduction is the **delta** between stored and posted issue quantities, summed per product: posting
+  the same numbers twice deducts nothing, and lowering a number returns the difference. The delta loop
+  walks the **union** of before/after — walking only "after" was a real bug in the old return flow,
+  where clearing a return quantity never reversed the earlier movement.
+- `assertProductsHaveStock()` runs on the increments *before* the first write, so a short line cannot
+  leave earlier lines half-issued behind an error.
+- Per line the UI shows stock on hand / issued / outstanding, with a *ของไม่พอ ขาด N* badge, and a
+  green "จ่ายของ (สโตร์)" card visible only on `Final` documents to `stock:adjust` holders.
+- `chargeDepartmentId/Name`, `chargeTeamId/Name`, `chargeWorkTypeCode/Name` are stamped onto every
+  movement the document produces. Names are resolved server-side from the master tables, never taken
+  from the client. Work types come from the code register (`kind: "workType"`), so the owner adds
+  งานเหล็ก / งานโรงงาน / งานผลิต without a code change.
+- `documentNumber` (the number printed on the form) is now separate from `_id`: production
+  requisitions default it to `{SC number}-MR{n}` while `_id` follows the system-wide
+  `MR-YYYYMM-NNNN`. See [Store.md](./Store.md).

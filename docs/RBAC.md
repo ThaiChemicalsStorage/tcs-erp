@@ -7,6 +7,34 @@
 > · `:finalize` ยังทำหน้าที่ที่สองอยู่เหมือนเดิมคือ "แก้/ลบเอกสารของคนอื่นได้" (`isOwnerOf || finalize`)
 > ซึ่งป้ายใหม่ยังไม่ได้บอก — จดไว้ใน TODO.md (Role-Based Access Control)
 
+## Store + AP permissions (2026-09-03)
+
+Nine permissions shipped with the Store department's module set:
+
+| Permission | Group | Granted by default to |
+|---|---|---|
+| `receivingReport:view` / `viewAll` / `create` / `edit` / `receive` / `print` / `delete` | คลังสินค้า | Super Admin, Administrator |
+| `ap:view`, `ap:manage` | บัญชีลูกหนี้ | Super Admin, Administrator, `accounting_user` |
+
+`receivingReport:receive` is deliberately **separate from `:edit`**: posting a receipt writes stock
+movements and creates a payable, which is a materially different act from correcting the form number
+in the document header. `:edit` covers the header; `:receive` covers posting and reversing rounds.
+
+The split between the two families is also deliberate — Store receives the goods and posts the
+payable, Accounting chases the payment. `accounting_user` therefore gets `ap:*` and **not**
+`receivingReport:*`; neither role acquires the other half by default. Administrator gets both
+because it must be able to reach every menu.
+
+Shipped with the append-only migration **`store-ap-permissions-2026-09-03`** in
+`api/_lib/rbacSeed.ts`, covered by `tests/api/rbacMigrations.test.ts`. Without a migration an
+already-provisioned database would never gain these, and the new menu entries would be invisible to
+everyone but Super Admin — the exact failure that hid the จัดซื้อ and BD nav groups for three days
+(see "Rollout" below).
+
+Team tools (`เครื่องมือประจำทีม`) deliberately added **no** permission — it reads the same stock
+ledger and is gated on the existing `stock:view`.
+
+---
 ## Current State: Real, Server-Enforced RBAC — Deployed and Live
 
 As of 2026-07-09 this app's RBAC/user-management/approval-workflow/notification/audit-log system is **genuinely enforced server-side**, not a client-side simulation. Since the ~2026-08-07 cutover the app is deployed on a self-hosted VPS (own domain + HTTPS) running the standalone Express server against self-hosted MongoDB (the earlier Vercel Serverless Functions + MongoDB Atlas demo is decommissioned) — see [ARCHITECTURE.md](./ARCHITECTURE.md), [API.md](./API.md), [DATABASE.md](./DATABASE.md). The role/permission **model itself is unchanged** from the 2026-07-08 client-side build described further below — same 6 default roles, same 17-permission set, same UI. What changed is **where each check is enforced**:
