@@ -138,7 +138,7 @@ export function ToolReportPrintDocument({ mode, holdings, rows, companyHeader, p
         <tfoot>
           <tr>
             <td style={{ padding: 0, border: "none" }}>
-              <p style={{ textAlign: "right", margin: "6px 0 0", fontSize: "9px" }}>คิดจากใบเบิกที่สโตร์จ่ายและรับคืน · ณ วันที่พิมพ์ {printDate(printedAt)}</p>
+              <p style={{ textAlign: "right", margin: "6px 0 0", fontSize: "9px" }}>คิดจากการจ่าย/รับคืนเครื่องมือและใบเบิกของสโตร์ · ณ วันที่พิมพ์ {printDate(printedAt)}</p>
             </td>
           </tr>
         </tfoot>

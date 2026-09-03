@@ -45,6 +45,9 @@ export function ToolIssueCard({
   const [heldResult, setHeldResult] = useState<{ teamId: string; rows: ToolHoldingRow[] }>({ teamId: "", rows: [] });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  /** เพิ่มค่าหลังบันทึกสำเร็จ เพื่อดึงยอดคงเหลือและยอดถือครองใหม่ — ไม่งั้นช่อง "คงเหลือ" ในตาราง
+   *  ยังโชว์ยอดก่อนจ่าย ซึ่งอ่านแล้วเหมือนกดไม่ติด (เจอตอนไล่กดทดสอบ 2026-09-03b) */
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +55,7 @@ export function ToolIssueCard({
       .then((list) => { if (!cancelled) setTools(list.filter((p) => p.isTool && !p.archived)); })
       .catch(() => { if (!cancelled) setError(t("toolControl.issue.errorLoadTools")); });
     return () => { cancelled = true; };
-  }, [t]);
+  }, [t, reloadToken]);
 
   // ยอดที่ทีมถืออยู่ — โหลดใหม่ทุกครั้งที่เปลี่ยนทีม ใช้เป็นเพดานของโหมดรับคืน
   useEffect(() => {
@@ -62,7 +65,7 @@ export function ToolIssueCard({
       .then((rows) => { if (!cancelled) setHeldResult({ teamId, rows }); })
       .catch(() => { if (!cancelled) setHeldResult({ teamId, rows: [] }); });
     return () => { cancelled = true; };
-  }, [teamId]);
+  }, [teamId, reloadToken]);
 
   const teamsOfDepartment = teams.filter((tm) => tm.isActive && (!departmentId || tm.departmentId === departmentId));
   const heldByProduct = useMemo(
@@ -100,6 +103,7 @@ export function ToolIssueCard({
       const result = await issueTools({ mode, departmentId, teamId, workTypeCode, note, lines });
       showToast(t(mode === "issue" ? "toolControl.issue.issuedToast" : "toolControl.issue.returnedToast").replace("{no}", result.slipNumber));
       reset();
+      setReloadToken((n) => n + 1);
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("toolControl.issue.errorSave"));

@@ -21,7 +21,7 @@ Related: [Product.md](./Product.md) (Stock ledger, costing, team tools), [Purcha
 | Purchase-tax register + AP register | ✅ Built |
 | Delivery Order attachments | ✅ Built |
 | Real paper forms for the RR print layout | ⏳ Not supplied by the owner yet — placeholder |
-| Browser click-through of the whole flow | ⏳ Not done |
+| Browser click-through of the whole flow | ✅ Done 2026-09-03c — found and fixed two client-side staleness bugs |
 
 ## Decisions the owner made (2026-09-03)
 
@@ -267,8 +267,11 @@ shared attachment engine. Full writeup in [DeliveryOrder.md](./DeliveryOrder.md)
 
 - **No real paper form for the RR print layout.** It is a plain bordered table like the PO's, and is
   expected to be replaced wholesale when the owner supplies the form.
-- **Nothing has been clicked in a browser yet** — everything above is covered by integration tests
-  against a real in-memory MongoDB, not by a click-through.
+- **Print output has not been checked as a real PDF.** The click-through covered the screens, not
+  the paper. Ctrl+P on the receiving report was broken (fixed 2026-09-03b) precisely because print
+  output is the part no test looks at.
+- **The English UI has not been eyeballed.** Every key exists in both dictionaries, but nobody has
+  switched the language and looked for Thai left on screen.
 - Reversing a receipt uses the current average cost (see above).
 - `ap_entries` only ever holds `entryType: "RR"`. The rest of the company's AP codes need their own
   source documents first.

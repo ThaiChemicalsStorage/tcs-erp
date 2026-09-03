@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Boxes, Search, X, History, Printer, AlertTriangle, ClipboardList } from "lucide-react";
-import { type Product, type ProductCategory, updateProduct } from "../../lib/products";
+import { type Product, type ProductCategory, updateProduct, fetchProducts } from "../../lib/products";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { StockCountSheetPrintDocument } from "./StockCountSheetPrintDocument";
 import { StockCardPrintDocument } from "./StockCardPrintDocument";
@@ -63,6 +63,24 @@ export function StockPage({
   // synchronous ใน effect (ต้องห้ามตาม react-hooks/set-state-in-effect) — pattern เดียวกับ
   // AccountingDashboardPage.tsx
   const [movementsResult, setMovementsResult] = useState<{ key: string; movements?: StockMovement[]; error?: boolean } | null>(null);
+  /**
+   * ดึงยอดสินค้าใหม่ทุกครั้งที่เปิดหน้านี้ (2026-09-03b)
+   *
+   * `products` มาจากชุดข้อมูลที่ App โหลดตอนบูตครั้งเดียว แต่ยอดสต๊อกเปลี่ยนจาก **หน้าอื่น** ได้
+   * ตลอดเวลา — สโตร์จ่ายของบนใบเบิก รับของบนใบรับสินค้า จ่ายเครื่องมือให้ทีม — พอเดินกลับมาหน้านี้
+   * จึงเห็นยอดเก่าค้างอยู่จนกว่าจะรีเฟรชทั้งแอป ซึ่งอ่านแล้วเหมือนระบบไม่ได้บันทึกให้ (เจอจริงตอน
+   * ไล่กดทดสอบ: รับของ 10 ชิ้นแล้วหน้านี้ยังขึ้น 0 ส่วนประวัติด้านล่างขึ้นยอดถูก — ขัดกันเองบนจอเดียว)
+   */
+  useEffect(() => {
+    let cancelled = false;
+    fetchProducts()
+      .then((fresh) => { if (!cancelled) onProductsChange(fresh); })
+      .catch(() => { /* ยอดเดิมที่ค้างอยู่ยังใช้ดูได้ ไม่ต้องรบกวนด้วย toast */ });
+    return () => { cancelled = true; };
+    // ครั้งเดียวตอน mount — ตั้งใจไม่ผูกกับ onProductsChange ที่เปลี่ยน identity ทุก render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     const key = `${historyProduct?.id ?? ""}#${historyRetryToken}`;
