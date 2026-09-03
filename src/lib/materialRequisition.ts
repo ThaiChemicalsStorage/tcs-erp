@@ -35,9 +35,12 @@ export interface MaterialRequisitionLine {
   category: MaterialRequisitionCategory;
   /** "เบิกของ" — the originally planned/requested quantity. */
   plannedQty: number | null;
-  /** "เบิกครั้งที่1" */
+  /**
+   * "เบิกครั้งที่1" / "เบิกครั้งที่2" — จำนวนที่**สโตร์จ่ายจริง** (2026-09-03: เจ้าของเลือกให้ตัดสต๊อก
+   * ตอนสโตร์จ่ายของ ไม่ใช่ตอนอนุมัติ) เขียนได้ทาง `POST /:id/issue` เท่านั้น ใบ Final เท่านั้น
+   * ผู้จัดทำแก้ไม่ได้ · จ่ายบางส่วนได้ ส่วนที่เหลือ = "ค้างเบิก" (`outstandingQtyOf()`)
+   */
   withdrawal1Qty: number | null;
-  /** "เบิกครั้งที่2" */
   withdrawal2Qty: number | null;
   /** "คืนของ" — leftover material returned via this same line, after issuance. Exempt from the
    * Final-status lock at the API layer (Stage 3) — same "follow-up fields survive Final" pattern
@@ -49,9 +52,31 @@ export interface MaterialRequisitionLine {
 }
 
 export interface MaterialRequisition {
-  /** Human-readable business id (e.g. "MR-2569-0001"), intended to be stored directly as _id once
-   * the API layer mints it (Stage 3) — same convention as service_reports' SR-{year}-{seq}. */
+  /** Human-readable business id (`MR-{YYYYMM}-{NNNN}` since 2026-09-03 — older rows carry
+   * `MR-{พ.ศ.}-{NNNN}` or `{SC}-MR{n}`), stored directly as `_id` — same convention as
+   * service_reports. Never changes; the number people read is `documentNumber` below. */
   id: string;
+  /**
+   * เลขที่บนฟอร์ม (2026-09-03) — เจ้าของสั่ง *"ใบเบิกสามารถกรอกเองได้แต่ยังให้รันเลขปกติ"* · ค่าตั้งต้น
+   * = `id` (ฝ่ายโครงการ) หรือ `{เลขใบสั่งผลิต}-MR{n}` (ฝ่ายผลิต — คำสั่ง 2026-09-02 ย้ายมาอยู่ที่นี่)
+   * แก้ได้ตอน Draft ห้ามซ้ำ · optional เพราะใบเก่าไม่มี อ่านออกมาเป็น `id` เสมอ (normalize ตอนอ่าน)
+   */
+  documentNumber?: string;
+  /**
+   * "ตัดของแผนกไหน ทีมไหน" (2026-09-03) — แผนก/ทีมที่รับของไป ใช้ทั้งตอนตัดและตอนคืน ประทับลงบัญชี
+   * เดินสะพัดของสต๊อกทุกแถว · ชื่อเก็บเป็น snapshot ให้ใบพิมพ์และรายงานอ่านได้ไม่ต้อง join
+   * ค่าตั้งต้น = แผนก/ทีมของคนสร้างใบ · ว่างได้
+   */
+  chargeDepartmentId?: string;
+  chargeDepartmentName?: string;
+  chargeTeamId?: string;
+  chargeTeamName?: string;
+  /**
+   * "ตัดเข้างาน" — ประเภทงานที่ของถูกตัดให้ (งานเหล็ก / งานโรงงาน / งานผลิต …) เจ้าของสั่ง 2026-09-03
+   * ค่ามาจากทะเบียนรหัส `kind: "workType"` (src/lib/codeRegister.ts) แต่พิมพ์เองได้ถ้ายังไม่มีในทะเบียน
+   */
+  chargeWorkTypeCode?: string;
+  chargeWorkTypeName?: string;
   projectId: string;
   /**
    * แผนกเจ้าของเอกสาร — ฝ่ายโครงการกับฝ่ายผลิตใช้เอกสารชนิดเดียวกันแต่ต่างคนต่างเห็นของตัวเอง
@@ -125,6 +150,13 @@ export interface MaterialRequisition {
  * DeliveryOrderSummary. */
 export interface MaterialRequisitionSummary {
   id: string;
+  /** เลขที่บนฟอร์ม — เท่ากับ `id` เมื่อไม่ได้พิมพ์ทับ */
+  documentNumber: string;
+  chargeDepartmentName: string;
+  chargeTeamName: string;
+  chargeWorkTypeName: string;
+  /** ใบอนุมัติแล้วที่สโตร์ยังจ่ายไม่ครบ — ป้าย "ค้างเบิก" ในหน้ารายการ */
+  hasOutstanding: boolean;
   projectId: string;
   scopeOfWorkId: string;
   jobCode: string;
@@ -153,6 +185,24 @@ export const MATERIAL_CATEGORY_TO_KEY: Record<string, MaterialRequisitionCategor
 export const MATERIAL_CATEGORY_NAMES: string[] = Object.keys(MATERIAL_CATEGORY_TO_KEY);
 export function resolveMaterialCategoryKey(categoryName: string): MaterialRequisitionCategory {
   return MATERIAL_CATEGORY_TO_KEY[categoryName] ?? "other";
+}
+
+// ── จ่ายจริง / ค้างเบิก (2026-09-03) — ฟังก์ชันล้วน ใช้ร่วมกันทั้งหน้าจอ ใบพิมพ์ และ API ─────────
+/** จำนวนที่สโตร์จ่ายไปแล้ว = เบิกครั้งที่ 1 + ครั้งที่ 2 */
+export function issuedQtyOf(line: Pick<MaterialRequisitionLine, "withdrawal1Qty" | "withdrawal2Qty">): number {
+  return (line.withdrawal1Qty ?? 0) + (line.withdrawal2Qty ?? 0);
+}
+/** ค้างเบิก = ขอ − จ่ายแล้ว (ไม่ติดลบ — จ่ายเกินที่ขอไม่ได้อยู่แล้ว server กันไว้) */
+export function outstandingQtyOf(line: Pick<MaterialRequisitionLine, "plannedQty" | "withdrawal1Qty" | "withdrawal2Qty">): number {
+  return Math.max(0, (line.plannedQty ?? 0) - issuedQtyOf(line));
+}
+/** ใบที่ยังมีของค้างจ่ายอย่างน้อยหนึ่งบรรทัด (เฉพาะใบที่อนุมัติแล้วเท่านั้นที่มีความหมาย) */
+export function requisitionHasOutstanding(doc: Pick<MaterialRequisition, "status" | "lines">): boolean {
+  return doc.status === "Final" && doc.lines.some((l) => outstandingQtyOf(l) > 0);
+}
+/** ของที่ทีมยังถืออยู่จากบรรทัดนี้ = จ่ายแล้ว − คืนแล้ว */
+export function netHeldQtyOf(line: Pick<MaterialRequisitionLine, "withdrawal1Qty" | "withdrawal2Qty" | "returnQty">): number {
+  return Math.max(0, issuedQtyOf(line) - (line.returnQty ?? 0));
 }
 
 // สร้างรายการเปล่าจากสินค้าที่เลือกในแคตตาล็อก
@@ -184,8 +234,32 @@ export async function createMaterialRequisitionFromProductionOrder(productionOrd
   });
   return materialRequisition;
 }
-export async function fetchMaterialRequisition(id: string): Promise<MaterialRequisition> {
-  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}`);
+/**
+ * ใบเบิกพร้อมยอดคงเหลือปัจจุบันของทุกสินค้าในใบ (`stockByProduct`, key = productId) — server อ่านให้
+ * ในคำขอเดียว หน้าเอกสารจึงโชว์ "คงเหลือในสต๊อก" ต่อบรรทัดได้โดยไม่ต้องดึงสินค้าทั้งคลัง
+ */
+export async function fetchMaterialRequisition(id: string): Promise<{ materialRequisition: MaterialRequisition; stockByProduct: Record<string, number> }> {
+  const { materialRequisition, stockByProduct } = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number> }>(`/material-requisitions/${encodeURIComponent(id)}`);
+  return { materialRequisition, stockByProduct: stockByProduct ?? {} };
+}
+/**
+ * สโตร์จ่ายของ (2026-09-03) — กรอกเบิกครั้งที่ 1/2 ต่อบรรทัด แล้วสต๊อกถูกตัดตาม**ส่วนต่าง**จากที่จ่ายไปแล้ว
+ * ใบ Final เท่านั้น ต้องมีสิทธิ์ `stock:adjust` (คนจ่ายของคือสโตร์ ไม่ใช่เจ้าของใบ)
+ */
+export async function issueMaterialRequisition(
+  id: string,
+  fields: {
+    lines: { id: string; withdrawal1Qty: number | null; withdrawal2Qty: number | null }[];
+    storeDeptBy?: string;
+    chargeDepartmentId?: string;
+    chargeTeamId?: string;
+    chargeWorkTypeCode?: string;
+    chargeWorkTypeName?: string;
+  },
+): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}/issue`, {
+    method: "POST", body: JSON.stringify(fields),
+  });
   return materialRequisition;
 }
 /**
@@ -210,7 +284,12 @@ export async function updateMaterialRequisition(id: string, fields: MaterialRequ
 // Records a material return — stays editable even once the document is Final
 export async function recordMaterialRequisitionReturn(
   id: string,
-  fields: { lines: { id: string; returnQty: number | null }[]; returnedBy?: string; returnReceivedBy?: string },
+  fields: {
+    lines: { id: string; returnQty: number | null }[];
+    returnedBy?: string; returnReceivedBy?: string;
+    /** แผนก/ทีม/ประเภทงานที่คืนจาก — ปกติเท่ากับที่ตัดให้ แก้ได้ */
+    chargeDepartmentId?: string; chargeTeamId?: string; chargeWorkTypeCode?: string; chargeWorkTypeName?: string;
+  },
 ): Promise<MaterialRequisition> {
   const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}/return`, {
     method: "POST", body: JSON.stringify(fields),

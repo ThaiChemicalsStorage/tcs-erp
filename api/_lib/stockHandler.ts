@@ -15,6 +15,12 @@ import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js
  * change `Product.stockQty` — both the manual Stock page (handleMovementCreate below) and
  * Accounting's IV stock-cutting action (arHandler.ts's handleStockDeduction) call it, so every
  * balance change is always traceable through a StockMovementFields row.
+ *
+ * **2026-09-03 — ต้นทุนและมูลค่า.** เจ้าของสั่ง *"ยอดรวมมูลค่า Stock ตอนรับเข้ามาจะมีมูลค่าโชว์"* และ
+ * *"การ์ด stock"* ตัวเลขจึงไม่พอ ต้องมีต้นทุนด้วย · ใช้**ถัวเฉลี่ยเคลื่อนที่** (`Product.avgCost`): รับเข้า
+ * พร้อมต้นทุน → ถัวใหม่ในคำสั่ง update เดียวกับที่บวกจำนวน (pipeline update, ยัง atomic) · จ่ายออก/คืน/
+ * ปรับ → ใช้ต้นทุนถัวเฉลี่ย ณ ตอนนั้นเป็นต้นทุนของแถว ไม่แตะค่าเฉลี่ย · ไม่ใช่ FIFO เพราะไม่มี lot
+ * ให้ไล่ และการ์ดสต๊อกของบริษัทอ่านเป็นราคาเฉลี่ยอยู่แล้ว
  */
 
 let stockDefaultsBackfilled = false;
@@ -56,6 +62,20 @@ export async function assertProductsHaveStock(qtyByProductId: Map<string, number
   }
 }
 
+/** แผนก/ทีม/ประเภทงานที่ประทับลง movement — ดู StockMovementFields */
+export interface StockMovementOrgTags {
+  departmentId?: string;
+  departmentName?: string;
+  teamId?: string;
+  teamName?: string;
+  workTypeCode?: string;
+  workTypeName?: string;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export async function applyStockMovement(params: {
   productId: string;
   kind: StockMovementKind;
@@ -65,8 +85,14 @@ export async function applyStockMovement(params: {
   sourceId?: string;
   sourceLabel?: string;
   userId: string;
+  /** ต้นทุน/หน่วยของของที่รับเข้า — มีผลเฉพาะ delta > 0 · ไม่ส่ง = รับเข้าด้วยต้นทุนถัวเฉลี่ยเดิม (ค่าเฉลี่ยไม่เปลี่ยน) */
+  unitCost?: number;
+  org?: StockMovementOrgTags;
 }): Promise<{ movement: StockMovementFields & { id: string }; balanceAfter: number }> {
   if (!Number.isFinite(params.delta) || params.delta === 0) throw new HttpError(400, "จำนวนต้องไม่เป็นศูนย์");
+  const costIn = params.delta > 0 && typeof params.unitCost === "number" && Number.isFinite(params.unitCost) && params.unitCost >= 0
+    ? params.unitCost
+    : null;
 
   await backfillProductStockDefaults();
   const products = await productsCollection();
@@ -77,9 +103,23 @@ export async function applyStockMovement(params: {
   const filter = params.delta < 0
     ? { _id: productObjectId, stockQty: { $gte: -params.delta } }
     : { _id: productObjectId };
+  // pipeline update — ถัวเฉลี่ยต้องอ่าน stockQty/avgCost "ก่อน" ในคำสั่งเดียวกับที่บวกจำนวน ไม่งั้นสองใบรับ
+  // ที่ชนกันจะถัวจากค่าเก่าทั้งคู่ · ถ้าของเดิมเป็นศูนย์หรือติดลบ ค่าเฉลี่ยใหม่ = ต้นทุนที่รับเข้า
+  const qtyBefore = { $ifNull: ["$stockQty", 0] };
+  const avgBefore = { $ifNull: ["$avgCost", 0] };
+  const qtyAfter = { $add: [qtyBefore, params.delta] };
+  const avgAfter = costIn === null
+    ? avgBefore
+    : {
+        $cond: [
+          { $lte: [qtyBefore, 0] },
+          costIn,
+          { $divide: [{ $add: [{ $multiply: [qtyBefore, avgBefore] }, params.delta * costIn] }, qtyAfter] },
+        ],
+      };
   const updated = await products.findOneAndUpdate(
     filter,
-    { $inc: { stockQty: params.delta }, $set: { updatedAt: nowIso() } },
+    [{ $set: { stockQty: qtyAfter, avgCost: avgAfter, updatedAt: nowIso() } }],
     { returnDocument: "after" },
   );
   if (!updated) {
@@ -88,6 +128,8 @@ export async function applyStockMovement(params: {
     throw new HttpError(400, `สต๊อกคงเหลือไม่พอ (คงเหลือ ${exists.stockQty ?? 0} หน่วย)`);
   }
 
+  // ต้นทุนของแถว: รับเข้าพร้อมราคา = ราคานั้น · อื่น ๆ = ค่าเฉลี่ยที่ใช้อยู่ (ซึ่งไม่เปลี่ยนในกรณีนั้น)
+  const unitCost = round2(costIn ?? (updated.avgCost ?? 0));
   const now = nowIso();
   const movementFields: StockMovementFields = {
     productId: params.productId,
@@ -100,6 +142,15 @@ export async function applyStockMovement(params: {
     sourceType: params.sourceType,
     sourceId: params.sourceId,
     sourceLabel: params.sourceLabel,
+    unitCost,
+    amount: round2(Math.abs(params.delta) * unitCost),
+    balanceValueAfter: round2(Math.max(0, updated.stockQty) * (updated.avgCost ?? 0)),
+    ...(params.org?.departmentId ? { departmentId: params.org.departmentId } : {}),
+    ...(params.org?.departmentName ? { departmentName: params.org.departmentName } : {}),
+    ...(params.org?.teamId ? { teamId: params.org.teamId } : {}),
+    ...(params.org?.teamName ? { teamName: params.org.teamName } : {}),
+    ...(params.org?.workTypeCode ? { workTypeCode: params.org.workTypeCode } : {}),
+    ...(params.org?.workTypeName ? { workTypeName: params.org.workTypeName } : {}),
     createdAt: now,
     createdBy: params.userId,
   };
@@ -168,18 +219,24 @@ async function notifyIfLowStock(params: {
   }
 }
 
+/** เพดานแถวของประวัติ — หน้าสต๊อกรวมทุกสินค้าใช้ 200 เหมือนเดิม การ์ดสต๊อกของสินค้าตัวเดียวขอได้ถึง 2000 */
+const DEFAULT_LIST_LIMIT = 200;
+const MAX_LIST_LIMIT = 2000;
+
 async function handleMovementsList(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "stock:view");
   const movements = await stockMovementsCollection();
   const productId = typeof req.query?.productId === "string" ? req.query.productId : undefined;
   const sourceId = typeof req.query?.sourceId === "string" ? req.query.sourceId : undefined;
+  const requested = typeof req.query?.limit === "string" ? Number.parseInt(req.query.limit, 10) : NaN;
+  const limit = Number.isFinite(requested) && requested > 0 ? Math.min(requested, MAX_LIST_LIMIT) : DEFAULT_LIST_LIMIT;
   const filter = { ...(productId ? { productId } : {}), ...(sourceId ? { sourceId } : {}) };
-  const docs = await movements.find(filter).sort({ createdAt: -1 }).limit(200).toArray();
+  const docs = await movements.find(filter).sort({ createdAt: -1 }).limit(limit).toArray();
   res.status(200).json({ movements: docs.map(withStringId) });
 }
 
-const MOVEMENT_KINDS: StockMovementKind[] = ["receive", "deduct", "adjust"];
+const MOVEMENT_KINDS: StockMovementKind[] = ["receive", "deduct", "adjust", "return"];
 
 async function handleMovementCreate(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
@@ -196,11 +253,12 @@ async function handleMovementCreate(req: VercelRequest, res: VercelResponse) {
   } else {
     const qty = typeof body.qty === "number" ? body.qty : NaN;
     if (!Number.isFinite(qty) || qty <= 0) throw new HttpError(400, "กรุณาระบุจำนวนที่มากกว่า 0");
-    delta = kind === "receive" ? qty : -qty;
+    delta = kind === "deduct" ? -qty : qty;
   }
+  const unitCost = typeof body.unitCost === "number" && Number.isFinite(body.unitCost) && body.unitCost >= 0 ? body.unitCost : undefined;
 
   const { movement } = await applyStockMovement({
-    productId, kind, delta, reason, sourceType: "manual", userId: ctx.user.id,
+    productId, kind, delta, reason, sourceType: "manual", userId: ctx.user.id, unitCost,
   });
   res.status(201).json({ movement });
 }

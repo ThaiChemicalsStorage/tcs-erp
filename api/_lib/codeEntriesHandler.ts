@@ -53,7 +53,7 @@ function escapeRegExp(s: string): string {
 }
 
 function parseKind(v: unknown): CodeEntryFields["kind"] {
-  if (v === "department" || v === "account") return v;
+  if (v === "department" || v === "account" || v === "workType") return v;
   throw new HttpError(400, "ชนิดรหัสไม่ถูกต้อง");
 }
 

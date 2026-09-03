@@ -4,6 +4,7 @@ import { requirePermission, requireOneOfPermissions } from "../_lib/auth.js";
 import { productsCollection, toObjectId, withStringId } from "../_lib/collections.js";
 import { nowIso } from "../../src/lib/products.js";
 import { handleStock, backfillProductStockDefaults } from "../_lib/stockHandler.js";
+import { handleToolHoldings } from "../_lib/toolHoldingsHandler.js";
 
 async function handleList(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
@@ -44,6 +45,8 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       // it, so every change is traceable through a StockMovement row. See docs/MODULES/Product.md.
       stockQty: 0,
       reorderPoint: 0,
+      avgCost: 0,
+      isTool: body.isTool === true,
       createdAt: now,
       updatedAt: now,
       createdBy: ctx.user.id,
@@ -85,6 +88,9 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
     if (typeof body.reorderPoint === "number" && Number.isFinite(body.reorderPoint)) {
       update.reorderPoint = Math.max(0, Math.floor(body.reorderPoint));
     }
+    // "เครื่องมือ — ต้องคืน" (2026-09-03) — ธง ไม่ใช่ตัวเลข จึงไม่ต้องตรวจอะไรนอกจากชนิด
+    // `avgCost` ไม่รับจาก client เลย เหมือน `stockQty` — เปลี่ยนได้ทาง applyStockMovement() เท่านั้น
+    if (typeof body.isTool === "boolean") update.isTool = body.isTool;
 
     if (Object.keys(update).length > 0) {
       update.updatedAt = nowIso();
@@ -113,6 +119,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // convention documented in docs/CLAUDE.md (e.g. customers.ts also serves /api/search).
     const pathname = (req.url ?? "").split("?")[0];
     if (pathname === "/api/stock-movements" || pathname.startsWith("/api/stock-movements/")) return handleStock(req, res);
+    // เครื่องมือประจำทีม (2026-09-03) — มุมมองของบัญชีสต๊อก จึงอยู่ในช่องเดียวกัน
+    if (pathname === "/api/tool-holdings" || pathname.startsWith("/api/tool-holdings/")) return handleToolHoldings(req, res);
 
     const parts = getPathSegments(req, "/api/products");
     if (parts.length === 0) return handleList(req, res);

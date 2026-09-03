@@ -14,7 +14,11 @@ import { apiFetch } from "./apiClient.js";
  * ก็แค่กรองด้วย `kind`
  */
 
-export type CodeKind = "department" | "account";
+/** `workType` (2026-09-03) — ประเภทงานที่ใบเบิก "ตัดเข้างาน" (งานเหล็ก / งานโรงงาน / งานผลิต …)
+ * เจ้าของสั่ง *"ใบเบิกมี dropdown สามารถเลือกตัดได้ว่าตัดงานนี้เป็นงานเหล็กอะไรงี้ งานโรงงาน งานผลิต"*
+ * เก็บในทะเบียนนี้แทนการฮาร์ดโค้ด เพื่อให้เจ้าของเพิ่ม/แก้รายการเองได้ */
+export type CodeKind = "department" | "account" | "workType";
+export const CODE_KINDS: readonly CodeKind[] = ["department", "account", "workType"];
 
 export interface CodeEntry {
   id: string;

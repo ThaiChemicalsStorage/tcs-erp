@@ -27,8 +27,12 @@ export function DocumentStatusStepper({
   approvedByUserId,
   approvedByName = "",
   approvedAt = "",
+  finalHint,
 }: {
   status: ApprovableStatus;
+  /** ข้อความขั้น Final ที่เอกสารบางชนิดต้องบอกมากกว่า "อนุมัติแล้ว" — เช่นใบเบิกที่สโตร์ยังจ่ายไม่ครบ
+   *  ("รอสโตร์จ่ายของ") · ไม่ระบุ = ข้อความกลางเดิม */
+  finalHint?: string;
   /** มีค่า = ใบนี้เคยถูกตีกลับ ทำให้ขั้น "จัดทำร่าง" อ่านต่างออกไป (แก้ของเดิม ไม่ใช่เริ่มใหม่) */
   rejectionComment?: string;
   /** ใครคือคนที่ต้องกดอนุมัติใบชนิดนี้ เช่น "ผู้มีสิทธิ์อนุมัติใบเบิก" — ไม่ระบุ = ข้อความกลาง ๆ */
@@ -57,7 +61,7 @@ export function DocumentStatusStepper({
   const approverName = approvedByName.trim() || byId(approvedByUserId)?.fullName || "";
   const hint =
     status === "Final"
-      ? t("approval.step.hint.final")
+      ? finalHint || t("approval.step.hint.final")
           .replace("{by}", approverName ? t("approval.step.by").replace("{name}", approverName) : "")
           .replace("{at}", approvedAt ? t("approval.step.at").replace("{date}", formatQuoteDateThai(approvedAt)) : "")
       : status === "PendingApproval"

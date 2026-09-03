@@ -75,6 +75,7 @@ const ArDocumentListPage = lazy(() => import("./pages/accounting/ArDocumentListP
 const ArMonthlyReportPage = lazy(() => import("./pages/accounting/ArMonthlyReportPage").then((m) => ({ default: m.ArMonthlyReportPage })));
 const AccountingDashboardPage = lazy(() => import("./pages/accounting/AccountingDashboardPage").then((m) => ({ default: m.AccountingDashboardPage })));
 const StockPage = lazy(() => import("./pages/stock/StockPage").then((m) => ({ default: m.StockPage })));
+const ToolControlPage = lazy(() => import("./pages/toolControl/ToolControlPage").then((m) => ({ default: m.ToolControlPage })));
 const ProductRequestPage = lazy(() => import("./pages/productRequest/ProductRequestPage").then((m) => ({ default: m.ProductRequestPage })));
 
 // แสดงสถานะกำลังโหลดหน้าย่อยระหว่างรอโหลดโค้ด (Suspense fallback) พร้อมข้อความสำหรับ screen reader
@@ -147,7 +148,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "productRequest" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "toolControl" | "productRequest" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
@@ -230,6 +231,8 @@ const navItems: NavItem[] = [
   { key: "productionPurchase", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "products", icon: Package, labelKey: "nav.products", permission: "products:view" },
   { key: "stock", icon: Boxes, labelKey: "nav.stock", permission: "stock:view" },
+  // เครื่องมือประจำทีม (2026-09-03) — มุมมองของบัญชีสต๊อก ใช้สิทธิ์ stock:view เดิม ไม่สร้างสิทธิ์ใหม่
+  { key: "toolControl", icon: Hammer, labelKey: "nav.toolControl", permission: "stock:view" },
   { key: "productRequest", icon: PackagePlus, labelKey: "nav.productRequest", permission: "productRequest:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -259,7 +262,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
-  { labelKey: "nav.group.inventory", keys: ["products", "stock", "productRequest"] },
+  { labelKey: "nav.group.inventory", keys: ["products", "stock", "toolControl", "productRequest"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 
@@ -292,6 +295,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   purchasingRequestInbox: "nav.purchasingRequestInbox",
   products: "nav.products",
   stock: "nav.stock",
+  toolControl: "nav.toolControl",
   productRequest: "nav.productRequest",
   customers: "nav.customers",
   vendors: "nav.vendors",
@@ -1122,7 +1126,7 @@ export default function App() {
               : effectiveNav === "project"
               ? <ProjectPage currentUserId={currentUser.id} canEdit={canEditProject} canDelete={canDeleteProject} canCreate={canCreateProject} canCreateMaterialRequisition={canCreateMaterialRequisition} canCreateJobOrder={canCreateJobOrder} canCreatePurchaseRequest={canCreatePurchaseRequest} onOpenMaterialRequisition={navigateToMaterialRequisition} onOpenJobOrder={navigateToJobOrder} onOpenPurchaseRequest={navigateToPurchaseRequest} initialProjectId={projectDeepLinkId} onProjectIdConsumed={() => setProjectDeepLinkId(null)} />
               : effectiveNav === "materialRequisition"
-              ? <MaterialRequisitionPage company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
+              ? <MaterialRequisitionPage company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} canIssueStock={canAdjustStock} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
               : effectiveNav === "jobOrder"
               ? <JobOrderPage company={company} currentUserId={currentUser.id} canEdit={canEditJobOrder} canFinalize={canFinalizeJobOrder} canPrint={canPrintJobOrder} canDelete={canDeleteJobOrder} canCreate={canCreateJobOrder} initialJobOrderId={jobOrderDeepLinkId} onJobOrderIdConsumed={() => setJobOrderDeepLinkId(null)} />
               : effectiveNav === "purchasingRequestInbox"
@@ -1130,7 +1134,7 @@ export default function App() {
               : effectiveNav === "purchaseRequest"
               ? <PurchaseRequestPage company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionRequisition"
-              ? <MaterialRequisitionPage key="mr-production" ownerDepartment="production" company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
+              ? <MaterialRequisitionPage key="mr-production" ownerDepartment="production" company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} canIssueStock={canAdjustStock} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
               : effectiveNav === "productionPurchase"
               ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionOrder"
@@ -1177,6 +1181,8 @@ export default function App() {
               ? <ProductsPage products={products} onProductsChange={updateProducts} categories={categories} onCategoriesChange={updateCategories} currentUserId={currentUser.id} initialEditId={productDeepLinkId} onEditIdConsumed={() => setProductDeepLinkId(null)} autoView={pageAction?.nav === "products" ? pageAction.action : null} autoViewSeq={pageAction?.nav === "products" ? pageAction.seq : null} onAutoActionConsumed={clearPageAction} />
               : effectiveNav === "stock"
               ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} company={company} currentUserName={currentUser.fullName} />
+              : effectiveNav === "toolControl"
+              ? <ToolControlPage company={company} currentUserId={currentUser.id} />
               : effectiveNav === "productRequest"
               ? <ProductRequestPage currentUserId={currentUser.id} canCreate={canCreateProductRequest} canReview={canReviewProductRequest} initialProductRequestId={productRequestDeepLinkId} onProductRequestIdConsumed={() => setProductRequestDeepLinkId(null)} />
               : effectiveNav === "users"

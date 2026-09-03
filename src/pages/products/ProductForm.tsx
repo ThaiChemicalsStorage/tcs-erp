@@ -11,6 +11,8 @@ export interface ProductDraft {
   defaultPrice: number;
   description: string;
   specifications: string;
+  /** "เครื่องมือ — ต้องคืน" ดู Product.isTool (2026-09-03) */
+  isTool: boolean;
 }
 
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
@@ -43,6 +45,7 @@ export function ProductForm({
   const [defaultPrice, setDefaultPrice] = useState(initial?.defaultPrice ?? 0);
   const [description, setDescription] = useState(initial?.description ?? "");
   const [specifications, setSpecifications] = useState(initial?.specifications ?? "");
+  const [isTool, setIsTool] = useState(initial?.isTool === true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -74,6 +77,7 @@ export function ProductForm({
         defaultPrice,
         description: description.trim(),
         specifications: specifications.trim(),
+        isTool,
       });
       if (error) setErrors({ code: error });
     } finally {
@@ -148,6 +152,16 @@ export function ProductForm({
             <label htmlFor="product-specifications" className={labelCls}>{t("products.form.specLabel")}</label>
             <textarea id="product-specifications" rows={3} className={`${inputCls} resize-none leading-relaxed`} value={specifications} onChange={(e) => setSpecifications(e.target.value)} placeholder={t("products.form.specPlaceholder")} />
           </div>
+
+          {/* เครื่องมือ (2026-09-03) — สินค้าที่ทีมเบิกไปแล้ว "ถือ" อยู่จนกว่าจะคืน ต่างจากวัสดุสิ้นเปลืองที่ใช้หมด
+              ติ๊กแล้วจะถูกนับในหน้า "เครื่องมือประจำทีม" */}
+          <label className="flex items-start gap-3 rounded-lg border border-border bg-secondary/40 px-3 py-2.5 cursor-pointer">
+            <input type="checkbox" className="mt-0.5 accent-[#c9a84c]" checked={isTool} onChange={(e) => setIsTool(e.target.checked)} />
+            <span className="text-sm text-foreground">
+              {t("products.form.isToolLabel")}
+              <span className="block text-xs text-muted-foreground mt-0.5">{t("products.form.isToolHint")}</span>
+            </span>
+          </label>
 
           <p className="text-xs text-muted-foreground leading-relaxed pt-1 border-t border-border">
             {t("products.form.editHint")}

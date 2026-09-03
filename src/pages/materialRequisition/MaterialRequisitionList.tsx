@@ -41,10 +41,15 @@ export function MaterialRequisitionList({
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
-  const items = materialRequisitions.map((m) => ({ ...m, jobCode: m.jobCode ?? "", productionOrderId: m.productionOrderId ?? "", status: m.status ?? "Draft" }));
+  const items = materialRequisitions.map((m) => ({
+    ...m,
+    documentNumber: m.documentNumber || m.id,
+    jobCode: m.jobCode ?? "", productionOrderId: m.productionOrderId ?? "", status: m.status ?? "Draft",
+    chargeTo: [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / "),
+  }));
   const filtered = items
     .filter((m) => filterStatus === FILTER_ALL || m.status === filterStatus)
-    .filter((m) => !normalizedSearch || [m.id, m.jobCode, m.productionOrderId].some((v) => v.toLowerCase().includes(normalizedSearch)));
+    .filter((m) => !normalizedSearch || [m.id, m.documentNumber, m.jobCode, m.productionOrderId, m.chargeTo, m.chargeWorkTypeName ?? ""].some((v) => v.toLowerCase().includes(normalizedSearch)));
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -100,7 +105,7 @@ export function MaterialRequisitionList({
         <table className="w-full">
           <thead>
             <tr className="border-b border-border bg-muted/40">
-              {[t("materialRequisition.col.id"), t("materialRequisition.col.productionOrder"), t("materialRequisition.col.jobCode"), t("materialRequisition.col.status"), t("materialRequisition.col.updatedAt")].map((h) => (
+              {[t("materialRequisition.col.id"), t("materialRequisition.col.productionOrder"), t("materialRequisition.col.jobCode"), t("materialRequisition.col.chargeTo"), t("materialRequisition.col.status"), t("materialRequisition.col.updatedAt")].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -111,18 +116,31 @@ export function MaterialRequisitionList({
                 key={m.id}
                 tabIndex={0}
                 role="button"
-                aria-label={`${t("materialRequisition.openRow")} ${m.id}`}
+                aria-label={`${t("materialRequisition.openRow")} ${m.documentNumber}`}
                 onClick={() => onOpen(m.id)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(m.id); } }}
                 className="border-b border-border/50 hover:bg-secondary/30 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a84c]/50 focus-visible:bg-secondary/30"
               >
-                <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{m.id}</td>
+                <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">
+                  {m.documentNumber}
+                  {/* เลขบนฟอร์มถูกพิมพ์ทับ — โชว์เลขรันของระบบไว้ข้าง ๆ ให้ค้นเจอทั้งสองทาง */}
+                  {m.documentNumber !== m.id && <span className="ml-1.5 font-normal text-muted-foreground">({m.id})</span>}
+                </td>
                 <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{m.productionOrderId || "—"}</td>
                 <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{m.jobCode || "—"}</td>
+                <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">
+                  {m.chargeTo || "—"}
+                  {m.chargeWorkTypeName && <span className="block text-xs">{m.chargeWorkTypeName}</span>}
+                </td>
                 <td className="px-4 py-3.5">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[m.status]}`}>
                     {statusLabel[m.status]}
                   </span>
+                  {m.hasOutstanding && (
+                    <span className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
+                      {t("materialRequisition.outstandingBadge")}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(m.updatedAt)}</td>
               </tr>

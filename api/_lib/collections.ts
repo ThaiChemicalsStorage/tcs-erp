@@ -430,7 +430,8 @@ export async function materialRequisitionTemplatesCollection() {
  * รหัสห้ามซ้ำ**ภายในชนิดเดียวกัน** — unique index จึงเป็น `{ kind, code }` ไม่ใช่ `{ code }` เดี่ยว
  */
 export interface CodeEntryFields {
-  kind: "department" | "account";
+  /** `workType` (2026-09-03) = ประเภทงานที่ใบเบิก "ตัดเข้างาน" (งานเหล็ก / งานโรงงาน / งานผลิต …) */
+  kind: "department" | "account" | "workType";
   code: string;
   name: string;
   category: string;
@@ -815,12 +816,19 @@ export async function arDocumentsCollection() {
 // sync with this one. `Product.stockQty` (src/lib/products.ts) is the denormalized current balance,
 // kept in sync via applyStockMovement() (api/_lib/stockHandler.ts) — the only writer, so every
 // balance change is traceable through a StockMovementFields row. See docs/MODULES/Product.md "Stock".
-export type StockMovementKind = "receive" | "deduct" | "adjust";
+/**
+ * `return` เพิ่ม 2026-09-03 — เจ้าของสั่ง *"ประวัติปรับ Stock ให้มีของคืนด้วย"* ของที่คืนจากใบเบิกเคยลง
+ * เป็น `receive` ธรรมดา แยกไม่ออกจากของที่ซื้อเข้ามา · delta เป็นบวกเหมือน `receive`
+ *
+ * **ต้องประกาศให้ตรงกับ `StockMovementKind` ใน src/lib/stock.ts** — สอง union นี้ประกาศแยกกัน
+ */
+export type StockMovementKind = "receive" | "deduct" | "adjust" | "return";
 /**
  * `material_requisition` เพิ่ม 2026-09-02 ตอนทำ "ตัดของอัตโนมัติ" — ใบเบิกที่อนุมัติแล้วตัดสต๊อกเอง
  * (`goods_receipt` เคยมีแล้วถูกลบไปเมื่อ 2026-08-28d พร้อมกับการถอดใบตรวจรับออก)
+ * `receiving_report` เพิ่ม 2026-09-03 — ใบรับสินค้าของสโตร์ (สร้างจากใบสั่งซื้อ) รับของเข้าพร้อมต้นทุน
  */
-export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition";
+export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report";
 
 export interface StockMovementFields {
   productId: string;
@@ -841,6 +849,27 @@ export interface StockMovementFields {
   sourceId?: string;
   /** Denormalized, e.g. the AR document's docNo, so the movement log reads without a join. */
   sourceLabel?: string;
+  /**
+   * ต้นทุน/หน่วยของการเคลื่อนไหวนี้ (2026-09-03, การ์ดสต๊อกและมูลค่าสต๊อก) — รับเข้าจากใบรับสินค้า
+   * ใช้ราคาที่ซื้อจริง ส่วนจ่ายออก/คืน/ปรับ ใช้ต้นทุนถัวเฉลี่ยของสินค้า ณ ตอนนั้น (`Product.avgCost`)
+   * แถวที่บันทึกก่อนวันนั้นไม่มีฟิลด์นี้ — การ์ดสต๊อกพิมพ์ขีดกลาง ไม่ได้ทำ migration
+   */
+  unitCost?: number;
+  /** |delta| × unitCost — เก็บไว้ให้การ์ดสต๊อกอ่านโดยไม่ต้องคูณเอง */
+  amount?: number;
+  /** stockQty × avgCost หลังการเคลื่อนไหว — คู่กับ `balanceAfter` */
+  balanceValueAfter?: number;
+  /**
+   * แผนก/ทีม/ประเภทงานที่ของถูกตัดให้ หรือคืนจาก (2026-09-03, เจ้าของสั่ง *"เลือกตัดของแผนกไหนทีมไหน
+   * ตัด/คืนเหมือนกัน"* และ *"ตัดงานนี้เป็นงานเหล็ก งานโรงงาน งานผลิต"*) — ประทับจากหัวใบเบิกตอนจ่าย/คืน
+   * ชื่อเก็บเป็น snapshot เพราะรายงานเครื่องมือประจำทีมต้องอ่านย้อนหลังได้แม้ทีมถูกเปลี่ยนชื่อ
+   */
+  departmentId?: string;
+  departmentName?: string;
+  teamId?: string;
+  teamName?: string;
+  workTypeCode?: string;
+  workTypeName?: string;
   createdAt: string;
   createdBy: string;
 }
@@ -865,8 +894,10 @@ export async function projectsCollection() {
   return db.collection<ProjectFields>("projects");
 }
 
-/** Business-id-keyed (e.g. "MR-2569-0001"), same convention as quotes/service_reports — the atomic
- * per-Buddhist-year counter that mints this id is API-layer code, not built yet (Stage 3). */
+/** Business-id-keyed (`MR-{YYYYMM}-{NNNN}` since 2026-09-03; `MR-{พ.ศ.}-{NNNN}` and
+ * `{SC}-MR{n}` before that), same convention as quotes/service_reports. `documentNumber` (2026-09-03)
+ * is the number printed on the form — defaults to `_id`, user-editable while Draft, unique via the
+ * lazy `ensureMaterialRequisitionNumberIndex()` in materialRequisitionHandler.ts. */
 export type MaterialRequisitionFields = Omit<MaterialRequisition, "id">;
 export async function materialRequisitionsCollection() {
   const db = await getDb();

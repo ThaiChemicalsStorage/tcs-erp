@@ -44,6 +44,12 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
     ],
   ];
 
+  // เลขบนฟอร์ม (พิมพ์ทับได้ตั้งแต่ 2026-09-03) — ใบเก่าไม่มี ถอยไปใช้เลขรันของระบบ
+  const formNumber = m.documentNumber || m.id;
+  // "ตัดของให้" — แผนก / ทีม / ประเภทงาน รวมเป็นบรรทัดเดียวบนหัวใบ
+  const chargeTo = [m.chargeDepartmentName, m.chargeTeamName].filter(Boolean).join(" / ");
+  const workType = [m.chargeWorkTypeCode, m.chargeWorkTypeName].filter(Boolean).join(" ");
+
   return (
     <div className="hidden print:block" style={{ fontFamily: "'Times New Roman', 'Noto Serif Thai', serif" }}>
       <style>{"@media print { @page { size: A4 portrait; margin: 12mm; } }"}</style>
@@ -55,7 +61,7 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
         companyHeader={companyHeader}
         docLabel="REQUISITION"
         rightMeta={[
-          { label: "เลขที่ใบเบิก", value: m.id },
+          { label: "เลขที่ใบเบิก", value: formNumber },
           { label: "รหัสงาน", value: printText(m.jobCode) },
         ]}
       />
@@ -66,7 +72,7 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
             <td className="py-0.5 pr-2 font-semibold w-28">ชื่อลูกค้า:</td>
             <td className="py-0.5 border-b border-black">{printText(m.customerName)}</td>
             <td className="py-0.5 pl-4 pr-2 font-semibold w-32">เลขที่ใบเบิก:</td>
-            <td className="py-0.5 border-b border-black w-40">{m.id}</td>
+            <td className="py-0.5 border-b border-black w-40">{formNumber}</td>
           </tr>
           <tr>
             <td className="py-0.5 pr-2 font-semibold">รหัสงาน:</td>
@@ -86,6 +92,12 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
             {/* สายที่มา: ใบนี้ออกจากใบสั่งผลิตใบไหน — ใบของฝ่ายโครงการไม่มีต้นทางนี้ พิมพ์ขีดกลาง */}
             <td className="py-0.5 pl-4 pr-2 font-semibold">เลขที่ใบสั่งผลิต:</td>
             <td className="py-0.5 border-b border-black">{printText(m.productionOrderId)}</td>
+          </tr>
+          <tr>
+            <td className="py-0.5 pr-2 font-semibold">ตัดของให้แผนก/ทีม:</td>
+            <td className="py-0.5 border-b border-black">{printText(chargeTo)}</td>
+            <td className="py-0.5 pl-4 pr-2 font-semibold">ตัดเข้างาน:</td>
+            <td className="py-0.5 border-b border-black">{printText(workType)}</td>
           </tr>
         </tbody>
       </table>

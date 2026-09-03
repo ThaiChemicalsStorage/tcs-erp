@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2 , GitBranch, LayoutTemplate } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2, GitBranch, LayoutTemplate, PackageCheck, CheckCircle2 } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
   type MaterialRequisition, type MaterialRequisitionLine, type MaterialRequisitionUpdateFields,
-  fetchMaterialRequisition, updateMaterialRequisition, recordMaterialRequisitionReturn,
+  fetchMaterialRequisition, updateMaterialRequisition, recordMaterialRequisitionReturn, issueMaterialRequisition,
   logMaterialRequisitionPrinted, deleteMaterialRequisition,
   blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES,
   submitMaterialRequisitionApproval, approveMaterialRequisition, rejectMaterialRequisition, withdrawMaterialRequisitionApproval,
-  rewriteMaterialRequisition,
+  rewriteMaterialRequisition, issuedQtyOf, outstandingQtyOf,
 } from "../../lib/materialRequisition";
+import { fetchDepartments, type Department } from "../../lib/departments";
+import { fetchTeams, type Team } from "../../lib/teams";
+import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
+import { Combobox } from "../../components/Combobox";
 import { DocumentApprovalActions, RejectionNotice } from "../../components/DocumentApprovalActions";
 import { DocumentStatusStepper } from "../../components/DocumentStatusStepper";
 import { ApiError } from "../../lib/apiClient";
@@ -31,10 +35,20 @@ import { assessUnsavedRisk } from "../../lib/unsavedChanges";
 import { DraftRecoveryBanner } from "../../components/DraftRecoveryBanner";
 import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 
+/**
+ * payload ที่ปุ่ม "บันทึกฉบับร่าง" ส่ง — เบิกครั้งที่ 1/2 และคืนของ**ไม่อยู่ในนี้** ตั้งแต่ 2026-09-03
+ * (server ไม่รับจาก PATCH อยู่แล้ว เป็นของสโตร์ผ่าน /issue และ /return) จึงตัดออกจาก lines ก่อนส่ง
+ * ไม่งั้นการเทียบ "ยังไม่ได้บันทึก" จะเห็นค่าที่สโตร์เพิ่งกรอกในการ์ดจ่ายของเป็นงานค้างของฉบับร่าง
+ */
 function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields {
   return {
-    lines: m.lines,
+    lines: m.lines.map((l) => ({ ...l, withdrawal1Qty: null, withdrawal2Qty: null, returnQty: null })),
     revisionNote: m.revisionNote,
+    documentNumber: m.documentNumber ?? "",
+    chargeDepartmentId: m.chargeDepartmentId ?? "",
+    chargeTeamId: m.chargeTeamId ?? "",
+    chargeWorkTypeCode: m.chargeWorkTypeCode ?? "",
+    chargeWorkTypeName: m.chargeWorkTypeName ?? "",
     customerName: m.customerName,
     productName: m.productName,
     responsibleEmployee: m.responsibleEmployee,
@@ -50,13 +64,20 @@ function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields
   };
 }
 
-/** ทุกช่องที่ผู้ใช้แก้ได้จริงบนหน้านี้ รวมช่องคืนวัสดุที่ toUpdateFields ไม่ได้ครอบคลุม (returnQty อยู่ใน lines แล้ว) */
+/** ทุกช่องที่ผู้ใช้แก้ได้จริงบนหน้านี้ — รวมช่องของสโตร์ (จ่ายจริง/คืน) ที่ toUpdateFields ตัดทิ้ง */
 function toGuardPayload(m: MaterialRequisition) {
-  return { ...toUpdateFields(m), returnedBy: m.returnedBy, returnReceivedBy: m.returnReceivedBy };
+  return {
+    ...toUpdateFields(m),
+    issued: m.lines.map((l) => [l.id, l.withdrawal1Qty, l.withdrawal2Qty, l.returnQty]),
+    returnedBy: m.returnedBy, returnReceivedBy: m.returnReceivedBy,
+  };
 }
 
-// หน้าแก้ไขใบเบิกและใบคืนวัสดุ: ข้อมูลหัวเรื่อง ตารางรายการจากแคตตาล็อก และการคืนวัสดุ
-// Material Requisition editor: header fields, catalog line table, and the material-return section.
+const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70";
+const cellInputCls = "w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70";
+
+// หน้าแก้ไขใบเบิกและใบคืนวัสดุ: ข้อมูลหัวเรื่อง ตารางรายการจากแคตตาล็อก การจ่ายของโดยสโตร์ และการคืนวัสดุ
+// Material Requisition editor: header fields, catalog line table, the Store issue card, and the return section.
 export function MaterialRequisitionDocument({
   materialRequisitionId,
   company,
@@ -65,6 +86,7 @@ export function MaterialRequisitionDocument({
   canFinalize,
   canPrint,
   canDelete,
+  canIssueStock,
   onBack,
   onDeleted,
   onOpenOther,
@@ -77,6 +99,8 @@ export function MaterialRequisitionDocument({
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
+  /** `stock:adjust` — การ์ด "จ่ายของ (สโตร์)" และการรับคืน (2026-09-03) */
+  canIssueStock: boolean;
   onBack: () => void;
   onDeleted: () => void;
   /** เปิดเอกสารใบอื่นในโมดูลเดียวกัน — ใช้ตอน Rewrite เพื่อพาไปฉบับใหม่ที่เพิ่งสร้าง */
@@ -88,10 +112,16 @@ export function MaterialRequisitionDocument({
   const [draft, setDraft] = useState<MaterialRequisition | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
+  /** ยอดคงเหลือปัจจุบันต่อสินค้า — server ส่งมาพร้อมใบ และอัปเดตทุกครั้งที่จ่าย/คืน */
+  const [stockByProduct, setStockByProduct] = useState<Record<string, number>>({});
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([]);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savingReturn, setSavingReturn] = useState(false);
+  const [savingIssue, setSavingIssue] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -104,12 +134,16 @@ export function MaterialRequisitionDocument({
   const [showPrint, setShowPrint] = useState(false);
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) — ประกาศเหนือ effect โหลดข้อมูล เพื่อตั้งฐานเทียบใหม่ทุกครั้งที่ดึงเอกสาร
-  const dirty = useDirtyTracker(draft && canEdit ? toGuardPayload(draft) : null);
+  const dirty = useDirtyTracker(draft && (canEdit || canIssueStock) ? toGuardPayload(draft) : null);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetchMaterialRequisition(materialRequisitionId), fetchProducts(), fetchCategories()])
-      .then(([m, p, c]) => { if (!cancelled) { setDoc(m); setDraft(m); setProducts(p); setCategories(c); } })
+      .then(([m, p, c]) => {
+        if (cancelled) return;
+        setDoc(m.materialRequisition); setDraft(m.materialRequisition); setStockByProduct(m.stockByProduct);
+        setProducts(p); setCategories(c);
+      })
       .catch((err) => {
         if (cancelled) return;
         setLoadError(err instanceof ApiError ? err.message : t("materialRequisitionDoc.loadError"));
@@ -117,10 +151,21 @@ export function MaterialRequisitionDocument({
     return () => { cancelled = true; };
   }, [materialRequisitionId, reloadKey, t, dirty]);
 
+  // แผนก/ทีม/ประเภทงาน สำหรับ dropdown "ตัดของให้…" — GET เหล่านี้เปิดให้ทุกคนที่ล็อกอิน โหลดครั้งเดียว
+  // best-effort: โหลดไม่ได้ก็ยังใช้หน้าได้ (ค่าที่บันทึกไว้แล้วยังแสดงชื่อจาก snapshot)
+  useEffect(() => {
+    let cancelled = false;
+    fetchDepartments().then((list) => { if (!cancelled) setDepartments(list); }).catch(() => {});
+    fetchTeams().then((list) => { if (!cancelled) setTeams(list); }).catch(() => {});
+    fetchCodeEntries().then((list) => { if (!cancelled) setCodeEntries(list); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const docTourSteps: DriveStep[] = [
     { element: '[data-tour="mrdoc-actions"]', popover: { title: t("tour.mrdoc.actions.title"), description: t("tour.mrdoc.actions.desc"), side: "bottom" } },
     { element: '[data-tour="mrdoc-addline"]', popover: { title: t("tour.mrdoc.addline.title"), description: t("tour.mrdoc.addline.desc"), side: "bottom" } },
     { element: '[data-tour="mrdoc-lines"]', popover: { title: t("tour.mrdoc.lines.title"), description: t("tour.mrdoc.lines.desc"), side: "top" } },
+    { element: '[data-tour="mrdoc-issueCard"]', popover: { title: t("tour.mrdoc.issueCard.title"), description: t("tour.mrdoc.issueCard.desc"), side: "top" } },
     { element: '[data-tour="mrdoc-returnCard"]', popover: { title: t("tour.mrdoc.returnCard.title"), description: t("tour.mrdoc.returnCard.desc"), side: "top" } },
   ];
 
@@ -148,17 +193,22 @@ export function MaterialRequisitionDocument({
     },
   });
 
+  const applySaved = (updated: MaterialRequisition, stock?: Record<string, number>) => {
+    setDoc(updated);
+    setDraft(updated);
+    if (stock) setStockByProduct(stock);
+    dirty.markSaved(toGuardPayload(updated));
+  };
+
   const save = async (): Promise<boolean> => {
     if (!draft) return false;
     setSaving(true);
     try {
       const updated = await updateMaterialRequisition(draft.id, toUpdateFields(draft));
-      setDoc(updated);
-      setDraft(updated);
+      applySaved(updated);
       // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
       // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
       autoSave.markSaved(toUpdateFields(updated));
-      dirty.markSaved(toGuardPayload(updated));
       draftBackup.clear();
       showToast(t("materialRequisitionDoc.saved"));
       return true;
@@ -170,6 +220,13 @@ export function MaterialRequisitionDocument({
     }
   };
 
+  const chargeFieldsOf = (m: MaterialRequisition) => ({
+    chargeDepartmentId: m.chargeDepartmentId ?? "",
+    chargeTeamId: m.chargeTeamId ?? "",
+    chargeWorkTypeCode: m.chargeWorkTypeCode ?? "",
+    chargeWorkTypeName: m.chargeWorkTypeName ?? "",
+  });
+
   const saveReturn = async (): Promise<boolean> => {
     if (!draft) return false;
     setSavingReturn(true);
@@ -178,10 +235,11 @@ export function MaterialRequisitionDocument({
         lines: draft.lines.map((l) => ({ id: l.id, returnQty: l.returnQty })),
         returnedBy: draft.returnedBy,
         returnReceivedBy: draft.returnReceivedBy,
+        ...chargeFieldsOf(draft),
       });
-      setDoc(updated);
-      setDraft(updated);
-      dirty.markSaved(toGuardPayload(updated));
+      // route คืนของส่ง stockByProduct มาด้วย แต่ wrapper ฝั่ง client คืนเฉพาะเอกสาร — โหลดยอดใหม่ผ่าน fetch สั้น ๆ
+      const fresh = await fetchMaterialRequisition(draft.id).catch(() => null);
+      applySaved(updated, fresh?.stockByProduct);
       showToast(t("materialRequisitionDoc.returnSaved"));
       return true;
     } catch (err) {
@@ -192,10 +250,32 @@ export function MaterialRequisitionDocument({
     }
   };
 
-  // การ์ด "ยังไม่ได้บันทึก" — ยังทำงานหลังอนุมัติด้วย เพราะช่องคืนวัสดุยังแก้ได้ และตอนนั้น auto-save ปิดอยู่
-  // ปุ่ม "บันทึก" ในกล่องจึงต้องเลือกให้ตรงเฟส: ฉบับร่างใช้ save() ส่วนหลังอนุมัติใช้ saveReturn()
+  /** สโตร์จ่ายของ — ส่งเบิกครั้งที่ 1/2 ของทุกบรรทัด server ตัดสต๊อกตามส่วนต่างเอง */
+  const saveIssue = async (): Promise<boolean> => {
+    if (!draft) return false;
+    setSavingIssue(true);
+    try {
+      const updated = await issueMaterialRequisition(draft.id, {
+        lines: draft.lines.map((l) => ({ id: l.id, withdrawal1Qty: l.withdrawal1Qty, withdrawal2Qty: l.withdrawal2Qty })),
+        storeDeptBy: draft.storeDeptBy,
+        ...chargeFieldsOf(draft),
+      });
+      const fresh = await fetchMaterialRequisition(draft.id).catch(() => null);
+      applySaved(updated, fresh?.stockByProduct);
+      showToast(t("materialRequisitionDoc.issueSaved"));
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorSaveIssue"));
+      return false;
+    } finally {
+      setSavingIssue(false);
+    }
+  };
+
+  // การ์ด "ยังไม่ได้บันทึก" — ยังทำงานหลังอนุมัติด้วย เพราะช่องจ่ายของ/คืนวัสดุยังแก้ได้ และตอนนั้น auto-save ปิดอยู่
+  // ปุ่ม "บันทึก" ในกล่องจึงต้องเลือกให้ตรงเฟส: ฉบับร่างใช้ save() หลังอนุมัติ สโตร์ใช้ saveIssue() คนอื่นใช้ saveReturn()
   const { requestLeave } = useUnsavedChangesGuard(
-    draft && canEdit
+    draft && (canEdit || canIssueStock)
       ? {
           getRisk: () => assessUnsavedRisk({
             isDirty: dirty.isDirtyNow(),
@@ -203,8 +283,8 @@ export function MaterialRequisitionDocument({
             autoSaveEnabled: autoSaveEditable,
             autoSaveState: autoSave.state,
           }),
-          documentLabel: draft.id,
-          save: draft.status === "Draft" ? save : saveReturn,
+          documentLabel: draft.documentNumber || draft.id,
+          save: draft.status === "Draft" ? save : canIssueStock ? saveIssue : saveReturn,
           discard: draftBackup.clear,
         }
       : null,
@@ -256,7 +336,14 @@ export function MaterialRequisitionDocument({
   }
 
   const isDraftStatus = doc.status === "Draft";
+  const isFinal = doc.status === "Final";
   const editable = canEdit && isDraftStatus;
+  /** สโตร์จ่ายของได้เฉพาะใบที่อนุมัติแล้ว */
+  const canIssue = canIssueStock && isFinal;
+  /** คืนของ: ใบอนุมัติแล้ว โดยเจ้าของใบหรือสโตร์ */
+  const canReturn = (canEdit || canIssueStock) && isFinal;
+  const outstandingLines = doc.lines.filter((l) => outstandingQtyOf(l) > 0).length;
+  const formNumber = doc.documentNumber || doc.id;
 
   // แบบเดียวกับที่ใบส่งมอบสินค้าทำ (DeliveryOrderDocument.tsx) — โมดูลนี้ไม่เคยโหลดโปรไฟล์บริษัท
   // มาก่อนเลย จึงพิมพ์หัวจดหมายไม่ได้ จนกระทั่งฝ่ายผลิตขอเมื่อ 2026-08-27
@@ -273,6 +360,7 @@ export function MaterialRequisitionDocument({
   const removeLine = (id: string) => {
     setDraft((prev) => prev && { ...prev, lines: prev.lines.filter((l) => l.id !== id) });
   };
+  const numberOrNull = (v: string) => (v === "" ? null : Number(v));
   /**
    * "ใช้เทมเพลต" — เติมรายการทั้งชุดจากเทมเพลตที่ตั้งไว้ (เจ้าของสั่ง 2026-09-02)
    *
@@ -297,6 +385,8 @@ export function MaterialRequisitionDocument({
   const addProduct = (product: Product) => {
     const categoryName = categories.find((c) => c.id === product.categoryId)?.name ?? "";
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankMaterialRequisitionLine(product, categoryName)] });
+    // สินค้าที่เพิ่งเพิ่มยังไม่มียอดคงเหลือใน map ที่ server ส่งมา — ใช้ค่าจากรายการสินค้าที่โหลดไว้ไปก่อน
+    setStockByProduct((prev) => (product.id in prev ? prev : { ...prev, [product.id]: product.stockQty }));
   };
 
   // สร้างฉบับแก้ไข แล้วเปิดฉบับใหม่ทันที — ฉบับเดิมยังอยู่ และลิงก์ในโครงการถูกย้ายมาชี้ฉบับใหม่ให้แล้ว
@@ -341,6 +431,69 @@ export function MaterialRequisitionDocument({
     return MATERIAL_CATEGORY_NAMES.includes(name);
   });
 
+  // dropdown แผนก/ทีม/ประเภทงาน — ใช้ทั้งหัวใบ (ตอนร่าง) และการ์ดจ่ายของ (สโตร์แก้ได้ตอนจ่าย)
+  const activeDepartments = departments.filter((d) => d.isActive);
+  const teamsOfDepartment = teams.filter((tm) => tm.isActive && (!draft.chargeDepartmentId || tm.departmentId === draft.chargeDepartmentId));
+  const setChargeDepartment = (id: string) => setDraft((prev) => prev && {
+    ...prev,
+    chargeDepartmentId: id,
+    chargeDepartmentName: departments.find((d) => d.id === id)?.name ?? "",
+    // เปลี่ยนแผนกแล้วทีมเดิมไม่อยู่ในแผนกนั้น — ล้างทิ้ง ไม่งั้นจะได้ทีมของแผนกอื่นติดไป
+    ...(prev.chargeTeamId && teams.find((tm) => tm.id === prev.chargeTeamId)?.departmentId !== id ? { chargeTeamId: "", chargeTeamName: "" } : {}),
+  });
+  const setChargeTeam = (id: string) => setDraft((prev) => prev && {
+    ...prev, chargeTeamId: id, chargeTeamName: teams.find((tm) => tm.id === id)?.name ?? "",
+  });
+  const workTypeOptions = codeComboboxOptions(codeEntries, "workType");
+  const setChargeWorkType = (code: string) => setDraft((prev) => prev && {
+    ...prev, chargeWorkTypeCode: code,
+    chargeWorkTypeName: codeEntries.find((c) => c.kind === "workType" && c.code === code.toUpperCase())?.name ?? prev.chargeWorkTypeName ?? "",
+  });
+  // ฟังก์ชันคืน JSX ไม่ใช่คอมโพเนนต์ — ถ้าประกาศเป็นคอมโพเนนต์ในตัว render ทุกครั้งที่พิมพ์ช่องจะถูก remount และโฟกัสหลุด
+  const renderChargeSelectors = (disabled: boolean, idPrefix: string) => (
+    <>
+      <div>
+        <label htmlFor={`${idPrefix}-chargeDepartment`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.chargeDepartment")}</label>
+        <select id={`${idPrefix}-chargeDepartment`} disabled={disabled} value={draft.chargeDepartmentId ?? ""}
+          onChange={(e) => setChargeDepartment(e.target.value)} className={inputCls}>
+          <option value="">{t("materialRequisitionDoc.field.noDepartment")}</option>
+          {activeDepartments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          {draft.chargeDepartmentId && !activeDepartments.some((d) => d.id === draft.chargeDepartmentId) && (
+            <option value={draft.chargeDepartmentId}>{draft.chargeDepartmentName || draft.chargeDepartmentId}</option>
+          )}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-chargeTeam`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.chargeTeam")}</label>
+        <select id={`${idPrefix}-chargeTeam`} disabled={disabled} value={draft.chargeTeamId ?? ""}
+          onChange={(e) => setChargeTeam(e.target.value)} className={inputCls}>
+          <option value="">{t("materialRequisitionDoc.field.noTeam")}</option>
+          {teamsOfDepartment.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+          {draft.chargeTeamId && !teamsOfDepartment.some((tm) => tm.id === draft.chargeTeamId) && (
+            <option value={draft.chargeTeamId}>{draft.chargeTeamName || draft.chargeTeamId}</option>
+          )}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-chargeWorkType`} className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.chargeWorkType")}</label>
+        <Combobox
+          id={`${idPrefix}-chargeWorkType`}
+          disabled={disabled}
+          value={draft.chargeWorkTypeCode ?? ""}
+          onChange={setChargeWorkType}
+          onPick={(opt) => setDraft((prev) => prev && { ...prev, chargeWorkTypeCode: opt.value, chargeWorkTypeName: opt.hint ?? opt.label ?? opt.value })}
+          options={workTypeOptions}
+          placeholder={t("materialRequisitionDoc.field.chargeWorkTypePlaceholder")}
+          ariaLabel={t("materialRequisitionDoc.field.chargeWorkType")}
+          className={inputCls}
+        />
+        {draft.chargeWorkTypeName && draft.chargeWorkTypeName !== draft.chargeWorkTypeCode && (
+          <p className="text-xs text-muted-foreground mt-1">{draft.chargeWorkTypeName}</p>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
       <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3 flex items-center gap-3 flex-wrap print:hidden">
@@ -348,10 +501,16 @@ export function MaterialRequisitionDocument({
           <ChevronRight size={14} className="rotate-180" /> {t("materialRequisitionDoc.backToList")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{doc.id}</span>
+        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{formNumber}</span>
+        {formNumber !== doc.id && <span className="text-xs font-mono text-muted-foreground">({doc.id})</span>}
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${doc.status === "Draft" ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20" : doc.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
           {doc.status === "Draft" ? t("materialRequisition.status.draft") : doc.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
         </span>
+        {isFinal && outstandingLines > 0 && (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20">
+            {t("materialRequisition.outstandingBadge")} {outstandingLines}
+          </span>
+        )}
 
         <div data-tour="mrdoc-actions" className="ml-auto flex items-center gap-2 flex-wrap justify-end">
           <TourReplayButton onClick={docTour.start} />
@@ -379,7 +538,7 @@ export function MaterialRequisitionDocument({
             onApprove={() => approveMaterialRequisition(doc.id)}
             onReject={(c) => rejectMaterialRequisition(doc.id, c)}
             onWithdraw={() => withdrawMaterialRequisitionApproval(doc.id)}
-            onUpdated={(updated) => { setDoc(updated); setDraft(updated); dirty.markSaved(toGuardPayload(updated)); }}
+            onUpdated={(updated) => applySaved(updated)}
             showToast={showToast}
           />
           {canDelete && (
@@ -411,8 +570,21 @@ export function MaterialRequisitionDocument({
           approvedByUserId={doc.approvedByUserId}
           approvedByName={doc.approvedBy}
           approvedAt={doc.approvedAt}
+          finalHint={isFinal && outstandingLines > 0 ? t("materialRequisitionDoc.finalHintOutstanding").replace("{n}", String(outstandingLines)) : undefined}
         />
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
+        {/* สรุปสถานะการจ่ายของ — เฉพาะใบที่อนุมัติแล้ว (ใบร่างยังไม่มีอะไรให้จ่าย) */}
+        {isFinal && (
+          outstandingLines > 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-[#e08a3c]/30 bg-[#e08a3c]/5 px-4 py-3 text-sm text-[#a75d1a]">
+              <AlertTriangle size={15} /> {t("materialRequisitionDoc.outstandingBanner").replace("{n}", String(outstandingLines))}
+            </div>
+          ) : doc.lines.length > 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-[#2aa36b]/30 bg-[#2aa36b]/5 px-4 py-3 text-sm text-[#207e52]">
+              <CheckCircle2 size={15} /> {t("materialRequisitionDoc.issuedAllBanner")}
+            </div>
+          ) : null
+        )}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
             <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("materialRequisitionDoc.title")}</h1>
@@ -426,29 +598,38 @@ export function MaterialRequisitionDocument({
           </div>
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
+              <label htmlFor="mr-documentNumber" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.documentNumber")}</label>
+              <input id="mr-documentNumber" disabled={!editable} value={draft.documentNumber ?? ""}
+                onChange={(e) => setDraft({ ...draft, documentNumber: e.target.value })}
+                className={`${inputCls} font-mono`} />
+              <p className="text-xs text-muted-foreground mt-1">{t("materialRequisitionDoc.field.documentNumberHint").replace("{id}", doc.id)}</p>
+            </div>
+            <div>
               <label htmlFor="mr-customerName" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.customerName")}</label>
               <input id="mr-customerName" disabled={!editable} value={draft.customerName}
                 onChange={(e) => setDraft({ ...draft, customerName: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className={inputCls} />
             </div>
             <div>
               <label htmlFor="mr-productName" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.productName")}</label>
               <input id="mr-productName" disabled={!editable} value={draft.productName}
                 onChange={(e) => setDraft({ ...draft, productName: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className={inputCls} />
             </div>
             <div>
               <label htmlFor="mr-responsibleEmployee" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.responsibleEmployee")}</label>
               <input id="mr-responsibleEmployee" disabled={!editable} value={draft.responsibleEmployee}
                 onChange={(e) => setDraft({ ...draft, responsibleEmployee: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className={inputCls} />
             </div>
             <div>
               <label htmlFor="mr-productionStartDate" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.productionStartDate")}</label>
               <input id="mr-productionStartDate" type="date" disabled={!editable} value={draft.productionStartDate}
                 onChange={(e) => setDraft({ ...draft, productionStartDate: e.target.value })}
-                className="w-full text-sm font-mono text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className={`${inputCls} font-mono`} />
             </div>
+            {/* ตัดของให้แผนก/ทีม/ประเภทงาน — ตั้งได้ตอนร่าง สโตร์แก้ได้อีกครั้งตอนจ่ายของ (การ์ดด้านล่าง) */}
+            {renderChargeSelectors(!editable, "mr")}
           </div>
         </div>
 
@@ -476,35 +657,49 @@ export function MaterialRequisitionDocument({
                   <tr className="border-b border-border bg-muted/40">
                     {[
                       t("materialRequisitionDoc.col.productCode"), t("materialRequisitionDoc.col.item"), t("materialRequisitionDoc.col.unit"),
-                      t("materialRequisitionDoc.col.plannedQty"), t("materialRequisitionDoc.col.withdrawal1"), t("materialRequisitionDoc.col.withdrawal2"),
+                      t("materialRequisitionDoc.col.stockQty"), t("materialRequisitionDoc.col.plannedQty"),
+                      t("materialRequisitionDoc.col.issued"), t("materialRequisitionDoc.col.outstanding"),
                       t("materialRequisitionDoc.col.returnQty"), t("materialRequisitionDoc.col.actualUsed"), "",
-                    ].map((h) => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    ].map((h, i) => (
+                      <th key={`${i}-${h}`} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {draft.lines.map((line) => (
+                  {draft.lines.map((line) => {
+                    const stock = stockByProduct[line.productId];
+                    const outstanding = outstandingQtyOf(line);
+                    // "ของไม่พอ" เทียบกับที่ยังต้องจ่าย ไม่ใช่ที่ขอทั้งหมด — ส่วนที่จ่ายไปแล้วออกจากคลังไปแล้ว
+                    const shortBy = stock !== undefined && outstanding > stock ? outstanding - stock : 0;
+                    return (
                     <tr key={line.id} className="border-b border-border/50">
                       <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">{line.productCode}</td>
-                      <td className="px-3 py-2 text-xs text-foreground">{line.productName}</td>
+                      <td className="px-3 py-2 text-xs text-foreground">
+                        {line.productName}
+                        {shortBy > 0 && (
+                          <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20 whitespace-nowrap">
+                            <AlertTriangle size={10} /> {t("materialRequisitionDoc.shortBy").replace("{n}", shortBy.toLocaleString())}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{line.unit}</td>
-                      {(["plannedQty", "withdrawal1Qty", "withdrawal2Qty"] as const).map((field) => (
-                        <td key={field} className="px-2 py-1.5">
-                          <input
-                            type="number" disabled={!editable}
-                            value={line[field] ?? ""}
-                            onChange={(e) => updateLine(line.id, { [field]: e.target.value === "" ? null : Number(e.target.value) })}
-                            className="w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
-                          />
-                        </td>
-                      ))}
+                      <td className={`px-3 py-2 text-xs font-mono whitespace-nowrap ${shortBy > 0 ? "text-[#a75d1a]" : "text-muted-foreground"}`}>{stock === undefined ? "—" : stock.toLocaleString()}</td>
                       <td className="px-2 py-1.5">
                         <input
-                          type="number" disabled={!canEdit}
+                          type="number" disabled={!editable}
+                          value={line.plannedQty ?? ""}
+                          onChange={(e) => updateLine(line.id, { plannedQty: numberOrNull(e.target.value) })}
+                          className={cellInputCls}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-xs font-mono text-foreground whitespace-nowrap">{issuedQtyOf(line).toLocaleString()}</td>
+                      <td className={`px-3 py-2 text-xs font-mono whitespace-nowrap ${isFinal && outstanding > 0 ? "text-[#a75d1a] font-semibold" : "text-muted-foreground"}`}>{outstanding.toLocaleString()}</td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="number" disabled={!canReturn}
                           title={t("materialRequisitionDoc.returnQtyHint")}
                           value={line.returnQty ?? ""}
-                          onChange={(e) => updateLine(line.id, { returnQty: e.target.value === "" ? null : Number(e.target.value) })}
+                          onChange={(e) => updateLine(line.id, { returnQty: numberOrNull(e.target.value) })}
                           className="w-20 text-xs font-mono text-foreground bg-[#c9a84c]/5 border border-[#c9a84c]/20 rounded px-1.5 py-1 outline-none disabled:opacity-70"
                         />
                       </td>
@@ -512,8 +707,8 @@ export function MaterialRequisitionDocument({
                         <input
                           type="number" disabled={!editable}
                           value={line.actualUsedQty ?? ""}
-                          onChange={(e) => updateLine(line.id, { actualUsedQty: e.target.value === "" ? null : Number(e.target.value) })}
-                          className="w-20 text-xs font-mono text-foreground bg-transparent border-0 outline-none focus:bg-secondary rounded px-1.5 py-1 disabled:opacity-70"
+                          onChange={(e) => updateLine(line.id, { actualUsedQty: numberOrNull(e.target.value) })}
+                          className={cellInputCls}
                         />
                       </td>
                       <td className="px-2 py-1.5">
@@ -524,7 +719,8 @@ export function MaterialRequisitionDocument({
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -549,6 +745,68 @@ export function MaterialRequisitionDocument({
           </div>
         )}
 
+        {/* การ์ด "จ่ายของ (สโตร์)" — ขึ้นให้คนที่มี stock:adjust เห็นเสมอ (ล็อกจนกว่าใบจะอนุมัติ) เพื่อให้รู้ว่ามีขั้นนี้อยู่ */}
+        {canIssueStock && (
+          <div data-tour="mrdoc-issueCard" className="bg-card border border-[#2aa36b]/30 rounded-xl p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <PackageCheck size={15} className="text-[#207e52]" />
+              <h2 className="text-sm font-semibold text-foreground">{t("materialRequisitionDoc.issueTitle")}</h2>
+            </div>
+            <p className="text-xs text-muted-foreground">{canIssue ? t("materialRequisitionDoc.issueHint") : t("materialRequisitionDoc.issueLocked")}</p>
+            {canIssue && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {renderChargeSelectors(!canIssue, "mr-issue")}
+                  <div>
+                    <label htmlFor="mr-issue-storeDeptBy" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.issuedBy")}</label>
+                    <input id="mr-issue-storeDeptBy" value={draft.storeDeptBy}
+                      onChange={(e) => setDraft({ ...draft, storeDeptBy: e.target.value })}
+                      className={inputCls} />
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40">
+                        {[
+                          t("materialRequisitionDoc.col.item"), t("materialRequisitionDoc.col.plannedQty"), t("materialRequisitionDoc.col.stockQty"),
+                          t("materialRequisitionDoc.col.withdrawal1"), t("materialRequisitionDoc.col.withdrawal2"), t("materialRequisitionDoc.col.outstanding"),
+                        ].map((h) => (
+                          <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {draft.lines.map((line) => {
+                        const stock = stockByProduct[line.productId];
+                        const outstanding = outstandingQtyOf(line);
+                        return (
+                          <tr key={line.id} className="border-b border-border/50">
+                            <td className="px-3 py-2 text-xs text-foreground"><span className="font-mono text-muted-foreground mr-2">{line.productCode}</span>{line.productName}</td>
+                            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{(line.plannedQty ?? 0).toLocaleString()} {line.unit}</td>
+                            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{stock === undefined ? "—" : stock.toLocaleString()}</td>
+                            {(["withdrawal1Qty", "withdrawal2Qty"] as const).map((field) => (
+                              <td key={field} className="px-2 py-1.5">
+                                <input type="number" min={0} value={line[field] ?? ""}
+                                  onChange={(e) => updateLine(line.id, { [field]: numberOrNull(e.target.value) })}
+                                  className="w-20 text-xs font-mono text-foreground bg-[#2aa36b]/5 border border-[#2aa36b]/20 rounded px-1.5 py-1 outline-none" />
+                              </td>
+                            ))}
+                            <td className={`px-3 py-2 text-xs font-mono ${outstanding > 0 ? "text-[#a75d1a] font-semibold" : "text-muted-foreground"}`}>{outstanding.toLocaleString()}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <button onClick={saveIssue} disabled={savingIssue} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#2aa36b]/40 text-[#207e52] rounded-lg font-medium hover:bg-[#2aa36b]/10 transition-colors disabled:opacity-60">
+                  {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("materialRequisitionDoc.saveIssue")}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         <div data-tour="mrdoc-returnCard" className="bg-card border border-[#c9a84c]/30 rounded-xl p-5 space-y-3">
           <div className="flex items-center gap-2">
             <Undo2 size={15} className="text-[#c9a84c]" />
@@ -558,18 +816,18 @@ export function MaterialRequisitionDocument({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="mr-returnedBy" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.returnedBy")}</label>
-              <input id="mr-returnedBy" disabled={!canEdit} value={draft.returnedBy}
+              <input id="mr-returnedBy" disabled={!canReturn} value={draft.returnedBy}
                 onChange={(e) => setDraft({ ...draft, returnedBy: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className={inputCls} />
             </div>
             <div>
               <label htmlFor="mr-returnReceivedBy" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.returnReceivedBy")}</label>
-              <input id="mr-returnReceivedBy" disabled={!canEdit} value={draft.returnReceivedBy}
+              <input id="mr-returnReceivedBy" disabled={!canReturn} value={draft.returnReceivedBy}
                 onChange={(e) => setDraft({ ...draft, returnReceivedBy: e.target.value })}
-                className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-70" />
+                className={inputCls} />
             </div>
           </div>
-          {canEdit && (
+          {canReturn && (
             <button onClick={saveReturn} disabled={savingReturn} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#c9a84c]/40 text-[#a5822f] rounded-lg font-medium hover:bg-[#c9a84c]/10 transition-colors disabled:opacity-60">
               {savingReturn ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("materialRequisitionDoc.saveReturn")}
             </button>

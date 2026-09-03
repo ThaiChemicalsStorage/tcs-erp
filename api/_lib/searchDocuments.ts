@@ -158,7 +158,7 @@ export async function searchMaterialRequisitions(query: string, ctx: AuthContext
   const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "materialRequisition:viewAll"), "createdBy");
   const docs = await col.find(
     docFilter(ownership, [
-      { _id: rx }, { customerName: rx }, { jobCode: rx }, { productName: rx },
+      { _id: rx }, { documentNumber: rx }, { customerName: rx }, { jobCode: rx }, { productName: rx },
       { responsibleEmployee: rx }, { jobOrderCode: rx },
       { "lines.productCode": rx }, { "lines.productName": rx },
     ]) as never,
@@ -166,7 +166,8 @@ export async function searchMaterialRequisitions(query: string, ctx: AuthContext
   ).toArray();
   return docs.map((d) => ({
     id: d._id.toString(),
-    docNumber: d._id.toString(),
+    // เลขบนฟอร์ม (พิมพ์ทับได้ตั้งแต่ 2026-09-03) — ใบเก่าไม่มี ถอยไปใช้ _id
+    docNumber: d.documentNumber || d._id.toString(),
     party: d.customerName ?? "",
     lineage: d.jobCode ?? "",
     status: d.status ?? "",
@@ -415,9 +416,12 @@ export async function searchByDocNumber(
     case "materialRequisition": {
       const col = await materialRequisitionsCollection();
       const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "materialRequisition:viewAll"), "createdBy");
-      const docs = await col.find({ isDeleted: false, $and: [ownership, { _id: anchored }] } as never, { limit: 1 }).toArray();
+      const docs = await col.find(
+        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
+        { limit: 1 },
+      ).toArray();
       return first("materialRequisition", docs.map((d) => ({
-        id: d._id.toString(), docNumber: d._id.toString(),
+        id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
         party: d.customerName ?? "", lineage: d.jobCode ?? "", status: d.status ?? "", date: isoOf(d),
         ownerDepartment: d.ownerDepartment === "production" ? ("production" as const) : ("project" as const),
       })));

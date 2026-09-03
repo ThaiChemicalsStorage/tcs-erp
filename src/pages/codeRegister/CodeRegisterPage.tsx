@@ -158,9 +158,9 @@ export function CodeRegisterPage({
         </div>
       </div>
 
-      {/* สองแท็บ — รหัสคนละชุดกัน รหัสซ้ำข้ามชุดได้ */}
+      {/* สามแท็บ — รหัสคนละชุดกัน รหัสซ้ำข้ามชุดได้ (ประเภทงานเพิ่ม 2026-09-03 สำหรับ "ตัดเข้างาน" บนใบเบิก) */}
       <div className="flex items-center gap-1 border-b border-border" role="tablist">
-        {(["department", "account"] as const).map((k) => (
+        {(["department", "account", "workType"] as const).map((k) => (
           <button
             key={k}
             role="tab"
@@ -168,7 +168,7 @@ export function CodeRegisterPage({
             onClick={() => { setKind(k); setPage(0); }}
             className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${kind === k ? "border-[#c9a84c] text-foreground font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
-            {t(k === "department" ? "codeRegister.tab.department" : "codeRegister.tab.account")}
+            {t(k === "department" ? "codeRegister.tab.department" : k === "account" ? "codeRegister.tab.account" : "codeRegister.tab.workType")}
             <span className="ml-2 text-xs text-muted-foreground">{codes.filter((c) => c.kind === k && !c.isDeleted).length}</span>
           </button>
         ))}

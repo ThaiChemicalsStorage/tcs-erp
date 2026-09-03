@@ -14,6 +14,8 @@
     { "source": "/api/products/:path*", "destination": "/api/handlers/products" },
     { "source": "/api/stock-movements", "destination": "/api/handlers/products" },
     { "source": "/api/stock-movements/:path*", "destination": "/api/handlers/products" },
+    { "source": "/api/tool-holdings", "destination": "/api/handlers/products" },
+    { "source": "/api/tool-holdings/:path*", "destination": "/api/handlers/products" },
     { "source": "/api/categories", "destination": "/api/handlers/categories" },
     { "source": "/api/categories/:path*", "destination": "/api/handlers/categories" },
     { "source": "/api/notifications", "destination": "/api/handlers/notifications" },

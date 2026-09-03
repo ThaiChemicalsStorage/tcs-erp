@@ -33,6 +33,7 @@ const API_ROUTES: Record<string, ApiHandler> = {
   teams: rolesHandler,
   products: productsHandler,
   "stock-movements": productsHandler,
+  "tool-holdings": productsHandler,
   categories: categoriesHandler,
   notifications: notificationsHandler,
   quotes: quotesHandler,

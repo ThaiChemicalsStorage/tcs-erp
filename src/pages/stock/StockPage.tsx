@@ -1,18 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { Boxes, Search, X, History, Printer, AlertTriangle } from "lucide-react";
+import { Boxes, Search, X, History, Printer, AlertTriangle, ClipboardList } from "lucide-react";
 import { type Product, type ProductCategory, updateProduct } from "../../lib/products";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
 import { StockCountSheetPrintDocument } from "./StockCountSheetPrintDocument";
-import { fetchStockMovements, createStockMovement, STOCK_MOVEMENT_KIND_LABEL_KEY, type StockMovement, type StockMovementKind } from "../../lib/stock";
+import { StockCardPrintDocument } from "./StockCardPrintDocument";
+import { fetchStockMovements, createStockMovement, stockValueOf, STOCK_MOVEMENT_KIND_LABEL_KEY, type StockMovement, type StockMovementKind } from "../../lib/stock";
 import { EmptyState } from "../../components/EmptyState";
 import { Toast } from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 import { ApiError } from "../../lib/apiClient";
 import { useI18n } from "../../lib/i18n";
 
+const KIND_FILTERS = ["all", "receive", "deduct", "return", "adjust"] as const;
+type KindFilter = (typeof KIND_FILTERS)[number];
+
+const money = (n: number) => n.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 // หน้าสต๊อกสินค้า — เพิ่ม 2026-08-18 เป็นโครงสร้างที่ตั้งใจให้ใช้ร่วมกันได้ในอนาคต (ไม่ใช่ของฝ่ายบัญชี
 // เท่านั้น) ดูหมายเหตุใน api/_lib/collections.ts (StockMovementFields) — ตัวเลขคงเหลือ (stockQty) แก้ได้
 // ทางเดียวคือผ่าน applyStockMovement() เท่านั้น ทุกการเปลี่ยนแปลงจึงมีประวัติย้อนหลังเสมอ
+// 2026-09-03: มูลค่าสต๊อก (ต้นทุนถัวเฉลี่ย) · ประวัติแยก "คืนของ" และกรองตามประเภทได้ · การ์ดสต๊อกพิมพ์ได้
 // The Stock page — added 2026-08-18, deliberately shared infrastructure (see the doc comment on
 // StockMovementFields in api/_lib/collections.ts). Product.stockQty only ever changes through
 // applyStockMovement(), so every change is traceable in the movement log below.
@@ -37,6 +44,10 @@ export function StockPage({
   const [adjustTarget, setAdjustTarget] = useState<Product | null>(null);
   const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
   const [historyRetryToken, setHistoryRetryToken] = useState(0);
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
+  /** สินค้าที่กำลังจะพิมพ์การ์ดสต๊อก — โหลดประวัติทั้งหมด (ไม่ใช่ 200 แถวล่าสุด) แล้วค่อยสั่งพิมพ์ */
+  const [cardProduct, setCardProduct] = useState<Product | null>(null);
+  const [cardMovements, setCardMovements] = useState<StockMovement[] | null>(null);
   const toast = useToast();
   const { t } = useI18n();
 
@@ -67,9 +78,12 @@ export function StockPage({
   // ต้องแยกสถานะ "โหลดพัง" ออกจาก "ไม่มีประวัติ" — ไม่งั้นรอบที่ fetch ไม่สำเร็จจะขึ้นข้อความว่า
   // ยังไม่มีประวัติการปรับสต๊อก ซึ่งอ่านเหมือนข้อมูลจริงทั้งที่แค่โหลดไม่ได้ (pattern เดียวกับ ArMonthlyReportPage)
   const movementsError = currentMovements?.error === true;
-  const movements = currentMovements?.movements ?? [];
+  const allMovements = currentMovements?.movements ?? [];
+  // กรองฝั่งจอจากชุดที่โหลดมาแล้ว — "คืนของ" คือสิ่งที่เจ้าของขอให้เห็นแยกออกมา (2026-09-03)
+  const movements = kindFilter === "all" ? allMovements : allMovements.filter((m) => m.kind === kindFilter);
 
   const totalUnits = activeProducts.reduce((sum, p) => sum + p.stockQty, 0);
+  const totalValue = activeProducts.reduce((sum, p) => sum + stockValueOf(p), 0);
   const zeroStockCount = activeProducts.filter((p) => p.stockQty <= 0).length;
   /** ของใกล้หมด = ตั้งจุดเตือนไว้แล้ว และยอดคงเหลือถึงหรือต่ำกว่าจุดนั้น (จุดเตือน 0 = ปิดการเตือน) */
   const isLowStock = (product: Product) => (product.reorderPoint ?? 0) > 0 && product.stockQty <= (product.reorderPoint ?? 0);
@@ -101,12 +115,35 @@ export function StockPage({
     branchName: "", branchCode: "", stampDataUrl: company.stampDataUrl,
   };
 
-  const handleAdjustSaved = (updatedProductId: string, newQty: number) => {
-    onProductsChange(products.map((p) => (p.id === updatedProductId ? { ...p, stockQty: newQty } : p)));
+  const handleAdjustSaved = (updatedProductId: string, movement: StockMovement) => {
+    // ยอดและต้นทุนเฉลี่ยใหม่มาจาก movement ที่ server ตอบกลับ — มูลค่าคงเหลือ ÷ จำนวน = ค่าเฉลี่ยหลังรับ
+    onProductsChange(products.map((p) => (p.id === updatedProductId
+      ? { ...p, stockQty: movement.balanceAfter, avgCost: movement.balanceAfter > 0 && movement.balanceValueAfter !== undefined ? movement.balanceValueAfter / movement.balanceAfter : p.avgCost }
+      : p)));
     setAdjustTarget(null);
     setHistoryRetryToken((n) => n + 1);
     toast.show(t("stock.toast.adjustSaved"));
   };
+
+  /** การ์ดสต๊อก: โหลดประวัติทั้งหมดของสินค้าตัวนั้น (เก่า → ใหม่) แล้วสั่งพิมพ์เมื่อพร้อม */
+  const printStockCard = async (product: Product) => {
+    setCardProduct(product);
+    setCardMovements(null);
+    try {
+      const all = await fetchStockMovements({ productId: product.id, limit: 2000 });
+      setCardMovements([...all].reverse());
+    } catch (err) {
+      setCardProduct(null);
+      toast.show(err instanceof ApiError ? err.message : t("stock.toast.loadCardFailed"));
+    }
+  };
+  useEffect(() => {
+    if (!cardProduct || cardMovements === null) return;
+    const reset = () => { setCardProduct(null); setCardMovements(null); };
+    window.addEventListener("afterprint", reset);
+    window.print();
+    return () => window.removeEventListener("afterprint", reset);
+  }, [cardProduct, cardMovements]);
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5 print:p-0 print:overflow-visible">
@@ -115,10 +152,11 @@ export function StockPage({
         <p className="text-sm text-muted-foreground mt-0.5 font-mono">{t("stock.subtitle")}</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 print:hidden">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 print:hidden">
         {[
           { label: t("stock.kpi.itemCount"), value: String(activeProducts.length) },
           { label: t("stock.kpi.totalUnits"), value: totalUnits.toLocaleString("th-TH") },
+          { label: t("stock.kpi.stockValue"), value: money(totalValue) },
           { label: t("stock.kpi.zeroStock"), value: String(zeroStockCount) },
           { label: t("stock.kpi.lowStock"), value: String(lowStockCount) },
         ].map((s) => (
@@ -150,7 +188,7 @@ export function StockPage({
       </div>
         <button
           onClick={() => window.print()}
-          disabled={filtered.length === 0}
+          disabled={filtered.length === 0 || cardProduct !== null}
           className="h-9 flex items-center gap-1.5 px-3 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-50"
         >
           <Printer size={13} /> {t("stock.printCountSheet")}
@@ -169,8 +207,8 @@ export function StockPage({
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  {[t("stock.table.code"), t("stock.table.name"), t("stock.table.category"), t("stock.table.unit"), t("stock.table.remaining"), t("stock.table.reorderPoint"), ""].map((h, i) => (
-                    <th key={i} className="px-4 py-3 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  {[t("stock.table.code"), t("stock.table.name"), t("stock.table.category"), t("stock.table.unit"), t("stock.table.remaining"), t("stock.table.avgCost"), t("stock.table.value"), t("stock.table.reorderPoint"), ""].map((h, i) => (
+                    <th key={i} className={`px-4 py-3 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${i === 5 || i === 6 ? "text-right" : "text-left"}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -178,7 +216,10 @@ export function StockPage({
                 {filtered.map((p) => (
                   <tr key={p.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                     <td className="px-4 py-3.5 text-xs font-mono text-[#c9a84c] font-semibold whitespace-nowrap">{p.code}</td>
-                    <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[280px] truncate" title={p.name}>{p.name}</td>
+                    <td className="px-4 py-3.5 text-sm text-foreground font-medium max-w-[280px] truncate" title={p.name}>
+                      {p.name}
+                      {p.isTool && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20">{t("stock.toolBadge")}</span>}
+                    </td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{categoryName(p.categoryId)}</td>
                     <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{p.unit || "—"}</td>
                     <td className={`px-4 py-3.5 text-sm font-mono font-semibold whitespace-nowrap ${p.stockQty <= 0 ? "text-[#c23f3f]" : isLowStock(p) ? "text-[#a75d1a]" : "text-foreground"}`}>
@@ -187,6 +228,8 @@ export function StockPage({
                         {isLowStock(p) && p.stockQty > 0 && <AlertTriangle size={12} aria-label={t("stock.lowStockBadge")} />}
                       </span>
                     </td>
+                    <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground text-right whitespace-nowrap">{(p.avgCost ?? 0) > 0 ? money(p.avgCost ?? 0) : "—"}</td>
+                    <td className="px-4 py-3.5 text-xs font-mono text-foreground text-right whitespace-nowrap">{stockValueOf(p) > 0 ? money(stockValueOf(p)) : "—"}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       {canAdjust ? (
                         <input
@@ -204,8 +247,11 @@ export function StockPage({
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => setHistoryProduct(p)} className="text-muted-foreground hover:text-foreground transition-colors" title={t("stock.action.viewHistoryTitle")}>
+                        <button onClick={() => setHistoryProduct(p)} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity" title={t("stock.action.viewHistoryTitle")} aria-label={t("stock.action.viewHistoryTitle")}>
                           <History size={14} />
+                        </button>
+                        <button onClick={() => void printStockCard(p)} disabled={cardProduct !== null} className="text-muted-foreground opacity-50 hover:opacity-100 focus-visible:opacity-100 hover:text-foreground transition-opacity disabled:opacity-30" title={t("stock.action.stockCardTitle")} aria-label={t("stock.action.stockCardTitle")}>
+                          <ClipboardList size={14} />
                         </button>
                         {canAdjust && (
                           <button
@@ -230,9 +276,19 @@ export function StockPage({
           <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>
             {historyProduct ? `${t("stock.history.heading")} — ${historyProduct.name}` : t("stock.history.headingLatest")}
           </h2>
-          {historyProduct && (
-            <button onClick={() => setHistoryProduct(null)} className="text-xs text-muted-foreground hover:text-foreground">{t("stock.history.showAll")}</button>
-          )}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-8 w-fit" role="group" aria-label={t("stock.history.col.kind")}>
+              {KIND_FILTERS.map((k) => (
+                <button key={k} onClick={() => setKindFilter(k)}
+                  className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all ${kindFilter === k ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+                  {k === "all" ? t("stock.history.filter.all") : t(STOCK_MOVEMENT_KIND_LABEL_KEY[k])}
+                </button>
+              ))}
+            </div>
+            {historyProduct && (
+              <button onClick={() => setHistoryProduct(null)} className="text-xs text-muted-foreground hover:text-foreground">{t("stock.history.showAll")}</button>
+            )}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -242,7 +298,10 @@ export function StockPage({
                 {!historyProduct && <th className="text-left font-medium px-4 py-3">{t("stock.history.col.product")}</th>}
                 <th className="text-left font-medium px-4 py-3">{t("stock.history.col.kind")}</th>
                 <th className="text-right font-medium px-4 py-3">{t("stock.history.col.qty")}</th>
+                <th className="text-right font-medium px-4 py-3">{t("stock.history.col.unitCost")}</th>
+                <th className="text-right font-medium px-4 py-3">{t("stock.history.col.amount")}</th>
                 <th className="text-right font-medium px-4 py-3">{t("stock.history.col.balanceAfter")}</th>
+                <th className="text-left font-medium px-4 py-3">{t("stock.history.col.chargeTo")}</th>
                 <th className="text-left font-medium px-4 py-3">{t("stock.history.col.reason")}</th>
               </tr>
             </thead>
@@ -253,13 +312,19 @@ export function StockPage({
                   {!historyProduct && <td className="px-4 py-3 text-xs text-foreground whitespace-nowrap">{m.productCode} — {m.productName}</td>}
                   <td className="px-4 py-3 text-xs whitespace-nowrap">{t(STOCK_MOVEMENT_KIND_LABEL_KEY[m.kind])}</td>
                   <td className={`px-4 py-3 text-xs font-mono text-right whitespace-nowrap ${m.delta < 0 ? "text-[#c23f3f]" : "text-[#207e52]"}`}>{m.delta > 0 ? "+" : ""}{m.delta.toLocaleString("th-TH")}</td>
+                  <td className="px-4 py-3 text-xs font-mono text-right whitespace-nowrap text-muted-foreground">{m.unitCost !== undefined ? money(m.unitCost) : "—"}</td>
+                  <td className="px-4 py-3 text-xs font-mono text-right whitespace-nowrap">{m.amount !== undefined ? money(m.amount) : "—"}</td>
                   <td className="px-4 py-3 text-xs font-mono text-right whitespace-nowrap">{m.balanceAfter.toLocaleString("th-TH")}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                    {[m.departmentName, m.teamName].filter(Boolean).join(" / ") || "—"}
+                    {m.workTypeName && <span className="block text-xs">{m.workTypeName}</span>}
+                  </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{m.sourceLabel ? `${m.sourceLabel} — ` : ""}{m.reason}</td>
                 </tr>
               ))}
               {movements.length === 0 && (
                 <tr>
-                  <td colSpan={historyProduct ? 5 : 6} className="text-center text-xs text-muted-foreground py-10">
+                  <td colSpan={historyProduct ? 8 : 9} className="text-center text-xs text-muted-foreground py-10">
                     {loadingMovements ? t("stock.history.loading") : movementsError ? (
                       <span className="inline-flex items-center gap-2">
                         {t("stock.toast.loadHistoryFailed")}
@@ -288,25 +353,31 @@ export function StockPage({
       )}
       <Toast message={toast.message} />
 
-      {/* ใบนับสต๊อก — อยู่ใน DOM ตลอด ซ่อนอยู่จนกว่าจะพิมพ์ กด Ctrl+P ก็ได้ใบเดียวกัน */}
-      <StockCountSheetPrintDocument
-        products={filtered}
-        categories={categories}
-        companyHeader={companyHeader}
-        printedAt={printedAt}
-        countedBy={currentUserName}
-      />
+      {/* ใบนับสต๊อก — อยู่ใน DOM ตลอด ซ่อนอยู่จนกว่าจะพิมพ์ กด Ctrl+P ก็ได้ใบเดียวกัน
+          ยกเว้นตอนกำลังพิมพ์การ์ดสต๊อกของสินค้าตัวหนึ่ง ซึ่งจะเข้ามาแทนที่ชั่วคราว */}
+      {cardProduct && cardMovements !== null ? (
+        <StockCardPrintDocument product={cardProduct} movements={cardMovements} companyHeader={companyHeader} printedAt={printedAt} />
+      ) : (
+        <StockCountSheetPrintDocument
+          products={filtered}
+          categories={categories}
+          companyHeader={companyHeader}
+          printedAt={printedAt}
+          countedBy={currentUserName}
+        />
+      )}
     </div>
   );
 }
 
 function AdjustStockDialog({ product, onSaved, onCancel }: {
   product: Product;
-  onSaved: (productId: string, newQty: number) => void;
+  onSaved: (productId: string, movement: StockMovement) => void;
   onCancel: () => void;
 }) {
   const [kind, setKind] = useState<StockMovementKind>("receive");
   const [qty, setQty] = useState("");
+  const [unitCost, setUnitCost] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -318,13 +389,18 @@ function AdjustStockDialog({ product, onSaved, onCancel }: {
       setError(kind === "adjust" ? t("stock.dialog.error.nonZeroRequired") : t("stock.dialog.error.positiveRequired"));
       return;
     }
+    const cost = unitCost.trim() === "" ? undefined : Number(unitCost);
+    if (cost !== undefined && (!Number.isFinite(cost) || cost < 0)) {
+      setError(t("stock.dialog.error.unitCostInvalid"));
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       const movement = kind === "adjust"
         ? await createStockMovement({ productId: product.id, kind, delta: n, reason: reason.trim() })
-        : await createStockMovement({ productId: product.id, kind, qty: n, reason: reason.trim() });
-      onSaved(product.id, movement.balanceAfter);
+        : await createStockMovement({ productId: product.id, kind, qty: n, reason: reason.trim(), unitCost: kind === "receive" ? cost : undefined });
+      onSaved(product.id, movement);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("stock.dialog.error.saveFailed"));
     } finally {
@@ -362,6 +438,22 @@ function AdjustStockDialog({ product, onSaved, onCancel }: {
             className="h-9 w-full px-3 text-sm text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
           />
         </label>
+
+        {/* ต้นทุน/หน่วยตอนรับเข้า — ไม่บังคับ ถ้ากรอกจะถัวเฉลี่ยใหม่ (ใบรับสินค้าส่งราคาจริงมาเองอยู่แล้ว
+            ช่องนี้สำหรับรับเข้าด้วยมือ เช่นยอดตั้งต้น) */}
+        {kind === "receive" && (
+          <label className="block text-xs text-muted-foreground space-y-1">
+            <span>{t("stock.dialog.field.unitCost")}</span>
+            <input
+              type="number" min={0} step="0.01"
+              value={unitCost}
+              onChange={(e) => setUnitCost(e.target.value)}
+              placeholder={(product.avgCost ?? 0) > 0 ? money(product.avgCost ?? 0) : "0.00"}
+              className="h-9 w-full px-3 text-sm font-mono text-foreground bg-secondary border border-border rounded-lg outline-none focus:border-[#c9a84c]/50 transition-colors"
+            />
+            <span className="block">{t("stock.dialog.unitCostHint")}</span>
+          </label>
+        )}
 
         <label className="block text-xs text-muted-foreground space-y-1">
           <span>{t("stock.dialog.field.reason")}</span>
