@@ -14,6 +14,8 @@ import { handlePurchaseRequest } from "../_lib/purchaseRequestHandler.js";
 import { handleProductionOrder } from "../_lib/productionOrderHandler.js";
 import { handlePurchaseOrder } from "../_lib/purchaseOrderHandler.js";
 import { handleCostControl } from "../_lib/costControlHandler.js";
+import { handleReceivingReport } from "../_lib/receivingReportHandler.js";
+import { handleApEntries } from "../_lib/apHandler.js";
 import { handleProductRequest } from "../_lib/productRequestHandler.js";
 import { roleHasPermission, findRole } from "../../src/lib/roles.js";
 import { workflowTransitions, isWorkflowActionAllowed, REQUIRED_PERMISSION_HINT, approvalActionLabel, COMMENT_REQUIRED_ACTIONS, type ApprovalAction } from "../_lib/quoteWorkflow.js";
@@ -942,6 +944,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Cost Control (แผนก BD, 2026-08-28)
     if (pathname === "/api/cost-controls" || pathname.startsWith("/api/cost-controls/")) {
       return handleCostControl(req, res);
+    }
+    // แผนกสโตร์ (2026-09-03) — ใบรับสินค้า และทะเบียนเจ้าหนี้/ภาษีซื้อที่ใบรับสินค้าตั้งหนี้ให้
+    if (pathname === "/api/receiving-reports" || pathname.startsWith("/api/receiving-reports/")) {
+      return handleReceivingReport(req, res);
+    }
+    if (pathname === "/api/ap-entries" || pathname.startsWith("/api/ap-entries/")) {
+      return handleApEntries(req, res);
     }
 
     const parts = getPathSegments(req, "/api/quotes");

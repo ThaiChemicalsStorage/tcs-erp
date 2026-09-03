@@ -2,6 +2,7 @@ import type { AuthContext } from "./auth.js";
 import {
   deliveryOrdersCollection, serviceReportsCollection, projectsCollection,
   materialRequisitionsCollection, jobOrdersCollection, purchaseRequestsCollection, purchaseOrdersCollection, costControlsCollection,
+  receivingReportsCollection,
   productionOrdersCollection, productRequestsCollection, arDocumentsCollection,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -252,6 +253,32 @@ export async function searchPurchaseOrders(query: string, ctx: AuthContext, limi
 }
 
 /**
+ * ใบรับสินค้า (2026-09-03) — ค้นทั้ง `_id`, เลขที่บนฟอร์ม, ผู้ขาย, เลขที่ใบสั่งซื้อต้นทาง และ
+ * **เลขที่ใบกำกับภาษีของผู้ขายในทุกรอบการรับ** ซึ่งเป็นสิ่งที่คนถือกระดาษอยู่ในมือค้นหาจริง ๆ
+ * `party` เป็นผู้ขาย เหมือนใบสั่งซื้อ (เอกสารขาซื้อ)
+ */
+export async function searchReceivingReports(query: string, ctx: AuthContext, limit: number): Promise<SearchDocumentResult[]> {
+  const col = await receivingReportsCollection();
+  const rx = containsRegex(query);
+  const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "receivingReport:viewAll"), "createdBy");
+  const docs = await col.find(
+    docFilter(ownership, [
+      { _id: rx }, { documentNumber: rx }, { vendorName: rx }, { jobCode: rx },
+      { purchaseOrderNumber: rx }, { "batches.invoiceNumber": rx }, { "lines.description": rx }, { "lines.productCode": rx },
+    ]) as never,
+    { sort: SORT_RECENT, limit },
+  ).toArray();
+  return docs.map((d) => ({
+    id: d._id.toString(),
+    docNumber: d.documentNumber || d._id.toString(),
+    party: d.vendorName ?? "",
+    lineage: d.purchaseOrderNumber || d.jobCode || "",
+    status: d.status ?? "",
+    date: isoOf(d),
+  }));
+}
+
+/**
  * Cost Control (2026-08-28) — เอกสารของแผนก BD · `party` เป็น **ชื่องาน/ลูกค้า** (Job Name) และ
  * `lineage` เป็นเลขที่งานต้นทาง (Job order) ซึ่งเป็นเลข Scope of Work ที่คนใช้เรียกงานกันจริง ๆ
  */
@@ -459,7 +486,20 @@ export async function searchByDocNumber(
         status: d.status ?? "", date: isoOf(d),
       })));
     }
-    case "costControl": {
+    case "receivingReport": {
+      const col = await receivingReportsCollection();
+      const ownership = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "receivingReport:viewAll"), "createdBy");
+      const docs = await col.find(
+        { isDeleted: false, $and: [ownership, { $or: [{ documentNumber: anchored }, { _id: anchored }] }] } as never,
+        { limit: 1 },
+      ).toArray();
+      return first("receivingReport", docs.map((d) => ({
+        id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
+        party: d.vendorName ?? "", lineage: d.purchaseOrderNumber || d.jobCode || "",
+        status: d.status ?? "", date: isoOf(d),
+      })));
+    }
+        case "costControl": {
       const col = await costControlsCollection();
       const ownership = await buildCostControlVisibilityClause(ctx, roleHasPermission(ctx.role, "costControl:viewAll"));
       const docs = await col.find(

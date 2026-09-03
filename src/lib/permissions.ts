@@ -119,6 +119,18 @@ export type Permission =
   | "purchaseOrder:finalize"
   | "purchaseOrder:print"
   | "purchaseOrder:delete"
+  // ใบรับสินค้า (2026-09-03) — ของแผนกสโตร์ `:receive` แยกจาก `:edit` เพราะการบันทึกรับของ
+  // เขียนสต๊อกและตั้งหนี้จริง ต่างจากการแก้เลขที่/หมายเหตุบนหัวใบ
+  | "receivingReport:view"
+  | "receivingReport:viewAll"
+  | "receivingReport:create"
+  | "receivingReport:edit"
+  | "receivingReport:receive"
+  | "receivingReport:print"
+  | "receivingReport:delete"
+  // ทะเบียนเจ้าหนี้ / ภาษีซื้อ (2026-09-03) — ฝั่งบัญชี อ่านจากหนี้ที่ใบรับสินค้าตั้งไว้
+  | "ap:view"
+  | "ap:manage"
   | "costControl:view"
   | "costControl:viewAll"
   | "costControl:create"
@@ -255,6 +267,15 @@ export const ALL_PERMISSIONS: Permission[] = [
   "purchaseOrder:finalize",
   "purchaseOrder:print",
   "purchaseOrder:delete",
+  "receivingReport:view",
+  "receivingReport:viewAll",
+  "receivingReport:create",
+  "receivingReport:edit",
+  "receivingReport:receive",
+  "receivingReport:print",
+  "receivingReport:delete",
+  "ap:view",
+  "ap:manage",
   "costControl:view",
   "costControl:viewAll",
   "costControl:create",
@@ -389,6 +410,15 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "purchaseOrder:finalize": "อนุมัติ / ไม่อนุมัติใบสั่งซื้อ",
   "purchaseOrder:print": "พิมพ์ / ส่งออกใบสั่งซื้อ",
   "purchaseOrder:delete": "ลบใบสั่งซื้อ",
+  "receivingReport:view": "ดูใบรับสินค้า",
+  "receivingReport:viewAll": "ดูใบรับสินค้าของผู้อื่น",
+  "receivingReport:create": "สร้างใบรับสินค้าจากใบสั่งซื้อ",
+  "receivingReport:edit": "แก้ไขหัวใบรับสินค้า",
+  "receivingReport:receive": "บันทึกรับของ / ยกเลิกรอบการรับ (เขียนสต๊อกและตั้งหนี้)",
+  "receivingReport:print": "พิมพ์ / ส่งออกใบรับสินค้า",
+  "receivingReport:delete": "ลบใบรับสินค้า",
+  "ap:view": "ดูทะเบียนเจ้าหนี้และทะเบียนภาษีซื้อ",
+  "ap:manage": "บันทึกการจ่ายเงินในทะเบียนเจ้าหนี้",
   "costControl:view": "ดู Cost Control",
   "costControl:viewAll": "ดู Cost Control ของผู้อื่น",
   "costControl:create": "สร้าง Cost Control",
@@ -523,6 +553,15 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "purchaseOrder:finalize": "permission.purchaseOrderFinalize",
   "purchaseOrder:print": "permission.purchaseOrderPrint",
   "purchaseOrder:delete": "permission.purchaseOrderDelete",
+  "receivingReport:view": "permission.receivingReportView",
+  "receivingReport:viewAll": "permission.receivingReportViewAll",
+  "receivingReport:create": "permission.receivingReportCreate",
+  "receivingReport:edit": "permission.receivingReportEdit",
+  "receivingReport:receive": "permission.receivingReportReceive",
+  "receivingReport:print": "permission.receivingReportPrint",
+  "receivingReport:delete": "permission.receivingReportDelete",
+  "ap:view": "permission.apView",
+  "ap:manage": "permission.apManage",
   "costControl:view": "permission.costControlView",
   "costControl:viewAll": "permission.costControlViewAll",
   "costControl:create": "permission.costControlCreate",
@@ -588,7 +627,14 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
   {
     label: "คลังสินค้า",
     labelKey: "nav.products",
-    permissions: ["products:view", "products:create", "products:edit", "products:delete", "products:export", "stock:view", "stock:adjust", "productRequest:view", "productRequest:viewAll", "productRequest:create", "productRequest:review"],
+    permissions: [
+      "products:view", "products:create", "products:edit", "products:delete", "products:export",
+      "stock:view", "stock:adjust",
+      "productRequest:view", "productRequest:viewAll", "productRequest:create", "productRequest:review",
+      // ใบรับสินค้าอยู่กลุ่มคลังสินค้า ไม่ใช่จัดซื้อ — สโตร์เป็นคนรับของและเป็นเจ้าของใบ (2026-09-03)
+      "receivingReport:view", "receivingReport:viewAll", "receivingReport:create", "receivingReport:edit",
+      "receivingReport:receive", "receivingReport:print", "receivingReport:delete",
+    ],
   },
   {
     label: "ลูกค้า",
@@ -615,7 +661,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
   {
     label: "บัญชีลูกหนี้",
     labelKey: "permission.group.accounting",
-    permissions: ["ar:view", "ar:create", "ar:issue", "ar:cancel"],
+    permissions: ["ar:view", "ar:create", "ar:issue", "ar:cancel", "ap:view", "ap:manage"],
   },
   {
     label: "โครงการ",

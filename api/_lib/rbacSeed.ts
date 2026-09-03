@@ -54,6 +54,24 @@ interface RbacMigration {
  */
 const RBAC_MIGRATIONS: RbacMigration[] = [
   {
+    // แผนกสโตร์ (2026-09-03) — ใบรับสินค้า + ทะเบียนเจ้าหนี้/ภาษีซื้อ
+    //
+    // ทั้งสองชุดเป็นสิทธิ์ใหม่จริง ๆ (ไม่ใช่ของที่ค้างมา) และแยกจากกันโดยตั้งใจ: สโตร์เป็นคนรับของ
+    // และตั้งหนี้ ส่วนบัญชีเป็นคนตามจ่าย — role เดียวกันไม่ควรได้ทั้งสองฝั่งโดยอัตโนมัติ นอกจาก
+    // Administrator ที่ต้องเข้าถึงได้ทุกเมนูอยู่แล้ว
+    //
+    // `accounting_user` ได้เฉพาะ `ap:*` — บัญชีไม่ต้องเปิดใบรับสินค้าหรือกดรับของ
+    id: "store-ap-permissions-2026-09-03",
+    grants: {
+      administrator: [
+        "receivingReport:view", "receivingReport:viewAll", "receivingReport:create", "receivingReport:edit",
+        "receivingReport:receive", "receivingReport:print", "receivingReport:delete",
+        "ap:view", "ap:manage",
+      ],
+      accounting_user: ["ap:view", "ap:manage"],
+    },
+  },
+  {
     // ทะเบียนผู้ขาย (2026-08-31) **บวกของที่ค้างมาตั้งแต่ 2026-08-28**
     //
     // เช็คฐานข้อมูลจริงเมื่อ 2026-08-31: ทุก role มี `purchaseOrder:*` = 0 และ `costControl:*` = 0

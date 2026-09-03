@@ -108,6 +108,17 @@ export const defaultRoles: Role[] = [
       "purchaseOrder:finalize",
       "purchaseOrder:print",
       "purchaseOrder:delete",
+      // ใบรับสินค้า + ทะเบียนเจ้าหนี้/ภาษีซื้อ (แผนกสโตร์, 2026-09-03) — มี RBAC migration คู่กัน
+      // ดู `api/_lib/rbacSeed.ts` รายการ "store-ap-permissions-2026-09-03"
+      "receivingReport:view",
+      "receivingReport:viewAll",
+      "receivingReport:create",
+      "receivingReport:edit",
+      "receivingReport:receive",
+      "receivingReport:print",
+      "receivingReport:delete",
+      "ap:view",
+      "ap:manage",
       // ทะเบียนผู้ขาย (2026-08-31) — ข้อมูลหลักของฝ่ายจัดซื้อ
       "vendor:view",
       "vendor:create",
@@ -212,6 +223,8 @@ export const defaultRoles: Role[] = [
       // Stock (added 2026-08-18) — accounting cuts stock against IV documents from the same
       // dual-pane view they issue/print from, so both view+adjust travel together here.
       "stock:view", "stock:adjust",
+      // ทะเบียนเจ้าหนี้/ภาษีซื้อ (2026-09-03) — หนี้ตั้งจากใบรับสินค้าของสโตร์ บัญชีเป็นคนตามจ่าย
+      "ap:view", "ap:manage",
     ],
     isSuperAdmin: false,
     isSystem: false,

@@ -60,6 +60,7 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
   { prefix: "PR-", type: "purchaseRequest" },
   { prefix: "PO-", type: "purchaseOrder" },
   { prefix: "CC-", type: "costControl" },
+  { prefix: "RR-", type: "receivingReport" },
   { prefix: "SC-", type: "productionOrder" },
   { prefix: "AR", type: "arDocument" },
   { prefix: "BI", type: "arDocument" },
@@ -69,7 +70,8 @@ export const DOC_NUMBER_PREFIXES: { prefix: string; type: DocNumberFamily }[] = 
 
 export type DocNumberFamily =
   | "quotation" | "serviceReport" | "materialRequisition" | "jobOrder"
-  | "purchaseRequest" | "productionOrder" | "arDocument" | "purchaseOrder" | "costControl";
+  | "purchaseRequest" | "productionOrder" | "arDocument" | "purchaseOrder" | "costControl"
+  | "receivingReport";
 
 /**
  * Which document family a query looks like, or `null` when it doesn't look like a number at all.

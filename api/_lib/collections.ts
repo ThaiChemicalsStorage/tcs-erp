@@ -21,6 +21,8 @@ import type { PurchaseRequest } from "../../src/lib/purchaseRequest.js";
 import type { ProductionOrder } from "../../src/lib/productionOrder.js";
 import type { PurchaseOrder } from "../../src/lib/purchaseOrder.js";
 import type { CostControl } from "../../src/lib/costControl.js";
+import type { ReceivingReport } from "../../src/lib/receivingReport.js";
+import type { ApEntry } from "../../src/lib/apEntries.js";
 
 /** DB storage schema — includes passwordHash, which the client-side User type deliberately omits.
  * (`emailAppPasswordEnc` existed briefly on 2026-08-07 for the since-removed Gmail sending feature;
@@ -948,6 +950,26 @@ export async function costControlsCollection() {
   const db = await getDb();
   return db.collection<CostControlFields & { _id: string }>("cost_controls");
 }
+/**
+ * Business-id-keyed (e.g. "RR-202609-0001") — ใบรับสินค้าของแผนกสโตร์ (2026-09-03) หนึ่งใบต่อหนึ่ง
+ * ใบสั่งซื้อ (unique partial index บน `purchaseOrderId` เฉพาะใบที่ยังไม่ถูกลบ) รับได้หลายรอบในใบเดียว
+ * ยอด รับแล้ว/ค้างรับ **ไม่ได้เก็บ** คิดจาก `batches` ตอนอ่านเสมอ (ดู `receivingReportTotals()`)
+ */
+export type ReceivingReportFields = Omit<ReceivingReport, "id">;
+export async function receivingReportsCollection() {
+  const db = await getDb();
+  return db.collection<ReceivingReportFields & { _id: string }>("receiving_reports");
+}
+
+/**
+ * ทะเบียนเจ้าหนี้/ภาษีซื้อ (2026-09-03) — หนึ่งแถวต่อหนึ่งรอบการรับของ เขียนโดยเซิร์ฟเวอร์เท่านั้น
+ * ตอนบันทึกรับของ ไม่มีทางสร้างด้วยมือ บัญชีแก้ได้แค่สถานะจ่าย/ไม่จ่าย
+ */
+export type ApEntryFields = Omit<ApEntry, "id">;
+export async function apEntriesCollection() {
+  const db = await getDb();
+  return db.collection<ApEntryFields>("ap_entries");
+}
 
 /** Creates required indexes across every collection. Idempotent — safe to call repeatedly, but only worth calling from setup/cold paths, not every request. */
 export async function ensureIndexes() {
@@ -961,6 +983,7 @@ export async function ensureIndexes() {
     projects, materialRequisitions, jobOrders, purchaseRequests, productionOrders,
     productRequests,
     purchaseOrders, costControls,
+    receivingReports, apEntries,
   ] = await Promise.all([
     usersCollection(), rolesCollection(), productsCollection(), categoriesCollection(),
     quotesCollection(), notificationsCollection(), auditLogCollection(),
@@ -977,6 +1000,7 @@ export async function ensureIndexes() {
     productionOrdersCollection(),
     productRequestsCollection(),
     purchaseOrdersCollection(), costControlsCollection(),
+    receivingReportsCollection(), apEntriesCollection(),
   ]);
 
   await Promise.all([
@@ -1103,6 +1127,17 @@ export async function ensureIndexes() {
     // FK ไป Scope of Work (2026-08-31) — ใช้ทั้งตอนเช็คว่า Scope ใบนี้มี Cost Control แล้วหรือยัง
     // และตอนกรองใบที่ผู้ใช้เห็นได้เพราะถูกส่ง Scope ถึง · ไม่ unique โดยตั้งใจ ("ปกติใบเดียว แต่ไม่บังคับ")
     costControls.createIndex({ scopeOfWorkId: 1 }),
+    // ใบรับสินค้า: หนึ่งใบสั่งซื้อมีได้ใบเดียว — partial index เพื่อให้ใบที่ลบไปแล้วไม่กันการเปิดใบใหม่
+    receivingReports.createIndex({ purchaseOrderId: 1 }, { unique: true, partialFilterExpression: { isDeleted: false } }),
+    receivingReports.createIndex({ status: 1 }),
+    receivingReports.createIndex({ isDeleted: 1 }),
+    receivingReports.createIndex({ createdBy: 1 }),
+    // ทะเบียนภาษีซื้อกรองตามเดือนของ `invoiceDate` ส่วนทะเบียนเจ้าหนี้จัดกลุ่มตามผู้ขาย/สถานะ
+    apEntries.createIndex({ invoiceDate: 1 }),
+    apEntries.createIndex({ vendorName: 1 }),
+    apEntries.createIndex({ status: 1 }),
+    apEntries.createIndex({ receivingReportId: 1 }),
+    apEntries.createIndex({ batchId: 1 }),
   ]);
 
   // sessions: TTL index, auto-purges expired docs — created separately (different option shape)

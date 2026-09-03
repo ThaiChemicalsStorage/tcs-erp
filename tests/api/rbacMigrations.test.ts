@@ -31,6 +31,9 @@ let applyRbacMigrations: () => Promise<void>;
 const PURCHASING_MIGRATION_ID = "purchasing-registers-permissions-2026-08-31";
 const PURCHASING_PERMISSION = /^(vendor|purchaseOrder|costControl):/;
 
+/** แผนกสโตร์ (2026-09-03) — ใบรับสินค้าของสโตร์ และทะเบียนเจ้าหนี้/ภาษีซื้อของบัญชี */
+const STORE_PERMISSION = /^(receivingReport|ap):/;
+
 /**
  * The roles collection as it looks on a database provisioned before the Service module shipped —
  * and, since 2026-08-31, also before the purchasing/vendor/cost-control permissions existed.
@@ -43,7 +46,7 @@ async function seedLegacyRoles(): Promise<void> {
       .filter((r) => r.key !== "service_engineer")
       .map((r) => ({
         ...r,
-        permissions: r.permissions.filter((p) => !SERVICE_PERMISSION.test(p) && !PURCHASING_PERMISSION.test(p)),
+        permissions: r.permissions.filter((p) => !SERVICE_PERMISSION.test(p) && !PURCHASING_PERMISSION.test(p) && !STORE_PERMISSION.test(p)),
       })),
   );
 }
@@ -301,5 +304,50 @@ describe("applyRbacMigrations (vendor register + the purchasing/cost-control bac
 
     expect(await permissionsOf("administrator")).not.toContain("vendor:archive");
     expect(await permissionsOf("administrator")).toContain("vendor:view");
+  });
+});
+
+/**
+ * แผนกสโตร์ (`store-ap-permissions-2026-09-03`) — ใบรับสินค้า + ทะเบียนเจ้าหนี้/ภาษีซื้อ
+ *
+ * ต่างจากสองรายการข้างบนตรงที่ **แจกให้สอง role ไม่ใช่ role เดียว** และแจกไม่เท่ากันโดยตั้งใจ:
+ * บัญชีได้เฉพาะ `ap:*` (ตามจ่ายหนี้) ไม่ได้ `receivingReport:*` (รับของเป็นงานของสโตร์)
+ * ถ้าวันหนึ่งมีคนเผลอรวมสองชุดเข้าด้วยกัน เทสต์ข้อที่สองจะจับได้
+ */
+describe("applyRbacMigrations (store receiving report + AP registers)", () => {
+  const STORE_MIGRATION_ID = "store-ap-permissions-2026-09-03";
+
+  it("Administrator ได้ครบเท่ากับที่ติดตั้งใหม่จะได้", async () => {
+    await applyRbacMigrations();
+    const after = await permissionsOf("administrator");
+    const expected = (defaultRoles.find((r) => r.key === "administrator")?.permissions ?? [])
+      .filter((p) => STORE_PERMISSION.test(p)).sort();
+    expect(after.filter((p) => STORE_PERMISSION.test(p)).sort()).toEqual(expected);
+    expect(expected.length, "รายการนี้ต้องแจกสิทธิ์จริง ไม่ใช่ว่างเปล่า").toBe(9);
+  });
+
+  it("บัญชีได้เฉพาะ ap:* ไม่ได้สิทธิ์รับของ", async () => {
+    await applyRbacMigrations();
+    const acct = await permissionsOf("accounting_user");
+    expect(acct.filter((p) => p.startsWith("ap:")).sort()).toEqual(["ap:manage", "ap:view"]);
+    expect(acct.filter((p) => p.startsWith("receivingReport:"))).toEqual([]);
+  });
+
+  it("role อื่นไม่ได้อะไรเพิ่ม", async () => {
+    await applyRbacMigrations();
+    for (const key of ["sales_user", "viewer", "approver_1"]) {
+      expect((await permissionsOf(key)).filter((p) => STORE_PERMISSION.test(p)), key).toEqual([]);
+    }
+  });
+
+  it("บันทึกไว้แล้วรันซ้ำไม่เปลี่ยนอะไร และสิทธิ์ที่แอดมินถอดออกยังถูกถอดอยู่", async () => {
+    await applyRbacMigrations();
+    const marker = await markers.findOne({ _id: STORE_MIGRATION_ID });
+    expect(marker?.appliedRoleKeys.sort()).toEqual(["accounting_user", "administrator"]);
+
+    await roles.updateOne({ key: "administrator" }, { $pull: { permissions: "ap:manage" } });
+    await applyRbacMigrations();
+    expect(await permissionsOf("administrator")).not.toContain("ap:manage");
+    expect(await permissionsOf("administrator")).toContain("ap:view");
   });
 });
