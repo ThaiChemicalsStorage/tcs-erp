@@ -428,7 +428,9 @@ export function ReceivingReportDocument({
         </div>
       </div>
 
-      {showPrint && <ReceivingReportPrintDocument doc={draft} companyHeader={companyHeader} />}
+      {/* ใบพิมพ์อยู่ใน DOM ตลอด ซ่อนด้วย `hidden print:block` — กด Ctrl+P ต้องได้ใบเดียวกับปุ่มพิมพ์
+          (บั๊กเดิมของหกโมดูลที่แก้ไปเมื่อ 2026-09-02: เรนเดอร์เฉพาะตอนกดปุ่ม แล้ว Ctrl+P ได้กระดาษเปล่า) */}
+      <ReceivingReportPrintDocument doc={draft} companyHeader={companyHeader} />
 
       {receiveOpen && (
         <ReceiveBatchDialog doc={draft} busy={busy} onCancel={() => setReceiveOpen(false)} onSubmit={(b) => void runReceive(b)} />
