@@ -281,3 +281,27 @@ describe("ไฟล์แนบใบส่งมอบสินค้า", () =
     expect(left.map((a) => a.fileName)).toEqual(["customer-signed.pdf"]);
   });
 });
+
+/**
+ * ฉบับแก้ไข (Rewrite) ต้องไม่ลากไฟล์แนบไปด้วย — สำเนาจะชี้ไฟล์ก้อนเดียวกัน ลบทีเดียวพังทั้งสองใบ
+ * (กติกาเดียวกับใบสั่งงาน) · เขียนเทสต์นี้เพิ่ม 2026-09-03d ตอนรีวิวชี้ว่าเป็นข้อเดียวในสามข้อ
+ * ที่ยัง **ไม่มีเทสต์คุ้มอยู่เลย** ไม่ใช่แค่ยังไม่ได้กดจริงบนจอ
+ */
+describe("ฉบับแก้ไขของใบส่งมอบสินค้า", () => {
+  it("Rewrite แล้วฉบับใหม่ไม่มีไฟล์แนบติดไป ส่วนฉบับเดิมยังมีครบ", async () => {
+    const db = client.db("tcs_erp");
+    // ฉบับเดิมถูกตั้งเป็น Final ไว้แล้วในชุดก่อนหน้า และมีไฟล์แนบเหลืออยู่หนึ่งไฟล์
+    const before = await db.collection("delivery_orders").findOne({ scopeNumber: "TEST-SOW-01" });
+    expect((before?.attachments ?? []).length, "ต้องมีไฟล์แนบค้างอยู่จากชุดก่อนหน้า").toBe(1);
+
+    const rewritten = await call(quotesHandler, "POST", `/api/delivery-orders/${deliveryOrderId}/rewrite`);
+    expect(rewritten.statusCode, JSON.stringify(rewritten.body)).toBe(200);
+    const copy = (rewritten.body as { deliveryOrder: { id: string; attachments: unknown[]; status: string } }).deliveryOrder;
+    expect(copy.attachments, "ฉบับแก้ไขต้องเริ่มจากไม่มีไฟล์แนบ").toEqual([]);
+    expect(copy.status).toBe("Draft");
+    expect(copy.id).not.toBe(deliveryOrderId);
+
+    const original = await db.collection("delivery_orders").findOne({ _id: before!._id });
+    expect((original?.attachments ?? []).length, "ฉบับเดิมต้องไม่ถูกแตะ").toBe(1);
+  });
+});

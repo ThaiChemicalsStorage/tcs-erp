@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, Search, X, History, Printer, AlertTriangle, ClipboardList } from "lucide-react";
 import { type Product, type ProductCategory, updateProduct, fetchProducts } from "../../lib/products";
 import type { Company, CompanyHeaderInfo } from "../../lib/storage";
@@ -70,11 +70,17 @@ export function StockPage({
    * ตลอดเวลา — สโตร์จ่ายของบนใบเบิก รับของบนใบรับสินค้า จ่ายเครื่องมือให้ทีม — พอเดินกลับมาหน้านี้
    * จึงเห็นยอดเก่าค้างอยู่จนกว่าจะรีเฟรชทั้งแอป ซึ่งอ่านแล้วเหมือนระบบไม่ได้บันทึกให้ (เจอจริงตอน
    * ไล่กดทดสอบ: รับของ 10 ชิ้นแล้วหน้านี้ยังขึ้น 0 ส่วนประวัติด้านล่างขึ้นยอดถูก — ขัดกันเองบนจอเดียว)
+   *
+   * `localEditsRef` กันไม่ให้ผลของรอบนี้ทับสิ่งที่ผู้ใช้เพิ่งบันทึกไป: ถ้าเน็ตช้า คำขอนี้อาจอ่านค่าจาก
+   * เซิร์ฟเวอร์ *ก่อน* ที่ผู้ใช้จะกดปรับยอด/ตั้งจุดเตือน แต่ตอบกลับมา *ทีหลัง* — ถ้าเอาผลมาทับดื้อ ๆ
+   * ยอดที่เพิ่งปรับจะเด้งกลับเป็นค่าเก่า ซึ่งคือบั๊กเดียวกับที่เอฟเฟกต์นี้ตั้งใจแก้
    */
+  const localEditsRef = useRef(0);
   useEffect(() => {
     let cancelled = false;
+    const editsAtStart = localEditsRef.current;
     fetchProducts()
-      .then((fresh) => { if (!cancelled) onProductsChange(fresh); })
+      .then((fresh) => { if (!cancelled && localEditsRef.current === editsAtStart) onProductsChange(fresh); })
       .catch(() => { /* ยอดเดิมที่ค้างอยู่ยังใช้ดูได้ ไม่ต้องรบกวนด้วย toast */ });
     return () => { cancelled = true; };
     // ครั้งเดียวตอน mount — ตั้งใจไม่ผูกกับ onProductsChange ที่เปลี่ยน identity ทุก render
@@ -115,6 +121,7 @@ export function StockPage({
     setSavingReorderId(product.id);
     try {
       const updated = await updateProduct(product.id, { reorderPoint: next });
+      localEditsRef.current += 1;
       onProductsChange(products.map((x) => (x.id === updated.id ? updated : x)));
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("stock.toast.reorderSaveFailed"));
@@ -135,6 +142,7 @@ export function StockPage({
 
   const handleAdjustSaved = (updatedProductId: string, movement: StockMovement) => {
     // ยอดและต้นทุนเฉลี่ยใหม่มาจาก movement ที่ server ตอบกลับ — มูลค่าคงเหลือ ÷ จำนวน = ค่าเฉลี่ยหลังรับ
+    localEditsRef.current += 1;
     onProductsChange(products.map((p) => (p.id === updatedProductId
       ? { ...p, stockQty: movement.balanceAfter, avgCost: movement.balanceAfter > 0 && movement.balanceValueAfter !== undefined ? movement.balanceValueAfter / movement.balanceAfter : p.avgCost }
       : p)));

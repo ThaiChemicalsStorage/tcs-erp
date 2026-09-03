@@ -52,7 +52,9 @@ export function ToolIssueCard({
   useEffect(() => {
     let cancelled = false;
     fetchProducts()
-      .then((list) => { if (!cancelled) setTools(list.filter((p) => p.isTool && !p.archived)); })
+      // ล้าง error ของรอบก่อนด้วย — ไม่งั้นโหลดพลาดครั้งเดียวแล้วแถบแดงค้างอยู่ตลอด แม้รอบถัดไป
+      // (เช่น รอบที่ยิงใหม่หลังบันทึกสำเร็จ) จะโหลดผ่านแล้วก็ตาม
+      .then((list) => { if (!cancelled) { setTools(list.filter((p) => p.isTool && !p.archived)); setError(""); } })
       .catch(() => { if (!cancelled) setError(t("toolControl.issue.errorLoadTools")); });
     return () => { cancelled = true; };
   }, [t, reloadToken]);
