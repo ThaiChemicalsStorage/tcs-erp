@@ -11,7 +11,7 @@ import type { TranslationKey } from "./i18n.js";
  * being written by the server for two days before it existed here — fixed 2026-09-03.)
  */
 export type StockMovementKind = "receive" | "deduct" | "adjust" | "return";
-export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report";
+export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report" | "tool_issue";
 
 export interface StockMovement {
   id: string;

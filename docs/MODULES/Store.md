@@ -16,7 +16,7 @@ Related: [Product.md](./Product.md) (Stock ledger, costing, team tools), [Purcha
 | Unified `{PREFIX}-{YYYYMM}-{NNNN}` document numbering | ✅ Built |
 | Requisition: stock cut at issue time, outstanding tracking, department/team/work-type charging | ✅ Built |
 | Stock: return movements, moving-average cost, stock value, stock card print | ✅ Built |
-| Team tools (holdings + issue/return report) | ✅ Built |
+| Team tools (issue/return page, holdings, report) | ✅ Built |
 | **Receiving Report (RR)** + payable posting | ✅ Built |
 | Purchase-tax register + AP register | ✅ Built |
 | Delivery Order attachments | ✅ Built |
@@ -106,13 +106,30 @@ Defaults come from the creating user's own department/team.
 ## 4. Team tools
 
 `Product.isTool` marks an item as a tool that must come back. `GET /api/tool-holdings` owns **no
-collection of its own** — it aggregates `stock_movements` where `sourceType: "material_requisition"`
+collection of its own** — it aggregates `stock_movements` where `sourceType` is `"material_requisition"` or `"tool_issue"`
 and the product is a tool, per (department, team, product): `held = issued − returned`, filtered to
 `held > 0`. `?report=1` returns the individual movements inside a Bangkok-local date range.
 
-The page (`src/pages/toolControl/`) has two tabs — *ในครอบครอง* and *รายงานเบิก-คืน* — with a print
-layout for each. It uses the existing **`stock:view`** permission rather than minting a new one: it
-is a different view of the stock ledger, not a new kind of record.
+The page (`src/pages/toolControl/`) has three tabs. *ในครอบครอง* and *รายงานเบิก-คืน* are read-only
+views with a print layout each, gated on the existing **`stock:view`** — a different view of the
+stock ledger, not a new kind of record.
+
+**จ่าย / รับคืน (added 2026-09-03b)** is the owner's *"หน้าตัดเบิกเครื่องมือ มีแผนกในการเบิกโครงการ
+หรือผลิต"*. The first pass routed tool issuing through the material requisition instead; that was
+both off-spec and too heavy in practice, since tools go out and come back several times a day and
+nobody opens a requisition for that.
+
+`POST /api/tool-holdings/issue` writes to the **same ledger** as a requisition issue — only
+`sourceType: "tool_issue"` differs — and mints its own `TL-YYYYMM-NNNN` slip number, one per press
+rather than per line. Holdings and the report therefore sum both paths automatically; a second,
+parallel tally is exactly how the two numbers would end up disagreeing.
+
+Server-enforced rules: a **team is mandatory** (holdings belong to a team, not a department) and
+must belong to the chosen department; only `isTool` products are accepted; issuing validates the
+whole basket with `assertProductsHaveStock()` before the first write; returning is capped at what
+that team currently holds, because "returning" something never issued would grow stock out of
+nothing. The tab only appears for `stock:adjust` holders — the same permission that lets Store
+issue against a requisition.
 
 ## 5. Receiving Report (RR)
 

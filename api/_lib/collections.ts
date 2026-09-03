@@ -830,7 +830,7 @@ export type StockMovementKind = "receive" | "deduct" | "adjust" | "return";
  * (`goods_receipt` เคยมีแล้วถูกลบไปเมื่อ 2026-08-28d พร้อมกับการถอดใบตรวจรับออก)
  * `receiving_report` เพิ่ม 2026-09-03 — ใบรับสินค้าของสโตร์ (สร้างจากใบสั่งซื้อ) รับของเข้าพร้อมต้นทุน
  */
-export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report";
+export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report" | "tool_issue";
 
 export interface StockMovementFields {
   productId: string;

@@ -61,3 +61,27 @@ export async function fetchToolHoldings(filter: ToolFilter): Promise<ToolHolding
 export async function fetchToolReport(filter: ToolFilter): Promise<{ rows: ToolReportRow[]; truncated: boolean }> {
   return apiFetch<{ rows: ToolReportRow[]; truncated: boolean }>(`/tool-holdings${toQuery(filter, { report: "1" })}`);
 }
+
+/**
+ * จ่าย / รับคืนเครื่องมือให้ทีมโดยตรง (2026-09-03 รอบสอง) — เจ้าของสั่ง *"หน้าตัดเบิกเครื่องมือ
+ * มีแผนกในการเบิกโครงการหรือผลิต"*
+ *
+ * เขียนลงบัญชีสต๊อกชุดเดียวกับใบเบิก ต่างแค่ `sourceType` และได้เลขที่ของตัวเอง `TL-YYYYMM-NNNN`
+ * หนึ่งเลขต่อการกดหนึ่งครั้ง — ยอดถือครองจึงรวมของที่จ่ายทั้งสองทางเสมอ
+ */
+export interface ToolIssueInput {
+  mode: "issue" | "return";
+  departmentId: string;
+  /** บังคับ — ยอดถือครองเป็นของทีม ไม่ใช่ของแผนก */
+  teamId: string;
+  workTypeCode?: string;
+  note?: string;
+  lines: { productId: string; qty: number }[];
+}
+
+export async function issueTools(input: ToolIssueInput): Promise<{ slipNumber: string; lineCount: number }> {
+  return apiFetch<{ slipNumber: string; lineCount: number }>("/tool-holdings/issue", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}

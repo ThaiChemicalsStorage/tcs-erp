@@ -1210,7 +1210,7 @@ export default function App() {
               : effectiveNav === "stock"
               ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} company={company} currentUserName={currentUser.fullName} />
               : effectiveNav === "toolControl"
-              ? <ToolControlPage company={company} currentUserId={currentUser.id} />
+              ? <ToolControlPage company={company} currentUserId={currentUser.id} canIssue={canAdjustStock} />
               : effectiveNav === "receivingReport"
               ? <ReceivingReportPage canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canReceive={canReceiveGoods} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialReceivingReportId={receivingReportDeepLinkId} onReceivingReportIdConsumed={() => setReceivingReportDeepLinkId(null)} />
               : effectiveNav === "productRequest"

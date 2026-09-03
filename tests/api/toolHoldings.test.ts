@@ -95,3 +95,93 @@ describe("GET /api/tool-holdings", () => {
     expect((await api("/api/tool-holdings?report=1&from=2026-9-2")).status).toBe(400);
   });
 });
+
+/**
+ * จ่าย / รับคืนเครื่องมือให้ทีมโดยตรง (2026-09-03 รอบสอง) — `POST /api/tool-holdings/issue`
+ *
+ * สิ่งที่ตรึงไว้ คือจุดที่พังแล้วยอดถือครองจะผิดโดยไม่มีอะไรฟ้อง:
+ *  - ต้องเขียนลงบัญชีสต๊อกชุดเดียวกับใบเบิก ยอดถือครองจึงต้องรวมของสองทางเข้าด้วยกัน
+ *    (ถ้าเผลอแยก sourceType ออกจากตัวรวม ยอดจะหายไปครึ่งหนึ่งแบบเงียบ ๆ)
+ *  - คืนเกินที่ทีมถืออยู่ต้องไม่ผ่าน ไม่งั้น "คืน" ของที่ไม่เคยเบิกจะทำให้สต๊อกงอกเอง
+ *  - ของไม่พอต้องไม่เขียนอะไรเลย ไม่ใช่เขียนบรรทัดแรกแล้วค่อย error
+ */
+describe("POST /api/tool-holdings/issue", () => {
+  let deptId = "";
+  let teamC = "";
+
+  async function post(body: unknown): Promise<{ status: number; body: any }> {
+    const res = await fetch(`${baseUrl}/api/tool-holdings/issue`, {
+      method: "POST", headers: { cookie: adminCookie, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    return { status: res.status, body: text ? JSON.parse(text) : undefined };
+  }
+  async function stockOf(): Promise<number> {
+    const p = await client.db("tcs_erp").collection("products").findOne({ code: "TL-01" });
+    return p?.stockQty ?? 0;
+  }
+
+  beforeAll(async () => {
+    const db = client.db("tcs_erp");
+    deptId = (await db.collection("departments").insertOne({ name: "ฝ่ายผลิต", code: "PD", isActive: true, createdAt: "", updatedAt: "" } as never)).insertedId.toString();
+    teamC = (await db.collection("teams").insertOne({ name: "ทีม C", departmentId: deptId, isActive: true, createdAt: "", updatedAt: "" } as never)).insertedId.toString();
+    // ตั้งยอดตั้งต้นให้สว่านมีของจ่ายได้จริง (movement ในชุดก่อนหน้าใส่ตรง ๆ ไม่ผ่าน applyStockMovement)
+    await db.collection("products").updateOne({ code: "TL-01" }, { $set: { stockQty: 5 } });
+  });
+
+  it("จ่ายให้ทีมแล้วสต๊อกลด และยอดถือครองของทีมนั้นขึ้นทันที", async () => {
+    const res = await post({ mode: "issue", departmentId: deptId, teamId: teamC, lines: [{ productId: toolId, qty: 3 }] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.slipNumber).toMatch(/^TL-\d{6}-\d{4}$/);
+    expect(await stockOf()).toBe(2);
+
+    const { holdings } = (await (await api(`/api/tool-holdings?teamId=${teamC}`)).json()) as { holdings: { held: number; lastSourceLabel: string }[] };
+    expect(holdings).toHaveLength(1);
+    expect(holdings[0].held).toBe(3);
+    expect(holdings[0].lastSourceLabel).toBe(res.body.slipNumber);
+  });
+
+  it("คืนเกินที่ถืออยู่ไม่ผ่าน และไม่แตะสต๊อก", async () => {
+    const before = await stockOf();
+    const res = await post({ mode: "return", departmentId: deptId, teamId: teamC, lines: [{ productId: toolId, qty: 4 }] });
+    expect(res.status).toBe(400);
+    expect(await stockOf()).toBe(before);
+  });
+
+  it("รับคืนบางส่วนแล้วยอดถือครองลดตาม", async () => {
+    const res = await post({ mode: "return", departmentId: deptId, teamId: teamC, lines: [{ productId: toolId, qty: 2 }] });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(await stockOf()).toBe(4);
+    const { holdings } = (await (await api(`/api/tool-holdings?teamId=${teamC}`)).json()) as { holdings: { held: number }[] };
+    expect(holdings[0].held).toBe(1);
+  });
+
+  it("ของไม่พอ → 400 และไม่เขียนอะไรเลย", async () => {
+    const before = await stockOf();
+    const res = await post({ mode: "issue", departmentId: deptId, teamId: teamC, lines: [{ productId: toolId, qty: 999 }] });
+    expect(res.status).toBe(400);
+    expect(await stockOf()).toBe(before);
+  });
+
+  it("สินค้าที่ไม่ใช่เครื่องมือ จ่ายผ่านหน้านี้ไม่ได้", async () => {
+    const res = await post({ mode: "issue", departmentId: deptId, teamId: teamC, lines: [{ productId: consumableId, qty: 1 }] });
+    expect(res.status).toBe(400);
+  });
+
+  it("ทีมที่ไม่ได้อยู่ในแผนกที่เลือก → 400", async () => {
+    const res = await post({ mode: "issue", departmentId: dept, teamId: teamC, lines: [{ productId: toolId, qty: 1 }] });
+    expect(res.status).toBe(400);
+  });
+
+  it("ไม่ระบุทีม → 400 (ยอดถือครองเป็นของทีม ไม่ใช่ของแผนก)", async () => {
+    const res = await post({ mode: "issue", departmentId: deptId, teamId: "", lines: [{ productId: toolId, qty: 1 }] });
+    expect(res.status).toBe(400);
+  });
+
+  it("รายงานเบิก-คืนเห็นรายการที่จ่ายตรงด้วย ไม่ใช่เฉพาะที่มาจากใบเบิก", async () => {
+    const { rows } = (await (await api(`/api/tool-holdings?report=1&teamId=${teamC}`)).json()) as { rows: { sourceLabel: string; qty: number }[] };
+    expect(rows.map((r) => r.qty)).toEqual([3, -2]);
+    expect(rows.every((r) => r.sourceLabel.startsWith("TL-"))).toBe(true);
+  });
+});

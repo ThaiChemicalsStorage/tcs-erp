@@ -7,6 +7,9 @@ import { fetchTeams, type Team } from "../../lib/teams";
 import { fetchCodeEntries, type CodeEntry } from "../../lib/codeRegister";
 import { fetchToolHoldings, fetchToolReport, type ToolHoldingRow, type ToolReportRow } from "../../lib/toolHoldings";
 import { ToolReportPrintDocument } from "./ToolReportPrintDocument";
+import { ToolIssueCard } from "./ToolIssueCard";
+import { Toast } from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
 import { EmptyState } from "../../components/EmptyState";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
@@ -14,7 +17,8 @@ import { formatQuoteDateThai } from "../../lib/quotes";
 import { printDate } from "../../lib/printFormat";
 import { useI18n } from "../../lib/i18n";
 
-type Tab = "holdings" | "report";
+/** "issue" (2026-09-03 รอบสอง) = หน้าตัดเบิกเครื่องมือที่เจ้าของสั่ง — จ่าย/รับคืนให้ทีมโดยตรง */
+type Tab = "issue" | "holdings" | "report";
 
 const selectCls = "h-9 text-xs text-foreground bg-secondary border border-border rounded-lg px-3 outline-none focus:border-[#c9a84c]/50 transition-colors";
 
@@ -30,8 +34,9 @@ function today(): string {
 
 // หน้าเครื่องมือประจำทีม (2026-09-03) — เจ้าของสั่ง "เพิ่มหน้าคุมเครื่องมือ ว่าทีมนี้มีเครื่องมืออะไรในครอบครอง"
 // และหน้าย่อยรายงานว่าทีมไหนเบิกอะไรไปบ้าง พิมพ์ได้ · อ่านอย่างเดียว ทุกตัวเลขมาจากบัญชีสต๊อกที่ใบเบิกประทับทีมไว้
-export function ToolControlPage({ company, currentUserId }: { company: Company; currentUserId: string }) {
+export function ToolControlPage({ company, currentUserId, canIssue }: { company: Company; currentUserId: string; canIssue: boolean }) {
   const { t } = useI18n();
+  const toast = useToast();
   const [tab, setTab] = useState<Tab>("holdings");
   const [departments, setDepartments] = useState<Department[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -125,14 +130,24 @@ export function ToolControlPage({ company, currentUserId }: { company: Company; 
       </div>
 
       <div data-tour="tool-tabs" className="flex items-center gap-1 border-b border-border print:hidden" role="tablist">
-        {(["holdings", "report"] as const).map((k) => (
+        {((canIssue ? ["issue", "holdings", "report"] : ["holdings", "report"]) as Tab[]).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
             className={`px-4 py-2 text-sm border-b-2 -mb-px transition-colors ${tab === k ? "border-[#c9a84c] text-foreground font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-            {t(k === "holdings" ? "toolControl.tab.holdings" : "toolControl.tab.report")}
+            {t(k === "issue" ? "toolControl.tab.issue" : k === "holdings" ? "toolControl.tab.holdings" : "toolControl.tab.report")}
           </button>
         ))}
       </div>
 
+      {tab === "issue" ? (
+        <ToolIssueCard
+          departments={departments}
+          teams={teams}
+          workTypes={workTypes}
+          showToast={toast.show}
+          onDone={() => setRetryToken((n) => n + 1)}
+        />
+      ) : (
+      <>
       <div data-tour="tool-filters" className="flex items-end gap-3 flex-wrap print:hidden">
         <label className="text-xs text-muted-foreground space-y-1">
           <span className="block">{t("toolControl.filter.department")}</span>
@@ -265,9 +280,13 @@ export function ToolControlPage({ company, currentUserId }: { company: Company; 
         )}
       </div>
 
-      {/* ใบพิมพ์อยู่ใน DOM ตลอด (Ctrl+P ได้ใบเดียวกับปุ่ม) — พิมพ์ตามแท็บและตัวกรองที่เปิดอยู่ */}
+      </>
+      )}
+
+      {/* ใบพิมพ์อยู่ใน DOM ตลอด (Ctrl+P ได้ใบเดียวกับปุ่ม) — พิมพ์ตามแท็บและตัวกรองที่เปิดอยู่
+          แท็บจ่าย/คืนไม่มีอะไรให้พิมพ์ จึงพิมพ์ยอดถือครองแทน */}
       <ToolReportPrintDocument
-        mode={tab}
+        mode={tab === "report" ? "report" : "holdings"}
         holdings={holdings}
         rows={rows}
         companyHeader={companyHeader}
@@ -275,6 +294,7 @@ export function ToolControlPage({ company, currentUserId }: { company: Company; 
         filterLabel={filterLabel}
         rangeLabel={rangeLabel}
       />
+      <Toast message={toast.message} />
     </div>
   );
 }
