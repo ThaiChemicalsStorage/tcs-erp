@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { WithId } from "mongodb";
+import type { Collection, WithId } from "mongodb";
 import { HttpError, getPathSegments, isAutoSaveRequest } from "./http.js";
+import {
+  handleAttachmentUpload, handleAttachmentDelete, handleAttachmentDownload, type AttachmentConfig,
+} from "./documentAttachments.js";
+import type { DocumentAttachment } from "../../src/lib/documentAttachments.js";
 import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildOwnershipClause } from "./visibility.js";
 import {
@@ -201,7 +205,7 @@ function toListItem(doc: WithId<DeliveryOrderFields>): DeliveryOrderListItem {
  * skipped on a new response shape added later. */
 function toClient(doc: WithId<DeliveryOrderFields>) {
   const full = withStringId(doc);
-  return { ...full, installments: stripDepositInstallments(full.installments) };
+  return { ...full, installments: stripDepositInstallments(full.installments), attachments: full.attachments ?? [] };
 }
 
 async function loadDeliveryOrderOrThrow(id: string): Promise<WithId<DeliveryOrderFields>> {
@@ -271,6 +275,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     customerAddress: scope.customerSnapshot.address,
     items: deriveItemsFromScope(scope),
     installments: deriveInstallmentsFromScope(scope),
+    attachments: [],
     status: "Draft",
     version: 1,
     createdAt: now,
@@ -636,6 +641,9 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
   const { _id: _sourceId, ...rest } = source;
   const doc: DeliveryOrderFields = {
     ...rest,
+    // ไฟล์แนบไม่สืบทอดมาที่ฉบับแก้ไข เพราะสำเนาจะชี้ไฟล์ก้อนเดียวกัน แล้วลบทีเดียวพังทั้งสองฉบับ
+    // (เหตุผลเดียวกับใบสั่งงาน)
+    attachments: [],
     status: "Draft",
     version: 1,
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
@@ -679,6 +687,23 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
 // A `shareKey` field may linger on delivery_orders documents that had a link minted during the
 // feature's brief lifetime — harmless, nothing reads it. See CHANGELOG.md 2026-07-24.
 
+/** ไฟล์แนบของใบส่งมอบสินค้า — ใช้ระบบกลางตัวเดียวกับใบสั่งงาน/ใบขอซื้อ (เจ้าของสั่ง 2026-09-03:
+ * *"ใบส่งมอบสามารถแนบใบส่งมอบได้ด้วยเหมือนกับ cost control"*) `_id` ของโมดูลนี้เป็น ObjectId
+ * ไม่ใช่ string id แบบใบขอซื้อ — `idOf` จึงคืน `doc._id` ตรง ๆ */
+const attachmentConfig: AttachmentConfig<WithId<DeliveryOrderFields>> = {
+  label: "ใบส่งมอบสินค้า",
+  docType: "delivery-orders",
+  load: loadDeliveryOrderOrThrow,
+  canEdit: canEditDeliveryOrder,
+  collection: async () => (await deliveryOrdersCollection()) as unknown as Collection<never>,
+  idOf: (doc) => doc._id,
+  currentAttachments: (doc) => (doc.attachments ?? []) as DocumentAttachment[],
+  writeAudit: (ctx, action, detail, doc) => writeDeliveryOrderAuditEntry(ctx, action, detail, {
+    scopeNumber: doc.scopeNumber, scopeOfWorkId: doc.scopeOfWorkId,
+  }),
+  respond: async (res, id) => { res.status(200).json({ deliveryOrder: toClient(await loadDeliveryOrderOrThrow(id)) }); },
+};
+
 export async function handleDeliveryOrder(req: VercelRequest, res: VercelResponse): Promise<void> {
   const parts = getPathSegments(req, "/api/delivery-orders");
 
@@ -688,8 +713,14 @@ export async function handleDeliveryOrder(req: VercelRequest, res: VercelRespons
   }
   // ด่านเดียวคุมทุก route ที่แก้ข้อมูล — ผู้รับจากการส่งถึงแผนกต้องดู/พิมพ์ได้อย่างเดียว (2026-08-20)
   // วางไว้ตรงนี้จุดเดียวแทนที่จะไปโรยตาม handler ทีละตัว จะได้ไม่มี route ใหม่หลุดด่านนี้ในอนาคต
+  // ตัวดาวน์โหลดไฟล์แนบตั้งใจให้เปิดได้โดยไม่ต้องล็อกอิน คุมด้วย capability key ใน URL แทน
+  // (ดู api/_lib/documentAttachments.ts) จึงต้องมาก่อนด่านด้านล่างที่เรียก requireUser
+  if (parts.length === 4 && parts[1] === "attachments" && parts[3] === "download") {
+    return handleAttachmentDownload(req, res, "delivery-orders", parts[0], parts[2]);
+  }
   const isMutation = parts.length === 2
-    ? ["refresh", "finalize", "submit-approval", "reject", "withdraw-approval", "rewrite", "send-to-departments", "installment-numbers"].includes(parts[1])
+    ? ["refresh", "finalize", "submit-approval", "reject", "withdraw-approval", "rewrite", "send-to-departments", "installment-numbers", "attachments"].includes(parts[1])
+    : parts.length === 3 ? parts[1] === "attachments"
     : parts.length === 1 && (req.method === "PATCH" || req.method === "DELETE");
   if (isMutation) {
     const ctx = await requireUser(req);
@@ -697,6 +728,9 @@ export async function handleDeliveryOrder(req: VercelRequest, res: VercelRespons
   }
 
   if (parts.length === 1) return handleOne(req, res, parts[0]);
+  // ไฟล์แนบ — route แยกจาก PATCH ไม่ล็อกตามสถานะเอกสาร แต่ล็อกตามสิทธิ์ `deliveryOrder:edit`
+  if (parts.length === 2 && parts[1] === "attachments") return handleAttachmentUpload(req, res, parts[0], attachmentConfig);
+  if (parts.length === 3 && parts[1] === "attachments") return handleAttachmentDelete(req, res, parts[0], parts[2], attachmentConfig);
   if (parts.length === 2 && parts[1] === "installment-numbers") return handleInstallmentNumbers(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "send-to-departments") return handleSendToDepartments(req, res, parts[0]);
   if (parts.length === 2 && parts[1] === "refresh") return handleRefresh(req, res, parts[0]);

@@ -1,4 +1,6 @@
 import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
+import type { DocumentAttachment } from "./documentAttachments.js";
+import { uploadDocumentAttachment, deleteDocumentAttachment, fileToBase64 } from "./documentAttachments.js";
 
 export type DeliveryOrderStatus = "Draft" | "PendingApproval" | "Final";
 
@@ -41,6 +43,13 @@ export interface DeliveryOrder {
    * เป็น optional เพราะเอกสารที่สร้างก่อนฟีเจอร์นี้ไม่มีฟิลด์นี้ใน MongoDB เลย
    */
   sentToDepartmentIds?: string[];
+  /**
+   * ไฟล์แนบ (2026-09-03 — เจ้าของสั่ง *"ใบส่งมอบสามารถแนบใบส่งมอบได้ด้วยเหมือนกับ cost control"*)
+   * จัดการผ่าน route เฉพาะของมันเท่านั้น **ไม่ใช่ฟิลด์ที่ PATCH ได้** เพื่อไม่ให้หน้าจอที่ถือข้อมูลเก่า
+   * เขียนทับ array นี้จนไฟล์ที่คนอื่นเพิ่งแนบหายไป (กติกาเดียวกับใบสั่งงาน/ใบขอซื้อ)
+   * เอกสารก่อนวันนั้นไม่มีฟิลด์นี้ — อ่านออกมาเป็น [] เสมอ
+   */
+  attachments: DocumentAttachment[];
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -126,6 +135,23 @@ export async function updateDeliveryOrderInstallmentNumbers(
   const { deliveryOrder } = await apiFetch<{ deliveryOrder: DeliveryOrder }>(`/delivery-orders/${encodeURIComponent(id)}/installment-numbers`, {
     method: "POST", body: JSON.stringify({ installments }),
   });
+  return deliveryOrder;
+}
+
+/**
+ * แนบไฟล์ / ลบไฟล์แนบ — route แยก ไม่ผ่าน PATCH โดยตั้งใจ ด้วยเหตุผลเดียวกับใบสั่งงาน
+ * ไม่ล็อกตามสถานะเอกสาร (ใบส่งของที่ลูกค้าเซ็นกลับมามักมาหลังอนุมัติ) แต่ล็อกตามสิทธิ์แก้
+ */
+export async function uploadDeliveryOrderAttachment(id: string, file: File): Promise<DeliveryOrder> {
+  const { deliveryOrder } = await uploadDocumentAttachment<{ deliveryOrder: DeliveryOrder }>("delivery-orders", id, {
+    fileName: file.name,
+    contentType: file.type || "application/octet-stream",
+    dataBase64: await fileToBase64(file),
+  });
+  return deliveryOrder;
+}
+export async function deleteDeliveryOrderAttachment(id: string, attachmentId: string): Promise<DeliveryOrder> {
+  const { deliveryOrder } = await deleteDocumentAttachment<{ deliveryOrder: DeliveryOrder }>("delivery-orders", id, attachmentId);
   return deliveryOrder;
 }
 

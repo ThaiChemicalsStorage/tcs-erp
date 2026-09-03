@@ -6,7 +6,9 @@ import {
   fetchDeliveryOrder, updateDeliveryOrder, finalizeDeliveryOrder, refreshDeliveryOrderFromScope, deleteDeliveryOrder,
   updateDeliveryOrderInstallmentNumbers,
   submitDeliveryOrderApproval, rejectDeliveryOrder, withdrawDeliveryOrderApproval, rewriteDeliveryOrder,
+  uploadDeliveryOrderAttachment, deleteDeliveryOrderAttachment,
 } from "../../lib/deliveryOrder";
+import { DocumentAttachmentsCard } from "../../components/DocumentAttachmentsCard";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { PromptDialog } from "../../components/PromptDialog";
@@ -551,6 +553,25 @@ export function DeliveryOrderDocument({
               />
             ))
           )}
+        </div>
+
+        {/* ไฟล์แนบ — เจ้าของสั่ง 2026-09-03 ให้แนบใบส่งของที่ลูกค้าเซ็นกลับมาได้ "เหมือนกับ cost control"
+            ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้ เพราะใบเซ็นกลับมักมาหลังเอกสารอนุมัติแล้ว */}
+        <div className="print:hidden">
+          <DocumentAttachmentsCard
+            attachments={deliveryOrder.attachments ?? []}
+            disabled={!canEdit}
+            onUpload={async (file) => {
+              const updated = await uploadDeliveryOrderAttachment(deliveryOrder.id, file);
+              // รับกลับมาเฉพาะ `attachments` ไม่เขียนทับทั้งก้อน — งวดชำระเงินที่กำลังพิมพ์ค้างอยู่บนจอ
+              // (ยังไม่บันทึก) จะหายทันทีถ้าแทนที่ทั้งเอกสารด้วยฉบับจากเซิร์ฟเวอร์
+              setDeliveryOrder((prev) => (prev ? { ...prev, attachments: updated.attachments } : updated));
+            }}
+            onDelete={async (attachmentId) => {
+              const updated = await deleteDeliveryOrderAttachment(deliveryOrder.id, attachmentId);
+              setDeliveryOrder((prev) => (prev ? { ...prev, attachments: updated.attachments } : updated));
+            }}
+          />
         </div>
 
         <DeliveryOrderPrintDocument deliveryOrder={deliveryOrder} companyHeader={companyHeader} onlyInstallmentId={printInstallmentId} />

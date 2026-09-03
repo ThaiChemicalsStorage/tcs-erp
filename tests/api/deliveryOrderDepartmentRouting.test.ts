@@ -41,6 +41,7 @@ function makeReqRes(method: string, url: string, body: unknown, cookie: string) 
   const res = {
     status(code: number) { captured.statusCode = code; return this; },
     json(payload: unknown) { captured.body = payload; return this; },
+    send(payload: unknown) { captured.body = payload; return this; },
     setHeader(name: string, value: string) { captured.headers[name.toLowerCase()] = value; return this; },
     end() { return this; },
   } as unknown as VercelResponse;
@@ -216,5 +217,67 @@ describe("ส่งใบส่งมอบงานถึงแผนก", () =
     expect(cleared.statusCode, JSON.stringify(cleared.body)).toBe(200);
     const after = await call(quotesHandler, "GET", "/api/delivery-orders", undefined, factoryCookie);
     expect(listedIds(after.body)).not.toContain(deliveryOrderId);
+  });
+});
+
+/**
+ * ไฟล์แนบของใบส่งมอบสินค้า (2026-09-03) — เจ้าของสั่ง *"ใบส่งมอบสามารถแนบใบส่งมอบได้ด้วยเหมือนกับ
+ * cost control"* ใช้ระบบแนบไฟล์กลางตัวเดียวกับใบสั่งงาน/ใบขอซื้อ
+ *
+ * จุดที่ตรึงไว้เพราะพังแล้วเงียบ:
+ *  - route ดาวน์โหลดต้องอยู่ **ก่อน** ด่าน `assertNotDepartmentRecipientOnly` (ซึ่งเรียก requireUser)
+ *    ไม่งั้นลิงก์ที่คุมด้วย capability key จะเปิดไม่ได้เลยเมื่อไม่ได้ล็อกอิน
+ *  - แนบ/ลบไฟล์ต้องนับเป็น mutation ด้วย ไม่งั้นผู้รับที่ควรดู/พิมพ์อย่างเดียวจะแก้ไฟล์แนบได้
+ *  - เอกสารที่อนุมัติแล้ว (Final) ยังแนบได้ — ใบเซ็นกลับจากลูกค้ามาทีหลังเสมอ
+ */
+describe("ไฟล์แนบใบส่งมอบสินค้า", () => {
+  const fileBody = { fileName: "signed-do.pdf", contentType: "application/pdf", dataBase64: Buffer.from("%PDF-1.4 test").toString("base64") };
+  let attachmentId = "";
+  let downloadUrl = "";
+
+  it("เจ้าของแนบไฟล์ได้ และเอกสารตอบกลับพร้อม attachments", async () => {
+    const up = await call(quotesHandler, "POST", `/api/delivery-orders/${deliveryOrderId}/attachments`, fileBody);
+    expect(up.statusCode, JSON.stringify(up.body)).toBe(200);
+    const attachments = (up.body as { deliveryOrder: { attachments: { id: string; fileName: string; url: string }[] } }).deliveryOrder.attachments;
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].fileName).toBe("signed-do.pdf");
+    attachmentId = attachments[0].id;
+    downloadUrl = attachments[0].url;
+    expect(downloadUrl).toContain(`/attachments/${attachmentId}/download?key=`);
+  });
+
+  it("ดาวน์โหลดได้โดยไม่ต้องล็อกอิน (คุมด้วย key ใน URL) และคีย์ผิดได้ 404", async () => {
+    const ok = await call(quotesHandler, "GET", downloadUrl, undefined, "");
+    expect(ok.statusCode, JSON.stringify(ok.body)).toBe(200);
+    expect(Buffer.isBuffer(ok.body)).toBe(true);
+
+    const bad = await call(quotesHandler, "GET", downloadUrl.replace(/key=.*$/, "key=wrong"), undefined, "");
+    expect(bad.statusCode).toBe(404);
+  });
+
+  it("ผู้รับที่เอกสารถูกส่งถึงแผนก แนบหรือลบไฟล์ไม่ได้", async () => {
+    const sent = await call(quotesHandler, "POST", `/api/delivery-orders/${deliveryOrderId}/send-to-departments`, { departmentIds: [factoryDeptId] });
+    expect(sent.statusCode, JSON.stringify(sent.body)).toBe(200);
+
+    const up = await call(quotesHandler, "POST", `/api/delivery-orders/${deliveryOrderId}/attachments`, fileBody, factoryCookie);
+    expect(up.statusCode, "ผู้รับต้องดู/พิมพ์ได้อย่างเดียว").toBe(403);
+    const del = await call(quotesHandler, "DELETE", `/api/delivery-orders/${deliveryOrderId}/attachments/${attachmentId}`, undefined, factoryCookie);
+    expect(del.statusCode).toBe(403);
+  });
+
+  it("เอกสารที่อนุมัติแล้วยังแนบไฟล์ได้ — ใบเซ็นกลับจากลูกค้ามาทีหลัง", async () => {
+    await client.db("tcs_erp").collection("delivery_orders").updateOne(
+      { scopeNumber: "TEST-SOW-01" }, { $set: { status: "Final" } },
+    );
+    const up = await call(quotesHandler, "POST", `/api/delivery-orders/${deliveryOrderId}/attachments`, { ...fileBody, fileName: "customer-signed.pdf" });
+    expect(up.statusCode, JSON.stringify(up.body)).toBe(200);
+    expect((up.body as { deliveryOrder: { attachments: unknown[] } }).deliveryOrder.attachments).toHaveLength(2);
+  });
+
+  it("เจ้าของลบไฟล์แนบได้", async () => {
+    const del = await call(quotesHandler, "DELETE", `/api/delivery-orders/${deliveryOrderId}/attachments/${attachmentId}`);
+    expect(del.statusCode, JSON.stringify(del.body)).toBe(200);
+    const left = (del.body as { deliveryOrder: { attachments: { fileName: string }[] } }).deliveryOrder.attachments;
+    expect(left.map((a) => a.fileName)).toEqual(["customer-signed.pdf"]);
   });
 });

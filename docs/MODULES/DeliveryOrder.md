@@ -209,6 +209,7 @@ interface DeliveryOrder {
   customerAddress: string;          // "เรียน" line 2
   items: DeliveryOrderItem[];       // { id, name, quantity, unit, specifications }
   installments: DeliveryOrderInstallment[];
+  attachments: DocumentAttachment[];   // 2026-09-03 — ไฟล์แนบ, route แยก ไม่ใช่ฟิลด์ที่ PATCH ได้
   status: "Draft" | "Final";
   version: number;
   createdAt, updatedAt, createdBy, updatedBy, isDeleted;
@@ -251,6 +252,36 @@ Mounted from `api/handlers/quotes.ts` (checked on the raw pathname before the Sc
 which is itself checked before the plain quotes logic) — no new Vercel function file, same
 12-function-slot-sharing convention Scope of Work and Quotation Templates already use. New
 `api/_lib/deliveryOrderHandler.ts`. See [API.md](../API.md) for the full route table.
+
+## ไฟล์แนบ (added 2026-09-03)
+
+Owner request, in the Store-department batch: *"ทำให้ใบส่งมอบสามารถแนบใบส่งมอบได้ด้วยเหมือนกับ cost
+control"* — the signed delivery note that comes back from the customer (and the customer's own
+paperwork) belongs on the record itself, the way Cost Control already allows.
+
+Uses the **shared** attachment engine (`api/_lib/documentAttachments.ts` +
+`src/components/DocumentAttachmentsCard.tsx`, `docType: "delivery-orders"`) — the third module on it
+after Job Order and Purchase Request, so the security-sensitive parts (size cap, base64 charset
+check, atomic `$push` cap, script-capable content types forced to `attachment` disposition) stay in
+one place. Caps: 2 MB per file, 5 files per document.
+
+Three deliberate choices, all copied from the Purchase Request pass (2026-09-02):
+
+- **A route of its own, never PATCH.** A screen holding a stale copy of the document would otherwise
+  overwrite the whole `attachments` array and silently drop a file a colleague just added.
+- **No status lock.** A customer-signed note almost always arrives *after* the document is Final. The
+  lock is the `deliveryOrder:edit` permission (plus the owner-or-`:finalize` rule), not the status.
+- **Download needs no session.** The link carries a random 24-byte capability key. This route is
+  therefore dispatched *before* the `assertNotDepartmentRecipientOnly` gate below, because that gate
+  calls `requireUser()` and would break the link for anyone not signed in.
+
+Upload and delete *are* refused for a department recipient (view/print only), same as every other
+mutating route. A **Rewrite does not inherit attachments** — the copy would point at the same stored
+bytes, and deleting the file on one document would break the other (same rule as Job Order).
+
+On screen the card sits below the installment editors, inside `print:hidden`. It merges only the
+`attachments` array back into local state rather than replacing the whole document, so installment
+numbers being typed at that moment are not thrown away.
 
 ## Department Routing (added 2026-08-20)
 
