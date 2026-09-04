@@ -125,25 +125,25 @@ export function ArMonthlyReportPage() {
                   <h2 className="text-sm font-semibold text-foreground">{t(DOC_TYPE_LABEL_KEY[docType])} ({docType})</h2>
                   <p className="text-xs text-muted-foreground font-mono">{sectionActive.length} {t("accounting.monthly.unit.copies")} · {t("accounting.monthly.totalPrefix")} {money(sectionTotal)} {t("accounting.monthly.currency.baht")}</p>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto print:overflow-visible">
+                  <table className="w-full print:text-[9px]">
                     <thead>
                       <tr className="border-b border-border">
                         {[t("accounting.monthly.col.docNo"), t("accounting.monthly.col.date"), t("accounting.monthly.col.company"), t("accounting.monthly.valueBeforeVat"), "VAT", t("accounting.monthly.col.netTotal"), t("accounting.monthly.col.status")].map((h) => (
-                          <th key={h} className="px-4 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                          <th key={h} className="px-4 py-2.5 print:px-1 print:py-1 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap print:whitespace-normal">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {sectionDocs.map((d) => (
                         <tr key={d.id} className={`border-b border-border/50 ${d.status === "cancelled" ? "opacity-50" : ""}`}>
-                          <td className={`px-4 py-2.5 text-xs font-mono font-semibold whitespace-nowrap ${d.status === "cancelled" ? "line-through text-muted-foreground" : "text-[#c9a84c]"}`}>{d.docNo}</td>
-                          <td className="px-4 py-2.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(d.docDate)}</td>
-                          <td className="px-4 py-2.5 text-sm text-foreground max-w-[280px] truncate" title={d.customerSnapshot.companyName}>{d.customerSnapshot.companyName}</td>
-                          <td className="px-4 py-2.5 text-xs text-foreground font-mono whitespace-nowrap">{money(d.valueAmount)}</td>
-                          <td className="px-4 py-2.5 text-xs text-foreground font-mono whitespace-nowrap">{money(d.vatAmount)}</td>
-                          <td className="px-4 py-2.5 text-xs text-foreground font-mono whitespace-nowrap">{money(d.netTotal)}</td>
-                          <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                          <td className={`px-4 py-2.5 print:px-1 print:py-1 text-xs font-mono font-semibold whitespace-nowrap print:whitespace-normal ${d.status === "cancelled" ? "line-through text-muted-foreground" : "text-[#c9a84c]"}`}>{d.docNo}</td>
+                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs text-muted-foreground font-mono whitespace-nowrap print:whitespace-normal">{formatQuoteDateThai(d.docDate)}</td>
+                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-sm text-foreground max-w-[280px] truncate print:max-w-none print:overflow-visible print:whitespace-normal print:text-clip" title={d.customerSnapshot.companyName}>{d.customerSnapshot.companyName}</td>
+                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs text-foreground font-mono whitespace-nowrap print:whitespace-normal">{money(d.valueAmount)}</td>
+                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs text-foreground font-mono whitespace-nowrap print:whitespace-normal">{money(d.vatAmount)}</td>
+                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs text-foreground font-mono whitespace-nowrap print:whitespace-normal">{money(d.netTotal)}</td>
+                          <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs whitespace-nowrap print:whitespace-normal">
                             {d.status === "cancelled" ? <span className="text-[#c23f3f]">{t("accounting.monthly.status.cancelled")}</span> : <span className="text-[#207e52]">{t("accounting.monthly.status.active")}</span>}
                           </td>
                         </tr>
@@ -151,10 +151,10 @@ export function ArMonthlyReportPage() {
                     </tbody>
                     <tfoot>
                       <tr className="bg-muted/30">
-                        <td colSpan={3} className="px-4 py-2.5 text-xs font-semibold text-foreground">{t("accounting.monthly.totalPrefix")} {sectionActive.length} {t("accounting.monthly.footer.suffix")}</td>
-                        <td className="px-4 py-2.5 text-xs font-mono font-bold text-foreground whitespace-nowrap">{money(sectionActive.reduce((s, d) => s + d.valueAmount, 0))}</td>
-                        <td className="px-4 py-2.5 text-xs font-mono font-bold text-foreground whitespace-nowrap">{money(sectionActive.reduce((s, d) => s + d.vatAmount, 0))}</td>
-                        <td className="px-4 py-2.5 text-xs font-mono font-bold text-foreground whitespace-nowrap">{money(sectionTotal)}</td>
+                        <td colSpan={3} className="px-4 py-2.5 print:px-1 print:py-1 text-xs font-semibold text-foreground">{t("accounting.monthly.totalPrefix")} {sectionActive.length} {t("accounting.monthly.footer.suffix")}</td>
+                        <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs font-mono font-bold text-foreground whitespace-nowrap print:whitespace-normal">{money(sectionActive.reduce((s, d) => s + d.valueAmount, 0))}</td>
+                        <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs font-mono font-bold text-foreground whitespace-nowrap print:whitespace-normal">{money(sectionActive.reduce((s, d) => s + d.vatAmount, 0))}</td>
+                        <td className="px-4 py-2.5 print:px-1 print:py-1 text-xs font-mono font-bold text-foreground whitespace-nowrap print:whitespace-normal">{money(sectionTotal)}</td>
                         <td />
                       </tr>
                     </tfoot>

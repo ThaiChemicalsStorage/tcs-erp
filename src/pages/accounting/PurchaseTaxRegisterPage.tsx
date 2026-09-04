@@ -109,8 +109,12 @@ export function PurchaseTaxRegisterPage() {
           </div>
 
           <div className="bg-card border border-border rounded-xl overflow-hidden print:border-black">
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            {/* `print:overflow-visible` + คอลัมน์ที่ยอมขึ้นบรรทัดใหม่ — บนกระดาษ A4 ตั้ง (กว้างพิมพ์ได้
+                186 มม.) ตารางเก้าคอลัมน์นี้กว้างเกิน `overflow-x-auto` จึงตัดสามคอลัมน์เงินทิ้ง
+                (มูลค่าสินค้า/ภาษี/รวม) แล้ววาดแถบเลื่อนของหน้าจอลงบนกระดาษแทน — คือคอลัมน์ที่รายงานนี้
+                มีไว้เพื่อพิมพ์โดยเฉพาะ (พบ 2026-09-04 ตอนตรวจใบพิมพ์เป็น PDF จริง) */}
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-full print:text-[9px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/40">
                     {[
@@ -118,29 +122,29 @@ export function PurchaseTaxRegisterPage() {
                       t("purchaseTaxRegister.col.vendor"), t("purchaseTaxRegister.col.taxId"), t("purchaseTaxRegister.col.reference"),
                       t("purchaseTaxRegister.col.value"), t("purchaseTaxRegister.col.vat"), t("purchaseTaxRegister.col.total"),
                     ].map((h) => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      <th key={h} className="px-3 py-2.5 print:px-1 print:py-1 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap print:whitespace-normal print:tracking-normal">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map((e, i) => (
                     <tr key={e.id} className="border-b border-border/50">
-                      <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">{i + 1}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono text-foreground whitespace-nowrap">{e.invoiceNumber}</td>
-                      <td className="px-3 py-2.5 text-sm text-foreground max-w-[240px] truncate" title={e.vendorName}>{e.vendorName || "—"}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.vendorTaxId || "—"}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.receivingReportNumber}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono text-right text-foreground whitespace-nowrap">{money(e.subtotal)}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono text-right text-foreground whitespace-nowrap">{money(e.vatAmt)}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono text-right font-semibold text-foreground whitespace-nowrap">{money(e.total)}</td>
+                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground">{i + 1}</td>
+                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap print:whitespace-normal">{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
+                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-foreground whitespace-nowrap print:whitespace-normal">{e.invoiceNumber}</td>
+                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-sm text-foreground max-w-[240px] truncate print:max-w-none print:overflow-visible print:whitespace-normal print:text-clip" title={e.vendorName}>{e.vendorName || "—"}</td>
+                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap print:whitespace-normal">{e.vendorTaxId || "—"}</td>
+                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap print:whitespace-normal">{e.receivingReportNumber}</td>
+                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right text-foreground whitespace-nowrap print:whitespace-normal">{money(e.subtotal)}</td>
+                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right text-foreground whitespace-nowrap print:whitespace-normal">{money(e.vatAmt)}</td>
+                      <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right font-semibold text-foreground whitespace-nowrap print:whitespace-normal">{money(e.total)}</td>
                     </tr>
                   ))}
                   <tr className="bg-muted/40">
-                    <td className="px-3 py-2.5 text-xs font-semibold text-foreground" colSpan={6}>{t("purchaseTaxRegister.grandTotal")}</td>
-                    <td className="px-3 py-2.5 text-xs font-mono text-right font-semibold text-foreground">{money(subtotal)}</td>
-                    <td className="px-3 py-2.5 text-xs font-mono text-right font-semibold text-foreground">{money(vatAmt)}</td>
-                    <td className="px-3 py-2.5 text-xs font-mono text-right font-semibold text-[#207e52]">{money(total)}</td>
+                    <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-semibold text-foreground" colSpan={6}>{t("purchaseTaxRegister.grandTotal")}</td>
+                    <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right font-semibold text-foreground">{money(subtotal)}</td>
+                    <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right font-semibold text-foreground">{money(vatAmt)}</td>
+                    <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right font-semibold text-[#207e52]">{money(total)}</td>
                   </tr>
                 </tbody>
               </table>

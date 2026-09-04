@@ -147,7 +147,7 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
                     {t("apRegister.vendorUnpaid")} <span className={`font-mono font-semibold ${vendorUnpaid > 0 ? "text-[#a75d1a]" : "text-muted-foreground"}`}>{money(vendorUnpaid)}</span>
                   </span>
                 </div>
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto print:overflow-visible">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-muted/40">
@@ -155,25 +155,25 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
                           t("apRegister.col.invoiceDate"), t("apRegister.col.invoiceNumber"), t("apRegister.col.reference"),
                           t("apRegister.col.jobCode"), t("apRegister.col.total"), t("apRegister.col.status"), "",
                         ].map((h, i) => (
-                          <th key={h || `spacer-${i}`} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                          <th key={h || `spacer-${i}`} className="px-3 py-2.5 print:px-1 print:py-1 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((e) => (
                         <tr key={e.id} className="border-b border-border/50 last:border-0">
-                          <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
-                          <td className="px-3 py-2.5 text-xs font-mono text-foreground whitespace-nowrap">{e.invoiceNumber}</td>
-                          <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.receivingReportNumber}</td>
-                          <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.jobCode || "—"}</td>
-                          <td className="px-3 py-2.5 text-xs font-mono text-right text-foreground whitespace-nowrap">{money(e.total)}</td>
-                          <td className="px-3 py-2.5 whitespace-nowrap">
+                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.invoiceDate ? formatQuoteDateThai(e.invoiceDate) : "—"}</td>
+                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-foreground whitespace-nowrap">{e.invoiceNumber}</td>
+                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.receivingReportNumber}</td>
+                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-muted-foreground whitespace-nowrap">{e.jobCode || "—"}</td>
+                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-xs font-mono text-right text-foreground whitespace-nowrap">{money(e.total)}</td>
+                          <td className="px-3 py-2.5 print:px-1 print:py-1 whitespace-nowrap">
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${e.status === "Paid" ? "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20" : "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"}`}>
                               {e.status === "Paid" ? t("apRegister.status.paid") : t("apRegister.status.unpaid")}
                             </span>
                             {e.status === "Paid" && e.paymentRef ? <span className="ml-2 text-xs font-mono text-muted-foreground">{e.paymentRef}</span> : null}
                           </td>
-                          <td className="px-3 py-2.5 text-right whitespace-nowrap print:hidden">
+                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-right whitespace-nowrap print:hidden">
                             {canManage && (e.status === "Paid" ? (
                               <button onClick={() => void applyStatus(e, "Unpaid")} disabled={busy}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all disabled:opacity-60">

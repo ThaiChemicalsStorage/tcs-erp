@@ -28,8 +28,13 @@ export function PrintLetterhead({
   return (
     <div className="relative pb-3 mb-2 border-b-2 border-[#0b1d3a]/10">
       {docLabel && (
-        <div className="absolute top-0 right-0 w-6 h-20 bg-[#1a5fb4] flex items-center justify-center">
-          <span className="text-white text-[9px] font-bold tracking-[0.2em]" style={{ writingMode: "vertical-rl" }}>
+        // `overflow-hidden` + `leading-none` กันแถบตั้งล้นออกนอกกระดาษ (พบ 2026-09-04 ตอนตรวจใบพิมพ์
+        // เป็น PDF จริง): ข้อความ `writing-mode: vertical-rl` กว้างเท่ากับ line-height ที่สืบทอดมา
+        // ไม่ใช่เท่า font-size — ใบที่ตัวหนังสือฐานเป็น Times New Roman ได้กล่อง 29px ในแถบ 24px
+        // ส่วนที่เกินยื่นพ้นขอบขวาของ `@page` ทำให้ Chromium ตัดขอบขวาของทั้งหน้าทิ้ง (แถบตั้งแหว่ง
+        // เส้นตารางขวาสุดหาย ท้ายบรรทัดล่างถูกตัด) เห็นชัดในใบรายงานเครื่องมือและการ์ดสต๊อก
+        <div className="absolute top-0 right-0 w-6 h-20 bg-[#1a5fb4] flex items-center justify-center overflow-hidden">
+          <span className="text-white text-[9px] leading-none font-bold tracking-[0.2em]" style={{ writingMode: "vertical-rl" }}>
             {docLabel}
           </span>
         </div>

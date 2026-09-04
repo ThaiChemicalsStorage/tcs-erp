@@ -267,11 +267,19 @@ shared attachment engine. Full writeup in [DeliveryOrder.md](./DeliveryOrder.md)
 
 - **No real paper form for the RR print layout.** It is a plain bordered table like the PO's, and is
   expected to be replaced wholesale when the owner supplies the form.
-- **Print output has not been checked as a real PDF.** The click-through covered the screens, not
-  the paper. Ctrl+P on the receiving report was broken (fixed 2026-09-03b) precisely because print
-  output is the part no test looks at.
-- **The English UI has not been eyeballed.** Every key exists in both dictionaries, but nobody has
-  switched the language and looked for Thai left on screen.
+- ~~**Print output has not been checked as a real PDF.**~~ — **checked 2026-09-04** across all seven
+  printouts (receiving report, stock card, stock count sheet, purchase tax register, AP register,
+  both tool-report tabs), rendered to images via `page.pdf({ preferCSSPageSize: true })` + pdf.js.
+  Two bugs found and fixed, both invisible in the DOM: the purchase tax register dropped its three
+  money columns and printed an on-screen scrollbar onto the paper (`overflow-x-auto` was never
+  neutralised for print), and the letterhead's vertical side ribbon overflowed the `@page` box,
+  which made Chromium clip the right edge of every page using a serif base font. See CHANGELOG.md
+  2026-09-04. The RR layout itself is clean — it is still a placeholder form, not a wrong one.
+- ~~**The English UI has not been eyeballed.**~~ — **checked 2026-09-04**: switched to EN and swept
+  the rendered text of six screens for Thai characters. No hardcoded Thai is left; everything Thai
+  on screen is database content (product, vendor, department and unit names). One thing to decide:
+  dates still render in the Thai Buddhist calendar in EN mode, because every page shares
+  `formatQuoteDateThai()`. That predates this module and is logged in TODO.md, not changed here.
 - Reversing a receipt uses the current average cost (see above).
 - `ap_entries` only ever holds `entryType: "RR"`. The rest of the company's AP codes need their own
   source documents first.
