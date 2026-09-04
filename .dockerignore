@@ -11,6 +11,7 @@ dist
 docs
 tests
 nginx/certs/
+reference/
 *.log
 *.tsbuildinfo
 Dockerfile
