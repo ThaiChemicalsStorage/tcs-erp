@@ -3,7 +3,7 @@ import { Upload, FileSpreadsheet, Loader2, AlertTriangle, X, Download, CheckCirc
 import {
   parseProductRows, buildProductImportPreview,
   PRODUCT_IMPORT_TEMPLATE_HEADERS, PRODUCT_IMPORT_TEMPLATE_SAMPLE, PRODUCT_IMPORT_MAX_ROWS,
-  type ProductImportRow, type ProductImportProblem, type ProductImportPreview,
+  type ProductImportProblem, type ProductImportPreview,
 } from "../../lib/productImport";
 import { importProducts } from "../../lib/products";
 import type { Product, ProductCategory } from "../../lib/products";
@@ -33,7 +33,6 @@ export function ProductImportDialog({
   onImported: () => Promise<void> | void;
 }) {
   const { t } = useI18n();
-  const panelRef = useDialogA11y(onClose);
   const titleId = useId();
   const inputId = useId();
 
@@ -51,6 +50,8 @@ export function ProductImportDialog({
     setReading(true);
     setError("");
     setPreview(null);
+    setProblems([]);
+    setUnmapped([]);
     setDone(null);
     setFileName(file.name);
     try {
@@ -76,7 +77,7 @@ export function ProductImportDialog({
     setImporting(true);
     setError("");
     try {
-      const result = await importProducts(preview.toCreate.map((r: ProductImportRow) => ({
+      const result = await importProducts(preview.toCreate.map((r) => ({
         code: r.code, name: r.name, categoryName: r.categoryName, unit: r.unit,
         defaultPrice: r.defaultPrice, description: r.description, specifications: r.specifications,
         isTool: r.isTool, reorderPoint: r.reorderPoint,
@@ -101,6 +102,10 @@ export function ProductImportDialog({
   };
 
   const busy = reading || importing;
+  // Escape ต้องไม่ปิดกล่องระหว่างที่คำขอนำเข้ายังค้างอยู่ — ปุ่มและฉากหลังถูกปิดตอน busy อยู่แล้ว
+  // แต่ Escape ไม่ได้ถูกกัน ถ้าปิดกลางคัน สินค้าเข้าไปจริงแต่ผู้ใช้ไม่เห็นสรุปว่าสร้าง/ข้ามไปกี่รายการ
+  // แล้วมักลากไฟล์เดิมเข้าไปซ้ำ
+  const panelRef = useDialogA11y(useCallback(() => { if (!busy) onClose(); }, [busy, onClose]));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

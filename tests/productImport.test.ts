@@ -95,6 +95,26 @@ describe("parseProductRows", () => {
     expect(parsed.problems[1].message).toContain("จุดเตือนไม่ใช่ตัวเลข");
   });
 
+  it("ขีดในคอลัมน์ตัวเลขคือ 0 ไม่ใช่ค่าที่อ่านไม่ออก — ไฟล์ส่งออกใช้ขีดแทน 'ไม่มีค่า' เป็นปกติ", () => {
+    const parsed = parseProductRows([
+      ["รหัสสินค้า", "ชื่อสินค้า", "ราคา", "จุดเตือน"],
+      ["PD-1", "ของยังไม่ตั้งราคา", "-", "—"],
+    ]);
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.rows).toHaveLength(1);
+    expect(parsed.rows[0].defaultPrice).toBe(0);
+    expect(parsed.rows[0].reorderPoint).toBe(0);
+  });
+
+  it("รับหัวคอลัมน์ 'รหัสสินค้า/บริการ' ตามที่แอปนี้เรียกเอง", () => {
+    const parsed = parseProductRows([
+      ["รหัสสินค้า/บริการ", "ชื่อสินค้า/บริการ"],
+      ["PD-1", "ของดี"],
+    ]);
+    expect(parsed.headerFound).toBe(true);
+    expect(parsed.rows.map((r) => r.code)).toEqual(["PD-1"]);
+  });
+
   it("อ่านช่องเครื่องมือได้ทั้งไทยและอังกฤษ และฟ้องเมื่ออ่านไม่ออก", () => {
     const parsed = parseProductRows([
       ["รหัสสินค้า", "ชื่อสินค้า", "เป็นเครื่องมือ"],

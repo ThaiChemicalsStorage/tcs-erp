@@ -52,7 +52,7 @@ type Field = "code" | "name" | "categoryName" | "unit" | "defaultPrice" | "descr
  * เรียงจากเฉพาะเจาะจงไปกว้าง เพราะ `matchField()` คืนตัวแรกที่ตรง
  */
 const HEADER_ALIASES: [Field, string[]][] = [
-  ["code", ["รหัสสินค้า", "รหัสสินค้/บริการ", "รหัส", "productcode", "itemcode", "code", "sku", "partno", "partnumber"]],
+  ["code", ["รหัสสินค้า", "รหัสสินค้า/บริการ", "รหัส", "productcode", "itemcode", "code", "sku", "partno", "partnumber"]],
   ["name", ["ชื่อสินค้า", "ชื่อสินค้า/บริการ", "ชื่อรายการ", "รายการ", "ชื่อ", "productname", "itemname", "name"]],
   ["categoryName", ["หมวดหมู่", "หมวดหมู่สินค้า", "หมวด", "ประเภทสินค้า", "ประเภท", "กลุ่มสินค้า", "category", "group", "type"]],
   ["unit", ["หน่วยนับ", "หน่วย", "unit", "uom", "units"]],
@@ -85,17 +85,21 @@ function cellText(row: string[], index: number | undefined): string {
 /**
  * แปลงข้อความเป็นตัวเลข — รองรับตัวคั่นหลักพัน ช่องว่าง และสัญลักษณ์สกุลเงินที่ไฟล์ส่งออกมักติดมาด้วย
  * คืน `null` เมื่อมีข้อความอยู่แต่อ่านเป็นตัวเลขไม่ได้ (คนละกรณีกับช่องว่างที่คืน 0)
+ *
+ * ขีดเดี่ยว ๆ (`-` `–` `—`) นับเป็น 0 ไม่ใช่ค่าที่อ่านไม่ออก — ไฟล์ส่งออกแทบทุกระบบใช้ขีดแทน "ไม่มีค่า"
+ * ในคอลัมน์ตัวเลข และช่อง "เป็นเครื่องมือ" ก็รับขีดเป็นเท็จอยู่แล้ว ถ้าไม่รับตรงนี้ สินค้าที่ยังไม่ตั้งราคา
+ * จะถูกทิ้งทั้งแถวด้วยเหตุผล "ราคาไม่ใช่ตัวเลข"
  */
 function parseNumber(raw: string): number | null {
   if (!raw) return 0;
   const cleaned = raw.replace(/[,\s฿]/g, "").replace(/^บาท/, "");
-  if (!cleaned) return 0;
+  if (!cleaned || /^[-–—]+$/.test(cleaned)) return 0;
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : null;
 }
 
 const TRUE_WORDS = new Set(["ใช่", "y", "yes", "true", "1", "x", "✓", "เครื่องมือ", "t"]);
-const FALSE_WORDS = new Set(["", "ไม่", "ไม่ใช่", "n", "no", "false", "0", "-", "f"]);
+const FALSE_WORDS = new Set(["", "ไม่", "ไม่ใช่", "n", "no", "false", "0", "-", "–", "—", "f"]);
 
 /** คืน `null` เมื่อกรอกมาแต่แปลไม่ออก จะได้ฟ้องแทนที่จะเดาว่าไม่ใช่เครื่องมือ */
 function parseBool(raw: string): boolean | null {

@@ -1,8 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requirePermission, requireOneOfPermissions } from "../_lib/auth.js";
-import { productsCollection, categoriesCollection, auditLogCollection, toObjectId, withStringId } from "../_lib/collections.js";
-import { escapeRegExp } from "../_lib/searchShared.js";
+import { productsCollection, categoriesCollection, auditLogCollection, toObjectId, withStringId, type ProductFields } from "../_lib/collections.js";
 import { PRODUCT_IMPORT_MAX_ROWS } from "../../src/lib/productImport.js";
 import { nowIso } from "../../src/lib/products.js";
 import { handleStock, backfillProductStockDefaults } from "../_lib/stockHandler.js";
@@ -100,15 +99,27 @@ async function handleImport(req: VercelRequest, res: VercelResponse) {
   }
   const categoriesCreated: string[] = [];
 
-  let created = 0;
+  // รหัสที่มีอยู่แล้วอ่านครั้งเดียวลงเซ็ต ไม่ใช่ยิง `findOne` ต่อแถว — การเทียบแบบไม่สนตัวพิมพ์ต้องใช้
+  // `$regex` ที่ใช้ index ไม่ได้ ถ้าถามทีละแถวคือสแกนทั้งคอลเลกชัน 2000 รอบต่อการนำเข้าหนึ่งครั้ง
+  // (ช้าจนคำขอถูกตัดกลางคัน เหลือสินค้าเข้าไปครึ่งเดียวและไม่มีแถว audit log กำกับ)
+  const existingCodes = new Set<string>();
+  for (const doc of await products.find({}, { projection: { code: 1 } }).toArray()) {
+    const key = String(doc.code ?? "").trim().toLowerCase();
+    if (key) existingCodes.add(key);
+  }
+
+  const toInsert: ProductFields[] = [];
   let skipped = 0;
   for (const raw of rawRows as Record<string, unknown>[]) {
+    // แถวที่ไม่ใช่อ็อบเจ็กต์ (เช่น `null` จากคำขอที่ประกอบเอง) ต้องถูกข้าม ไม่ใช่ทำให้ทั้งคำขอพัง 500
+    if (typeof raw !== "object" || raw === null) { skipped += 1; continue; }
     const code = typeof raw.code === "string" ? raw.code.trim() : "";
     const name = typeof raw.name === "string" ? raw.name.trim() : "";
     if (!code || !name) { skipped += 1; continue; }
 
-    const existing = await products.findOne({ code: { $regex: `^${escapeRegExp(code)}$`, $options: "i" } });
-    if (existing) { skipped += 1; continue; }
+    // เติมรหัสที่เพิ่งรับไว้ลงเซ็ตด้วย ไฟล์/คำขอที่มีรหัสซ้ำกันเองจึงเข้าได้ตัวเดียวเหมือนเดิม
+    if (existingCodes.has(code.toLowerCase())) { skipped += 1; continue; }
+    existingCodes.add(code.toLowerCase());
 
     const categoryName = typeof raw.categoryName === "string" ? raw.categoryName.trim() : "";
     let categoryId = "";
@@ -128,7 +139,7 @@ async function handleImport(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    await products.insertOne({
+    toInsert.push({
       code,
       name,
       categoryId,
@@ -146,8 +157,10 @@ async function handleImport(req: VercelRequest, res: VercelResponse) {
       createdBy: ctx.user.id,
       updatedBy: ctx.user.id,
     });
-    created += 1;
   }
+
+  if (toInsert.length > 0) await products.insertMany(toInsert);
+  const created = toInsert.length;
 
   const auditLog = await auditLogCollection();
   await auditLog.insertOne({

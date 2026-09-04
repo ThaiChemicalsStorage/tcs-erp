@@ -155,7 +155,9 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
                           t("apRegister.col.invoiceDate"), t("apRegister.col.invoiceNumber"), t("apRegister.col.reference"),
                           t("apRegister.col.jobCode"), t("apRegister.col.total"), t("apRegister.col.status"), "",
                         ].map((h, i) => (
-                          <th key={h || `spacer-${i}`} className="px-3 py-2.5 print:px-1 print:py-1 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                          // คอลัมน์ว่างท้ายตารางคือหัวของช่องปุ่มจัดการ ซึ่ง `print:hidden` ตอนพิมพ์ —
+                          // หัวต้องหายไปด้วย ไม่งั้นบนกระดาษยังกินความกว้างเป็นคอลัมน์เปล่า
+                          <th key={h || `spacer-${i}`} className={`px-3 py-2.5 print:px-1 print:py-1 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap${h ? "" : " print:hidden"}`}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -173,7 +175,7 @@ export function ApRegisterPage({ canManage }: { canManage: boolean }) {
                             </span>
                             {e.status === "Paid" && e.paymentRef ? <span className="ml-2 text-xs font-mono text-muted-foreground">{e.paymentRef}</span> : null}
                           </td>
-                          <td className="px-3 py-2.5 print:px-1 print:py-1 text-right whitespace-nowrap print:hidden">
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap print:hidden">
                             {canManage && (e.status === "Paid" ? (
                               <button onClick={() => void applyStatus(e, "Unpaid")} disabled={busy}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-all disabled:opacity-60">

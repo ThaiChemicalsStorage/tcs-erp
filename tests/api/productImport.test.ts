@@ -100,6 +100,13 @@ describe("นำเข้าสินค้า — เส้นทางแล�
     expect(res.status).toBe(400);
   });
 
+  it("แถวที่ไม่ใช่อ็อบเจ็กต์ถูกข้าม ไม่ใช่ทำให้ทั้งคำขอพัง 500", async () => {
+    const res = await importRows([null, "PD-1", 7] as unknown as Record<string, unknown>[]);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ created: 0, skipped: 3 });
+    expect(await listProducts()).toHaveLength(0);
+  });
+
   it("เกินเพดานต่อครั้งถูกปฏิเสธทั้งชุด ไม่ใช่นำเข้าครึ่งเดียว", async () => {
     const rows = Array.from({ length: 2001 }, (_, i) => ({ code: `X-${i}`, name: `ของ ${i}` }));
     const res = await importRows(rows);

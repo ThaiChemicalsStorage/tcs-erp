@@ -239,6 +239,17 @@ click and no typing.
   deliberately ignored rather than becoming an untraceable balance.
 - 2000 rows per import, enforced on both sides (`PRODUCT_IMPORT_MAX_ROWS`), and one audit-log entry
   per import.
+- **One read, one write.** Existing codes are read once into a lowercase `Set` and the accepted rows
+  go in with a single `insertMany()` (2026-09-04c). The first cut asked the database per row with a
+  case-insensitive `$regex` — a query no index can serve, so a full 2000-row import meant 2000
+  collection scans plus 2000 sequential inserts, slow enough to risk the request being cut off
+  half-imported *and* with no audit row, because the audit entry is written after the loop. A row
+  that is not an object (`null` in a hand-rolled request) is skipped, not a 500.
+
+**Number cells accept a bare dash.** `-`, `–` and `—` read as 0 in `defaultPrice`/`reorderPoint`
+(2026-09-04c). Practically every export writes a dash for "no value", the `เป็นเครื่องมือ` column
+already took one as false, and rejecting it dropped the whole row as "ราคาไม่ใช่ตัวเลข". Text that
+genuinely is not a number still rejects the row with its Excel row number, as before.
 
 **A template file** is generated on demand from the same header constants the parser reads, so the
 two cannot drift; `tests/productImport.test.ts` feeds the generated template back through the parser
