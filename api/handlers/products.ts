@@ -1,7 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { withErrorHandling, HttpError, getPathSegments } from "../_lib/http.js";
 import { requirePermission, requireOneOfPermissions } from "../_lib/auth.js";
-import { productsCollection, toObjectId, withStringId } from "../_lib/collections.js";
+import { productsCollection, categoriesCollection, auditLogCollection, toObjectId, withStringId } from "../_lib/collections.js";
+import { escapeRegExp } from "../_lib/searchShared.js";
+import { PRODUCT_IMPORT_MAX_ROWS } from "../../src/lib/productImport.js";
 import { nowIso } from "../../src/lib/products.js";
 import { handleStock, backfillProductStockDefaults } from "../_lib/stockHandler.js";
 import { handleToolHoldings } from "../_lib/toolHoldingsHandler.js";
@@ -59,6 +61,107 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   }
 
   throw new HttpError(405, "Method not allowed");
+}
+
+/**
+ * นำเข้าสินค้าทีละหลายรายการจากไฟล์ Excel (2026-09-04) — เจ้าของสั่งว่าเวลาย้ายสินค้าจากอีกระบบเข้ามา
+ * ต้อง *"โยนไฟล์ exel เข้าไปแล้วสินค้าเข้ามาเลย"*
+ *
+ * **ไม่ทับของเดิมเด็ดขาด** รหัสที่มีอยู่แล้วถูกข้าม ไม่ใช่อัปเดต — การนำเข้าเป็นท่าที่คนกดผิดไฟล์ได้ง่าย
+ * และการเขียนทับแคตตาล็อกทั้งชุดคือความเสียหายที่ย้อนไม่ได้ · เทียบรหัส**ไม่สนตัวพิมพ์เล็ก/ใหญ่**
+ * ต่างจากตอนสร้างทีละตัวที่เทียบตรงตัว เพราะไฟล์ที่ย้ายมาจากระบบอื่นมักสลับตัวพิมพ์
+ *
+ * หมวดหมู่รับมาเป็น **ชื่อ** แล้วจับคู่/สร้างที่นี่ (ไฟล์ Excel ไม่มีทางรู้ `categoryId`) — สร้างหมวดหมู่
+ * ใช้สิทธิ์ `products:create` ตัวเดียวกับที่ `api/handlers/categories.ts` ใช้อยู่แล้ว จึงไม่ต้องมีสิทธิ์ใหม่
+ * และไม่ต้องทำ RBAC migration
+ *
+ * `stockQty`/`avgCost` เริ่มที่ 0 เสมอเหมือนการสร้างทีละตัว — ยอดสต๊อกเปลี่ยนได้ทาง
+ * `POST /api/stock-movements` ทางเดียว ทุกการเปลี่ยนแปลงจึงมีแถว StockMovement กำกับ (ดู Product.md)
+ */
+async function handleImport(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "products:create");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const rawRows = Array.isArray(body.products) ? body.products : [];
+  if (rawRows.length === 0) throw new HttpError(400, "ไม่มีรายการให้นำเข้า");
+  if (rawRows.length > PRODUCT_IMPORT_MAX_ROWS) {
+    throw new HttpError(400, `นำเข้าได้ครั้งละไม่เกิน ${PRODUCT_IMPORT_MAX_ROWS} รายการ`);
+  }
+
+  const products = await productsCollection();
+  const categories = await categoriesCollection();
+  const now = nowIso();
+
+  // จับคู่หมวดหมู่ด้วยชื่อแบบไม่สนตัวพิมพ์ — อ่านของที่มีอยู่ครั้งเดียว แล้วเติมของที่สร้างใหม่ลงแมปเดิม
+  const categoryIdByName = new Map<string, string>();
+  for (const doc of await categories.find({}).toArray()) {
+    const key = String(doc.name ?? "").trim().toLowerCase();
+    if (key && !categoryIdByName.has(key)) categoryIdByName.set(key, doc._id.toString());
+  }
+  const categoriesCreated: string[] = [];
+
+  let created = 0;
+  let skipped = 0;
+  for (const raw of rawRows as Record<string, unknown>[]) {
+    const code = typeof raw.code === "string" ? raw.code.trim() : "";
+    const name = typeof raw.name === "string" ? raw.name.trim() : "";
+    if (!code || !name) { skipped += 1; continue; }
+
+    const existing = await products.findOne({ code: { $regex: `^${escapeRegExp(code)}$`, $options: "i" } });
+    if (existing) { skipped += 1; continue; }
+
+    const categoryName = typeof raw.categoryName === "string" ? raw.categoryName.trim() : "";
+    let categoryId = "";
+    if (categoryName) {
+      const key = categoryName.toLowerCase();
+      const known = categoryIdByName.get(key);
+      if (known) {
+        categoryId = known;
+      } else {
+        const inserted = await categories.insertOne({
+          name: categoryName, archived: false,
+          createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+        });
+        categoryId = inserted.insertedId.toString();
+        categoryIdByName.set(key, categoryId);
+        categoriesCreated.push(categoryName);
+      }
+    }
+
+    await products.insertOne({
+      code,
+      name,
+      categoryId,
+      unit: typeof raw.unit === "string" ? raw.unit.trim() : "",
+      defaultPrice: typeof raw.defaultPrice === "number" && Number.isFinite(raw.defaultPrice) ? raw.defaultPrice : 0,
+      description: typeof raw.description === "string" ? raw.description : "",
+      specifications: typeof raw.specifications === "string" ? raw.specifications : "",
+      archived: false,
+      stockQty: 0,
+      reorderPoint: typeof raw.reorderPoint === "number" && Number.isFinite(raw.reorderPoint) ? raw.reorderPoint : 0,
+      avgCost: 0,
+      isTool: raw.isTool === true,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: ctx.user.id,
+      updatedBy: ctx.user.id,
+    });
+    created += 1;
+  }
+
+  const auditLog = await auditLogCollection();
+  await auditLog.insertOne({
+    userId: ctx.user.id,
+    userName: ctx.user.fullName,
+    roleName: ctx.role?.name ?? ctx.user.roleKey,
+    module: "คลังสินค้า",
+    action: "Products Imported",
+    details: `นำเข้าสินค้าจากไฟล์ สร้างใหม่ ${created} ข้าม ${skipped}` +
+      (categoriesCreated.length > 0 ? ` · หมวดหมู่ใหม่ ${categoriesCreated.length}` : ""),
+    createdAt: now,
+  });
+
+  res.status(200).json({ created, skipped, categoriesCreated });
 }
 
 async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
@@ -124,6 +227,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const parts = getPathSegments(req, "/api/products");
     if (parts.length === 0) return handleList(req, res);
+    if (parts.length === 1 && parts[0] === "import") return handleImport(req, res);
     if (parts.length === 1) return handleOne(req, res, parts[0]);
     throw new HttpError(404, "Not found");
   });

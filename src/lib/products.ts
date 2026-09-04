@@ -103,6 +103,33 @@ export async function deleteProduct(id: string): Promise<void> {
   await apiFetch<void>(`/products/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+/** หนึ่งแถวที่ส่งไปนำเข้า — `categoryName` เป็น *ชื่อ* ไม่ใช่ id เพราะไฟล์ Excel ไม่มีทางรู้ id */
+export interface ProductImportPayloadRow {
+  code: string;
+  name: string;
+  categoryName?: string;
+  unit?: string;
+  defaultPrice?: number;
+  description?: string;
+  specifications?: string;
+  isTool?: boolean;
+  reorderPoint?: number;
+}
+
+export interface ProductImportResult {
+  created: number;
+  /** รหัสที่มีอยู่แล้ว — นำเข้าไม่ทับของเดิม */
+  skipped: number;
+  /** ชื่อหมวดหมู่ที่ถูกสร้างใหม่ระหว่างนำเข้า */
+  categoriesCreated: string[];
+}
+
+// นำเข้าสินค้าหลายรายการพร้อมกันจากไฟล์ Excel (2026-09-04)
+// Bulk-creates products from a spreadsheet import; existing codes are skipped, never overwritten.
+export async function importProducts(rows: ProductImportPayloadRow[]): Promise<ProductImportResult> {
+  return apiFetch<ProductImportResult>("/products/import", { method: "POST", body: JSON.stringify({ products: rows }) });
+}
+
 // ดึงรายการหมวดหมู่สินค้าทั้งหมดจากเซิร์ฟเวอร์
 // Fetches all product categories from the server
 export async function fetchCategories(): Promise<ProductCategory[]> {

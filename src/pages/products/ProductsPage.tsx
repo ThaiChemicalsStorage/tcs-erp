@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Product, ProductCategory } from "../../lib/products";
-import { createProduct, updateProduct, deleteProduct } from "../../lib/products";
+import { createProduct, updateProduct, deleteProduct, fetchProducts, fetchCategories } from "../../lib/products";
 import { ProductList } from "./ProductList";
 import { ProductForm, type ProductDraft } from "./ProductForm";
 import { CategoriesManager } from "./CategoriesManager";
+import { ProductImportDialog } from "./ProductImportDialog";
 import { useI18n } from "../../lib/i18n";
 
 type View = "list" | "create" | "edit" | "categories";
@@ -36,6 +37,7 @@ export function ProductsPage({
   const { t } = useI18n();
   const [view, setView] = useState<View>("list");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const [appliedEditId, setAppliedEditId] = useState<string | null>(null);
   if (initialEditId && initialEditId !== appliedEditId) {
@@ -149,16 +151,33 @@ export function ProductsPage({
   }
 
   return (
-    <ProductList
-      products={products}
-      categories={categories}
-      currentUserId={currentUserId}
-      onEdit={(id) => { setEditingId(id); setView("edit"); }}
-      onArchiveToggle={handleArchiveToggle}
-      onDelete={handleDelete}
-      onDuplicate={handleDuplicate}
-      onCreateNew={() => setView("create")}
-      onManageCategories={() => setView("categories")}
-    />
+    <>
+      <ProductList
+        products={products}
+        categories={categories}
+        currentUserId={currentUserId}
+        onEdit={(id) => { setEditingId(id); setView("edit"); }}
+        onArchiveToggle={handleArchiveToggle}
+        onDelete={handleDelete}
+        onDuplicate={handleDuplicate}
+        onCreateNew={() => setView("create")}
+        onManageCategories={() => setView("categories")}
+        onImport={() => setImportOpen(true)}
+      />
+      {importOpen && (
+        <ProductImportDialog
+          products={products}
+          categories={categories}
+          onClose={() => setImportOpen(false)}
+          // ดึงทั้งสองรายการใหม่หลังนำเข้า — การนำเข้าสร้างได้ทั้งสินค้าและหมวดหมู่ และง่ายกว่าเดา
+          // ว่ามีอะไรถูกสร้างบ้าง (กติกาเดียวกับปุ่มนำเข้าของทะเบียนรหัส)
+          onImported={async () => {
+            const [nextProducts, nextCategories] = await Promise.all([fetchProducts(), fetchCategories()]);
+            onProductsChange(nextProducts);
+            onCategoriesChange(nextCategories);
+          }}
+        />
+      )}
+    </>
   );
 }

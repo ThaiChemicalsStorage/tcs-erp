@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   Plus, Search, ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Pencil, Copy, Archive, ArchiveRestore, Trash2, Tags, Package, HelpCircle,
+  Pencil, Copy, Archive, ArchiveRestore, Trash2, Tags, Package, HelpCircle, Upload,
 } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import type { Product, ProductCategory } from "../../lib/products";
@@ -34,6 +34,7 @@ export function ProductList({
   onDuplicate,
   onCreateNew,
   onManageCategories,
+  onImport,
 }: {
   products: Product[];
   categories: ProductCategory[];
@@ -44,11 +45,14 @@ export function ProductList({
   onDuplicate: (id: string) => void;
   onCreateNew: () => void;
   onManageCategories: () => void;
+  /** เปิดกล่องนำเข้าสินค้าจากไฟล์ Excel (2026-09-04) */
+  onImport: () => void;
 }) {
   const { t } = useI18n();
 
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="products-create"]', popover: { title: t("tour.products.create.title"), description: t("tour.products.create.desc"), side: "bottom" } },
+    { element: '[data-tour="products-import"]', popover: { title: t("tour.products.import.title"), description: t("tour.products.import.desc"), side: "bottom" } },
     { element: '[data-tour="products-categories"]', popover: { title: t("tour.products.categories.title"), description: t("tour.products.categories.desc"), side: "bottom" } },
     { element: '[data-tour="products-toolbar"]', popover: { title: t("tour.products.toolbar.title"), description: t("tour.products.toolbar.desc"), side: "bottom" } },
     { element: '[data-tour="products-table"]', popover: { title: t("tour.products.table.title"), description: t("tour.products.table.desc"), side: "top" } },
@@ -128,6 +132,9 @@ export function ProductList({
             className="flex items-center justify-center w-9 h-9 text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all"
           >
             <HelpCircle size={15} />
+          </button>
+          <button data-tour="products-import" onClick={onImport} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
+            <Upload size={15} /> {t("products.importFromFile")}
           </button>
           <button data-tour="products-categories" onClick={onManageCategories} className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border rounded-lg hover:border-[#c9a84c]/40 hover:text-foreground transition-all">
             <Tags size={15} /> {t("products.manageCategories")}

@@ -119,7 +119,7 @@ Quotation. See CHANGELOG.md 2026-07-30.
 
 ## Future Improvements
 
-- Bulk import/export (CSV) — not requested yet, but a natural fit for a "product library"
+- ~~Bulk import~~ — **done 2026-09-04**, see "Excel import" below. Bulk *export* is still open, and so is importing opening stock (catalog only today).
 - Product images/attachments
 - Per-customer or per-region pricing tiers (currently one `defaultPrice` only)
 - ~~Stock/inventory linkage once an Inventory module exists~~ — closed 2026-08-18, see "Stock" above (a lightweight on-hand-quantity ledger tied to Accounting's IV workflow, not a full standalone Inventory module)
@@ -199,3 +199,51 @@ Added with the Store department's module set — see [Store.md](./Store.md) for 
 - **Stock card** (`StockCardPrintDocument.tsx`) — A4 landscape, accounting layout, one product's whole
   history with received/issued/balance quantities *and* values. It needs the full history, so
   `GET /api/stock-movements` gained `?limit=` (default 200, max 2000).
+
+## Excel import (นำเข้าสินค้าจากไฟล์, 2026-09-04)
+
+Built from a direct request: *"หน้าเพิ่มสินค้าอะทำให้รองรับไฟล์ exel ให้หน่อย เวลาย้ายสินค้าจากอีกระบบ
+เข้ามาจะได้ง่ายๆ แบบโยนไฟล์ exel เข้าไปแล้วสินค้าเข้ามาเลย"* — the migration path off whatever
+catalog the company keeps today.
+
+**Where it lives.** A "นำเข้าจากไฟล์" button on the Product Library header opens
+`src/pages/products/ProductImportDialog.tsx`. Drop a file or pick one; `xlsx` is loaded with a
+dynamic `import()` so it stays out of the main bundle, exactly as Cost Control and ทะเบียนรหัส do.
+
+**Headers are matched by name, not by position** (`src/lib/productImport.ts`, React-free and
+unit-tested). No two systems export the same column order, and the file that matters here comes from
+someone else's software. Thai and English aliases are both accepted (`รหัสสินค้า`/`Item Code`,
+`หน่วย`/`U.O.M`, …), the header row does not have to be the first row (exports usually carry a
+report title above it), and any column the parser does not recognise is **listed back to the user**
+rather than dropped silently.
+
+**One preview step before anything is written.** The request said "drop it in and the products
+appear," and it still is a drop plus one click — but the click happens after a panel that shows how
+many rows will be created, how many are skipped because the code already exists, which categories
+will be created, and every row that was rejected with its Excel row number. Importing hundreds of
+rows blind into a live catalog is not reversible in one action; showing what will happen costs one
+click and no typing.
+
+**Rules the endpoint enforces** (`POST /api/products/import`, `products:create`):
+
+- **An existing code is skipped, never overwritten.** Re-running the same file mid-migration is
+  normal; overwriting would eat names and prices edited in the app afterwards.
+- **The duplicate check is case-insensitive**, unlike single-product create, because exports
+  routinely change the case of a code and a case-twin catalog is far harder to unpick than a skipped
+  row.
+- **Categories are matched or created by name**, once per name — a spreadsheet cannot know a
+  `categoryId`. Creating them needs no new permission: `api/handlers/categories.ts` already gates
+  category creation on `products:create`, so there is no RBAC migration for this feature.
+- **`stockQty` and `avgCost` stay 0.** Import may not set an opening balance; stock moves only
+  through a `StockMovement` row (see "Stock" above). A column named `คงเหลือ` in someone's export is
+  deliberately ignored rather than becoming an untraceable balance.
+- 2000 rows per import, enforced on both sides (`PRODUCT_IMPORT_MAX_ROWS`), and one audit-log entry
+  per import.
+
+**A template file** is generated on demand from the same header constants the parser reads, so the
+two cannot drift; `tests/productImport.test.ts` feeds the generated template back through the parser
+to keep that true.
+
+**Still open:** this imports the *catalog*, not opening stock. Bulk stock loading is its own
+outstanding item in [TODO.md](../TODO.md) and would have to go through `applyStockMovement()` to
+keep the ledger honest.
