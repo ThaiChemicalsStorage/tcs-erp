@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { DashboardStats } from "../src/lib/dashboard";
-import { buildWorkbookSheets, buildCsvSections, type ReportCell } from "../src/pages/dashboard/reportRows";
+import { buildWorkbookSheets, buildCsvSections, type ReportCell, type ReportRow } from "../src/pages/dashboard/reportRows";
 import { buildDashboardCsv } from "../src/pages/dashboard/csvExport";
 
 /**
@@ -64,8 +64,9 @@ function fixture(overrides: Partial<DashboardStats> = {}): DashboardStats {
   };
 }
 
-const findRow = (rows: ReportCell[][], first: string) => rows.find((r) => r[0]?.v === first);
+const findRow = (rows: ReportRow[], first: string) => rows.find((r) => r.cells[0]?.v === first)?.cells;
 const numAt = (row: ReportCell[] | undefined, i: number) => (typeof row?.[i]?.v === "number" ? (row![i].v as number) : NaN);
+const rolesOf = (rows: ReportRow[]) => [...new Set(rows.map((r) => r.role))];
 
 describe("buildWorkbookSheets", () => {
   it("มี 10 ชีต ชื่อไม่เกิน 31 ตัว และไม่มีอักขระต้องห้ามของ Excel", () => {
@@ -111,7 +112,7 @@ describe("buildWorkbookSheets", () => {
 
   it("รายเซลล์ x สถานะ: หัวคอลัมน์ครบ 9 สถานะ + รวม และแถวรวมบวกถูก", () => {
     const rows = buildWorkbookSheets(fixture(), fixture().filters)[3].rows;
-    expect(rows[1]).toHaveLength(11);
+    expect(rows[1].cells).toHaveLength(11);
     const total = findRow(rows, "รวม")!;
     expect(numAt(total, 1)).toBe(2); // ร่าง: เอ 2 + บี 0
     expect(numAt(total, 6)).toBe(3); // ปิดการขายสำเร็จ: 2 + 1
@@ -121,7 +122,22 @@ describe("buildWorkbookSheets", () => {
   it("ไม่มี quotations → ชีตรายการมีแถวบอกให้ส่งออกใหม่ ไม่ crash", () => {
     const sheet = buildWorkbookSheets(fixture({ quotations: undefined }), fixture().filters)[5];
     expect(sheet.rows).toHaveLength(2);
-    expect(String(sheet.rows[1][0].v)).toContain("ไม่ได้โหลด");
+    expect(String(sheet.rows[1].cells[0].v)).toContain("ไม่ได้โหลด");
+  });
+
+  it("ทุกแถวมี role ที่ตัวเรนเดอร์ Excel รู้จัก และชีตตารางเดียวมีหัวตารางเดียว", () => {
+    const known = new Set(["title", "section", "meta", "header", "data", "total", "blank"]);
+    const sheets = buildWorkbookSheets(fixture(), fixture().filters);
+    for (const s of sheets) for (const r of s.rows) expect(known.has(r.role), `${s.name}: ${r.role}`).toBe(true);
+    // สามชีตนี้เป็นตารางเดียวยาว ๆ จึงต้องมีหัวตารางแถวเดียว (ตัวเรนเดอร์ใส่ฟิลเตอร์+ตรึงหัวจากเงื่อนไขนี้)
+    for (const name of ["รายเซลล์", "รายการใบเสนอราคา", "ประเภทงาน"]) {
+      const rows = sheets.find((s) => s.name === name)!.rows;
+      expect(rows.filter((r) => r.role === "header"), name).toHaveLength(1);
+      expect(rows[0].role, name).toBe("header");
+    }
+    // ชีตสรุปมีหลายบล็อก จึงต้องมีหัวตารางมากกว่าหนึ่ง (ห้ามใส่ฟิลเตอร์)
+    expect(rolesOf(sheets[0].rows)).toContain("meta");
+    expect(sheets[0].rows.filter((r) => r.role === "header").length).toBeGreaterThan(1);
   });
 
   it("ทุกอย่างว่าง → ทุกชีตยังมีหัวตาราง ไม่โยน", () => {

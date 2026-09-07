@@ -162,8 +162,27 @@ Owner request: *"dashboard export ออกมาเป็น excel … แย�
 the CSV had duplicated their row builders and drifted (CSV had Total Leads, Excel didn't). Now:
 
 - **One row builder** — `src/pages/dashboard/reportRows.ts` produces typed cells
-  (`text | int | money | percent | days | date`) per sheet; `xlsxExport.ts` and `csvExport.ts` are
-  renderers only. CSV is a documented **subset** (สรุปภาพรวม · รายเซลล์ · ลูกค้า · ประเภทงาน).
+  (`text | int | money | percent | days | date`) per sheet, each row tagged with a **role**
+  (`title | section | meta | header | data | total | blank`); `xlsxExport.ts` and `csvExport.ts` are
+  renderers only. CSV is a documented **subset** (สรุปภาพรวม · รายเซลล์ · ลูกค้า · ประเภทงาน) and
+  ignores the role — only Excel styles from it.
+- **Written with `exceljs`, not `xlsx` (2026-09-07).** The owner opened the first version and asked for
+  a real-looking table. SheetJS community **cannot write cell styles at all** — a round-trip through
+  the installed `xlsx@0.18.5` returns `s: {patternType:"none"}` (bold and fill dropped) and discards
+  `!freeze` entirely; only widths, number formats and autofilter survive. `exceljs@4.4.0` was added
+  **for writing only**; `xlsx` stays for every import path (Cost Control, Code Register, Product
+  import, `templateWorkbookParser.ts`). Both are dynamically imported, so `exceljs` is its own
+  ~940 kB chunk that only downloads when someone actually clicks Export. Its one audit advisory comes
+  from a transitive `uuid@8` ("missing buffer bounds check in v3/v5/v6 when `buf` is provided") —
+  exceljs only calls `v4()` and never passes `buf`, so the affected path is unreachable here.
+- **Styling** (row roles → format): header rows are white bold on navy `#0B1D3A` with wrapped,
+  centred labels; data rows get thin `#D9DEE6` grid borders and alternate onto `#F7F8FA`; total rows
+  are bold on `#F5EDD6` under a medium navy top border; titles and section headings are bold navy,
+  merged across the sheet, with a gold underline on sections. Font is Tahoma (ships with Windows and
+  has full Thai coverage — Calibri does not, leaving Excel to pick a fallback). Sheets that are a
+  single long table (รายเซลล์, รายการใบเสนอราคา, ประเภทงาน) get their header row **frozen** and an
+  **autofilter**; sheets holding several tables get neither, because one filter would apply to the
+  wrong block.
 - **10 Thai sheets**: สรุปภาพรวม (header + KPIs grouped ปริมาณ/มูลค่า/อัตรา/เวลา) · สถานะใบเสนอราคา
   (Won/Lost/Active/Non-active partition with count-% and value-%, pipeline with % and stage conversion,
   interest) · รายเซลล์ (`salesPerformance` + share-of-total columns + Σ row) · รายเซลล์ x สถานะ

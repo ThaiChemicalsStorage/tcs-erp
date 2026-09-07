@@ -28,7 +28,8 @@ export function buildDashboardCsv(stats: DashboardStats, filters: ReportFilters)
   const lines: string[] = [];
   for (const section of buildCsvSections(stats, filters)) {
     lines.push(csvRow([`## ${section.name}`]));
-    for (const row of section.rows) lines.push(row.length === 0 ? "" : csvRow(row.map(csvValue)));
+    // CSV ไม่มีสี ไม่มีตัวหนา — `role` ของแถวจึงถูกทิ้ง เหลือแค่ค่าในช่อง (Excel เป็นคนใช้ role จัดรูปแบบ)
+    for (const row of section.rows) lines.push(row.cells.length === 0 ? "" : csvRow(row.cells.map(csvValue)));
     lines.push("");
   }
   return lines.join("\r\n");
