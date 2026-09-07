@@ -1,4 +1,5 @@
-import type { DashboardStats, DashboardVatMode } from "../../lib/dashboard";
+import type { DashboardStats } from "../../lib/dashboard";
+import { buildCsvSections, type ReportCell, type ReportFilters } from "./reportRows";
 
 // ครอบค่าเป็นเซลล์ CSV ที่ถูกต้อง (ใส่เครื่องหมายคำพูดถ้ามีจุลภาคหรือขึ้นบรรทัดใหม่)
 // Escapes a value into a valid CSV cell (quotes it if it contains a comma or newline)
@@ -12,69 +13,24 @@ function csvRow(cells: (string | number)[]): string {
   return cells.map(csvCell).join(",");
 }
 
-// สร้างไฟล์ CSV สรุปรายงานแดชบอร์ดจากข้อมูลที่กรองไว้แล้วบนหน้าจอ
-// Builds a dashboard report CSV from the already-filtered stats currently on screen
-export function buildDashboardCsv(stats: DashboardStats, filters: { from: string; to: string; salesperson: string; department: string; vatMode: DashboardVatMode }): string {
+/** CSV ไม่มีรูปแบบตัวเลข — เปอร์เซ็นต์คงเป็น 0–100 ตามหัวคอลัมน์ ค่าว่างเป็นช่องว่าง */
+function csvValue(cell: ReportCell): string | number {
+  if (cell.v === null) return "";
+  return cell.v;
+}
+
+/**
+ * สร้างไฟล์ CSV สรุปรายงานแดชบอร์ด — ตัวเรนเดอร์ของแถวจาก `reportRows.ts` แหล่งเดียวกับ Excel (2026-09-07)
+ * ก่อนหน้านี้ไฟล์นี้เขียนแถวของตัวเองจนต่างจาก Excel (มี Total Leads ที่ Excel ไม่มี) ตอนนี้เป็นชุดย่อยของ
+ * ชีตเดียวกัน: สรุปภาพรวม · รายเซลล์ · ลูกค้า · ประเภทงาน — ต้องการชีตอื่นให้ใช้ Excel
+ */
+export function buildDashboardCsv(stats: DashboardStats, filters: ReportFilters): string {
   const lines: string[] = [];
-  const vatLabel = filters.vatMode === "post" ? "incl. VAT 7%" : "Before VAT";
-  const vatNote = filters.vatMode === "post" ? "post-tax / incl. VAT 7%" : "pre-tax / before VAT";
-  lines.push(csvRow(["Thai Chemicals Storage ERP — Dashboard Export"]));
-  lines.push(csvRow(["Generated at", new Date().toISOString()]));
-  lines.push(csvRow(["Date from", filters.from || "(all time)"]));
-  lines.push(csvRow(["Date to", filters.to || "(today)"]));
-  lines.push(csvRow(["Salesperson filter", filters.salesperson]));
-  lines.push(csvRow(["Department filter", filters.department]));
-  lines.push("");
-
-  lines.push(csvRow([`KPIs (all monetary values are ${vatNote})`]));
-  const k = stats.kpis;
-  const kpiRows: [string, number | string][] = [
-    ["Total Quotations", k.totalQuotations],
-    [`Total Quotation Value (${vatLabel})`, k.totalQuotationValue],
-    [`Closed Sales (${vatLabel})`, k.closedSales],
-    [`Expected Sales (${vatLabel})`, k.expectedSales],
-    ["Won Jobs", k.wonDeals],
-    ["Lost Jobs", k.lostDeals],
-    ["Active Jobs", k.activeQuotations],
-    ["Non-Active Jobs", k.nonActiveQuotations],
-    ["Expired Jobs", k.expiredQuotations],
-    ["Win Rate (%)", k.winRate],
-    ["Lose Rate (%)", k.loseRate],
-    ["Conversion Rate (%)", k.conversionRate],
-    [`Average Deal Size (${vatLabel})`, k.averageDealSize],
-    ["Average Closing Time (days)", k.averageClosingTime ?? ""],
-    ["Average Approval Time (days)", k.averageApprovalTime ?? ""],
-    ["Total Customers", k.totalCustomers],
-    ["Total Leads", k.totalLeads],
-    ["Total Products", k.totalProducts],
-    ["Pending Approvals", k.pendingApprovals],
-    ["Overdue Follow-ups", k.overdueFollowups],
-    ["New Customers", k.newCustomers],
-    ["Repeat Customers", k.repeatCustomers],
-  ];
-  for (const [label, value] of kpiRows) lines.push(csvRow([label, value]));
-  lines.push("");
-
-  lines.push(csvRow([`Sales Performance (monetary values ${vatNote})`]));
-  lines.push(csvRow(["Salesperson", "Jobs", `Total Value (${vatLabel})`, `Closed Sales (${vatLabel})`, `Expected Revenue (${vatLabel})`, "Won", "Lost", "Pending", "Conversion Rate (%)", `Avg. Deal Size (${vatLabel})`, "Avg. Closing Time (days)"]));
-  for (const s of stats.salesPerformance) {
-    lines.push(csvRow([s.salesperson, s.quotationCount, s.totalValue, s.revenue, s.expectedRevenue, s.won, s.lost, s.pending, s.conversionRate, s.avgDealSize, s.avgClosingTime ?? ""]));
+  for (const section of buildCsvSections(stats, filters)) {
+    lines.push(csvRow([`## ${section.name}`]));
+    for (const row of section.rows) lines.push(row.length === 0 ? "" : csvRow(row.map(csvValue)));
+    lines.push("");
   }
-  lines.push("");
-
-  lines.push(csvRow([`Top Customers (by revenue, ${vatNote})`]));
-  lines.push(csvRow(["Customer", "Quotations", `Total Value (${vatLabel})`, `Won Value (${vatLabel})`, "Last Quotation Date"]));
-  for (const c of stats.customerAnalytics.topByRevenue) {
-    lines.push(csvRow([c.client, c.quotationCount, c.totalValue, c.revenue, c.lastQuotationDate || ""]));
-  }
-  lines.push("");
-
-  lines.push(csvRow([`Job Type Analytics (monetary values ${vatNote})`]));
-  lines.push(csvRow(["Code", "Job Type", "Jobs", `Total Value (${vatLabel})`, `Won Value (${vatLabel})`, "Win Rate (%)", `Avg. Deal Size (${vatLabel})`]));
-  for (const j of stats.jobTypeAnalytics) {
-    lines.push(csvRow([j.jobTypeCode, j.jobTypeName, j.count, j.totalValue, j.revenue, j.winRate, j.avgDealSize]));
-  }
-
   return lines.join("\r\n");
 }
 

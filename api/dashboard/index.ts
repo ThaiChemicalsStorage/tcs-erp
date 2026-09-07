@@ -13,6 +13,11 @@ import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
 import { computeQuoteAmountBeforeVat, computeQuoteAmountWithVat, type DiscountMode } from "../_lib/quoteAmounts.js";
 import { dedupeQuotesByRevisionChain } from "../_lib/quoteRevisions.js";
+import {
+  computeStageProbabilities, computeWeightedPipeline, computeStatusBySalesperson, appliedProbabilityFor,
+  closingDateOf, daysBetweenIso, MIN_STAGE_SAMPLE,
+} from "../_lib/dashboardAnalytics.js";
+import type { DashboardQuoteRow } from "../../src/lib/dashboard.js";
 
 const WON_STATUS = "ปิดการขายสำเร็จ";
 const LOST_STATUS = "เสียโอกาส";
@@ -128,7 +133,7 @@ type QuoteCalcDoc = Pick<
   QuoteFields,
   "status" | "client" | "salesperson" | "jobTypeCode" | "jobTypeName" |
   "isPotentialOpportunity" | "followUpDate" | "issueDate" | "expiryDate" | "approvalHistory" | "interest" |
-  "lines" | "discount" | "discountMode"
+  "lines" | "discount" | "discountMode" | "project"
 > & { _id: string; amount: number };
 
 /**
@@ -274,6 +279,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const salespersonFilter = queryString(req, "salesperson");
     const departmentFilter = queryString(req, "department");
     const vatMode: "pre" | "post" = queryString(req, "vat") === "post" ? "post" : "pre";
+    // รายการใบเสนอราคาทีละใบ (ชีต "รายการใบเสนอราคา" ในไฟล์ Excel) — ขอเฉพาะตอนกดส่งออก หน้าจอปกติ
+    // ไม่ต้องแบก payload นี้ · มาจาก `docs` ชุดเดียวกับทุก aggregate จึงตรงกับยอดในชีตอื่นโดยโครงสร้าง
+    const includeQuotations = queryString(req, "include").split(",").includes("quotations");
     // `discountMode` (added 2026-08-25) says whether `discount` is a percentage or a baht amount.
     // Absent — which is every quotation issued before then — means percent, so historical figures
     // are unchanged.
@@ -379,7 +387,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const projection = {
       status: 1, client: 1, salesperson: 1, jobTypeCode: 1, jobTypeName: 1,
       isPotentialOpportunity: 1, followUpDate: 1, issueDate: 1, expiryDate: 1, approvalHistory: 1, interest: 1,
-      lines: 1, discount: 1, discountMode: 1,
+      lines: 1, discount: 1, discountMode: 1, project: 1,
     } as const;
 
     const [
@@ -443,9 +451,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // **No `status` filter at the Mongo level anymore** (2026-07-22, same Rewrite fix as above) —
       // every status in the window must be fetched so a chain's latest revision can be resolved
       // before counting it as Won/Lost; the status filter moves to JS, after dedup.
+      // `approvalHistory` เพิ่ม 2026-09-07 — โอกาสปิดการขายรายขั้นต้องรู้ว่าใบที่ปิดแล้วเคยผ่านขั้นไหนบ้าง
       quotes.find(
         { issueDate: { $gte: lastNMonthKeys(MONTHS_BACK, trendAnchor)[0] } },
-        { projection: { status: 1, issueDate: 1 } },
+        { projection: { status: 1, issueDate: 1, approvalHistory: 1 } },
       ).toArray(),
       // Same fix as the two above — was `$group`-ed by {month, status} in Mongo; now a raw fetch so
       // `dedupeQuotesByRevisionChain()` can run first, then the month+status grouping happens in JS.
@@ -626,6 +635,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
     }).sort((a, b) => b.revenue - a.revenue);
 
+    // ── เมทริกซ์ เซลล์ × สถานะ (2026-09-07, ชีต "รายเซลล์ x สถานะ") — จาก `docs` ชุดเดียวกัน ─────
+    const statusBySalesperson = computeStatusBySalesperson(docs, PIPELINE_ORDER);
+
     // ── Customer analytics ───────────────────────────────────────────────
     // `revenue` here means Won Value specifically (kept for backward-compat with existing consumers);
     // `totalValue` is the full quotation value regardless of outcome — the Dashboard spec requires
@@ -682,7 +694,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Deduped by revision chain (2026-07-22, Rewrite double-counting fix) before counting Won/Lost —
     // a chain's outcome is whatever its LATEST revision's status is, not every revision's status
     // summed (e.g. a Won original superseded by a still-open rewrite must no longer count as Won).
-    const historicalOutcomeDocs = dedupeQuotesByRevisionChain(historicalOutcomeDocsRaw as Array<{ _id: string; status: string; issueDate: string }>);
+    const historicalOutcomeDocs = dedupeQuotesByRevisionChain(
+      historicalOutcomeDocsRaw as Array<{ _id: string; status: string; issueDate: string; approvalHistory?: ApprovalHistoryEntry[] }>,
+    );
     const wonLast12 = historicalOutcomeDocs.filter((d) => d.status === WON_STATUS).length;
     const lostLast12 = historicalOutcomeDocs.filter((d) => d.status === LOST_STATUS).length;
     const historicalWinRate = wonLast12 + lostLast12 > 0 ? wonLast12 / (wonLast12 + lostLast12) : 0;
@@ -705,6 +719,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       thisYear: forecastFor("year"),
       historicalWinRate: Math.round(historicalWinRate * 1000) / 10,
     };
+
+    // ── โอกาสปิดการขายรายขั้น + pipeline ถ่วงน้ำหนัก (2026-09-07) ─────────────────────────────
+    // ประชากร = ใบที่ปิดแล้วในหน้าต่าง 12 เดือนเดียวกับ forecast (ทั้งบริษัท เหตุผลเดียวกัน) · ใบเปิด =
+    // `activeDocs` ตัว predicate เดียวกับ KPI Active (ไม่ปิด ไม่หมดอายุ) ดู api/_lib/dashboardAnalytics.ts
+    const closedHistorical = historicalOutcomeDocs.filter((d) => CLOSED_STATUSES.has(d.status));
+    const stageStats = computeStageProbabilities(closedHistorical);
+    const weightedPipeline = computeWeightedPipeline(
+      activeDocs.map((q) => ({ _id: q._id, status: q.status, salesperson: q.salesperson, amount: q.amount })),
+      stageStats,
+      forecast.historicalWinRate,
+    );
+    const closingProbability = {
+      windowFrom: `${lastNMonthKeys(MONTHS_BACK, trendAnchor)[0]}-01`,
+      windowTo: trendAnchor.toISOString().slice(0, 10),
+      minSampleSize: MIN_STAGE_SAMPLE,
+      closedSampleSize: closedHistorical.length,
+      historicalWinRate: forecast.historicalWinRate,
+      ...weightedPipeline,
+    };
+
+    // ── รายการใบเสนอราคาทีละใบ (เฉพาะ ?include=quotations) ────────────────────────────────
+    const quotations: DashboardQuoteRow[] | undefined = includeQuotations
+      ? [...docs]
+          .sort((a, b) => (b.issueDate ?? "").localeCompare(a.issueDate ?? "") || a._id.localeCompare(b._id))
+          .map((q) => {
+            const open = !CLOSED_STATUSES.has(q.status) && !isExpired(q);
+            const probability = open ? appliedProbabilityFor(closingProbability.stages, q.status) : null;
+            return {
+              id: q._id,
+              issueDate: q.issueDate ?? "",
+              client: q.client,
+              project: q.project ?? "",
+              salesperson: q.salesperson,
+              status: q.status,
+              jobTypeCode: q.jobTypeCode ?? "",
+              jobTypeName: q.jobTypeName ?? "",
+              amount: q.amount,
+              isPotentialOpportunity: q.isPotentialOpportunity === true,
+              interest: q.interest ?? "",
+              expiryDate: q.expiryDate ?? "",
+              followUpDate: q.followUpDate ?? "",
+              daysOpen: daysBetweenIso(q.issueDate ?? "", closingDateOf(q.approvalHistory) ?? today),
+              isExpired: isExpired(q),
+              isOpen: open,
+              stageProbability: probability,
+              weightedValue: probability === null ? null : Math.round(q.amount * probability) / 100,
+            };
+          })
+      : undefined;
 
     // ── Follow-ups ────────────────────────────────────────────────────────
     // Deduped by revision chain (2026-07-22, Rewrite double-counting fix) — otherwise a rewritten
@@ -1169,6 +1232,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       availableSalespeople,
       availableDepartments,
       filters: { from, to, salesperson: salespersonFilter || "all", department: departmentFilter || "all", vatMode },
+      statusBySalesperson,
+      closingProbability,
+      ...(quotations ? { quotations } : {}),
     });
   });
 }

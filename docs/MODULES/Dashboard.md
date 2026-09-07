@@ -150,12 +150,53 @@ added 2026-08-14 per direct user request. This applies to `totalQuotationValue`,
 (revenue/totalValue), `jobTypeAnalytics` (revenue/totalValue/avgDealSize), `forecast`
 (thisMonth/thisQuarter/thisYear), `revenueTrend`/`revenueByMonth`, `followUps[].amount`, and
 `approvalDashboard.pendingList[].amount`. Every value in the CSV export (`csvExport.ts`) and the
-Excel export (`xlsxExport.ts`, added 2026-07-24 — multi-sheet: Summary+KPIs / Sales Performance /
-Top Customers / Job Types / Pipeline / Monthly Trend; `xlsx` package dynamic-imported on first
-click) inherits whichever mode is currently selected on screen, since both are built from the
-same already-fetched response — the exports were a direct part of this pass's scope, per explicit
-user request that switching the toggle should also change what gets exported, not just what's on
-screen.
+Excel export (`xlsxExport.ts`) inherits whichever mode is currently selected on screen — the exports
+were a direct part of this pass's scope, per explicit user request that switching the toggle should
+also change what gets exported, not just what's on screen. The VAT mode is also stamped on the
+first sheet and in the filename (`-preVAT` / `-inclVAT`).
+
+### Excel / CSV export — detailed workbook (2026-09-07)
+
+Owner request: *"dashboard export ออกมาเป็น excel … แยกดูยอดรวม เปอร์เซ็นต์ ดูแยกเป็นคนได้ โอกาสปิดการขายรวม
+แบบละเอียด ๆ"* plus *"ออกแบบให้ออกมาดูง่าย"*. The original 6-sheet English workbook (2026-07-24) and
+the CSV had duplicated their row builders and drifted (CSV had Total Leads, Excel didn't). Now:
+
+- **One row builder** — `src/pages/dashboard/reportRows.ts` produces typed cells
+  (`text | int | money | percent | days | date`) per sheet; `xlsxExport.ts` and `csvExport.ts` are
+  renderers only. CSV is a documented **subset** (สรุปภาพรวม · รายเซลล์ · ลูกค้า · ประเภทงาน).
+- **10 Thai sheets**: สรุปภาพรวม (header + KPIs grouped ปริมาณ/มูลค่า/อัตรา/เวลา) · สถานะใบเสนอราคา
+  (Won/Lost/Active/Non-active partition with count-% and value-%, pipeline with % and stage conversion,
+  interest) · รายเซลล์ (`salesPerformance` + share-of-total columns + Σ row) · รายเซลล์ x สถานะ
+  (salesperson × 9 statuses, count block and value block) · โอกาสปิดการขาย · รายการใบเสนอราคา (one row
+  per quotation, for pivots) · ลูกค้า (4 top lists + repeat %) · ประเภทงาน · แนวโน้ม (monthly with
+  closing rate, weekly/quarterly/yearly) · ติดตามงาน (overdue/today/upcoming).
+- **Numbers are numbers**: Excel cells get `z` formats (`#,##0.00` money, `0.0%` percent stored as a
+  fraction, `#,##0` counts) so SUM() works; CSV keeps percentages as 0–100 with "(%)"-style labels.
+  Labels are fixed Thai (not i18n) so two people's exports compare cell-for-cell. The community
+  `xlsx` build cannot bold/colour/freeze — readability comes from section titles, blank separator rows
+  and content-fitted column widths.
+- **`closingProbability`** (computed in `api/_lib/dashboardAnalytics.ts`, pure and unit-tested):
+  population = closed quotations (Won/Lost/ลูกค้าปฏิเสธ/ยกเลิก) in the same trailing-12-month,
+  company-wide window the forecast baseline uses. `reachedStages()` infers which open stages a closed
+  quotation passed through from its final status **plus** every `workflowTransitions[action].to` in
+  `approvalHistory` (so a quote cancelled after approval counts for ร่าง/รออนุมัติ/อนุมัติแล้ว, one cancelled
+  from Draft only for ร่าง). Per open stage S: `P(win | reached S) = won ÷ reached`, reported only when
+  the sample is ≥ `MIN_STAGE_SAMPLE = 5`, otherwise `null` → the sheet prints **"ข้อมูลไม่พอ"** and the
+  weighting falls back to `forecast.historicalWinRate` with `source: "fallback"` shown in its own
+  column. Weighted pipeline = every Active quotation (same predicate as the Active KPI) × the applied
+  probability, per stage and per salesperson. There is still no per-quote probability field — owner
+  decision 2026-09-07 was "compute from real statistics automatically".
+- **`statusBySalesperson`** — zero-filled salesperson × `PIPELINE_ORDER` matrix from the same deduped
+  `docs` array; blank salesperson grouped as "(ไม่ระบุ)".
+- **`?include=quotations`** — `GET /api/dashboard` returns `quotations: DashboardQuoteRow[]` only when
+  asked. The export button re-fetches with the flag (`fetchDashboardStats({ ...filters,
+  includeQuotations: true })`); the normal page load never carries it. Rows come from the same
+  deduped, visibility-scoped `docs` every aggregate uses, so the sheet reconciles with the totals by
+  construction. Unbounded on purpose (a filter window holds hundreds to low thousands of rows).
+  `daysOpen` = issue date → last closing action (or today); it can be negative for legacy data whose
+  history predates its issue date — reported as-is rather than clamped.
+- Tests: `tests/dashboardAnalytics.test.ts`, `tests/dashboardReportRows.test.ts`,
+  `tests/api/dashboardReport.test.ts`.
 
 **Still a single global 7% rate.** The toggle only changes *which* of the two already-existing
 values is shown — it does **not** introduce a per-company/per-quote VAT rate. `VAT_RATE` in
@@ -551,6 +592,9 @@ None owned by this page — it's a read-only aggregation over `customers`, `lead
   isolated in its own try/catch. Backs the new `ServiceSummary.tsx` component, see
   "Pages / Components" below.
 
+**2026-09-07 additions to the same route**: `statusBySalesperson`, `closingProbability` (always), and
+`quotations` (only with `?include=quotations`) — see "Excel / CSV export — detailed workbook" above.
+
 ## Permissions
 
 `dashboard:view` (every default role has it, unchanged) gates the whole page — and, as of
@@ -629,9 +673,9 @@ pass — see [RBAC.md](../RBAC.md).
 - `totalCustomers`/`totalLeads` will start returning real non-zero numbers once the CRM module
   (schema already prepped, see [Customer.md](./Customer.md)/[Lead.md](./Lead.md)) gets API
   routes + UI — no Dashboard code changes needed when that happens.
-- Report Export (PDF/Excel/CSV) — explicitly deferred again this pass, needs a new dependency for
-  Excel and a new print layout for PDF; should be built against this now-stable dashboard shape.
-  No dead/placeholder button exists for it anywhere in the UI.
+- Report Export — CSV shipped 2026-07-10, Excel 2026-07-24, the detailed 10-sheet workbook
+  2026-09-07 (see "Excel / CSV export — detailed workbook" above). **PDF is still open**; it should
+  extend the browser-print pattern rather than add a dependency.
 - Real Customer/Lead/Department entities would fix the free-text-matching caveats above (customer
   grouping, department filtering) and let the pipeline start at "Lead" instead of "Draft."
 - Activity Timeline is a flat recent-N feed from `audit_log`, not grouped by period or

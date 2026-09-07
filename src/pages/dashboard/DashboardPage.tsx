@@ -169,15 +169,22 @@ export function DashboardPage({ currentUserId, onNavigateToQuotations, onOpenQuo
     downloadCsv(`dashboard-export-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
   const [exportingXlsx, setExportingXlsx] = useState(false);
-  // สร้างและดาวน์โหลดไฟล์ Excel ของข้อมูลแดชบอร์ดปัจจุบัน ชื่อไฟล์มีช่วงวันที่กำกับ
-  // Builds and downloads an Excel export of the current dashboard data, named with its filter period.
+  // สร้างและดาวน์โหลดไฟล์ Excel ของข้อมูลแดชบอร์ดปัจจุบัน ชื่อไฟล์มีช่วงวันที่ โหมด VAT และขอบเขตข้อมูลกำกับ
+  // 2026-09-07: ยิงขอข้อมูลใหม่พร้อม `includeQuotations` เพื่อให้ได้รายการใบเสนอราคาทีละใบ (ชีต "รายการ
+  // ใบเสนอราคา") ซึ่งหน้าจอปกติไม่โหลด ตัวกรองเดิมทุกตัวส่งไปเหมือนกัน ยอดในไฟล์จึงตรงกับที่เห็นบนจอ
   const exportXlsx = () => {
     if (!stats || exportingXlsx) return;
     setExportingXlsx(true);
-    const period = stats.filters.from || stats.filters.to
-      ? `${stats.filters.from || "start"}_${stats.filters.to || todayIsoBangkok()}`
-      : new Date().toISOString().slice(0, 10);
-    exportDashboardXlsx(stats, stats.filters, `dashboard-report-${period}.xlsx`)
+    fetchDashboardStats({ ...filters, includeQuotations: true })
+      .then((full) => {
+        const period = full.filters.from || full.filters.to
+          ? `${full.filters.from || "start"}_${full.filters.to || todayIsoBangkok()}`
+          : todayIsoBangkok();
+        const vat = full.filters.vatMode === "post" ? "inclVAT" : "preVAT";
+        const scope = full.ownDataOnly ? `-${full.visibilityScope}` : "";
+        return exportDashboardXlsx(full, full.filters, `dashboard-report-${period}-${vat}${scope}.xlsx`);
+      })
+      .catch((err) => console.error("[dashboard] export xlsx failed", err))
       .finally(() => setExportingXlsx(false));
   };
 

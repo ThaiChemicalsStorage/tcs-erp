@@ -1,106 +1,61 @@
-import type { DashboardStats, DashboardVatMode } from "../../lib/dashboard";
+import type { DashboardStats } from "../../lib/dashboard";
+import { buildWorkbookSheets, type ReportCell, type ReportFilters } from "./reportRows";
 
-type Cell = string | number;
+/**
+ * ส่งออกรายงานแดชบอร์ดเป็น Excel หลายชีต — ตัวเรนเดอร์ของแถวจาก `reportRows.ts` (แหล่งเดียวกับ CSV)
+ *
+ * 2026-09-07 ยกเครื่องจาก 6 ชีตป้ายอังกฤษเป็น 10 ชีตภาษาไทย ตามที่เจ้าของขอ *"แยกดูยอดรวม เปอร์เซ็นต์
+ * ดูแยกเป็นคนได้ โอกาสปิดการขายรวม แบบละเอียด ๆ"* และ *"ออกแบบให้ออกมาดูง่าย"*:
+ *   - ตัวเลขเป็น**ตัวเลขจริง**พร้อมรูปแบบ (เงินคั่นหลักพัน 2 ตำแหน่ง · เปอร์เซ็นต์เป็น % จริง · วันที่เป็นข้อความ
+ *     ISO ที่ Excel เรียงได้) ผู้ใช้ลาก SUM() ได้ทันที
+ *   - แต่ละชีตมีบรรทัดหัวข้อ + บรรทัดว่างคั่นระหว่างตาราง ความกว้างคอลัมน์คิดจากเนื้อหาจริง
+ *   - `xlsx` โหลดแบบ dynamic เหมือนเดิม ไม่ติดไปกับ bundle หลัก
+ *
+ * ข้อจำกัดที่รู้: xlsx รุ่นชุมชน (ที่ใช้อยู่) ไม่รองรับตัวหนา/สีพื้น/freeze pane — "ดูง่าย" ในไฟล์นี้จึงมาจาก
+ * โครงสร้างแถว ชื่อชีตชัด และรูปแบบตัวเลข ไม่ใช่การตกแต่ง
+ */
 
-// สร้างแถวข้อมูล KPI สำหรับชีตสรุปในไฟล์ Excel
-// Builds the KPI rows for the summary sheet
-function kpiRows(stats: DashboardStats, vatLabel: string): Cell[][] {
-  const k = stats.kpis;
-  return [
-    ["Total Quotations", k.totalQuotations],
-    [`Total Quotation Value (${vatLabel})`, k.totalQuotationValue],
-    [`Closed Sales (${vatLabel})`, k.closedSales],
-    [`Expected Sales (${vatLabel})`, k.expectedSales],
-    ["Won Jobs", k.wonDeals],
-    ["Lost Jobs", k.lostDeals],
-    ["Active Jobs", k.activeQuotations],
-    ["Non-Active Jobs", k.nonActiveQuotations],
-    ["Expired Jobs", k.expiredQuotations],
-    ["Win Rate (%)", k.winRate],
-    ["Lose Rate (%)", k.loseRate],
-    ["Conversion Rate (%)", k.conversionRate],
-    [`Average Deal Size (${vatLabel})`, k.averageDealSize],
-    ["Average Closing Time (days)", k.averageClosingTime ?? ""],
-    ["Average Approval Time (days)", k.averageApprovalTime ?? ""],
-    ["Total Customers", k.totalCustomers],
-    ["Total Products", k.totalProducts],
-    ["Pending Approvals", k.pendingApprovals],
-    ["Overdue Follow-ups", k.overdueFollowups],
-    ["New Customers", k.newCustomers],
-    ["Repeat Customers", k.repeatCustomers],
-  ];
+const NUMBER_FORMAT: Record<ReportCell["kind"], string | null> = {
+  text: null,
+  date: null,
+  int: "#,##0",
+  money: "#,##0.00",
+  percent: "0.0%",
+  days: "0.0",
+};
+
+function toSheetValue(cell: ReportCell): string | number {
+  if (cell.v === null) return cell.kind === "text" || cell.kind === "date" ? "" : "—";
+  if (cell.kind === "percent" && typeof cell.v === "number") return cell.v / 100;
+  return cell.v;
 }
 
-// ส่งออกรายงานแดชบอร์ดเป็นไฟล์ Excel หลายชีต (สรุป, ผลงานขาย, ลูกค้า, ประเภทงาน, ไปป์ไลน์, แนวโน้มรายเดือน)
-// Exports the dashboard report as a multi-sheet Excel workbook (summary, sales performance, customers, job types, pipeline, monthly trend)
-export async function exportDashboardXlsx(
-  stats: DashboardStats,
-  filters: { from: string; to: string; salesperson: string; department: string; vatMode: DashboardVatMode },
-  filename: string,
-): Promise<void> {
+export async function exportDashboardXlsx(stats: DashboardStats, filters: ReportFilters, filename: string): Promise<void> {
   const XLSX = await import("xlsx");
-  const vatLabel = filters.vatMode === "post" ? "incl. VAT 7%" : "Before VAT";
-  const vatNote = filters.vatMode === "post" ? "post-tax / incl. VAT 7%" : "pre-tax / before VAT";
-
-  const summary: Cell[][] = [
-    ["Thai Chemicals Storage ERP — Dashboard Report"],
-    ["Generated at", new Date().toISOString()],
-    ["Date from", filters.from || "(all time)"],
-    ["Date to", filters.to || "(today)"],
-    ["Salesperson filter", filters.salesperson],
-    ["Department filter", filters.department],
-    ...(stats.ownDataOnly
-      ? [["Scope", `${stats.visibilityScope[0].toUpperCase()}${stats.visibilityScope.slice(1)} data only (caller lacks viewAll)`] as Cell[]]
-      : []),
-    [],
-    [`KPIs (all monetary values are ${vatNote})`],
-    ...kpiRows(stats, vatLabel),
-  ];
-
-  const salesPerformance: Cell[][] = [
-    ["Salesperson", "Jobs", `Total Value (${vatLabel})`, `Closed Sales (${vatLabel})`, `Expected Revenue (${vatLabel})`, "Won", "Lost", "Pending", "Conversion Rate (%)", `Avg. Deal Size (${vatLabel})`, "Avg. Closing Time (days)"],
-    ...stats.salesPerformance.map((s): Cell[] => [s.salesperson, s.quotationCount, s.totalValue, s.revenue, s.expectedRevenue, s.won, s.lost, s.pending, s.conversionRate, s.avgDealSize, s.avgClosingTime ?? ""]),
-  ];
-
-  const topCustomers: Cell[][] = [
-    ["Customer", "Quotations", `Total Value (${vatLabel})`, `Won Value (${vatLabel})`, "Last Quotation Date"],
-    ...stats.customerAnalytics.topByRevenue.map((c): Cell[] => [c.client, c.quotationCount, c.totalValue, c.revenue, c.lastQuotationDate || ""]),
-  ];
-
-  const jobTypes: Cell[][] = [
-    ["Code", "Job Type", "Jobs", `Total Value (${vatLabel})`, `Won Value (${vatLabel})`, "Win Rate (%)", `Avg. Deal Size (${vatLabel})`],
-    ...stats.jobTypeAnalytics.map((j): Cell[] => [j.jobTypeCode, j.jobTypeName, j.count, j.totalValue, j.revenue, j.winRate, j.avgDealSize]),
-  ];
-
-  const pipeline: Cell[][] = [
-    ["Stage", "Count", `Total Value (${vatLabel})`, "Conversion From Previous (%)"],
-    ...stats.pipeline.map((p): Cell[] => [p.stage, p.count, p.totalValue, p.conversionFromPrevious ?? ""]),
-  ];
-
-  const monthlyTrend: Cell[][] = [
-    ["Month", `Revenue (${vatLabel})`, "Win Rate (%)"],
-    ...stats.revenueTrend.monthly.map((m): Cell[] => {
-      const closing = stats.monthlyClosingRate.find((c) => c.month === m.period);
-      return [m.period, m.revenue, closing?.winRate ?? ""];
-    }),
-  ];
-
   const wb = XLSX.utils.book_new();
-  const sheets: [string, Cell[][]][] = [
-    ["Summary - KPIs", summary],
-    ["Sales Performance", salesPerformance],
-    ["Top Customers", topCustomers],
-    ["Job Types", jobTypes],
-    ["Pipeline", pipeline],
-    ["Monthly Trend", monthlyTrend],
-  ];
-  for (const [name, rows] of sheets) {
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    const colCount = Math.max(...rows.map((r) => r.length));
+  for (const sheet of buildWorkbookSheets(stats, filters)) {
+    const ws = XLSX.utils.aoa_to_sheet(sheet.rows.map((row) => row.map(toSheetValue)));
+    // ใส่รูปแบบตัวเลขทีละช่องตามชนิดที่ตัวสร้างแถวบอกไว้ — aoa_to_sheet ไม่รู้จักชนิดของเรา
+    sheet.rows.forEach((row, r) => {
+      row.forEach((cell, c) => {
+        const fmt = NUMBER_FORMAT[cell.kind];
+        if (!fmt || typeof cell.v !== "number") return;
+        const ref = XLSX.utils.encode_cell({ r, c });
+        const target = ws[ref] as { t?: string; z?: string } | undefined;
+        if (target) { target.t = "n"; target.z = fmt; }
+      });
+    });
+    const colCount = Math.max(1, ...sheet.rows.map((r) => r.length));
     ws["!cols"] = Array.from({ length: colCount }, (_, i) => ({
-      wch: Math.min(45, Math.max(12, ...rows.map((r) => String(r[i] ?? "").length + 2))),
+      wch: Math.min(48, Math.max(10, ...sheet.rows.map((r) => {
+        const cell = r[i];
+        if (!cell) return 0;
+        // ตัวเลขที่จัดรูปแบบแล้วกว้างกว่าตัวดิบ (คั่นหลักพัน + ทศนิยม) เผื่อไว้ให้ไม่ขึ้น ######
+        const width = typeof cell.v === "number" ? cell.v.toLocaleString("en-US", { maximumFractionDigits: 2 }).length + 2 : String(cell.v ?? "").length;
+        return width + 2;
+      }))),
     }));
-    XLSX.utils.book_append_sheet(wb, ws, name);
+    XLSX.utils.book_append_sheet(wb, ws, sheet.name);
   }
   XLSX.writeFile(wb, filename);
 }

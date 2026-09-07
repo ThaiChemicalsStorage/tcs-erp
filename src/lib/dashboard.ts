@@ -194,6 +194,67 @@ export interface InterestBreakdown {
   notEvaluated: number;
 }
 
+// ── ส่วนที่เพิ่มสำหรับไฟล์ Excel แบบละเอียด (2026-09-07) ───────────────────────────────────────
+
+/** หนึ่งช่องในเมทริกซ์ เซลล์ × สถานะ */
+export interface StatusBySalespersonCell { status: string; count: number; value: number }
+export interface StatusBySalespersonRow {
+  salesperson: string;
+  total: { count: number; value: number };
+  /** เติมศูนย์ครบทุกสถานะตามลำดับ pipeline เสมอ */
+  cells: StatusBySalespersonCell[];
+}
+
+/**
+ * โอกาสปิดของขั้นเปิดหนึ่งขั้น — `probability` มาจากสถิติจริง 12 เดือน (null = ตัวอย่างไม่พอ) ส่วน
+ * `appliedProbability` คือค่าที่ใช้ถ่วงน้ำหนักจริง (ค่าของขั้น หรืออัตราชนะรวมของบริษัทเมื่อ `source` = fallback)
+ */
+export interface StageProbability {
+  stage: string;
+  sampleSize: number;
+  wonCount: number;
+  probability: number | null;
+  source: "stage" | "fallback";
+  appliedProbability: number;
+  openCount: number;
+  openValue: number;
+  weightedValue: number;
+}
+export interface ClosingProbability {
+  windowFrom: string;
+  windowTo: string;
+  minSampleSize: number;
+  closedSampleSize: number;
+  historicalWinRate: number;
+  stages: StageProbability[];
+  totalOpenCount: number;
+  totalOpenValue: number;
+  totalWeightedValue: number;
+  bySalesperson: { salesperson: string; openCount: number; openValue: number; weightedValue: number }[];
+}
+
+/** หนึ่งแถวต่อใบเสนอราคาในชีต "รายการใบเสนอราคา" — ส่งมาเฉพาะเมื่อขอ `includeQuotations` */
+export interface DashboardQuoteRow {
+  id: string;
+  issueDate: string;
+  client: string;
+  project: string;
+  salesperson: string;
+  status: string;
+  jobTypeCode: string;
+  jobTypeName: string;
+  amount: number;
+  isPotentialOpportunity: boolean;
+  interest: string;
+  expiryDate: string;
+  followUpDate: string;
+  daysOpen: number | null;
+  isExpired: boolean;
+  isOpen: boolean;
+  stageProbability: number | null;
+  weightedValue: number | null;
+}
+
 export interface DashboardStats {
   hasAnyData: boolean;
   kpis: DashboardKpis;
@@ -222,6 +283,12 @@ export interface DashboardStats {
   availableSalespeople: string[];
   availableDepartments: string[];
   filters: { from: string; to: string; salesperson: string; department: string; vatMode: DashboardVatMode };
+  /** 2026-09-07 — ตอบเสมอ ใช้ในชีต "รายเซลล์ x สถานะ" */
+  statusBySalesperson: StatusBySalespersonRow[];
+  /** 2026-09-07 — ตอบเสมอ ใช้ในชีต "โอกาสปิดการขาย" */
+  closingProbability: ClosingProbability;
+  /** 2026-09-07 — ตอบเฉพาะเมื่อขอ `?include=quotations` (ปุ่มส่งออก Excel) หน้าจอปกติไม่โหลด */
+  quotations?: DashboardQuoteRow[];
 }
 
 export interface DashboardFilters {
@@ -230,6 +297,8 @@ export interface DashboardFilters {
   salesperson?: string;
   department?: string;
   vatMode?: DashboardVatMode;
+  /** ขอรายการใบเสนอราคาทีละใบมาด้วย — ใช้ตอนส่งออก Excel เท่านั้น */
+  includeQuotations?: boolean;
 }
 
 // ดึงข้อมูลสถิติแดชบอร์ดจากเซิร์ฟเวอร์ ตามตัวกรองวันที่/พนักงานขาย/แผนก/โหมดภาษีมูลค่าเพิ่มที่ระบุ
@@ -241,6 +310,7 @@ export async function fetchDashboardStats(filters?: DashboardFilters): Promise<D
   if (filters?.salesperson && filters.salesperson !== "all") params.set("salesperson", filters.salesperson);
   if (filters?.department && filters.department !== "all") params.set("department", filters.department);
   if (filters?.vatMode === "post") params.set("vat", "post");
+  if (filters?.includeQuotations) params.set("include", "quotations");
   const qs = params.toString();
   return apiFetch<DashboardStats>(`/dashboard${qs ? `?${qs}` : ""}`);
 }
