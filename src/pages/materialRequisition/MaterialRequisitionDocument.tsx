@@ -388,6 +388,13 @@ export function MaterialRequisitionDocument({
   /** รอบการจ่ายที่บันทึกแล้ว — ใบที่จ่ายไปก่อน 2026-09-07 ถูกแปลงยอดเดิมมาเป็นรอบให้อัตโนมัติ */
   const issueBatches = issueBatchesOf(doc);
   const nextIssueSeq = issueBatches.length > 0 ? Math.max(...issueBatches.map((b) => b.seq)) + 1 : 1;
+  /**
+   * ใบที่จ่ายไปก่อน 2026-09-07 ไม่มีรายการรอบจริง — ที่เห็นคือยอดสองช่องเดิมที่ถูกแปลงเป็นรอบตอนอ่าน
+   * (`legacyIssueBatchesOf`) วันที่กับผู้จ่ายของทุกรอบจึงเป็นค่าเดียวกันจากช่องเซ็นของสโตร์ ไม่ใช่เวลาจริง
+   * ของแต่ละรอบ · บอกไว้ใต้หัวการ์ด เพราะปุ่มยกเลิกรอบทำงานกับรอบพวกนี้ได้ด้วย (ซึ่งถูกต้อง — เท่ากับการ
+   * แก้ยอดลงแบบที่หน้าจอเดิมทำได้) แต่ถ้าไม่บอก คนใช้จะงงว่ารอบที่ตัวเองไม่เคยกดมาจากไหน
+   */
+  const issueBatchesAreLegacy = (doc.issues?.length ?? 0) === 0 && issueBatches.length > 0;
   const formNumber = doc.documentNumber || doc.id;
 
   // แบบเดียวกับที่ใบส่งมอบสินค้าทำ (DeliveryOrderDocument.tsx) — โมดูลนี้ไม่เคยโหลดโปรไฟล์บริษัท
@@ -875,6 +882,7 @@ export function MaterialRequisitionDocument({
               <History size={15} className="text-muted-foreground" />
               <h2 className="text-sm font-semibold text-foreground">{t("materialRequisitionDoc.batchesTitle")}</h2>
             </div>
+            {issueBatchesAreLegacy && <p className="text-xs text-muted-foreground">{t("materialRequisitionDoc.batchesLegacyNote")}</p>}
             <div className="space-y-2">
               {issueBatches.map((batch, idx) => {
                 const isLast = idx === issueBatches.length - 1;

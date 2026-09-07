@@ -87,7 +87,12 @@ now their own append-only list, the same shape Receiving Report's `batches` alre
 - **Documents issued before 2026-09-07 have no rounds**, only the two stored numbers.
   `legacyIssueBatchesOf()` presents them as one synthetic round per non-empty column (`seq` equal to
   the column number, so the derived values round-trip exactly), and the next real round persists
-  those synthetic rounds alongside it. No migration was run, and no stock is re-deducted.
+  those synthetic rounds alongside it. No migration was run, and no stock is re-deducted. Because the
+  old data carries only one Store sign-off, every synthetic round shows the same date and issuer, and
+  the cancel button works on them too — correctly (it is the equivalent of lowering the old number,
+  which the previous editable columns allowed), but the history card says so in a caption
+  (`batchesLegacyNote`) so nobody wonders where a round they never posted came from. Found by driving
+  a legacy fixture through the running app on 2026-09-07.
 
 Per line the client computes `issuedQty = w1 + w2`, `outstandingQty = max(0, planned − issued)` and
 `netHeldQty = issued − returned` (`src/lib/materialRequisition.ts`). `GET /:id` returns
