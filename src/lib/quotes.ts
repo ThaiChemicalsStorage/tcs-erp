@@ -4,6 +4,7 @@ import { apiFetch, writeQuery, type WriteOptions } from "./apiClient.js";
 import type { TranslationKey } from "./i18n";
 import type { CustomerSnapshot } from "./customers";
 import type { TemplateSection, TemplateTermLine } from "./quotationTemplates";
+import type { QuoteContact } from "./quoteContacts";
 import {
   type DiscountMode, VAT_RATE as SHARED_VAT_RATE, lineSubtotal as sharedLineSubtotal,
   computeTotals as sharedComputeTotals,
@@ -100,6 +101,14 @@ export interface Quote {
   contactName: string;
   contactPhone: string;
   contactEmail: string;
+  /**
+   * ผู้ติดต่อทุกคนของใบนี้ (เพิ่ม 2026-09-07) — ไม่ระบุ = ใบเก่าที่มีแค่สามช่องด้านบน อ่านผ่าน
+   * `quoteContactsOf()` ได้ผู้ติดต่อคนเดียวจากสามช่องนั้น ไม่ได้ทำ migration · สามช่องด้านบน**ยังอยู่
+   * และเท่ากับ `contacts[0]` เสมอ** เซิร์ฟเวอร์เป็นคนเขียนให้ (ดู src/lib/quoteContacts.ts)
+   * Every contact person on this quotation (added 2026-09-07). Absent on older documents, which
+   * carry only the three legacy fields above; the server keeps those three mirroring `contacts[0]`.
+   */
+  contacts?: QuoteContact[];
   address: string;
   taxId: string;
   deliveryMethod: string;
@@ -135,7 +144,7 @@ export interface Quote {
 export type QuoteDraftFields = Pick<
   Quote,
   | "client" | "status" | "lines" | "discount" | "discountMode" | "salesperson"
-  | "contactName" | "contactPhone" | "contactEmail" | "address" | "taxId"
+  | "contactName" | "contactPhone" | "contactEmail" | "contacts" | "address" | "taxId"
   | "deliveryMethod" | "deliveryAddress" | "project"
   | "poRef" | "paymentTerms" | "issueDate" | "expiryDate" | "remarks" | "revisionNote"
   | "jobTypeCode" | "jobTypeName" | "isPotentialOpportunity" | "followUpDate"
@@ -149,6 +158,12 @@ export type QuoteUpdateFields = Partial<
 
 export type { DiscountMode } from "./quoteMath";
 export { lineDiscountAmount, resolveDiscountAmount } from "./quoteMath";
+// ผู้ติดต่อหลายคน — ตัวช่วยล้วนอยู่ใน quoteContacts.ts (ไม่มี import) ให้เซิร์ฟเวอร์ใช้ไฟล์เดียวกันได้
+export type { QuoteContact } from "./quoteContacts";
+export {
+  MAX_QUOTE_CONTACTS, newContactId, blankContact, isBlankContact, normalizeContacts,
+  quoteContactsOf, primaryContactFields, contactLine,
+} from "./quoteContacts";
 
 export const VAT_RATE = SHARED_VAT_RATE;
 

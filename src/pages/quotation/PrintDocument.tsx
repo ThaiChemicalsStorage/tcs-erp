@@ -3,8 +3,8 @@ import { Pin } from "lucide-react";
 import type { CompanyHeaderInfo } from "../../lib/storage";
 import type { User } from "../../lib/users";
 import {
-  type Quote, type QuoteLine, type DiscountMode, fmt, lineSubtotal, lineDiscountAmount, computeTotals, bahtText, VAT_RATE,
-  lineHasDetails, formatQuoteDateThai as fmtThaiDate, formatQuoteDateNumeric as fmtNumericDate,
+  type Quote, type QuoteLine, type DiscountMode, type QuoteContact, fmt, lineSubtotal, lineDiscountAmount, computeTotals, bahtText, VAT_RATE,
+  lineHasDetails, formatQuoteDateThai as fmtThaiDate, formatQuoteDateNumeric as fmtNumericDate, contactLine,
 } from "../../lib/quotes";
 import { BrandMark } from "../../components/BrandMark";
 import { FacebookIcon, LineAppIcon } from "../../components/PrintSocialIcons";
@@ -35,7 +35,7 @@ export function PrintDocument({
   quote,
   nextId,
   companyHeader,
-  client, contactName, contactPhone, contactEmail, address, taxId,
+  client, contacts, address, taxId,
   deliveryMethod, deliveryAddress, project,
   poRef, paymentTerms, issueDate, expiryDate, jobTypeName,
   lines, discount, discountMode, remarks,
@@ -46,9 +46,8 @@ export function PrintDocument({
   nextId: string;
   companyHeader: CompanyHeaderInfo;
   client: string;
-  contactName: string;
-  contactPhone: string;
-  contactEmail: string;
+  /** ผู้ติดต่อทุกคน (ตัดแถวว่างแล้ว) — คนแรกพิมพ์สามบรรทัดเหมือนเดิม คนถัดไปพิมพ์บรรทัดย่อ */
+  contacts: QuoteContact[];
   address: string;
   taxId: string;
   deliveryMethod: string;
@@ -151,9 +150,19 @@ export function PrintDocument({
                     <p className="font-semibold text-[11px]">{client}</p>
                     {address.trim() && <p className="text-[10.5px] leading-snug">{address}</p>}
                     <Field label="เลขประจำตัวผู้เสียภาษี" value={taxId} mono />
-                    <Field label="ชื่อผู้ติดต่อ" value={contactName} />
-                    <Field label="เบอร์โทร" value={contactPhone} mono />
-                    <Field label="E-mail" value={contactEmail} />
+                    {/* ผู้ติดต่อหลักคงสามบรรทัดเดิม (ใบเก่าทุกใบมีคนเดียว หน้าตาจึงไม่เปลี่ยน) · คนที่ 2 ขึ้นไป
+                        พิมพ์บรรทัดย่อ "ชื่อ (ตำแหน่ง) · เบอร์ · อีเมล" — คอลัมน์ผู้ซื้อกว้างครึ่งกระดาษ
+                        บรรทัดย่อยาวสุดราว 70 ตัวอักษร ตัดได้ไม่เกินสองบรรทัด */}
+                    {contacts[0] && (
+                      <>
+                        <Field label="ชื่อผู้ติดต่อ" value={contacts[0].position.trim() ? `${contacts[0].name} (${contacts[0].position})` : contacts[0].name} />
+                        <Field label="เบอร์โทร" value={contacts[0].phone} mono />
+                        <Field label="E-mail" value={contacts[0].email} />
+                      </>
+                    )}
+                    {contacts.slice(1).map((c, i) => (
+                      <Field key={c.id} label={`ผู้ติดต่อ ${i + 2}`} value={contactLine(c)} />
+                    ))}
                     <Field label="วิธีจัดส่ง" value={deliveryMethod} />
                     <Field label="ที่อยู่จัดส่ง" value={deliveryAddress} />
                     <Field label="โครงการ" value={project} />

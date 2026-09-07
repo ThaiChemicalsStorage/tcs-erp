@@ -487,6 +487,15 @@ permission.
 type ScopeOfWorkStatus = "Draft" | "Final";
 // contactName added 2026-07-15, Codex review High Priority fix (was previously dropped entirely).
 interface ScopeOfWorkCustomerSnapshot { companyName: string; contactName: string; address: string; taxId: string; phone: string; email: string; projectName: string; }
+
+// ── quotes.contacts (2026-09-07) ────────────────────────────────────────────────────────────────
+// interface QuoteContact { id: string; name: string; position: string; phone: string; email: string }
+// Quote.contacts?: QuoteContact[]   — every contact person on the quotation, max 10.
+// ABSENT on every document written before 2026-09-07; no migration. Readers call quoteContactsOf(),
+// which turns the legacy trio into one contact. The legacy trio contactName/contactPhone/contactEmail
+// is ALWAYS equal to contacts[0] and is written by the server (applyContactMirror in
+// api/handlers/quotes.ts) — never by the client — so Scope of Work / AR / search keep reading it.
+// customerSnapshot does NOT carry contacts (it mirrors the nine Customer-master fields).
 // ChecklistOption/ChecklistGroup moved to src/lib/documentRequirements.ts on 2026-07-16 (re-exported
 // here for compatibility). Quotation briefly gained its own `checklistGroups` field the same day,
 // then had it removed again later the same day per an explicit business decision ("make Quotation

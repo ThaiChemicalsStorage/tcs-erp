@@ -23,9 +23,11 @@ import { HIGH_VALUE_THRESHOLD, type NotificationType } from "../../src/lib/notif
 import { PERMISSION_LABELS } from "../../src/lib/permissions.js";
 import { nowIso } from "../../src/lib/products.js";
 import {
-  validateLines, validateIsoDateOrEmpty, validateJobType, validateQuotationTemplate, computeQuoteAmount,
+  validateLines, validateContacts, validateIsoDateOrEmpty, validateJobType, validateQuotationTemplate, computeQuoteAmount,
   sanitizeShortText, sanitizeLongText, sanitizeDiscountPct, sanitizeDiscountMode, sanitizeBoolean,
 } from "../_lib/quoteValidation.js";
+import { primaryContactFields, isBlankContact, type QuoteContact } from "../../src/lib/quoteContacts.js";
+import { randomUUID } from "node:crypto";
 import { validateQuotationForFinalization, validateQuotationForPrint, type QuotationValidationInput } from "../../src/lib/validation/quotationValidation.js";
 import { getRevisionRoot } from "../_lib/quoteRevisions.js";
 
@@ -207,6 +209,45 @@ function thaiDate(d: Date): string {
   return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/**
+ * ผู้ติดต่อหลายคน (2026-09-07) — สามช่องเดิม `contactName/contactPhone/contactEmail` เป็น**กระจก**ของ
+ * `contacts[0]` ที่เซิร์ฟเวอร์เขียนเอง เพื่อให้ Scope of Work / AR / ค้นหา / ด่านตรวจ ที่อ่านสามช่องนั้น
+ * อยู่แล้วไม่ต้องแก้สักบรรทัด กติกา:
+ *   (a) คำขอส่ง `contacts` มา → สามช่องเดิมถูกเขียนทับจาก `contacts[0]` เสมอ ไม่สนค่าที่ client ส่งมาคู่กัน
+ *   (b) คำขอส่งแค่สามช่องเดิม และเอกสารมี `contacts` อยู่แล้ว → แก้ `contacts[0]` ตาม ไม่ให้สองที่เห็นไม่ตรงกัน
+ *   (c) ไม่มีทั้งคู่ → ไม่แตะ · ใบเก่าที่ไม่มี `contacts` จะไม่ถูกยัด `contacts` เข้ามาเพราะแก้ช่องอื่น
+ */
+function applyContactMirror(
+  update: Partial<QuoteFields>,
+  target: Pick<QuoteFields, "contacts" | "contactName" | "contactPhone" | "contactEmail">,
+): void {
+  if (update.contacts !== undefined) {
+    Object.assign(update, primaryContactFields(update.contacts));
+    return;
+  }
+  const touchesLegacy = "contactName" in update || "contactPhone" in update || "contactEmail" in update;
+  if (!touchesLegacy || !target.contacts?.length) return;
+  const [first, ...rest] = target.contacts;
+  const patched: QuoteContact = {
+    ...first,
+    name: update.contactName ?? first.name,
+    phone: update.contactPhone ?? first.phone,
+    email: update.contactEmail ?? first.email,
+  };
+  update.contacts = isBlankContact(patched) ? rest : [patched, ...rest];
+}
+
+/** สามช่องเดิมที่ client เก่าส่งมาโดยไม่มี `contacts` → ผู้ติดต่อคนเดียว หรือไม่มีเลยถ้าว่างทั้งสาม */
+function contactsFromLegacy(contactName: string, contactPhone: string, contactEmail: string): QuoteContact[] {
+  const c: QuoteContact = { id: randomUUID(), name: contactName, position: "", phone: contactPhone, email: contactEmail };
+  return isBlankContact(c) ? [] : [c];
+}
+
+/** id ใหม่ทุกแถวตอน Duplicate/Rewrite — เหตุผลเดียวกับ sub-detail ใน cloneLines ด้านล่าง */
+function cloneContacts(contacts: QuoteContact[] | undefined): QuoteContact[] | undefined {
+  return contacts?.map((c) => ({ ...c, id: randomUUID() }));
+}
+
 function cloneLines(lines: QuoteFields["lines"]): QuoteFields["lines"] {
   let idCounter = Date.now();
   return lines.map((l) => ({
@@ -240,6 +281,7 @@ function sanitizePartialQuoteFields(body: Record<string, unknown>): Partial<Quot
   if ("contactName" in body) update.contactName = sanitizeShortText(body.contactName, "ชื่อผู้ติดต่อ");
   if ("contactPhone" in body) update.contactPhone = sanitizeShortText(body.contactPhone, "เบอร์โทรผู้ติดต่อ");
   if ("contactEmail" in body) update.contactEmail = sanitizeShortText(body.contactEmail, "อีเมลผู้ติดต่อ");
+  if ("contacts" in body) update.contacts = validateContacts(body.contacts);
   if ("address" in body) update.address = sanitizeShortText(body.address, "ที่อยู่");
   if ("taxId" in body) update.taxId = sanitizeShortText(body.taxId, "เลขประจำตัวผู้เสียภาษี");
   if ("deliveryMethod" in body) update.deliveryMethod = sanitizeShortText(body.deliveryMethod, "วิธีจัดส่ง");
@@ -296,11 +338,16 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
     const [quotes, counters] = await Promise.all([quotesCollection(), countersCollection()]);
     const id = await nextQuoteId(counters);
     const today = new Date();
+    // ผู้ติดต่อ: รับ `contacts[]` เป็นหลัก client เก่าที่ส่งแค่สามช่องเดิมได้ผู้ติดต่อคนเดียว — สามช่องเดิม
+    // ในเอกสารคือกระจกของ `contacts[0]` เสมอ (ดู applyContactMirror)
+    const contacts = validateContacts(body.contacts) ?? contactsFromLegacy(
+      sanitizeShortText(body.contactName, "ชื่อผู้ติดต่อ"),
+      sanitizeShortText(body.contactPhone, "เบอร์โทรผู้ติดต่อ"),
+      sanitizeShortText(body.contactEmail, "อีเมลผู้ติดต่อ"),
+    );
     const customerFields: CustomerFieldSet = {
       client,
-      contactName: sanitizeShortText(body.contactName, "ชื่อผู้ติดต่อ"),
-      contactPhone: sanitizeShortText(body.contactPhone, "เบอร์โทรผู้ติดต่อ"),
-      contactEmail: sanitizeShortText(body.contactEmail, "อีเมลผู้ติดต่อ"),
+      ...primaryContactFields(contacts),
       address: sanitizeShortText(body.address, "ที่อยู่"),
       taxId: sanitizeShortText(body.taxId, "เลขประจำตัวผู้เสียภาษี"),
       deliveryMethod: sanitizeShortText(body.deliveryMethod, "วิธีจัดส่ง"),
@@ -321,6 +368,7 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
       // meaning "percent" for every quotation that predates the 2026-08-25 baht-discount option.
       ...(discountMode ? { discountMode } : {}),
       ...customerFields,
+      contacts,
       poRef: sanitizeShortText(body.poRef, "เลขที่ใบสั่งซื้อ"),
       paymentTerms: sanitizeShortText(body.paymentTerms, "เงื่อนไขการชำระเงิน"),
       issueDate: validateIsoDateOrEmpty(body.issueDate, "วันที่ออกใบเสนอราคา"),
@@ -383,6 +431,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
 
   const body: Record<string, unknown> = req.body ?? {};
   const update: Partial<QuoteFields> = sanitizePartialQuoteFields(body);
+  applyContactMirror(update, target);
   if ("interest" in body) {
     if (!isValidInterest(body.interest)) throw new HttpError(400, "ค่าความสนใจไม่ถูกต้อง");
     update.interest = body.interest;
@@ -417,7 +466,7 @@ async function handleOne(req: VercelRequest, res: VercelResponse, id: string) {
   // Information field on this PATCH changes, from the *resulting* (already-sanitized) values —
   // otherwise it's left untouched, preserving what a reopened quotation already had (per the
   // business requirement: "Preserve customerSnapshot when reopening quotation").
-  const CUSTOMER_FIELD_KEYS = ["client", "contactName", "contactPhone", "contactEmail", "address", "taxId", "deliveryMethod", "project", "deliveryAddress"] as const;
+  const CUSTOMER_FIELD_KEYS = ["client", "contactName", "contactPhone", "contactEmail", "contacts", "address", "taxId", "deliveryMethod", "project", "deliveryAddress"] as const;
   if (customerLinkChanged || CUSTOMER_FIELD_KEYS.some((k) => k in body)) {
     update.customerSnapshot = buildCustomerSnapshot({
       client: update.client ?? target.client,
@@ -501,6 +550,7 @@ async function handleDuplicate(req: VercelRequest, res: VercelResponse, id: stri
     status: "ร่าง" as const,
     interest: null,
     lines,
+    ...(source.contacts ? { contacts: cloneContacts(source.contacts) } : {}),
     // Recomputed rather than copied from `source.amount` — cheap, and guarantees the invariant
     // holds even if a past write (pre-dating this validation pass) ever left it inconsistent.
     amount: computeQuoteAmount(lines, source.discount, source.discountMode),
@@ -548,6 +598,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
       status: "ร่าง" as const,
       interest: null,
       lines,
+      ...(source.contacts ? { contacts: cloneContacts(source.contacts) } : {}),
       // Recomputed rather than copied from `source.amount` — same defensive invariant as Duplicate.
       amount: computeQuoteAmount(lines, source.discount, source.discountMode),
       createdByUserId: ctx.user.id,
@@ -665,6 +716,7 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
   // Workflow drafts may not move `interest` (plain-edit-only field) — `sanitizePartialQuoteFields`
   // never looks at it, so it's already excluded without needing a second field allowlist.
   const update: Partial<QuoteFields> = sanitizePartialQuoteFields(draft);
+  applyContactMirror(update, target);
   if ("jobTypeCode" in draft) {
     const jobTypeMaster = await loadJobTypeMaster();
     const { jobTypeCode, jobTypeName } = validateJobType(draft.jobTypeCode, jobTypeMaster, { required: false });
@@ -688,7 +740,7 @@ async function handleWorkflow(req: VercelRequest, res: VercelResponse, id: strin
     }
   }
 
-  const WORKFLOW_CUSTOMER_FIELD_KEYS = ["client", "contactName", "contactPhone", "contactEmail", "address", "taxId", "deliveryMethod", "project", "deliveryAddress"] as const;
+  const WORKFLOW_CUSTOMER_FIELD_KEYS = ["client", "contactName", "contactPhone", "contactEmail", "contacts", "address", "taxId", "deliveryMethod", "project", "deliveryAddress"] as const;
   if (workflowCustomerLinkChanged || WORKFLOW_CUSTOMER_FIELD_KEYS.some((k) => k in draft)) {
     update.customerSnapshot = buildCustomerSnapshot({
       client: update.client ?? target.client,

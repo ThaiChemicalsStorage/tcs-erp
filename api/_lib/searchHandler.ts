@@ -306,7 +306,7 @@ async function searchQuotations(query: string, ctx: AuthContext, limit: number):
       ...ownershipMatch,
       $and: [{
         $or: [
-          { _id: rx }, { client: rx }, { "customerSnapshot.companyName": rx }, { contactName: rx },
+          { _id: rx }, { client: rx }, { "customerSnapshot.companyName": rx }, { contactName: rx }, { "contacts.name": rx },
           { project: rx }, { poRef: rx }, { salesperson: rx }, { jobTypeCode: rx }, { jobTypeName: rx },
           { status: rx }, { remarks: rx },
         ],

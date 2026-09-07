@@ -87,6 +87,46 @@ customer/manual entry was previously on screen). All nine remain freely editable
 editing them never writes back to the Customer master record. Clearing the selection (×) reverts to
 a plain manually-entered quote without discarding whatever's already been typed.
 
+### Multiple contacts (2026-09-07)
+
+A quotation can now name **several contact people** (owner request: *"ใบเสนอราคาสามารถเพิ่มผู้ติดต่อได้"*,
+with the explicit decision that contacts are typed **on the quotation only** — the Customer master
+keeps its single primary contact). Model and rules:
+
+- `Quote.contacts?: QuoteContact[]` — `{ id, name, position, phone, email }`, capped at
+  `MAX_QUOTE_CONTACTS = 10` (`src/lib/quoteContacts.ts`, a dependency-free module the server imports
+  directly, same reason `quoteMath.ts` exists). `position` is new; there was nowhere for it before.
+- **The three legacy fields `contactName/contactPhone/contactEmail` stay and are a server-written
+  mirror of `contacts[0]`** (`applyContactMirror()` in `api/handlers/quotes.ts`). A request carrying
+  `contacts` overwrites the trio from its first entry; a request carrying only the trio (an older client)
+  patches `contacts[0]` in place when the document already has a list. Because of this mirror nothing
+  downstream changed: Scope of Work's `buildCustomerSnapshot()`, AR, Global Search, the print/finalize
+  gates and `quotationRequiredFields` all keep reading the trio.
+- **Documents saved before 2026-09-07 have no `contacts` key** and are never migrated. Every reader goes
+  through `quoteContactsOf()`, which returns the trio as a single contact (or `[]`). A PATCH touching an
+  unrelated field on such a document does **not** invent a `contacts` array; the UI's next save does,
+  because the editor always sends the full list.
+- `customerSnapshot` deliberately does **not** gain `contacts` — it mirrors the nine Customer-master
+  fields and is consumed by modules that need exactly one contact. `"contacts"` *is* in both snapshot
+  refresh key lists so a contact change rebuilds the snapshot from the resulting trio.
+- **UI**: `QuoteContactsEditor.tsx` replaces the three inputs in the Customer Information card — the same
+  shape as Scope of Work's "เพิ่มเลข PO" list (owner asked for exactly that): row 1 is labelled
+  "ผู้ติดต่อหลัก", further rows "ผู้ติดต่อ #n", a gold "+ เพิ่มผู้ติดต่อ" button appends, a trash icon removes
+  (the last row cannot be removed). Selecting a customer overwrites **only the primary row's**
+  name/phone/email; rows 2..n stay as typed. Blank rows are stripped by `currentDraft()` before save,
+  so an added-but-empty row never marks the document dirty.
+- **Print**: the primary contact keeps the original three `Field` rows (name gains " (position)" when
+  set), so every pre-existing quotation prints unchanged; contacts 2..n each print as one compact line
+  `ผู้ติดต่อ n: name (position) · phone · email` inside the same buyer column.
+- **Revision notes**: `generateQuoteRevisionSummary()` now reports contacts by position
+  ("เพิ่ม/ลบผู้ติดต่อที่ n", "ผู้ติดต่อที่ n — ชื่อ/ตำแหน่ง/เบอร์โทร/อีเมล: old → new"); a legacy single
+  contact yields the same three comparisons as before under the "ผู้ติดต่อที่ 1" label.
+- Duplicate/Rewrite deep-clone the list with fresh ids (`cloneContacts()`), same reason as sub-details.
+- This does **not** unblock Scope of Work's shipping/billing contact autofill (see TODO) — contacts carry
+  no role, so the server still cannot guess which one is the delivery contact.
+- Tests: `tests/quoteContacts.test.ts` (pure helpers) and `tests/api/quoteContacts.test.ts` (mirror in
+  both directions, legacy document untouched, cap, blank rows, duplicate ids).
+
 On save, `customerId` (if a customer is linked) is sent to the server; `api/handlers/quotes.ts`
 validates it exists and isn't archived, and **always** builds `customerSnapshot` — a frozen copy of
 the Customer Information fields actually submitted, whether autofilled-then-possibly-edited or

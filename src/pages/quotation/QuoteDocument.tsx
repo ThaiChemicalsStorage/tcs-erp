@@ -15,9 +15,10 @@ import type { JobType } from "../../lib/jobTypes";
 import type { User } from "../../lib/users";
 import {
   type Quote, type QuoteStatus, type QuoteInterest, type QuoteLine, type QuoteDraftFields, type ApprovalAction, type QuotePermissions,
-  type DiscountMode,
+  type DiscountMode, type QuoteContact,
   statusStyle, statusLabelKey, computeTotals, todayIso, plusDaysIso, paymentTermsOptions, approvalActionLabelKey, formatQuoteDateThai,
   printQuote, isRevisionQuote,
+  quoteContactsOf, normalizeContacts, primaryContactFields, blankContact,
 } from "../../lib/quotes";
 import { getRevisionPredecessorId, getRevisionNumber, generateQuoteRevisionSummary, appendRevisionNoteEntry } from "../../lib/revisionDiff";
 import type { Customer } from "../../lib/customers";
@@ -27,6 +28,7 @@ import { statusIcon } from "./statusIcons";
 import { InterestButtons } from "./InterestButtons";
 import { LineItemsEditor } from "./LineItemsEditor";
 import { CustomerSelector } from "./CustomerSelector";
+import { QuoteContactsEditor } from "./QuoteContactsEditor";
 import { PrintDocument } from "./PrintDocument";
 import type { QuotationWizardResult } from "./QuotationTemplateWizard";
 import { BrandMark } from "../../components/BrandMark";
@@ -165,9 +167,17 @@ export function QuoteDocument({
   // a unit of its own yet.
   const [defaultLineDiscountMode] = useState<DiscountMode>(mode === "new" ? "amount" : "percent");
   const [salesperson, setSalesperson] = useState(quote?.salesperson ?? currentUser.fullName);
-  const [contactName, setContactName] = useState(customerSnapshot?.contactName ?? quote?.contactName ?? "");
-  const [contactPhone, setContactPhone] = useState(customerSnapshot?.phone ?? quote?.contactPhone ?? "");
-  const [contactEmail, setContactEmail] = useState(customerSnapshot?.email ?? quote?.contactEmail ?? "");
+  // ผู้ติดต่อหลายคน (2026-09-07) — ใบที่มี `contacts` ใช้เลย · ใบเก่าที่มีแค่สามช่องเดิมได้คนเดียวตาม
+  // ลำดับเดิม snapshot → ค่าในใบ → ว่าง (ดู Quotation.md "Customer Selection") · ไม่มีใครเลยให้แถวว่างหนึ่งแถว
+  const [contacts, setContacts] = useState<QuoteContact[]>(() => {
+    if (quote?.contacts?.length) return quote.contacts;
+    const seeded = quoteContactsOf({
+      contactName: customerSnapshot?.contactName ?? quote?.contactName ?? "",
+      contactPhone: customerSnapshot?.phone ?? quote?.contactPhone ?? "",
+      contactEmail: customerSnapshot?.email ?? quote?.contactEmail ?? "",
+    });
+    return seeded.length > 0 ? seeded : [blankContact()];
+  });
   const [address, setAddress] = useState(customerSnapshot?.address ?? quote?.address ?? "");
   const [taxId, setTaxId] = useState(customerSnapshot?.taxId ?? quote?.taxId ?? "");
   const [deliveryMethod, setDeliveryMethod] = useState(customerSnapshot?.deliveryMethod ?? quote?.deliveryMethod ?? "");
@@ -195,9 +205,8 @@ export function QuoteDocument({
   const handleSelectCustomer = (c: Customer) => {
     setCustomerId(c.id);
     setClient(c.companyName);
-    setContactName(c.contactName);
-    setContactPhone(c.phone);
-    setContactEmail(c.email);
+    // ทะเบียนลูกค้ามีผู้ติดต่อหลักคนเดียว — ทับเฉพาะแถวแรก แถวที่พิมพ์เพิ่มไว้คงอยู่
+    setContacts((prev) => [{ ...(prev[0] ?? blankContact()), name: c.contactName, phone: c.phone, email: c.email }, ...prev.slice(1)]);
     setAddress(c.address);
     setTaxId(c.taxId);
     setDeliveryMethod(c.deliveryMethod);
@@ -293,7 +302,7 @@ export function QuoteDocument({
   // Gathers the current on-screen draft into one object for saving or workflow actions
   const currentDraft = (): QuoteDraftFields => ({
     client, status: quoteStatus, lines, discount, discountMode, amount: total,
-    salesperson, contactName, contactPhone, contactEmail, address, taxId,
+    salesperson, ...primaryContactFields(normalizeContacts(contacts)), contacts: normalizeContacts(contacts), address, taxId,
     deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate, remarks,
     revisionNote,
     jobTypeCode,
@@ -350,9 +359,9 @@ export function QuoteDocument({
     setDiscount(d.discount);
     setDiscountMode(d.discountMode ?? "percent");
     setSalesperson(d.salesperson);
-    setContactName(d.contactName);
-    setContactPhone(d.contactPhone);
-    setContactEmail(d.contactEmail);
+    // สำเนาร่างที่บันทึกไว้ก่อน 2026-09-07 ไม่มี `contacts` แต่มีสามช่องเดิม
+    const recoveredContacts = d.contacts?.length ? d.contacts : quoteContactsOf(d);
+    setContacts(recoveredContacts.length > 0 ? recoveredContacts : [blankContact()]);
     setAddress(d.address);
     setTaxId(d.taxId);
     setDeliveryMethod(d.deliveryMethod);
@@ -390,11 +399,11 @@ export function QuoteDocument({
 
   const clientValidation = useMemo(
     () => validateQuotationForFinalization({
-      client, salesperson, contactName, contactPhone, contactEmail, address, taxId,
+      client, salesperson, ...primaryContactFields(normalizeContacts(contacts)), address, taxId,
       deliveryMethod, deliveryAddress, project, poRef, paymentTerms, issueDate, expiryDate,
       jobTypeCode, remarks, followUpDate, isPotentialOpportunity,
     }),
-    [client, salesperson, contactName, contactPhone, contactEmail, address, taxId, deliveryMethod, deliveryAddress,
+    [client, salesperson, contacts, address, taxId, deliveryMethod, deliveryAddress,
       project, poRef, paymentTerms, issueDate, expiryDate, jobTypeCode, remarks,
       followUpDate, isPotentialOpportunity],
   );
@@ -717,19 +726,10 @@ export function QuoteDocument({
                   <input id="quote-client" disabled={disabled} className="w-full text-sm font-medium text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={client} onChange={(e) => setClient(e.target.value)} />
                   <FieldError message={validation.fieldErrors.client} />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <RequiredFieldLabel required={false} htmlFor="quote-contactName">{t("quotation.field.contactName")}</RequiredFieldLabel>
-                    <input id="quote-contactName" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder={t("quotation.field.contactNamePlaceholder")} />
-                  </div>
-                  <div>
-                    <RequiredFieldLabel required={false} htmlFor="quote-contactPhone">{t("quotation.field.contactPhone")}</RequiredFieldLabel>
-                    <input id="quote-contactPhone" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="0XX-XXX-XXXX" />
-                  </div>
-                </div>
                 <div>
-                  <RequiredFieldLabel required={false} htmlFor="quote-contactEmail">{t("quotation.field.contactEmail")}</RequiredFieldLabel>
-                  <input id="quote-contactEmail" disabled={disabled} className="w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors disabled:opacity-60" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="name@company.com" />
+                  <RequiredFieldLabel required={false} htmlFor="quote-contact-0-name">{t("quotation.field.contactName")}</RequiredFieldLabel>
+                  {/* ผู้ติดต่อได้หลายคน (2026-09-07) — โครงเดียวกับปุ่ม "เพิ่มเลข PO" ของ Scope of Work ตามที่เจ้าของขอ */}
+                  <QuoteContactsEditor contacts={contacts} onChange={setContacts} disabled={disabled} />
                 </div>
                 <div>
                   <RequiredFieldLabel required={false} htmlFor="quote-address">{t("quotation.field.address")}</RequiredFieldLabel>
@@ -961,9 +961,7 @@ export function QuoteDocument({
           nextId={nextId}
           companyHeader={companyHeader}
           client={client}
-          contactName={contactName}
-          contactPhone={contactPhone}
-          contactEmail={contactEmail}
+          contacts={normalizeContacts(contacts)}
           address={address}
           taxId={taxId}
           deliveryMethod={deliveryMethod}

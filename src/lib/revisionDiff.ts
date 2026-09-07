@@ -1,4 +1,5 @@
 import type { Quote, QuoteLine, DiscountMode } from "./quotes";
+import { quoteContactsOf, contactLine, type QuoteContact } from "./quoteContacts";
 import type { ScopeOfWork, ScopeOfWorkItem, ScopeOfWorkPaymentConditions } from "./scopeOfWork";
 import { formatPaymentMethod, scopePoNumbers, scopeQuotationNumbers } from "./scopeOfWork";
 import type { ChecklistGroup } from "./documentRequirements";
@@ -96,9 +97,29 @@ function diffQuoteLines(oldLines: QuoteLine[], newLines: QuoteLine[]): string[] 
   return out;
 }
 
+// เทียบรายชื่อผู้ติดต่อทีละตำแหน่ง — ใบเก่าที่มีแค่สามช่องเดิมถูกแปลงเป็นคนเดียวก่อนเทียบ (quoteContactsOf)
+// ผลลัพธ์สำหรับใบที่มีคนเดียวจึงเทียบเท่าสามบรรทัดเดิม แค่ขึ้นต้นด้วย "ผู้ติดต่อที่ 1"
+function diffContacts(oldList: QuoteContact[], newList: QuoteContact[]): string[] {
+  const out: string[] = [];
+  const max = Math.max(oldList.length, newList.length);
+  for (let i = 0; i < max; i++) {
+    const o = oldList[i];
+    const n = newList[i];
+    if (o && !n) { out.push(`ลบผู้ติดต่อที่ ${i + 1}: "${contactLine(o) || "(ว่าง)"}"`); continue; }
+    if (!o && n) { out.push(`เพิ่มผู้ติดต่อที่ ${i + 1}: "${contactLine(n) || "(ว่าง)"}"`); continue; }
+    if (!o || !n) continue;
+    const label = `ผู้ติดต่อที่ ${i + 1}`;
+    push(out, diffText(`${label} — ชื่อ`, o.name, n.name));
+    push(out, diffText(`${label} — ตำแหน่ง`, o.position, n.position));
+    push(out, diffText(`${label} — เบอร์โทร`, o.phone, n.phone));
+    push(out, diffText(`${label} — อีเมล`, o.email, n.email));
+  }
+  return out;
+}
+
 export type QuoteRevisionDiffInput = Pick<
   Quote,
-  | "client" | "project" | "address" | "taxId" | "contactName" | "contactPhone" | "contactEmail"
+  | "client" | "project" | "address" | "taxId" | "contactName" | "contactPhone" | "contactEmail" | "contacts"
   | "deliveryMethod" | "deliveryAddress" | "poRef" | "paymentTerms" | "issueDate" | "expiryDate"
   | "salesperson" | "jobTypeCode" | "jobTypeName" | "discount" | "discountMode" | "isPotentialOpportunity"
   | "followUpDate" | "remarks" | "lines" | "customerId"
@@ -112,9 +133,7 @@ export function generateQuoteRevisionSummary(source: QuoteRevisionDiffInput, cur
   push(out, diffText("โครงการ", source.project, current.project));
   push(out, diffText("ที่อยู่", source.address, current.address));
   push(out, diffText("เลขประจำตัวผู้เสียภาษี", source.taxId, current.taxId));
-  push(out, diffText("ชื่อผู้ติดต่อ", source.contactName, current.contactName));
-  push(out, diffText("เบอร์โทรผู้ติดต่อ", source.contactPhone, current.contactPhone));
-  push(out, diffText("อีเมลผู้ติดต่อ", source.contactEmail, current.contactEmail));
+  out.push(...diffContacts(quoteContactsOf(source), quoteContactsOf(current)));
   push(out, diffText("วิธีจัดส่ง", source.deliveryMethod, current.deliveryMethod));
   push(out, diffText("สถานที่จัดส่ง", source.deliveryAddress, current.deliveryAddress));
   push(out, diffText("เอกสารใบสั่งซื้อ (PO)", source.poRef, current.poRef));

@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { HttpError } from "./http.js";
 import type { QuoteFields } from "./collections.js";
 import { computeQuoteAmountWithVat, type DiscountMode } from "./quoteAmounts.js";
+import { MAX_QUOTE_CONTACTS, isBlankContact, type QuoteContact } from "../../src/lib/quoteContacts.js";
 
 /**
  * Server-side quote payload validation — added per the 2026-07-10 Codex review's Critical finding
@@ -112,6 +114,30 @@ function sanitizeLine(raw: unknown, index: number): QuoteFields["lines"][number]
 }
 
 /** Validates and sanitizes a `lines` array — throws on any malformed line rather than silently dropping/coercing it. */
+/**
+ * รายชื่อผู้ติดต่อ (2026-09-07) — `undefined` เมื่อคำขอไม่ได้ส่งมา (ผู้เรียกจะไม่แตะค่าเดิม) · แถวที่ว่างทั้ง
+ * แถวถูกตัดทิ้งเงียบ ๆ (หน้าจอส่งแถวเปล่าที่ผู้ใช้กด "เพิ่ม" แล้วไม่ได้กรอกมาได้) · `id` ที่หายให้สุ่มใหม่
+ * แบบเดียวกับ `sanitizeSpecLine` ของ Scope of Work — id เป็นแค่ key ของหน้าจอ ไม่ใช่ข้อมูลธุรกิจ
+ */
+export function validateContacts(raw: unknown): QuoteContact[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) throw new HttpError(400, "รูปแบบรายชื่อผู้ติดต่อไม่ถูกต้อง");
+  if (raw.length > MAX_QUOTE_CONTACTS) throw new HttpError(400, `ผู้ติดต่อต้องไม่เกิน ${MAX_QUOTE_CONTACTS} คน`);
+  return raw
+    .map((c, i): QuoteContact => {
+      if (!c || typeof c !== "object") throw new HttpError(400, `ผู้ติดต่อที่ ${i + 1} ไม่ถูกต้อง`);
+      const r = c as Record<string, unknown>;
+      return {
+        id: typeof r.id === "string" && r.id.trim() ? r.id.trim() : randomUUID(),
+        name: sanitizeShortText(r.name, `ชื่อผู้ติดต่อที่ ${i + 1}`),
+        position: sanitizeShortText(r.position, `ตำแหน่งผู้ติดต่อที่ ${i + 1}`),
+        phone: sanitizeShortText(r.phone, `เบอร์โทรผู้ติดต่อที่ ${i + 1}`),
+        email: sanitizeShortText(r.email, `อีเมลผู้ติดต่อที่ ${i + 1}`),
+      };
+    })
+    .filter((c) => !isBlankContact(c));
+}
+
 export function validateLines(raw: unknown): QuoteFields["lines"] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) throw new HttpError(400, "รูปแบบรายการสินค้าไม่ถูกต้อง");
