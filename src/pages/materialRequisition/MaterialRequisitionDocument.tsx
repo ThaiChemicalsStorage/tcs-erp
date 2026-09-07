@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2, GitBranch, LayoutTemplate, PackageCheck, CheckCircle2 } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, Undo2, GitBranch, LayoutTemplate, PackageCheck, CheckCircle2, History } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
-  type MaterialRequisition, type MaterialRequisitionLine, type MaterialRequisitionUpdateFields,
-  fetchMaterialRequisition, updateMaterialRequisition, recordMaterialRequisitionReturn, issueMaterialRequisition,
+  type MaterialRequisition, type MaterialRequisitionLine, type MaterialRequisitionUpdateFields, type MaterialIssueBatch,
+  fetchMaterialRequisition, updateMaterialRequisition, recordMaterialRequisitionReturn,
+  postMaterialIssueBatch, cancelMaterialIssueBatch,
   logMaterialRequisitionPrinted, deleteMaterialRequisition,
   blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES,
   submitMaterialRequisitionApproval, approveMaterialRequisition, rejectMaterialRequisition, withdrawMaterialRequisitionApproval,
-  rewriteMaterialRequisition, issuedQtyOf, outstandingQtyOf,
+  rewriteMaterialRequisition, issuedQtyOf, outstandingQtyOf, issueBatchesOf,
 } from "../../lib/materialRequisition";
 import { fetchDepartments, type Department } from "../../lib/departments";
 import { fetchTeams, type Team } from "../../lib/teams";
@@ -37,7 +38,7 @@ import { useAutoSave, useDraftBackup } from "../../hooks/useAutoSave";
 
 /**
  * payload ที่ปุ่ม "บันทึกฉบับร่าง" ส่ง — เบิกครั้งที่ 1/2 และคืนของ**ไม่อยู่ในนี้** ตั้งแต่ 2026-09-03
- * (server ไม่รับจาก PATCH อยู่แล้ว เป็นของสโตร์ผ่าน /issue และ /return) จึงตัดออกจาก lines ก่อนส่ง
+ * (server ไม่รับจาก PATCH อยู่แล้ว เป็นของสโตร์ผ่าน /issues และ /return) จึงตัดออกจาก lines ก่อนส่ง
  * ไม่งั้นการเทียบ "ยังไม่ได้บันทึก" จะเห็นค่าที่สโตร์เพิ่งกรอกในการ์ดจ่ายของเป็นงานค้างของฉบับร่าง
  */
 function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields {
@@ -64,11 +65,16 @@ function toUpdateFields(m: MaterialRequisition): MaterialRequisitionUpdateFields
   };
 }
 
-/** ทุกช่องที่ผู้ใช้แก้ได้จริงบนหน้านี้ — รวมช่องของสโตร์ (จ่ายจริง/คืน) ที่ toUpdateFields ตัดทิ้ง */
+/**
+ * ทุกช่องที่ผู้ใช้แก้ได้จริงบนหน้านี้ — รวมช่องคืนของที่ toUpdateFields ตัดทิ้ง
+ *
+ * ยอดจ่ายไม่อยู่ในนี้ตั้งแต่ 2026-09-07 — การจ่ายเป็นรอบที่กด "บันทึก" ทีเดียวจบ ไม่ใช่ช่องที่ค้าง
+ * แก้ไว้บนหน้าจอ จึงไม่มีอะไรให้เตือนว่ายังไม่ได้บันทึก
+ */
 function toGuardPayload(m: MaterialRequisition) {
   return {
     ...toUpdateFields(m),
-    issued: m.lines.map((l) => [l.id, l.withdrawal1Qty, l.withdrawal2Qty, l.returnQty]),
+    returns: m.lines.map((l) => [l.id, l.returnQty]),
     returnedBy: m.returnedBy, returnReceivedBy: m.returnReceivedBy,
   };
 }
@@ -122,6 +128,12 @@ export function MaterialRequisitionDocument({
   const [saving, setSaving] = useState(false);
   const [savingReturn, setSavingReturn] = useState(false);
   const [savingIssue, setSavingIssue] = useState(false);
+  /** ช่อง "จ่ายรอบนี้" ต่อบรรทัด — state แยกจากเอกสาร เพราะเป็นรอบที่ยังไม่ได้บันทึก ไม่ใช่ค่าในใบ */
+  const [issueQty, setIssueQty] = useState<Record<string, string>>({});
+  const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [issueRemark, setIssueRemark] = useState("");
+  const [confirmCancelBatch, setConfirmCancelBatch] = useState<MaterialIssueBatch | null>(null);
+  const [cancellingBatch, setCancellingBatch] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -250,18 +262,31 @@ export function MaterialRequisitionDocument({
     }
   };
 
-  /** สโตร์จ่ายของ — ส่งเบิกครั้งที่ 1/2 ของทุกบรรทัด server ตัดสต๊อกตามส่วนต่างเอง */
+  /**
+   * สโตร์จ่ายของหนึ่งรอบ — ส่งเฉพาะบรรทัดที่กรอกจำนวนมา ยอดของรอบก่อนหน้าไม่ถูกแตะเลย
+   * เซิร์ฟเวอร์ต่อท้ายรอบใหม่ ตัดสต๊อกตามจำนวนของรอบนั้น แล้วคิดช่อง "เบิกครั้งที่ 1/2" ใหม่ให้เอง
+   */
   const saveIssue = async (): Promise<boolean> => {
     if (!draft) return false;
+    const lines = draft.lines
+      .map((l) => ({ lineId: l.id, qty: Number(issueQty[l.id] ?? "") }))
+      .filter((l) => Number.isFinite(l.qty) && l.qty > 0);
+    if (lines.length === 0) {
+      showToast(t("materialRequisitionDoc.issueEmpty"));
+      return false;
+    }
     setSavingIssue(true);
     try {
-      const updated = await issueMaterialRequisition(draft.id, {
-        lines: draft.lines.map((l) => ({ id: l.id, withdrawal1Qty: l.withdrawal1Qty, withdrawal2Qty: l.withdrawal2Qty })),
-        storeDeptBy: draft.storeDeptBy,
+      const { materialRequisition, stockByProduct: fresh } = await postMaterialIssueBatch(draft.id, {
+        lines,
+        issuedDate: issueDate,
+        issuedBy: draft.storeDeptBy,
+        remark: issueRemark,
         ...chargeFieldsOf(draft),
       });
-      const fresh = await fetchMaterialRequisition(draft.id).catch(() => null);
-      applySaved(updated, fresh?.stockByProduct);
+      applySaved(materialRequisition, fresh);
+      setIssueQty({});
+      setIssueRemark("");
       showToast(t("materialRequisitionDoc.issueSaved"));
       return true;
     } catch (err) {
@@ -272,8 +297,25 @@ export function MaterialRequisitionDocument({
     }
   };
 
-  // การ์ด "ยังไม่ได้บันทึก" — ยังทำงานหลังอนุมัติด้วย เพราะช่องจ่ายของ/คืนวัสดุยังแก้ได้ และตอนนั้น auto-save ปิดอยู่
-  // ปุ่ม "บันทึก" ในกล่องจึงต้องเลือกให้ตรงเฟส: ฉบับร่างใช้ save() หลังอนุมัติ สโตร์ใช้ saveIssue() คนอื่นใช้ saveReturn()
+  /** ยกเลิกรอบล่าสุด — ของทั้งรอบกลับเข้าคลัง */
+  const cancelBatch = async (batch: MaterialIssueBatch) => {
+    if (!draft) return;
+    setCancellingBatch(true);
+    try {
+      const { materialRequisition, stockByProduct: fresh } = await cancelMaterialIssueBatch(draft.id, batch.id);
+      applySaved(materialRequisition, fresh);
+      setConfirmCancelBatch(null);
+      showToast(t("materialRequisitionDoc.batchCancelled"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("materialRequisitionDoc.errorCancelBatch"));
+    } finally {
+      setCancellingBatch(false);
+    }
+  };
+
+  // การ์ด "ยังไม่ได้บันทึก" — ยังทำงานหลังอนุมัติด้วย เพราะช่องคืนวัสดุยังแก้ได้ และตอนนั้น auto-save ปิดอยู่
+  // ปุ่ม "บันทึก" ในกล่องเลือกตามเฟส: ฉบับร่างใช้ save() หลังอนุมัติใช้ saveReturn()
+  // (การจ่ายของเป็นรอบที่กดบันทึกทีเดียวจบ ไม่มีสถานะค้างให้กู้)
   const { requestLeave } = useUnsavedChangesGuard(
     draft && (canEdit || canIssueStock)
       ? {
@@ -284,7 +326,7 @@ export function MaterialRequisitionDocument({
             autoSaveState: autoSave.state,
           }),
           documentLabel: draft.documentNumber || draft.id,
-          save: draft.status === "Draft" ? save : canIssueStock ? saveIssue : saveReturn,
+          save: draft.status === "Draft" ? save : saveReturn,
           discard: draftBackup.clear,
         }
       : null,
@@ -343,6 +385,9 @@ export function MaterialRequisitionDocument({
   /** คืนของ: ใบอนุมัติแล้ว โดยเจ้าของใบหรือสโตร์ */
   const canReturn = (canEdit || canIssueStock) && isFinal;
   const outstandingLines = doc.lines.filter((l) => outstandingQtyOf(l) > 0).length;
+  /** รอบการจ่ายที่บันทึกแล้ว — ใบที่จ่ายไปก่อน 2026-09-07 ถูกแปลงยอดเดิมมาเป็นรอบให้อัตโนมัติ */
+  const issueBatches = issueBatchesOf(doc);
+  const nextIssueSeq = issueBatches.length > 0 ? Math.max(...issueBatches.map((b) => b.seq)) + 1 : 1;
   const formNumber = doc.documentNumber || doc.id;
 
   // แบบเดียวกับที่ใบส่งมอบสินค้าทำ (DeliveryOrderDocument.tsx) — โมดูลนี้ไม่เคยโหลดโปรไฟล์บริษัท
@@ -750,7 +795,9 @@ export function MaterialRequisitionDocument({
           <div data-tour="mrdoc-issueCard" className="bg-card border border-[#2aa36b]/30 rounded-xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <PackageCheck size={15} className="text-[#207e52]" />
-              <h2 className="text-sm font-semibold text-foreground">{t("materialRequisitionDoc.issueTitle")}</h2>
+              <h2 className="text-sm font-semibold text-foreground">
+                {t("materialRequisitionDoc.issueRoundTitle").replace("{n}", String(nextIssueSeq))}
+              </h2>
             </div>
             <p className="text-xs text-muted-foreground">{canIssue ? t("materialRequisitionDoc.issueHint") : t("materialRequisitionDoc.issueLocked")}</p>
             {canIssue && (
@@ -763,14 +810,24 @@ export function MaterialRequisitionDocument({
                       onChange={(e) => setDraft({ ...draft, storeDeptBy: e.target.value })}
                       className={inputCls} />
                   </div>
+                  <div>
+                    <label htmlFor="mr-issue-date" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.issuedDate")}</label>
+                    <input id="mr-issue-date" type="date" value={issueDate}
+                      onChange={(e) => setIssueDate(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label htmlFor="mr-issue-remark" className="text-xs text-muted-foreground block mb-1">{t("materialRequisitionDoc.field.issueRemark")}</label>
+                    <input id="mr-issue-remark" value={issueRemark}
+                      onChange={(e) => setIssueRemark(e.target.value)} className={inputCls} />
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-muted/40">
                         {[
-                          t("materialRequisitionDoc.col.item"), t("materialRequisitionDoc.col.plannedQty"), t("materialRequisitionDoc.col.stockQty"),
-                          t("materialRequisitionDoc.col.withdrawal1"), t("materialRequisitionDoc.col.withdrawal2"), t("materialRequisitionDoc.col.outstanding"),
+                          t("materialRequisitionDoc.col.item"), t("materialRequisitionDoc.col.plannedQty"), t("materialRequisitionDoc.col.issued"),
+                          t("materialRequisitionDoc.col.outstanding"), t("materialRequisitionDoc.col.stockQty"), t("materialRequisitionDoc.col.issueNow"),
                         ].map((h) => (
                           <th key={h} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                         ))}
@@ -780,19 +837,22 @@ export function MaterialRequisitionDocument({
                       {draft.lines.map((line) => {
                         const stock = stockByProduct[line.productId];
                         const outstanding = outstandingQtyOf(line);
+                        const typed = Number(issueQty[line.id] ?? "");
+                        // เตือนตรงช่องที่พิมพ์ ก่อนจะไปโดนเซิร์ฟเวอร์ปฏิเสธ — เกินค้างเบิก หรือของในคลังไม่พอ
+                        const bad = Number.isFinite(typed) && typed > 0 && (typed > outstanding || (stock !== undefined && typed > stock));
                         return (
                           <tr key={line.id} className="border-b border-border/50">
                             <td className="px-3 py-2 text-xs text-foreground"><span className="font-mono text-muted-foreground mr-2">{line.productCode}</span>{line.productName}</td>
                             <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{(line.plannedQty ?? 0).toLocaleString()} {line.unit}</td>
-                            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{stock === undefined ? "—" : stock.toLocaleString()}</td>
-                            {(["withdrawal1Qty", "withdrawal2Qty"] as const).map((field) => (
-                              <td key={field} className="px-2 py-1.5">
-                                <input type="number" min={0} value={line[field] ?? ""}
-                                  onChange={(e) => updateLine(line.id, { [field]: numberOrNull(e.target.value) })}
-                                  className="w-20 text-xs font-mono text-foreground bg-[#2aa36b]/5 border border-[#2aa36b]/20 rounded px-1.5 py-1 outline-none" />
-                              </td>
-                            ))}
+                            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{issuedQtyOf(line).toLocaleString()}</td>
                             <td className={`px-3 py-2 text-xs font-mono ${outstanding > 0 ? "text-[#a75d1a] font-semibold" : "text-muted-foreground"}`}>{outstanding.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{stock === undefined ? "—" : stock.toLocaleString()}</td>
+                            <td className="px-2 py-1.5">
+                              <input type="number" min={0} max={outstanding} value={issueQty[line.id] ?? ""}
+                                disabled={outstanding <= 0}
+                                onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
+                                className={`w-24 text-xs font-mono text-foreground bg-[#2aa36b]/5 border rounded px-1.5 py-1 outline-none disabled:opacity-40 ${bad ? "border-[#e05252]" : "border-[#2aa36b]/20"}`} />
+                            </td>
                           </tr>
                         );
                       })}
@@ -800,10 +860,57 @@ export function MaterialRequisitionDocument({
                   </table>
                 </div>
                 <button onClick={saveIssue} disabled={savingIssue} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-[#2aa36b]/40 text-[#207e52] rounded-lg font-medium hover:bg-[#2aa36b]/10 transition-colors disabled:opacity-60">
-                  {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {t("materialRequisitionDoc.saveIssue")}
+                  {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                  {t("materialRequisitionDoc.saveIssueRound").replace("{n}", String(nextIssueSeq))}
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {/* ประวัติรอบการจ่าย — ทุกคนที่เปิดใบได้เห็น เพราะเป็นตัวตอบว่าของออกไปเมื่อไหร่ให้ใคร */}
+        {issueBatches.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <History size={15} className="text-muted-foreground" />
+              <h2 className="text-sm font-semibold text-foreground">{t("materialRequisitionDoc.batchesTitle")}</h2>
+            </div>
+            <div className="space-y-2">
+              {issueBatches.map((batch, idx) => {
+                const isLast = idx === issueBatches.length - 1;
+                return (
+                  <div key={batch.id} className="border border-border rounded-lg px-3 py-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs text-foreground">
+                        <span className="font-semibold">{t("materialRequisitionDoc.batchLabel").replace("{n}", String(batch.seq))}</span>
+                        <span className="text-muted-foreground"> · {batch.issuedDate || "—"}</span>
+                        {batch.issuedBy ? <span className="text-muted-foreground"> · {batch.issuedBy}</span> : null}
+                        {batch.chargeTeamName ? <span className="text-muted-foreground"> · {batch.chargeTeamName}</span> : null}
+                      </div>
+                      {canIssue && isLast && (
+                        <button onClick={() => setConfirmCancelBatch(batch)}
+                          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors">
+                          <Undo2 size={12} /> {t("materialRequisitionDoc.cancelBatch")}
+                        </button>
+                      )}
+                    </div>
+                    <ul className="mt-1.5 space-y-0.5">
+                      {batch.lines.map((bl) => {
+                        const line = draft.lines.find((l) => l.id === bl.lineId);
+                        return (
+                          <li key={bl.lineId} className="text-xs text-muted-foreground">
+                            <span className="font-mono mr-2">{line?.productCode ?? "—"}</span>
+                            {line?.productName ?? t("materialRequisitionDoc.batchDeletedLine")}
+                            <span className="font-mono text-foreground ml-2">{bl.qty.toLocaleString()} {line?.unit ?? ""}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {batch.remark ? <p className="mt-1.5 text-xs text-muted-foreground">{batch.remark}</p> : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -921,6 +1028,16 @@ export function MaterialRequisitionDocument({
         busy={rewriting}
         onConfirm={() => void handleRewrite()}
         onCancel={() => setConfirmRewrite(false)}
+      />
+      <ConfirmDialog
+        open={!!confirmCancelBatch}
+        title={t("materialRequisitionDoc.cancelBatchConfirmTitle")}
+        message={t("materialRequisitionDoc.cancelBatchConfirmBody").replace("{n}", String(confirmCancelBatch?.seq ?? ""))}
+        confirmLabel={t("materialRequisitionDoc.cancelBatch")}
+        danger
+        busy={cancellingBatch}
+        onConfirm={() => { if (confirmCancelBatch) void cancelBatch(confirmCancelBatch); }}
+        onCancel={() => setConfirmCancelBatch(null)}
       />
     </div>
   );

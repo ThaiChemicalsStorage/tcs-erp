@@ -19,8 +19,8 @@ import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js
 import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
 import { ensureMaterialCatalogSeeded } from "./materialCatalogSeedData.js";
 import { applyStockMovement, assertProductsHaveStock, type StockMovementOrgTags } from "./stockHandler.js";
-import { issuedQtyOf, netHeldQtyOf, requisitionHasOutstanding } from "../../src/lib/materialRequisition.js";
-import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary } from "../../src/lib/materialRequisition.js";
+import { issuedQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches } from "../../src/lib/materialRequisition.js";
+import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch } from "../../src/lib/materialRequisition.js";
 
 /**
  * Material Requisition API (added 2026-08-18, Stage 3) — mounted from `api/handlers/quotes.ts`
@@ -31,8 +31,13 @@ import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequ
  * **2026-09-03 — สต๊อกตัดตอนสโตร์จ่ายของจริง ไม่ใช่ตอนอนุมัติ.** เจ้าของเลือกทางนี้เมื่อถูกถาม
  * (แทนการตัดตาม "เบิกของ" ตอนอนุมัติที่ทำไว้เมื่อ 2026-09-02 ซึ่งทำให้ใบที่ของไม่พออนุมัติไม่ได้เลย):
  *   - อนุมัติ = อนุมัติ ไม่แตะสต๊อก (`approvalConfig` ไม่มี beforeApprove/onApproved ด้านสต๊อกอีก)
- *   - `POST /:id/issue` — สโตร์กรอก "เบิกครั้งที่ 1/2" แล้วสต๊อกถูกตัดตาม**ส่วนต่าง**ต่อสินค้า จ่ายบางส่วนได้
+ *   - `POST /:id/issues` — สโตร์จ่ายหนึ่งรอบ สต๊อกถูกตัดตามจำนวนของรอบนั้น จ่ายบางส่วนได้
  *     ส่วนที่เหลือคือ "ค้างเบิก" ที่หน้าจอโชว์ต่อบรรทัด และจ่ายเพิ่มในใบเดิมได้เมื่อของมา
+ *
+ * **2026-09-07 — จ่ายเป็นรอบ ต่อท้ายอย่างเดียว.** เดิม `POST /:id/issue` รับยอดรวมของช่อง "เบิกครั้งที่ 1/2"
+ * แล้วตัดตามส่วนต่าง ซึ่งจ่ายได้แค่ 2 รอบ และการพิมพ์ทับช่องเดิมทำให้ยอดของรอบก่อนหายไปเงียบ ๆ ตอนนี้
+ * รอบการจ่ายเก็บเป็น `issues[]` (โครงเดียวกับ `batches` ของใบรับสินค้า) ส่วนสองช่องบนฟอร์มกลายเป็น
+ * ค่าที่**คำนวณจากรอบ** (`withdrawalsFromBatches`) จึงไม่ต้องแก้ใบพิมพ์ ตัวคิดค้างเบิก หรือกฎการคืนของ
  *   - `POST /:id/return` — คืนตามส่วนต่างเหมือนเดิม แต่ห้ามคืนเกินที่จ่ายไปแล้ว และลงบัญชีเป็น kind `return`
  *   - ทุก movement ประทับ แผนก/ทีม/ประเภทงาน จากหัวใบ (`charge*`) — ฐานของทะเบียนเครื่องมือประจำทีม
  */
@@ -57,10 +62,6 @@ export function deductionsFor(lines: { productId?: string; plannedQty?: number |
     byProduct.set(productId, (byProduct.get(productId) ?? 0) + qty);
   }
   return byProduct;
-}
-/** จำนวนที่จ่ายแล้วต่อสินค้า — ตัวที่ route จ่ายของใช้เทียบก่อน/หลัง */
-export function issuedByProduct(lines: { productId?: string; withdrawal1Qty?: number | null; withdrawal2Qty?: number | null }[]): Map<string, number> {
-  return deductionsFor(lines.map((l) => ({ productId: l.productId, plannedQty: issuedQtyOf({ withdrawal1Qty: l.withdrawal1Qty ?? null, withdrawal2Qty: l.withdrawal2Qty ?? null }) })));
 }
 /**
  * ส่วนต่างต่อสินค้าระหว่างสองรอบ — วน **union** ของทั้งสองฝั่ง ไม่ใช่แค่ฝั่ง "หลัง" (บั๊กเดิมของ
@@ -310,6 +311,8 @@ function toClient(doc: MaterialRequisitionFields & { _id: string }) {
   return withStringId(withApprovalDefaults({
     ...doc,
     revisionNote: doc.revisionNote ?? "",
+    // ใบก่อน 2026-09-07 ไม่มีรายการรอบการจ่าย — หน้าจอเรียก issueBatchesOf() แปลงยอดเดิมให้เอง
+    issues: doc.issues ?? [],
     documentNumber: doc.documentNumber || doc._id,
     chargeDepartmentId: doc.chargeDepartmentId ?? "", chargeDepartmentName: doc.chargeDepartmentName ?? "",
     chargeTeamId: doc.chargeTeamId ?? "", chargeTeamName: doc.chargeTeamName ?? "",
@@ -453,7 +456,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     productionOrderId: fromProduction ? productionOrderId : "",
     jobOrderId: jobOrderLink.jobOrderId, jobOrderCode: jobOrderLink.jobOrderCode,
     productName: source.productName, responsibleEmployee: source.responsibleEmployee, productionStartDate: "",
-    lines: [], status: "Draft",
+    lines: [], issues: [], status: "Draft",
     // preparedAt seeds from a date-only slice of `now`, not the full ISO timestamp — see
     // jobOrderHandler.ts's identical fix/comment on requestedAt for why (validateIsoDateOrEmpty
     // requires strict YYYY-MM-DD; the full timestamp made every save after creation fail with 400).
@@ -585,73 +588,171 @@ function assertFinalForStock(doc: MaterialRequisitionFields, action: string): vo
 }
 
 /**
- * "จ่ายของ" (สโตร์) — เจ้าของเลือก 2026-09-03: *ตัดตอนสโตร์จ่ายของจริง จ่ายบางส่วนได้*
+ * รวมจำนวนต่อ **สินค้า** จากจำนวนต่อ **บรรทัด** — สองบรรทัดที่ชี้สินค้าเดียวกันถูกยุบเป็นก้อนเดียว
+ * ก่อนแตะสต๊อก ไม่งั้นจะเขียน movement ซ้ำสองรอบให้สินค้าตัวเดียวกันในคำขอเดียว
+ */
+function productTotalsOf(lines: MaterialRequisitionLine[], qtyByLineId: Map<string, number>): Map<string, number> {
+  return deductionsFor(lines.map((l) => ({ productId: l.productId, plannedQty: qtyByLineId.get(l.id) ?? 0 })));
+}
+
+/** ช่อง "เบิกครั้งที่ 1/2" ของทุกบรรทัด คิดใหม่จากรอบการจ่ายทั้งหมด — ค่าที่เก็บไว้ไม่เคยถูกเชื่อ */
+function linesWithDerivedWithdrawals(lines: MaterialRequisitionLine[], batches: MaterialIssueBatch[]): MaterialRequisitionLine[] {
+  return lines.map((l) => ({ ...l, ...withdrawalsFromBatches(batches, l.id) }));
+}
+
+/**
+ * "จ่ายของ" หนึ่งรอบ (2026-09-07) — ต่อท้าย `issues` หนึ่งก้อน ตัดสต๊อกตามจำนวนของรอบนั้น จบ
  *
  * สิทธิ์ `stock:adjust` ไม่ใช่ `canEdit()` — คนจ่ายของคือสโตร์ ซึ่งไม่ใช่เจ้าของใบและอาจไม่มีสิทธิ์แก้ใบ
  * เลย ส่วนเจ้าของใบก็ไม่ควรกรอกเลขจ่ายเองได้ (ไม่งั้นตัวเลขสต๊อกจะขึ้นกับคนขอ ไม่ใช่คนจ่าย)
  *
- * ลำดับ: ตรวจทุกบรรทัด (จ่ายรวม ≤ ขอ, ≥ คืนแล้ว) → คำนวณส่วนต่างต่อสินค้า → เช็คยอดพอสำหรับทุกตัวที่ต้อง
- * ตัดเพิ่ม **ก่อน** เขียนอะไรเลย (กันเขียนครึ่งเดียว) → ตัด/คืนส่วนต่างทีละสินค้า → บันทึกใบ
- * ส่วนต่างติดลบ (สโตร์แก้เลขลง) = ของกลับเข้าคลังเป็น `return` ของสโตร์เอง ไม่ใช่การคืนจากทีม
+ * ลำดับ: ตรวจทุกบรรทัด (จ่ายรอบนี้ > 0 และไม่เกินค้างเบิก) → เช็คยอดพอสำหรับทุกสินค้า **ก่อน** เขียน
+ * อะไรเลย (กันเขียนครึ่งเดียว) → ตัดสต๊อกทีละสินค้า → ต่อท้ายรอบและคิดสองช่องบนฟอร์มใหม่
+ *
+ * ใบเก่าที่จ่ายไปแล้วก่อนมีระบบรอบ ถูกแปลงยอดเดิมเป็นรอบย้อนหลังแล้วเขียนลงฐานข้อมูล**พร้อมกับ**รอบใหม่
+ * (`legacyIssueBatchesOf` ผ่าน `issueBatchesOf`) ยอดเดิมจึงไม่หายและไม่ถูกตัดสต๊อกซ้ำ
  */
-async function handleIssue(req: VercelRequest, res: VercelResponse, id: string) {
+async function handlePostIssueBatch(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "stock:adjust");
   const doc = await loadOrThrow(id);
   assertFinalForStock(doc, "จ่ายของ");
 
   const body = (req.body ?? {}) as Record<string, unknown>;
-  const rows = Array.isArray(body.lines) ? (body.lines as Record<string, unknown>[]) : [];
-  const rowById = new Map(rows.map((r) => [typeof r.id === "string" ? r.id : "", r]));
-  const lines = doc.lines.map((line) => {
-    const r = rowById.get(line.id);
-    if (!r) return line;
-    const withdrawal1Qty = "withdrawal1Qty" in r ? sanitizeNullableNumber(r.withdrawal1Qty, `เบิกครั้งที่1 (${line.productName})`) : line.withdrawal1Qty;
-    const withdrawal2Qty = "withdrawal2Qty" in r ? sanitizeNullableNumber(r.withdrawal2Qty, `เบิกครั้งที่2 (${line.productName})`) : line.withdrawal2Qty;
-    if ((withdrawal1Qty ?? 0) < 0 || (withdrawal2Qty ?? 0) < 0) throw new HttpError(400, `จำนวนจ่าย (${line.productName}) ต้องไม่ติดลบ`);
-    const issued = issuedQtyOf({ withdrawal1Qty, withdrawal2Qty });
-    if (issued > (line.plannedQty ?? 0)) {
-      throw new HttpError(400, `จ่าย ${line.productName} รวม ${issued} เกินที่ขอเบิก ${line.plannedQty ?? 0} ${line.unit}`);
+  const issuedDate = validateIsoDateOrEmpty(body.issuedDate, "วันที่จ่ายของ") || nowIso().slice(0, 10);
+  const issuedBy = sanitizeShortText(body.issuedBy, "ผู้จ่ายของ") || doc.storeDeptBy || ctx.user.fullName;
+  const remark = sanitizeLongText(body.remark, "หมายเหตุ");
+
+  const rows = body.lines;
+  if (!Array.isArray(rows)) throw new HttpError(400, "ข้อมูลรายการจ่ายไม่ถูกต้อง");
+  if (rows.length > MAX_LINES) throw new HttpError(400, `จำนวนรายการต้องไม่เกิน ${MAX_LINES} รายการ`);
+
+  const previous = issueBatchesOf(doc);
+  const lineById = new Map(doc.lines.map((l) => [l.id, l]));
+  const qtyByLineId = new Map<string, number>();
+  for (const [idx, raw] of (rows as Record<string, unknown>[]).entries()) {
+    const lineId = typeof raw.lineId === "string" ? raw.lineId : "";
+    const line = lineById.get(lineId);
+    if (!line) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: ไม่พบบรรทัดที่ระบุในใบนี้`);
+    if (qtyByLineId.has(lineId)) throw new HttpError(400, `รายการลำดับที่ ${idx + 1}: ส่งบรรทัดเดียวกันมาซ้ำ`);
+    const qty = sanitizeNullableNumber(raw.qty, `จำนวนจ่าย (${line.productName})`) ?? 0;
+    if (qty < 0) throw new HttpError(400, `จำนวนจ่าย (${line.productName}) ต้องไม่ติดลบ`);
+    if (qty === 0) continue; // บรรทัดที่ไม่ได้จ่ายรอบนี้ — ปล่อยผ่าน ไม่ใช่ข้อผิดพลาด
+    const outstanding = (line.plannedQty ?? 0) - batchIssuedQtyOf(previous, lineId);
+    if (qty > outstanding) {
+      throw new HttpError(400, `จ่าย ${line.productName} ${qty} เกินที่ค้างเบิก ${Math.max(0, outstanding)} ${line.unit}`);
     }
-    if (issued < (line.returnQty ?? 0)) {
-      throw new HttpError(400, `จ่าย ${line.productName} รวม ${issued} น้อยกว่าที่คืนไปแล้ว ${line.returnQty ?? 0} ${line.unit}`);
-    }
-    return { ...line, withdrawal1Qty, withdrawal2Qty };
-  });
+    qtyByLineId.set(lineId, qty);
+  }
+  if (qtyByLineId.size === 0) throw new HttpError(400, "กรุณาระบุจำนวนที่จ่ายอย่างน้อยหนึ่งรายการ");
 
   const charge = await resolveChargeFromBody(body);
-  const merged: MaterialRequisitionFields = { ...doc, ...charge, lines };
-  const delta = deltaByProduct(issuedByProduct(doc.lines), issuedByProduct(lines));
-  // เช็คก่อนเขียน: ทุกสินค้าที่ต้องตัดเพิ่มต้องมีพอ — applyStockMovement() ยังมีด่าน $gte ของตัวเองปิดช่องแข่ง
-  const needs = new Map<string, number>();
-  for (const [productId, d] of delta) if (d > 0) needs.set(productId, d);
-  await assertProductsHaveStock(needs);
+  const merged: MaterialRequisitionFields = { ...doc, ...charge };
+  // เช็คก่อนเขียน: ทุกสินค้าต้องมีพอ — applyStockMovement() ยังมีด่าน $gte ของตัวเองปิดช่องแข่ง
+  const totals = productTotalsOf(doc.lines, qtyByLineId);
+  await assertProductsHaveStock(totals);
 
   const org = orgTagsOf(merged);
   const label = merged.documentNumber || id;
-  for (const [productId, d] of delta) {
+  const seq = previous.length > 0 ? Math.max(...previous.map((b) => b.seq)) + 1 : 1;
+  const stockMovementIds: string[] = [];
+  for (const [productId, qty] of totals) {
+    const { movement } = await applyStockMovement({
+      productId, kind: "deduct", delta: -qty,
+      reason: `จ่ายของตามใบเบิก ${label} (รอบที่ ${seq})`,
+      sourceType: "material_requisition", sourceId: id, sourceLabel: label,
+      userId: ctx.user.id, org,
+    });
+    stockMovementIds.push(movement.id);
+  }
+
+  const now = nowIso();
+  const batch: MaterialIssueBatch = {
+    id: newId("mrissue"),
+    seq,
+    issuedDate,
+    lines: [...qtyByLineId].map(([lineId, qty]) => ({ lineId, qty })),
+    issuedBy,
+    remark,
+    chargeDepartmentName: merged.chargeDepartmentName ?? "",
+    chargeTeamName: merged.chargeTeamName ?? "",
+    chargeWorkTypeName: merged.chargeWorkTypeName ?? "",
+    postedAt: now, postedBy: ctx.user.id, postedByName: ctx.user.fullName,
+    stockMovementIds,
+  };
+  const issues = [...previous, batch];
+
+  const materialRequisitions = await materialRequisitionsCollection();
+  await materialRequisitions.updateOne({ _id: id }, {
+    $set: {
+      issues,
+      lines: linesWithDerivedWithdrawals(doc.lines, issues),
+      ...charge,
+      storeDeptBy: issuedBy, storeDeptAt: issuedDate,
+      updatedAt: now, updatedBy: ctx.user.id,
+    },
+  });
+  const updated = await loadOrThrow(id);
+  await writeAuditEntry(
+    ctx, "Material Requisition Issued",
+    `สโตร์จ่ายของตามใบเบิก ${label} รอบที่ ${seq} (${[...totals].map(([p, q]) => `${p}: -${q}`).join(", ")})`,
+    { scopeOfWorkId: updated.scopeOfWorkId },
+  );
+  res.status(200).json({ materialRequisition: toClient(updated), stockByProduct: await stockByProductFor(updated.lines ?? []) });
+}
+
+/**
+ * ยกเลิกรอบการจ่าย — ได้เฉพาะ **รอบล่าสุด** เหมือนใบรับสินค้า เพราะถ้าถอนรอบที่แทรกกลางออกได้
+ * ลำดับที่เหลือจะอ่านไม่ตรงกับบัญชีเดินสะพัดของสต๊อกที่บันทึกไว้ตามลำดับจริง
+ *
+ * ของทั้งรอบกลับเข้าคลังเป็น kind `return` · ยกเลิกไม่ได้ถ้าทีมคืนของมามากกว่าที่จะเหลือว่าจ่ายไป
+ * (ไม่งั้นยอด "คืนของ" จะมากกว่ายอด "จ่ายแล้ว" ซึ่งเป็นสถานะที่กฎการคืนของห้ามไว้อยู่แล้ว)
+ */
+async function handleCancelIssueBatch(req: VercelRequest, res: VercelResponse, id: string, batchId: string) {
+  if (req.method !== "DELETE") throw new HttpError(405, "Method not allowed");
+  const ctx = await requirePermission(req, "stock:adjust");
+  const doc = await loadOrThrow(id);
+  assertFinalForStock(doc, "ยกเลิกรอบการจ่าย");
+
+  const previous = issueBatchesOf(doc);
+  const last = previous[previous.length - 1];
+  if (!last || last.id !== batchId) throw new HttpError(400, "ยกเลิกได้เฉพาะรอบการจ่ายล่าสุดเท่านั้น");
+  const issues = previous.slice(0, -1);
+
+  for (const line of doc.lines) {
+    const remaining = batchIssuedQtyOf(issues, line.id);
+    if (remaining < (line.returnQty ?? 0)) {
+      throw new HttpError(400, `ยกเลิกไม่ได้: ${line.productName} คืนมาแล้ว ${line.returnQty} ${line.unit} มากกว่าที่จะเหลือว่าจ่ายไป ${remaining} ${line.unit}`);
+    }
+  }
+
+  const qtyByLineId = new Map(last.lines.map((l) => [l.lineId, l.qty]));
+  const totals = productTotalsOf(doc.lines.filter((l) => qtyByLineId.has(l.id)), qtyByLineId);
+  const org = orgTagsOf(doc);
+  const label = doc.documentNumber || id;
+  for (const [productId, qty] of totals) {
     await applyStockMovement({
-      productId, kind: d > 0 ? "deduct" : "return", delta: -d,
-      reason: d > 0 ? `จ่ายของตามใบเบิก ${label}` : `แก้ยอดจ่ายใบเบิก ${label} (ของกลับเข้าคลัง)`,
+      productId, kind: "return", delta: qty,
+      reason: `ยกเลิกการจ่ายรอบที่ ${last.seq} ของใบเบิก ${label} (ของกลับเข้าคลัง)`,
       sourceType: "material_requisition", sourceId: id, sourceLabel: label,
       userId: ctx.user.id, org,
     });
   }
 
-  const update: Partial<MaterialRequisitionFields> = {
-    lines, ...charge,
-    updatedAt: nowIso(), updatedBy: ctx.user.id,
-  };
-  if ("storeDeptBy" in body) update.storeDeptBy = sanitizeShortText(body.storeDeptBy, "แผนกสโตร์");
-  if (!doc.storeDeptBy && !update.storeDeptBy) update.storeDeptBy = ctx.user.fullName;
-  if (delta.size > 0 || !doc.storeDeptAt) update.storeDeptAt = nowIso().slice(0, 10);
-
+  const stillLast = issues[issues.length - 1];
   const materialRequisitions = await materialRequisitionsCollection();
-  await materialRequisitions.updateOne({ _id: id }, { $set: update });
+  await materialRequisitions.updateOne({ _id: id }, {
+    $set: {
+      issues,
+      lines: linesWithDerivedWithdrawals(doc.lines, issues),
+      storeDeptBy: stillLast?.issuedBy ?? "", storeDeptAt: stillLast?.issuedDate ?? "",
+      updatedAt: nowIso(), updatedBy: ctx.user.id,
+    },
+  });
   const updated = await loadOrThrow(id);
   await writeAuditEntry(
-    ctx, "Material Requisition Issued",
-    `สโตร์จ่ายของตามใบเบิก ${label}${delta.size > 0 ? ` (${[...delta].map(([p, d]) => `${p}: ${d > 0 ? "-" : "+"}${Math.abs(d)}`).join(", ")})` : " (ไม่มียอดเปลี่ยน)"}`,
+    ctx, "Material Requisition Issue Reversed",
+    `ยกเลิกการจ่ายรอบที่ ${last.seq} ของใบเบิก ${label} (${[...totals].map(([p, q]) => `${p}: +${q}`).join(", ")})`,
     { scopeOfWorkId: updated.scopeOfWorkId },
   );
   res.status(200).json({ materialRequisition: toClient(updated), stockByProduct: await stockByProductFor(updated.lines ?? []) });
@@ -835,6 +936,7 @@ async function handleRewrite(req: VercelRequest, res: VercelResponse, id: string
       _id: `${root}-R${seq}`,
       documentNumber: `${formRoot}-R${seq}`,
       lines: source.lines.map((l) => ({ ...l, withdrawal1Qty: null, withdrawal2Qty: null, returnQty: null, actualUsedQty: null })),
+      issues: [],
       status: "Draft",
       preparedBy: ctx.user.fullName, preparedAt: now.slice(0, 10),
       approvedBy: "", approvedAt: "",
@@ -906,7 +1008,13 @@ export async function handleMaterialRequisition(req: VercelRequest, res: VercelR
     return handleList(req, res);
   }
   if (parts.length === 1) return handleOne(req, res, parts[0]);
-  if (parts.length === 2 && parts[1] === "issue") return handleIssue(req, res, parts[0]);
+  if (parts.length === 2 && parts[1] === "issues") return handlePostIssueBatch(req, res, parts[0]);
+  if (parts.length === 3 && parts[1] === "issues") return handleCancelIssueBatch(req, res, parts[0], parts[2]);
+  // route เดิมที่รับยอดรวมสองช่อง ถูกแทนด้วย /issues ตั้งแต่ 2026-09-07 — เก็บไว้ตอบให้ชัดแทนที่จะ 404
+  // เงียบ ๆ เพราะแท็บที่เปิดค้างไว้ก่อนอัปเดตยังยิงมาที่นี่ และเขียนต่อไม่ได้แล้วโดยไม่ทำรอบพัง
+  if (parts.length === 2 && parts[1] === "issue") {
+    throw new HttpError(400, "ระบบเปลี่ยนเป็นการจ่ายของเป็นรอบแล้ว กรุณารีเฟรชหน้าเว็บก่อนบันทึก");
+  }
   if (parts.length === 2 && parts[1] === "return") return handleReturn(req, res, parts[0]);
   // finalize เป็น alias ของ approve — แต่ "ไม่" เข้ากันได้ย้อนหลังจริง: ผู้เรียกเดิมยิงตอนเอกสารยัง
   // เป็นร่าง ซึ่งตอนนี้จะได้ 400 (ต้องส่งขออนุมัติก่อน) เก็บชื่อเดิมไว้เพื่อไม่ให้ URL หาย ไม่ใช่เพื่อ

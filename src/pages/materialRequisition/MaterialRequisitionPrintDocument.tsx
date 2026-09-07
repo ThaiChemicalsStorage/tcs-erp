@@ -102,6 +102,9 @@ export function MaterialRequisitionPrintDocument({ materialRequisition: m, compa
         </tbody>
       </table>
 
+      {/* ฟอร์ม FM-ST-04 มีสองช่องเบิก แต่ของจริงจ่ายกี่รอบก็ได้ตั้งแต่ 2026-09-07 — สองช่องนี้เป็นค่าที่
+          เซิร์ฟเวอร์คิดจากรอบการจ่าย (รอบ 1 ลงช่องแรก รอบ 2 ขึ้นไปรวมกันในช่องที่สอง) ไม่ใช่ค่าที่ใครกรอก
+          ประวัติเต็มทุกรอบดูได้ในหน้าเอกสาร ไม่ได้พิมพ์ลงกระดาษเพราะฟอร์มจริงไม่มีที่ให้ */}
       <table className="w-full text-[10px]" style={{ borderCollapse: "collapse" }}>
         <thead>
           <tr>

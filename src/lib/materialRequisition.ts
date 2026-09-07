@@ -51,6 +51,40 @@ export interface MaterialRequisitionLine {
   actualUsedQty: number | null;
 }
 
+/** หนึ่งบรรทัดในหนึ่งรอบการจ่าย — `qty` > 0 เสมอ บรรทัดที่ไม่ได้จ่ายรอบนี้ไม่ถูกเก็บ */
+export interface MaterialIssueBatchLine {
+  lineId: string;
+  qty: number;
+}
+
+/**
+ * หนึ่งรอบการจ่ายของโดยสโตร์ (2026-09-07) — โครงเดียวกับ `ReceivingBatch` ของใบรับสินค้า
+ *
+ * ต่อท้ายอย่างเดียว แก้รอบเก่าไม่ได้ ยกเลิกได้เฉพาะรอบล่าสุด ตัวเลขของรอบก่อนหน้าจึงถูกรักษาไว้เสมอ
+ * ตามที่เจ้าของสั่ง 2026-09-07 (*"เซฟตัวเลขเก่าแต่เพิ่มตัวเลขใหม่ขึ้นมาในการเบิกครั้งถัดไป"*) และ
+ * สต๊อกถูกตัดตามจำนวนของรอบนั้นรอบเดียว ไม่ได้คิดจากยอดรวมที่พิมพ์ทับกันได้แบบก่อนหน้านี้
+ *
+ * `postedAt`/`postedBy`/`stockMovementIds` เซิร์ฟเวอร์เขียนเท่านั้น เก็บไว้เพื่อย้อนกลับและตรวจสอบ
+ * `charge*Name` เป็น snapshot ของแผนก/ทีม/ประเภทงาน ณ รอบนั้น เพราะรอบถัดไปอาจจ่ายให้ทีมอื่น
+ */
+export interface MaterialIssueBatch {
+  id: string;
+  /** ลำดับรอบ เริ่มที่ 1 — รอบที่ 1 ลงช่อง "เบิกครั้งที่1" บนใบพิมพ์ รอบที่ 2 ขึ้นไปรวมกันในช่อง "เบิกครั้งที่2" */
+  seq: number;
+  issuedDate: string;
+  lines: MaterialIssueBatchLine[];
+  /** ชื่อผู้จ่ายที่พิมพ์บนใบ — ข้อความอิสระ ไม่ใช่ผู้ใช้ในระบบ */
+  issuedBy: string;
+  remark: string;
+  chargeDepartmentName: string;
+  chargeTeamName: string;
+  chargeWorkTypeName: string;
+  postedAt: string;
+  postedBy: string;
+  postedByName: string;
+  stockMovementIds: string[];
+}
+
 export interface MaterialRequisition {
   /** Human-readable business id (`MR-{YYYYMM}-{NNNN}` since 2026-09-03 — older rows carry
    * `MR-{พ.ศ.}-{NNNN}` or `{SC}-MR{n}`), stored directly as `_id` — same convention as
@@ -107,6 +141,13 @@ export interface MaterialRequisition {
   /** "วันที่เริ่มผลิต" */
   productionStartDate: string;
   lines: MaterialRequisitionLine[];
+  /**
+   * รอบการจ่ายของทั้งหมด เรียงตามลำดับที่จ่ายจริง (2026-09-07) — **แหล่งความจริงของยอดที่จ่ายไปแล้ว**
+   * ช่อง `withdrawal1Qty`/`withdrawal2Qty` ของแต่ละบรรทัดคำนวณจากตรงนี้ (`withdrawalsFromBatches`)
+   * เอกสารก่อน 2026-09-07 ไม่มีฟิลด์นี้ อ่านออกมาเป็น `[]` แล้วแปลงยอดเดิมเป็นรอบย้อนหลังตอนแสดงผล
+   * (`legacyIssueBatchesOf`) และเขียนลงฐานข้อมูลจริงตอนจ่ายรอบถัดไป — ไม่ได้ทำ migration
+   */
+  issues: MaterialIssueBatch[];
   status: MaterialRequisitionStatus;
   /**
    * หมายเหตุการแก้ไข — พิมพ์เอง อธิบายว่าฉบับนี้ต่างจากฉบับก่อนตรงไหน (ฝ่ายผลิตขอไว้ 2026-08-27:
@@ -205,6 +246,63 @@ export function netHeldQtyOf(line: Pick<MaterialRequisitionLine, "withdrawal1Qty
   return Math.max(0, issuedQtyOf(line) - (line.returnQty ?? 0));
 }
 
+// ── รอบการจ่าย (2026-09-07) — ฟังก์ชันล้วน ใช้ร่วมกันทั้งหน้าจอ ใบพิมพ์ และ API ────────────────
+
+/** จำนวนที่จ่ายให้บรรทัดหนึ่งในรอบเหล่านี้รวมกัน */
+export function batchIssuedQtyOf(batches: MaterialIssueBatch[], lineId: string): number {
+  return batches.reduce((sum, b) => sum + b.lines.reduce((s, l) => s + (l.lineId === lineId ? l.qty : 0), 0), 0);
+}
+
+/**
+ * ยอดสองช่องบนฟอร์มกระดาษที่คิดจากรอบการจ่าย — รอบที่ 1 ลงช่องแรก รอบที่ 2 ขึ้นไป**รวมกัน**ในช่องที่สอง
+ *
+ * ฟอร์ม FM-ST-04 มีแค่สองช่อง แต่ของจริงจ่ายกี่รอบก็ได้ ใบพิมพ์จึงยุบรอบท้าย ๆ เข้าด้วยกัน
+ * ส่วนประวัติเต็มอยู่ใน `issues` และหน้าจอแสดงทีละรอบ
+ */
+export function withdrawalsFromBatches(batches: MaterialIssueBatch[], lineId: string): { withdrawal1Qty: number | null; withdrawal2Qty: number | null } {
+  const first = batchIssuedQtyOf(batches.filter((b) => b.seq <= 1), lineId);
+  const rest = batchIssuedQtyOf(batches.filter((b) => b.seq > 1), lineId);
+  return { withdrawal1Qty: first > 0 ? first : null, withdrawal2Qty: rest > 0 ? rest : null };
+}
+
+/**
+ * ใบที่จ่ายไปแล้วก่อน 2026-09-07 มีแต่ยอดในสองช่อง ไม่มีรายการรอบ — แปลงกลับเป็นรอบย้อนหลังหนึ่งรอบ
+ * ต่อหนึ่งช่องที่มีตัวเลข เพื่อให้หน้าจอ ใบพิมพ์ และการจ่ายรอบถัดไปเห็นข้อมูลชุดเดียวกันหมด
+ *
+ * `seq` ตรงกับหมายเลขช่องเดิม (ไม่ใช่ลำดับที่นับใหม่) ยอดที่คิดกลับออกมาจึงเท่าของเดิมเป๊ะทุกกรณี
+ * รวมถึงใบแปลกที่กรอกแต่ช่องที่สอง · วันที่/ผู้จ่ายมาจากช่องเซ็นของแผนกสโตร์ซึ่งเป็นข้อมูลเดียวที่มี
+ */
+export function legacyIssueBatchesOf(
+  doc: Pick<MaterialRequisition, "lines" | "storeDeptBy" | "storeDeptAt" | "updatedAt">,
+): MaterialIssueBatch[] {
+  const out: MaterialIssueBatch[] = [];
+  (["withdrawal1Qty", "withdrawal2Qty"] as const).forEach((field, idx) => {
+    const lines = doc.lines
+      .filter((l) => (l[field] ?? 0) > 0)
+      .map((l) => ({ lineId: l.id, qty: l[field] as number }));
+    if (lines.length === 0) return;
+    out.push({
+      id: `mrissue-legacy${idx + 1}`,
+      seq: idx + 1,
+      issuedDate: doc.storeDeptAt || "",
+      lines,
+      issuedBy: doc.storeDeptBy || "",
+      remark: "",
+      chargeDepartmentName: "", chargeTeamName: "", chargeWorkTypeName: "",
+      postedAt: doc.updatedAt, postedBy: "", postedByName: doc.storeDeptBy || "",
+      stockMovementIds: [],
+    });
+  });
+  return out;
+}
+
+/** รอบการจ่ายที่ควรแสดง — ของจริงถ้ามี ไม่มีก็แปลงจากยอดเดิมของใบเก่าให้ */
+export function issueBatchesOf(
+  doc: Pick<MaterialRequisition, "issues" | "lines" | "storeDeptBy" | "storeDeptAt" | "updatedAt">,
+): MaterialIssueBatch[] {
+  return doc.issues?.length ? doc.issues : legacyIssueBatchesOf(doc);
+}
+
 // สร้างรายการเปล่าจากสินค้าที่เลือกในแคตตาล็อก
 // Builds a new line from a product picked in the catalog
 export function blankMaterialRequisitionLine(product: Product, categoryName: string): MaterialRequisitionLine {
@@ -242,25 +340,44 @@ export async function fetchMaterialRequisition(id: string): Promise<{ materialRe
   const { materialRequisition, stockByProduct } = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number> }>(`/material-requisitions/${encodeURIComponent(id)}`);
   return { materialRequisition, stockByProduct: stockByProduct ?? {} };
 }
+/** ผลลัพธ์ของทุก route ที่ขยับสต๊อก — ยอดคงเหลือใหม่มาพร้อมเอกสาร หน้าจอจึงไม่ต้องยิงซ้ำ */
+export interface MaterialRequisitionWithStock {
+  materialRequisition: MaterialRequisition;
+  stockByProduct: Record<string, number>;
+}
+
 /**
- * สโตร์จ่ายของ (2026-09-03) — กรอกเบิกครั้งที่ 1/2 ต่อบรรทัด แล้วสต๊อกถูกตัดตาม**ส่วนต่าง**จากที่จ่ายไปแล้ว
- * ใบ Final เท่านั้น ต้องมีสิทธิ์ `stock:adjust` (คนจ่ายของคือสโตร์ ไม่ใช่เจ้าของใบ)
+ * สโตร์จ่ายของหนึ่งรอบ (2026-09-07) — ต่อท้าย `issues` หนึ่งรอบ แล้วตัดสต๊อกตามจำนวนของรอบนั้น
+ *
+ * ยอดของรอบก่อน ๆ ไม่ถูกแตะเลย ต่างจาก `/issue` เดิมที่รับยอดรวมสองช่องแล้วตัดตามส่วนต่าง ซึ่งพิมพ์
+ * ทับรอบเก่าได้ · ใบ Final เท่านั้น ต้องมีสิทธิ์ `stock:adjust` (คนจ่ายของคือสโตร์ ไม่ใช่เจ้าของใบ)
  */
-export async function issueMaterialRequisition(
+export async function postMaterialIssueBatch(
   id: string,
-  fields: {
-    lines: { id: string; withdrawal1Qty: number | null; withdrawal2Qty: number | null }[];
-    storeDeptBy?: string;
+  batch: {
+    lines: { lineId: string; qty: number }[];
+    issuedDate?: string;
+    issuedBy?: string;
+    remark?: string;
     chargeDepartmentId?: string;
     chargeTeamId?: string;
     chargeWorkTypeCode?: string;
     chargeWorkTypeName?: string;
   },
-): Promise<MaterialRequisition> {
-  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>(`/material-requisitions/${encodeURIComponent(id)}/issue`, {
-    method: "POST", body: JSON.stringify(fields),
+): Promise<MaterialRequisitionWithStock> {
+  const res = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number> }>(`/material-requisitions/${encodeURIComponent(id)}/issues`, {
+    method: "POST", body: JSON.stringify(batch),
   });
-  return materialRequisition;
+  return { materialRequisition: res.materialRequisition, stockByProduct: res.stockByProduct ?? {} };
+}
+
+/** ยกเลิกรอบการจ่าย**ล่าสุด** — ของกลับเข้าคลังทั้งรอบ (รอบที่ทีมคืนของไปแล้วบางส่วนยกเลิกไม่ได้) */
+export async function cancelMaterialIssueBatch(id: string, batchId: string): Promise<MaterialRequisitionWithStock> {
+  const res = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number> }>(
+    `/material-requisitions/${encodeURIComponent(id)}/issues/${encodeURIComponent(batchId)}`,
+    { method: "DELETE" },
+  );
+  return { materialRequisition: res.materialRequisition, stockByProduct: res.stockByProduct ?? {} };
 }
 /**
  * หนึ่งใบเบิกครอบคลุมได้หลายรายการในโครงการ (เจ้าของสั่ง 2026-09-02 "ให้เหมือนกับผลิต" — ฝ่ายผลิต

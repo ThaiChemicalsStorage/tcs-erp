@@ -28,7 +28,7 @@ Related: [Product.md](./Product.md) (Stock ledger, costing, team tools), [Purcha
 | Question | Answer |
 |---|---|
 | Document-number format | `PO-202609-0001` — Gregorian year + month, restarting at `0001` every month, for **every internal document**. Quotations (`Q#`) and accounting AR/BI/RE/IV are untouched. |
-| When a requisition cuts stock | **When Store actually issues the goods**, partial issues allowed. Approval no longer touches stock at all. |
+| When a requisition cuts stock | **When Store actually issues the goods**, partial issues allowed, any number of rounds (2026-09-07). Approval no longer touches stock at all. |
 | *"แนบ…เหมือน cost control"* | The **Delivery Order** gains file attachments. |
 | RR ↔ PO relationship | **One PO = one RR**, created from an approved PO, several receipt rounds inside the one document. |
 
@@ -57,23 +57,42 @@ Before this pass (2026-09-02) a requisition deducted stock inside `onApproved`, 
 owner replaced that: a requisition must always be approvable, and the shortage must be visible on
 screen instead.
 
-- `POST /api/material-requisitions/:id/issue` — `Final` documents only, gated on **`stock:adjust`**
-  (the person issuing is Store, not the requisition's author). Body carries `withdrawal1Qty` /
-  `withdrawal2Qty` per line.
-- Deduction is computed as a **delta** between the stored issue quantities and the new ones, summed
-  per product, so posting the same numbers twice deducts nothing and lowering a number returns the
-  difference to stock. The delta loop walks the **union** of the before and after maps — walking only
-  "after" was a real bug in the old return flow, where clearing a return quantity never reversed the
-  earlier movement.
-- `assertProductsHaveStock()` runs on the increments **before** any movement is written, so a
+- `POST /api/material-requisitions/:id/issues` — `Final` documents only, gated on **`stock:adjust`**
+  (the person issuing is Store, not the requisition's author). Body is **one round**:
+  `{ lines: [{ lineId, qty }], issuedDate?, issuedBy?, remark?, charge* }`.
+- `assertProductsHaveStock()` runs on the whole round **before** any movement is written, so a
   short line cannot leave earlier lines half-issued behind an error response.
 - `withdrawal1Qty`/`withdrawal2Qty` are stripped from `PATCH` (`sanitizeLines(raw, existing)` copies
-  them from the stored line) — they belong to Store's issue route alone.
+  them from the stored line) — they belong to Store's issue routes alone.
+
+### Issue rounds (2026-09-07)
+
+The paper form has exactly two withdrawal columns; real jobs draw more often than twice. Rounds are
+now their own append-only list, the same shape Receiving Report's `batches` already uses:
+
+- `MaterialRequisition.issues: MaterialIssueBatch[]` is the **source of truth** for what has been
+  issued. A round is never edited — post another one, or cancel the last one.
+- `withdrawal1Qty`/`withdrawal2Qty` are **derived** from those rounds on every write
+  (`withdrawalsFromBatches`): round 1 fills the first column, rounds 2..N are summed into the
+  second. Nothing downstream changed — the printed form, `outstandingQtyOf`, `netHeldQtyOf`, the
+  return route's ceiling and the "cannot delete a requisition still holding goods" guard all keep
+  reading the same two fields.
+- Stock is deducted **by that round's quantities alone**. The old delta-against-a-running-total
+  arithmetic is gone, and with it the failure mode where typing over an earlier column silently
+  returned goods to stock.
+- `DELETE /api/material-requisitions/:id/issues/:batchId` cancels the **latest** round only (same
+  restriction, and the same reason, as Receiving Report): the whole round goes back to stock as a
+  `return` movement. Refused when the team has already returned more than the remaining rounds
+  would leave issued.
+- **Documents issued before 2026-09-07 have no rounds**, only the two stored numbers.
+  `legacyIssueBatchesOf()` presents them as one synthetic round per non-empty column (`seq` equal to
+  the column number, so the derived values round-trip exactly), and the next real round persists
+  those synthetic rounds alongside it. No migration was run, and no stock is re-deducted.
 
 Per line the client computes `issuedQty = w1 + w2`, `outstandingQty = max(0, planned − issued)` and
 `netHeldQty = issued − returned` (`src/lib/materialRequisition.ts`). `GET /:id` returns
 `stockByProduct` alongside the document so the editor can show live balances without loading the
-whole catalogue.
+whole catalogue; the issue and cancel routes return it too, so the editor never needs a second read.
 
 ### Charging a department / team / work type
 

@@ -1021,7 +1021,14 @@ the module isn't functional yet, per the standing "hold off until functional" in
 
 - **`MaterialRequisition`** (`material_requisitions`, FM-ST-04 Rev.02) — withdraws items from the
   store catalog. Lines reference an existing `Product` by id (see "Products-catalog-reuse" below)
-  rather than a duplicate parallel catalog; each line tracks `plannedQty`/`withdrawal1Qty`/
+  rather than a duplicate parallel catalog. **`issues: MaterialIssueBatch[]` (2026-09-07) is the
+  source of truth for what Store has issued** — one append-only entry per issue round
+  (`{ id, seq, issuedDate, lines: [{ lineId, qty }], issuedBy, remark, charge*Name, postedAt/By,
+  stockMovementIds }`), the same shape `receiving_reports.batches` uses. The two withdrawal columns
+  below are **derived** from it on every write, so pre-2026-09-07 rows (which have no `issues` field
+  at all) keep working untouched: they read back as `[]` and are presented as synthetic rounds by
+  `legacyIssueBatchesOf()`, persisted only when the next real round is posted. No migration was run.
+  Each line tracks `plannedQty`/`withdrawal1Qty`/
   `withdrawal2Qty`/`returnQty`/`actualUsedQty`. `returnQty` (and the document-level `returnedBy`/
   `returnReceivedBy`/`returnedAt`) is intended to stay editable even after `status: "Final"` at the
   API layer (Stage 3) — same "follow-up fields survive Final" pattern Scope of Work's PO-chasing
