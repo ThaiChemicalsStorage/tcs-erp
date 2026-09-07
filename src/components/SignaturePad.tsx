@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Check, Eraser, PenLine, Upload } from "lucide-react";
 import { useI18n } from "../lib/i18n";
 import { compressImageFile } from "../lib/imageCompression";
+import { trimSignatureDataUrl } from "../lib/signatureImage";
 
 const STROKE_COLOR = "#0b1d3a";
 const STROKE_WIDTH = 2.4;
@@ -174,7 +175,9 @@ export function SignaturePad({
       const { dataUrl, blob } = await compressImageFile(file);
       if (blob.size > MAX_UPLOAD_BYTES) { setUploadError(t("settings.image.tooLarge")); return; }
       setUploadError("");
-      setUploadedDataUrl(dataUrl);
+      // ตัดขอบว่างรอบลายเซ็นทิ้งก่อนเก็บ (2026-09-07) — รูปถ่ายกระดาษที่หมึกอยู่กลางภาพนิดเดียว
+      // เคยออกมาเล็กจนอ่านไม่ออกบนใบพิมพ์ และผู้ใช้ต้องไปครอปเอง ดู src/lib/signatureImage.ts
+      setUploadedDataUrl(await trimSignatureDataUrl(dataUrl));
     } catch {
       setUploadError(t("settings.image.readError"));
     }
@@ -182,9 +185,14 @@ export function SignaturePad({
 
   const clear = () => (mode === "draw" ? clearPad() : clearUpload());
 
-  const confirm = () => {
-    const finalDataUrl = mode === "draw" ? (hasStroke ? canvasRef.current?.toDataURL("image/webp", 0.92) ?? "" : "") : uploadedDataUrl;
-    if (!finalDataUrl || (requireName && !name.trim())) return;
+  const confirm = async () => {
+    const drawn = mode === "draw" ? (hasStroke ? canvasRef.current?.toDataURL("image/webp", 0.92) ?? "" : "") : "";
+    if (mode === "draw" ? !drawn : !uploadedDataUrl) return;
+    if (requireName && !name.trim()) return;
+    // แพดกว้างกว่าลายเซ็นเสมอ คนที่เซ็นตัวเล็กกลางแพดเคยได้ลายเซ็นจิ๋วบนกระดาษ — ตัดขอบให้เหมือน
+    // ทางอัปโหลด ลายเซ็นสองทางเข้าจึงออกมาขนาดเดียวกัน (รูปที่อัปโหลดถูกตัดไปแล้วตอนเลือกไฟล์)
+    const finalDataUrl = mode === "draw" ? await trimSignatureDataUrl(drawn) : uploadedDataUrl;
+    if (!finalDataUrl) return;
     onConfirm({ dataUrl: finalDataUrl, name: requireName ? name.trim() : signerName });
   };
 
@@ -332,7 +340,7 @@ export function SignaturePad({
           </button>
           <button
             type="button"
-            onClick={confirm}
+            onClick={() => { void confirm(); }}
             disabled={disabled || !hasValue || (requireName && !name.trim())}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
