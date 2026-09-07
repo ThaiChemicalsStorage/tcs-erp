@@ -667,8 +667,13 @@ export function QuoteDocument({
         </div>
 
         <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 flex flex-wrap items-start justify-between gap-4 print:hidden">
-            <div className="min-w-0">
+          {/* หัวเอกสาร: ที่อยู่บริษัทซ้าย ชื่อเอกสารขวา — ห้ามใช้ flex-wrap ตรงนี้ (บั๊กที่แก้ 2026-09-07)
+              flex-wrap ตัดสินใจขึ้นบรรทัดใหม่จากความกว้าง max-content ของแต่ละก้อน ที่อยู่จริงของบริษัท
+              ยาวเกินความกว้างการ์ดทั้งใบเมื่ออยู่บรรทัดเดียว ก้อนซ้ายจึงกินทั้งแถวและดันชื่อเอกสารตกลง
+              มาบรรทัดล่าง กลายเป็นก้อนแคบ ๆ ชิดซ้ายที่ยังจัดข้อความชิดขวาอยู่ข้างใน อ่านแล้วเหมือนย่อหน้าเบี้ยว
+              ทางที่ถูกคือซ้อนกันบนจอเล็ก แล้วเรียงสองคอลัมน์ตั้งแต่ sm ขึ้นไปโดยให้ก้อนซ้ายยืดหยุ่นแทน */}
+          <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between print:hidden">
+            <div className="min-w-0 sm:flex-1">
               <div className="flex items-center gap-2.5 mb-1">
                 {companyHeader.logoDataUrl ? (
                   <img src={companyHeader.logoDataUrl} alt={companyHeader.name} className="h-8 max-w-[140px] object-contain" />
@@ -679,7 +684,7 @@ export function QuoteDocument({
               <p className="text-[#a8bed8] text-sm mt-1">{companyHeader.name} · {companyHeader.address}</p>
               <p className="text-[#a8bed8] text-sm">{t("quotation.field.contactPhone")}: {companyHeader.phone} · {t("settings.company.emailLabel")}: {companyHeader.email}</p>
             </div>
-            <div className="text-right">
+            <div className="sm:text-right sm:shrink-0">
               <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("quotation.pageTitle")}</h1>
               <p className="text-[#a8bed8] text-xs font-mono mt-1">QUOTATION</p>
               <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/30">
