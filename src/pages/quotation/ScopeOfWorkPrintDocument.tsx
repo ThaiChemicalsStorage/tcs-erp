@@ -186,8 +186,13 @@ export function ScopeOfWorkPrintDocument({ scopeOfWork, companyHeader, sellerUse
 
           {s.remarks.trim() && (
             <tr>
-              <td colSpan={4} className="pt-4">
-                <p className="text-[10.5px] font-semibold mb-1">หมายเหตุ</p>
+              {/* บล็อกหมายเหตุห้ามถูกหั่นคร่อมหน้า (แก้ 2026-09-07 ตามที่เจ้าของแจ้ง) — เดิมหัวข้อ
+                  "หมายเหตุ" ค้างอยู่ท้ายหน้าแรกแล้วเนื้อความไหลไปต่อหน้าสอง คนอ่านกระดาษเห็นเป็นสอง
+                  ก้อนที่ไม่เกี่ยวกัน · `orphans`/`widows` เป็นตาข่ายรับกรณีหมายเหตุยาวเกินหนึ่งหน้า
+                  ซึ่งเบราว์เซอร์จะไม่สนใจ break-inside แล้วหั่นอยู่ดี อย่างน้อยไม่ให้เหลือบรรทัดเดียว
+                  ค้างหัวหรือท้ายหน้า · บล็อกลายเซ็นด้านล่างใช้กติกาเดียวกันอยู่แล้ว */}
+              <td colSpan={4} className="pt-4" style={{ breakInside: "avoid", orphans: 3, widows: 3 }}>
+                <p className="text-[10.5px] font-semibold mb-1" style={{ breakAfter: "avoid" }}>หมายเหตุ</p>
                 <p className="text-[10px] whitespace-pre-line leading-relaxed">{s.remarks}</p>
               </td>
             </tr>

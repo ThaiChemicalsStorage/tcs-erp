@@ -262,8 +262,10 @@ export function PrintDocument({
 
           {remarks.trim() && (
             <tr>
-              <td colSpan={7} className="pt-4">
-                <p className="text-[11px] font-semibold mb-1">หมายเหตุ / เงื่อนไข</p>
+              {/* กติกาเดียวกับใบ Scope of Work (2026-09-07) — บล็อกหมายเหตุห้ามถูกหั่นคร่อมหน้า
+                  ไม่งั้นหัวข้อค้างท้ายหน้าแรกแล้วเนื้อความไปโผล่หน้าถัดไปเป็นคนละก้อน */}
+              <td colSpan={7} className="pt-4" style={{ breakInside: "avoid", orphans: 3, widows: 3 }}>
+                <p className="text-[11px] font-semibold mb-1" style={{ breakAfter: "avoid" }}>หมายเหตุ / เงื่อนไข</p>
                 <p className="text-[10.5px] whitespace-pre-line leading-relaxed">{remarks}</p>
               </td>
             </tr>
