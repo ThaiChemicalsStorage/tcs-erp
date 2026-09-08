@@ -14,6 +14,13 @@ Within the currently-scoped modules (Dashboard, Quotation, Product Library, Auth
 
 ## Completed Features
 
+- ✅ **[2026-09-08] หน้าเทมเพลตใบเบิกใช้งานได้จริงเป็นครั้งแรก.**
+  โมดูลนี้ขึ้นตั้งแต่ 2026-09-02 พร้อม handler ครบทุกเมธอดและหน้าจอของตัวเอง แต่ชื่อ
+  `material-requisition-templates` ไม่เคยถูกใส่ใน `API_ROUTES` ของ `server/app.ts` ซึ่งเลือก
+  handler จากส่วนแรกของ path เท่านั้น ทุก request จึงถูกตอบ `404` ก่อนถึง handler เป็นเวลาหกวัน
+  จนเจ้าของกดบันทึกแล้วเจอเอง · แก้เป็นบรรทัดเดียว และเพิ่ม `tests/serverRouteTable.test.ts` ที่
+  เทียบ pathname ที่ handler ดักไว้จริงกับตาราง route ทุกครั้งที่รันเทสต์ · ดู CHANGELOG.md
+  2026-09-08 และ [API.md](./API.md) หัวข้อ Material Requisition Templates
 - ✅ **[2026-09-04] นำเข้าสินค้าจากไฟล์ Excel ที่หน้าคลังสินค้า.**
   เจ้าของสั่งว่าเวลาย้ายสินค้าจากอีกระบบเข้ามาต้อง *"โยนไฟล์ exel เข้าไปแล้วสินค้าเข้ามาเลย"* ·
   ปุ่ม **นำเข้าจากไฟล์** เปิดกล่องที่ลากไฟล์วางได้ · **อ่านจากชื่อหัวคอลัมน์ ไม่ใช่ตำแหน่ง** รับทั้ง

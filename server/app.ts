@@ -44,6 +44,7 @@ const API_ROUTES: Record<string, ApiHandler> = {
   "ar-dashboard": quotesHandler,
   projects: quotesHandler,
   "material-requisitions": quotesHandler,
+  "material-requisition-templates": quotesHandler,
   "job-orders": quotesHandler,
   "purchase-requests": quotesHandler,
   "production-orders": quotesHandler,

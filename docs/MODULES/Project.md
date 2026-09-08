@@ -57,6 +57,9 @@ none of its 28 permissions to any existing default role (see "RBAC" below).
 - **เทมเพลตใบเบิก** (`material_requisition_templates`) — ชุดรายการที่ตั้งชื่อไว้ มีหน้าจัดการของตัวเอง
   และปุ่ม "ใช้เทมเพลต" บนใบเบิกซึ่ง **ต่อท้ายไม่ทับ** (ใบเดียวใช้ได้หลายชุด) · **ไม่มีสิทธิ์ชุดใหม่**
   ใช้ `materialRequisition:view`/`:edit` เพื่อเลี่ยงกับดัก RBAC migration ที่โมดูลก่อน ๆ ตกไปแล้วสองรอบ
+  · **แก้ 2026-09-08**: ชื่อ `material-requisition-templates` ไม่เคยถูกใส่ใน `API_ROUTES` ของ
+  `server/app.ts` ทั้งหน้าจึงตอบ `404 Not found` ทุก request มาตั้งแต่วันแรก ตอนนี้ใส่แล้วและมี
+  `tests/serverRouteTable.test.ts` กันไว้ ดู [API.md](../API.md) หัวข้อ Material Requisition Templates
 - **ใบเบิกที่อนุมัติแล้วตัดสต๊อกเอง** — ดู [MODULES/Product.md](./Product.md) "อัตโนมัติและการเตือน"
 
 ## Business Flow

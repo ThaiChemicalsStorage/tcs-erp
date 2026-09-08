@@ -328,6 +328,27 @@ All 3 share one route shape (`X` = `material-requisitions` / `job-orders` / `pur
 | `GET /api/job-orders/:id/attachments/:attachmentId/download?key=` | **none — capability URL** | Deliberately unauthenticated: access is gated by the random 24-byte `key` in the URL, so a shared link opens without a session. A wrong/missing key is an opaque `404`. Script-capable types (HTML/SVG) are forced to `application/octet-stream` + `attachment` disposition with `nosniff`, because this route lives on the app’s own origin. |
 | `DELETE /api/X/:id` | `{...}:delete` + (owner **or** `:finalize`) | Soft delete. Also resets the parent `ProjectItem` back to `"unassigned"`/`"pending"` and clears the link (best-effort, via `unlinkProjectItem()`) — closes the loop `PATCH /api/projects/:id/items/:itemId`'s own error message points users toward. |
 
+### Material Requisition Templates (`api/_lib/materialRequisitionTemplateHandler.ts`, mounted at `/api/material-requisition-templates` via `api/handlers/quotes.ts` — added 2026-09-02, documented 2026-09-08)
+
+Named sets of material lines that drop into a Material Requisition in one click. **No permissions of
+its own** — a deliberate choice recorded in the handler's own doc comment: a new permission needs an
+RBAC migration to reach real roles, and this codebase has twice shipped a menu nobody could see by
+forgetting one.
+
+| Method & Path | Auth | Notes |
+|---|---|---|
+| `GET /api/material-requisition-templates` | `materialRequisition:create` **or** `materialRequisition:view` | All non-deleted templates, sorted by name. Read is the looser of the two checks on purpose: whoever can raise a requisition must be able to see the templates, or the "use template" picker is empty for exactly the people who need it. |
+| `POST /api/material-requisition-templates` | `materialRequisition:edit` | Body `{ name, description?, lines[] }`. Line `id`s are always regenerated server-side, `category` falls back to `"other"` instead of failing the whole save (it only affects on-screen grouping), and the line count is capped at `MAX_TEMPLATE_LINES`. Returns `201`. |
+| `PATCH /api/material-requisition-templates/:id` | `materialRequisition:edit` | Partial update of `name`/`description`/`lines`. A no-op body writes no audit entry. |
+| `DELETE /api/material-requisition-templates/:id` | `materialRequisition:edit` | **Soft delete only** (`isDeleted: true`) so past audit entries can still resolve the template's name. |
+
+> **Adding a resource takes two files.** `server/app.ts` picks the handler from the *first* path
+> segment only, so a resource missing from its `API_ROUTES` table 404s before its handler runs — no
+> matter how complete the handler is. This module shipped that way on 2026-09-02 and every request
+> to it returned `{"error":"Not found"}` until 2026-09-08. `tests/serverRouteTable.test.ts` now
+> fails the build when the two sides drift apart.
+
+
 **Numbering**: `MR-{buddhistYear}-{seq}` / `JO-{buddhistYear}-{seq}` / `PR-{buddhistYear}-{seq}`, an
 atomic per-Buddhist-year counter in the shared `counters` collection — same shape as
 `service_reports`' `SR-{year}-{seq}` (`nextServiceReportId()`), deliberately not the real Purchase

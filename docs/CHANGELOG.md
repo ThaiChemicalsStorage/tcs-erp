@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-09-08 (absolute latest) — หน้าเทมเพลตใบเบิกกดบันทึกแล้วขึ้น "not found" มาตั้งแต่วันที่สร้าง
+
+เจ้าของแจ้งว่า *"ทำไมสร้างเทมเพลตใบเบิกกดบันทึกแล้วขึ้น not found"* — ทั้งหน้าเรียกข้อมูลไม่ขึ้นและ
+บันทึกไม่ได้เลย ไม่ใช่แค่บางปุ่ม
+
+**สาเหตุ** — `server/app.ts` เลือก handler จาก**ส่วนแรกของ path เท่านั้น**
+(`API_ROUTES[pathname.split("/")[2]]`) ชื่อไหนไม่อยู่ในตารางนั้นจะถูกตอบ `404 {"error":"Not found"}`
+ตั้งแต่ก่อนเข้า handler · handler ของเทมเพลตใบเบิก
+(`api/_lib/materialRequisitionTemplateHandler.ts`) เขียนครบทุกเมธอดและถูกต่อไว้ใน
+`api/handlers/quotes.ts` แล้ว แต่ `"material-requisition-templates"` **ไม่เคยถูกใส่ลงใน `API_ROUTES`**
+ทั้งฟีเจอร์จึงเข้าไม่ถึงมาตั้งแต่คอมมิต `e828766` (2026-09-02) รวม 6 วัน ตรวจย้อนด้วย
+`git log -S` ยืนยันว่าบรรทัดนี้ไม่เคยมีอยู่แล้วหายไป — คือลืมใส่ตั้งแต่แรก
+
+การเพิ่ม resource ใหม่ในระบบนี้ต้องแก้**สองไฟล์** เพราะ handler หลายตัวรับหลาย resource แล้วแยกทาง
+กันเองจาก pathname เต็ม (`quotes.ts` ตัวเดียวรับสิบกว่าตัว) พลาดไฟล์ที่สองแล้วอาการจะกำกวมที่สุด
+เท่าที่จะเป็นไปได้ คือโค้ดครบ เทสต์ผ่าน รีวิวแล้วดูเรียบร้อย แต่ทุก request ตอบ not found
+
+**แก้เป็น** เพิ่ม `"material-requisition-templates": quotesHandler,` ต่อจาก `"material-requisitions"`
+ใน `API_ROUTES` (บรรทัดเดียว)
+
+**กันไม่ให้เกิดซ้ำ** — เพิ่ม `tests/serverRouteTable.test.ts` สแกน `api/` หา pathname ที่ handler
+**เทียบจริง** (`=== "/api/x"`, `startsWith("/api/x/")` และรูปปฏิเสธ) แล้วยืนยันว่าทุกชื่อมีใน `API_ROUTES`
+· ตั้งใจไม่จับ `/api/...` ที่เป็นแค่ข้อความในคอมเมนต์ เพราะ `api/handlers/customers.ts` ยังเล่าถึงโมดูล
+`/api/company-profiles` ที่ถอดออกไปแล้ว จับแบบหลวม ๆ จะได้ผีมาแทน · ทดสอบตัวเทสต์เองด้วยการถอด
+บรรทัดที่เพิ่งแก้ออกแล้วรันใหม่ ต้องฟ้องชื่อ `/api/material-requisition-templates` ออกมา
+
+**ตรวจจริง** — ยิง `GET`/`POST /api/material-requisition-templates` ทั้งตรงที่พอร์ต 3001 และผ่าน
+พร็อกซีของ Vite ที่พอร์ต 3000 · ก่อนแก้ได้ `404 {"error":"Not found"}` ทั้งคู่ หลังแก้ได้
+`401 {"error":"Not authenticated"}` คือ request ไปถึง handler และไปตกที่ด่านสิทธิ์ตามที่ควรเป็น
+
+**Files Modified**: `server/app.ts`, `docs/{API,CHANGELOG,TODO,PROJECT_STATUS,SESSION_LOG}.md`, `docs/MODULES/Project.md`
+
+**Files Added**: `tests/serverRouteTable.test.ts`
+
+**Notes**: ข้อ manual test ใน TODO.md ที่ว่า *"สร้างเทมเพลตใบเบิก → กด ใช้เทมเพลต สองครั้งติดกัน"*
+ยังไม่เคยมีใครกดจริงเลยตั้งแต่ 2026-09-02 ถ้ากดตั้งแต่ตอนนั้นจะเจอทันที
+
+---
+
 ## 2026-09-07h (absolute latest) — ไฟล์ Excel แดชบอร์ดเป็นตารางจริง (ย้ายตัวเขียนไป exceljs)
 
 เจ้าของเปิดไฟล์ที่ส่งออกแล้วบอกว่า *"ทำออกมาเป็นตารางให้ดูสวย ๆ ได้มะ"* — ไฟล์เดิมมีแต่ตัวอักษรดำบนพื้นขาว
