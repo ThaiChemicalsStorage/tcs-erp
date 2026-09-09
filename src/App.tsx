@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Inbox, Settings, Package,
   ChevronRight, Menu, X, ChevronDown, Loader2, AlertTriangle, RotateCw,
   LogOut, type LucideIcon, FileText, Users as UsersIcon, ShieldCheck, ScrollText, HelpCircle, Contact, Layers, ClipboardList, Truck, Store, Hash, BookOpen, Wrench, Receipt,
-  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate,
+  Banknote, FileCheck, Wallet, CalendarDays, BarChart3, Boxes, PackagePlus, PackageCheck, Briefcase, Package2, Hammer, ShoppingCart, ShoppingBag, Calculator, Factory, LayoutTemplate, Tags,
 } from "lucide-react";
 import { type Company, defaultCompany, fetchCompany } from "./lib/storage";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "./lib/products";
@@ -80,6 +80,7 @@ const ReceivingReportPage = lazy(() => import("./pages/receivingReport/Receiving
 const PurchaseTaxRegisterPage = lazy(() => import("./pages/accounting/PurchaseTaxRegisterPage").then((m) => ({ default: m.PurchaseTaxRegisterPage })));
 const ApRegisterPage = lazy(() => import("./pages/accounting/ApRegisterPage").then((m) => ({ default: m.ApRegisterPage })));
 const ProductRequestPage = lazy(() => import("./pages/productRequest/ProductRequestPage").then((m) => ({ default: m.ProductRequestPage })));
+const CategoriesManager = lazy(() => import("./pages/products/CategoriesManager").then((m) => ({ default: m.CategoriesManager })));
 
 // แสดงสถานะกำลังโหลดหน้าย่อยระหว่างรอโหลดโค้ด (Suspense fallback) พร้อมข้อความสำหรับ screen reader
 // Loading placeholder shown as the Suspense fallback for every lazy-loaded page, with a screen-reader label
@@ -151,7 +152,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "toolControl" | "receivingReport" | "storeRequestInbox" | "productRequest" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "toolControl" | "receivingReport" | "storeRequestInbox" | "productRequest" | "productCategories" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
@@ -244,6 +245,10 @@ const navItems: NavItem[] = [
   // กล่องงานเข้าของสโตร์ (2026-09-09) — ใบขอซื้อที่อนุมัติแล้วและรอสโตร์เช็คว่ามีของในสต๊อกไหม
   // ใช้สิทธิ์ `purchaseRequest:view` ตัวเดิม ไม่สร้างสิทธิ์ใหม่สำหรับหน้าที่ไม่ได้ให้อำนาจใหม่
   { key: "storeRequestInbox", icon: ShoppingCart, labelKey: "nav.storeRequestInbox", permission: "purchaseRequest:view" },
+  // หมวดหมู่สินค้าเป็นเมนูของตัวเองตั้งแต่ 2026-09-09 (เจ้าของขอ "จัดการหมวดหมู่สินค้าได้ด้วย") —
+  // เดิมซ่อนอยู่หลังปุ่มในหน้าสินค้า ซึ่งเป็นหน้าของฝ่ายอื่นและต้องมีสิทธิ์คนละชุด · เปิดให้คนที่เห็น
+  // คลังสินค้าอยู่แล้วเข้าได้ ปุ่มแก้ไขข้างในยังคุมด้วยสิทธิ์จริงอีกชั้น
+  { key: "productCategories", icon: Tags, labelKey: "nav.productCategories", anyPermission: ["products:view", "stock:view"] },
   { key: "productRequest", icon: PackagePlus, labelKey: "nav.productRequest", permission: "productRequest:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -273,7 +278,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
-  { labelKey: "nav.group.inventory", keys: ["products", "stock", "toolControl", "receivingReport", "storeRequestInbox", "productRequest"] },
+  { labelKey: "nav.group.inventory", keys: ["products", "productCategories", "stock", "toolControl", "receivingReport", "storeRequestInbox", "productRequest"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 
@@ -294,6 +299,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   arMonthly: "nav.arMonthly",
   purchaseTaxRegister: "nav.purchaseTaxRegister",
   storeRequestInbox: "nav.storeRequestInbox",
+  productCategories: "nav.productCategories",
   apRegister: "nav.apRegister",
   accountingDashboard: "nav.accountingDashboard",
   project: "nav.project",
@@ -542,7 +548,15 @@ export default function App() {
    * สินค้าที่เกิดขึ้นนอกหน้า "สินค้า" (สโตร์อนุมัติคำขอเพิ่มสินค้า) จึงไม่ขึ้นในตัวเลือกของใบเสนอราคา
    * จนกว่าจะรีเฟรชหน้าทั้งหน้า · best-effort: ล้มแล้วใช้รายการเดิมต่อ
    */
-  const refreshProducts = () => { void fetchProducts().then(setProducts).catch(() => {}); };
+  /**
+   * โหลดแคตตาล็อกใหม่ทั้งสินค้าและหมวดหมู่ — สโตร์อาจสร้างหมวดใหม่ไปพร้อมกับการตั้งรหัสสินค้า
+   * (2026-09-09) ถ้าโหลดแต่สินค้า หมวดที่เพิ่งเกิดจะไม่มีในรายการของแอป และหน้าอื่นจะโชว์สินค้าตัวนั้น
+   * เป็น "ไม่ระบุหมวดหมู่" ทั้งที่มีหมวดอยู่จริง · best-effort: ล้มแล้วใช้ของเดิมต่อ
+   */
+  const refreshCatalog = () => {
+    void fetchProducts().then(setProducts).catch(() => {});
+    void fetchCategories().then(setCategories).catch(() => {});
+  };
   const updateCategories = (next: ProductCategory[]) => setCategories(next);
   const updateUsers = (next: User[]) => {
     setUsers(next);
@@ -1222,12 +1236,14 @@ export default function App() {
               ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} company={company} currentUserName={currentUser.fullName} />
               : effectiveNav === "toolControl"
               ? <ToolControlPage company={company} currentUserId={currentUser.id} canIssue={canAdjustStock} />
+              : effectiveNav === "productCategories"
+              ? <CategoriesManager categories={categories} products={products} onChange={updateCategories} canManage={hasPermission(currentUser, roles, "products:create") || hasPermission(currentUser, roles, "products:edit")} />
               : effectiveNav === "storeRequestInbox"
               ? <PurchaseRequestPage key="pr-store" ownerDepartment="all" storeStage="pending" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} canIssueStock={canAdjustStock} canEditApproved={canEditApprovedPurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "receivingReport"
               ? <ReceivingReportPage canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canReceive={canReceiveGoods} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialReceivingReportId={receivingReportDeepLinkId} onReceivingReportIdConsumed={() => setReceivingReportDeepLinkId(null)} />
               : effectiveNav === "productRequest"
-              ? <ProductRequestPage currentUserId={currentUser.id} canCreate={canCreateProductRequest} canReview={canReviewProductRequest} onProductsChanged={refreshProducts} initialProductRequestId={productRequestDeepLinkId} onProductRequestIdConsumed={() => setProductRequestDeepLinkId(null)} />
+              ? <ProductRequestPage currentUserId={currentUser.id} canCreate={canCreateProductRequest} canReview={canReviewProductRequest} onProductsChanged={refreshCatalog} initialProductRequestId={productRequestDeepLinkId} onProductRequestIdConsumed={() => setProductRequestDeepLinkId(null)} />
               : effectiveNav === "users"
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} departments={departments} teams={teams} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
               : effectiveNav === "roles" && isSuperAdmin

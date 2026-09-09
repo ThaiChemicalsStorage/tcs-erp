@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PackagePlus, Search, Loader2, CheckCircle2, XCircle, Trash2 } from "lucide-react";
+import { PackagePlus, Search, Loader2, CheckCircle2, XCircle, Trash2, Plus } from "lucide-react";
 import {
   type ProductRequest, type ProductRequestStatus,
   fetchProductRequests, createProductRequest, approveProductRequest, rejectProductRequest, deleteProductRequest,
@@ -60,6 +60,9 @@ export function ProductRequestPage({
   const [reviewing, setReviewing] = useState<ProductRequest | null>(null);
   const [reviewCode, setReviewCode] = useState("");
   const [reviewCategoryId, setReviewCategoryId] = useState("");
+  /** พิมพ์ชื่อหมวดใหม่ตรงนี้แทนการเลือกจากรายการ — ว่าง = ใช้หมวดที่เลือกไว้ (2026-09-09) */
+  const [reviewNewCategory, setReviewNewCategory] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<ProductRequest | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProductRequest | null>(null);
 
@@ -120,9 +123,13 @@ export function ProductRequestPage({
     if (!reviewing) return;
     setBusy(true);
     try {
-      await approveProductRequest(reviewing.id, reviewCode, reviewCategoryId);
+      await approveProductRequest(reviewing.id, reviewCode, reviewCategoryId, addingCategory ? reviewNewCategory.trim() : undefined);
       await reload();
       setReviewing(null);
+      setAddingCategory(false);
+      setReviewNewCategory("");
+      // หมวดอาจเพิ่งถูกสร้างไปพร้อมกัน — โหลดรายการหมวดใหม่ให้กล่องอนุมัติครั้งถัดไปเห็น
+      fetchCategories().then(setCategories).catch(() => { /* ใช้รายการเดิมต่อไป */ });
       // สินค้าเกิดขึ้นจริงแล้ว — บอกแอปให้โหลดแคตตาล็อกใหม่ ไม่งั้นตัวเลือกสินค้าของใบเสนอราคายังเป็นชุดเดิม
       onProductsChanged?.();
       toast.show(t("productRequest.approved"));
@@ -226,7 +233,7 @@ export function ProductRequestPage({
                           {canReview && r.status === "Pending" && (
                             <>
                               <button
-                                onClick={() => { setReviewing(r); setReviewCode(""); setReviewCategoryId(r.categoryId || ""); }}
+                                onClick={() => { setReviewing(r); setReviewCode(""); setReviewCategoryId(r.categoryId || ""); setAddingCategory(false); setReviewNewCategory(""); }}
                                 className="flex items-center gap-1 px-2.5 py-1 text-xs bg-[#2aa36b] text-white rounded-lg font-medium hover:bg-[#238f5c] transition-colors">
                                 <CheckCircle2 size={12} /> {t("productRequest.approve")}
                               </button>
@@ -311,17 +318,34 @@ export function ProductRequestPage({
             </div>
             <div>
               <label className="text-xs text-muted-foreground block mb-1">{t("productRequest.field.category")}</label>
-              <select value={reviewCategoryId} onChange={(e) => setReviewCategoryId(e.target.value)} className={inputCls}>
-                <option value="">{t("productRequest.field.categoryPlaceholder")}</option>
-                {categories.filter((c) => !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              {addingCategory ? (
+                <input
+                  autoFocus
+                  value={reviewNewCategory}
+                  onChange={(e) => setReviewNewCategory(e.target.value)}
+                  placeholder={t("products.categories.namePlaceholder")}
+                  className={inputCls}
+                />
+              ) : (
+                <select value={reviewCategoryId} onChange={(e) => setReviewCategoryId(e.target.value)} className={inputCls}>
+                  <option value="">{t("productRequest.field.categoryPlaceholder")}</option>
+                  {categories.filter((c) => !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              )}
+              {/* หมวดที่ต้องใช้ยังไม่มี — สร้างได้ตรงนี้เลย ไม่ต้องออกไปหน้าสินค้าแล้วกลับมาเริ่มใหม่ */}
+              <button
+                onClick={() => { setAddingCategory((v) => !v); setReviewNewCategory(""); }}
+                className="flex items-center gap-1 text-xs text-[#c9a84c] hover:text-[#b8973f] transition-colors mt-1.5"
+              >
+                <Plus size={11} /> {addingCategory ? t("productRequest.field.categoryPickExisting") : t("productRequest.field.categoryAddNew")}
+              </button>
               <p className="text-xs text-muted-foreground mt-1">{t("productRequest.field.categoryHint")}</p>
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setReviewing(null)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">
                 {t("common.cancel")}
               </button>
-              <button onClick={() => void submitApprove()} disabled={busy || !reviewCode.trim() || !reviewCategoryId}
+              <button onClick={() => void submitApprove()} disabled={busy || !reviewCode.trim() || (addingCategory ? !reviewNewCategory.trim() : !reviewCategoryId)}
                 className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#2aa36b] text-white rounded-lg font-semibold hover:bg-[#238f5c] transition-colors disabled:opacity-60">
                 {busy && <Loader2 size={12} className="animate-spin" />} {t("productRequest.approve")}
               </button>

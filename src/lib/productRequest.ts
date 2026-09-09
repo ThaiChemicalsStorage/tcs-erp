@@ -95,9 +95,15 @@ export async function updateProductRequest(id: string, fields: Partial<ProductRe
  * สโตร์อนุมัติ + ตั้งรหัส — สร้าง `Product` จริงแล้วแจ้งเตือนกลับผู้ขอ
  * รหัสซ้ำจะได้ 409 พร้อมข้อความไทย เหมือนกับการเพิ่มสินค้าตรง ๆ ในหน้าคลังสินค้า
  */
-export async function approveProductRequest(id: string, code: string, categoryId: string): Promise<ProductRequest> {
+/**
+ * สโตร์อนุมัติและตั้งรหัส · ส่ง `newCategoryName` มาแทน `categoryId` ได้ถ้าหมวดที่ต้องใช้ยังไม่มี
+ * (2026-09-09) — เซิร์ฟเวอร์สร้างหมวดให้ในจังหวะเดียวกัน และใช้หมวดเดิมถ้าชื่อซ้ำกับที่มีอยู่แล้ว
+ */
+export async function approveProductRequest(
+  id: string, code: string, categoryId: string, newCategoryName?: string,
+): Promise<ProductRequest> {
   const { productRequest } = await apiFetch<{ productRequest: ProductRequest }>(`/product-requests/${encodeURIComponent(id)}/approve`, {
-    method: "POST", body: JSON.stringify({ code, categoryId }),
+    method: "POST", body: JSON.stringify({ code, categoryId, ...(newCategoryName ? { newCategoryName } : {}) }),
   });
   return productRequest;
 }

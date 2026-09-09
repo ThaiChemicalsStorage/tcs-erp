@@ -122,7 +122,7 @@ export function ProductsPage({
   };
 
   if (view === "categories") {
-    return <CategoriesManager categories={categories} onChange={onCategoriesChange} onBack={() => setView("list")} />;
+    return <CategoriesManager categories={categories} products={products} onChange={onCategoriesChange} onBack={() => setView("list")} />;
   }
 
   if (view === "create") {

@@ -126,6 +126,20 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
 }
 
 /**
+ * หาหมวดหมู่จากชื่อแบบไม่สนตัวพิมพ์ — ใช้ตอนสโตร์พิมพ์ชื่อหมวดใหม่ในกล่องอนุมัติ
+ *
+ * กรองในหน่วยความจำแทนการยิง regex เข้า MongoDB โดยตั้งใจ: ชื่อหมวดเป็นข้อความอิสระที่มีอักขระ
+ * พิเศษของ regex ได้ (`(คลัง)` ในหมวดที่ระบบ seed มาเองก็มีวงเล็บ) การประกอบ regex จากข้อความของ
+ * ผู้ใช้จึงต้อง escape ให้ครบทุกตัวเสมอ ซึ่งพลาดง่ายกว่าที่คิด · ตารางหมวดหมู่มีไม่กี่สิบแถว
+ */
+async function findCategoryByName(name: string) {
+  const categories = await categoriesCollection();
+  const wanted = name.trim().toLowerCase();
+  const all = await categories.find({}).toArray();
+  return all.find((c) => (c.name ?? "").trim().toLowerCase() === wanted) ?? null;
+}
+
+/**
  * เติม `productId`/`productCode` กลับเข้าบรรทัดของใบขอซื้อที่เป็นต้นทางของคำขอ (2026-09-09)
  *
  * เจ้าของสั่งว่า *"พอเค้าตั้งเสร็จแล้วอยากให้มันขึ้นมาเลยไม่ต้องมากดลบแล้วเพิ่มใหม่"* — เดิมตั้งใจไม่ทำ
@@ -178,11 +192,36 @@ async function handleApprove(req: VercelRequest, res: VercelResponse, id: string
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const code = sanitizeShortText(body.code, "รหัสสินค้า", true).toUpperCase();
-  const categoryId = sanitizeShortText(body.categoryId, "หมวดหมู่", true);
+  /**
+   * **ตั้งหมวดใหม่ได้ในจังหวะเดียวกับที่ตั้งรหัส (2026-09-09)** — เจ้าของขอให้ "จัดการหมวดหมู่สินค้าได้ด้วย"
+   * ถ้าหมวดที่ควรใช้ยังไม่มี สโตร์ต้องออกจากงานที่ทำอยู่ไปสร้างหมวดที่หน้าสินค้าแล้วกลับมาเริ่มใหม่
+   *
+   * ส่ง `newCategoryName` มาแทน `categoryId` ได้ · ตั้งใจให้ทางนี้อยู่บน route ของการอนุมัติคำขอ
+   * **ไม่ใช่การเปิดสิทธิ์ `POST /api/categories` ให้กว้างขึ้น**: คนที่ตั้งรหัสสินค้าได้ย่อมสร้างหมวดที่
+   * สินค้าตัวนั้นต้องใช้ได้ด้วย แต่ไม่ได้แปลว่าเขาควรจัดการทะเบียนหมวดหมู่ของทั้งระบบ
+   *
+   * ชื่อที่มีอยู่แล้ว (ไม่สนตัวพิมพ์) จะ **ใช้หมวดเดิม ไม่สร้างซ้ำ** — ไม่งั้นการพิมพ์ชื่อเดียวกันสองครั้ง
+   * จะได้หมวดชื่อซ้ำสองอัน ซึ่งทำให้ช่องเลือกหมวดอ่านไม่รู้เรื่องภายในไม่กี่สัปดาห์
+   */
+  const newCategoryName = sanitizeShortText(body.newCategoryName, "ชื่อหมวดหมู่ใหม่");
+  const categoryId = sanitizeShortText(body.categoryId, "หมวดหมู่", !newCategoryName);
 
   const categories = await categoriesCollection();
-  const category = await categories.findOne({ _id: toObjectId(categoryId) });
+  let category = categoryId ? await categories.findOne({ _id: toObjectId(categoryId) }) : null;
+  if (!category && newCategoryName) {
+    category = await findCategoryByName(newCategoryName);
+    if (!category) {
+      const createdAt = nowIso();
+      const inserted = await categories.insertOne({
+        name: newCategoryName, archived: false,
+        createdAt, updatedAt: createdAt, createdBy: ctx.user.id, updatedBy: ctx.user.id,
+      } as never);
+      category = await categories.findOne({ _id: inserted.insertedId });
+      await writeAuditEntry(ctx, "Product Category Created", `สร้างหมวดหมู่สินค้า "${newCategoryName}" ตอนตั้งรหัสสินค้า`);
+    }
+  }
   if (!category) throw new HttpError(400, "ไม่พบหมวดหมู่ที่เลือก");
+  const resolvedCategoryId = category._id.toString();
 
   const products = await productsCollection();
   if (await products.findOne({ code })) throw new HttpError(409, "รหัสสินค้านี้มีอยู่แล้ว");
@@ -191,7 +230,7 @@ async function handleApprove(req: VercelRequest, res: VercelResponse, id: string
   const productResult = await products.insertOne({
     code,
     name: doc.name,
-    categoryId,
+    categoryId: resolvedCategoryId,
     unit: doc.unit,
     defaultPrice: 0,
     description: doc.specifications,
@@ -215,7 +254,7 @@ async function handleApprove(req: VercelRequest, res: VercelResponse, id: string
       status: "Approved",
       assignedProductCode: code,
       assignedProductId: productResult.insertedId.toString(),
-      categoryId,
+      categoryId: resolvedCategoryId,
       reviewedBy: ctx.user.id, reviewedByName: ctx.user.fullName, reviewedAt: now.slice(0, 10),
       updatedAt: now,
     },

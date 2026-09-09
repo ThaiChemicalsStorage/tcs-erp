@@ -207,3 +207,67 @@ describe("คำขอจากใบขอซื้อ — เติมรห�
     expect(await productByCode("NO-SOURCE-1")).toBeTruthy();
   });
 });
+
+/**
+ * **ตั้งหมวดหมู่ใหม่ในจังหวะเดียวกับที่ตั้งรหัส (2026-09-09)** — เจ้าของขอให้ "จัดการหมวดหมู่สินค้าได้ด้วย"
+ *
+ * ตรึงไว้สามข้อ:
+ *   1. ส่ง `newCategoryName` มาแทน `categoryId` แล้วต้องได้หมวดจริงและสินค้าลงหมวดนั้น
+ *   2. ชื่อที่มีอยู่แล้ว **ไม่สร้างซ้ำ** และไม่สนตัวพิมพ์ — ไม่งั้นช่องเลือกหมวดจะมีชื่อซ้ำกันเต็มไปหมด
+ *   3. ไม่ส่งอะไรมาสักอย่างต้องได้ 400 เหมือนเดิม (ยังบังคับให้เลือกหมวด)
+ */
+describe("คำขอเพิ่มสินค้า — ตั้งหมวดหมู่ใหม่ตอนอนุมัติ", () => {
+  async function categoriesNamed(name: string): Promise<{ id: string; name: string }[]> {
+    const { categories } = await json<{ categories: { id: string; name: string }[] }>(await api("/api/categories"));
+    return categories.filter((c) => c.name.toLowerCase() === name.toLowerCase());
+  }
+
+  it("พิมพ์ชื่อหมวดใหม่แล้วได้หมวดจริง และสินค้าลงหมวดนั้น", async () => {
+    const req = await createRequest({ name: "เทปพันเกลียว", unit: "ม้วน" });
+    const approved = await api(`/api/product-requests/${encodeURIComponent(req.id)}/approve`, {
+      method: "POST", body: JSON.stringify({ code: "NEWCAT-1", newCategoryName: "อุปกรณ์ประปา" }),
+    });
+    expect(approved.status).toBe(200);
+
+    const created = await categoriesNamed("อุปกรณ์ประปา");
+    expect(created).toHaveLength(1);
+    expect((await productByCode("NEWCAT-1"))?.categoryId).toBe(created[0].id);
+  });
+
+  it("ชื่อซ้ำกับหมวดที่มีอยู่ (ไม่สนตัวพิมพ์) ใช้หมวดเดิม ไม่สร้างใหม่", async () => {
+    const before = await categoriesNamed("อุปกรณ์ประปา");
+    expect(before).toHaveLength(1);
+
+    const req = await createRequest({ name: "ข้อต่อสามทาง", unit: "ตัว" });
+    expect((await api(`/api/product-requests/${encodeURIComponent(req.id)}/approve`, {
+      method: "POST", body: JSON.stringify({ code: "NEWCAT-2", newCategoryName: "  อุปกรณ์ประปา  " }),
+    })).status).toBe(200);
+
+    expect(await categoriesNamed("อุปกรณ์ประปา"), "ต้องไม่มีหมวดชื่อซ้ำเกิดขึ้น").toHaveLength(1);
+    expect((await productByCode("NEWCAT-2"))?.categoryId).toBe(before[0].id);
+  });
+
+  it("ชื่อที่มีอักขระพิเศษของ regex ก็จับซ้ำได้ถูกต้อง", async () => {
+    const name = "อื่นๆ (คลัง) [ทดสอบ]";
+    const first = await createRequest({ name: "ของทดสอบวงเล็บ", unit: "ชิ้น" });
+    expect((await api(`/api/product-requests/${encodeURIComponent(first.id)}/approve`, {
+      method: "POST", body: JSON.stringify({ code: "REGEX-1", newCategoryName: name }),
+    })).status).toBe(200);
+
+    const second = await createRequest({ name: "ของทดสอบวงเล็บสอง", unit: "ชิ้น" });
+    expect((await api(`/api/product-requests/${encodeURIComponent(second.id)}/approve`, {
+      method: "POST", body: JSON.stringify({ code: "REGEX-2", newCategoryName: name }),
+    })).status).toBe(200);
+
+    expect(await categoriesNamed(name)).toHaveLength(1);
+  });
+
+  it("ไม่ส่งทั้ง categoryId และ newCategoryName → 400", async () => {
+    const req = await createRequest({ name: "ของไม่มีหมวด", unit: "ชิ้น" });
+    const res = await api(`/api/product-requests/${encodeURIComponent(req.id)}/approve`, {
+      method: "POST", body: JSON.stringify({ code: "NOCAT-1" }),
+    });
+    expect(res.status).toBe(400);
+    expect(await productByCode("NOCAT-1")).toBeUndefined();
+  });
+});
