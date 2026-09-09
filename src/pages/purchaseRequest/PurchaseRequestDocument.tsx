@@ -1,14 +1,17 @@
 import { Fragment, useEffect, useState } from "react";
-import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight , PackagePlus , GitBranch } from "lucide-react";
+import { ChevronRight, Printer, Save, RotateCw, Trash2, Loader2, AlertTriangle, Plus, X, CornerDownRight, PackagePlus, GitBranch, PackageCheck, CheckCircle2, History, Undo2 } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import { type Product, type ProductCategory, fetchProducts, fetchCategories } from "../../lib/products";
 import {
   type PurchaseRequest, type PurchaseRequestLine, type PurchaseRequestUpdateFields,
-  fetchPurchaseRequest, updatePurchaseRequest, logPurchaseRequestPrinted,
+  type PurchaseRequestIssueBatch,
+  fetchPurchaseRequestWithStock, updatePurchaseRequest, logPurchaseRequestPrinted,
   deletePurchaseRequest, blankPurchaseRequestLine,
   submitPurchaseRequestApproval, approvePurchaseRequest, rejectPurchaseRequest, withdrawPurchaseRequestApproval,
   rewritePurchaseRequest,
   uploadPurchaseRequestAttachment, deletePurchaseRequestAttachment,
+  reviewPurchaseRequestStock, postPurchaseRequestIssue, cancelPurchaseRequestIssue,
+  storeIssueBatchesOf, storeIssuedQtyOf, storeOutstandingQtyOf,
 } from "../../lib/purchaseRequest";
 import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { createProductRequest } from "../../lib/productRequest";
@@ -25,6 +28,7 @@ import { Combobox } from "../../components/Combobox";
 import { type CodeEntry, fetchCodeEntries, codeComboboxOptions } from "../../lib/codeRegister";
 import { useI18n } from "../../lib/i18n";
 import { getRevisionNumber } from "../../lib/revisionDiff";
+import { formatQuoteDateThai } from "../../lib/quotes";
 import { AutoSaveIndicator } from "../../components/AutoSaveIndicator";
 import { useDirtyTracker } from "../../hooks/useDirtyTracker";
 import { useUnsavedChangesGuard } from "../../hooks/useNavigationGuard";
@@ -63,6 +67,8 @@ export function PurchaseRequestDocument({
   canFinalize,
   canPrint,
   canDelete,
+  canIssueStock,
+  canEditApproved,
   onBack,
   onDeleted,
   onOpenOther,
@@ -77,6 +83,10 @@ export function PurchaseRequestDocument({
   canFinalize: boolean;
   canPrint: boolean;
   canDelete: boolean;
+  /** `stock:adjust` — การ์ด "สโตร์เช็คของ / จ่ายของ" บนใบที่อนุมัติแล้ว (2026-09-09) */
+  canIssueStock: boolean;
+  /** `purchaseRequest:editApproved` — ฝ่ายจัดซื้อแก้ใบที่อนุมัติแล้วได้ (2026-09-09) */
+  canEditApproved: boolean;
   onBack: () => void;
   onDeleted: () => void;
   /** เปิดเอกสารใบอื่นในโมดูลเดียวกัน — ใช้ตอน Rewrite เพื่อพาไปฉบับใหม่ที่เพิ่งสร้าง */
@@ -101,6 +111,21 @@ export function PurchaseRequestDocument({
   const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([]);
   const [showPrint, setShowPrint] = useState(false);
   const [requestingCodeFor, setRequestingCodeFor] = useState<string | null>(null);
+  /** ยอดคงเหลือปัจจุบันต่อสินค้า — server ส่งมาพร้อมใบ และอัปเดตทุกครั้งที่เช็ค/จ่าย/ยกเลิก */
+  const [stockByProduct, setStockByProduct] = useState<Record<string, number>>({});
+  /** ผลการเช็คของที่สโตร์กำลังกรอก (ยังไม่บันทึก) — key = lineId */
+  const [storeDecisions, setStoreDecisions] = useState<Record<string, "stock" | "purchase">>({});
+  const [storeRemark, setStoreRemark] = useState("");
+  const [savingReview, setSavingReview] = useState(false);
+  /** จำนวนที่สโตร์กำลังจะจ่ายรอบนี้ — key = lineId, เก็บเป็น string เพราะเป็นช่องกรอก */
+  const [issueQty, setIssueQty] = useState<Record<string, string>>({});
+  const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [issueRemark, setIssueRemark] = useState("");
+  const [savingIssue, setSavingIssue] = useState(false);
+  const [cancelBatchTarget, setCancelBatchTarget] = useState<PurchaseRequestIssueBatch | null>(null);
+  const [cancellingBatch, setCancellingBatch] = useState(false);
+  /** หมายเหตุของฝ่ายจัดซื้อตอนแก้ใบที่อนุมัติแล้ว — ส่งไปกับการกดบันทึก ไม่ใช่ฟิลด์ที่เก็บบนใบ */
+  const [purchasingEditNote, setPurchasingEditNote] = useState("");
 
   // ── การ์ด "ยังไม่ได้บันทึก" (2026-08-25) ─────────────────────────────────────────────────────
   // ประกาศเหนือ effect โหลดข้อมูล เพราะทุกครั้งที่ดึงเอกสารจากเซิร์ฟเวอร์ต้องตั้งฐานเทียบใหม่ ไม่งั้นเอกสารจะ
@@ -112,8 +137,19 @@ export function PurchaseRequestDocument({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchPurchaseRequest(purchaseRequestId), fetchProducts(), fetchCategories()])
-      .then(([p, prod, cat]) => { if (!cancelled) { setDoc(p); setDraft(p); setProducts(prod); setCategories(cat); dirty.markSaved(toUpdateFields(p)); } })
+    Promise.all([fetchPurchaseRequestWithStock(purchaseRequestId), fetchProducts(), fetchCategories()])
+      .then(([res, prod, cat]) => {
+        if (cancelled) return;
+        setDoc(res.purchaseRequest); setDraft(res.purchaseRequest); setStockByProduct(res.stockByProduct);
+        setProducts(prod); setCategories(cat); dirty.markSaved(toUpdateFields(res.purchaseRequest));
+        setStoreRemark(res.purchaseRequest.storeRemark ?? "");
+        // ตั้งค่าเริ่มต้นของตัวเลือกให้ตรงกับที่บันทึกไว้ สโตร์จะได้เห็นผลการเช็คครั้งก่อนไม่ใช่ช่องว่าง
+        setStoreDecisions(Object.fromEntries(
+          (res.purchaseRequest.lines ?? [])
+            .filter((l) => l.storeDecision === "stock" || l.storeDecision === "purchase")
+            .map((l) => [l.id, l.storeDecision as "stock" | "purchase"]),
+        ));
+      })
       .catch((err) => {
         if (cancelled) return;
         setLoadError(err instanceof ApiError ? err.message : t("purchaseRequestDoc.loadError"));
@@ -162,9 +198,14 @@ export function PurchaseRequestDocument({
     if (!draft) return false;
     setSaving(true);
     try {
-      const updated = await updatePurchaseRequest(draft.id, toUpdateFields(draft));
+      const updated = await updatePurchaseRequest(draft.id, {
+        ...toUpdateFields(draft),
+        // โหมดจัดซื้อแก้ใบที่อนุมัติแล้ว — หมายเหตุนี้ไม่ใช่ฟิลด์บนใบ เซิร์ฟเวอร์เอาไปต่อท้ายประวัติการแก้
+        ...(draft.status === "Final" && canEditApproved ? { purchasingEditNote } : {}),
+      });
       setDoc(updated);
       setDraft(updated);
+      setPurchasingEditNote("");
       // ตั้งฐานเทียบของ auto-save ใหม่เป็น "สิ่งที่เซิร์ฟเวอร์ตอบกลับมา" ซึ่งคือสิ่งที่ฟอร์มถืออยู่หลังบรรทัดบน
       // ไม่ใช่ค่าบนจอตอนเรียก ซึ่งอาจเก่าหรือใหม่กว่าที่ส่งขึ้นไปจริง
       autoSave.markSaved(toUpdateFields(updated));
@@ -248,7 +289,18 @@ export function PurchaseRequestDocument({
   }
 
   const isDraftStatus = doc.status === "Draft";
-  const editable = canEdit && isDraftStatus;
+  const isFinal = doc.status === "Final";
+  /**
+   * ฝ่ายจัดซื้อแก้ใบที่อนุมัติแล้วได้ (2026-09-09) — เจ้าของเลือกให้แก้ได้**ทุกช่องเหมือนใบร่าง**
+   * เพราะชื่อ/ยี่ห้อที่ซื้อได้จริงมักไม่ตรงกับที่ผู้ขอพิมพ์ไว้ · ทุกครั้งที่บันทึกจะถูกจดไว้ในประวัติ
+   * `PendingApproval` ยังล็อกทุกคน — ห้ามแก้ใบที่ผู้อนุมัติกำลังอ่าน (กติกาเดิมของทั้งระบบ)
+   */
+  const purchasingEditMode = canEditApproved && isFinal;
+  const editable = (canEdit && isDraftStatus) || purchasingEditMode;
+  /** การ์ดของสโตร์ — ใบที่อนุมัติแล้วเท่านั้น และต้องมีสิทธิ์ขยับสต๊อก */
+  const storeCardVisible = isFinal && canIssueStock;
+  const issueBatches = storeIssueBatchesOf(doc);
+  const lastBatch = issueBatches[issueBatches.length - 1];
 
   // หัวจดหมายของใบพิมพ์ — สร้าง inline แบบเดียวกับใบเบิกพัสดุ/ใบส่งมอบสินค้า
   const companyHeader: CompanyHeaderInfo = {
@@ -264,6 +316,17 @@ export function PurchaseRequestDocument({
   const removeLine = (id: string) => {
     setDraft((prev) => prev && { ...prev, lines: prev.lines.filter((l) => l.id !== id) });
   };
+  /**
+   * เปิดตัวเลือกสินค้า แล้วดึงรายการสินค้าใหม่ทุกครั้ง — เดิมโหลดครั้งเดียวตอน mount สินค้าที่สโตร์เพิ่ง
+   * ตั้งรหัสให้จึงไม่ขึ้นจนกว่าจะออกจากเอกสารแล้วเข้ามาใหม่ (เจ้าของรายงาน 2026-09-09)
+   */
+  const openProductPicker = () => {
+    setPickerOpen(true);
+    Promise.all([fetchProducts(), fetchCategories()])
+      .then(([prod, cat]) => { setProducts(prod); setCategories(cat); })
+      .catch(() => { /* ใช้รายการเดิมต่อไป */ });
+  };
+
   const addProduct = (product: Product) => {
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankPurchaseRequestLine({ id: product.id, code: product.code, name: product.name, unit: product.unit })] });
   };
@@ -275,8 +338,10 @@ export function PurchaseRequestDocument({
    * ขอรหัสสินค้าให้บรรทัดที่พิมพ์เอง (ฝ่ายโครงการขอไว้ 2026-08-27: "ใบขอซื้อมีปุ่มแจ้งเตือนหาสโตร์เอาไว้
    * ตั้งรหัสสินค้าที่ไม่มีในคลัง") — สร้างคำขอพร้อมผูกเลขที่ใบขอซื้อไว้ แล้วสโตร์จะได้แจ้งเตือนทันที
    *
-   * ตั้งใจ**ไม่**แก้บรรทัดในใบขอซื้อให้อัตโนมัติตอนสโตร์ตั้งรหัสเสร็จ — ใบขอซื้ออาจถูกอนุมัติ/ล็อกไปแล้ว
-   * และการไปแก้เนื้อหาเอกสารที่อนุมัติแล้วเงียบ ๆ แย่กว่าการให้คนกดเลือกสินค้าจากคลังเองอีกครั้ง
+   * **2026-09-09 — สโตร์ตั้งรหัสแล้วบรรทัดนี้ถูกเติมรหัสให้เอง** (เจ้าของสั่ง: "พอเค้าตั้งเสร็จแล้วอยากให้
+   * มันขึ้นมาเลยไม่ต้องมากดลบแล้วเพิ่มใหม่") เซิร์ฟเวอร์เขียนให้ตอนอนุมัติคำขอ ดู
+   * `api/_lib/productRequestHandler.ts` `backfillSourcePurchaseRequestLine()` — เขียนเฉพาะ
+   * `productId`/`productCode`/`unit` ของบรรทัดนั้น ไม่แตะเนื้อหาอื่นของใบที่อนุมัติแล้ว
    */
   const requestProductCode = async (line: PurchaseRequestLine) => {
     if (!doc) return;
@@ -294,6 +359,72 @@ export function PurchaseRequestDocument({
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : t("productRequest.error"));
     } finally { setRequestingCodeFor(null); }
+  };
+
+  /** ผลลัพธ์ของทุก route ฝั่งสโตร์คืนเอกสาร + ยอดคงเหลือใหม่มาให้ — เขียนกลับเข้าหน้าจอที่เดียว */
+  const applyStoreResult = (updated: PurchaseRequest, stock: Record<string, number>) => {
+    setDoc(updated);
+    setDraft(updated);
+    setStockByProduct(stock);
+    dirty.markSaved(toUpdateFields(updated));
+    setStoreRemark(updated.storeRemark ?? "");
+  };
+
+  /** บันทึกผลการเช็คของ — ต้องเลือกให้ครบทุกบรรทัดก่อน ไม่งั้นใบจะค้างที่ "รอสโตร์" แบบอธิบายไม่ได้ */
+  const saveStoreReview = async () => {
+    if (!draft) return;
+    const lines = draft.lines.map((l) => ({ lineId: l.id, decision: storeDecisions[l.id], availableQty: stockByProduct[l.productId] ?? null }));
+    if (lines.some((l) => !l.decision)) {
+      showToast(t("purchaseRequestDoc.store.reviewIncomplete"));
+      return;
+    }
+    setSavingReview(true);
+    try {
+      const res = await reviewPurchaseRequestStock(draft.id, {
+        lines: lines as { lineId: string; decision: "stock" | "purchase"; availableQty: number | null }[],
+        remark: storeRemark,
+      });
+      applyStoreResult(res.purchaseRequest, res.stockByProduct);
+      showToast(t("purchaseRequestDoc.store.reviewSaved"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("purchaseRequestDoc.store.reviewError"));
+    } finally { setSavingReview(false); }
+  };
+
+  /** จ่ายของหนึ่งรอบ — ส่งเฉพาะบรรทัดที่กรอกจำนวนมา ยอดของรอบก่อนไม่ถูกแตะ */
+  const saveStoreIssue = async () => {
+    if (!draft) return;
+    const lines = draft.lines
+      .map((l) => ({ lineId: l.id, qty: Number(issueQty[l.id] ?? "") }))
+      .filter((l) => Number.isFinite(l.qty) && l.qty > 0);
+    if (lines.length === 0) {
+      showToast(t("purchaseRequestDoc.store.issueEmpty"));
+      return;
+    }
+    setSavingIssue(true);
+    try {
+      const res = await postPurchaseRequestIssue(draft.id, { lines, issuedDate: issueDate, remark: issueRemark });
+      applyStoreResult(res.purchaseRequest, res.stockByProduct);
+      setIssueQty({});
+      setIssueRemark("");
+      showToast(t("purchaseRequestDoc.store.issueSaved"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("purchaseRequestDoc.store.issueError"));
+    } finally { setSavingIssue(false); }
+  };
+
+  /** ยกเลิกรอบล่าสุด — ของทั้งรอบกลับเข้าคลัง */
+  const cancelStoreIssue = async (batch: PurchaseRequestIssueBatch) => {
+    if (!draft) return;
+    setCancellingBatch(true);
+    try {
+      const res = await cancelPurchaseRequestIssue(draft.id, batch.id);
+      applyStoreResult(res.purchaseRequest, res.stockByProduct);
+      setCancelBatchTarget(null);
+      showToast(t("purchaseRequestDoc.store.batchCancelled"));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("purchaseRequestDoc.store.cancelError"));
+    } finally { setCancellingBatch(false); }
   };
 
   // สร้างฉบับแก้ไข แล้วเปิดฉบับใหม่ทันที — ฉบับเดิมยังอยู่ครบ ไม่ถูกแตะต้อง
@@ -332,11 +463,6 @@ export function PurchaseRequestDocument({
       setDeleting(false);
     }
   };
-
-  const filteredProducts = products.filter((p) => {
-    const name = categories.find((c) => c.id === p.categoryId)?.name ?? "";
-    return MATERIAL_CATEGORY_NAMES.includes(name);
-  });
 
   return (
     <div className="flex-1 overflow-y-auto print:overflow-visible print:block print:h-auto">
@@ -388,7 +514,7 @@ export function PurchaseRequestDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:hidden">
-        {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+        {isDraftStatus && draftBackup.recovered && draftBackup.recoveredAt !== null && (
           <DraftRecoveryBanner
             savedAt={draftBackup.recoveredAt}
             onRestore={() => {
@@ -401,6 +527,8 @@ export function PurchaseRequestDocument({
           />
         )}
 
+        {/* ขั้น Final ของใบขอซื้อไม่ได้จบที่ "อนุมัติแล้ว" อีกแล้วตั้งแต่ 2026-09-09 — ยังต้องผ่านสโตร์
+            แล้วถึงจัดซื้อ · ใช้ช่อง finalHint ที่แถบมีอยู่แล้ว ไม่เพิ่มสถานะที่ 4 ให้ทั้งระบบ */}
         <DocumentStatusStepper
           status={doc.status}
           rejectionComment={doc.rejectionComment ?? ""}
@@ -408,7 +536,41 @@ export function PurchaseRequestDocument({
           approvedByUserId={doc.approvedByUserId}
           approvedByName={doc.approvedBy}
           approvedAt={doc.approvedAt}
+          finalHint={
+            doc.storeStage === "pending" ? t("purchaseRequestDoc.store.hintPending")
+            : doc.storeStage === "forwarded" ? t("purchaseRequestDoc.store.hintForwarded")
+            : doc.storeStage === "closed" ? t("purchaseRequestDoc.store.hintClosed")
+            : undefined
+          }
         />
+        {/* จัดซื้อกำลังแก้ใบที่หัวหน้าเซ็นไปแล้ว — ต้องเห็นชัดว่าไม่ใช่การแก้ใบร่างธรรมดา */}
+        {purchasingEditMode && (
+          <div className="bg-[#e08a3c]/8 border border-[#e08a3c]/30 rounded-xl p-4 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={15} className="text-[#a75d1a] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-[#a75d1a]">{t("purchaseRequestDoc.purchasingEdit.title")}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("purchaseRequestDoc.purchasingEdit.help")}</p>
+              </div>
+            </div>
+            <input
+              value={purchasingEditNote}
+              onChange={(e) => setPurchasingEditNote(e.target.value)}
+              placeholder={t("purchaseRequestDoc.purchasingEdit.notePlaceholder")}
+              className="w-full text-xs text-foreground bg-card border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors"
+            />
+            {(doc.purchasingEdits ?? []).length > 0 && (
+              <ul className="space-y-1 pt-1">
+                {(doc.purchasingEdits ?? []).map((e, i) => (
+                  <li key={`${e.at}-${i}`} className="text-xs text-muted-foreground">
+                    <span className="font-mono">{formatQuoteDateThai(e.at.slice(0, 10))}</span> · {e.byName}
+                    {e.note.trim() ? ` — ${e.note}` : ""}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         <RejectionNotice comment={doc.rejectionComment ?? ""} />
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
@@ -463,7 +625,7 @@ export function PurchaseRequestDocument({
             <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t("purchaseRequestDoc.linesTitle")}</h2>
             {editable && (
               <div className="flex items-center gap-2">
-                <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={() => openProductPicker()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
                   <Plus size={13} /> {t("purchaseRequestDoc.addFromCatalog")}
                 </button>
                 <button onClick={addFreeLine} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
@@ -616,6 +778,163 @@ export function PurchaseRequestDocument({
           </div>
         </div>
 
+        {/*
+          การ์ดของสโตร์ (2026-09-09) — ไหลงานที่เจ้าของสั่ง: อนุมัติ → สโตร์เช็คของ → มีของ = จ่ายจบ /
+          ไม่มี = ส่งต่อจัดซื้อ · ลอกโครงมาจากการ์ด "จ่ายของ (สโตร์)" ของใบเบิก ไม่ได้ออกแบบใหม่
+          ไม่ถูกพิมพ์ลงกระดาษ เพราะฟอร์ม FM-PU-05 ไม่มีส่วนนี้
+        */}
+        {storeCardVisible && (
+          <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <PackageCheck size={15} className="text-[#c9a84c]" /> {t("purchaseRequestDoc.store.title")}
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("purchaseRequestDoc.store.help")}</p>
+              </div>
+              {doc.storeReviewedAt && (
+                <p className="text-xs text-muted-foreground">
+                  {t("purchaseRequestDoc.store.reviewedBy")
+                    .replace("{name}", doc.storeReviewedByName ?? "")
+                    .replace("{date}", formatQuoteDateThai(doc.storeReviewedAt))}
+                </p>
+              )}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[40rem]">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40">
+                    {[
+                      t("purchaseRequestDoc.col.description"), t("purchaseRequestDoc.col.qtyRequested"),
+                      t("purchaseRequestDoc.store.col.onHand"), t("purchaseRequestDoc.store.col.decision"),
+                      t("purchaseRequestDoc.store.col.issued"), t("purchaseRequestDoc.store.col.issueNow"),
+                    ].map((h, i) => (
+                      <th key={`${i}-${h}`} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {doc.lines.map((line) => {
+                    const stock = line.productId ? stockByProduct[line.productId] : undefined;
+                    const issued = storeIssuedQtyOf(doc, line.id);
+                    const outstanding = storeOutstandingQtyOf(doc, line);
+                    const decision = storeDecisions[line.id];
+                    const short = decision === "stock" && stock !== undefined && outstanding > stock;
+                    return (
+                      <tr key={line.id} className="border-b border-border/50">
+                        <td className="px-3 py-2 text-xs text-foreground">
+                          {line.description}
+                          {!line.productId && (
+                            <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20 whitespace-nowrap">
+                              {t("purchaseRequestDoc.store.noProductCode")}
+                            </span>
+                          )}
+                          {short && (
+                            <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20 whitespace-nowrap">
+                              <AlertTriangle size={10} /> {t("purchaseRequestDoc.store.shortBy").replace("{n}", (outstanding - (stock ?? 0)).toLocaleString())}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap">{(line.qtyRequested ?? 0).toLocaleString()} {line.unit}</td>
+                        <td className={`px-3 py-2 text-xs font-mono whitespace-nowrap ${short ? "text-[#a75d1a]" : "text-muted-foreground"}`}>
+                          {stock === undefined ? "—" : stock.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <div className="flex items-center gap-1" role="group" aria-label={t("purchaseRequestDoc.store.col.decision")}>
+                            {(["stock", "purchase"] as const).map((value) => (
+                              <button
+                                key={value}
+                                onClick={() => setStoreDecisions((prev) => ({ ...prev, [line.id]: value }))}
+                                className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${decision === value
+                                  ? "bg-[#c9a84c] text-[#0b1d3a] border-[#c9a84c] font-semibold"
+                                  : "border-border text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40"}`}
+                              >
+                                {value === "stock" ? t("purchaseRequestDoc.store.decisionStock") : t("purchaseRequestDoc.store.decisionPurchase")}
+                              </button>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-xs font-mono text-foreground whitespace-nowrap">{issued.toLocaleString()}</td>
+                        <td className="px-2 py-1.5">
+                          <input
+                            type="number"
+                            disabled={decision !== "stock" || !line.productId || outstanding <= 0}
+                            value={issueQty[line.id] ?? ""}
+                            onChange={(e) => setIssueQty((prev) => ({ ...prev, [line.id]: e.target.value }))}
+                            placeholder={outstanding > 0 ? String(outstanding) : ""}
+                            className="w-20 text-xs font-mono text-foreground bg-secondary border border-border rounded px-1.5 py-1 outline-none focus:border-[#c9a84c]/50 disabled:opacity-50"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2">
+                <label htmlFor="pr-store-remark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.remark")}</label>
+                <input id="pr-store-remark" value={storeRemark} onChange={(e) => setStoreRemark(e.target.value)}
+                  className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              </div>
+              <div>
+                <label htmlFor="pr-store-issuedate" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.issuedDate")}</label>
+                <input id="pr-store-issuedate" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)}
+                  className="w-full text-xs font-mono text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="pr-store-issueremark" className="text-xs text-muted-foreground block mb-1">{t("purchaseRequestDoc.store.issueRemark")}</label>
+              <input id="pr-store-issueremark" value={issueRemark} onChange={(e) => setIssueRemark(e.target.value)}
+                className="w-full text-xs text-foreground bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none focus:border-[#c9a84c]/50 transition-colors" />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => void saveStoreReview()} disabled={savingReview}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs border border-border rounded-lg text-foreground hover:border-[#c9a84c]/40 transition-colors disabled:opacity-60">
+                {savingReview ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} {t("purchaseRequestDoc.store.saveReview")}
+              </button>
+              <button onClick={() => void saveStoreIssue()} disabled={savingIssue}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#b8973f] transition-colors disabled:opacity-60">
+                {savingIssue ? <Loader2 size={13} className="animate-spin" /> : <PackageCheck size={13} />} {t("purchaseRequestDoc.store.saveIssue")}
+              </button>
+            </div>
+
+            {issueBatches.length > 0 && (
+              <div className="border-t border-border pt-3 space-y-2">
+                <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <History size={13} /> {t("purchaseRequestDoc.store.historyTitle")}
+                </h3>
+                {issueBatches.map((batch) => (
+                  <div key={batch.id} className="flex items-start justify-between gap-3 bg-secondary/40 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs text-foreground">
+                        {t("purchaseRequestDoc.store.batchLabel").replace("{seq}", String(batch.seq))}
+                        <span className="text-muted-foreground font-mono ml-2">{formatQuoteDateThai(batch.issuedDate)}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {batch.lines.map((bl) => {
+                          const line = doc.lines.find((l) => l.id === bl.lineId);
+                          return `${line?.description ?? bl.lineId} ${bl.qty.toLocaleString()} ${line?.unit ?? ""}`;
+                        }).join(" · ")}
+                        {batch.remark.trim() ? ` — ${batch.remark}` : ""}
+                      </p>
+                    </div>
+                    {batch.id === lastBatch?.id && (
+                      <button onClick={() => setCancelBatchTarget(batch)}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs border border-[#e05252]/40 text-[#e05252] rounded-lg font-medium hover:bg-[#e05252]/10 transition-colors whitespace-nowrap">
+                        <Undo2 size={11} /> {t("purchaseRequestDoc.store.cancelBatch")}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ไฟล์แนบ — เจ้าของสั่งไว้ 2026-09-02 ("ใบขอซื้อสามารถทำให้แนบไฟล์ได้ด้วย")
             ใช้ระบบแนบไฟล์กลางตัวเดียวกับใบสั่งงาน · ไม่ล็อคตามสถานะเอกสาร แต่ล็อคตามสิทธิ์แก้
             เพราะใบเสนอราคาผู้ขาย/แคตตาล็อกมักตามมาหลังใบอนุมัติแล้ว */}
@@ -672,8 +991,26 @@ export function PurchaseRequestDocument({
 
       <PurchaseRequestPrintDocument purchaseRequest={doc} companyHeader={companyHeader} />
 
-      <ProductPickerModal open={pickerOpen} products={filteredProducts} categories={categories} onSelect={addProduct} onClose={() => setPickerOpen(false)} />
+      <ProductPickerModal
+        open={pickerOpen}
+        products={products}
+        categories={categories}
+        preferCategoryNames={MATERIAL_CATEGORY_NAMES}
+        showStock
+        onSelect={addProduct}
+        onClose={() => setPickerOpen(false)}
+      />
 
+      <ConfirmDialog
+        open={cancelBatchTarget !== null}
+        title={t("purchaseRequestDoc.store.cancelConfirmTitle")}
+        message={t("purchaseRequestDoc.store.cancelConfirmBody")}
+        danger
+        busy={cancellingBatch}
+        confirmLabel={t("purchaseRequestDoc.store.cancelBatch")}
+        onConfirm={() => { if (cancelBatchTarget) void cancelStoreIssue(cancelBatchTarget); }}
+        onCancel={() => setCancelBatchTarget(null)}
+      />
       <ConfirmDialog
         open={confirmDelete}
         title={t("purchaseRequestDoc.deleteConfirmTitle")}

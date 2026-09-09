@@ -68,12 +68,6 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
     fetchCategories().then(setCategories).catch(() => setCategories([]));
   }, []);
 
-  /** จำกัดแคตตาล็อกให้เหลือเฉพาะหมวดวัสดุของสโตร์ เหมือนที่หน้าใบเบิกทำ */
-  const materialProducts = useMemo(() => {
-    const ids = new Set(categories.filter((c) => MATERIAL_CATEGORY_NAMES.includes(c.name)).map((c) => c.id));
-    return products.filter((p) => ids.has(p.categoryId));
-  }, [products, categories]);
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return templates;
@@ -309,7 +303,9 @@ export function MaterialRequisitionTemplatePage({ canEdit }: { canEdit: boolean 
         </div>
       )}
 
-      <ProductPickerModal open={pickerOpen} products={materialProducts} categories={categories} onSelect={addProduct} onClose={() => setPickerOpen(false)} />
+      <ProductPickerModal open={pickerOpen} products={products} categories={categories}
+        preferCategoryNames={MATERIAL_CATEGORY_NAMES} showStock
+        onSelect={addProduct} onClose={() => setPickerOpen(false)} />
 
       <ConfirmDialog
         open={deleteTarget !== null}

@@ -48,7 +48,57 @@ export interface PurchaseRequestLine {
   /** "tied to a job code" per the original request — cost lives per-line here, not on the header,
    * since a PR is naturally a list of individually-priced items. */
   estimatedCost: number | null;
+  /**
+   * ผลการเช็คของของสโตร์ต่อบรรทัด (2026-09-09) — `"stock"` = มีของในคลัง สโตร์จ่ายให้เลย
+   * `"purchase"` = ไม่มี ส่งต่อฝ่ายจัดซื้อ · `""`/ไม่มีค่า = ยังไม่ได้เช็ค
+   *
+   * ใบสั่งซื้อจะลอกไปเฉพาะบรรทัดที่ **ไม่ใช่** `"stock"` เพราะของนั้นออกจากคลังไปแล้ว ไม่ต้องซื้อซ้ำ
+   */
+  storeDecision?: "" | "stock" | "purchase";
+  /** ยอดคงเหลือที่สโตร์เห็น ณ ตอนเช็ค — เก็บเป็นหลักฐานว่าตัดสินใจจากตัวเลขอะไร ต่างจาก
+   *  `warehouseRemainingQty` ซึ่งเป็นช่องบนฟอร์มที่ผู้ขอพิมพ์เองตอนเขียนใบ */
+  storeAvailableQty?: number | null;
 }
+
+/**
+ * หนึ่งรอบที่สโตร์จ่ายของตามใบขอซื้อ (2026-09-09) — โครงเดียวกับ `MaterialIssueBatch` ของใบเบิกทุกประการ
+ * ต่อท้ายอย่างเดียว แก้รอบเก่าไม่ได้ ยกเลิกได้เฉพาะรอบล่าสุด
+ *
+ * เจ้าของเลือกทางนี้เมื่อถูกถาม 2026-09-09 (จ่ายบนใบขอซื้อเลย) แทนการให้สโตร์ไปสร้างใบเบิกอีกใบจาก
+ * รายการที่มีของ — เร็วกว่าสำหรับคนใช้งาน แลกกับการที่ของออกจากคลังผ่านเอกสารชนิดที่สองซึ่งไม่มีใบพิมพ์
+ * และไม่มีช่องคืนของ (บันทึกเป็นข้อจำกัดไว้ใน docs/MODULES/Purchasing.md)
+ */
+export interface PurchaseRequestIssueBatch {
+  id: string;
+  /** ลำดับรอบ เริ่มที่ 1 */
+  seq: number;
+  issuedDate: string;
+  lines: { lineId: string; qty: number }[];
+  /** ชื่อผู้จ่ายที่พิมพ์เอง — ไม่ใช่ผู้ใช้ในระบบ */
+  issuedBy: string;
+  remark: string;
+  postedAt: string;
+  postedBy: string;
+  postedByName: string;
+  stockMovementIds: string[];
+}
+
+/**
+ * ขั้นของสโตร์หลังใบขอซื้อได้รับอนุมัติ (2026-09-09) — ไหลงานที่เจ้าของสั่ง:
+ * สร้างใบ → หัวหน้าฝ่ายอนุมัติ → **สโตร์เช็คของ** → มีของ = จ่ายจบ / ไม่มี = ส่งต่อจัดซื้อ
+ *
+ * - `"pending"` = อนุมัติแล้ว รอสโตร์เช็คของ (ออกใบสั่งซื้อยังไม่ได้)
+ * - `"forwarded"` = สโตร์เช็คแล้วของไม่ครบ ส่งต่อจัดซื้อ (ออกใบสั่งซื้อได้)
+ * - `"closed"` = ของมีครบและสโตร์จ่ายครบแล้ว ไม่ต้องซื้อ
+ *
+ * **ไม่มีค่า = ใบก่อน 2026-09-09** ซึ่งวิ่งตรงไปจัดซื้อตั้งแต่อนุมัติ — ด่านออกใบสั่งซื้อจึงปล่อยผ่าน
+ * ใบที่ไม่มีฟิลด์นี้ ไม่ได้ทำ migration (แนวเดียวกับทุกฟิลด์ที่เพิ่มทีหลังในระบบนี้)
+ *
+ * เก็บเป็นฟิลด์ของใบขอซื้อเอง **ไม่ใช่สถานะที่ 4** — `ApprovableStatus` ใน
+ * `api/_lib/documentApproval.ts` ใช้ร่วมกัน 6 เอกสาร การเพิ่มค่าเข้าไปคือการแก้ทุกเอกสาร ทุกแถบสถานะ
+ * กล่องรออนุมัติ และเทสต์อีก 6 ไฟล์ เพื่อขั้นที่มีอยู่ในใบขอซื้อใบเดียว
+ */
+export type PurchaseRequestStoreStage = "pending" | "forwarded" | "closed";
 
 export interface PurchaseRequest {
   /** Human-readable business id (e.g. "PR-2569-0001"), intended to be stored directly as _id once
@@ -95,6 +145,21 @@ export interface PurchaseRequest {
   deliveryLocation: string;
   lines: PurchaseRequestLine[];
   status: PurchaseRequestStatus;
+  /** ขั้นของสโตร์หลังอนุมัติ — ดู `PurchaseRequestStoreStage` · ไม่มีค่า = ใบก่อน 2026-09-09 */
+  storeStage?: PurchaseRequestStoreStage;
+  /** ผู้เช็คของของสโตร์ + วันที่ + หมายเหตุ (เช่น ของหมด สั่งเพิ่ม) */
+  storeReviewedBy?: string;
+  storeReviewedByName?: string;
+  storeReviewedAt?: string;
+  storeRemark?: string;
+  /** รอบการจ่ายของโดยสโตร์ — ต่อท้ายอย่างเดียว ยกเลิกได้เฉพาะรอบล่าสุด */
+  storeIssues?: PurchaseRequestIssueBatch[];
+  /**
+   * ประวัติการแก้ไขหลังอนุมัติโดยฝ่ายจัดซื้อ (2026-09-09) — เจ้าของสั่งว่าจัดซื้อต้องแก้ใบที่อนุมัติแล้วได้
+   * เพราะชื่อหรือยี่ห้อตอนซื้ออาจไม่ตรงกับที่พิมพ์ไว้ในใบ · การแก้จึงไม่เงียบ: ทุกครั้งที่บันทึกจะต่อท้าย
+   * แถวนี้ พร้อมเขียน audit log และแจ้งผู้สร้างใบ
+   */
+  purchasingEdits?: { at: string; byUserId: string; byName: string; note: string }[];
   /**
    * หมายเหตุการแก้ไข — พิมพ์เอง อธิบายว่าฉบับนี้ต่างจากฉบับก่อนตรงไหน และ **แสดงบนใบพิมพ์ด้วย**
    * (ฝ่ายผลิตขอไว้ 2026-08-27 ว่า "สามารถดูในใบปริ้นได้" — ต่างจาก revisionNote ของใบเสนอราคา/
@@ -172,6 +237,8 @@ export interface PurchaseRequestSummary {
   scopeOfWorkId: string;
   jobCode: string;
   status: PurchaseRequestStatus;
+  /** ขั้นของสโตร์ — ป้าย "รอสโตร์ / รอจัดซื้อ / จ่ายจากสต๊อก" ในหน้ารายการ (2026-09-09) */
+  storeStage?: PurchaseRequestStoreStage;
   updatedAt: string;
 }
 
@@ -187,8 +254,13 @@ export async function fetchPurchaseRequestsByProject(projectId: string): Promise
   const { purchaseRequests } = await apiFetch<{ purchaseRequests: PurchaseRequestSummary[] }>(`/purchase-requests?projectId=${encodeURIComponent(projectId)}`);
   return purchaseRequests;
 }
-export async function fetchAllPurchaseRequests(ownerDepartment: PurchaseRequestScope = "project"): Promise<PurchaseRequestSummary[]> {
-  const { purchaseRequests } = await apiFetch<{ purchaseRequests: PurchaseRequestSummary[] }>(`/purchase-requests?ownerDepartment=${ownerDepartment}`);
+export async function fetchAllPurchaseRequests(
+  ownerDepartment: PurchaseRequestScope = "project",
+  /** กล่องงานเข้าตามขั้นของสโตร์ (2026-09-09) — ดู `PurchaseRequestStoreStage` */
+  storeStage?: "pending" | "forwarded",
+): Promise<PurchaseRequestSummary[]> {
+  const query = `?ownerDepartment=${ownerDepartment}${storeStage ? `&storeStage=${storeStage}` : ""}`;
+  const { purchaseRequests } = await apiFetch<{ purchaseRequests: PurchaseRequestSummary[] }>(`/purchase-requests${query}`);
   return purchaseRequests;
 }
 
@@ -215,7 +287,17 @@ export async function fetchPurchaseRequest(id: string): Promise<PurchaseRequest>
   const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}`);
   return purchaseRequest;
 }
-export type PurchaseRequestUpdateFields = Partial<Omit<PurchaseRequest, "id" | "createdAt" | "createdBy" | "isDeleted">>;
+/** เปิดใบพร้อมยอดคงเหลือของสินค้าในใบ — ใช้โดยการ์ดสโตร์เช็คของ/จ่ายของ */
+export async function fetchPurchaseRequestWithStock(id: string): Promise<PurchaseRequestWithStock> {
+  return unwrapWithStock(await apiFetch<PurchaseRequestStockResponse>(`/purchase-requests/${encodeURIComponent(id)}`));
+}
+export type PurchaseRequestUpdateFields = Partial<Omit<PurchaseRequest, "id" | "createdAt" | "createdBy" | "isDeleted">> & {
+  /**
+   * หมายเหตุของฝ่ายจัดซื้อตอนแก้ใบที่อนุมัติแล้ว (2026-09-09) — **ไม่ใช่ฟิลด์ที่เก็บตรง ๆ บนใบ**
+   * เซิร์ฟเวอร์เอาไปต่อท้าย `purchasingEdits` พร้อมชื่อคนแก้และเวลา ส่งมาในโหมดอื่นจะถูกมองข้าม
+   */
+  purchasingEditNote?: string;
+};
 export async function updatePurchaseRequest(id: string, fields: PurchaseRequestUpdateFields, options?: WriteOptions): Promise<PurchaseRequest> {
   const { purchaseRequest } = await apiFetch<{ purchaseRequest: PurchaseRequest }>(`/purchase-requests/${encodeURIComponent(id)}${writeQuery(options)}`, { method: "PATCH", body: JSON.stringify(fields) });
   return purchaseRequest;
@@ -236,6 +318,62 @@ export async function logPurchaseRequestPrinted(id: string): Promise<void> {
 export async function deletePurchaseRequest(id: string): Promise<void> {
   await apiFetch<void>(`/purchase-requests/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
+/** รอบการจ่ายของสโตร์ทั้งหมด เรียงตามลำดับ — ใบเก่าที่ไม่มีฟิลด์นี้อ่านเป็น [] */
+export function storeIssueBatchesOf(doc: PurchaseRequest): PurchaseRequestIssueBatch[] {
+  return [...(doc.storeIssues ?? [])].sort((a, b) => a.seq - b.seq);
+}
+/** จำนวนที่สโตร์จ่ายไปแล้วของบรรทัดหนึ่ง */
+export function storeIssuedQtyOf(doc: PurchaseRequest, lineId: string): number {
+  return storeIssueBatchesOf(doc)
+    .flatMap((b) => b.lines)
+    .filter((l) => l.lineId === lineId)
+    .reduce((sum, l) => sum + l.qty, 0);
+}
+/** ยังต้องจ่ายอีกเท่าไรของบรรทัดที่สโตร์บอกว่ามีของ */
+export function storeOutstandingQtyOf(doc: PurchaseRequest, line: PurchaseRequestLine): number {
+  return Math.max(0, (line.qtyRequested ?? 0) - storeIssuedQtyOf(doc, line.id));
+}
+
+// ── ขั้นสโตร์เช็คของ / จ่ายของ (2026-09-09) ────────────────────────────────────────────────
+/** ใบขอซื้อพร้อมยอดคงเหลือปัจจุบันของสินค้าในใบ — แนวเดียวกับใบเบิก (`MaterialRequisitionWithStock`) */
+export interface PurchaseRequestWithStock {
+  purchaseRequest: PurchaseRequest;
+  stockByProduct: Record<string, number>;
+}
+interface PurchaseRequestStockResponse {
+  purchaseRequest: PurchaseRequest;
+  stockByProduct?: Record<string, number>;
+}
+function unwrapWithStock(res: PurchaseRequestStockResponse): PurchaseRequestWithStock {
+  return { purchaseRequest: res.purchaseRequest, stockByProduct: res.stockByProduct ?? {} };
+}
+
+/** บันทึกผลการเช็คของ — บรรทัดไหนมีของ บรรทัดไหนต้องซื้อ · มีบรรทัดต้องซื้อ = ส่งต่อจัดซื้อทันที */
+export async function reviewPurchaseRequestStock(
+  id: string,
+  body: { lines: { lineId: string; decision: "stock" | "purchase"; availableQty?: number | null }[]; remark?: string },
+): Promise<PurchaseRequestWithStock> {
+  return unwrapWithStock(await apiFetch<PurchaseRequestStockResponse>(`/purchase-requests/${encodeURIComponent(id)}/store-review`, {
+    method: "POST", body: JSON.stringify(body),
+  }));
+}
+/** สโตร์จ่ายของหนึ่งรอบตามใบขอซื้อ — ตัดสต๊อกตามจำนวนของรอบนั้น จ่ายบางส่วนได้ */
+export async function postPurchaseRequestIssue(
+  id: string,
+  batch: { lines: { lineId: string; qty: number }[]; issuedDate?: string; issuedBy?: string; remark?: string },
+): Promise<PurchaseRequestWithStock> {
+  return unwrapWithStock(await apiFetch<PurchaseRequestStockResponse>(`/purchase-requests/${encodeURIComponent(id)}/store-issues`, {
+    method: "POST", body: JSON.stringify(batch),
+  }));
+}
+/** ยกเลิกรอบการจ่าย**ล่าสุด** — ของทั้งรอบกลับเข้าคลัง */
+export async function cancelPurchaseRequestIssue(id: string, batchId: string): Promise<PurchaseRequestWithStock> {
+  return unwrapWithStock(await apiFetch<PurchaseRequestStockResponse>(
+    `/purchase-requests/${encodeURIComponent(id)}/store-issues/${encodeURIComponent(batchId)}`,
+    { method: "DELETE" },
+  ));
+}
+
 // สร้างรายการเปล่า อาจผูกกับสินค้าในแคตตาล็อกหรือพิมพ์เองอิสระก็ได้
 // Builds a blank line — may optionally be linked to a catalog Product, or stay free-typed
 export function blankPurchaseRequestLine(product?: { id: string; code: string; name: string; unit: string }): PurchaseRequestLine {

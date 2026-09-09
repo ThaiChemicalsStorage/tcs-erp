@@ -30,12 +30,19 @@ const STATUS_STYLE: Record<ProductRequestStatus, string> = {
 const inputCls = "w-full text-sm text-foreground bg-secondary border border-border rounded-lg px-3 py-2 outline-none focus:border-[#c9a84c]/50 transition-colors";
 
 export function ProductRequestPage({
-  currentUserId, canCreate, canReview, initialProductRequestId, onProductRequestIdConsumed,
+  currentUserId, canCreate, canReview, onProductsChanged, initialProductRequestId, onProductRequestIdConsumed,
 }: {
   /** ใช้ซ่อนปุ่มลบบนคำขอของคนอื่น — เซิร์ฟเวอร์ก็ปฏิเสธอยู่แล้ว แต่ปุ่มที่กดแล้วได้ 403 เสมอไม่ควรมีให้เห็น */
   currentUserId: string;
   canCreate: boolean;
   canReview: boolean;
+  /**
+   * เรียกหลังอนุมัติคำขอสำเร็จ เพื่อให้แอปโหลดรายการสินค้าใหม่ (2026-09-09)
+   *
+   * `App.tsx` โหลดรายการสินค้าครั้งเดียวตอนเข้าระบบ และส่งต่อให้ตัวเลือกสินค้าของใบเสนอราคา/เทมเพลต
+   * ใบเสนอราคา — ถ้าไม่บอกให้โหลดใหม่ สินค้าที่สโตร์เพิ่งตั้งรหัสจะไม่ขึ้นจนกว่าจะรีเฟรชหน้าทั้งหน้า
+   */
+  onProductsChanged?: () => void;
   initialProductRequestId?: string | null;
   onProductRequestIdConsumed?: () => void;
 }) {
@@ -116,6 +123,8 @@ export function ProductRequestPage({
       await approveProductRequest(reviewing.id, reviewCode, reviewCategoryId);
       await reload();
       setReviewing(null);
+      // สินค้าเกิดขึ้นจริงแล้ว — บอกแอปให้โหลดแคตตาล็อกใหม่ ไม่งั้นตัวเลือกสินค้าของใบเสนอราคายังเป็นชุดเดิม
+      onProductsChanged?.();
       toast.show(t("productRequest.approved"));
     } catch (err) {
       // รหัสซ้ำ (409) ต้องไม่ปิดกล่อง — ผู้ใช้จะได้แก้รหัสแล้วกดใหม่ได้ทันที
@@ -217,7 +226,7 @@ export function ProductRequestPage({
                           {canReview && r.status === "Pending" && (
                             <>
                               <button
-                                onClick={() => { setReviewing(r); setReviewCode(""); setReviewCategoryId(r.categoryId || categories[0]?.id || ""); }}
+                                onClick={() => { setReviewing(r); setReviewCode(""); setReviewCategoryId(r.categoryId || ""); }}
                                 className="flex items-center gap-1 px-2.5 py-1 text-xs bg-[#2aa36b] text-white rounded-lg font-medium hover:bg-[#238f5c] transition-colors">
                                 <CheckCircle2 size={12} /> {t("productRequest.approve")}
                               </button>
@@ -303,9 +312,10 @@ export function ProductRequestPage({
             <div>
               <label className="text-xs text-muted-foreground block mb-1">{t("productRequest.field.category")}</label>
               <select value={reviewCategoryId} onChange={(e) => setReviewCategoryId(e.target.value)} className={inputCls}>
-                <option value="">—</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="">{t("productRequest.field.categoryPlaceholder")}</option>
+                {categories.filter((c) => !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              <p className="text-xs text-muted-foreground mt-1">{t("productRequest.field.categoryHint")}</p>
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setReviewing(null)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors">

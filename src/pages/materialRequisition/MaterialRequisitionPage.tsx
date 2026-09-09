@@ -22,6 +22,7 @@ export function MaterialRequisitionPage({
   canDelete,
   canCreate,
   canIssueStock,
+  canRequestProductCode,
   ownerDepartment = "project",
   initialMaterialRequisitionId,
   onMaterialRequisitionIdConsumed,
@@ -35,6 +36,8 @@ export function MaterialRequisitionPage({
   canCreate: boolean;
   /** `stock:adjust` — สโตร์จ่ายของ/รับคืนบนใบที่อนุมัติแล้ว (2026-09-03) แยกจากสิทธิ์แก้ใบ */
   canIssueStock: boolean;
+  /** `productRequest:create` — ขอรหัสสินค้าใหม่จากในตัวเลือกสินค้าได้ (2026-09-09) */
+  canRequestProductCode: boolean;
   /** แผนกเจ้าของ — หน้านี้ถูกเมาต์ 2 ครั้ง (โครงการ/ผลิต) และเห็นคนละชุดข้อมูล (2026-08-20).
    *  ฝั่งผลิตออกเอกสารจากใบสั่งผลิต ส่วนฝั่งโครงการออกจากรายการในโครงการ */
   ownerDepartment?: "project" | "production";
@@ -123,6 +126,7 @@ export function MaterialRequisitionPage({
           canPrint={canPrint}
           canDelete={canDelete}
           canIssueStock={canIssueStock}
+          canRequestProductCode={canRequestProductCode}
           onBack={backToList}
           onDeleted={backToList}
           onOpenOther={openMaterialRequisition}

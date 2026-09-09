@@ -133,9 +133,23 @@ export function PurchaseRequestList({
                   <td className="px-4 py-3.5 text-xs text-muted-foreground whitespace-nowrap">{departmentLabel[p.ownerDepartment ?? "project"]}</td>
                 )}
                 <td className="px-4 py-3.5">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[p.status]}`}>
-                    {statusLabel[p.status]}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle[p.status]}`}>
+                      {statusLabel[p.status]}
+                    </span>
+                    {/* ขั้นของสโตร์ (2026-09-09) — ใบที่อนุมัติแล้วยังไม่จบ ต้องผ่านสโตร์ก่อนถึงจัดซื้อ
+                        ใบก่อนวันนั้นไม่มีฟิลด์นี้ จึงไม่ขึ้นป้ายอะไรเลย ซึ่งถูกต้อง: มันวิ่งตรงไปจัดซื้อ */}
+                    {p.status === "Final" && p.storeStage && (
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                        p.storeStage === "pending" ? "bg-[#e08a3c]/15 text-[#a75d1a]"
+                        : p.storeStage === "forwarded" ? "bg-[#3c7de0]/15 text-[#1a4fa7]"
+                        : "bg-[#2aa36b]/15 text-[#1c7a4e]"}`}>
+                        {p.storeStage === "pending" ? t("purchaseRequest.stage.pending")
+                          : p.storeStage === "forwarded" ? t("purchaseRequest.stage.forwarded")
+                          : t("purchaseRequest.stage.closed")}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono whitespace-nowrap">{formatQuoteDateThai(p.updatedAt)}</td>
               </tr>

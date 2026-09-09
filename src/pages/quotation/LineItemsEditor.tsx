@@ -5,7 +5,6 @@ import {
 } from "lucide-react";
 import type { Product, ProductCategory } from "../../lib/products";
 import { type QuoteLine, type SubDetail, type DiscountMode, blankLine, newSubDetailId, lineSubtotal, computeTotals, fmt, VAT_RATE } from "../../lib/quotes";
-import { MATERIAL_CATEGORY_NAMES } from "../../lib/materialRequisition";
 import { ProductPickerModal } from "../products/ProductPickerModal";
 import { useI18n } from "../../lib/i18n";
 
@@ -281,17 +280,6 @@ export function LineItemsEditor({
 
   const { subtotal, discountAmt, afterDiscount, vatAmt, total } = computeTotals(lines, discount, discountMode);
 
-  // Excludes the 4 categories seeded for Material Requisition/Purchase Request's internal-only
-  // store catalog (เคมี/เรซิ่น, วัสดุสิ้นเปลือง, น็อตและสกรู, อื่นๆ (คลัง)) from the sales-facing quote
-  // picker — those items were never meant to be quoted to a customer. This is a category-level
-  // assumption, not a per-product flag: a future customer-facing product added to one of these
-  // categories, or an internal-only product added to an existing customer-facing category, won't be
-  // caught by this filter and would need revisiting then.
-  const quotationProducts = products.filter((p) => {
-    const categoryName = categories.find((c) => c.id === p.categoryId)?.name ?? "";
-    return !MATERIAL_CATEGORY_NAMES.includes(categoryName);
-  });
-
   let itemNumber = 0;
   const itemNumbers = lines.map((l) => (l.isSectionHeader ? null : ++itemNumber));
 
@@ -323,7 +311,10 @@ export function LineItemsEditor({
           </button>
         </div>
       </div>
-      <ProductPickerModal open={pickerOpen} products={quotationProducts} categories={categories} onSelect={addLineFromProduct} onClose={() => setPickerOpen(false)} />
+      {/* ก่อน 2026-09-09 ที่นี่กรองหมวดคลัง 4 หมวดของใบเบิกออกจากตัวเลือก โดยเดาจาก "ชื่อหมวด" —
+          สินค้าที่สโตร์ตั้งรหัสลงหมวดคลังจึงหายไปจากใบเสนอราคาอย่างถาวรและกลับกัน ตอนนี้ตัวเลือกแสดง
+          ทั้งคลังแล้ว และให้คนเลือกหมวดเองในช่องกรองที่มองเห็น ดู ProductPickerModal */}
+      <ProductPickerModal open={pickerOpen} products={products} categories={categories} onSelect={addLineFromProduct} onClose={() => setPickerOpen(false)} />
 
       <div className="overflow-x-auto">
         <table className="w-full">

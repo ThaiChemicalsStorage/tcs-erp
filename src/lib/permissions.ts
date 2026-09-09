@@ -102,6 +102,7 @@ export type Permission =
   | "purchaseRequest:viewAll"
   | "purchaseRequest:create"
   | "purchaseRequest:edit"
+  | "purchaseRequest:editApproved"
   | "purchaseRequest:finalize"
   | "purchaseRequest:print"
   | "purchaseRequest:delete"
@@ -250,6 +251,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   "purchaseRequest:viewAll",
   "purchaseRequest:create",
   "purchaseRequest:edit",
+  "purchaseRequest:editApproved",
   "purchaseRequest:finalize",
   "purchaseRequest:print",
   "purchaseRequest:delete",
@@ -393,6 +395,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "purchaseRequest:viewAll": "ดูใบขอซื้อของผู้อื่น",
   "purchaseRequest:create": "สร้างใบขอซื้อ",
   "purchaseRequest:edit": "แก้ไขและบันทึกใบขอซื้อ",
+  "purchaseRequest:editApproved": "แก้ไขใบขอซื้อที่อนุมัติแล้ว (ฝ่ายจัดซื้อ)",
   "purchaseRequest:finalize": "อนุมัติ / ไม่อนุมัติใบขอซื้อ",
   "purchaseRequest:print": "พิมพ์ / ส่งออกใบขอซื้อ",
   "purchaseRequest:delete": "ลบใบขอซื้อ",
@@ -536,6 +539,7 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "purchaseRequest:viewAll": "permission.purchaseRequestViewAll",
   "purchaseRequest:create": "permission.purchaseRequestCreate",
   "purchaseRequest:edit": "permission.purchaseRequestEdit",
+  "purchaseRequest:editApproved": "permission.purchaseRequestEditApproved",
   "purchaseRequest:finalize": "permission.purchaseRequestFinalize",
   "purchaseRequest:print": "permission.purchaseRequestPrint",
   "purchaseRequest:delete": "permission.purchaseRequestDelete",
@@ -692,6 +696,7 @@ export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permi
       "purchaseRequest:viewAll",
       "purchaseRequest:create",
       "purchaseRequest:edit",
+      "purchaseRequest:editApproved",
       "purchaseRequest:finalize",
       "purchaseRequest:print",
       "purchaseRequest:delete",

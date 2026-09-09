@@ -304,6 +304,17 @@ shared attachment engine. Full writeup in [DeliveryOrder.md](./DeliveryOrder.md)
   on screen is database content (product, vendor, department and unit names). One thing to decide:
   dates still render in the Thai Buddhist calendar in EN mode, because every page shares
   `formatQuoteDateThai()`. That predates this module and is logged in TODO.md, not changed here.
-- Reversing a receipt uses the current average cost (see above).
+- Reversing a **receipt** still uses the current average cost (see above). Reversing an **issue**
+  (requisition or purchase request) and every return now book at the **latest purchase price**
+  (`Product.lastCost`, 2026-09-09) — the owner picked that over the moving average when asked. Stock
+  *value* is still `stockQty × avgCost`; the latest price only sets the value of the ledger row.
+- **Store can now issue straight off a ใบขอซื้อ** (2026-09-09). Approved purchase requests land in a
+  new inbox, "ใบขอซื้อ (รอสโตร์เช็คของ)", where Store marks each line in-stock or to-be-bought;
+  in-stock lines are issued from that document with the same append-only rounds this module's
+  requisition already uses (`sourceType: "purchase_request"`), and anything to be bought is
+  forwarded to Purchasing. A purchase order cannot be raised until Store has answered, and lines the
+  store issued are never copied onto it. ⚠️ Unlike the requisition, that issue path has **no printed
+  slip, no receiver signature and no return column** — the owner chose the shorter route knowingly;
+  see [MODULES/Purchasing.md](./Purchasing.md) and [TODO.md](../TODO.md).
 - `ap_entries` only ever holds `entryType: "RR"`. The rest of the company's AP codes need their own
   source documents first.

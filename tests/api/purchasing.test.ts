@@ -43,7 +43,12 @@ async function json<T>(res: Response): Promise<T> {
 
 type PurchaseRequestDoc = {
   id: string; status: string; ownerDepartment?: string;
-  lines: { id: string; productCode: string; description: string; unit: string; qtyRequested: number | null; estimatedCost: number | null; subDetails: string[] }[];
+  storeStage?: "pending" | "forwarded" | "closed";
+  storeReviewedByName?: string;
+  storeRemark?: string;
+  storeIssues?: { id: string; seq: number; lines: { lineId: string; qty: number }[] }[];
+  purchasingEdits?: { at: string; byName: string; note: string }[];
+  lines: { id: string; productId: string; productCode: string; description: string; unit: string; qtyRequested: number | null; estimatedCost: number | null; subDetails: string[]; storeDecision?: string }[];
 };
 type PurchaseOrderDoc = {
   id: string; documentNumber: string; status: string; vendorName: string; purchaseRequestId: string;
@@ -56,7 +61,12 @@ async function createStandalonePurchaseRequest(): Promise<PurchaseRequestDoc> {
   return (await json<{ purchaseRequest: PurchaseRequestDoc }>(res)).purchaseRequest;
 }
 
-/** ใบขอซื้อที่อนุมัติแล้ว พร้อมรายการ 2 บรรทัด — ต้นทางของ PO ในเทสต์ส่วนใหญ่ */
+/**
+ * ใบขอซื้อที่อนุมัติแล้ว **และสโตร์ส่งต่อจัดซื้อแล้ว** พร้อมรายการ 2 บรรทัด — ต้นทางของ PO ในเทสต์ส่วนใหญ่
+ *
+ * ขั้น "สโตร์เช็คของ" เพิ่มเมื่อ 2026-09-09: ใบที่อนุมัติแล้วแต่ยังไม่ผ่านสโตร์ออกใบสั่งซื้อไม่ได้
+ * เทสต์ที่สนใจเฉพาะ PO จึงต้องเดินผ่านขั้นนี้ก่อน (ดูชุดเทสต์ของขั้นสโตร์ด้านล่างสำหรับตัวขั้นเอง)
+ */
 async function approvedPurchaseRequest(): Promise<PurchaseRequestDoc> {
   const pr = await createStandalonePurchaseRequest();
   const patched = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
@@ -71,6 +81,35 @@ async function approvedPurchaseRequest(): Promise<PurchaseRequestDoc> {
   expect(patched.status).toBe(200);
   const submitted = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/submit-approval`, { method: "POST" });
   expect(submitted.status).toBe(200);
+  const approved = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/approve`, { method: "POST" });
+  expect(approved.status).toBe(200);
+  return storeForwardsToPurchasing(pr.id);
+}
+
+/** สโตร์เช็คแล้วบอกว่าไม่มีของทั้งสองบรรทัด → ใบถูกส่งต่อฝ่ายจัดซื้อ */
+async function storeForwardsToPurchasing(id: string): Promise<PurchaseRequestDoc> {
+  const res = await api(`/api/purchase-requests/${encodeURIComponent(id)}/store-review`, {
+    method: "POST",
+    body: JSON.stringify({ lines: [{ lineId: "l1", decision: "purchase" }, { lineId: "l2", decision: "purchase" }], remark: "ไม่มีของทั้งสองรายการ" }),
+  });
+  expect(res.status).toBe(200);
+  return (await json<{ purchaseRequest: PurchaseRequestDoc }>(res)).purchaseRequest;
+}
+
+/** ใบขอซื้อที่อนุมัติแล้วแต่ยังไม่ผ่านสโตร์ — ใช้ทดสอบขั้นสโตร์เอง */
+async function approvedAwaitingStore(): Promise<PurchaseRequestDoc> {
+  const pr = await createStandalonePurchaseRequest();
+  const patched = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      lines: [
+        { id: "l1", productId: null, productCode: "P-001", description: "ปั๊มเคมี", subDetails: [], unit: "ตัว", qtyRequested: 2, estimatedCost: 15000, remark: "" },
+        { id: "l2", productId: null, productCode: "", description: "ท่อ PVC", subDetails: [], unit: "เส้น", qtyRequested: 10, estimatedCost: 250, remark: "" },
+      ],
+    }),
+  });
+  expect(patched.status).toBe(200);
+  expect((await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/submit-approval`, { method: "POST" })).status).toBe(200);
   const approved = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/approve`, { method: "POST" });
   expect(approved.status).toBe(200);
   return (await json<{ purchaseRequest: PurchaseRequestDoc }>(approved)).purchaseRequest;
@@ -395,5 +434,234 @@ describe("ทะเบียนผู้ขาย", () => {
     // ไม่ตรึงลำดับการเรียงไว้: เซิร์ฟเวอร์ใช้ sort({ name: 1 }) ของ MongoDB ซึ่งเทียบแบบไบนารี
     // ส่วน localeCompare ของ JS เทียบตามภาษา — ชื่อไทยปนอังกฤษจะได้คนละลำดับ และไม่ใช่ลำดับที่
     // ผูกพันกับใคร (หน้าจอกรอง/ค้นเองอยู่แล้ว) สิ่งที่ต้องตรึงจริงคือ route ใช้งานได้
+  });
+});
+
+/**
+ * **ขั้นสโตร์เช็คของ (2026-09-09)** — ไหลงานที่เจ้าของสั่ง: สร้างใบ → หัวหน้าฝ่ายอนุมัติ →
+ * สโตร์เช็คของ → มีของ = จ่ายจบ / ไม่มี = ส่งต่อจัดซื้อ
+ *
+ * สี่อย่างที่ตรึงไว้เพราะแก้ทีหลังแล้วเจ็บ:
+ *   1. อนุมัติแล้วใบต้องอยู่ที่ `storeStage: "pending"` และ**ออกใบสั่งซื้อยังไม่ได้**
+ *   2. สโตร์บอกว่าไม่มีของ → `"forwarded"` และออกใบสั่งซื้อได้
+ *   3. สโตร์จ่ายของจริง → สต๊อกลดจริง ใบปิดเป็น `"closed"` และออกใบสั่งซื้อไม่ได้อีก
+ *   4. บรรทัดที่สโตร์จ่ายจากสต๊อก**ไม่ถูกลอกไปใบสั่งซื้อ** (ไม่งั้นซื้อของที่มีอยู่แล้วซ้ำ)
+ */
+describe("ใบขอซื้อ — ขั้นสโตร์เช็คของ", () => {
+  /** สินค้าจริงในคลังพร้อมยอดตั้งต้น — ต้องมีรหัสสินค้า ไม่งั้นสโตร์จ่ายของไม่ได้ */
+  async function productWithStock(code: string, qty: number, unitCost?: number): Promise<string> {
+    const catRes = await api("/api/categories", { method: "POST", body: JSON.stringify({ name: `หมวด ${code}` }) });
+    expect(catRes.status).toBe(201);
+    const categoryId = (await json<{ category: { id: string } }>(catRes)).category.id;
+    const prodRes = await api("/api/products", {
+      method: "POST",
+      body: JSON.stringify({ code, name: `สินค้า ${code}`, categoryId, unit: "ชิ้น", defaultPrice: 0 }),
+    });
+    expect(prodRes.status).toBe(201);
+    const productId = (await json<{ product: { id: string } }>(prodRes)).product.id;
+    const moveRes = await api("/api/stock-movements", {
+      method: "POST",
+      body: JSON.stringify({ productId, kind: "receive", qty, reason: "ตั้งยอดตั้งต้น", ...(unitCost === undefined ? {} : { unitCost }) }),
+    });
+    expect(moveRes.status).toBe(201);
+    return productId;
+  }
+
+  async function stockOf(productId: string): Promise<number> {
+    const res = await api("/api/products");
+    const { products } = await json<{ products: { id: string; stockQty: number }[] }>(res);
+    return products.find((p) => p.id === productId)?.stockQty ?? 0;
+  }
+
+  it("อนุมัติแล้วรอสโตร์ — ออกใบสั่งซื้อยังไม่ได้", async () => {
+    const pr = await approvedAwaitingStore();
+    expect(pr.storeStage).toBe("pending");
+    const po = await api("/api/purchase-orders", { method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id }) });
+    expect(po.status).toBe(400);
+  });
+
+  it("สโตร์บอกว่าไม่มีของ — ส่งต่อจัดซื้อแล้วออกใบสั่งซื้อได้", async () => {
+    const pr = await approvedAwaitingStore();
+    const reviewed = await storeForwardsToPurchasing(pr.id);
+    expect(reviewed.storeStage).toBe("forwarded");
+    expect(reviewed.storeRemark).toBe("ไม่มีของทั้งสองรายการ");
+    expect(reviewed.lines.every((l) => l.storeDecision === "purchase")).toBe(true);
+    const po = await api("/api/purchase-orders", { method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id }) });
+    expect(po.status).toBe(201);
+  });
+
+  it("มีของครบแล้วจ่ายครบ — สต๊อกลดจริง ใบปิด และออกใบสั่งซื้อไม่ได้อีก", async () => {
+    const productId = await productWithStock("STK-001", 10);
+    const pr = await createStandalonePurchaseRequest();
+    const patched = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: [{ id: "s1", productId, subDetails: [], qtyRequested: 4, remark: "" }] }),
+    });
+    expect(patched.status).toBe(200);
+    expect((await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/submit-approval`, { method: "POST" })).status).toBe(200);
+    expect((await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/approve`, { method: "POST" })).status).toBe(200);
+
+    const reviewed = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-review`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "s1", decision: "stock" }] }),
+    });
+    expect(reviewed.status).toBe(200);
+    // เช็คแล้วว่ามีของ แต่ยังไม่จ่าย — ยังเป็นงานของสโตร์อยู่ ไม่ใช่ของจัดซื้อ
+    expect((await json<{ purchaseRequest: PurchaseRequestDoc }>(reviewed)).purchaseRequest.storeStage).toBe("pending");
+
+    const issued = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-issues`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "s1", qty: 4 }], remark: "จ่ายครบ" }),
+    });
+    expect(issued.status).toBe(200);
+    const afterIssue = (await json<{ purchaseRequest: PurchaseRequestDoc; stockByProduct: Record<string, number> }>(issued));
+    expect(afterIssue.purchaseRequest.storeStage).toBe("closed");
+    expect(afterIssue.stockByProduct[productId]).toBe(6);
+    expect(await stockOf(productId)).toBe(6);
+
+    const po = await api("/api/purchase-orders", { method: "POST", body: JSON.stringify({ purchaseRequestId: pr.id }) });
+    expect(po.status).toBe(400);
+  });
+
+  it("จ่ายเกินที่ขอไม่ได้ และจ่ายเกินที่มีในคลังไม่ได้", async () => {
+    const productId = await productWithStock("STK-002", 3);
+    const pr = await createStandalonePurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH", body: JSON.stringify({ lines: [{ id: "s1", productId, subDetails: [], qtyRequested: 5, remark: "" }] }),
+    });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/submit-approval`, { method: "POST" });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/approve`, { method: "POST" });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-review`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "s1", decision: "stock" }] }),
+    });
+
+    const tooMany = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-issues`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "s1", qty: 6 }] }),
+    });
+    expect(tooMany.status, "จ่ายเกินจำนวนที่ขอไว้").toBe(400);
+
+    const shortStock = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-issues`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "s1", qty: 5 }] }),
+    });
+    expect(shortStock.status, "ของในคลังมีแค่ 3").toBe(400);
+    expect(await stockOf(productId), "ปฏิเสธแล้วต้องไม่ตัดสต๊อกเลย").toBe(3);
+  });
+
+  it("บรรทัดที่จ่ายจากสต๊อกไม่ถูกลอกไปใบสั่งซื้อ", async () => {
+    const productId = await productWithStock("STK-003", 10);
+    const pr = await createStandalonePurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        lines: [
+          { id: "have", productId, subDetails: [], qtyRequested: 2, remark: "" },
+          { id: "buy", productId: null, productCode: "", description: "ของที่ต้องซื้อ", subDetails: [], unit: "ชุด", qtyRequested: 1, remark: "" },
+        ],
+      }),
+    });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/submit-approval`, { method: "POST" });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/approve`, { method: "POST" });
+    const reviewed = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-review`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ lineId: "have", decision: "stock" }, { lineId: "buy", decision: "purchase" }] }),
+    });
+    expect((await json<{ purchaseRequest: PurchaseRequestDoc }>(reviewed)).purchaseRequest.storeStage).toBe("forwarded");
+
+    const po = await createPurchaseOrder({ purchaseRequestId: pr.id });
+    expect(po.lines).toHaveLength(1);
+    expect(po.lines[0].description).toBe("ของที่ต้องซื้อ");
+  });
+
+  it("ยกเลิกรอบการจ่ายล่าสุด — ของกลับเข้าคลังด้วยราคาซื้อล่าสุด", async () => {
+    const productId = await productWithStock("STK-004", 8, 125);
+    const pr = await createStandalonePurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH", body: JSON.stringify({ lines: [{ id: "s1", productId, subDetails: [], qtyRequested: 5, remark: "" }] }),
+    });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/submit-approval`, { method: "POST" });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/approve`, { method: "POST" });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-review`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "s1", decision: "stock" }] }),
+    });
+    const issued = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-issues`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "s1", qty: 5 }] }),
+    });
+    const batchId = (await json<{ purchaseRequest: PurchaseRequestDoc }>(issued)).purchaseRequest.storeIssues?.[0].id ?? "";
+    expect(batchId).not.toBe("");
+    expect(await stockOf(productId)).toBe(3);
+
+    const cancelled = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-issues/${encodeURIComponent(batchId)}`, { method: "DELETE" });
+    expect(cancelled.status).toBe(200);
+    const after = await json<{ purchaseRequest: PurchaseRequestDoc }>(cancelled);
+    expect(after.purchaseRequest.storeIssues ?? []).toHaveLength(0);
+    expect(await stockOf(productId)).toBe(8);
+
+    // แถวที่คืนเข้าคลังต้องลงด้วยราคาซื้อล่าสุด (125) ไม่ใช่ 0 และไม่ใช่ราคาขาย
+    const moves = await api(`/api/stock-movements?productId=${encodeURIComponent(productId)}`);
+    const { movements } = await json<{ movements: { kind: string; unitCost?: number }[] }>(moves);
+    const returned = movements.find((m) => m.kind === "return");
+    expect(returned?.unitCost).toBe(125);
+  });
+});
+
+/**
+ * **ฝ่ายจัดซื้อแก้ใบที่อนุมัติแล้ว (2026-09-09)** — เจ้าของสั่ง: *"จัดซื้อสามารถแก้ไข PR ได้ เนื่องจาก
+ * ชื่อหรือยี่ห้อตอนซื้ออาจจะไม่ตรงตามที่พิมพ์ไว้ในใบ"* และเลือกให้แก้ได้ทุกช่องเหมือนใบร่าง
+ */
+describe("ใบขอซื้อ — จัดซื้อแก้ใบที่อนุมัติแล้ว", () => {
+  it("แก้ชื่อ/ยี่ห้อบนใบ Final ได้ และถูกจดไว้ในประวัติ", async () => {
+    const pr = await approvedPurchaseRequest();
+    const patched = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        lines: pr.lines.map((l) => (l.id === "l1" ? { ...l, description: "ปั๊มเคมี ยี่ห้อ Grundfos" } : l)),
+        purchasingEditNote: "เปลี่ยนยี่ห้อตามที่ร้านมี",
+      }),
+    });
+    expect(patched.status).toBe(200);
+    const updated = (await json<{ purchaseRequest: PurchaseRequestDoc }>(patched)).purchaseRequest;
+    expect(updated.status, "แก้แล้วยังเป็นใบที่อนุมัติแล้ว ไม่ถูกตีกลับเป็นร่าง").toBe("Final");
+    expect(updated.lines.find((l) => l.id === "l1")?.description).toBe("ปั๊มเคมี ยี่ห้อ Grundfos");
+    expect(updated.purchasingEdits ?? []).toHaveLength(1);
+    expect((updated.purchasingEdits ?? [])[0].note).toBe("เปลี่ยนยี่ห้อตามที่ร้านมี");
+  });
+
+  it("บันทึกอัตโนมัติแก้ใบที่อนุมัติแล้วไม่ได้ (409)", async () => {
+    const pr = await approvedPurchaseRequest();
+    const auto = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}?autoSave=1`, {
+      method: "PATCH", body: JSON.stringify({ headerRemark: "แก้เงียบ ๆ" }),
+    });
+    expect(auto.status).toBe(409);
+  });
+
+  it("ลดจำนวนต่ำกว่าที่สโตร์จ่ายไปแล้วไม่ได้", async () => {
+    const catRes = await api("/api/categories", { method: "POST", body: JSON.stringify({ name: "หมวดกันลด" }) });
+    const categoryId = (await json<{ category: { id: string } }>(catRes)).category.id;
+    const prodRes = await api("/api/products", {
+      method: "POST", body: JSON.stringify({ code: "STK-EDIT", name: "สินค้ากันลด", categoryId, unit: "ชิ้น", defaultPrice: 0 }),
+    });
+    const productId = (await json<{ product: { id: string } }>(prodRes)).product.id;
+    await api("/api/stock-movements", { method: "POST", body: JSON.stringify({ productId, kind: "receive", qty: 10, reason: "ตั้งต้น" }) });
+
+    const pr = await createStandalonePurchaseRequest();
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH", body: JSON.stringify({ lines: [{ id: "s1", productId, subDetails: [], qtyRequested: 6, remark: "" }] }),
+    });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/submit-approval`, { method: "POST" });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/approve`, { method: "POST" });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-review`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "s1", decision: "stock" }] }),
+    });
+    await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}/store-issues`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "s1", qty: 4 }] }),
+    });
+
+    const shrink = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH", body: JSON.stringify({ lines: [{ id: "s1", productId, subDetails: [], qtyRequested: 2, remark: "" }] }),
+    });
+    expect(shrink.status).toBe(400);
+
+    const removed = await api(`/api/purchase-requests/${encodeURIComponent(pr.id)}`, {
+      method: "PATCH", body: JSON.stringify({ lines: [] }),
+    });
+    expect(removed.status, "ลบบรรทัดที่จ่ายของไปแล้วไม่ได้").toBe(400);
   });
 });

@@ -28,6 +28,8 @@ export type NotificationType =
   //    ตัวช่วยอนุมัติร่วม (api/_lib/documentApproval.ts) เขียนแค่ audit log เท่านั้น
   | "material_requisition_approved"
   | "purchase_request_approved"
+  /** ฝ่ายจัดซื้อแก้ใบขอซื้อที่อนุมัติแล้ว (2026-09-09) — แจ้งผู้สร้างใบ เพราะเนื้อหาใบที่เขาเซ็นไปแล้วเปลี่ยน */
+  | "purchase_request_edited"
   // ── รออนุมัติ (2026-08-31) — เจ้าของขอไว้ 2026-08-28: "ทำแจ้งเตือนให้ด้วยถ้ามีคนกดขอส่งอนุมัติ
   //    ให้แจ้งเตือนคนที่มีสิทธิ์อนุมัติ" · เอกสาร 6 ใบบนเครื่องอนุมัติร่วมเคยเขียนแค่ audit log
   | "material_requisition_submitted"

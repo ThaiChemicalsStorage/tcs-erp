@@ -8,8 +8,11 @@ import { formatQuoteDateThai } from "../../lib/quotes";
 /**
  * เลือกใบขอซื้อต้นทางก่อนสร้างใบสั่งซื้อ
  *
- * แสดงเฉพาะใบที่ **อนุมัติแล้ว (Final)** เพราะเซิร์ฟเวอร์ปฏิเสธการออก PO จากใบที่ยังไม่อนุมัติอยู่แล้ว
+ * แสดงเฉพาะใบที่ **อนุมัติแล้ว (Final)** และ**ผ่านสโตร์มาแล้ว** เพราะเซิร์ฟเวอร์ปฏิเสธทั้งสองกรณีอยู่แล้ว
  * — กรองตรงนี้ไม่ใช่การบังคับสิทธิ์ แต่เพื่อไม่ให้ผู้ใช้เลือกสิ่งที่จะโดนปฏิเสธทีหลัง
+ *
+ * `storeStage` (2026-09-09): `"pending"` = ยังรอสโตร์เช็คของ · `"closed"` = สโตร์จ่ายจากสต๊อกครบแล้ว
+ * ทั้งสองออกใบสั่งซื้อไม่ได้ · ใบเก่าที่ไม่มีฟิลด์นี้ถือว่าผ่าน (วิ่งตรงไปจัดซื้อตามกติกาเดิม)
  *
  * ดึงทั้งฝ่ายโครงการและฝ่ายผลิต เพราะจัดซื้อต้องเห็นงานที่ต้องซื้อของทุกฝ่าย ไม่ใช่แค่ฝ่ายเดียว
  * (หน้ารายการใบขอซื้อเดิมแยกตามฝ่ายเพราะเป็นมุมมองของฝ่ายผู้ขอ ไม่ใช่ของผู้ซื้อ)
@@ -34,7 +37,7 @@ export function PurchaseRequestPickerDialog({
         if (cancelled) return;
         const seen = new Set<string>();
         const merged = [...a, ...b].filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
-        setRows(merged.filter((r) => r.status === "Final"));
+        setRows(merged.filter((r) => r.status === "Final" && r.storeStage !== "pending" && r.storeStage !== "closed"));
         setLoading(false);
       })
       .catch(() => { if (!cancelled) setLoading(false); });

@@ -98,6 +98,7 @@ const NOTIFICATION_TYPE_LABELS: Record<NotificationType, { label: string; module
   purchase_order_submitted: { label: "ใบสั่งซื้อรออนุมัติ", module: "ใบสั่งซื้อ" },
   cost_control_submitted: { label: "Cost Control รออนุมัติ", module: "Cost Control" },
   purchase_request_approved: { label: "อนุมัติใบขอซื้อ", module: "ใบขอซื้อ" },
+  purchase_request_edited: { label: "ฝ่ายจัดซื้อแก้ใบขอซื้อที่อนุมัติแล้ว", module: "ใบขอซื้อ" },
   product_request_submitted: { label: "มีคำขอเพิ่มสินค้าใหม่", module: "คำขอเพิ่มสินค้า" },
   product_request_approved: { label: "คำขอเพิ่มสินค้าได้รับอนุมัติ", module: "คำขอเพิ่มสินค้า" },
   product_request_rejected: { label: "คำขอเพิ่มสินค้าถูกปฏิเสธ", module: "คำขอเพิ่มสินค้า" },

@@ -826,11 +826,14 @@ export async function arDocumentsCollection() {
  */
 export type StockMovementKind = "receive" | "deduct" | "adjust" | "return";
 /**
- * `material_requisition` เพิ่ม 2026-09-02 ตอนทำ "ตัดของอัตโนมัติ" — ใบเบิกที่อนุมัติแล้วตัดสต๊อกเอง
+ * `material_requisition` เพิ่ม 2026-09-02 ตอนทำ "ตัดของอัตโนมัติ" ซึ่ง**ถูกถอดออกแล้วเมื่อ 2026-09-03** —
+ * ตอนนี้ของออกจากคลังตอน**สโตร์กดจ่ายจริง**เท่านั้น ไม่มีการตัดสต๊อกอัตโนมัติตอนอนุมัติเอกสารใดเลย
  * (`goods_receipt` เคยมีแล้วถูกลบไปเมื่อ 2026-08-28d พร้อมกับการถอดใบตรวจรับออก)
  * `receiving_report` เพิ่ม 2026-09-03 — ใบรับสินค้าของสโตร์ (สร้างจากใบสั่งซื้อ) รับของเข้าพร้อมต้นทุน
+ * `purchase_request` เพิ่ม 2026-09-09 — สโตร์เช็คใบขอซื้อแล้วพบว่ามีของในสต๊อก จึงจ่ายจากใบขอซื้อนั้นเลย
+ * (เจ้าของเลือกทางนี้แทนการสร้างใบเบิกอีกใบ ดู src/lib/purchaseRequest.ts `PurchaseRequestIssueBatch`)
  */
-export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report" | "tool_issue";
+export type StockMovementSourceType = "manual" | "ar_document" | "material_requisition" | "receiving_report" | "tool_issue" | "purchase_request";
 
 export interface StockMovementFields {
   productId: string;

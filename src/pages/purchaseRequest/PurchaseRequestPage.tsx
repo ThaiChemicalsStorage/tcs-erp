@@ -22,7 +22,10 @@ export function PurchaseRequestPage({
   canPrint,
   canDelete,
   canCreate,
+  canIssueStock,
+  canEditApproved,
   ownerDepartment = "project",
+  storeStage,
   initialPurchaseRequestId,
   onPurchaseRequestIdConsumed,
 }: {
@@ -32,6 +35,15 @@ export function PurchaseRequestPage({
   canPrint: boolean;
   canDelete: boolean;
   canCreate: boolean;
+  /** `stock:adjust` — การ์ด "สโตร์เช็คของ / จ่ายของ" บนใบที่อนุมัติแล้ว (2026-09-09) */
+  canIssueStock: boolean;
+  /** `purchaseRequest:editApproved` — ฝ่ายจัดซื้อแก้ใบที่อนุมัติแล้วได้ (2026-09-09) */
+  canEditApproved: boolean;
+  /**
+   * กล่องงานเข้าตามขั้นของสโตร์ (2026-09-09) — `"pending"` คือกล่องของสโตร์ (อนุมัติแล้วรอเช็คของ)
+   * `"forwarded"` คือกล่องของจัดซื้อ · ไม่ระบุ = เห็นทุกใบตามปกติ
+   */
+  storeStage?: "pending" | "forwarded";
   /** สิทธิ์ productRequest:create — คุมปุ่ม "ขอรหัสสินค้า" บนบรรทัดที่พิมพ์เอง */
   /** ส่งต่อให้ใบพิมพ์ FM-PU-05 ใช้ทำหัวจดหมายไทย */
   company: Company;
@@ -90,18 +102,18 @@ export function PurchaseRequestPage({
   const loadList = () => {
     setLoading(true);
     setLoadError(false);
-    fetchAllPurchaseRequests(ownerDepartment)
+    fetchAllPurchaseRequests(ownerDepartment, storeStage)
       .then((list) => { setPurchaseRequests(list); setLoading(false); })
       .catch(() => { setLoadError(true); setLoading(false); });
   };
 
   useEffect(() => {
     let cancelled = false;
-    fetchAllPurchaseRequests(ownerDepartment)
+    fetchAllPurchaseRequests(ownerDepartment, storeStage)
       .then((list) => { if (!cancelled) { setPurchaseRequests(list); setLoading(false); } })
       .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
     return () => { cancelled = true; };
-  }, [ownerDepartment]);
+  }, [ownerDepartment, storeStage]);
 
   const openPurchaseRequest = (id: string) => {
     setSelectedId(id);
@@ -132,6 +144,8 @@ export function PurchaseRequestPage({
           canRequestProductCode={canRequestProductCode}
           currentUserId={currentUserId}
           canEdit={canEdit}
+          canIssueStock={canIssueStock}
+          canEditApproved={canEditApproved}
           canFinalize={canFinalize}
           canPrint={canPrint}
           canDelete={canDelete}
@@ -181,7 +195,7 @@ export function PurchaseRequestPage({
         purchaseRequests={purchaseRequests}
         currentUserId={currentUserId}
         onOpen={openPurchaseRequest}
-        heading={ownerDepartment === "all" ? t("nav.purchasingRequestInbox") : undefined}
+        heading={storeStage === "pending" ? t("nav.storeRequestInbox") : ownerDepartment === "all" ? t("nav.purchasingRequestInbox") : undefined}
         showDepartment={ownerDepartment === "all"}
         headerAction={canCreate ? (
           <button

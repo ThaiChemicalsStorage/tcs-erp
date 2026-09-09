@@ -144,7 +144,15 @@ export function StockPage({
     // ยอดและต้นทุนเฉลี่ยใหม่มาจาก movement ที่ server ตอบกลับ — มูลค่าคงเหลือ ÷ จำนวน = ค่าเฉลี่ยหลังรับ
     localEditsRef.current += 1;
     onProductsChange(products.map((p) => (p.id === updatedProductId
-      ? { ...p, stockQty: movement.balanceAfter, avgCost: movement.balanceAfter > 0 && movement.balanceValueAfter !== undefined ? movement.balanceValueAfter / movement.balanceAfter : p.avgCost }
+      ? {
+          ...p,
+          stockQty: movement.balanceAfter,
+          avgCost: movement.balanceAfter > 0 && movement.balanceValueAfter !== undefined ? movement.balanceValueAfter / movement.balanceAfter : p.avgCost,
+          // รับเข้าพร้อมราคา = ราคาซื้อล่าสุดเปลี่ยนด้วย (2026-09-09) ไม่งั้นคอลัมน์ใหม่ค้างค่าเก่าจนรีโหลด
+          ...(movement.kind === "receive" && (movement.unitCost ?? 0) > 0
+            ? { lastCost: movement.unitCost, lastCostAt: movement.createdAt }
+            : {}),
+        }
       : p)));
     setAdjustTarget(null);
     setHistoryRetryToken((n) => n + 1);
@@ -233,7 +241,7 @@ export function StockPage({
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
-                  {[t("stock.table.code"), t("stock.table.name"), t("stock.table.category"), t("stock.table.unit"), t("stock.table.remaining"), t("stock.table.avgCost"), t("stock.table.value"), t("stock.table.reorderPoint"), ""].map((h, i) => (
+                  {[t("stock.table.code"), t("stock.table.name"), t("stock.table.category"), t("stock.table.unit"), t("stock.table.remaining"), t("stock.table.avgCost"), t("stock.table.lastCost"), t("stock.table.value"), t("stock.table.reorderPoint"), ""].map((h, i) => (
                     <th key={i} className={`px-4 py-3 text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${i === 5 || i === 6 ? "text-right" : "text-left"}`}>{h}</th>
                   ))}
                 </tr>
@@ -255,6 +263,10 @@ export function StockPage({
                       </span>
                     </td>
                     <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground text-right whitespace-nowrap">{(p.avgCost ?? 0) > 0 ? money(p.avgCost ?? 0) : "—"}</td>
+                    {/* ราคาซื้อล่าสุด (2026-09-09) — ราคาที่ของคืนเข้าคลังใช้ลงบัญชี ไม่ใช่ฐานของมูลค่าสต๊อก */}
+                    <td className="px-4 py-3.5 text-xs font-mono text-muted-foreground text-right whitespace-nowrap" title={(p.lastCostAt ?? "") ? t("stock.table.lastCostOn").replace("{date}", (p.lastCostAt ?? "").slice(0, 10)) : t("stock.table.lastCostHint")}>
+                      {(p.lastCost ?? 0) > 0 ? money(p.lastCost ?? 0) : "—"}
+                    </td>
                     <td className="px-4 py-3.5 text-xs font-mono text-foreground text-right whitespace-nowrap">{stockValueOf(p) > 0 ? money(stockValueOf(p)) : "—"}</td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       {canAdjust ? (

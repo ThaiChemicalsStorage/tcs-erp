@@ -35,6 +35,13 @@ const PURCHASING_PERMISSION = /^(vendor|purchaseOrder|costControl):/;
 const STORE_PERMISSION = /^(receivingReport|ap):/;
 
 /**
+ * ใบขอซื้อผ่านสโตร์ (2026-09-09) — สิทธิ์ใหม่ตัวเดียวของฝ่ายจัดซื้อ คือแก้ใบที่อนุมัติแล้วได้
+ * (`purchaseRequest:view` ของบทบาทสโตร์แจกที่นี่ไม่ได้ เพราะบทบาทสโตร์เป็นของที่ลูกค้าสร้างเอง)
+ */
+const PR_STORE_MIGRATION_ID = "purchase-request-store-stage-2026-09-09";
+const PR_EDIT_APPROVED = "purchaseRequest:editApproved";
+
+/**
  * The roles collection as it looks on a database provisioned before the Service module shipped —
  * and, since 2026-08-31, also before the purchasing/vendor/cost-control permissions existed.
  */
@@ -46,7 +53,7 @@ async function seedLegacyRoles(): Promise<void> {
       .filter((r) => r.key !== "service_engineer")
       .map((r) => ({
         ...r,
-        permissions: r.permissions.filter((p) => !SERVICE_PERMISSION.test(p) && !PURCHASING_PERMISSION.test(p) && !STORE_PERMISSION.test(p)),
+        permissions: r.permissions.filter((p) => !SERVICE_PERMISSION.test(p) && !PURCHASING_PERMISSION.test(p) && !STORE_PERMISSION.test(p) && p !== PR_EDIT_APPROVED),
       })),
   );
 }
@@ -349,5 +356,35 @@ describe("applyRbacMigrations (store receiving report + AP registers)", () => {
     await applyRbacMigrations();
     expect(await permissionsOf("administrator")).not.toContain("ap:manage");
     expect(await permissionsOf("administrator")).toContain("ap:view");
+  });
+});
+
+/**
+ * ใบขอซื้อผ่านสโตร์ + จัดซื้อแก้ใบที่อนุมัติแล้ว (`purchase-request-store-stage-2026-09-09`)
+ *
+ * ตรึงไว้สองข้อ: Administrator ต้องได้สิทธิ์ใหม่ และ**บทบาทอื่นต้องไม่ได้** — สิทธิ์นี้คือสิ่งที่ทำให้แก้
+ * เนื้อหาใบที่หัวหน้าเซ็นไปแล้วได้ แจกกว้างเกินไปคือการทำให้ลายเซ็นบนใบไม่มีความหมาย
+ */
+describe("applyRbacMigrations (purchase request store stage)", () => {
+  it("grants Administrator the new purchasing edit permission", async () => {
+    expect(await permissionsOf("administrator")).not.toContain(PR_EDIT_APPROVED);
+    await applyRbacMigrations();
+    expect(await permissionsOf("administrator")).toContain(PR_EDIT_APPROVED);
+  });
+
+  it("grants it to nobody else", async () => {
+    await applyRbacMigrations();
+    for (const key of ["sales_user", "viewer", "approver_1", "approver_2", "accounting_user"]) {
+      expect(await permissionsOf(key), key).not.toContain(PR_EDIT_APPROVED);
+    }
+  });
+
+  it("records the migration so a second run is a complete no-op", async () => {
+    await applyRbacMigrations();
+    const marker = await markers.findOne({ _id: PR_STORE_MIGRATION_ID });
+    expect(marker?.appliedRoleKeys).toEqual(["administrator"]);
+    const snapshot = await permissionsOf("administrator");
+    await applyRbacMigrations();
+    expect(await permissionsOf("administrator")).toEqual(snapshot);
   });
 });

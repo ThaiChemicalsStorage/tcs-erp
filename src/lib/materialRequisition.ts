@@ -336,14 +336,30 @@ export async function createMaterialRequisitionFromProductionOrder(productionOrd
  * ใบเบิกพร้อมยอดคงเหลือปัจจุบันของทุกสินค้าในใบ (`stockByProduct`, key = productId) — server อ่านให้
  * ในคำขอเดียว หน้าเอกสารจึงโชว์ "คงเหลือในสต๊อก" ต่อบรรทัดได้โดยไม่ต้องดึงสินค้าทั้งคลัง
  */
-export async function fetchMaterialRequisition(id: string): Promise<{ materialRequisition: MaterialRequisition; stockByProduct: Record<string, number> }> {
-  const { materialRequisition, stockByProduct } = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number> }>(`/material-requisitions/${encodeURIComponent(id)}`);
-  return { materialRequisition, stockByProduct: stockByProduct ?? {} };
+export async function fetchMaterialRequisition(id: string): Promise<MaterialRequisitionWithStock> {
+  const res = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number>; costByProduct?: Record<string, ProductCostBasis> }>(`/material-requisitions/${encodeURIComponent(id)}`);
+  return { materialRequisition: res.materialRequisition, stockByProduct: res.stockByProduct ?? {}, costByProduct: res.costByProduct ?? {} };
 }
+/**
+ * ต้นทุนต่อหน่วยของสินค้าในใบ — `lastCost` คือ**ราคาซื้อล่าสุด** ที่เจ้าของเลือกให้ใช้ตอนรับของคืน
+ * (2026-09-09) และ `avgCost` คือถัวเฉลี่ยที่ยังเป็นฐานของ "มูลค่าสต๊อก" ตามเดิม · 0 = ยังไม่เคยมีค่า
+ */
+export interface ProductCostBasis {
+  avgCost: number;
+  lastCost: number;
+}
+
+/** ราคาที่จะลงบัญชีเมื่อของกลับเข้าคลัง — ตรงกับ `returnUnitCostOf()` ฝั่งเซิร์ฟเวอร์ */
+export function returnUnitCostOf(basis: ProductCostBasis | undefined): number {
+  if (!basis) return 0;
+  return basis.lastCost > 0 ? basis.lastCost : basis.avgCost;
+}
+
 /** ผลลัพธ์ของทุก route ที่ขยับสต๊อก — ยอดคงเหลือใหม่มาพร้อมเอกสาร หน้าจอจึงไม่ต้องยิงซ้ำ */
 export interface MaterialRequisitionWithStock {
   materialRequisition: MaterialRequisition;
   stockByProduct: Record<string, number>;
+  costByProduct: Record<string, ProductCostBasis>;
 }
 
 /**
@@ -365,19 +381,19 @@ export async function postMaterialIssueBatch(
     chargeWorkTypeName?: string;
   },
 ): Promise<MaterialRequisitionWithStock> {
-  const res = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number> }>(`/material-requisitions/${encodeURIComponent(id)}/issues`, {
+  const res = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number>; costByProduct?: Record<string, ProductCostBasis> }>(`/material-requisitions/${encodeURIComponent(id)}/issues`, {
     method: "POST", body: JSON.stringify(batch),
   });
-  return { materialRequisition: res.materialRequisition, stockByProduct: res.stockByProduct ?? {} };
+  return { materialRequisition: res.materialRequisition, stockByProduct: res.stockByProduct ?? {}, costByProduct: res.costByProduct ?? {} };
 }
 
 /** ยกเลิกรอบการจ่าย**ล่าสุด** — ของกลับเข้าคลังทั้งรอบ (รอบที่ทีมคืนของไปแล้วบางส่วนยกเลิกไม่ได้) */
 export async function cancelMaterialIssueBatch(id: string, batchId: string): Promise<MaterialRequisitionWithStock> {
-  const res = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number> }>(
+  const res = await apiFetch<{ materialRequisition: MaterialRequisition; stockByProduct?: Record<string, number>; costByProduct?: Record<string, ProductCostBasis> }>(
     `/material-requisitions/${encodeURIComponent(id)}/issues/${encodeURIComponent(batchId)}`,
     { method: "DELETE" },
   );
-  return { materialRequisition: res.materialRequisition, stockByProduct: res.stockByProduct ?? {} };
+  return { materialRequisition: res.materialRequisition, stockByProduct: res.stockByProduct ?? {}, costByProduct: res.costByProduct ?? {} };
 }
 /**
  * หนึ่งใบเบิกครอบคลุมได้หลายรายการในโครงการ (เจ้าของสั่ง 2026-09-02 "ให้เหมือนกับผลิต" — ฝ่ายผลิต

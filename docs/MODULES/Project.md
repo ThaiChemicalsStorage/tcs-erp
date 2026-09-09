@@ -60,7 +60,10 @@ none of its 28 permissions to any existing default role (see "RBAC" below).
   · **แก้ 2026-09-08**: ชื่อ `material-requisition-templates` ไม่เคยถูกใส่ใน `API_ROUTES` ของ
   `server/app.ts` ทั้งหน้าจึงตอบ `404 Not found` ทุก request มาตั้งแต่วันแรก ตอนนี้ใส่แล้วและมี
   `tests/serverRouteTable.test.ts` กันไว้ ดู [API.md](../API.md) หัวข้อ Material Requisition Templates
-- **ใบเบิกที่อนุมัติแล้วตัดสต๊อกเอง** — ดู [MODULES/Product.md](./Product.md) "อัตโนมัติและการเตือน"
+- **สต๊อกถูกตัดตอนสโตร์กดจ่ายของจริง ไม่ใช่ตอนอนุมัติ** (แก้ 2026-09-03 · แก้ข้อความที่นี่ 2026-09-09
+  ซึ่งยังเขียนว่า "อนุมัติแล้วตัดสต๊อกเอง" ตามพฤติกรรมที่มีอยู่วันเดียว) — ใบเบิกอนุมัติได้เสมอแม้ของ
+  ไม่พอ หน้าจอขึ้นป้ายบอกว่าขาดเท่าไร ดู [MODULES/Store.md](./Store.md) "Requisition: cut at issue,
+  not at approval" และ [MODULES/Product.md](./Product.md)
 
 ## Business Flow
 

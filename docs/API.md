@@ -837,3 +837,32 @@ base64 payload, and no body-size ceiling to design around.
 
 `ensureCostControlNumberIndex()` creates the unique `documentNumber` index lazily, because
 `ensureIndexes()` only ever runs from the Setup Wizard.
+
+## ใบขอซื้อ — ขั้นสโตร์เช็คของ (2026-09-09, `api/_lib/purchaseRequestHandler.ts`)
+
+ไหลงานที่เจ้าของสั่ง: **สร้างใบ → หัวหน้าฝ่ายอนุมัติ → สโตร์เช็คของ → มีของ = จ่ายจบ / ไม่มี = ส่งต่อจัดซื้อ**
+ขั้นนี้อยู่**หลัง** `status: "Final"` และเก็บเป็นฟิลด์ของใบขอซื้อเอง (`storeStage`) — ไม่ได้เพิ่มสถานะที่ 4
+ให้เครื่องอนุมัติร่วม ซึ่งใช้กันอยู่ 6 เอกสาร
+
+| Route | Permission | Notes |
+|---|---|---|
+| `POST /api/purchase-requests/:id/store-review` | `stock:adjust` | `Final` เท่านั้น · body `{ lines: [{lineId, decision: "stock"\|"purchase", availableQty?}], remark? }` · บันทึกได้ซ้ำ · บรรทัดที่จ่ายของไปแล้วเปลี่ยนเป็น `"purchase"` ไม่ได้ (400) · มีบรรทัด `"purchase"` = `storeStage: "forwarded"` แล้วแจ้งฝ่ายจัดซื้อ |
+| `POST /api/purchase-requests/:id/store-issues` | `stock:adjust` | `Final` เท่านั้น · body หนึ่งรอบ `{ lines: [{lineId, qty}], issuedDate?, issuedBy?, remark? }` · เช็คยอดทั้งรอบด้วย `assertProductsHaveStock()` **ก่อน**เขียนแม้แต่แถวเดียว · บรรทัดที่ไม่มี `productId` → 400 พร้อมข้อความให้ขอรหัสสินค้าก่อน · จ่ายเกินจำนวนที่ขอ → 400 |
+| `DELETE /api/purchase-requests/:id/store-issues/:batchId` | `stock:adjust` | ยกเลิกได้เฉพาะ**รอบล่าสุด** (เหตุผลเดียวกับใบรับสินค้าและใบเบิก) · ของกลับเข้าคลังเป็น `kind: "return"` ด้วย**ราคาซื้อล่าสุด** |
+| `GET /api/purchase-requests?storeStage=` | `purchaseRequest:view` | `pending` = กล่องงานเข้าของสโตร์ · `forwarded` = ของจัดซื้อ (**รวมใบเก่าที่ไม่มีฟิลด์นี้** ไม่งั้นใบก่อน 2026-09-09 จะหายจากกล่องจัดซื้อทั้งหมด) |
+
+`GET /api/purchase-requests/:id` ส่ง `stockByProduct` มาพร้อมเอกสารแล้ว (แนวเดียวกับใบเบิก) และทุก
+route ข้างบนก็ส่งกลับมาด้วย หน้าจอจึงไม่ต้องยิงซ้ำ
+
+**`POST /api/purchase-orders` เข้มขึ้น**: ปฏิเสธใบขอซื้อที่ `storeStage: "pending"` (ยังรอสโตร์) และ
+`"closed"` (จ่ายจากสต๊อกครบแล้ว) · ตอนลอกบรรทัด **ข้ามบรรทัดที่ `storeDecision === "stock"`** เพราะของ
+นั้นออกจากคลังไปแล้ว ถ้าไม่เหลือบรรทัดให้ซื้อเลย → 400
+
+**`PATCH /api/purchase-requests/:id` เปิดทางที่สอง**: ผู้ถือ `purchaseRequest:editApproved` แก้ใบ
+`Final` ได้ทุกช่องเหมือนใบร่าง (ยกเว้น `status`/ฟิลด์การอนุมัติ/ไฟล์แนบซึ่งมี route ของตัวเอง) ·
+`PendingApproval` ยังล็อกทุกคน · `?autoSave=1` บนใบ `Final` → **409** · body รับ `purchasingEditNote`
+เพิ่มหนึ่งช่อง ซึ่งไม่ใช่ฟิลด์ที่เก็บตรง ๆ แต่ถูกต่อท้าย `purchasingEdits[]` พร้อมชื่อผู้แก้และเวลา ·
+ห้ามลบบรรทัดหรือลดจำนวนต่ำกว่าที่สโตร์จ่ายไปแล้ว → 400
+
+`GET /api/material-requisitions/:id` (และ route จ่าย/ยกเลิก/คืน) ส่ง **`costByProduct`** เพิ่มอีกหนึ่ง map
+(`{ [productId]: { avgCost, lastCost } }`) ให้หน้าจอโชว์ "ราคาล่าสุด" ที่ของจะกลับเข้าคลังด้วยตอนคืน

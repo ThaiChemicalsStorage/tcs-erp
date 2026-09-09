@@ -62,6 +62,35 @@ export async function assertProductsHaveStock(qtyByProductId: Map<string, number
   }
 }
 
+/** ต้นทุนต่อหน่วยของสินค้าหนึ่งตัว ณ ปัจจุบัน — ถัวเฉลี่ย (มูลค่าคลัง) และราคาซื้อล่าสุด (ใช้ตอนคืนของ) */
+export interface ProductCostBasis {
+  avgCost: number;
+  lastCost: number;
+}
+
+/**
+ * อ่านต้นทุนของสินค้าหลายตัวในคำขอเดียว (2026-09-09) — ใช้สองทาง: ส่งให้หน้าจอโชว์ "ราคาล่าสุด"
+ * ข้างช่องคืนของ และให้ผู้เรียกส่งต่อเป็น `rowUnitCost` ตอนคืนของเข้าคลัง
+ *
+ * `lastCost` ของสินค้าที่ยังไม่เคยรับเข้าพร้อมราคาจะเป็น 0 — ผู้เรียกควร fallback เป็น `avgCost`
+ * (ดู `returnUnitCostOf()`) ไม่ใช่ลงศูนย์ ไม่งั้นของที่เคยตั้งยอดตั้งต้นด้วยมือจะคืนเข้ามาแบบไร้มูลค่า
+ */
+export async function productCostBasis(productIds: string[]): Promise<Record<string, ProductCostBasis>> {
+  const ids = [...new Set(productIds.filter((id) => id))];
+  if (ids.length === 0) return {};
+  const products = await productsCollection();
+  const docs = await products
+    .find({ _id: { $in: ids.map((id) => toObjectId(id)) } }, { projection: { avgCost: 1, lastCost: 1 } })
+    .toArray();
+  return Object.fromEntries(docs.map((p) => [p._id.toString(), { avgCost: p.avgCost ?? 0, lastCost: p.lastCost ?? 0 }]));
+}
+
+/** ราคาที่ใช้ลงบัญชีตอนของกลับเข้าคลัง — ราคาซื้อล่าสุด ถ้าไม่เคยมีก็ถัวเฉลี่ยปัจจุบัน */
+export function returnUnitCostOf(basis: ProductCostBasis | undefined): number | undefined {
+  if (!basis) return undefined;
+  return basis.lastCost > 0 ? basis.lastCost : (basis.avgCost > 0 ? basis.avgCost : undefined);
+}
+
 /** แผนก/ทีม/ประเภทงานที่ประทับลง movement — ดู StockMovementFields */
 export interface StockMovementOrgTags {
   departmentId?: string;
@@ -87,6 +116,15 @@ export async function applyStockMovement(params: {
   userId: string;
   /** ต้นทุน/หน่วยของของที่รับเข้า — มีผลเฉพาะ delta > 0 · ไม่ส่ง = รับเข้าด้วยต้นทุนถัวเฉลี่ยเดิม (ค่าเฉลี่ยไม่เปลี่ยน) */
   unitCost?: number;
+  /**
+   * ต้นทุน/หน่วยที่จะ**ประทับลงแถวนี้** โดย**ไม่แตะค่าเฉลี่ยของสินค้า** (2026-09-09)
+   *
+   * ต่างจาก `unitCost` ตรงนี้คือจุดสำคัญ: `unitCost` คือ "รับของเข้ามาที่ราคานี้" จึงถัวเฉลี่ยใหม่
+   * ส่วนตัวนี้คือ "แถวนี้มีมูลค่าเท่านี้" ใช้กับการคืนของซึ่งเจ้าของสั่งให้ลงด้วย**ราคาซื้อล่าสุด** —
+   * ถ้าเอา `unitCost` ไปใช้แทน ค่าเฉลี่ยของคลังจะถูกคิดใหม่ทุกครั้งที่มีคนคืนของ ซึ่งเป็นการเปลี่ยน
+   * วิธีคิดต้นทุนที่ไม่มีใครสั่ง · ถูกมองข้ามเมื่อส่ง `unitCost` มาด้วย (รับเข้าจริงชนะเสมอ)
+   */
+  rowUnitCost?: number;
   org?: StockMovementOrgTags;
 }): Promise<{ movement: StockMovementFields & { id: string }; balanceAfter: number }> {
   if (!Number.isFinite(params.delta) || params.delta === 0) throw new HttpError(400, "จำนวนต้องไม่เป็นศูนย์");
@@ -117,9 +155,13 @@ export async function applyStockMovement(params: {
           { $divide: [{ $add: [{ $multiply: [qtyBefore, avgBefore] }, params.delta * costIn] }, qtyAfter] },
         ],
       };
+  // ราคาซื้อล่าสุด (2026-09-09) — เขียนเฉพาะตอนรับเข้าพร้อมราคา ในคำสั่งเดียวกับจำนวนและค่าเฉลี่ย
+  // จะได้ไม่มีช่วงที่ตัวเลขสองตัวนี้ไม่ตรงกัน และไม่ต้องมีผู้เขียน Product รายที่สอง
+  const receivedAt = nowIso();
+  const lastCostFields = costIn === null ? {} : { lastCost: costIn, lastCostAt: receivedAt };
   const updated = await products.findOneAndUpdate(
     filter,
-    [{ $set: { stockQty: qtyAfter, avgCost: avgAfter, updatedAt: nowIso() } }],
+    [{ $set: { stockQty: qtyAfter, avgCost: avgAfter, ...lastCostFields, updatedAt: receivedAt } }],
     { returnDocument: "after" },
   );
   if (!updated) {
@@ -128,9 +170,13 @@ export async function applyStockMovement(params: {
     throw new HttpError(400, `สต๊อกคงเหลือไม่พอ (คงเหลือ ${exists.stockQty ?? 0} หน่วย)`);
   }
 
-  // ต้นทุนของแถว: รับเข้าพร้อมราคา = ราคานั้น · อื่น ๆ = ค่าเฉลี่ยที่ใช้อยู่ (ซึ่งไม่เปลี่ยนในกรณีนั้น)
-  const unitCost = round2(costIn ?? (updated.avgCost ?? 0));
-  const now = nowIso();
+  // ต้นทุนของแถว: รับเข้าพร้อมราคา = ราคานั้น · มี rowUnitCost = ราคานั้น (เช่นคืนของใช้ราคาซื้อล่าสุด)
+  // · นอกนั้น = ค่าเฉลี่ยที่ใช้อยู่ (ซึ่งไม่เปลี่ยนในสองกรณีหลัง)
+  const rowCost = typeof params.rowUnitCost === "number" && Number.isFinite(params.rowUnitCost) && params.rowUnitCost >= 0
+    ? params.rowUnitCost
+    : null;
+  const unitCost = round2(costIn ?? rowCost ?? (updated.avgCost ?? 0));
+  const now = receivedAt;
   const movementFields: StockMovementFields = {
     productId: params.productId,
     productCode: updated.code,

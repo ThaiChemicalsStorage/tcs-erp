@@ -4,6 +4,7 @@ import { requireUser, requirePermission, type AuthContext } from "./auth.js";
 import { buildSimpleOwnershipClause } from "./visibility.js";
 import {
   productRequestsCollection, productsCollection, categoriesCollection, auditLogCollection,
+  purchaseRequestsCollection,
   toObjectId, withStringId, type ProductRequestFields,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
@@ -125,6 +126,45 @@ async function handleUpdate(req: VercelRequest, res: VercelResponse, id: string)
 }
 
 /**
+ * เติม `productId`/`productCode` กลับเข้าบรรทัดของใบขอซื้อที่เป็นต้นทางของคำขอ (2026-09-09)
+ *
+ * เจ้าของสั่งว่า *"พอเค้าตั้งเสร็จแล้วอยากให้มันขึ้นมาเลยไม่ต้องมากดลบแล้วเพิ่มใหม่"* — เดิมตั้งใจไม่ทำ
+ * เพราะใบขอซื้ออาจอนุมัติไปแล้ว แต่สิ่งที่เขียนนี่**ไม่ใช่เนื้อหาที่ผู้อนุมัติตรวจ**: เป็นการผูกบรรทัดที่
+ * พิมพ์เองเข้ากับรหัสสินค้าที่เพิ่งเกิดขึ้น ชื่อ/จำนวน/ราคาบนใบไม่ถูกแตะ จึงเขียนได้ทุกสถานะ แนวเดียวกับ
+ * ฟิลด์ตามงานของ Scope of Work ที่ยกเว้นจากการล็อกตอน Final (ดู docs/MODULES/ScopeOfWork.md "PO Chasing")
+ *
+ * เลือกบรรทัด: บรรทัดที่ยังไม่มี `productId` และ `description` ตรงกับชื่อที่ขอ (ตัดช่องว่างหัวท้าย)
+ * ถ้าไม่เจอ ใช้บรรทัดแรกที่ยังไม่มี `productId` · ไม่เจอเลย = ไม่ทำอะไร (คืน false)
+ *
+ * **best-effort โดยตั้งใจ** — การตั้งรหัสสินค้าสำเร็จไปแล้วตอนถึงบรรทัดนี้ ห้ามให้การเติมใบขอซื้อที่
+ * ล้มเหลวย้อนไปทำให้การอนุมัติล้ม (แนวเดียวกับการแจ้งเตือนทุกจุดในระบบนี้)
+ */
+async function backfillSourcePurchaseRequestLine(
+  request: ProductRequestFields, productId: string, code: string,
+): Promise<boolean> {
+  const prId = (request.sourcePurchaseRequestId ?? "").trim();
+  if (!prId) return false;
+  try {
+    const purchaseRequests = await purchaseRequestsCollection();
+    const pr = await purchaseRequests.findOne({ _id: prId });
+    if (!pr || pr.isDeleted) return false;
+    const wanted = request.name.trim();
+    const lines = pr.lines ?? [];
+    const target = lines.find((l) => !l.productId && l.description.trim() === wanted)
+      ?? lines.find((l) => !l.productId);
+    if (!target) return false;
+    const nextLines = lines.map((l) => (l.id === target.id
+      ? { ...l, productId, productCode: code, unit: l.unit.trim() || request.unit }
+      : l));
+    await purchaseRequests.updateOne({ _id: prId }, { $set: { lines: nextLines, updatedAt: nowIso() } });
+    return true;
+  } catch (err) {
+    console.error("[product-requests] failed to backfill purchase request", prId, err);
+    return false;
+  }
+}
+
+/**
  * สโตร์อนุมัติ: ตั้งรหัส → สร้าง `Product` จริง → แจ้งกลับผู้ขอ
  *
  * สร้างสินค้า**ก่อน**อัปเดตสถานะคำขอ เพื่อว่าถ้ารหัสซ้ำ (409) คำขอจะยังคงเป็น Pending ให้แก้รหัสแล้ว
@@ -161,6 +201,11 @@ async function handleApprove(req: VercelRequest, res: VercelResponse, id: string
     archived: false,
     // ตั้งต้นที่ 0 เสมอ เหมือน POST /api/products — จำนวนจริงเข้ามาทางหน้าสต๊อกเท่านั้น
     stockQty: 0,
+    // ครบชุดเหมือน POST /api/products (2026-09-09) — เดิมขาดสามฟิลด์นี้ สินค้าที่เกิดจากการอนุมัติจึง
+    // ไม่มีวันขึ้นในตัวเลือกเครื่องมือที่กรองด้วย `isTool` และอ่านต้นทุน/จุดเตือนต่างจากสินค้าปกติ
+    reorderPoint: 0,
+    avgCost: 0,
+    isTool: false,
     createdAt: now, updatedAt: now, createdBy: ctx.user.id, updatedBy: ctx.user.id,
   } as never);
 
@@ -176,12 +221,16 @@ async function handleApprove(req: VercelRequest, res: VercelResponse, id: string
     },
   });
 
+  // เติมรหัสกลับเข้าบรรทัดในใบขอซื้อต้นทางให้เลย — best-effort ไม่ให้การอนุมัติล้มเพราะเรื่องนี้
+  const backfilled = await backfillSourcePurchaseRequestLine(doc, productResult.insertedId.toString(), code);
+
   // แจ้งกลับผู้ขอพร้อมรหัสที่ได้ — เป็นข้อที่ที่ประชุมระบุตรง ๆ
   try {
     await notifyUser(doc.requestedBy, ctx.user.id, {
       type: "product_request_approved",
       title: "สินค้าที่คุณขอเพิ่มได้รับการตั้งรหัสแล้ว",
-      description: `"${doc.name}" ได้รหัสสินค้า ${code} — เลือกจากคลังสินค้าได้แล้ว`,
+      description: `"${doc.name}" ได้รหัสสินค้า ${code} — เลือกจากคลังสินค้าได้แล้ว`
+        + (backfilled ? ` และใส่ให้ในใบขอซื้อ ${doc.sourcePurchaseRequestId} เรียบร้อยแล้ว` : ""),
       module: "คำขอเพิ่มสินค้า",
       related: { relatedProductRequestId: id },
     });
@@ -189,7 +238,9 @@ async function handleApprove(req: VercelRequest, res: VercelResponse, id: string
     console.error("[product-requests] failed to notify the requester on approval", err);
   }
 
-  await writeAuditEntry(ctx, "Product Request Approved", `อนุมัติคำขอเพิ่มสินค้า "${doc.name}" และตั้งรหัส ${code}`);
+  await writeAuditEntry(ctx, "Product Request Approved",
+    `อนุมัติคำขอเพิ่มสินค้า "${doc.name}" และตั้งรหัส ${code}`
+    + (backfilled ? ` · เติมรหัสลงบรรทัดในใบขอซื้อ ${doc.sourcePurchaseRequestId} ให้แล้ว` : ""));
   res.status(200).json({ productRequest: toClient(await loadOrThrow(id)) });
 }
 

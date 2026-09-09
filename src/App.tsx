@@ -151,7 +151,7 @@ function SectionLoading({ error, onRetry }: { error: boolean; onRetry: () => voi
   );
 }
 
-type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "toolControl" | "receivingReport" | "productRequest" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
+type NavKey = "dashboard" | "pendingApprovals" | "quotations" | "quotationTemplates" | "scopeOfWork" | "deliveryOrder" | "service" | "serviceTemplates" | "accounting" | "arDeposit" | "arBilling" | "arReceipt" | "arTaxInvoice" | "arMonthly" | "accountingDashboard" | "project" | "materialRequisition" | "materialRequisitionTemplates" | "jobOrder" | "purchaseRequest" | "purchasingRequestInbox" | "productionOrder" | "purchaseOrder" | "costControl" | "productionRequisition" | "productionPurchase" | "products" | "stock" | "toolControl" | "receivingReport" | "storeRequestInbox" | "productRequest" | "purchaseTaxRegister" | "apRegister" | "customers" | "vendors" | "codeRegister" | "users" | "roles" | "departments" | "auditLog" | "settings";
 
 type ResourceKey = "users" | "roles" | "departments" | "teams" | "company" | "products" | "categories" | "notifications" | "quotes" | "jobTypes" | "customers" | "vendors" | "codeEntries";
 type ResourceState = "loading" | "ready" | "error";
@@ -241,6 +241,9 @@ const navItems: NavItem[] = [
   { key: "toolControl", icon: Hammer, labelKey: "nav.toolControl", permission: "stock:view" },
   // ใบรับสินค้า (2026-09-03) — สโตร์เป็นคนรับของและเป็นเจ้าของใบ จึงอยู่กลุ่มคลังสินค้า ไม่ใช่จัดซื้อ
   { key: "receivingReport", icon: PackageCheck, labelKey: "nav.receivingReport", permission: "receivingReport:view" },
+  // กล่องงานเข้าของสโตร์ (2026-09-09) — ใบขอซื้อที่อนุมัติแล้วและรอสโตร์เช็คว่ามีของในสต๊อกไหม
+  // ใช้สิทธิ์ `purchaseRequest:view` ตัวเดิม ไม่สร้างสิทธิ์ใหม่สำหรับหน้าที่ไม่ได้ให้อำนาจใหม่
+  { key: "storeRequestInbox", icon: ShoppingCart, labelKey: "nav.storeRequestInbox", permission: "purchaseRequest:view" },
   { key: "productRequest", icon: PackagePlus, labelKey: "nav.productRequest", permission: "productRequest:view" },
   { key: "customers", icon: Contact, labelKey: "nav.customers", permission: "customers:view" },
   { key: "users", icon: UsersIcon, labelKey: "nav.users", permission: "users:manage" },
@@ -270,7 +273,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
   { labelKey: "nav.group.bd", keys: ["costControl"] },
-  { labelKey: "nav.group.inventory", keys: ["products", "stock", "toolControl", "receivingReport", "productRequest"] },
+  { labelKey: "nav.group.inventory", keys: ["products", "stock", "toolControl", "receivingReport", "storeRequestInbox", "productRequest"] },
   { labelKey: "nav.group.admin", keys: ["users", "roles", "departments", "auditLog"] },
 ];
 
@@ -290,6 +293,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
   arTaxInvoice: "nav.arTaxInvoice",
   arMonthly: "nav.arMonthly",
   purchaseTaxRegister: "nav.purchaseTaxRegister",
+  storeRequestInbox: "nav.storeRequestInbox",
   apRegister: "nav.apRegister",
   accountingDashboard: "nav.accountingDashboard",
   project: "nav.project",
@@ -533,6 +537,12 @@ export default function App() {
 
   const updateCompany = (next: Company) => setCompany(next);
   const updateProducts = (next: Product[]) => setProducts(next);
+  /**
+   * โหลดแคตตาล็อกสินค้าใหม่จากเซิร์ฟเวอร์ (2026-09-09) — รายการสินค้าโหลดครั้งเดียวตอนเข้าระบบ
+   * สินค้าที่เกิดขึ้นนอกหน้า "สินค้า" (สโตร์อนุมัติคำขอเพิ่มสินค้า) จึงไม่ขึ้นในตัวเลือกของใบเสนอราคา
+   * จนกว่าจะรีเฟรชหน้าทั้งหน้า · best-effort: ล้มแล้วใช้รายการเดิมต่อ
+   */
+  const refreshProducts = () => { void fetchProducts().then(setProducts).catch(() => {}); };
   const updateCategories = (next: ProductCategory[]) => setCategories(next);
   const updateUsers = (next: User[]) => {
     setUsers(next);
@@ -916,6 +926,7 @@ export default function App() {
   const canPrintCostControl = hasPermission(currentUser, roles, "costControl:print");
   const canDeleteCostControl = hasPermission(currentUser, roles, "costControl:delete");
   const canEditPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:edit");
+  const canEditApprovedPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:editApproved");
   const canFinalizePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:finalize");
   const canPrintPurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:print");
   const canDeletePurchaseRequest = hasPermission(currentUser, roles, "purchaseRequest:delete");
@@ -1150,17 +1161,17 @@ export default function App() {
               : effectiveNav === "project"
               ? <ProjectPage currentUserId={currentUser.id} canEdit={canEditProject} canDelete={canDeleteProject} canCreate={canCreateProject} canCreateMaterialRequisition={canCreateMaterialRequisition} canCreateJobOrder={canCreateJobOrder} canCreatePurchaseRequest={canCreatePurchaseRequest} onOpenMaterialRequisition={navigateToMaterialRequisition} onOpenJobOrder={navigateToJobOrder} onOpenPurchaseRequest={navigateToPurchaseRequest} initialProjectId={projectDeepLinkId} onProjectIdConsumed={() => setProjectDeepLinkId(null)} />
               : effectiveNav === "materialRequisition"
-              ? <MaterialRequisitionPage company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} canIssueStock={canAdjustStock} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
+              ? <MaterialRequisitionPage company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} canIssueStock={canAdjustStock} canRequestProductCode={canCreateProductRequest} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
               : effectiveNav === "jobOrder"
               ? <JobOrderPage company={company} currentUserId={currentUser.id} canEdit={canEditJobOrder} canFinalize={canFinalizeJobOrder} canPrint={canPrintJobOrder} canDelete={canDeleteJobOrder} canCreate={canCreateJobOrder} initialJobOrderId={jobOrderDeepLinkId} onJobOrderIdConsumed={() => setJobOrderDeepLinkId(null)} />
               : effectiveNav === "purchasingRequestInbox"
-              ? <PurchaseRequestPage key="pr-purchasing" ownerDepartment="all" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
+              ? <PurchaseRequestPage key="pr-purchasing" ownerDepartment="all" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} canIssueStock={canAdjustStock} canEditApproved={canEditApprovedPurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "purchaseRequest"
-              ? <PurchaseRequestPage company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
+              ? <PurchaseRequestPage company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} canIssueStock={canAdjustStock} canEditApproved={canEditApprovedPurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionRequisition"
-              ? <MaterialRequisitionPage key="mr-production" ownerDepartment="production" company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} canIssueStock={canAdjustStock} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
+              ? <MaterialRequisitionPage key="mr-production" ownerDepartment="production" company={company} currentUserId={currentUser.id} canEdit={canEditMaterialRequisition} canFinalize={canFinalizeMaterialRequisition} canPrint={canPrintMaterialRequisition} canDelete={canDeleteMaterialRequisition} canCreate={canCreateMaterialRequisition} canIssueStock={canAdjustStock} canRequestProductCode={canCreateProductRequest} initialMaterialRequisitionId={materialRequisitionDeepLinkId} onMaterialRequisitionIdConsumed={() => setMaterialRequisitionDeepLinkId(null)} />
               : effectiveNav === "productionPurchase"
-              ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
+              ? <PurchaseRequestPage key="pr-production" ownerDepartment="production" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} canIssueStock={canAdjustStock} canEditApproved={canEditApprovedPurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "productionOrder"
               ? <ProductionOrderPage company={company} canEdit={canEditProductionOrder} canApprove={canApproveProductionOrder} canPrint={canPrintProductionOrder} canDelete={canDeleteProductionOrder} canCreate={canCreateProductionOrder} initialProductionOrderId={productionOrderDeepLinkId} onProductionOrderIdConsumed={() => setProductionOrderDeepLinkId(null)} />
               : effectiveNav === "purchaseOrder"
@@ -1211,10 +1222,12 @@ export default function App() {
               ? <StockPage products={products} onProductsChange={updateProducts} categories={categories} canAdjust={canAdjustStock} company={company} currentUserName={currentUser.fullName} />
               : effectiveNav === "toolControl"
               ? <ToolControlPage company={company} currentUserId={currentUser.id} canIssue={canAdjustStock} />
+              : effectiveNav === "storeRequestInbox"
+              ? <PurchaseRequestPage key="pr-store" ownerDepartment="all" storeStage="pending" company={company} canRequestProductCode={canCreateProductRequest} currentUserId={currentUser.id} canEdit={canEditPurchaseRequest} canFinalize={canFinalizePurchaseRequest} canPrint={canPrintPurchaseRequest} canDelete={canDeletePurchaseRequest} canCreate={canCreatePurchaseRequest} canIssueStock={canAdjustStock} canEditApproved={canEditApprovedPurchaseRequest} initialPurchaseRequestId={purchaseRequestDeepLinkId} onPurchaseRequestIdConsumed={() => setPurchaseRequestDeepLinkId(null)} />
               : effectiveNav === "receivingReport"
               ? <ReceivingReportPage canCreate={canCreateReceivingReport} canEdit={canEditReceivingReport} canReceive={canReceiveGoods} canPrint={canPrintReceivingReport} canDelete={canDeleteReceivingReport} company={company} initialReceivingReportId={receivingReportDeepLinkId} onReceivingReportIdConsumed={() => setReceivingReportDeepLinkId(null)} />
               : effectiveNav === "productRequest"
-              ? <ProductRequestPage currentUserId={currentUser.id} canCreate={canCreateProductRequest} canReview={canReviewProductRequest} initialProductRequestId={productRequestDeepLinkId} onProductRequestIdConsumed={() => setProductRequestDeepLinkId(null)} />
+              ? <ProductRequestPage currentUserId={currentUser.id} canCreate={canCreateProductRequest} canReview={canReviewProductRequest} onProductsChanged={refreshProducts} initialProductRequestId={productRequestDeepLinkId} onProductRequestIdConsumed={() => setProductRequestDeepLinkId(null)} />
               : effectiveNav === "users"
               ? <UserManagementPage users={users} onUsersChange={updateUsers} roles={roles} departments={departments} teams={teams} currentUser={currentUser} isSuperAdmin={isSuperAdmin} onAudit={handleAudit} initialEditId={userDeepLinkId} onEditIdConsumed={() => setUserDeepLinkId(null)} />
               : effectiveNav === "roles" && isSuperAdmin

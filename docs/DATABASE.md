@@ -258,6 +258,9 @@ interface Product {
   specifications: string;
   archived: boolean;       // the soft-delete flag — no separate deletedAt field
   stockQty: number;        // added 2026-08-18 — current on-hand quantity, see "Stock" below
+  avgCost?: number;        // added 2026-09-03 — moving average, the basis of stock value
+  lastCost?: number;       // added 2026-09-09 — unit cost of the latest receipt that carried a price
+  lastCostAt?: string;     // added 2026-09-09 — when that receipt happened (ISO datetime)
   createdAt: string;       // ISO datetime
   updatedAt: string;       // ISO datetime
   createdBy: string;       // → User.id, added 2026-07-09
@@ -1157,3 +1160,36 @@ plain string, matching its printed form — which is why `ApprovalConfig` has an
 There is a fourth value used only as a **query scope**, never stored: `?ownerDepartment=all`, which
 the Purchasing inbox uses to list every department's requests in one table. It removes the
 department filter and nothing else — ownership scoping still applies.
+
+### `Product.lastCost` / `lastCostAt` (2026-09-09)
+
+**ราคาซื้อล่าสุด** — ต้นทุนต่อหน่วยของการ "รับเข้าพร้อมราคา" ครั้งล่าสุด (ใบรับสินค้า หรือรับเข้าด้วยมือ
+ที่กรอกต้นทุน) เจ้าของเลือกให้**การรับของคืนเข้าคลังลงบัญชีด้วยราคานี้** ไม่ใช่ราคาถัวเฉลี่ย
+
+เขียนใน pipeline update **เดียวกัน**กับ `stockQty`/`avgCost` ใน `applyStockMovement()` จึงไม่มีช่วงที่
+สามค่านี้ไม่ตรงกัน และไม่ต้องมีผู้เขียน `Product` รายที่สอง · **ไม่รับจาก client เด็ดขาด** เหมือน
+`stockQty`/`avgCost` · optional เพราะสินค้าที่มีอยู่ก่อนวันนั้นไม่มีฟิลด์นี้ — อ่านออกมาเป็น 0/"" ไม่ได้ทำ migration
+
+⚠️ **มูลค่าสต๊อกยังเป็น `stockQty × avgCost`** ราคาซื้อล่าสุดมีผลกับ `unitCost`/`amount` ของ**แถว**ใน
+`stock_movements` (ผ่านพารามิเตอร์ `rowUnitCost` ซึ่งประทับราคาลงแถวโดยไม่แตะค่าเฉลี่ย) และการแสดงผล
+เท่านั้น ไม่ได้เปลี่ยนวิธีคิดต้นทุนของคลัง
+
+### `purchase_requests` — ขั้นสโตร์ (2026-09-09)
+
+ฟิลด์ที่เพิ่ม ทั้งหมด optional และ**ไม่ได้ทำ migration** — ใบก่อนวันนั้นไม่มี `storeStage` เลย ซึ่งแปลว่า
+"วิ่งตรงไปจัดซื้อตามกติกาเดิม" และด่านออกใบสั่งซื้อปล่อยผ่านให้:
+
+```ts
+storeStage?: "pending" | "forwarded" | "closed";  // อนุมัติแล้วรอสโตร์ / สโตร์ส่งต่อจัดซื้อ / จ่ายจากสต๊อกครบ
+storeReviewedBy?: string;      // → User.id
+storeReviewedByName?: string;  // snapshot ชื่อผู้เช็ค
+storeReviewedAt?: string;      // YYYY-MM-DD
+storeRemark?: string;
+storeIssues?: PurchaseRequestIssueBatch[];  // รอบการจ่าย ต่อท้ายอย่างเดียว ยกเลิกได้เฉพาะรอบล่าสุด
+purchasingEdits?: { at: string; byUserId: string; byName: string; note: string }[];  // ประวัติการแก้หลังอนุมัติ
+// ต่อบรรทัด:
+lines[].storeDecision?: "" | "stock" | "purchase";
+lines[].storeAvailableQty?: number | null;   // ยอดคงเหลือที่สโตร์เห็น ณ ตอนเช็ค
+```
+
+การจ่ายของทางนี้เขียน `stock_movements` ด้วย `sourceType: "purchase_request"` (ค่าที่หกของ union)

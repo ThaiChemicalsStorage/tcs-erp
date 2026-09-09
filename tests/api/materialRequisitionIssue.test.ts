@@ -369,3 +369,64 @@ describe("รายการใบเบิก", () => {
     expect(row?.chargeTeamName).toBe("ทีม A");
   });
 });
+
+/**
+ * **ราคาที่ของคืนเข้าคลังใช้ลงบัญชี = ราคาซื้อล่าสุด (2026-09-09)** — เจ้าของเลือกทางนี้เมื่อถูกถาม
+ * (ตัวเลือกคือ ราคาซื้อล่าสุด / ราคาตอนจ่ายออก / ราคาเฉลี่ยปัจจุบัน)
+ *
+ * สองอย่างที่ตรึงไว้:
+ *   1. แถว `return` ต้องถือ `unitCost` = `Product.lastCost` ไม่ใช่ต้นทุนถัวเฉลี่ย
+ *   2. การคืนของต้อง**ไม่**ไปคิดค่าเฉลี่ยใหม่ — ไม่งั้นการคืนของกลายเป็นการเปลี่ยนวิธีคิดต้นทุนคลัง
+ */
+describe("คืนของ — ลงบัญชีด้วยราคาซื้อล่าสุด", () => {
+  async function productDoc(productId: string) {
+    const { ObjectId } = await import("mongodb");
+    return client.db("tcs_erp").collection("products").findOne({ _id: new ObjectId(productId) });
+  }
+
+  it("รับเข้าพร้อมราคาสองครั้ง — lastCost คือครั้งล่าสุด แต่ avgCost ยังเป็นถัวเฉลี่ย", async () => {
+    await setStock(productA, 0);
+    const { ObjectId } = await import("mongodb");
+    await client.db("tcs_erp").collection("products").updateOne({ _id: new ObjectId(productA) }, { $set: { avgCost: 0, lastCost: 0 } });
+
+    expect((await api("/api/stock-movements", {
+      method: "POST", body: JSON.stringify({ productId: productA, kind: "receive", qty: 10, unitCost: 100, reason: "ล็อตแรก" }),
+    })).status).toBe(201);
+    expect((await api("/api/stock-movements", {
+      method: "POST", body: JSON.stringify({ productId: productA, kind: "receive", qty: 10, unitCost: 140, reason: "ล็อตสอง" }),
+    })).status).toBe(201);
+
+    const p = await productDoc(productA);
+    expect(p?.lastCost, "ราคาซื้อล่าสุด = ล็อตสุดท้าย").toBe(140);
+    expect(p?.avgCost, "ค่าเฉลี่ยยังเป็นถัวเฉลี่ยของทั้งสองล็อต").toBe(120);
+  });
+
+  it("แถวคืนของถือราคาซื้อล่าสุด และไม่ไปคิดค่าเฉลี่ยใหม่", async () => {
+    const id = await seedRequisition("Final");
+    // จ่าย 4 ชิ้นจากยอดที่ตั้งไว้ในเทสต์ก่อนหน้า (20 ชิ้น ต้นทุนเฉลี่ย 120 ราคาซื้อล่าสุด 140)
+    expect((await api(`/api/material-requisitions/${id}/issues`, {
+      method: "POST", body: JSON.stringify({ lines: [{ lineId: "l1", qty: 4 }] }),
+    })).status).toBe(200);
+
+    const avgBefore = (await productDoc(productA))?.avgCost;
+    expect((await api(`/api/material-requisitions/${id}/return`, {
+      method: "POST", body: JSON.stringify({ lines: [{ id: "l1", returnQty: 3 }] }),
+    })).status).toBe(200);
+
+    const moves = await movementsOf(id);
+    const returned = moves.filter((m) => m.kind === "return");
+    expect(returned).toHaveLength(1);
+    expect(returned[0].unitCost, "คืนของลงด้วยราคาซื้อล่าสุด ไม่ใช่ถัวเฉลี่ย").toBe(140);
+    expect(returned[0].amount).toBe(420);
+    expect((await productDoc(productA))?.avgCost, "การคืนของต้องไม่คิดค่าเฉลี่ยใหม่").toBe(avgBefore);
+  });
+
+  it("GET ส่ง costByProduct มาด้วย เพื่อให้หน้าจอโชว์ราคาก่อนกดบันทึก", async () => {
+    const id = await seedRequisition("Final");
+    const body = (await (await api(`/api/material-requisitions/${id}`)).json()) as {
+      costByProduct: Record<string, { avgCost: number; lastCost: number }>;
+    };
+    expect(body.costByProduct[productA].lastCost).toBe(140);
+    expect(body.costByProduct[productA].avgCost).toBeGreaterThan(0);
+  });
+});

@@ -190,7 +190,13 @@ export async function handleApprove<TDoc extends ApprovableFields>(
   });
   await cfg.onApproved?.(ctx, updated);
   await cfg.writeAudit(ctx, `${cfg.label} Approved`, `อนุมัติ${cfg.label} ${id}`, updated);
-  cfg.respond(res, updated);
+  /**
+   * อ่านเอกสารใหม่ถ้ามี `onApproved` (2026-09-09) — hook นั้นเขียนฟิลด์ของเอกสารตัวเองได้ (ใบขอซื้อ
+   * ตั้ง `storeStage: "pending"` ตอนอนุมัติ เพื่อส่งต่อให้สโตร์) ถ้าตอบด้วยตัวที่โหลดไว้ก่อน hook
+   * หน้าจอจะได้ค่าเก่ากลับไปแล้วแสดงสถานะผิดจนกว่าผู้ใช้จะรีเฟรช — เจอจากเทสต์ตอนทำขั้นสโตร์
+   * ไม่มี hook = ไม่อ่านซ้ำ เอกสารอีก 5 ชนิดจึงไม่มี query เพิ่มขึ้นเลย
+   */
+  cfg.respond(res, cfg.onApproved ? await cfg.load(id) : updated);
 }
 
 /** รออนุมัติ → ร่าง (ผู้อนุมัติตีกลับ ต้องระบุเหตุผล) */

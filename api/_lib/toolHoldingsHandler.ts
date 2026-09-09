@@ -6,7 +6,7 @@ import {
   codeEntriesCollection, countersCollection, auditLogCollection,
   toObjectId, withStringId, type StockMovementFields,
 } from "./collections.js";
-import { applyStockMovement, assertProductsHaveStock } from "./stockHandler.js";
+import { applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf } from "./stockHandler.js";
 import { nextMonthlyDocumentNumber } from "./documentNumbering.js";
 import { nowIso } from "../../src/lib/products.js";
 import { sanitizeShortText, sanitizeLongText } from "./quoteValidation.js";
@@ -250,6 +250,8 @@ async function handleIssue(req: VercelRequest, res: VercelResponse): Promise<voi
     ...(workTypeName ? { workTypeName } : {}),
   };
   const reason = note || (mode === "issue" ? `จ่ายเครื่องมือให้ ${team.name}` : `รับคืนเครื่องมือจาก ${team.name}`);
+  // เครื่องมือที่คืนเข้าคลังลงบัญชีด้วยราคาซื้อล่าสุด เหมือนการคืนวัสดุของใบเบิก (2026-09-09)
+  const costs = mode === "return" ? await productCostBasis([...qtyByProduct.keys()]) : {};
   for (const [productId, qty] of qtyByProduct) {
     await applyStockMovement({
       productId,
@@ -261,6 +263,7 @@ async function handleIssue(req: VercelRequest, res: VercelResponse): Promise<voi
       sourceLabel: slipNumber,
       userId: ctx.user.id,
       org,
+      ...(mode === "return" ? { rowUnitCost: returnUnitCostOf(costs[productId]) } : {}),
     });
   }
 

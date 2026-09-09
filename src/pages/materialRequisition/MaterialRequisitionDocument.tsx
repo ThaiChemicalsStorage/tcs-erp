@@ -7,7 +7,7 @@ import {
   fetchMaterialRequisition, updateMaterialRequisition, recordMaterialRequisitionReturn,
   postMaterialIssueBatch, cancelMaterialIssueBatch,
   logMaterialRequisitionPrinted, deleteMaterialRequisition,
-  blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES,
+  blankMaterialRequisitionLine, MATERIAL_CATEGORY_NAMES, returnUnitCostOf, type ProductCostBasis,
   submitMaterialRequisitionApproval, approveMaterialRequisition, rejectMaterialRequisition, withdrawMaterialRequisitionApproval,
   rewriteMaterialRequisition, issuedQtyOf, outstandingQtyOf, issueBatchesOf,
 } from "../../lib/materialRequisition";
@@ -23,6 +23,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useModuleTour } from "../../components/GuidedTour";
 import { TourReplayButton } from "../../components/TourReplayButton";
 import { ProductPickerModal } from "../products/ProductPickerModal";
+import { createProductRequest } from "../../lib/productRequest";
 import {
   type MaterialRequisitionTemplate, fetchMaterialRequisitionTemplates, templateLinesToRequisitionLines,
 } from "../../lib/materialRequisitionTemplate";
@@ -93,6 +94,7 @@ export function MaterialRequisitionDocument({
   canPrint,
   canDelete,
   canIssueStock,
+  canRequestProductCode,
   onBack,
   onDeleted,
   onOpenOther,
@@ -107,6 +109,8 @@ export function MaterialRequisitionDocument({
   canDelete: boolean;
   /** `stock:adjust` — การ์ด "จ่ายของ (สโตร์)" และการรับคืน (2026-09-03) */
   canIssueStock: boolean;
+  /** `productRequest:create` — ปุ่ม "ขอรหัสสินค้าใหม่" ในตัวเลือกสินค้า (2026-09-09) */
+  canRequestProductCode: boolean;
   onBack: () => void;
   onDeleted: () => void;
   /** เปิดเอกสารใบอื่นในโมดูลเดียวกัน — ใช้ตอน Rewrite เพื่อพาไปฉบับใหม่ที่เพิ่งสร้าง */
@@ -120,6 +124,8 @@ export function MaterialRequisitionDocument({
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   /** ยอดคงเหลือปัจจุบันต่อสินค้า — server ส่งมาพร้อมใบ และอัปเดตทุกครั้งที่จ่าย/คืน */
   const [stockByProduct, setStockByProduct] = useState<Record<string, number>>({});
+  /** ต้นทุนต่อหน่วยต่อสินค้า — ใช้โชว์ "ราคาล่าสุด" ที่ของจะกลับเข้าคลังด้วย (2026-09-09) */
+  const [costByProduct, setCostByProduct] = useState<Record<string, ProductCostBasis>>({});
   const [departments, setDepartments] = useState<Department[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [codeEntries, setCodeEntries] = useState<CodeEntry[]>([]);
@@ -153,7 +159,7 @@ export function MaterialRequisitionDocument({
     Promise.all([fetchMaterialRequisition(materialRequisitionId), fetchProducts(), fetchCategories()])
       .then(([m, p, c]) => {
         if (cancelled) return;
-        setDoc(m.materialRequisition); setDraft(m.materialRequisition); setStockByProduct(m.stockByProduct);
+        setDoc(m.materialRequisition); setDraft(m.materialRequisition); setStockByProduct(m.stockByProduct); setCostByProduct(m.costByProduct);
         setProducts(p); setCategories(c);
       })
       .catch((err) => {
@@ -205,10 +211,11 @@ export function MaterialRequisitionDocument({
     },
   });
 
-  const applySaved = (updated: MaterialRequisition, stock?: Record<string, number>) => {
+  const applySaved = (updated: MaterialRequisition, stock?: Record<string, number>, cost?: Record<string, ProductCostBasis>) => {
     setDoc(updated);
     setDraft(updated);
     if (stock) setStockByProduct(stock);
+    if (cost) setCostByProduct(cost);
     dirty.markSaved(toGuardPayload(updated));
   };
 
@@ -251,7 +258,7 @@ export function MaterialRequisitionDocument({
       });
       // route คืนของส่ง stockByProduct มาด้วย แต่ wrapper ฝั่ง client คืนเฉพาะเอกสาร — โหลดยอดใหม่ผ่าน fetch สั้น ๆ
       const fresh = await fetchMaterialRequisition(draft.id).catch(() => null);
-      applySaved(updated, fresh?.stockByProduct);
+      applySaved(updated, fresh?.stockByProduct, fresh?.costByProduct);
       showToast(t("materialRequisitionDoc.returnSaved"));
       return true;
     } catch (err) {
@@ -277,14 +284,14 @@ export function MaterialRequisitionDocument({
     }
     setSavingIssue(true);
     try {
-      const { materialRequisition, stockByProduct: fresh } = await postMaterialIssueBatch(draft.id, {
+      const { materialRequisition, stockByProduct: fresh, costByProduct: freshCost } = await postMaterialIssueBatch(draft.id, {
         lines,
         issuedDate: issueDate,
         issuedBy: draft.storeDeptBy,
         remark: issueRemark,
         ...chargeFieldsOf(draft),
       });
-      applySaved(materialRequisition, fresh);
+      applySaved(materialRequisition, fresh, freshCost);
       setIssueQty({});
       setIssueRemark("");
       showToast(t("materialRequisitionDoc.issueSaved"));
@@ -302,8 +309,8 @@ export function MaterialRequisitionDocument({
     if (!draft) return;
     setCancellingBatch(true);
     try {
-      const { materialRequisition, stockByProduct: fresh } = await cancelMaterialIssueBatch(draft.id, batch.id);
-      applySaved(materialRequisition, fresh);
+      const { materialRequisition, stockByProduct: fresh, costByProduct: freshCost } = await cancelMaterialIssueBatch(draft.id, batch.id);
+      applySaved(materialRequisition, fresh, freshCost);
       setConfirmCancelBatch(null);
       showToast(t("materialRequisitionDoc.batchCancelled"));
     } catch (err) {
@@ -434,6 +441,35 @@ export function MaterialRequisitionDocument({
       .catch(() => { setTemplates([]); showToast(t("materialRequisitionDoc.useTemplateError")); });
   };
 
+  /**
+   * เปิดตัวเลือกสินค้า แล้ว**ดึงรายการสินค้าใหม่ทุกครั้ง** — เดิมโหลดครั้งเดียวตอน mount สินค้าที่สโตร์
+   * เพิ่งตั้งรหัสให้จึงไม่ขึ้นจนกว่าจะออกจากเอกสารแล้วเข้ามาใหม่ (เจ้าของรายงาน 2026-09-09)
+   * best-effort: ดึงไม่สำเร็จก็ยังใช้รายการที่โหลดไว้เลือกได้ตามปกติ
+   */
+  const openProductPicker = () => {
+    setPickerOpen(true);
+    Promise.all([fetchProducts(), fetchCategories()])
+      .then(([p, c]) => { setProducts(p); setCategories(c); })
+      .catch(() => { /* ใช้รายการเดิมต่อไป */ });
+  };
+
+  /** ขอรหัสสินค้าใหม่จากในตัวเลือกสินค้า — บรรทัดใบเบิกบังคับต้องอ้างสินค้าในคลัง ของที่ยังไม่มีรหัสจึงตีบตัน */
+  const requestProductCode = async (name: string) => {
+    try {
+      await createProductRequest({
+        name,
+        unit: "",
+        categoryId: "",
+        specifications: "",
+        reason: `ใช้กับใบเบิก ${draft.documentNumber || doc.id}`,
+      });
+      showToast(t("productRequest.created"));
+      setPickerOpen(false);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : t("productRequest.error"));
+    }
+  };
+
   const addProduct = (product: Product) => {
     const categoryName = categories.find((c) => c.id === product.categoryId)?.name ?? "";
     setDraft((prev) => prev && { ...prev, lines: [...prev.lines, blankMaterialRequisitionLine(product, categoryName)] });
@@ -478,10 +514,6 @@ export function MaterialRequisitionDocument({
     }
   };
 
-  const filteredProducts = products.filter((p) => {
-    const name = categories.find((c) => c.id === p.categoryId)?.name ?? "";
-    return MATERIAL_CATEGORY_NAMES.includes(name);
-  });
 
   // dropdown แผนก/ทีม/ประเภทงาน — ใช้ทั้งหัวใบ (ตอนร่าง) และการ์ดจ่ายของ (สโตร์แก้ได้ตอนจ่าย)
   const activeDepartments = departments.filter((d) => d.isActive);
@@ -496,6 +528,8 @@ export function MaterialRequisitionDocument({
   const setChargeTeam = (id: string) => setDraft((prev) => prev && {
     ...prev, chargeTeamId: id, chargeTeamName: teams.find((tm) => tm.id === id)?.name ?? "",
   });
+  /** ราคาที่ของจะกลับเข้าคลังด้วยเมื่อคืน — ตรงกับที่เซิร์ฟเวอร์ใช้ (`returnUnitCostOf`) */
+  const returnCost = (productId: string) => returnUnitCostOf(costByProduct[productId]);
   const workTypeOptions = codeComboboxOptions(codeEntries, "workType");
   const setChargeWorkType = (code: string) => setDraft((prev) => prev && {
     ...prev, chargeWorkTypeCode: code,
@@ -602,7 +636,7 @@ export function MaterialRequisitionDocument({
       </div>
 
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto print:hidden">
-        {draftBackup.recovered && draftBackup.recoveredAt !== null && (
+        {isDraftStatus && draftBackup.recovered && draftBackup.recoveredAt !== null && (
           <DraftRecoveryBanner
             savedAt={draftBackup.recoveredAt}
             onRestore={() => {
@@ -693,7 +727,7 @@ export function MaterialRequisitionDocument({
                 <button onClick={openTemplatePicker} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
                   <LayoutTemplate size={13} /> {t("materialRequisitionDoc.useTemplate")}
                 </button>
-                <button onClick={() => setPickerOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
+                <button onClick={() => openProductPicker()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all">
                   <Plus size={13} /> {t("materialRequisitionDoc.addLine")}
                 </button>
               </div>
@@ -711,7 +745,8 @@ export function MaterialRequisitionDocument({
                       t("materialRequisitionDoc.col.productCode"), t("materialRequisitionDoc.col.item"), t("materialRequisitionDoc.col.unit"),
                       t("materialRequisitionDoc.col.stockQty"), t("materialRequisitionDoc.col.plannedQty"),
                       t("materialRequisitionDoc.col.issued"), t("materialRequisitionDoc.col.outstanding"),
-                      t("materialRequisitionDoc.col.returnQty"), t("materialRequisitionDoc.col.actualUsed"), "",
+                      t("materialRequisitionDoc.col.returnQty"), t("materialRequisitionDoc.col.lastCost"),
+                      t("materialRequisitionDoc.col.actualUsed"), "",
                     ].map((h, i) => (
                       <th key={`${i}-${h}`} className="px-3 py-2.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
@@ -754,6 +789,11 @@ export function MaterialRequisitionDocument({
                           onChange={(e) => updateLine(line.id, { returnQty: numberOrNull(e.target.value) })}
                           className="w-20 text-xs font-mono text-foreground bg-[#c9a84c]/5 border border-[#c9a84c]/20 rounded px-1.5 py-1 outline-none disabled:opacity-70"
                         />
+                      </td>
+                      {/* ราคาที่ของจะกลับเข้าคลังด้วย — ราคาซื้อล่าสุด (ถ้ายังไม่เคยรับเข้าพร้อมราคา ใช้ถัวเฉลี่ย)
+                          โชว์เฉย ๆ เพื่อให้สโตร์เห็นก่อนกดบันทึก เซิร์ฟเวอร์คิดเองอีกรอบตอนเขียนบัญชีเดินสะพัด */}
+                      <td className="px-3 py-2 text-xs font-mono text-muted-foreground whitespace-nowrap" title={t("materialRequisitionDoc.col.lastCostHint")}>
+                        {returnCost(line.productId) > 0 ? returnCost(line.productId).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
                       </td>
                       <td className="px-2 py-1.5">
                         <input
@@ -979,7 +1019,16 @@ export function MaterialRequisitionDocument({
 
       <MaterialRequisitionPrintDocument materialRequisition={doc} companyHeader={companyHeader} />
 
-      <ProductPickerModal open={pickerOpen} products={filteredProducts} categories={categories} onSelect={addProduct} onClose={() => setPickerOpen(false)} />
+      <ProductPickerModal
+        open={pickerOpen}
+        products={products}
+        categories={categories}
+        preferCategoryNames={MATERIAL_CATEGORY_NAMES}
+        showStock
+        onRequestProductCode={canRequestProductCode ? requestProductCode : undefined}
+        onSelect={addProduct}
+        onClose={() => setPickerOpen(false)}
+      />
 
       {templatePickerOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 print:hidden">

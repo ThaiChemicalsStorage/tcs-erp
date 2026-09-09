@@ -180,6 +180,19 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     const pr = await purchaseRequests.findOne({ _id: purchaseRequestId });
     if (!pr || pr.isDeleted) throw new HttpError(404, "ไม่พบใบขอซื้อต้นทาง");
     if (pr.status !== "Final") throw new HttpError(400, "ใบขอซื้อต้องได้รับอนุมัติก่อนจึงจะออกใบสั่งซื้อได้");
+    /**
+     * **ต้องผ่านสโตร์ก่อน (2026-09-09)** — ไหลงานที่เจ้าของสั่ง: อนุมัติ → สโตร์เช็คของ → จัดซื้อ
+     * สโตร์อาจจ่ายของจากสต๊อกได้เลย ซึ่งแปลว่าไม่ต้องซื้อ การออกใบสั่งซื้อก่อนรู้ผลคือการซื้อของที่มีอยู่
+     *
+     * ใบก่อน 2026-09-09 ไม่มี `storeStage` เลย — ปล่อยผ่าน ไม่งั้นใบที่อนุมัติไว้ก่อนหน้านี้จะออก
+     * ใบสั่งซื้อไม่ได้ทั้งหมด (ไม่ได้ทำ migration โดยตั้งใจ แนวเดียวกับทุกฟิลด์ที่เพิ่มทีหลัง)
+     */
+    if (pr.storeStage === "pending") {
+      throw new HttpError(400, "ใบขอซื้อนี้ยังรอสโตร์เช็คของ ต้องให้สโตร์ยืนยันก่อนว่าไม่มีของในสต๊อก");
+    }
+    if (pr.storeStage === "closed") {
+      throw new HttpError(400, "ใบขอซื้อนี้สโตร์จ่ายของจากสต๊อกครบแล้ว ไม่ต้องสั่งซื้อ");
+    }
 
     jobCode = pr.jobCode ?? "";
     neededByDate = pr.neededByDate ?? "";
@@ -189,7 +202,14 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     // ฝ่ายจัดซื้อเลือกผู้ขายเองบนใบสั่งซื้อจากทะเบียนผู้ขาย (src/lib/vendors.ts) ซึ่งเติม
     // ผู้ติดต่อ/โทร/เลขภาษี/ที่อยู่ ให้ครบกว่าที่ใบขอซื้อเคยส่งต่อมาได้
     // snapshot ของรายการ ณ ตอนสร้าง — แก้ PO ทีหลังไม่กระทบใบขอซื้อ และแก้ใบขอซื้อไม่ย้อนมาแก้ PO
-    lines = (pr.lines ?? []).map((l) => ({
+    //
+    // **ข้ามบรรทัดที่สโตร์บอกว่ามีของ (2026-09-09)** — ของนั้นออกจากคลังไปแล้ว ลอกมาก็จะซื้อซ้ำ
+    // บรรทัดที่สโตร์ยังไม่ได้เช็ค (ใบเก่าก่อนวันนั้น) ลอกมาทั้งหมดตามเดิม
+    const linesToBuy = (pr.lines ?? []).filter((l) => l.storeDecision !== "stock");
+    if (linesToBuy.length === 0 && (pr.lines ?? []).length > 0) {
+      throw new HttpError(400, "ทุกรายการในใบขอซื้อนี้สโตร์จ่ายจากสต๊อกแล้ว ไม่มีรายการที่ต้องสั่งซื้อ");
+    }
+    lines = linesToBuy.map((l) => ({
       id: newId("poline"),
       productId: l.productId || null,
       productCode: l.productCode ?? "",

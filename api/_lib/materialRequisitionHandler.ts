@@ -18,7 +18,10 @@ import { getRevisionRoot } from "../../src/lib/revisionDiff.js";
 import { notifyDepartments, STORE_DEPARTMENT_NAMES } from "./departmentNotify.js";
 import { sanitizeNullableNumber, sanitizeEnum } from "./projectValidation.js";
 import { ensureMaterialCatalogSeeded } from "./materialCatalogSeedData.js";
-import { applyStockMovement, assertProductsHaveStock, type StockMovementOrgTags } from "./stockHandler.js";
+import {
+  applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf,
+  type StockMovementOrgTags, type ProductCostBasis,
+} from "./stockHandler.js";
 import { issuedQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches } from "../../src/lib/materialRequisition.js";
 import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch } from "../../src/lib/materialRequisition.js";
 
@@ -500,11 +503,26 @@ async function stockByProductFor(lines: MaterialRequisitionLine[]): Promise<Reco
   return Object.fromEntries(docs.map((p) => [p._id.toString(), p.stockQty ?? 0]));
 }
 
+/**
+ * ต้นทุนต่อหน่วยของทุกสินค้าในใบ — ส่งคู่กับเอกสารเหมือน `stockByProduct` (2026-09-09)
+ *
+ * หน้าจอใช้โชว์ "ราคาล่าสุด" ข้างช่องคืนของ ตามที่เจ้าของสั่งให้การคืนของลงบัญชีด้วยราคาซื้อล่าสุด
+ * แยก map กับยอดคงเหลือโดยตั้งใจ — `stockByProduct` เป็น `Record<string, number>` ที่หน้าจอและ
+ * route 4 ตัวอ่านอยู่แล้ว การเปลี่ยนรูปมันคือการแก้ทุกจุดพร้อมกันเพื่อข้อมูลที่เพิ่มมาแค่สองตัวเลข
+ */
+async function costByProductFor(lines: MaterialRequisitionLine[]): Promise<Record<string, ProductCostBasis>> {
+  return productCostBasis(lines.map((l) => l.productId).filter((id) => id && isObjectIdLike(id)));
+}
+
 async function handleGetOne(req: VercelRequest, res: VercelResponse, id: string) {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   await requirePermission(req, "materialRequisition:view");
   const doc = await loadOrThrow(id);
-  res.status(200).json({ materialRequisition: toClient(doc), stockByProduct: await stockByProductFor(doc.lines ?? []) });
+  res.status(200).json({
+    materialRequisition: toClient(doc),
+    stockByProduct: await stockByProductFor(doc.lines ?? []),
+    costByProduct: await costByProductFor(doc.lines ?? []),
+  });
 }
 
 const SHORT_TEXT_FIELDS: { key: keyof MaterialRequisitionFields; label: string }[] = [
@@ -698,7 +716,11 @@ async function handlePostIssueBatch(req: VercelRequest, res: VercelResponse, id:
     `สโตร์จ่ายของตามใบเบิก ${label} รอบที่ ${seq} (${[...totals].map(([p, q]) => `${p}: -${q}`).join(", ")})`,
     { scopeOfWorkId: updated.scopeOfWorkId },
   );
-  res.status(200).json({ materialRequisition: toClient(updated), stockByProduct: await stockByProductFor(updated.lines ?? []) });
+  res.status(200).json({
+    materialRequisition: toClient(updated),
+    stockByProduct: await stockByProductFor(updated.lines ?? []),
+    costByProduct: await costByProductFor(updated.lines ?? []),
+  });
 }
 
 /**
@@ -730,12 +752,14 @@ async function handleCancelIssueBatch(req: VercelRequest, res: VercelResponse, i
   const totals = productTotalsOf(doc.lines.filter((l) => qtyByLineId.has(l.id)), qtyByLineId);
   const org = orgTagsOf(doc);
   const label = doc.documentNumber || id;
+  // ของกลับเข้าคลังลงบัญชีด้วย**ราคาซื้อล่าสุด** (2026-09-09) — `rowUnitCost` ไม่แตะค่าเฉลี่ยของคลัง
+  const costs = await productCostBasis([...totals.keys()]);
   for (const [productId, qty] of totals) {
     await applyStockMovement({
       productId, kind: "return", delta: qty,
       reason: `ยกเลิกการจ่ายรอบที่ ${last.seq} ของใบเบิก ${label} (ของกลับเข้าคลัง)`,
       sourceType: "material_requisition", sourceId: id, sourceLabel: label,
-      userId: ctx.user.id, org,
+      userId: ctx.user.id, org, rowUnitCost: returnUnitCostOf(costs[productId]),
     });
   }
 
@@ -755,7 +779,11 @@ async function handleCancelIssueBatch(req: VercelRequest, res: VercelResponse, i
     `ยกเลิกการจ่ายรอบที่ ${last.seq} ของใบเบิก ${label} (${[...totals].map(([p, q]) => `${p}: +${q}`).join(", ")})`,
     { scopeOfWorkId: updated.scopeOfWorkId },
   );
-  res.status(200).json({ materialRequisition: toClient(updated), stockByProduct: await stockByProductFor(updated.lines ?? []) });
+  res.status(200).json({
+    materialRequisition: toClient(updated),
+    stockByProduct: await stockByProductFor(updated.lines ?? []),
+    costByProduct: await costByProductFor(updated.lines ?? []),
+  });
 }
 
 /**
@@ -818,12 +846,15 @@ async function handleReturn(req: VercelRequest, res: VercelResponse, id: string)
 
   const org = orgTagsOf(merged);
   const label = merged.documentNumber || id;
+  // ของกลับเข้าคลังลงบัญชีด้วย**ราคาซื้อล่าสุด** (2026-09-09, คำสั่งเจ้าของ) — แถวที่ตัดออกเพราะแก้ยอด
+  // คืนให้น้อยลงใช้ราคาเดียวกัน เพื่อให้สองแถวที่หักกลบกันมีมูลค่าเท่ากัน
+  const costs = await productCostBasis([...delta.keys()]);
   for (const [productId, d] of delta) {
     await applyStockMovement({
       productId, kind: d > 0 ? "return" : "deduct", delta: d,
       reason: d > 0 ? `คืนวัสดุตามใบเบิก ${label}` : `แก้ยอดคืนใบเบิก ${label} (ของออกจากคลัง)`,
       sourceType: "material_requisition", sourceId: id, sourceLabel: label,
-      userId: ctx.user.id, org,
+      userId: ctx.user.id, org, rowUnitCost: returnUnitCostOf(costs[productId]),
     });
   }
 
@@ -831,7 +862,11 @@ async function handleReturn(req: VercelRequest, res: VercelResponse, id: string)
   await materialRequisitions.updateOne({ _id: id }, { $set: update });
   const updated = await loadOrThrow(id);
   await writeAuditEntry(ctx, "Material Requisition Return Recorded", `บันทึกการคืนวัสดุของใบเบิกและใบคืนวัสดุ ${label}`, { scopeOfWorkId: updated.scopeOfWorkId });
-  res.status(200).json({ materialRequisition: toClient(updated), stockByProduct: await stockByProductFor(updated.lines ?? []) });
+  res.status(200).json({
+    materialRequisition: toClient(updated),
+    stockByProduct: await stockByProductFor(updated.lines ?? []),
+    costByProduct: await costByProductFor(updated.lines ?? []),
+  });
 }
 
 /**
