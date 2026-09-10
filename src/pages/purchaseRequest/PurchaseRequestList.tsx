@@ -25,6 +25,7 @@ export function PurchaseRequestList({
   headerAction,
   heading,
   showDepartment = false,
+  stageFilter = false,
 }: {
   purchaseRequests: PurchaseRequestSummary[];
   currentUserId: string;
@@ -33,6 +34,14 @@ export function PurchaseRequestList({
   heading?: string;
   /** เพิ่มคอลัมน์ "แผนก" — จำเป็นเฉพาะมุมมองรวมทุกฝ่าย ที่ไม่รู้จากหน้าเองว่าใบไหนของใคร */
   showDepartment?: boolean;
+  /**
+   * เปลี่ยนแถบกรองจาก "สถานะเอกสาร" เป็น "ขั้นของใบ" — ใช้กับกล่องงานเข้าของฝ่ายจัดซื้อเท่านั้น (2026-09-10)
+   *
+   * กล่องนั้นเป็นคิวงาน คำถามของคนเปิดคือ *"ใบไหนถึงคิวฉันแล้ว"* ไม่ใช่ *"ใบไหนเป็นร่าง"* · ก่อนหน้านี้
+   * กล่องนี้แสดงทุกใบรวมกันโดยไม่มีตัวกรองขั้นเลย ใบที่ยังรอสโตร์เช็คของอยู่จึงปนมากับงานที่ทำได้จริง
+   * (กดออกใบสั่งซื้อแล้วโดน 400) ต่างจากกล่องของสโตร์ที่กรอง `?storeStage=pending` มาตั้งแต่แรก
+   */
+  stageFilter?: boolean;
   /** ปุ่ม "+ สร้าง" ของหน้านั้นๆ — หน้า Page เป็นเจ้าของ state ของกล่องเลือกต้นทาง (2026-08-20) */
   headerAction?: ReactNode;
 }) {
@@ -49,12 +58,26 @@ export function PurchaseRequestList({
     general: t("purchaseRequest.dept.general"),
   };
   const [filterStatus, setFilterStatus] = useState<string>(FILTER_ALL);
+  /**
+   * ตั้งต้นที่ "ถึงคิวจัดซื้อ" ไม่ใช่ "ทั้งหมด" — เปิดหน้ามาแล้วต้องเห็นงานที่ทำได้จริงก่อน
+   * ใบที่ยังรอสโตร์อยู่ดูได้จากชิปข้าง ๆ ไม่ได้ถูกซ่อนหายไป
+   */
+  const [filterStage, setFilterStage] = useState<"forwarded" | "pending" | "all">("forwarded");
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedSearch = searchQuery.trim().toLowerCase();
 
+  /**
+   * "ถึงคิวจัดซื้อแล้ว" = อนุมัติแล้ว **และ**สโตร์ส่งต่อมาแล้ว · ใบก่อน 2026-09-09 ไม่มีฟิลด์ `storeStage`
+   * เลย ซึ่งแปลว่าวิ่งตรงไปจัดซื้อตามกติกาเดิม จึงนับรวมด้วย — เงื่อนไขเดียวกับ `?storeStage=forwarded`
+   * ฝั่งเซิร์ฟเวอร์ (`purchaseRequestHandler.ts`) ถ้าสองที่นี้ไม่ตรงกัน หน้าจอกับ API จะตอบคนละอย่าง
+   */
+  const atPurchasing = (p: PurchaseRequestSummary) => p.status === "Final" && (p.storeStage === "forwarded" || !p.storeStage);
+
   const items = purchaseRequests.map((p) => ({ ...p, jobCode: p.jobCode ?? "", status: p.status ?? "Draft" }));
   const filtered = items
-    .filter((p) => filterStatus === FILTER_ALL || p.status === filterStatus)
+    .filter((p) => (stageFilter
+      ? filterStage === "all" || (filterStage === "forwarded" ? atPurchasing(p) : p.status === "Final" && p.storeStage === "pending")
+      : filterStatus === FILTER_ALL || p.status === filterStatus))
     .filter((p) => !normalizedSearch || [p.id, p.jobCode].some((v) => v.toLowerCase().includes(normalizedSearch)));
 
   return (
@@ -86,14 +109,30 @@ export function PurchaseRequestList({
             </button>
           )}
         </div>
-        <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
-          {([FILTER_ALL, "Draft", "PendingApproval", "Final"] as const).map((s) => (
-            <button key={s} onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
-              {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as PurchaseRequestStatus]}
-            </button>
-          ))}
-        </div>
+        {stageFilter ? (
+          <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
+            {(["forwarded", "pending", "all"] as const).map((s) => (
+              <button key={s} onClick={() => setFilterStage(s)}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStage === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+                {s === "all" ? t("quotation.filterAll") : s === "forwarded" ? t("purchaseRequest.stageFilter.forwarded") : t("purchaseRequest.stageFilter.pending")}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 bg-muted rounded-xl p-1 h-9 w-fit flex-wrap">
+            {([FILTER_ALL, "Draft", "PendingApproval", "Final"] as const).map((s) => (
+              <button key={s} onClick={() => setFilterStatus(s)}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${filterStatus === s ? "bg-[#c9a84c] text-[#0b1d3a]" : "text-muted-foreground hover:text-foreground"}`}>
+                {s === FILTER_ALL ? t("quotation.filterAll") : statusLabel[s as PurchaseRequestStatus]}
+              </button>
+            ))}
+          </div>
+        )}
+        {stageFilter && (
+          <p className="text-xs text-muted-foreground font-mono" role="status" aria-live="polite">
+            {t("purchaseRequest.stageFilter.count").replace("{n}", String(filtered.length))}
+          </p>
+        )}
       </div>
 
       <div data-tour="pr-table" className="bg-card border border-border rounded-xl overflow-hidden">

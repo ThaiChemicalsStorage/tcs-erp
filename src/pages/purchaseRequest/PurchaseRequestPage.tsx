@@ -197,6 +197,8 @@ export function PurchaseRequestPage({
         onOpen={openPurchaseRequest}
         heading={storeStage === "pending" ? t("nav.storeRequestInbox") : ownerDepartment === "all" ? t("nav.purchasingRequestInbox") : undefined}
         showDepartment={ownerDepartment === "all"}
+        // กล่องงานเข้าของจัดซื้อเท่านั้น — กล่องของสโตร์กรองมาจากเซิร์ฟเวอร์แล้ว (storeStage="pending")
+        stageFilter={ownerDepartment === "all" && storeStage === undefined}
         headerAction={canCreate ? (
           <button
             onClick={() => (needsSourcePicker ? setPickerOpen(true) : void handleCreateStandalone())}

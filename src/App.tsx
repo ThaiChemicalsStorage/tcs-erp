@@ -237,8 +237,17 @@ const navItems: NavItem[] = [
   { key: "jobOrder", icon: Hammer, labelKey: "nav.jobOrder", permission: "jobOrder:view" },
   { key: "purchaseRequest", icon: ShoppingCart, labelKey: "nav.purchaseRequest", permission: "purchaseRequest:view" },
   { key: "productionOrder", icon: Factory, labelKey: "nav.productionOrder", permission: "productionOrder:view" },
-  // กล่องงานเข้าของฝ่ายจัดซื้อ — หน้าเดียวกับใบขอซื้อ แต่เห็นของทุกฝ่ายรวมกัน (2026-08-28)
-  { key: "purchasingRequestInbox", icon: ShoppingCart, labelKey: "nav.purchasingRequestInbox", permission: "purchaseRequest:view" },
+  /**
+   * กล่องงานเข้าของฝ่ายจัดซื้อ — หน้าเดียวกับใบขอซื้อ แต่เห็นของทุกฝ่ายรวมกัน (2026-08-28)
+   *
+   * 2026-09-10: เพิ่มด่านที่สอง เดิมเปิดด้วย `purchaseRequest:view` ตัวเดียว คนที่เป็นแค่**ผู้ขอซื้อ**
+   * จึงเห็นกล่องงานของฝ่ายจัดซื้อในแถบข้างด้วย (กดออกใบสั่งซื้อไม่ได้อยู่แล้ว แต่กล่องนี้บอกว่างานนี้
+   * ของใคร ไม่ใช่แค่ที่เก็บเอกสาร) · ใช้ `anyPermission` แบบกว้าง ไม่ใช่ `purchaseOrder:create` ตัวเดียว
+   * เพราะบทบาทของจัดซื้อบนเครื่องจริงเป็นบทบาทที่ลูกค้าสร้างเอง การเดาสิทธิ์แคบเกินไปจะทำให้เมนู
+   * หายไปจากคนที่ควรเห็น ซึ่งเป็นความผิดพลาดที่เคยซ่อนเมนูทั้งกลุ่มมาแล้วสองครั้ง (ดู RBAC.md "Rollout")
+   */
+  { key: "purchasingRequestInbox", icon: ShoppingCart, labelKey: "nav.purchasingRequestInbox", permission: "purchaseRequest:view",
+    anyPermission: ["purchaseOrder:view", "purchaseOrder:create", "purchaseOrder:edit"] },
   { key: "purchaseOrder", icon: ShoppingBag, labelKey: "nav.purchaseOrder", permission: "purchaseOrder:view" },
   { key: "vendors", icon: Store, labelKey: "nav.vendors", permission: "vendor:view" },
   { key: "codeRegister", icon: Hash, labelKey: "nav.codeRegister", permission: "codeRegister:view" },
@@ -252,8 +261,11 @@ const navItems: NavItem[] = [
   // ใบรับสินค้า (2026-09-03) — สโตร์เป็นคนรับของและเป็นเจ้าของใบ จึงอยู่กลุ่มคลังสินค้า ไม่ใช่จัดซื้อ
   { key: "receivingReport", icon: PackageCheck, labelKey: "nav.receivingReport", permission: "receivingReport:view" },
   // กล่องงานเข้าของสโตร์ (2026-09-09) — ใบขอซื้อที่อนุมัติแล้วและรอสโตร์เช็คว่ามีของในสต๊อกไหม
-  // ใช้สิทธิ์ `purchaseRequest:view` ตัวเดิม ไม่สร้างสิทธิ์ใหม่สำหรับหน้าที่ไม่ได้ให้อำนาจใหม่
-  { key: "storeRequestInbox", icon: ShoppingCart, labelKey: "nav.storeRequestInbox", permission: "purchaseRequest:view" },
+  // ไม่สร้างสิทธิ์ใหม่ แต่ต้องมีทั้งคู่ (2026-09-10): `stock:adjust` คือสิทธิ์ที่ทำให้ *ทำงานในกล่องนี้ได้จริง*
+  // ส่วน `purchaseRequest:view` คือด่านของรายการที่หน้านี้อ่าน — เดิมมีแค่ตัวหลัง ผู้ขอซื้อธรรมดาจึงเห็น
+  // กล่องงานของสโตร์ไปด้วย · สโตร์มี `stock:adjust` อยู่แล้วเพราะเป็นสิทธิ์ที่ใช้จ่ายของ ไม่ต้องติ๊กเพิ่ม
+  { key: "storeRequestInbox", icon: ShoppingCart, labelKey: "nav.storeRequestInbox", permission: "purchaseRequest:view",
+    anyPermission: ["stock:adjust"] },
   // หน้าตัดของของสโตร์ (2026-09-10) — ใบเบิกที่อนุมัติแล้วและยังจ่ายไม่ครบ ของทั้งฝ่ายโครงการและฝ่ายผลิต
   // ต้องมีทั้งสองสิทธิ์: `stock:adjust` คือสิทธิ์ที่ทำให้กดจ่ายได้จริง (และเป็นด่านของ API ตัวเดียวกัน)
   // ส่วน `materialRequisition:view` คือด่านของรายการที่หน้านี้อ่าน — คนที่ดูใบเบิกไม่ได้เห็นเมนูแล้วหน้าว่าง
