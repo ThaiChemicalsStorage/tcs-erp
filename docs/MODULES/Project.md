@@ -564,6 +564,40 @@ still goes through the same `POST /api/{material-requisitions,job-orders,purchas
 Verified via `tsc` (both configs)/`lint`/`build`/`test` (238/238). **Not yet click-tested in a real
 browser** — tracked in [`../TODO.md`](../TODO.md).
 
+## ใบเบิก: opening a blank one, with no source document at all (2026-09-10)
+
+Direct instruction: *"ใบเบิกทำให้สามารถเบิกเป็นใบเปล่าๆ ได้โดยไม่ต้องอิงมาจากงานไหนทั้งสิ้น แบบเพิ่ม
+ปุ่มขึ้นมา"*. Until this pass a requisition could only be born from a project item or a production
+order, which left no way to withdraw stock for maintenance, internal jobs, or day-to-day consumables
+— work that is real but belongs to no job.
+
+A second, **outline** button *เปิดใบเปล่า* now sits beside the gold *สร้างใบเบิก* on both mounts of
+`MaterialRequisitionPage`, copying the shape Cost Control's own blank-document button already
+established. `POST /api/material-requisitions` gained a third source, the same way Purchase Request
+did on 2026-08-28: **no `projectId`, no `itemIds`, no `productionOrderId`** yields a Draft with
+empty `projectId`/`scopeOfWorkId`/`jobCode`, its own `MR-YYYYMM-NNNN` number, the creator as
+`preparedBy`, and the creator's department/team as the default charge. Every line is typed by hand.
+
+Two decisions worth keeping:
+
+- **`ownerDepartment` comes from the menu that was clicked**, not from a source document — the
+  request body carries it. Purchase Request took the other road (a third `"general"` value with a
+  menu of its own), which for a requisition would mean a document vanishing from the list of the
+  person who just opened it. A blank requisition therefore stays in โครงการ or ผลิต, wherever it was
+  raised.
+- **`project:view` is no longer required for the blank path.** It is still required for the
+  project-item path, and the production path is untouched. Requiring it everywhere would mean a
+  department that cannot see projects cannot open a requisition of its own — the exact thing this
+  change exists to allow.
+
+Nothing downstream needed a guard: every place that follows a requisition back to a `ProjectItem`
+(delete, rewrite, approve) was already written as `doc.projectId ? … : []` for production-owned
+documents, which have had no `projectId` since 2026-08-20. A half-filled request (a `projectId`
+with no items) still fails with the same 400 — the blank path is not a way past validation.
+
+`tests/api/materialRequisitionIssue.test.ts` covers it end to end: open blank → type a line →
+submit → approve → Store issues → stock actually falls.
+
 ## Approval gate: only a Final Scope of Work can open a project (added 2026-08-20)
 
 Direct instruction: *"ให้ scope of work อนุมัติผ่านก่อนถึงจะกดสร้างโครงการได้"*. `handleCreate()`

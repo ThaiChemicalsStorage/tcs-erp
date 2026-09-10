@@ -407,7 +407,6 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "materialRequisition:create");
-  if (!roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const projectId = typeof body.projectId === "string" ? body.projectId.trim() : "";
@@ -431,7 +430,24 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
    *   - ใบสั่งผลิต        → ของฝ่ายผลิต, ไม่มีรายการให้ผูก จึงข้าม item-link ทั้งหมด
    */
   const fromProduction = Boolean(productionOrderId);
-  if (!fromProduction && (!projectId || itemIds.length === 0)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+  /**
+   * **ต้นทางที่สาม เพิ่ม 2026-09-10: ไม่มีเอกสารต้นทางเลย** — เจ้าของสั่ง *"ใบเบิกทำให้สามารถเบิกเป็น
+   * ใบเปล่าๆ ได้โดยไม่ต้องอิงมาจากงานไหนทั้งสิ้น"* · ของที่เบิกไปใช้กับงานซ่อมบำรุง งานภายใน หรือของ
+   * สิ้นเปลืองประจำวัน ไม่มีโครงการและไม่มีใบสั่งผลิตให้อ้าง แต่ก็ยังต้องตัดออกจากคลังให้ถูกต้อง
+   *
+   * ใบเปล่าไม่มี `projectId`/`scopeOfWorkId`/`jobCode` และ**ไม่ไปแตะ `ProjectItem` เลย** — ทางเดียว
+   * กับใบของฝ่ายผลิตที่ไม่มี projectId มาตั้งแต่ 2026-08-20 ทุกจุดที่ตามรายการในโครงการจึงกันไว้ด้วย
+   * `doc.projectId ? ... : []` อยู่แล้ว (ลบ · rewrite · อนุมัติ) ไม่ต้องเพิ่มด่านใหม่
+   *
+   * แบบเดียวกับใบขอซื้อที่เปิดใบเปล่าได้ตั้งแต่ 2026-08-28 — ต่างกันตรงที่ใบขอซื้อตั้ง
+   * `ownerDepartment: "general"` เป็นค่าที่สาม ส่วนใบเบิก**คงแผนกของเมนูที่กดสร้างไว้** เพื่อให้ใบ
+   * ที่เพิ่งเปิดอยู่ในรายการที่คนกดมองเห็นอยู่ ไม่ใช่หายไปอยู่เมนูที่สาม
+   */
+  const standalone = !fromProduction && !projectId && itemIds.length === 0;
+  if (!fromProduction && !standalone && (!projectId || itemIds.length === 0)) throw new HttpError(400, "กรุณาระบุโครงการและรายการ หรือใบสั่งผลิต");
+  // สิทธิ์ project:view จำเป็นเฉพาะทางที่อ่านโครงการจริง ๆ — ถ้าบังคับกับใบเปล่าด้วย ฝ่ายที่ไม่มีสิทธิ์
+  // ดูโครงการจะเปิดใบเปล่าของตัวเองไม่ได้เลย ซึ่งคือสิ่งที่รอบนี้ตั้งใจแก้ (ด่านของทางอื่นไม่เปลี่ยน)
+  if (!standalone && !roleHasPermission(ctx.role, "project:view")) throw new HttpError(403, "Forbidden");
 
   /** `responsibleEmployee` = "ชื่อพนักงานดูแล" บนฟอร์ม — เจ้าของสั่ง 2026-09-02 ว่า "ชื่อพนักงานดูแล
    *  ให้ขึ้นมาเลย" จึงเติมให้ตั้งแต่ตอนสร้าง (แก้ทีหลังได้) ใบของฝ่ายผลิตสืบมาจากใบสั่งผลิตก่อน
@@ -456,6 +472,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       customerName: po.customerCompanyName, productName: po.productName,
       responsibleEmployee: po.supervisorName?.trim() || ctx.user.fullName,
     };
+  } else if (standalone) {
+    // ไม่มีอะไรให้สืบทอด — ทุกช่องบนหัวใบพิมพ์เองในเอกสาร เหลือแค่ชื่อคนสร้างที่เติมให้ไว้ก่อน
+    source = { projectId: "", scopeOfWorkId: "", jobCode: "", customerName: "", productName: "", responsibleEmployee: ctx.user.fullName };
   } else {
     // Validates the item exists and is still "pending" BEFORE anything is inserted — see
     // loadPendingProjectItemOrThrow()'s own doc comment for why this ordering is what makes the
@@ -486,7 +505,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     ...charge,
     projectId: source.projectId, scopeOfWorkId: source.scopeOfWorkId, jobCode: source.jobCode,
     customerName: source.customerName,
-    ownerDepartment: fromProduction ? "production" : "project",
+    // ใบเปล่ารับแผนกมาจากเมนูที่กดสร้าง (ไม่ส่งมา = โครงการ) — ไม่งั้นกดจากเมนูผลิตแล้วใบไปโผล่เมนูโครงการ
+    ownerDepartment: fromProduction || (standalone && body.ownerDepartment === "production") ? "production" : "project",
     revisionNote: "",
     productionOrderId: fromProduction ? productionOrderId : "",
     jobOrderId: jobOrderLink.jobOrderId, jobOrderCode: jobOrderLink.jobOrderCode,
@@ -508,7 +528,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
   // linkProjectItemToSubDocument()'s doc comment) immediately after the insert succeeds — never
   // trusting any client-sent sourcingMethod/itemStatus/materialRequisitionId value.
   // ฝ่ายผลิตออกจากใบสั่งผลิต ไม่มีรายการในโครงการให้ผูก จึงข้ามขั้นตอนนี้ไป
-  if (!fromProduction) {
+  if (!fromProduction && !standalone) {
     await linkProjectItemsToSubDocument(projectId, itemIds, "requisition", "materialRequisitionId", id);
   }
 
@@ -516,6 +536,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     ctx, "Material Requisition Created",
     fromProduction
       ? `สร้างใบเบิกและใบคืนวัสดุ ${id} (${documentNumber}) จากใบสั่งผลิต ${productionOrderId}`
+      : standalone
+      ? `สร้างใบเบิกและใบคืนวัสดุ ${id} เป็นใบเปล่า ไม่มีเอกสารต้นทาง`
       : `สร้างใบเบิกและใบคืนวัสดุ ${id} สำหรับรายการ "${pickedItems.map((it) => it.name).join('", "')}"`,
     { scopeOfWorkId: source.scopeOfWorkId },
   );

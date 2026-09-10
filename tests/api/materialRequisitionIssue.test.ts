@@ -488,3 +488,73 @@ describe("คิวตัดของของสโตร์ — ?issueStage=pe
     expect(ids).not.toContain(ofProject);
   });
 });
+
+
+/**
+ * **ใบเบิกเปล่า (2026-09-10)** — `POST /api/material-requisitions` โดยไม่ส่งต้นทางอะไรมาเลย
+ *
+ * เจ้าของสั่ง *"ใบเบิกทำให้สามารถเบิกเป็นใบเปล่าๆ ได้โดยไม่ต้องอิงมาจากงานไหนทั้งสิ้น"*
+ *
+ * สามอย่างที่ตรึงไว้:
+ *   1. ไม่ส่งต้นทาง = ได้ใบจริง ไม่ใช่ 400 และไม่มี projectId/jobCode ติดมา
+ *   2. แผนกมาจากเมนูที่กดสร้าง ไม่งั้นกดจากเมนูผลิตแล้วใบไปโผล่เมนูโครงการ
+ *   3. ส่งโครงการมาครึ่งเดียว (มี projectId แต่ไม่มีรายการ) ยังต้องเป็น 400 เหมือนเดิม —
+ *      ทางใบเปล่าต้องไม่กลายเป็นประตูหลังให้คำขอที่กรอกไม่ครบผ่านไปได้
+ */
+describe("POST /api/material-requisitions — ใบเปล่า ไม่มีเอกสารต้นทาง", () => {
+  type Created = { id: string; documentNumber: string; status: string; projectId: string; jobCode: string; ownerDepartment?: string; lines: unknown[]; preparedBy: string };
+  async function createBlank(body: Record<string, unknown> = {}): Promise<Response> {
+    return api("/api/material-requisitions", { method: "POST", body: JSON.stringify(body) });
+  }
+
+  it("เปิดใบเปล่าได้ ไม่มีโครงการและไม่มีรหัสงานติดมา", async () => {
+    const res = await createBlank();
+    expect(res.status).toBe(201);
+    const doc = ((await res.json()) as { materialRequisition: Created }).materialRequisition;
+    expect(doc.status).toBe("Draft");
+    expect(doc.projectId).toBe("");
+    expect(doc.jobCode).toBe("");
+    expect(doc.lines).toHaveLength(0);
+    expect(doc.documentNumber.startsWith("MR-"), "ใช้เลขรันของใบเบิกเอง ไม่ใช่เลขใบสั่งผลิต").toBe(true);
+    expect(doc.preparedBy, "เติมชื่อผู้จัดทำให้ตั้งแต่สร้าง").toBeTruthy();
+  });
+
+  it("แผนกมาจากเมนูที่กดสร้าง และใบไปโผล่ในรายการของเมนูนั้น", async () => {
+    const ofProduction = ((await (await createBlank({ ownerDepartment: "production" })).json()) as { materialRequisition: Created }).materialRequisition;
+    const ofProject = ((await (await createBlank()).json()) as { materialRequisition: Created }).materialRequisition;
+    expect(ofProduction.ownerDepartment).toBe("production");
+    expect(ofProject.ownerDepartment).toBe("project");
+
+    const listOf = async (dept: string) => {
+      const r = await api(`/api/material-requisitions?ownerDepartment=${dept}`);
+      return ((await r.json()) as { materialRequisitions: { id: string }[] }).materialRequisitions.map((m) => m.id);
+    };
+    expect(await listOf("production")).toContain(ofProduction.id);
+    expect(await listOf("production")).not.toContain(ofProject.id);
+    expect(await listOf("project")).toContain(ofProject.id);
+  });
+
+  it("ส่งโครงการมาแต่ไม่ส่งรายการ ยังเป็น 400 เหมือนเดิม", async () => {
+    const res = await createBlank({ projectId: "PJ-ไม่มีจริง" });
+    expect(res.status).toBe(400);
+  });
+
+  it("ใบเปล่าที่อนุมัติแล้วจ่ายของได้จริง และสต๊อกลดตามจำนวน", async () => {
+    await setStock(productB, 50);
+    const created = ((await (await createBlank()).json()) as { materialRequisition: Created }).materialRequisition;
+    // เพิ่มบรรทัดเองทั้งใบ — ใบเปล่าไม่มีรายการต้นทางให้ลอกมา
+    const patched = await api(`/api/material-requisitions/${created.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ lines: [{ productId: productB, plannedQty: 6, category: "other" }] }),
+    });
+    expect(patched.status).toBe(200);
+
+    await api(`/api/material-requisitions/${created.id}/submit-approval`, { method: "POST" });
+    expect((await api(`/api/material-requisitions/${created.id}/approve`, { method: "POST" })).status).toBe(200);
+
+    const before = await stockOf(productB);
+    const lineId = (await docOf(created.id)).lines[0].id;
+    expect((await issue(created.id, [{ lineId, qty: 6 }])).status).toBe(200);
+    expect(await stockOf(productB)).toBe(before - 6);
+  });
+});

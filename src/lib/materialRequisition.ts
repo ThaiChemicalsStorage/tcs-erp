@@ -343,6 +343,20 @@ export async function fetchStoreIssueQueue(): Promise<MaterialRequisitionSummary
   return materialRequisitions;
 }
 
+/**
+ * เปิดใบเบิกเปล่า ไม่อ้างโครงการหรือใบสั่งผลิตเลย (2026-09-10) — เจ้าของสั่ง *"ใบเบิกทำให้สามารถเบิก
+ * เป็นใบเปล่าๆ ได้โดยไม่ต้องอิงมาจากงานไหนทั้งสิ้น"*
+ *
+ * `ownerDepartment` คือเมนูที่กดสร้าง ไม่ใช่ต้นทางของเอกสาร — ใบเปล่าไม่มีต้นทาง แต่ยังต้องอยู่ใน
+ * รายการที่คนกดสร้างมองเห็นอยู่ ไม่ใช่เด้งไปโผล่อีกเมนูหนึ่ง
+ */
+export async function createBlankMaterialRequisition(ownerDepartment: "project" | "production" = "project"): Promise<MaterialRequisition> {
+  const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>("/material-requisitions", {
+    method: "POST", body: JSON.stringify({ ownerDepartment }),
+  });
+  return materialRequisition;
+}
+
 /** สร้างจากใบสั่งผลิต — เอกสารฝั่งฝ่ายผลิต (ฝั่งโครงการใช้ createMaterialRequisition(projectId, itemId)) */
 export async function createMaterialRequisitionFromProductionOrder(productionOrderId: string): Promise<MaterialRequisition> {
   const { materialRequisition } = await apiFetch<{ materialRequisition: MaterialRequisition }>("/material-requisitions", {

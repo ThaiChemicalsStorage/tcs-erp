@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Company } from "../../lib/storage";
 import { Plus } from "lucide-react";
-import { type MaterialRequisitionSummary, fetchAllMaterialRequisitions, createMaterialRequisition, createMaterialRequisitionFromProductionOrder } from "../../lib/materialRequisition";
+import { type MaterialRequisitionSummary, fetchAllMaterialRequisitions, createMaterialRequisition, createMaterialRequisitionFromProductionOrder, createBlankMaterialRequisition } from "../../lib/materialRequisition";
 import { MaterialRequisitionList } from "./MaterialRequisitionList";
 import { MaterialRequisitionDocument } from "./MaterialRequisitionDocument";
 import { ProjectItemSourcePickerDialog, ProductionOrderSourcePickerDialog } from "../project/ProjectSourcePickers";
@@ -51,7 +51,24 @@ export function MaterialRequisitionPage({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [creatingBlank, setCreatingBlank] = useState(false);
   const toast = useToast();
+
+  /**
+   * เปิดใบเปล่า (2026-09-10) — ของที่เบิกไปใช้กับงานซ่อมบำรุงหรืองานภายในไม่มีโครงการและไม่มีใบสั่งผลิต
+   * ให้อ้าง กล่องเลือกต้นทางจึงไม่มีอะไรให้เลือก · ใบที่ได้อยู่ในแผนกของเมนูนี้ตามเดิม
+   */
+  const handleCreateBlank = async () => {
+    setCreatingBlank(true);
+    try {
+      const created = await createBlankMaterialRequisition(ownerDepartment);
+      openMaterialRequisition(created.id);
+    } catch (err) {
+      toast.show(err instanceof ApiError ? err.message : t("materialRequisition.loadError"));
+    } finally {
+      setCreatingBlank(false);
+    }
+  };
 
   // สร้างใบเบิก-คืนวัสดุจากหน้านี้ได้เลย โดยเลือกโครงการและรายการต้นทางเอง (เดิมสร้างได้จากในหน้าโครงการ
   // เท่านั้น) — ตามคำขอ 2026-08-20; API ยังต้องการทั้ง projectId และ itemId เหมือนเดิมทุกประการ
@@ -171,12 +188,21 @@ export function MaterialRequisitionPage({
         currentUserId={currentUserId}
         onOpen={openMaterialRequisition}
         headerAction={canCreate ? (
-          <button
-            onClick={() => setPickerOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
-          >
-            <Plus size={15} /> {t("materialRequisition.createBtn")}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void handleCreateBlank()}
+              disabled={creatingBlank}
+              className="flex items-center gap-2 px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground hover:border-[#c9a84c]/40 transition-all disabled:opacity-60"
+            >
+              <Plus size={15} /> {t("materialRequisition.createBlankBtn")}
+            </button>
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-[#c9a84c] text-[#0b1d3a] rounded-lg font-semibold hover:bg-[#f0c040] transition-colors"
+            >
+              <Plus size={15} /> {t("materialRequisition.createBtn")}
+            </button>
+          </div>
         ) : undefined}
       />
       {pickerOpen && (ownerDepartment === "production" ? (
