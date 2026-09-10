@@ -14,8 +14,15 @@ import { formatQuoteDateThai } from "../../lib/quotes";
  * `storeStage` (2026-09-09): `"pending"` = ยังรอสโตร์เช็คของ · `"closed"` = สโตร์จ่ายจากสต๊อกครบแล้ว
  * ทั้งสองออกใบสั่งซื้อไม่ได้ · ใบเก่าที่ไม่มีฟิลด์นี้ถือว่าผ่าน (วิ่งตรงไปจัดซื้อตามกติกาเดิม)
  *
- * ดึงทั้งฝ่ายโครงการและฝ่ายผลิต เพราะจัดซื้อต้องเห็นงานที่ต้องซื้อของทุกฝ่าย ไม่ใช่แค่ฝ่ายเดียว
- * (หน้ารายการใบขอซื้อเดิมแยกตามฝ่ายเพราะเป็นมุมมองของฝ่ายผู้ขอ ไม่ใช่ของผู้ซื้อ)
+ * ดึงด้วย `ownerDepartment=all` เพราะจัดซื้อต้องเห็นงานที่ต้องซื้อของ**ทุกฝ่าย** ไม่ใช่แค่ฝ่ายเดียว
+ * (หน้ารายการใบขอซื้อเดิมแยกตามฝ่ายเพราะเป็นมุมมองของฝ่ายผู้ขอ ไม่ใช่ของผู้ซื้อ) · ตัว `all` เปิดเฉพาะ
+ * กำแพงแผนก ไม่ได้เปิดกำแพงสิทธิ์ — เซิร์ฟเวอร์ยังกรองด้วยความเป็นเจ้าของใบเหมือนเดิม
+ *
+ * **บั๊กที่แก้ 2026-09-10:** เดิมยิงสองครั้งด้วย `"project"` + `"production"` ซึ่งพลาด
+ * `ownerDepartment: "general"` ที่เพิ่มมาตั้งแต่ 2026-08-28 — คือใบที่ฝ่ายซึ่งไม่มีเอกสารต้นทาง
+ * (สโตร์/เซอร์วิส/บัญชี/บุคคล) เปิดเอง · ผลคือใบพวกนั้นอนุมัติแล้ว ผ่านสโตร์แล้ว แต่**ไม่เคยขึ้นใน
+ * กล่องเลือกต้นทางเลย** จัดซื้อจึงออกใบสั่งซื้อให้ไม่ได้ ทั้งที่เซิร์ฟเวอร์ยอมรับคำขอนั้นอยู่แล้ว
+ * เจอตอนไล่ flow จริงในเบราว์เซอร์ทั้งสาย (สร้าง → อนุมัติ → สโตร์ → จัดซื้อ)
  */
 export function PurchaseRequestPickerDialog({
   onPick, onBlank, onCancel,
@@ -32,12 +39,10 @@ export function PurchaseRequestPickerDialog({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchAllPurchaseRequests("project"), fetchAllPurchaseRequests("production")])
-      .then(([a, b]) => {
+    fetchAllPurchaseRequests("all")
+      .then((list) => {
         if (cancelled) return;
-        const seen = new Set<string>();
-        const merged = [...a, ...b].filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
-        setRows(merged.filter((r) => r.status === "Final" && r.storeStage !== "pending" && r.storeStage !== "closed"));
+        setRows(list.filter((r) => r.status === "Final" && r.storeStage !== "pending" && r.storeStage !== "closed"));
         setLoading(false);
       })
       .catch(() => { if (!cancelled) setLoading(false); });
