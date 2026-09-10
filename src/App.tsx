@@ -223,6 +223,14 @@ const navItems: NavItem[] = [
   // ทะเบียนภาษีซื้อ/เจ้าหนี้ (2026-09-03) — อ่านจากหนี้ที่ใบรับสินค้าตั้งไว้ ไม่มีการคีย์ซ้ำ
   { key: "purchaseTaxRegister", icon: CalendarDays, labelKey: "nav.purchaseTaxRegister", permission: "ap:view" },
   { key: "apRegister", icon: Store, labelKey: "nav.apRegister", permission: "ap:view" },
+  /**
+   * **ไม่อยู่ในกลุ่มไหนเลยตั้งแต่ 2026-09-10 — เจ้าของสั่ง "หน้าโครงการอะลบออกไปเลยไม่ได้ใช้"**
+   *
+   * เก็บไว้ใน `navItems` ทั้งที่ไม่มีเมนู เพราะแถบข้างเรนเดอร์จาก `NAV_GROUPS` ส่วน `resolveNav()`
+   * ใช้ `navItems` เป็นตัวตัดสินสิทธิ์ · ถอดออกจากตรงนี้ด้วยจะกลายเป็นว่าหน้านี้ไม่มีด่าน
+   * `project:view` อีกเลยสำหรับทางที่ยังเข้าถึงได้ (ปุ่ม "เปิดโครงการ" ในใบเสนอราคา/Scope of Work
+   * และผลค้นหา) ซึ่งเป็นการเปิดกว้างขึ้น ไม่ใช่การลบ
+   */
   { key: "project", icon: Briefcase, labelKey: "nav.project", permission: "project:view" },
   { key: "materialRequisition", icon: Package2, labelKey: "nav.materialRequisition", permission: "materialRequisition:view" },
   { key: "materialRequisitionTemplates", icon: LayoutTemplate, labelKey: "nav.materialRequisitionTemplates", permission: "materialRequisition:view" },
@@ -278,7 +286,7 @@ const NAV_GROUPS: { labelKey: TranslationKey; keys: NavKey[] }[] = [
   // ใบส่งมอบสินค้าโผล่ใน 3 หมวด (ขาย/โปรเจกต์/ผลิต) โดยตั้งใจ — เป็นโมดูลเดียวกันและข้อมูลชุดเดียวกัน
   // ไม่ได้ก๊อปมาสร้างใหม่ เพราะทั้งสามแผนกใช้เอกสารใบเดียวกัน (เจ้าของยืนยัน 2026-08-20) แค่ให้แต่ละ
   // แผนกเข้าถึงได้จากหมวดของตัวเองแทนที่จะต้องไปหาใต้ "ขาย"
-  { labelKey: "nav.group.project", keys: ["project", "materialRequisition", "materialRequisitionTemplates", "jobOrder", "purchaseRequest", "deliveryOrder"] },
+  { labelKey: "nav.group.project", keys: ["materialRequisition", "materialRequisitionTemplates", "jobOrder", "purchaseRequest", "deliveryOrder"] },
   { labelKey: "nav.group.production", keys: ["productionOrder", "productionRequisition", "materialRequisitionTemplates", "productionPurchase", "deliveryOrder"] },
   { labelKey: "nav.group.purchasing", keys: ["purchasingRequestInbox", "purchaseOrder", "vendors", "codeRegister"] },
   // BD — Cost Control เป็นเอกสารของแผนกนี้โดยเฉพาะ ดู DESIGN.md เรื่องเกณฑ์การตั้งกลุ่มใหม่
@@ -1011,7 +1019,13 @@ export default function App() {
         </div>
         <nav data-tour="sidebar-nav" className="sidebar-scroll flex-1 px-2 py-4 space-y-3 overflow-y-auto">
           {NAV_GROUPS.map((group) => {
-            const items = visibleNavItems.filter((item) => group.keys.includes(item.key));
+            // เรียงตาม `group.keys` ไม่ใช่ลำดับใน `navItems` (แก้ 2026-09-10 — เจ้าของแจ้งว่า
+            // "ของผลิตเรียงมั่วหมดเลย") · `navItems` เรียงตามลำดับที่แต่ละโมดูลถูกสร้างขึ้นมา
+            // ซึ่งไม่ใช่ลำดับงานของแผนกไหนเลย ผลคือกลุ่มผลิตขึ้น ใบส่งมอบ → เทมเพลตใบเบิก ก่อน
+            // ใบสั่งผลิต · ลำดับที่ตั้งใจไว้อยู่ใน `NAV_GROUPS` มาตลอด แค่ไม่เคยถูกใช้
+            const items = group.keys
+              .map((key) => visibleNavItems.find((item) => item.key === key))
+              .filter((item): item is NavItem => item !== undefined);
             if (items.length === 0) return null;
             return (
               <div key={group.labelKey} className="space-y-0.5">
