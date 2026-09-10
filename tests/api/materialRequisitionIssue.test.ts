@@ -53,7 +53,7 @@ async function movementsOf(id: string) {
 
 let seq = 0;
 /** ใส่ใบเบิกลงฐานข้อมูลตรง ๆ — สองบรรทัด สินค้า A ขอ 10, สินค้า B ขอ 5 */
-async function seedRequisition(status: "Draft" | "PendingApproval" | "Final", lines?: Partial<Line>[]): Promise<string> {
+async function seedRequisition(status: "Draft" | "PendingApproval" | "Final", lines?: Partial<Line>[], ownerDepartment: "project" | "production" = "production"): Promise<string> {
   seq += 1;
   const id = `MR-TEST-${String(seq).padStart(4, "0")}`;
   const base: Line[] = [
@@ -62,7 +62,7 @@ async function seedRequisition(status: "Draft" | "PendingApproval" | "Final", li
   ];
   await client.db("tcs_erp").collection("material_requisitions").insertOne({
     _id: id as never, documentNumber: id, projectId: "", scopeOfWorkId: "", jobCode: "TEST-JOB", customerName: "ลูกค้าทดสอบ",
-    ownerDepartment: "production", productionOrderId: "", jobOrderId: null, jobOrderCode: "",
+    ownerDepartment, productionOrderId: "", jobOrderId: null, jobOrderCode: "",
     productName: "งานทดสอบ", responsibleEmployee: "", productionStartDate: "",
     chargeDepartmentId: departmentId, chargeDepartmentName: "ฝ่ายผลิต", chargeTeamId: teamId, chargeTeamName: "ทีม A",
     chargeWorkTypeCode: "STEEL", chargeWorkTypeName: "งานเหล็ก",
@@ -428,5 +428,63 @@ describe("คืนของ — ลงบัญชีด้วยราคา�
     };
     expect(body.costByProduct[productA].lastCost).toBe(140);
     expect(body.costByProduct[productA].avgCost).toBeGreaterThan(0);
+  });
+});
+
+
+/**
+ * **คิวหน้าตัดของของสโตร์ (2026-09-10)** — `GET /api/material-requisitions?ownerDepartment=all&issueStage=pending`
+ *
+ * สามอย่างที่ตรึงไว้ เพราะพลาดแล้วหน้าตัดของจะโกหกว่ามีงานหรือไม่มีงาน:
+ *   1. เข้าคิวเฉพาะใบ **Final ที่ยังจ่ายไม่ครบ** — ร่างและใบรออนุมัติไม่ใช่งานของสโตร์
+ *   2. **จ่ายครบแล้วต้องหลุดจากคิวเอง** ไม่ต้องมีใครมากดปิด
+ *   3. **เห็นทั้งฝ่ายโครงการและฝ่ายผลิตในคิวเดียว** — ที่มาทั้งหมดของหน้านี้คือการไม่ต้องไล่ดูสองเมนู
+ */
+describe("คิวตัดของของสโตร์ — ?issueStage=pending", () => {
+  type Row = { id: string; status: string; hasOutstanding: boolean; outstandingLineCount?: number; ownerDepartment?: string };
+  async function queue(): Promise<Row[]> {
+    const res = await api("/api/material-requisitions?ownerDepartment=all&issueStage=pending");
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { materialRequisitions: Row[] }).materialRequisitions;
+  }
+
+  it("มีแต่ใบที่อนุมัติแล้วและยังจ่ายไม่ครบ — ร่างและใบรออนุมัติไม่เข้าคิว", async () => {
+    const draft = await seedRequisition("Draft");
+    const pending = await seedRequisition("PendingApproval");
+    const open = await seedRequisition("Final");
+    const ids = (await queue()).map((r) => r.id);
+    expect(ids).toContain(open);
+    expect(ids).not.toContain(draft);
+    expect(ids).not.toContain(pending);
+  });
+
+  it("ใบเดียวกันหลุดจากคิวเองเมื่อจ่ายครบทุกบรรทัด", async () => {
+    await setStock(productA, 100);
+    await setStock(productB, 100);
+    const id = await seedRequisition("Final");
+    expect((await queue()).map((r) => r.id)).toContain(id);
+
+    // จ่ายบางส่วนก่อน — ยังต้องอยู่ในคิว และเหลือค้างหนึ่งรายการ
+    expect((await issue(id, [{ lineId: "l1", qty: 10 }])).status).toBe(200);
+    const partial = (await queue()).find((r) => r.id === id);
+    expect(partial?.outstandingLineCount, "เหลือค้างเฉพาะบรรทัดที่สอง").toBe(1);
+
+    expect((await issue(id, [{ lineId: "l2", qty: 5 }])).status).toBe(200);
+    expect((await queue()).map((r) => r.id)).not.toContain(id);
+  });
+
+  it("เห็นทั้งใบของฝ่ายโครงการและฝ่ายผลิตในคิวเดียวกัน", async () => {
+    const ofProject = await seedRequisition("Final", undefined, "project");
+    const ofProduction = await seedRequisition("Final", undefined, "production");
+    const rows = await queue();
+    expect(rows.find((r) => r.id === ofProject)?.ownerDepartment).toBe("project");
+    expect(rows.find((r) => r.id === ofProduction)?.ownerDepartment).toBe("production");
+  });
+
+  it("รายการปกติยังแยกสองฝ่ายเหมือนเดิม — ไม่ได้ถูกเปิดกำแพงตามไปด้วย", async () => {
+    const ofProject = await seedRequisition("Final", undefined, "project");
+    const res = await api("/api/material-requisitions?ownerDepartment=production");
+    const ids = ((await res.json()) as { materialRequisitions: Row[] }).materialRequisitions.map((r) => r.id);
+    expect(ids).not.toContain(ofProject);
   });
 });

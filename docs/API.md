@@ -728,7 +728,8 @@ the same `runCategory` discipline Global Search uses.
 
 | Change | Notes |
 |---|---|
-| `GET /api/{material-requisitions,purchase-requests}?ownerDepartment=` | `project` (default) or `production`. **A document with no `ownerDepartment` field counts as `project`**, so records created before 2026-08-20 keep appearing where they always did — no migration was run. Ignored when `projectId` is supplied (that mode is already scoped to one project). |
+| `GET /api/{material-requisitions,purchase-requests}?ownerDepartment=` | `project` (default) or `production`, plus `all` (both departments in one list — Purchasing's inbox since 2026-08-28, Store's issue queue since 2026-09-10; Purchase Request also has `general`). **A document with no `ownerDepartment` field counts as `project`**, so records created before 2026-08-20 keep appearing where they always did — no migration was run. Ignored when `projectId` is supplied (that mode is already scoped to one project). |
+| `GET /api/material-requisitions?issueStage=pending` | **Store's issue queue (2026-09-10).** Narrows to `status: "Final"` documents that still have at least one line with outstanding quantity, oldest first (a work queue, so a just-part-issued document falls to the back). Requires **`stock:adjust`** on top of `materialRequisition:view` (`403` without it) and, uniquely among the list modes, **does not filter by `createdBy`** — the permission to issue goods is stronger than "see other people's documents", and ownership filtering would leave Store looking at an empty page. Rows carry `ownerDepartment`, `outstandingLineCount` and `customerName`. |
 | `POST /api/{material-requisitions,purchase-requests}` | Now accepts **either** `{ projectId, itemId }` (Project-owned; still performs the atomic ProjectItem link) **or** `{ productionOrderId }` (Production-owned; no item to link, so that step is skipped entirely). |
 
 ## Purchasing (added 2026-08-28)

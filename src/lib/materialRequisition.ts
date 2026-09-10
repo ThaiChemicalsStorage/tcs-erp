@@ -198,6 +198,12 @@ export interface MaterialRequisitionSummary {
   chargeWorkTypeName: string;
   /** ใบอนุมัติแล้วที่สโตร์ยังจ่ายไม่ครบ — ป้าย "ค้างเบิก" ในหน้ารายการ */
   hasOutstanding: boolean;
+  /** จำนวนบรรทัดที่ยังค้างจ่าย (0 ถ้าใบยังไม่อนุมัติ) — หน้าตัดของบอกขนาดงานต่อใบด้วยค่านี้ */
+  outstandingLineCount?: number;
+  /** แผนกเจ้าของใบ — หน้าตัดของรวมสองฝ่ายไว้ด้วยกัน จึงต้องบอกได้ว่าแถวนี้ของใคร */
+  ownerDepartment?: "project" | "production";
+  /** "ชื่อลูกค้า" — บริบทของงานในหน้าตัดของ ว่างได้ */
+  customerName?: string;
   projectId: string;
   scopeOfWorkId: string;
   jobCode: string;
@@ -320,8 +326,20 @@ export async function fetchMaterialRequisitionsByProject(projectId: string): Pro
 }
 // ดึงรายการใบเบิกและใบคืนวัสดุทั้งหมดในระบบ สำหรับหน้ารายการแบบแยกต่างหาก (ไม่ผูกกับโครงการใดโครงการหนึ่ง)
 // Fetches every Material Requisition company-wide, for the standalone management page's list
-export async function fetchAllMaterialRequisitions(ownerDepartment: "project" | "production" = "project"): Promise<MaterialRequisitionSummary[]> {
+export async function fetchAllMaterialRequisitions(ownerDepartment: "project" | "production" | "all" = "project"): Promise<MaterialRequisitionSummary[]> {
   const { materialRequisitions } = await apiFetch<{ materialRequisitions: MaterialRequisitionSummary[] }>(`/material-requisitions?ownerDepartment=${ownerDepartment}`);
+  return materialRequisitions;
+}
+
+/**
+ * คิวงานของสโตร์ (2026-09-10) — ใบที่อนุมัติแล้วและยังจ่ายไม่ครบ **ของทั้งสองฝ่ายรวมกัน**
+ *
+ * ไม่ใช่ `fetchAllMaterialRequisitions("all")` แล้วมากรองต่อในเบราว์เซอร์: เซิร์ฟเวอร์เป็นคนตัดสินว่าใบไหน
+ * ยังค้าง (`?issueStage=pending`) และเป็นคนเปิดการมองเห็นข้ามเจ้าของใบให้เฉพาะคนที่มีสิทธิ์
+ * `stock:adjust` — สองอย่างนี้เป็นกติกาฝั่งเซิร์ฟเวอร์ ไม่ใช่ตัวกรองของหน้าจอ
+ */
+export async function fetchStoreIssueQueue(): Promise<MaterialRequisitionSummary[]> {
+  const { materialRequisitions } = await apiFetch<{ materialRequisitions: MaterialRequisitionSummary[] }>("/material-requisitions?ownerDepartment=all&issueStage=pending");
   return materialRequisitions;
 }
 

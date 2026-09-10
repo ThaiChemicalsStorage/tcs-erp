@@ -15,6 +15,7 @@ Related: [Product.md](./Product.md) (Stock ledger, costing, team tools), [Purcha
 |---|---|
 | Unified `{PREFIX}-{YYYYMM}-{NNNN}` document numbering | ✅ Built |
 | Requisition: stock cut at issue time, outstanding tracking, department/team/work-type charging | ✅ Built |
+| **Store's own issue queue page** (`ตัดของตามใบเบิก`, both departments in one list) | ✅ Built 2026-09-10 |
 | Stock: return movements, moving-average cost, stock value, stock card print | ✅ Built |
 | Team tools (issue/return page, holdings, report) | ✅ Built |
 | **Receiving Report (RR)** + payable posting | ✅ Built |
@@ -98,6 +99,51 @@ Per line the client computes `issuedQty = w1 + w2`, `outstandingQty = max(0, pla
 `netHeldQty = issued − returned` (`src/lib/materialRequisition.ts`). `GET /:id` returns
 `stockByProduct` alongside the document so the editor can show live balances without loading the
 whole catalogue; the issue and cancel routes return it too, so the editor never needs a second read.
+
+### The store's issue queue — `ตัดของตามใบเบิก` (2026-09-10)
+
+The owner asked on 2026-09-09 *"แล้วสโตร์จะดูจากตรงไหนว่ามีใบไหนมาให้ตัด"* and then, on 2026-09-10,
+*"เพิ่มหน้าตัดของ ของสโตร์มา แยกออกมาจากใบ"*. Before this there was no answer: the requisition list
+is mounted **twice** (under โครงการ and under ผลิต) and each mount only ever shows its own
+department's documents, so Store had to sweep two menus for work that all comes out of one stockroom
+— and the list had an "outstanding" badge but no filter to bring those rows together.
+
+`StoreIssueInboxPage` (`src/pages/materialRequisition/`) is one page in the คลังสินค้า group holding
+every approved requisition that still has something to issue. A row expands **in place** into the
+same issue form the document carries, so a picker never opens the document at all — that is what
+"แยกออกมาจากใบ" asked for. A "เปิดใบเบิก" button is there for when the full document is wanted, and
+it lands on the owning department's menu, not the one the user came from.
+
+**It is not a second way to issue goods.** The save button posts `POST /:id/issues`, the same route
+the document's issue card uses, with the same `stock:adjust` gate, the same rounds, and the same
+cancel-the-latest-round undo (which stays in the document, where the round history lives). The page
+stores no numbers of its own.
+
+Server side, `GET /api/material-requisitions?ownerDepartment=all&issueStage=pending`:
+
+- `ownerDepartment=all` drops the department clause — mirroring what `purchaseRequestHandler` has
+  done for Purchasing's inbox since 2026-08-28.
+- `issueStage=pending` narrows to `status: "Final"` and then filters on `requisitionHasOutstanding`
+  in memory. Nothing in the document summarises "still outstanding" as a stored field, and adding
+  one would create a second set of numbers that can drift from the lines; the Final set is small.
+- **The queue does not filter by `createdBy`.** It is gated on `stock:adjust` instead, which is a
+  stronger right than "see other people's documents" — the same reasoning `pendingApprovals.ts`
+  documents. Filtering by ownership would show Store only the requisitions Store wrote, which is
+  none of them, and the page would be permanently empty. The ordinary two-department lists are
+  untouched and still ownership-filtered.
+- Oldest first, the opposite of every other list, because this is a work queue: a requisition that
+  was just part-issued should fall to the back, not jump to the front.
+- `MaterialRequisitionSummary` gained `ownerDepartment`, `outstandingLineCount` and `customerName`
+  so a row can say whose work it is and how big it is without fetching each document.
+
+The issue form here deliberately has **no** department/team/work-type selectors. Omitting those keys
+from the body means `resolveChargeFromBody()` leaves them alone and the round inherits the charge
+already on the document; changing where goods are charged is a decision that belongs on the full
+document, next to the rest of its context.
+
+**No new permission and no RBAC migration.** The menu needs `stock:adjust` **and**
+`materialRequisition:view`, both of which any Store role that can already issue goods on a document
+holds — unlike the 2026-09-09 purchase-request stage, nobody has to tick anything before this works.
 
 ### Charging a department / team / work type
 
@@ -243,6 +289,7 @@ never interprets a query string as a pattern.
 | ทะเบียนภาษีซื้อ | บัญชี | `ap:view` |
 | ทะเบียนเจ้าหนี้ | บัญชี | `ap:view` (payment buttons need `ap:manage`) |
 | เครื่องมือประจำทีม | คลังสินค้า | `stock:view` |
+| ตัดของตามใบเบิก (คิวงานของสโตร์) | คลังสินค้า | `stock:adjust` + `materialRequisition:view` |
 
 The RR document is deliberately **one page for the whole life of the order**: ordered/received/
 outstanding value cards → *รายการค้างรับ* → *รับครบแล้ว* (a line moves across on its own when its
@@ -282,7 +329,7 @@ shared attachment engine. Full writeup in [DeliveryOrder.md](./DeliveryOrder.md)
 | File | Covers |
 |---|---|
 | `tests/api/monthlyNumbering.test.ts` | format, month rollover, prefix isolation, Bangkok-midnight boundary |
-| `tests/api/materialRequisitionIssue.test.ts` | approve with zero stock, delta-based issuing, over-issue, insufficient stock writing nothing, return limits, org stamping |
+| `tests/api/materialRequisitionIssue.test.ts` | approve with zero stock, delta-based issuing, over-issue, insufficient stock writing nothing, return limits, org stamping, and the issue queue's filter (Final-with-outstanding only, leaves on full issue, both departments, ordinary lists still split) |
 | `tests/api/toolHoldings.test.ts` | issued 3 returned 1 → holds 2, non-tools excluded, team filter, date-range report |
 | `tests/api/receivingReport.test.ts` | draft PO rejected, duplicate → 409 with the existing id, partial receipt, average cost across two prices, hand-typed line posts AP but no stock, auto-close, over-receive writes nothing, month totals, paid round cannot be reversed, reversal rolls back both sides |
 | `tests/api/rbacMigrations.test.ts` | the store/AP migration grants, and that Accounting does not gain receiving rights |

@@ -22,7 +22,7 @@ import {
   applyStockMovement, assertProductsHaveStock, productCostBasis, returnUnitCostOf,
   type StockMovementOrgTags, type ProductCostBasis,
 } from "./stockHandler.js";
-import { issuedQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches } from "../../src/lib/materialRequisition.js";
+import { issuedQtyOf, outstandingQtyOf, netHeldQtyOf, requisitionHasOutstanding, issueBatchesOf, batchIssuedQtyOf, withdrawalsFromBatches } from "../../src/lib/materialRequisition.js";
 import type { MaterialRequisitionLine, MaterialRequisitionCategory, MaterialRequisitionSummary, MaterialIssueBatch } from "../../src/lib/materialRequisition.js";
 
 /**
@@ -329,9 +329,13 @@ function toSummary(doc: MaterialRequisitionFields & { _id: string }): MaterialRe
     chargeDepartmentName: full.chargeDepartmentName ?? "", chargeTeamName: full.chargeTeamName ?? "",
     chargeWorkTypeName: full.chargeWorkTypeName ?? "",
     hasOutstanding: requisitionHasOutstanding({ status: full.status, lines: full.lines ?? [] }),
+    // จำนวนบรรทัดที่ยังค้างจ่าย — หน้าตัดของบอกขนาดงานของแต่ละใบด้วยค่านี้ ไม่ต้องเปิดใบทีละใบมานับ
+    outstandingLineCount: full.status === "Final" ? (full.lines ?? []).filter((l) => outstandingQtyOf(l) > 0).length : 0,
     projectId: full.projectId, scopeOfWorkId: full.scopeOfWorkId, jobCode: full.jobCode,
     // เอกสารก่อน 2026-08-20 ไม่มีฟิลด์นี้ — normalize ตอนอ่าน ไม่ได้ทำ migration
     productionOrderId: full.productionOrderId ?? "",
+    ownerDepartment: full.ownerDepartment ?? "project",
+    customerName: full.customerName ?? "",
     status: full.status, updatedAt: full.updatedAt,
   };
 }
@@ -352,24 +356,52 @@ async function handleList(req: VercelRequest, res: VercelResponse) {
   // company-wide" — Stage 4 addition, needed for the standalone list page Store staff use as their
   // own entry point (per the original Stage 1 "Store staff shouldn't have to go through Project"
   // reasoning) — same dual-mode shape Project's own GET /api/projects already established. Both
-  // modes are scoped by materialRequisition:viewAll via buildSimpleOwnershipClause().
-  const ownershipMatch = buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "materialRequisition:viewAll"), "createdBy");
+  // modes are scoped by materialRequisition:viewAll via buildSimpleOwnershipClause() — except the
+  // Store issue queue below, which is scoped by stock:adjust instead and deliberately sees every
+  // author's documents.
+  /**
+   * **หน้าตัดของของสโตร์ (2026-09-10)** — `?issueStage=pending` คือคิวงานของสโตร์: ใบที่อนุมัติแล้ว
+   * และยังจ่ายไม่ครบ · เจ้าของสั่ง *"อยากแยกหน้าออกมาเป็นของสโตร์ที่เอาไว้ตัดของ"*
+   *
+   * สองข้อที่ต่างจากรายการปกติโดยตั้งใจ:
+   *   1. **ไม่กรองด้วย `createdBy`** — กล่องนี้เปิดด้วยสิทธิ์ `stock:adjust` ซึ่งเป็นสิทธิ์ที่ทำให้
+   *      *จ่ายของ* ได้อยู่แล้ว แรงกว่า "ดูใบของคนอื่น" · ถ้ากรองด้วยความเป็นเจ้าของ สโตร์จะเห็นแต่ใบ
+   *      ที่ตัวเองเขียน ซึ่งคือศูนย์ใบ และหน้าที่เพิ่งสร้างจะว่างเปล่าตลอดไป — เหตุผลเดียวกับกล่อง
+   *      "เอกสารรออนุมัติ" (`api/_lib/pendingApprovals.ts`)
+   *   2. **ไม่กรองแผนก** (`ownerDepartment=all`) — ของอยู่คลังเดียวกัน สโตร์คนเดียวกันเป็นคนจ่าย
+   *      ทั้งใบของฝ่ายโครงการและฝ่ายผลิต การให้ไล่ดูสองเมนูคือปัญหาที่หน้านี้ถูกสร้างมาแก้
+   */
+  const issueQueue = req.query.issueStage === "pending";
+  if (issueQueue && !roleHasPermission(ctx.role, "stock:adjust")) throw new HttpError(403, "Forbidden");
+  const ownershipMatch = issueQueue
+    ? {}
+    : buildSimpleOwnershipClause(ctx.user.id, roleHasPermission(ctx.role, "materialRequisition:viewAll"), "createdBy");
   const materialRequisitions = await materialRequisitionsCollection();
   // แยกเอกสารตามแผนกเจ้าของ — ฝ่ายโครงการกับฝ่ายผลิตใช้เอกสารชนิดเดียวกันแต่ไม่เห็นของกันและกัน
   // (ยืนยันกับเจ้าของ 2026-08-20). เอกสารเก่าที่ไม่มีฟิลด์นี้ถือเป็นของฝ่ายโครงการ จึงต้องรับทั้ง
   // ค่า "project" และกรณีที่ยังไม่มีฟิลด์เลย — ไม่ได้ทำ migration
-  const ownerDepartment = req.query.ownerDepartment === "production" ? "production" : "project";
-  const departmentClause: Filter<MaterialRequisitionFields & { _id: string }> = ownerDepartment === "production"
-    ? { ownerDepartment: "production" }
+  // 2026-09-10: `"all"` = เห็นทั้งสองฝ่ายรวมกัน สำหรับหน้าตัดของของสโตร์ (และคิดแบบเดียวกับ
+  // `ownerDepartment=all` ของใบขอซื้อ ที่กล่องงานเข้าฝ่ายจัดซื้อใช้มาตั้งแต่ 2026-08-28)
+  const q = req.query.ownerDepartment;
+  const ownerDepartment = q === "production" || q === "all" ? q : "project";
+  const departmentClause: Filter<MaterialRequisitionFields & { _id: string }> =
+    ownerDepartment === "production" ? { ownerDepartment: "production" }
+    : ownerDepartment === "all" ? {}
     : { $or: [{ ownerDepartment: "project" }, { ownerDepartment: { $exists: false } }] };
   // เวลาระบุ projectId คือเช็คของโครงการนั้นโดยตรง ไม่ต้องกรองแผนกซ้ำ
   // $and, not spread: buildSimpleOwnershipClause() also returns a $or, so spreading both
   // would have the department clause silently overwrite the ownership one (a real leak).
+  const stageClause: Filter<MaterialRequisitionFields & { _id: string }> = issueQueue ? { status: "Final" } : {};
   const filter = projectId
     ? { projectId, isDeleted: false, ...ownershipMatch }
-    : { isDeleted: false, $and: [ownershipMatch, departmentClause] };
-  const docs = await materialRequisitions.find(filter).sort({ updatedAt: -1 }).toArray();
-  res.status(200).json({ materialRequisitions: docs.map(toSummary) });
+    : { isDeleted: false, $and: [ownershipMatch, departmentClause, stageClause] };
+  // คิวของสโตร์เรียงใบที่รอนานที่สุดขึ้นก่อน (ตรงข้ามกับรายการปกติ) — เป็นคิวงาน ไม่ใช่ประวัติ และ
+  // ใบที่เพิ่งจ่ายไปรอบหนึ่งควรถอยไปท้ายแถวเอง ไม่ใช่เด้งขึ้นมาบนสุดทุกครั้งที่แตะ
+  const docs = await materialRequisitions.find(filter).sort({ updatedAt: issueQueue ? 1 : -1 }).toArray();
+  // "ยังจ่ายไม่ครบ" คิดจากบรรทัดจริง ไม่ใช่ฟิลด์ที่เก็บไว้ — ไม่มีฟิลด์ไหนสรุปค่านี้ไว้ให้กรองใน MongoDB
+  // และการเพิ่มฟิลด์สรุปหมายถึงมีตัวเลขชุดที่สองให้ผิดเพี้ยนจากของจริงได้ · ใบ Final มีไม่กี่ร้อยใบ
+  const summaries = docs.map(toSummary).filter((s) => !issueQueue || s.hasOutstanding);
+  res.status(200).json({ materialRequisitions: summaries });
 }
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
