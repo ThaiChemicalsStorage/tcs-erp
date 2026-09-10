@@ -60,12 +60,19 @@ export function StoreIssueInboxPage({
   const [issueRemark, setIssueRemark] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const loadQueue = () => {
-    setLoading(true);
-    setLoadError(false);
+  /**
+   * โหลดคิวใหม่ · `reportError: false` = รีเฟรชเบื้องหลัง ใช้หลังบันทึกการจ่ายสำเร็จ — ถ้าปล่อยให้
+   * รีเฟรชที่พลาดตั้ง `loadError` หน้าจอจะกลายเป็นข้อความ "โหลดไม่สำเร็จ" ทับผลของการบันทึกที่สำเร็จ
+   * ไปแล้ว ทั้งที่ของถูกตัดออกจากสต๊อกเรียบร้อย
+   *
+   * (การโหลดครั้งแรกไม่เรียกผ่านตัวนี้ — `react-hooks/set-state-in-effect` ห้ามเรียกฟังก์ชันที่
+   * setState แบบซิงโครนัสจากตัวเอฟเฟกต์)
+   */
+  const loadQueue = (opts?: { reportError?: boolean }) => {
+    if (opts?.reportError !== false) { setLoading(true); setLoadError(false); }
     return fetchStoreIssueQueue()
       .then((list) => { setQueue(list); setLoading(false); })
-      .catch(() => { setLoadError(true); setLoading(false); });
+      .catch(() => { if (opts?.reportError === false) return; setLoadError(true); setLoading(false); });
   };
 
   useEffect(() => {
@@ -121,16 +128,26 @@ export function StoreIssueInboxPage({
     .filter((m) => !normalizedSearch || [m.id, m.documentNumber, m.jobCode ?? "", m.productionOrderId ?? "", m.customerName ?? "", m.chargeTeamName ?? ""]
       .some((v) => v.toLowerCase().includes(normalizedSearch)));
 
-  /** เติมช่องจ่ายด้วยจำนวนที่จ่ายได้จริง — ค้างเบิก แต่ไม่เกินของที่มีในคลัง */
+  /**
+   * เติมช่องจ่ายด้วยจำนวนที่จ่ายได้จริง — ค้างเบิก แต่ไม่เกินของที่มีในคลัง
+   *
+   * ของในคลังคิดรวมทั้งใบ ไม่ใช่ทีละบรรทัด — สินค้าตัวเดียวกันอยู่ได้หลายบรรทัดในใบเดียว (นั่นคือเหตุผล
+   * ที่ `productTotalsOf()` ฝั่งเซิร์ฟเวอร์รวมยอดตามสินค้าก่อนตัดสต๊อก) ถ้าเติมทีละบรรทัดจนเต็มยอดคงเหลือ
+   * ผลรวมจะเกินของที่มี แล้วเซิร์ฟเวอร์ตีกลับทั้งชุดว่าของไม่พอ ทั้งที่ปุ่มบอกว่า "เติมจำนวนที่จ่ายได้"
+   */
   const fillIssuable = () => {
     if (!detail) return;
     const next: Record<string, string> = {};
+    const remaining = new Map<string, number>();
     for (const line of detail.doc.lines) {
       const outstanding = outstandingQtyOf(line);
       if (outstanding <= 0) continue;
       const stock = detail.stock[line.productId];
-      const qty = stock === undefined ? outstanding : Math.min(outstanding, stock);
+      if (stock === undefined) { next[line.id] = String(outstanding); continue; }
+      const left = remaining.get(line.productId) ?? stock;
+      const qty = Math.min(outstanding, left);
       if (qty > 0) next[line.id] = String(qty);
+      remaining.set(line.productId, left - qty);
     }
     setIssueQty(next);
   };
@@ -144,22 +161,24 @@ export function StoreIssueInboxPage({
       toast.show(t("storeIssue.emptyQty"));
       return;
     }
+    // ผูกการบันทึกไว้กับใบที่เปิดอยู่ตอนกด — การจ่ายของยิงจริงหลายวินาที (ตัดสต๊อกทีละสินค้า + audit)
+    // ระหว่างนั้นผู้ใช้กดเปิดใบอื่นได้ ถ้าไม่เช็ค `loadSeq` ตอนคำตอบกลับมา ใบเก่าจะถูกยัดลงไปในการ์ด
+    // ของใบใหม่ (หรือ `closeRow()` ไปพับการ์ดที่ผู้ใช้เพิ่งเปิด) แล้วยอดที่พิมพ์ต่อจะไปลงผิดใบ
+    const seq = loadSeq.current;
     setSaving(true);
     try {
       const { materialRequisition, stockByProduct } = await postMaterialIssueBatch(detail.doc.id, {
         lines, issuedDate: issueDate, issuedBy, remark: issueRemark,
       });
-      setIssueQty({});
-      setIssueRemark("");
       const stillOutstanding = materialRequisition.lines.some((l) => outstandingQtyOf(l) > 0);
-      if (stillOutstanding) {
-        setDetail({ doc: materialRequisition, stock: stockByProduct });
-        toast.show(t("storeIssue.savedPartial"));
-      } else {
-        closeRow();
-        toast.show(t("storeIssue.savedDone"));
+      if (seq === loadSeq.current) {
+        setIssueQty({});
+        setIssueRemark("");
+        if (stillOutstanding) setDetail({ doc: materialRequisition, stock: stockByProduct });
+        else closeRow();
       }
-      await loadQueue();
+      toast.show(t(stillOutstanding ? "storeIssue.savedPartial" : "storeIssue.savedDone"));
+      await loadQueue({ reportError: false });
     } catch (err) {
       toast.show(err instanceof ApiError ? err.message : t("storeIssue.saveError"));
     } finally {
@@ -257,7 +276,7 @@ export function StoreIssueInboxPage({
                         <span className="sr-only">{t("storeIssue.loadingDoc")}</span>
                         {[...Array(2)].map((_, i) => <div key={i} className="h-9 rounded-lg bg-muted animate-pulse" aria-hidden="true" />)}
                       </div>
-                    ) : detailError || !detail ? (
+                    ) : detailError || detail?.doc.id !== m.id ? (
                       <div className="flex flex-col items-center gap-2 py-6 text-center">
                         <p className="text-sm text-muted-foreground">{t("storeIssue.loadDocError")}</p>
                         <button onClick={() => openRow(m.id)}
