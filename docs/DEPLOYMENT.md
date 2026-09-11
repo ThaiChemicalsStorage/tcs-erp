@@ -244,6 +244,14 @@ docker push thaics/tcserp-app:latest && docker push thaics/tcserp-web:latest
 docker compose pull && docker compose up -d
 ```
 
+- **Old images pile up — prune them every few deploys.** Checked 2026-09-11: 39 images, 11.28 GB,
+  of which 9.2 GB reclaimable, on a 40 GB disk that was 43% full. Every `pull` of `:latest`
+  leaves the previous image untagged and nothing ever removes it. `docker image prune -f` clears
+  the untagged ones (`-a -f` also clears tagged images no container uses); Docker refuses to
+  touch images a running container needs, so this is safe while the stack is up.
+- ⚠️ **Everything is tagged `:latest` only, so there is no rollback.** The moment a new image is
+  pulled, the previous one loses its name — a bad deploy can only be undone by rebuilding from
+  older source. Worth also tagging `thaics/tcserp-app:YYYY-MM-DD` at build time and keeping a few.
 - **`docker-compose.yml` is deliberately NOT committed** (owner request) — the complete reference
   copy is below; recreate it from here on a new machine.
 - Only `nginx/certs/` is a volume mount (self-git-ignored, and excluded from the build context via
