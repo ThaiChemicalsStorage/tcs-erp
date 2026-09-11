@@ -212,8 +212,28 @@ docker compose exec -T mongodb sh -c 'mongorestore \
 ```
 
 `--drop` replaces each collection as it restores, so restoring over a running stack is
-destructive — take a fresh dump first. **Test a restore at least once** on a throwaway machine;
-an untested backup is not a backup.
+destructive — take a fresh dump first.
+
+**Proving a backup without a second machine (done 2026-09-11, all 33 collections matched).**
+Restore into a *different database name* on the same MongoDB, compare document counts, then drop
+it. No `--drop`, a different namespace: live data is never touched.
+
+```bash
+LATEST=$(ls -t /var/backups/tcs-erp/db-*.archive.gz | head -1); cd /root
+docker compose exec -T mongodb sh -c 'mongorestore --quiet \
+  -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin \
+  --archive --gzip --nsFrom "tcs_erp.*" --nsTo "tcs_erp_restoretest.*"' < "$LATEST"
+
+set -a && . ./.env && set +a
+docker compose exec -T mongodb mongosh --quiet -u "$MONGO_USER" -p "$MONGO_PASS" \
+  --authenticationDatabase admin --eval 'const a=db.getSiblingDB("tcs_erp"),b=db.getSiblingDB("tcs_erp_restoretest");a.getCollectionNames().sort().forEach(n=>{const x=a[n].countDocuments(),y=b[n].countDocuments();print((x===y?"ok   ":"DIFF ")+n+"  "+x+" / "+y)})'
+
+# then always clean up:
+docker compose exec -T mongodb mongosh --quiet -u "$MONGO_USER" -p "$MONGO_PASS" \
+  --authenticationDatabase admin --eval 'db.getSiblingDB("tcs_erp_restoretest").dropDatabase()'
+```
+
+**An untested backup is not a backup** — re-run this after any change to the dump command.
 
 ## Updating the app
 
