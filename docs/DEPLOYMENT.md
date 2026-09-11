@@ -143,15 +143,28 @@ server prompt, answer `n` to "configure this as a Shared Drive", `y` to keep, `q
 
 Check it: `rclone lsd gdrive:` must list `backup server`.
 
-> ⚠️ **A blank `client_id` is a temporary state, not a permanent one.** It falls back to rclone's
-> shared Google API credentials, which rclone itself now warns about on every run:
-> *"this remote uses rclone's shared Google Drive client_id, which is being retired and will stop
-> working during 2026"* (seen 2026-09-11). It is also throttled. **Create an own OAuth client
-> before it cuts out**: Google Cloud Console → new project → enable *Google Drive API* → OAuth
-> consent screen, External, add the owner's address as a test user → Credentials → OAuth client
-> ID, type *Desktop app*. Then on the server `rclone config` → `e` (edit) → `gdrive` → paste the
-> id and secret → re-authorize (same headless flow as above). Nothing else changes; the Drive
-> folder, the script and cron stay as they are.
+> ⚠️ **A blank `client_id` is a temporary state, not a permanent one** — done for real on
+> 2026-09-11, keep this as the rebuild recipe. Blank falls back to rclone's shared Google API
+> credentials, which rclone warns about on every run: *"this remote uses rclone's shared Google
+> Drive client_id, which is being retired and will stop working during 2026"*. Own client:
+> Google Cloud Console → **its own project** (enabling an API is per-project, and so is the
+> consent screen — do not do this inside an unrelated project) → enable *Google Drive API* →
+> Google Auth Platform: Branding (app name, support email, developer email), Audience =
+> **External** → Clients → OAuth client ID, type *Desktop app*. Then on the server
+> `rclone config` → `e` → `gdrive` → paste id and secret → scope `1` → `Use auto config? n` →
+> re-authorize headlessly → `y` to replace the existing token. Nothing else changes.
+>
+> Two traps on that path, both hit on 2026-09-11:
+>
+> - **The app must be published to "In production".** While the publishing status is *Testing*,
+>   Google issues refresh tokens that **expire after 7 days** — the nightly backup would die
+>   silently a week later. Publishing additionally requires a reachable **homepage URL** and
+>   **privacy policy URL** (hence `public/privacy.html`), on a domain listed under *Authorised
+>   domains*.
+> - **"Your app requires verification" is expected — do not submit for review.** Full-Drive is a
+>   *restricted* scope, so Google offers verification; it needs a paid third-party security
+>   assessment. An unverified production app works fine, capped at 100 users (we have one: this
+>   server). The consent screen shows "Google hasn't verified this app" → *Advanced* → *Go to …*.
 
 **3. Install the script and schedule it**
 
@@ -159,10 +172,15 @@ Check it: `rclone lsd gdrive:` must list `backup server`.
 scp scripts/backup-to-gdrive.sh root@<server>:/usr/local/bin/tcs-erp-backup   # from the dev machine
 ssh root@<server> 'chmod +x /usr/local/bin/tcs-erp-backup'
 timedatectl set-timezone Asia/Bangkok        # cron times below are local time
-STACK_DIR=/opt/tcs-erp /usr/local/bin/tcs-erp-backup   # first run, watch it finish
+STACK_DIR=/root /usr/local/bin/tcs-erp-backup   # first run, watch it finish
 crontab -e                                   # then add:
-# 0 2 * * *  STACK_DIR=/opt/tcs-erp /usr/local/bin/tcs-erp-backup >> /var/log/tcs-erp-backup.log 2>&1
+# 0 2 * * *  STACK_DIR=/root /usr/local/bin/tcs-erp-backup >> /var/log/tcs-erp-backup.log 2>&1
 ```
+
+⚠️ **On the real server the stack lives in `/root`, not `/opt/tcs-erp`** (checked 2026-09-11 —
+the script's old default was a guess and the first cron line, written with an empty `STACK_DIR`,
+would have failed every night). `cron` runs with an empty environment: any value the script needs
+must be written into the cron line itself, never exported in a shell beforehand.
 
 `STACK_DIR` is the directory holding `docker-compose.yml`/`.env`/`nginx/` — everything else has a
 default and is overridable the same way (`REMOTE`, `KEEP_DAILY_DAYS`, `KEEP_MONTHLY_DAYS`,

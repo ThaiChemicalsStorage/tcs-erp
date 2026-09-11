@@ -1,0 +1,100 @@
+<!doctype html>
+<!-- นโยบายความเป็นส่วนตัว — หน้าสาธารณะ (ไม่ต้องล็อกอิน) เสิร์ฟจาก public/ ที่ /privacy.html
+     สร้าง 2026-09-11 เพราะ Google Cloud Console บังคับให้แอป OAuth ที่จะ publish เป็น production
+     ต้องมี homepage URL + privacy policy URL ที่เปิดได้จริง — แอป OAuth ตัวนั้นคือ client_id
+     ของ rclone ที่ใช้อัปสำรองข้อมูลขึ้น Google Drive (scripts/backup-to-gdrive.sh)
+     ดู docs/DEPLOYMENT.md หัวข้อ "Backups → Google Drive (rclone)"
+     หมายเหตุ: หน้านี้ไม่ได้ตามระบบดีไซน์ใน docs/DESIGN.md เหมือน manual.html — เป็นเอกสารเดี่ยว
+     ที่ต้องโหลดได้โดยไม่ยิงขออะไรจากภายนอกเลย (ฟอนต์ไทยของระบบ ไม่มี webfont) -->
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>นโยบายความเป็นส่วนตัว — TCS ERP</title>
+<link rel="icon" href="/logo.png" type="image/png" />
+<style>
+  :root {
+    --ink: #1b2430;
+    --muted: #5b6779;
+    --gold: #a8842f;
+    --ground: #f7f7f5;
+    --card: #ffffff;
+    --line: #e3e6ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 16px 64px;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Sarabun", "Noto Sans Thai", "Leelawadee UI", "Tahoma", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.75;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 40px 32px;
+  }
+  h1 { font-size: 1.75rem; margin: 0 0 4px; }
+  h2 { font-size: 1.25rem; margin: 32px 0 8px; color: var(--gold); }
+  .updated { color: var(--muted); font-size: 0.9rem; margin: 0 0 8px; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  a { color: var(--gold); }
+  footer { max-width: 720px; margin: 16px auto 0; color: var(--muted); font-size: 0.85rem; }
+  @media (max-width: 480px) { main { padding: 28px 20px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>นโยบายความเป็นส่วนตัว</h1>
+  <p class="updated">TCS ERP (Thai Chemicals Storage) · ปรับปรุงล่าสุด 11 กันยายน 2569</p>
+
+  <p>
+    TCS ERP เป็นระบบบริหารงานภายในของบริษัท ใช้งานโดยพนักงานของบริษัทเท่านั้น
+    ไม่ได้เปิดให้บุคคลทั่วไปสมัครใช้งาน และไม่ใช่บริการที่ขายให้ลูกค้าภายนอก
+  </p>
+
+  <h2>ข้อมูลที่ระบบเก็บ</h2>
+  <ul>
+    <li>ข้อมูลบัญชีผู้ใช้ของพนักงาน ได้แก่ ชื่อ อีเมล บทบาท และสิทธิ์การใช้งาน</li>
+    <li>ข้อมูลการดำเนินงานของบริษัท เช่น ใบเสนอราคา ใบสั่งซื้อ ใบเบิก สินค้า และลูกค้า</li>
+    <li>ไฟล์แนบและรูปถ่ายที่ผู้ใช้อัปโหลดเข้าระบบเอง</li>
+    <li>บันทึกการเข้าใช้งานและการแก้ไขเอกสาร เพื่อการตรวจสอบย้อนหลัง</li>
+  </ul>
+
+  <h2>ข้อมูลถูกเก็บไว้ที่ไหน</h2>
+  <p>
+    ข้อมูลทั้งหมดอยู่บนเซิร์ฟเวอร์ที่บริษัทดูแลเอง เชื่อมต่อผ่าน HTTPS เท่านั้น
+    บริษัทไม่ขาย ไม่ให้เช่า และไม่เปิดเผยข้อมูลเหล่านี้แก่บุคคลที่สาม
+    ยกเว้นกรณีที่กฎหมายกำหนด
+  </p>
+
+  <h2>การสำรองข้อมูลขึ้น Google Drive</h2>
+  <p>
+    ระบบสำรองข้อมูลอัตโนมัติคืนละครั้งขึ้น Google Drive ของบริษัทเอง ผ่านโปรแกรม rclone
+    การเชื่อมต่อนี้ขอสิทธิ์เข้าถึง Google Drive ของบัญชีเจ้าของระบบ
+    เพื่อ<strong>เขียนไฟล์สำรองขึ้นโฟลเดอร์ของบริษัทเท่านั้น</strong>
+    ไม่มีการอ่านหรือส่งข้อมูลไปยังบุคคลอื่น ไม่มีการเก็บข้อมูลไว้กับผู้พัฒนา
+    และไฟล์สำรองอยู่ในโฟลเดอร์ส่วนตัวที่ไม่ได้แชร์ให้ใคร
+  </p>
+
+  <h2>ระยะเวลาเก็บรักษา</h2>
+  <p>
+    ไฟล์สำรองรายวันเก็บไว้ 30 วัน และไฟล์สำรองประจำเดือนเก็บไว้ประมาณ 13 เดือน
+    หลังจากนั้นระบบจะลบทิ้งอัตโนมัติ
+  </p>
+
+  <h2>ติดต่อ</h2>
+  <p>
+    มีคำถามเกี่ยวกับข้อมูลส่วนบุคคล ติดต่อผู้ดูแลระบบได้ที่
+    <a href="mailto:bd1.thaichemicals@gmail.com">bd1.thaichemicals@gmail.com</a>
+  </p>
+</main>
+<footer>TCS ERP · <a href="https://www.huma-erp.com/">www.huma-erp.com</a></footer>
+</body>
+</html>

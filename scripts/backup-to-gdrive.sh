@@ -13,7 +13,7 @@
 #
 set -euo pipefail
 
-STACK_DIR="${STACK_DIR:-/opt/tcs-erp}"          # where docker-compose.yml lives
+STACK_DIR="${STACK_DIR:-/root}"                  # where docker-compose.yml lives (the real server: /root)
 REMOTE="${REMOTE:-gdrive:backup server}"        # rclone remote + the Drive folder
 LOCAL_DIR="${LOCAL_DIR:-/var/backups/tcs-erp}"  # staging copy kept on the server
 LOG_FILE="${LOG_FILE:-/var/log/tcs-erp-backup.log}"
