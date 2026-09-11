@@ -264,6 +264,28 @@ docker push thaics/tcserp-app:latest && docker push thaics/tcserp-web:latest
 docker compose pull && docker compose up -d
 ```
 
+- ⚠️ **MongoDB's port 27017 is published on the live server** (seen in the owner's copy of
+  `docker-compose.yml`, 2026-09-11 — the committed reference above now matches). Docker publishes
+  to `0.0.0.0` by default, so unless the VPS firewall blocks it, the database answers the public
+  internet; authentication is the only thing standing between a scanner and the data. The app
+  does **not** need it — it reaches MongoDB over the compose network as `mongodb:27017`. Either
+  drop the two `ports:` lines from the mongodb service, or bind them to loopback only
+  (`- "127.0.0.1:27017:27017"`) and tunnel over SSH when Compass is needed. Check what is exposed
+  with `ss -tlnp | grep 27017`.
+- **Auto-updates: Watchtower** (added 2026-09-11, owner request). A standalone container — *not*
+  in `docker-compose.yml` — pulls new `:latest` images and restarts those containers **daily at
+  03:00** (an hour after the midnight backup, deliberately: a backup of the old version exists
+  before anything changes). Its own logging is off (`--log-driver none` +
+  `WATCHTOWER_LOG_LEVEL=panic`, per owner request), so `docker logs watchtower` shows nothing —
+  check `docker ps` image IDs/ages instead. `WATCHTOWER_CLEANUP=true` deletes the superseded image
+  after each update, which is what stops the pile-up described below from coming back. It watches
+  only the app and web containers by name; **MongoDB is deliberately excluded** — an unattended
+  database engine upgrade on live data is not something to wake up to. The install command lives
+  in the Watchtower block further down.
+
+  ⚠️ Combined with `:latest` + no rollback (next bullet), this means **a bad image pushed to
+  Docker Hub deploys itself at 03:00 with nobody watching.** Pushing intentionally is the only
+  safeguard; don't push a build you are not ready to ship.
 - **Old images pile up — prune them every few deploys.** Checked 2026-09-11: 39 images, 11.28 GB,
   of which 9.2 GB reclaimable, on a 40 GB disk that was 43% full. Every `pull` of `:latest`
   leaves the previous image untagged and nothing ever removes it. `docker image prune -f` clears
@@ -325,8 +347,8 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS:?put MONGO_PASS in .env}
     volumes:
       - mongo_data:/data/db
-    # ports:
-    #   - "27017:27017"   # uncomment to reach the DB from the host (Compass, mongodump, ...)
+    ports:
+      - "27017:27017"   # ⚠️ ACTIVE on the live server as of 2026-09-11 — see the warning below
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -348,6 +370,21 @@ services:
 volumes:
   mongo_data:
 ```
+
+### Watchtower (automatic image updates, added 2026-09-11)
+
+Installed with `docker run`, never in `docker-compose.yml` (owner keeps that file untouched).
+Re-running this replaces the container, so it is also the "change the schedule" command:
+
+```bash
+WT=$(docker ps --format '{{.Names}}' | grep -vE 'mongo|watchtower' | tr '\n' ' '); echo "watching: $WT"
+docker rm -f watchtower >/dev/null 2>&1
+docker run -d --name watchtower --restart unless-stopped --log-driver none -e TZ=Asia/Bangkok -e WATCHTOWER_LOG_LEVEL=panic -e WATCHTOWER_CLEANUP=true -v /var/run/docker.sock:/var/run/docker.sock nickfedor/watchtower --schedule "0 0 3 * * *" $WT
+```
+
+`--schedule` takes **six** cron fields (seconds first), so `0 0 3 * * *` is 03:00:00 — with
+`TZ=Asia/Bangkok` that is 03:00 local, not UTC. Stop it with `docker rm -f watchtower`; the app
+keeps running, it just stops updating itself.
 
 Backups under Docker (authenticated):
 `docker compose exec mongodb sh -c 'mongodump -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --archive' > backup-$(date +%F).archive`
