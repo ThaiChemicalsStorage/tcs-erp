@@ -78,8 +78,14 @@ REMOTE_BYTES="$(rclone lsl "$REMOTE/daily/" | awk -v f="db-$STAMP.archive.gz" '$
 log "verified on Drive: $DB_BYTES bytes"
 
 # --- 5. retention -----------------------------------------------------------
-rclone delete "$REMOTE/daily/"   --min-age "${KEEP_DAILY_DAYS}d"   --rmdirs 2>>"$LOG_FILE" || log "WARN: daily retention sweep failed"
-rclone delete "$REMOTE/monthly/" --min-age "${KEEP_MONTHLY_DAYS}d" --rmdirs 2>>"$LOG_FILE" || log "WARN: monthly retention sweep failed"
+# monthly/ only exists once a 1st-of-month run has happened — sweeping a folder that is not
+# there yet is not a failure, so skip it instead of logging three retries and a WARN.
+sweep() {
+  rclone lsf "$1/" >/dev/null 2>&1 || { log "retention: $1 does not exist yet — skipped"; return 0; }
+  rclone delete "$1/" --min-age "$2" --rmdirs 2>>"$LOG_FILE" || log "WARN: retention sweep failed for $1"
+}
+sweep "$REMOTE/daily"   "${KEEP_DAILY_DAYS}d"
+sweep "$REMOTE/monthly" "${KEEP_MONTHLY_DAYS}d"
 find "$LOCAL_DIR" -type f -name '*.gz' -mtime "+$KEEP_LOCAL_DAYS" -delete
 
 log "=== backup $STAMP done ==="

@@ -143,11 +143,15 @@ server prompt, answer `n` to "configure this as a Shared Drive", `y` to keep, `q
 
 Check it: `rclone lsd gdrive:` must list `backup server`.
 
-> **Rate limits**: the blank `client_id` uses rclone's shared Google API credentials, which are
-> throttled and can make large first uploads crawl. If the nightly dump grows past a few GB,
-> create an own OAuth client (Google Cloud Console → new project → enable *Google Drive API* →
-> OAuth consent screen, External, add the owner's address as a test user → Credentials → OAuth
-> client ID, type *Desktop app*) and put the id/secret into `rclone config` on a re-run.
+> ⚠️ **A blank `client_id` is a temporary state, not a permanent one.** It falls back to rclone's
+> shared Google API credentials, which rclone itself now warns about on every run:
+> *"this remote uses rclone's shared Google Drive client_id, which is being retired and will stop
+> working during 2026"* (seen 2026-09-11). It is also throttled. **Create an own OAuth client
+> before it cuts out**: Google Cloud Console → new project → enable *Google Drive API* → OAuth
+> consent screen, External, add the owner's address as a test user → Credentials → OAuth client
+> ID, type *Desktop app*. Then on the server `rclone config` → `e` (edit) → `gdrive` → paste the
+> id and secret → re-authorize (same headless flow as above). Nothing else changes; the Drive
+> folder, the script and cron stay as they are.
 
 **3. Install the script and schedule it**
 
