@@ -689,6 +689,16 @@ pass — see [RBAC.md](../RBAC.md).
 
 ## Future Improvements
 
+- **Split the page up by department (owner request, 2026-09-11 — recorded, not started).** This
+  page is called "ภาพรวมผู้บริหาร" but 16 of `DashboardContent`'s 20 blocks are sales-only, and the
+  four that are not (Service, Products by category, Approval dashboard, Activity timeline) sit in
+  the middle of them with nothing marking them as a different department's. Six departments that
+  now own real documents — จัดซื้อ, สโตร์/คลังสินค้า, ผลิต, โครงการ, BD, บุคคล — have no numbers
+  here at all. `accountingDashboard` is the existing precedent for the per-department-page shape.
+  The full block→department inventory, the three layout options, and the constraints (one big
+  `GET /api/dashboard` payload, `reportRows.ts` as the single row source shared with the Excel/CSV
+  export, free-text `User.department`, and `visibilityScope` being a *different* question) are in
+  [TODO.md](../TODO.md) High Priority. **Needs an owner decision on the layout before any code.**
 - `totalCustomers`/`totalLeads` will start returning real non-zero numbers once the CRM module
   (schema already prepped, see [Customer.md](./Customer.md)/[Lead.md](./Lead.md)) gets API
   routes + UI — no Dashboard code changes needed when that happens.
