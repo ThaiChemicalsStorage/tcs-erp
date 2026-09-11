@@ -113,6 +113,86 @@ default; nginx needs the line above).
   copy it off-machine. Everything — including file attachments and photos — is in MongoDB, so a
   dump is a complete backup.
 
+### Google Drive (rclone) — the configured off-site target (added 2026-09-11)
+
+The owner's Google account has 2 TB and a folder named **`backup server`** at the root of My
+Drive. `scripts/backup-to-gdrive.sh` (committed) dumps the database, tars the config, uploads
+both there and prunes old copies. **The server does not have the repo checked out** (it only
+pulls images — see Docker below), so the script is *copied* onto it; re-copy it after editing it
+here.
+
+**1. Install rclone on the server**
+
+```bash
+curl https://rclone.org/install.sh | sudo bash    # or: apt install rclone (older, still fine)
+rclone version
+```
+
+**2. Authorize Google Drive.** The server has no browser, so the OAuth step happens on the
+Windows machine and the token is pasted back. On the server run `rclone config` and answer:
+`n` (new remote) → name **`gdrive`** → storage **`drive`** → `client_id`/`client_secret` blank
+(see the rate-limit note below) → scope **`1`** (full access — scope `drive.file` cannot see a
+folder it did not create, so it cannot write into the existing `backup server` folder) →
+`root_folder_id`/`service_account_file` blank → `Edit advanced config? n` →
+**`Use auto config? n`**. rclone then prints a command like `rclone authorize "drive" "…"`.
+
+On Windows, download rclone from <https://rclone.org/downloads/>, unzip, and run *that exact
+command* in PowerShell (`.\rclone.exe authorize "drive" "…"`). A browser opens, sign in as the
+owner's Google account, allow access; PowerShell prints a long token blob. Paste it back into the
+server prompt, answer `n` to "configure this as a Shared Drive", `y` to keep, `q` to quit.
+
+Check it: `rclone lsd gdrive:` must list `backup server`.
+
+> **Rate limits**: the blank `client_id` uses rclone's shared Google API credentials, which are
+> throttled and can make large first uploads crawl. If the nightly dump grows past a few GB,
+> create an own OAuth client (Google Cloud Console → new project → enable *Google Drive API* →
+> OAuth consent screen, External, add the owner's address as a test user → Credentials → OAuth
+> client ID, type *Desktop app*) and put the id/secret into `rclone config` on a re-run.
+
+**3. Install the script and schedule it**
+
+```bash
+scp scripts/backup-to-gdrive.sh root@<server>:/usr/local/bin/tcs-erp-backup   # from the dev machine
+ssh root@<server> 'chmod +x /usr/local/bin/tcs-erp-backup'
+timedatectl set-timezone Asia/Bangkok        # cron times below are local time
+STACK_DIR=/opt/tcs-erp /usr/local/bin/tcs-erp-backup   # first run, watch it finish
+crontab -e                                   # then add:
+# 0 2 * * *  STACK_DIR=/opt/tcs-erp /usr/local/bin/tcs-erp-backup >> /var/log/tcs-erp-backup.log 2>&1
+```
+
+`STACK_DIR` is the directory holding `docker-compose.yml`/`.env`/`nginx/` — everything else has a
+default and is overridable the same way (`REMOTE`, `KEEP_DAILY_DAYS`, `KEEP_MONTHLY_DAYS`,
+`KEEP_LOCAL_DAYS`, `LOCAL_DIR`, `LOG_FILE`). The remote default is `gdrive:backup server`, which
+is why the remote **must** be named `gdrive` unless `REMOTE` is set.
+
+What ends up on Drive:
+
+```
+backup server/daily/    db-YYYY-MM-DD_HHMM.archive.gz + config-…tar.gz   kept 30 days
+backup server/monthly/  the 1st-of-month run                             kept ~13 months
+```
+
+The script fails loudly (non-zero exit, message in `/var/log/tcs-erp-backup.log`) if the dump is
+not valid gzip, is under 100 KB, or if the uploaded byte count on Drive does not match the local
+file. It takes a `flock` so a slow run is never overlapped by the next night's.
+
+⚠️ `config-*.tar.gz` contains `.env` (JWT secret, Mongo password) and the TLS private key. It is
+in the owner's private Drive folder — **do not share that folder with anyone**, and keep it out of
+any link-shared parent.
+
+**Restore** (onto a fresh server, after `docker compose up -d`):
+
+```bash
+rclone copy "gdrive:backup server/daily/db-2026-09-11_0200.archive.gz" .
+docker compose exec -T mongodb sh -c 'mongorestore \
+  -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
+  --authenticationDatabase admin --archive --gzip --drop' < db-2026-09-11_0200.archive.gz
+```
+
+`--drop` replaces each collection as it restores, so restoring over a running stack is
+destructive — take a fresh dump first. **Test a restore at least once** on a throwaway machine;
+an untested backup is not a backup.
+
 ## Updating the app
 
 ```bash
@@ -221,7 +301,9 @@ volumes:
 
 Backups under Docker (authenticated):
 `docker compose exec mongodb sh -c 'mongodump -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --archive' > backup-$(date +%F).archive`
-(everything incl. attachments is in MongoDB), and copy the file off-machine.
+(everything incl. attachments is in MongoDB), and copy the file off-machine. This is exactly what
+`scripts/backup-to-gdrive.sh` automates — see [Backups → Google Drive (rclone)](#google-drive-rclone--the-configured-off-site-target-added-2026-09-11)
+rather than rolling a one-off cron line.
 
 ## Relationship to the Vercel demo
 
