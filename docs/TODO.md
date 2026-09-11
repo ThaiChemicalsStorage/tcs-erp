@@ -6,12 +6,15 @@
 
 ## High Priority — ตั้ง backup ขึ้น Google Drive บนเซิร์ฟเวอร์จริง (2026-09-11)
 
-สคริปต์ + คู่มืออยู่ครบแล้ว (`scripts/backup-to-gdrive.sh`, `docs/DEPLOYMENT.md` หัวข้อ Backups)
-แต่ยังไม่มีสำรองสักก้อนจนกว่าจะทำ 3 ข้อนี้บนเครื่องจริง — ต้องใช้บัญชี Google ของเจ้าของ
+**ติดตั้งบนเครื่องจริงเสร็จแล้ว 2026-09-11** — สำรองขึ้น Drive จริง cron ตี 2 ทำงาน และใช้ OAuth
+client ของบริษัทเอง (ไม่ใช่ของกลางที่กำลังถูกยกเลิก) · ที่เหลือคือข้อที่ต้องกดเองและงานตกค้าง
 
-- [ ] **🔴 ตั้ง rclone + cron บนเซิร์ฟเวอร์** ติดตั้ง rclone → `rclone config` ตั้ง remote ชื่อ `gdrive`
-  (ขอ token จากเครื่อง Windows ด้วย `rclone authorize "drive"`) → `scp` สคริปต์ขึ้น
-  `/usr/local/bin/tcs-erp-backup` → รันมือหนึ่งรอบ → ใส่บรรทัด cron ตี 2
+- [x] **ตั้ง rclone + cron บนเซิร์ฟเวอร์** (2026-09-11) — remote `gdrive`, สคริปต์อยู่ที่
+  `/usr/local/bin/tcs-erp-backup`, cron `0 2 * * * STACK_DIR=/root ...` · พาธสแตกจริงคือ **`/root`**
+- [ ] **🟡 deploy `public/privacy.html` ขึ้นเครื่องจริง** ต้อง build + push image + `docker compose pull`
+  · ถ้าช่อง privacy policy link ใน Google Cloud Console ใส่ `https://www.huma-erp.com/privacy.html`
+  ไว้ ตอนนี้ลิงก์นั้นยัง 404 · จะเพิ่มลิงก์เล็ก ๆ ใต้หน้าล็อกอิน (`src/pages/SignInPage.tsx`) ไปพร้อมกัน
+  ก็ได้ กูเกิลคาดหวังว่านโยบายต้องกดถึงได้จากหน้าแรก — **รอเจ้าของสั่ง ยังไม่ทำ**
 - [ ] **🔴 ทดสอบกู้คืนหนึ่งครั้ง** `mongorestore` ไฟล์จาก Drive ลงเครื่องทิ้ง แล้วเปิดดูว่าข้อมูลครบ —
   สำรองที่ยังไม่เคยกู้ ไม่นับว่าเป็นสำรอง
 - [ ] เช็คว่าโฟลเดอร์ `backup server` ใน Drive **ไม่ได้แชร์ให้ใคร** และไม่ได้อยู่ใต้โฟลเดอร์ที่เปิดลิงก์
