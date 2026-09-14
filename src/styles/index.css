@@ -8,16 +8,66 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Every scroll region in the app (2026-09-14) — the "separate, deliberate call" the sidebar note
+   below deferred. The owner first asked for the dashboard's scrollbars to look better
+   (the OS scrollbar — a wide grey track with arrow buttons — read as unfinished next to the chart
+   cards), then *"ตรง scroll bar ทำให้หมดทุกหน้าเลย"*: every page, not just the dashboard.
+
+   Same shape as the sidebar rule — thin, transparent track, no arrow buttons, a 6px pill inside a
+   10px hit target, visible at rest, brighter on hover — but inked in navy for a white/paper-blue
+   surface. Not gold (Rare Gold Rule: a scrollbar is chrome). Applied globally; `.sidebar-scroll`
+   below overrides it, so the dark rail keeps its light-ink thumb. A new scroll
+   region on a dark surface needs its own class like the sidebar's, or the navy thumb disappears.
+
+   Placed BEFORE the sidebar rule on purpose: `*:hover::-webkit-scrollbar-thumb` ties with
+   `.sidebar-scroll::-webkit-scrollbar-thumb` on specificity, so whichever comes later wins — the
+   sidebar must come later. */
+* {
+  /* Firefox — scrollbar-width does not inherit, so it must sit on every element */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(11, 29, 58, 0.22) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(11, 29, 58, 0.18);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 150ms ease;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(11, 29, 58, 0.3);
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: rgba(11, 29, 58, 0.45);
+}
+
 /* Sidebar scroll region (the navy nav rail in App.tsx).
 
    The rail had no scrollbar styling at all, so it fell back to the OS scrollbar — on Windows a
    ~17px white track with arrow buttons at both ends, which rendered as the single brightest
    element on the sidebar and read as a seam splitting the navy rail off from the page.
 
-   Scoped to the sidebar rather than applied globally on purpose: this is the app's only scroll
-   region sitting on a dark surface, where the default white track is genuinely glaring. Every
-   other scroll region is on white/paper-blue, where the OS scrollbar is unremarkable — restyling
-   those too is a separate, deliberate call, not a side effect of this fix.
+   This is the app's only scroll region sitting on a dark surface, so it overrides the global
+   light-surface rule above with light ink. (Originally, 2026-08-26, this was the only styled
+   scrollbar and every light surface kept the OS one; the owner asked for all pages on 2026-09-14.)
 
    The thumb is the sidebar's own inactive-label ink (#a8bed8, --sidebar-foreground) at low alpha,
    not gold: The Rare Gold Rule reserves gold for the active nav item and primary actions, and a
@@ -62,50 +112,6 @@ body {
 .sidebar-scroll::-webkit-scrollbar-thumb:hover,
 .sidebar-scroll::-webkit-scrollbar-thumb:active {
   background-color: rgba(168, 190, 216, 0.62);
-}
-
-/* Scroll regions on light surfaces (2026-09-14) — the "separate, deliberate call" the sidebar note
-   above deferred. The owner asked for the dashboard's scrollbars to look better: the OS scrollbar
-   there (a wide grey track with arrow buttons) sat on the page edge and inside the recent-activity
-   card, and read as unfinished next to the chart cards.
-
-   Same shape as the sidebar rule — thin, transparent track, no arrow buttons, a 6px pill inside a
-   10px hit target, visible at rest, brighter on hover — but inked in navy for a white/paper-blue
-   surface. Not gold (Rare Gold Rule: a scrollbar is chrome). Opt-in per region, not global. */
-.soft-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(11, 29, 58, 0.2) transparent;
-}
-
-.soft-scroll::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.soft-scroll::-webkit-scrollbar-track,
-.soft-scroll::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-.soft-scroll::-webkit-scrollbar-button {
-  display: none;
-}
-
-.soft-scroll::-webkit-scrollbar-thumb {
-  background-color: rgba(11, 29, 58, 0.18);
-  border-radius: 9999px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-  transition: background-color 150ms ease;
-}
-
-.soft-scroll:hover::-webkit-scrollbar-thumb {
-  background-color: rgba(11, 29, 58, 0.3);
-}
-
-.soft-scroll::-webkit-scrollbar-thumb:hover,
-.soft-scroll::-webkit-scrollbar-thumb:active {
-  background-color: rgba(11, 29, 58, 0.45);
 }
 
 /* แผงค้นหา (2026-08-28) — ขยับขึ้นเล็กน้อยตอนเปิด บอกว่ามันลอยเหนือหน้าอยู่ ไม่ใช่ส่วนหนึ่งของหน้า

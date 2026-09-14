@@ -16,7 +16,7 @@ export function ActivityTimeline({ entries, onOpenQuote, actorLabel }: { entries
       {entries.length === 0 ? (
         <p className="text-xs text-muted-foreground text-center py-10">{t("dashboard.activity.empty")}</p>
       ) : (
-        <div className="soft-scroll max-h-96 overflow-y-auto overflow-x-auto -mr-2 pr-2">
+        <div className="max-h-96 overflow-y-auto overflow-x-auto -mr-2 pr-2">
           <table className="w-full">
             <thead className="sticky top-0 bg-card">
               <tr className="border-b border-border">
