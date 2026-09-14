@@ -154,6 +154,8 @@ export interface ServiceDetail {
   approvalRejected: number;
   /** PM ครั้งถัดไปภายใน 30 วัน */
   upcomingPmCount: number;
+  /** ร่างที่ไม่ได้แตะเกิน 7 วัน ทั้งหมด — นับแยกจาก `followUps` ซึ่งตัดซ้ำและจำกัด 10 แถว */
+  staleDraftCount: number;
   upcomingPm: DueItem[];
   /** 12 เดือนล่าสุด — นับตามวันที่ตรวจ ไม่นับใบยกเลิก · `completed` = ในนั้นที่ปิดงานแล้ว */
   inspectedByMonth: { month: string; inspected: number; completed: number }[];

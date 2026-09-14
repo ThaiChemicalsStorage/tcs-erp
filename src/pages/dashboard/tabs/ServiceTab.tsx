@@ -36,7 +36,7 @@ export function ServiceTab({ result, onRetry, onNavigatePage }: DepartmentTabPro
         const d = block.detail;
         const today = response.today;
         const pmWithinWeek = d ? d.upcomingPm.filter((p) => daysBetweenIso(today, p.date) <= 7).length : 0;
-        const staleDrafts = d ? d.followUps.filter((f) => f.reason === "staleDraft").length : 0;
+        const staleDrafts = d?.staleDraftCount ?? 0;
         return (
           <>
             <TabIntro scope={block.scope} />

@@ -565,10 +565,12 @@ async function serviceBlock({ ctx, has, from, to, today, months, withDetail }: B
     const pmWindow = and(base, { status: { $ne: "Cancelled" }, nextPmDate: { $gte: today, $lte: addDaysIso(today, PM_WINDOW_DAYS) } });
     const staleBefore = new Date(Date.parse(`${addDaysIso(today, -STALE_DRAFT_DAYS)}T00:00:00+07:00`)).toISOString();
     const followUpProjection = { projection: { customerSnapshot: 1, serviceSystemName: 1, customerApproval: 1, updatedAt: 1 } };
-    const [inspectedInPeriod, approvalRejected, upcomingPmCount, upcoming, byMonth, approvalRows, rejected, waiting, staleDrafts] = await Promise.all([
+    const staleDraftMatch = and(base, { status: "Draft", updatedAt: { $lt: staleBefore } });
+    const [inspectedInPeriod, approvalRejected, upcomingPmCount, staleDraftCount, upcoming, byMonth, approvalRows, rejected, waiting, staleDrafts] = await Promise.all([
       count(reports, and(base, periodClause("inspectionDate", from, to))),
       count(reports, and(base, { "customerApproval.status": "rejected" })),
       count(reports, pmWindow),
+      count(reports, staleDraftMatch),
       reports.find(pmWindow as never, { projection: { customerSnapshot: 1, serviceSystemName: 1, nextPmDate: 1 } })
         .sort({ nextPmDate: 1 }).limit(LIST_LIMIT).toArray(),
       reports.aggregate([
@@ -589,7 +591,7 @@ async function serviceBlock({ ctx, has, from, to, today, months, withDetail }: B
         .sort({ "customerApproval.respondedAt": -1 }).limit(LIST_LIMIT).toArray(),
       reports.find(and(base, { "customerApproval.status": "pending" }) as never, followUpProjection)
         .sort({ "customerApproval.sentAt": 1 }).limit(LIST_LIMIT).toArray(),
-      reports.find(and(base, { status: "Draft", updatedAt: { $lt: staleBefore } }) as never, followUpProjection)
+      reports.find(staleDraftMatch as never, followUpProjection)
         .sort({ updatedAt: 1 }).limit(LIST_LIMIT).toArray(),
     ]);
 
@@ -605,7 +607,7 @@ async function serviceBlock({ ctx, has, from, to, today, months, withDetail }: B
 
     const approvalOf = (key: string) => approvalRows.find((r) => r._id === key)?.n ?? 0;
     detail = {
-      inspectedInPeriod, approvalRejected, upcomingPmCount, followUps,
+      inspectedInPeriod, approvalRejected, upcomingPmCount, staleDraftCount, followUps,
       upcomingPm: upcoming.map((r): DueItem => ({ id: r._id.toString(), docNumber: r._id.toString(), party: partyOf(r), date: r.nextPmDate })),
       inspectedByMonth: months.map((month) => {
         const row = byMonth.find((r) => r._id === month);
@@ -636,10 +638,12 @@ async function collectAttention({ ctx, has, today }: BlockContext): Promise<Atte
   if (has("purchaseOrder:view")) {
     tasks.push((async () => {
       const own = buildSimpleOwnershipClause(ctx.user.id, has("purchaseOrder:viewAll"), "createdBy");
+      // ไม่ใส่ limit ก่อนกรองใบที่รับครบ — ใบสั่งซื้อยังเป็น Final หลังรับของครบ ใบเก่าที่รับครบแล้วจึงเรียงอยู่หน้าสุด
+      // เสมอ ถ้าตัดที่ N ใบแรก ใบที่ค้างจริงจะหลุดหายเมื่อมีใบรับครบเก่ากว่าเกิน N ใบ
       const late = await (await purchaseOrdersCollection()).find(
         and({ isDeleted: false, status: "Final", neededByDate: { $gt: "", $lt: today } }, own) as never,
         { projection: { documentNumber: 1, vendorName: 1, neededByDate: 1 } },
-      ).sort({ neededByDate: 1 }).limit(50).toArray();
+      ).sort({ neededByDate: 1 }).toArray();
       const closed = new Set((await (await receivingReportsCollection()).find(
         { isDeleted: false, status: "Closed", purchaseOrderId: { $in: late.map((p) => p._id.toString()) } } as never,
         { projection: { purchaseOrderId: 1 } },

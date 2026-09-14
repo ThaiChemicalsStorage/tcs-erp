@@ -80,6 +80,9 @@ export function useDashboardData<T>(cache: DashboardDataCache, request: Dashboar
   if (key === null || request === null) return { data: null, loading: false, error: false };
   const entry = cache.entries.get(key);
   const settled = !!entry && !entry.pending;
-  const data = (entry?.data ?? cache.lastBySlot.get(slotOf(request)) ?? null) as T | null;
+  // A failed request must not fall back to the last good data: that data belongs to *other*
+  // parameters (e.g. the previous date range), and the tabs render any data they get — the user
+  // would see old-range numbers under the new filter with no error shown.
+  const data = (entry?.error ? null : entry?.data ?? cache.lastBySlot.get(slotOf(request)) ?? null) as T | null;
   return { data, loading: !settled, error: settled && !!entry?.error };
 }
