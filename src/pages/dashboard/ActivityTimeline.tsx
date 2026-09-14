@@ -4,7 +4,9 @@ import { useI18n } from "../../lib/i18n";
 
 // ตารางแสดงกิจกรรมล่าสุด พร้อมลิงก์ไปยังใบเสนอราคาที่เกี่ยวข้อง (ถ้ามี)
 // Recent activities table, with a link to the related quotation when available
-export function ActivityTimeline({ entries, onOpenQuote }: { entries: AuditLogEntry[]; onOpenQuote: (quoteId: string) => void }) {
+// `actorLabel` (2026-09-14): the dashboard's ภาพรวม tab shows every department's activity, where
+// "พนักงานขาย" would be the wrong column name — it passes a neutral "ผู้ใช้" instead.
+export function ActivityTimeline({ entries, onOpenQuote, actorLabel }: { entries: AuditLogEntry[]; onOpenQuote: (quoteId: string) => void; actorLabel?: string }) {
   const { t } = useI18n();
   return (
     <div className="bg-card border border-border rounded-xl p-5">
@@ -19,7 +21,7 @@ export function ActivityTimeline({ entries, onOpenQuote }: { entries: AuditLogEn
             <thead className="sticky top-0 bg-card">
               <tr className="border-b border-border">
                 <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.activity.col.date")}</th>
-                <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.activity.col.salesperson")}</th>
+                <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{actorLabel ?? t("dashboard.activity.col.salesperson")}</th>
                 <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.activity.col.action")}</th>
                 <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{t("dashboard.activity.col.quotation")}</th>
                 <th className="px-2 py-1.5 text-left text-[10px] font-mono font-semibold text-muted-foreground uppercase tracking-wider">{t("dashboard.activity.col.customer")}</th>

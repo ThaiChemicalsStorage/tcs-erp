@@ -3,11 +3,15 @@ import { withErrorHandling, HttpError } from "../_lib/http.js";
 import { requirePermission } from "../_lib/auth.js";
 import { buildOwnershipClause, resolveVisibilityScope } from "../_lib/visibility.js";
 import {
-  customersCollection, leadsCollection, quotesCollection, productsCollection, categoriesCollection,
+  customersCollection, leadsCollection, quotesCollection, productsCollection,
   auditLogCollection, notificationsCollection, usersCollection, jobTypesCollection, scopeOfWorksCollection,
-  deliveryOrdersCollection, serviceReportsCollection,
   withStringId, type QuoteFields,
 } from "../_lib/collections.js";
+import {
+  bangkokNow, todayIsoDate, bangkokDayBoundsUtc, fetchActivityTimeline, computeCategoryBreakdown,
+  countDeliveryOrders, countServiceReports,
+} from "../_lib/dashboardShared.js";
+import { handleDepartmentDashboard } from "../_lib/departmentDashboard.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
@@ -76,7 +80,6 @@ const PIPELINE_PREDECESSOR: Record<string, string | null> = {
 };
 const MONTHS_BACK = 12;
 const TOP_N = 10;
-const ACTIVITY_LIMIT = 30;
 
 /**
  * P'Keng/P'Kee business requirement (2026-07-14): every Dashboard monetary total is recomputed
@@ -136,31 +139,9 @@ type QuoteCalcDoc = Pick<
   "lines" | "discount" | "discountMode" | "project"
 > & { _id: string; amount: number };
 
-/**
- * Thailand is UTC+7, no DST. Vercel's Node runtime has no guaranteed local timezone (typically
- * UTC), and `issueDate`/`expiryDate`/`followUpDate` are Thailand-local business-date strings —
- * so "today"/month-boundary math here must not use the server's ambient local `Date` getters
- * (wrong timezone) or mix a local constructor with `.toISOString()` (shifts the boundary by a
- * day for any positive-UTC-offset zone). Fix: shift by the fixed offset once, then always read
- * back via UTC getters/`Date.UTC` only — correct regardless of the server's actual configured
- * timezone.
- */
-const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
-
-function bangkokNow(): Date {
-  return new Date(Date.now() + BANGKOK_OFFSET_MS);
-}
-function todayIsoDate(): string {
-  return bangkokNow().toISOString().slice(0, 10);
-}
-
-/** UTC instant range covering the Bangkok-local calendar day(s) `[from, to]` — for filtering real UTC timestamp fields (e.g. audit_log's `createdAt`) by the same Bangkok-local date-range preset used everywhere else, unlike `issueDate`/etc. which are already plain Bangkok-local date strings needing no conversion. */
-function bangkokDayBoundsUtc(from: string, to: string): { $gte?: string; $lt?: string } {
-  const range: { $gte?: string; $lt?: string } = {};
-  if (from) range.$gte = new Date(new Date(`${from}T00:00:00Z`).getTime() - BANGKOK_OFFSET_MS).toISOString();
-  if (to) range.$lt = new Date(new Date(`${to}T00:00:00Z`).getTime() - BANGKOK_OFFSET_MS + 86400000).toISOString();
-  return range;
-}
+// `bangkokNow()`/`todayIsoDate()`/`bangkokDayBoundsUtc()` (the fixed UTC+7 date math and its
+// rationale) moved to api/_lib/dashboardShared.ts on 2026-09-14 so the per-department dashboard
+// uses the exact same day boundaries.
 
 function queryString(req: VercelRequest, key: string): string {
   const v = req.query[key];
@@ -271,6 +252,11 @@ function periodEnd(kind: "month" | "quarter" | "year"): string {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   await withErrorHandling(req, res, async () => {
+    // แดชบอร์ดแยกตามแผนก (2026-09-14) ใช้ route key "dashboard" เดียวกันใน server/app.ts — ต้องแยกทาง
+    // ก่อนโค้ดของแดชบอร์ดขายข้างล่าง ซึ่งไม่ดู pathname เลยและจะตอบ payload ขายให้ทุก path
+    const pathname = (req.url ?? "").split("?")[0].replace(/\/+$/, "");
+    if (pathname === "/api/dashboard/departments") return handleDepartmentDashboard(req, res);
+
     if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
     const ctx = await requirePermission(req, "dashboard:view");
 
@@ -291,8 +277,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         : computeQuoteAmountBeforeVat(lines ?? [], discount, discountMode);
     const today = todayIsoDate();
 
-    const [customers, leads, quotes, products, categories, users, jobTypes, auditLog] = await Promise.all([
-      customersCollection(), leadsCollection(), quotesCollection(), productsCollection(), categoriesCollection(),
+    const [customers, leads, quotes, products, users, jobTypes, auditLog] = await Promise.all([
+      customersCollection(), leadsCollection(), quotesCollection(), productsCollection(),
       usersCollection(), jobTypesCollection(), auditLogCollection(),
     ]);
     // Index creation is incidental infrastructure, not data the response depends on — a transient
@@ -392,7 +378,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const [
       totalCustomers, totalLeads, totalProducts, totalQuotationsAllTime,
-      revenueTrendDocsRaw, productsByCategoryAgg, categoryDocs,
+      revenueTrendDocsRaw, categoryBreakdown,
       docsRaw, allClientDocsRaw, followUpDocsRaw, historicalOutcomeDocsRaw, monthlyOutcomeDocsRaw,
       activeJobTypes,
     ] = await Promise.all([
@@ -426,11 +412,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         { ...salespersonOnlyMatch, issueDate: { $regex: /^\d{4}-\d{2}-\d{2}$/ } },
         { projection: { status: 1, issueDate: 1, lines: 1, discount: 1, discountMode: 1 } },
       ).toArray(),
-      products.aggregate<{ _id: string; count: number }>([
-        { $match: { archived: false } },
-        { $group: { _id: "$categoryId", count: { $sum: 1 } } },
-      ]).toArray(),
-      categories.find({}).toArray(),
+      computeCategoryBreakdown(),
       quotes.find(fullMatch, { projection }).toArray() as unknown as Promise<QuoteCalcDoc[]>,
       // Raw (client) for every quote company-wide — used only to classify each client in the
       // filtered set as new-vs-repeat (see `totalQuoteCountByClient` below). Was a `$group` count
@@ -801,20 +783,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let activityTimeline: ReturnType<typeof withStringId>[] | null = null;
     if (roleHasPermission(ctx.role, "auditLog:view")) {
       try {
-        const auditMatch: Record<string, unknown> = {};
-        if (from || to) auditMatch.createdAt = bangkokDayBoundsUtc(from, to);
-        if (salespersonFilter && salespersonFilter !== "all") auditMatch.userName = salespersonFilter;
-        if (salespeopleInDepartment) {
-          const deptCond = { userName: { $in: [...salespeopleInDepartment] } };
-          if (auditMatch.userName) {
-            auditMatch.$and = [{ userName: auditMatch.userName }, deptCond];
-            delete auditMatch.userName;
-          } else {
-            Object.assign(auditMatch, deptCond);
-          }
-        }
-        const entries = await auditLog.find(auditMatch).sort({ createdAt: -1 }).limit(ACTIVITY_LIMIT).toArray();
-        activityTimeline = entries.map(withStringId);
+        activityTimeline = await fetchActivityTimeline({
+          from, to,
+          userName: salespersonFilter && salespersonFilter !== "all" ? salespersonFilter : undefined,
+          userNamesIn: salespeopleInDepartment ? [...salespeopleInDepartment] : undefined,
+        });
       } catch (err) {
         console.error("[dashboard] activityTimeline query failed", err);
         activityTimeline = null;
@@ -1057,18 +1030,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // all-time, deliberately unfiltered for the same reason: a Delivery Order inherits its
     // quotation context via the Scope of Work, so it has no salesperson/issue-date of its own to
     // filter by. ──
-    const ownDeliveryClause = await buildOwnershipClause(ctx, "deliveryOrder", "createdBy");
+    // Counting itself lives in api/_lib/dashboardShared.ts (2026-09-14) — shared with the ผลิต/โครงการ
+    // department tabs, which show the same card because the document belongs to all three departments.
     let deliveryOrder: { total: number; draft: number; pending: number; final: number } | null = null;
     if (roleHasPermission(ctx.role, "deliveryOrder:view")) {
       try {
-        const deliveryOrders = await deliveryOrdersCollection();
-        const [total, draft, pending, final] = await Promise.all([
-          deliveryOrders.countDocuments({ isDeleted: false, ...ownDeliveryClause }),
-          deliveryOrders.countDocuments({ isDeleted: false, status: "Draft", ...ownDeliveryClause }),
-          deliveryOrders.countDocuments({ isDeleted: false, status: "PendingApproval", ...ownDeliveryClause }),
-          deliveryOrders.countDocuments({ isDeleted: false, status: "Final", ...ownDeliveryClause }),
-        ]);
-        deliveryOrder = { total, draft, pending, final };
+        deliveryOrder = await countDeliveryOrders(ctx);
       } catch (err) {
         console.error("[dashboard] deliveryOrder query failed", err);
         deliveryOrder = null;
@@ -1082,22 +1049,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // to filter by — same conclusion already reached for Scope of Work/Delivery Order. Own-data-only
     // clause replicates `handleList`'s exact ownership predicate in api/_lib/serviceReportHandler.ts
     // (own `createdBy` + ownerless legacy records, no document-recipients concept unlike Scope of Work). ──
-    const ownServiceClause = roleHasPermission(ctx.role, "service:viewAll")
-      ? {}
-      : { $or: [{ createdBy: ctx.user.id }, { createdBy: "" }] };
+    // Same predicate, now in api/_lib/dashboardShared.ts (2026-09-14) so the บริการ tab counts identically.
     let serviceSummary: { total: number; draft: number; completed: number; cancelled: number; thisMonth: number } | null = null;
     if (roleHasPermission(ctx.role, "service:view")) {
       try {
-        const serviceReports = await serviceReportsCollection();
-        const thisMonthPrefix = today.slice(0, 7);
-        const [total, draft, completed, cancelled, thisMonth] = await Promise.all([
-          serviceReports.countDocuments({ isDeleted: false, ...ownServiceClause }),
-          serviceReports.countDocuments({ isDeleted: false, status: "Draft", ...ownServiceClause }),
-          serviceReports.countDocuments({ isDeleted: false, status: "Completed", ...ownServiceClause }),
-          serviceReports.countDocuments({ isDeleted: false, status: "Cancelled", ...ownServiceClause }),
-          serviceReports.countDocuments({ isDeleted: false, inspectionDate: { $regex: `^${thisMonthPrefix}` }, ...ownServiceClause }),
-        ]);
-        serviceSummary = { total, draft, completed, cancelled, thisMonth };
+        serviceSummary = await countServiceReports(ctx, today);
       } catch (err) {
         console.error("[dashboard] serviceSummary query failed", err);
         serviceSummary = null;
@@ -1186,16 +1142,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── Legacy shape (unchanged, still needed by the existing monthly-revenue/category widgets) ──
     const revenueByMonth = revenueTrend.monthly.map(({ period, revenue }) => ({ month: period, revenue }));
-    const categoryNameById = new Map(categoryDocs.map((c) => [c._id.toString(), c.name]));
-    const totalCategorizedProducts = productsByCategoryAgg.reduce((sum, c) => sum + c.count, 0);
-    const categoryBreakdown = productsByCategoryAgg
-      .map((c) => ({
-        categoryId: c._id,
-        categoryName: categoryNameById.get(c._id) ?? "ไม่ระบุหมวดหมู่",
-        count: c.count,
-        percentage: totalCategorizedProducts > 0 ? Math.round((c.count / totalCategorizedProducts) * 1000) / 10 : 0,
-      }))
-      .sort((a, b) => b.count - a.count);
 
     res.status(200).json({
       hasAnyData: totalQuotationsAllTime > 0 || totalProducts > 0,

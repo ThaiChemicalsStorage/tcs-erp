@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 import { CalendarRange } from "lucide-react";
 import { useI18n } from "../../lib/i18n";
 import { Toggle } from "../../components/Toggle";
@@ -6,6 +6,11 @@ import { type DateRangePreset, rangeForPreset } from "./dateRanges";
 import type { DashboardVatMode } from "../../lib/dashboard";
 
 export interface DashboardFilterState {
+  /**
+   * ตัวเลือกช่วงวันที่ที่ผู้ใช้กดไว้ (2026-09-14) — เดิมเก็บเป็น state ภายในแถบ ซึ่งรีเซ็ตกลับเป็น "ทั้งหมด"
+   * ทุกครั้งที่แถบถูกสร้างใหม่ (สลับแท็บ) ทั้งที่ from/to ยังเป็นช่วงเดิม · ย้ายมาอยู่กับตัวกรองในหน้าแม่แทน
+   */
+  preset: DateRangePreset;
   from: string;
   to: string;
   salesperson: string;
@@ -18,16 +23,18 @@ const PRESETS: DateRangePreset[] = ["all", "today", "yesterday", "last7", "last1
 // แถบตัวกรองของแดชบอร์ด: ช่วงวันที่ ฝ่ายขาย และพนักงานขาย
 // Dashboard filter bar for date range, department, and salesperson selection.
 export function DashboardFilterBar({
-  filters, onChange, availableSalespeople, availableDepartments, hidePeopleFilters = false,
+  filters, onChange, availableSalespeople, availableDepartments, hidePeopleFilters = false, mode = "full",
 }: {
   filters: DashboardFilterState;
   onChange: (next: DashboardFilterState) => void;
   availableSalespeople: string[];
   availableDepartments: string[];
   hidePeopleFilters?: boolean;
+  /** "dateOnly" = แท็บแผนกที่ไม่ใช่ขาย — ฝ่าย/พนักงานขาย/VAT มีความหมายกับใบเสนอราคาเท่านั้น */
+  mode?: "full" | "dateOnly";
 }) {
   const { t } = useI18n();
-  const [preset, setPreset] = useState<DateRangePreset>("all");
+  const preset = filters.preset;
   const vatLabelId = useId();
 
   const presetLabel: Record<DateRangePreset, string> = {
@@ -44,9 +51,8 @@ export function DashboardFilterBar({
   };
 
   const applyPreset = (p: DateRangePreset) => {
-    setPreset(p);
     const range = rangeForPreset(p);
-    onChange({ ...filters, from: range?.from ?? "", to: range?.to ?? "" });
+    onChange({ ...filters, preset: p, from: range?.from ?? "", to: range?.to ?? "" });
   };
 
   return (
@@ -77,6 +83,7 @@ export function DashboardFilterBar({
           ml-auto siblings previously made the leftover row space divide between both, floating
           the people-filters group mid-row instead of both hugging the right edge. Any future
           right-aligned addition belongs inside this container, not as a new sibling. */}
+      {mode === "full" && (
       <div className="flex items-center gap-2.5 flex-wrap sm:ml-auto">
         {!hidePeopleFilters && (
           <>
@@ -113,6 +120,7 @@ export function DashboardFilterBar({
           />
         </div>
       </div>
+      )}
     </div>
   );
 }

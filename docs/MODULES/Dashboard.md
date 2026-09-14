@@ -358,7 +358,108 @@ its `-R2` entry and left the other cases untouched. **Not verified against a liv
 with real rewritten quotation data** — same sandboxed-session no-MongoDB-network limitation as every
 other pass in this project (see PROJECT_STATUS.md "Known Risks").
 
+## Department Tabs (2026-09-14)
+
+Owner request (recorded 2026-09-11, repeated 2026-09-14): *"หน้า Dashboard อยากให้ทำให้ดูง่ายขึ้นแยก
+แต่ละแผนกอย่างชัดเจนแต่ก็ยังมี Dashboard ที่ดูข้อมูลรวมได้ทุกอย่างอยู่ด้วย"*. Of the three layouts
+recorded in TODO.md (section headers / tabs / separate pages), the owner picked **tabs on the one
+page**, with an overview that is a short summary of every department, and asked for every
+department to get real numbers now.
+
+**Tabs** — ภาพรวม · ขาย · บริการ · จัดซื้อ · คลังสินค้า · ผลิต · โครงการ · BD · บัญชี. There is no
+บุคคล tab: the system has no real HR data (users only).
+
+| Tab | Visible with any of | Data |
+|---|---|---|
+| ภาพรวม | always (the page itself needs `dashboard:view`) | `/api/dashboard/departments?dept=overview` + the sales and accounting endpoints below |
+| ขาย | `quotations:view` | unchanged `GET /api/dashboard` — everything the page used to show |
+| บริการ | `service:view` | `?dept=service` |
+| จัดซื้อ | `purchaseOrder:view`, `purchaseRequest:view` | `?dept=purchasing` |
+| คลังสินค้า | `stock:view`, `receivingReport:view`, `productRequest:view` | `?dept=inventory` |
+| ผลิต | `productionOrder:view` | `?dept=production` |
+| โครงการ | `jobOrder:view`, `project:view` | `?dept=project` |
+| BD | `costControl:view` | `?dept=bd` |
+| บัญชี | `ar:view`, `ap:view` | `AccountingDashboardView` — the same component as the แดชบอร์ดบัญชี menu page, with its own filter bar |
+
+The rules live in **`src/lib/dashboardTabs.ts`**, imported by both the page and the server, so a tab
+can never be visible without its data (or vice versa). Deliberate choices:
+
+- **ขาย is gated by `quotations:view`, not `dashboard:view`.** Every number there is a quotation
+  number; the default Service Engineer and Accounting User roles hold `dashboard:view` without
+  `quotations:view` and used to land on an all-zero sales page.
+- **`products:view` does not open คลังสินค้า** — Sales roles hold it to pick products on quotations.
+- **No new permissions.** Same principle as the pending-approvals inbox.
+
+**What moved.** `ServiceSummary` → บริการ · `ProductsByCategoryChart` → คลังสินค้า ·
+`ActivityTimeline` → ภาพรวม (with a neutral "ผู้ใช้" column label). Everything else stays on ขาย,
+including the quotation-only `ApprovalDashboard`, the Excel/CSV export and its guided-tour
+anchors. `DeliveryOrderSummary` shows on ขาย, ผลิต and โครงการ — one document belonging to three
+departments (owner decision 2026-08-20) — captioned as shared on the latter two.
+
+**URL and memory.** The open tab is in the hash (`#dashboard/inventory`; the overview is plain
+`#dashboard`) and in `localStorage` per user. Precedence on entry: hash → last tab → overview; a tab
+the user cannot see is never chosen, even from a typed URL. `navKeyFromHash()` in
+`src/lib/navResolution.ts` reads only the first segment, and App.tsx's hash writer leaves a
+`#dashboard/…` suffix alone.
+
+**Filters.** One filter state for the whole page. Non-sales tabs get the date range only
+(`mode="dateOnly"`); salesperson/department/VAT are sales concepts. The overview's sales card
+always uses salesperson/department "all" — it must not be filtered by values not on screen.
+`preset` moved from the filter bar's internal state into `DashboardFilterState` so switching tabs
+doesn't reset the dropdown label. บัญชี keeps its own filters because `/api/ar-dashboard` treats an
+empty range as "this month".
+
+**Snapshot vs period (Filter Honesty).** Every department number is "as of now" unless tagged
+"ช่วงที่เลือก": PO approved value by order date, stock movements, production/job starts, Cost
+Control by document date, service inspections. Each tab opens with a one-line note saying so.
+
+**Loading.** Header, tabs and filters render immediately; each tab has its own skeleton/error.
+`useDashboardData.ts` caches responses by full request key for the life of the page, so switching
+back to a tab is instant; "retry" and approve/reject bump a token that forms part of every key.
+
+### `GET /api/dashboard/departments` (`api/_lib/departmentDashboard.ts`)
+
+Dispatched at the top of `api/dashboard/index.ts` (same `dashboard` route key — that handler never
+looked at its pathname, so the dispatch must stay before the sales code). Every block is computed only
+when its tab is visible (`canSeeDashboardTab`), and every number inside checks that document type's
+own view permission again (`null` = no permission — the UI hides it rather than showing 0).
+Visibility clauses copy each module's `handleList` exactly (own + ownerless without `viewAll`; Cost
+Control's recipient rule; the store issue queue deliberately unscoped behind `stock:adjust`). A failed
+block becomes `null` and is listed in `failed`, the rest still render.
+
+| Block | Meaning of the less obvious numbers |
+|---|---|
+| จัดซื้อ | *PR awaiting a PO* = approved, forwarded to purchasing (or pre-2026-09-09 with no `storeStage`), and no non-deleted PO references it · *PO awaiting receipt* = approved with no receiving report or an Open one · *overdue* = of those, `neededByDate` < today · PO value via `purchaseOrderTotals()` |
+| คลังสินค้า | stock value = Σ `stockValueOf()` over non-archived products · low stock = `reorderPoint > 0 && stockQty <= reorderPoint` (same as StockPage) · MR awaiting issue = `requisitionHasOutstanding()` · outstanding receive value via `receivingReportTotals()` |
+| ผลิต | due soon = approved, due date within 7 days · past due = approved, due date passed (no completion status exists — the tooltip says so) |
+| โครงการ | MR/PR with no `ownerDepartment` count as project (matches the list handlers) · *PR open* = approved, not closed by store, no PO |
+| BD | counts only; the projection never reads `lines`, and a test walks the response for money-like keys |
+| บริการ | `completedThisMonth` = Completed with inspection date this month · PM = not cancelled, next PM within 30 days |
+
+The overview adds `pendingApprovals` from **`countPendingApprovals()`** (`api/_lib/pendingApprovals.ts`)
+— the same filters and approve-permission gate as the inbox list, via `countDocuments` so it isn't
+capped at 100 — and `activityTimeline` (`auditLog:view`, date range only).
+
+Shared helpers moved out of `api/dashboard/index.ts` without behaviour change into
+`api/_lib/dashboardShared.ts`: Bangkok date math, `fetchActivityTimeline`, `computeCategoryBreakdown`,
+`countDeliveryOrders`, `countServiceReports`.
+
+**Bug found on the way:** quotations have no `isDeleted` field, but the pending-approvals inbox
+filtered them with `isDeleted: false`, which never matches a missing field — pending quotations
+never appeared in เอกสารรออนุมัติ. Now `isDeleted: { $ne: true }` (test in
+`tests/api/departmentDashboard.test.ts`).
+
+Tests: `tests/api/departmentDashboard.test.ts` (routing, every block's numbers, snapshot vs period,
+permission gating, visibility, BD money, pending counts = inbox) and `tests/dashboardTabs.test.ts`
+(tabs per default role, initial tab, hash parsing).
+
 ## Pages / Components
+
+**2026-09-14:** `DashboardPage.tsx` is now the shell (header, `Tabs`, filter bar, per-tab data via
+`useDashboardData.ts`). The component list below describes what is now the **ขาย** tab
+(`tabs/SalesTab.tsx`, formerly `DashboardContent`); the department tabs live in `tabs/` beside it
+(`OverviewTab`, `ServiceTab`, `PurchasingTab`, `InventoryTab`, `ProductionTab`, `ProjectTab`, `BdTab`,
+shared pieces in `DepartmentWidgets.tsx`, colours/icons in `tabMeta.ts`). See "Department Tabs" above.
 
 `src/pages/dashboard/` was split from a single file into:
 
@@ -689,16 +790,13 @@ pass — see [RBAC.md](../RBAC.md).
 
 ## Future Improvements
 
-- **Split the page up by department (owner request, 2026-09-11 — recorded, not started).** This
-  page is called "ภาพรวมผู้บริหาร" but 16 of `DashboardContent`'s 20 blocks are sales-only, and the
-  four that are not (Service, Products by category, Approval dashboard, Activity timeline) sit in
-  the middle of them with nothing marking them as a different department's. Six departments that
-  now own real documents — จัดซื้อ, สโตร์/คลังสินค้า, ผลิต, โครงการ, BD, บุคคล — have no numbers
-  here at all. `accountingDashboard` is the existing precedent for the per-department-page shape.
-  The full block→department inventory, the three layout options, and the constraints (one big
-  `GET /api/dashboard` payload, `reportRows.ts` as the single row source shared with the Excel/CSV
-  export, free-text `User.department`, and `visibilityScope` being a *different* question) are in
-  [TODO.md](../TODO.md) High Priority. **Needs an owner decision on the layout before any code.**
+- ~~Split the page up by department~~ — **done 2026-09-14**, see "Department Tabs" above.
+- A cross-department Excel export. The Excel/CSV buttons exist on the ขาย tab only;
+  `reportRows.ts` is still a sales-only row source, and exporting "the overview" would need its
+  own sheet design rather than a partial dump.
+- Production orders and job orders have no "finished" status, so "past due" can only mean "the
+  due date written on an approved document has passed". A real completion step would make that
+  number exact.
 - `totalCustomers`/`totalLeads` will start returning real non-zero numbers once the CRM module
   (schema already prepped, see [Customer.md](./Customer.md)/[Lead.md](./Lead.md)) gets API
   routes + UI — no Dashboard code changes needed when that happens.

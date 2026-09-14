@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Inbox, Search, X, Loader2, AlertTriangle } from "lucide-react";
 import { EmptyState } from "../../components/EmptyState";
+import { PENDING_KIND_LABEL_KEY } from "./kindLabels";
 import { ApiError } from "../../lib/apiClient";
 import { formatQuoteDateThai } from "../../lib/quotes";
-import { useI18n, type TranslationKey } from "../../lib/i18n";
+import { useI18n } from "../../lib/i18n";
 import {
   type PendingApprovalItem, type PendingApprovalKind,
   fetchPendingApprovals, daysWaiting,
@@ -24,19 +25,8 @@ import {
 
 const FILTER_ALL = "all";
 
-/** ป้ายชนิดเอกสาร — ยืมคีย์ของแต่ละโมดูลมาใช้ ไม่ตั้งคีย์ซ้ำ */
-const KIND_LABEL_KEY: Record<PendingApprovalKind, TranslationKey> = {
-  quotation: "nav.quotations",
-  scopeOfWork: "nav.scopeOfWork",
-  deliveryOrder: "nav.deliveryOrder",
-  materialRequisition: "nav.materialRequisition",
-  jobOrder: "nav.jobOrder",
-  purchaseRequest: "nav.purchaseRequest",
-  purchaseOrder: "nav.purchaseOrder",
-  productionOrder: "nav.productionOrder",
-  costControl: "nav.costControl",
-  productRequest: "nav.productRequest",
-};
+/** ป้ายชนิดเอกสาร — ใช้ร่วมกับแท็บภาพรวมของแดชบอร์ด ดู kindLabels.ts */
+const KIND_LABEL_KEY = PENDING_KIND_LABEL_KEY;
 
 /** รอเกินกี่วันถึงเริ่มเตือน — ไม่ใช่กฎของบริษัท เป็นแค่เส้นให้สายตาจับได้ว่าใบไหนค้างนาน */
 const STALE_DAYS = 3;

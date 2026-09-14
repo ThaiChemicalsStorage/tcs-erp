@@ -3,6 +3,18 @@ import { type Role, hasPermission, isNavHiddenForUser } from "./roles";
 import type { Permission } from "./permissions";
 
 /**
+ * หน้าจาก URL hash — อ่านเฉพาะส่วนแรกก่อน `/` (2026-09-14)
+ *
+ * แดชบอร์ดเก็บแท็บที่เปิดอยู่ไว้ต่อท้าย (`#dashboard/inventory`) เพื่อให้รีเฟรช/ส่งลิงก์แล้วกลับมาแท็บเดิม
+ * เดิมตัวอ่านเทียบทั้งก้อน `raw in NAV_LABEL_KEYS` ซึ่งจะอ่านค่าแบบนั้นไม่ออก และเด้งกลับหน้าแรก
+ * ส่วนต่อท้ายเป็นเรื่องของหน้านั้นเอง ตัวนี้ไม่ตีความ
+ */
+export function navKeyFromHash<K extends string>(hash: string, keys: Readonly<Record<K, unknown>>): K | null {
+  const raw = hash.replace(/^#\/?/, "").split("/")[0];
+  return Object.prototype.hasOwnProperty.call(keys, raw) ? (raw as K) : null;
+}
+
+/**
  * ตัดสินว่า "จะแสดงหน้าไหน" จากหน้าที่ผู้ใช้ขอมา + สิทธิ์ที่มี — แยกออกมาจาก App.tsx เมื่อ 2026-08-25
  *
  * Decides which page actually renders, given the one the URL asked for and what this user may see.

@@ -17,6 +17,21 @@ import { useI18n } from "../../lib/i18n";
 // each is labeled honestly per docs/UI_GUIDELINES.md "Filter Honesty"; see accountingDashboard.ts.
 export function AccountingDashboardPage() {
   const { t } = useI18n();
+  return (
+    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <PageHeader title={t("accountingDashboard.title")} description={t("accountingDashboard.description")} />
+      <AccountingDashboardView />
+    </div>
+  );
+}
+
+/**
+ * เนื้อในของแดชบอร์ดบัญชี (ตัวกรอง + ตัวเลข + กราฟ) ไม่มีหัวหน้า — แยกออกมา 2026-09-14 เพื่อให้แท็บ
+ * "บัญชี" บนหน้าแดชบอร์ดใช้ของชิ้นเดียวกับเมนูแดชบอร์ดบัญชี ไม่มีสองเวอร์ชันให้ตัวเลขเพี้ยนจากกัน
+ * เมนูเดิมในกลุ่มบัญชียังอยู่ครบ · ตัวกรองวันที่เป็นของตัวเอง เพราะ ar-dashboard ตีความช่วงว่างเป็น "เดือนนี้"
+ */
+export function AccountingDashboardView() {
+  const { t } = useI18n();
   const [preset, setPreset] = useState<DateRangePreset>("thisMonth");
   const [from, setFrom] = useState<string>(() => rangeForPreset("thisMonth")?.from ?? "");
   const [to, setTo] = useState<string>(() => rangeForPreset("thisMonth")?.to ?? "");
@@ -62,9 +77,7 @@ export function AccountingDashboardPage() {
   ];
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
-      <PageHeader title={t("accountingDashboard.title")} description={t("accountingDashboard.description")} />
-
+    <div className="space-y-6">
       <div className="flex items-center gap-2.5 flex-wrap bg-card border border-border rounded-lg px-3 py-2">
         <div className="flex items-center gap-1.5 text-muted-foreground pl-1"><CalendarRange size={13} /></div>
         <select

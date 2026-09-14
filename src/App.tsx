@@ -16,7 +16,7 @@ import { type Quote, type QuotationListFilter, fetchQuotes } from "./lib/quotes"
 import { type User, fetchUsers, initials } from "./lib/users";
 import { UserDirectoryProvider } from "./lib/userDirectory";
 import { type Role, fetchRoles, hasPermission, userIsSuperAdmin, roleNameFor } from "./lib/roles";
-import { resolveNav } from "./lib/navResolution";
+import { resolveNav, navKeyFromHash } from "./lib/navResolution";
 import { NavigationGuardContext, useNavigationGuardHost } from "./hooks/useNavigationGuard";
 import { UnsavedChangesDialog } from "./components/UnsavedChangesDialog";
 import { type Department, fetchDepartments } from "./lib/departments";
@@ -357,8 +357,7 @@ const NAV_LABEL_KEYS: Record<NavKey, TranslationKey> = {
 // อ่านหน้าปัจจุบันจาก URL hash เพื่อให้รีเฟรชแล้วไม่เด้งกลับไปหน้า dashboard
 // Reads the current page from the URL hash, so a page refresh keeps the user on the same page
 function navFromHash(): NavKey | null {
-  const raw = window.location.hash.replace(/^#\/?/, "");
-  return raw in NAV_LABEL_KEYS ? (raw as NavKey) : null;
+  return navKeyFromHash<NavKey>(window.location.hash, NAV_LABEL_KEYS);
 }
 
 // แปลงชื่อ action ของ audit log ให้เป็นชื่อโมดูลภาษาไทย
@@ -869,7 +868,9 @@ export default function App() {
   useEffect(() => {
     if (bootStatus !== "ready" || resourceStatus.roles === "loading") return;
     const target = `#${effectiveNav}`;
-    if (window.location.hash === target) return;
+    // `#dashboard/inventory` belongs to the page (the Dashboard's open tab, 2026-09-14) — already on
+    // the right page, so leave the suffix alone instead of rewriting it back to `#dashboard`.
+    if (window.location.hash === target || window.location.hash.startsWith(`${target}/`)) return;
     if (window.location.hash === "") {
       window.history.replaceState(null, "", target);
     } else {
@@ -1195,7 +1196,7 @@ export default function App() {
             {!navDecided
               ? <SectionLoading error={false} onRetry={loadDomainData} />
               : effectiveNav === "dashboard"
-              ? <DashboardPage currentUserId={currentUser.id} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
+              ? <DashboardPage currentUserId={currentUser.id} can={(p) => hasPermission(currentUser, roles, p)} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} onNavigatePage={navigateToPage} />
               : effectiveNav === "pendingApprovals"
               ? <PendingApprovalsPage onOpen={openPendingApproval} />
               : effectiveNav === "auditLog"
@@ -1284,7 +1285,7 @@ export default function App() {
               ? <RoleManagementPage roles={roles} onRolesChange={updateRoles} users={users} currentUserId={currentUser.id} onAudit={handleAudit} />
               : effectiveNav === "departments" && isSuperAdmin
               ? <DepartmentManagementPage departments={departments} onDepartmentsChange={updateDepartments} teams={teams} onTeamsChange={updateTeams} />
-              : <DashboardPage currentUserId={currentUser.id} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} />
+              : <DashboardPage currentUserId={currentUser.id} can={(p) => hasPermission(currentUser, roles, p)} onNavigateToQuotations={navigateToQuotations} onOpenQuote={navigateToQuotation} onNavigatePage={navigateToPage} />
             }
           </Suspense>
           </ErrorBoundary>

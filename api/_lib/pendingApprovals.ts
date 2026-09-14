@@ -61,13 +61,27 @@ const SORT_OLDEST_FIRST = { updatedAt: 1 } as const;
 const PER_KIND_LIMIT = 100;
 
 /**
+ * เงื่อนไข "รออนุมัติ" ของแต่ละกลุ่ม — ที่เดียว ใช้ทั้งตอนดึงรายการ (`collectPendingApprovals`) และตอนนับ
+ * (`countPendingApprovals` ของแดชบอร์ด 2026-09-14) เพื่อให้ตัวเลขบนแดชบอร์ดไม่มีทางต่างจากกล่องงานเข้า
+ */
+const SHARED_PENDING_FILTER = { ...notDeleted, status: PENDING_SHARED } as const;
+const PRODUCT_REQUEST_PENDING_FILTER = { ...notDeleted, status: PENDING_PRODUCT_REQUEST } as const;
+/**
+ * **ใบเสนอราคาไม่มีฟิลด์ `isDeleted` เลย** (ดูคอมเมนต์ใน api/dashboard/index.ts — ไม่มีการลบแบบ soft
+ * delete สำหรับใบเสนอราคา) · เดิมใช้ `isDeleted: false` เหมือนหมวดอื่น ซึ่งไม่ตรงกับเอกสารที่ไม่มีฟิลด์นั้น
+ * ใบเสนอราคาที่รออนุมัติจริงจึงไม่เคยขึ้นในกล่องนี้ (มีแต่ในเทสต์ที่ใส่ `isDeleted: false` ไว้เอง)
+ * แก้ 2026-09-14 เป็น `$ne: true` — ยังกันใบที่อาจถูกทำเครื่องหมายลบในอนาคตได้เหมือนเดิม
+ */
+const QUOTATION_PENDING_FILTER = { isDeleted: { $ne: true }, status: PENDING_QUOTATION } as const;
+
+/**
  * ใบเสนอราคา — หมวดเดียวที่รู้**เวลาที่กดส่งขออนุมัติจริง** เพราะมันเก็บ `approvalHistory` ไว้
  * รายการ `submitted` ล่าสุดคือเวลาที่ต้องการพอดี ไม่ต้องเดาจาก `updatedAt` เหมือนอีก 9 หมวด
  * (และใบเสนอราคาไม่มี `updatedAt` ให้เดาด้วยซ้ำ)
  */
 async function quotations(): Promise<PendingApprovalItem[]> {
   const col = await quotesCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_QUOTATION } as never, { limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(QUOTATION_PENDING_FILTER as never, { limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => {
     const submitted = [...(d.approvalHistory ?? [])].reverse().find((h) => h.action === "submitted");
     return {
@@ -84,7 +98,7 @@ async function quotations(): Promise<PendingApprovalItem[]> {
 
 async function scopeOfWorks(): Promise<PendingApprovalItem[]> {
   const col = await scopeOfWorksCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_SHARED } as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(SHARED_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => ({
     kind: "scopeOfWork" as const,
     id: d._id.toString(),
@@ -98,7 +112,7 @@ async function scopeOfWorks(): Promise<PendingApprovalItem[]> {
 
 async function deliveryOrders(): Promise<PendingApprovalItem[]> {
   const col = await deliveryOrdersCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_SHARED } as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(SHARED_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => ({
     kind: "deliveryOrder" as const,
     id: d._id.toString(),
@@ -112,7 +126,7 @@ async function deliveryOrders(): Promise<PendingApprovalItem[]> {
 
 async function materialRequisitions(): Promise<PendingApprovalItem[]> {
   const col = await materialRequisitionsCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_SHARED } as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(SHARED_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => ({
     kind: "materialRequisition" as const,
     id: d._id.toString(),
@@ -128,7 +142,7 @@ async function materialRequisitions(): Promise<PendingApprovalItem[]> {
 
 async function jobOrders(): Promise<PendingApprovalItem[]> {
   const col = await jobOrdersCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_SHARED } as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(SHARED_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => ({
     kind: "jobOrder" as const,
     id: d._id.toString(),
@@ -142,7 +156,7 @@ async function jobOrders(): Promise<PendingApprovalItem[]> {
 
 async function purchaseRequests(): Promise<PendingApprovalItem[]> {
   const col = await purchaseRequestsCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_SHARED } as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(SHARED_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => ({
     kind: "purchaseRequest" as const,
     id: d._id.toString(),
@@ -158,7 +172,7 @@ async function purchaseRequests(): Promise<PendingApprovalItem[]> {
 
 async function purchaseOrders(): Promise<PendingApprovalItem[]> {
   const col = await purchaseOrdersCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_SHARED } as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(SHARED_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => ({
     kind: "purchaseOrder" as const,
     id: d._id.toString(),
@@ -172,7 +186,7 @@ async function purchaseOrders(): Promise<PendingApprovalItem[]> {
 
 async function productionOrders(): Promise<PendingApprovalItem[]> {
   const col = await productionOrdersCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_SHARED } as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(SHARED_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => ({
     kind: "productionOrder" as const,
     id: d._id.toString(),
@@ -186,7 +200,7 @@ async function productionOrders(): Promise<PendingApprovalItem[]> {
 
 async function costControls(): Promise<PendingApprovalItem[]> {
   const col = await costControlsCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_SHARED } as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(SHARED_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => ({
     kind: "costControl" as const,
     id: d._id.toString(),
@@ -200,7 +214,7 @@ async function costControls(): Promise<PendingApprovalItem[]> {
 
 async function productRequests(): Promise<PendingApprovalItem[]> {
   const col = await productRequestsCollection();
-  const docs = await col.find({ ...notDeleted, status: PENDING_PRODUCT_REQUEST } as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
+  const docs = await col.find(PRODUCT_REQUEST_PENDING_FILTER as never, { sort: SORT_OLDEST_FIRST, limit: PER_KIND_LIMIT }).toArray();
   return docs.map((d) => ({
     kind: "productRequest" as const,
     // คำขอได้รหัสสินค้าก็ต่อเมื่ออนุมัติแล้ว ใบที่รออยู่จึงไม่มีเลขที่เสมอ — ชื่อสินค้าเป็นตัวระบุแทน
@@ -213,19 +227,43 @@ async function productRequests(): Promise<PendingApprovalItem[]> {
   }));
 }
 
-/** หมวด → สิทธิ์ที่ทำให้ "อนุมัติได้" + ตัวดึงข้อมูล */
-const KINDS: { kind: PendingApprovalKind; permission: Permission; run: () => Promise<PendingApprovalItem[]> }[] = [
-  { kind: "quotation", permission: "quotations:approve", run: quotations },
-  { kind: "scopeOfWork", permission: "scopeOfWork:finalize", run: scopeOfWorks },
-  { kind: "deliveryOrder", permission: "deliveryOrder:finalize", run: deliveryOrders },
-  { kind: "materialRequisition", permission: "materialRequisition:finalize", run: materialRequisitions },
-  { kind: "jobOrder", permission: "jobOrder:finalize", run: jobOrders },
-  { kind: "purchaseRequest", permission: "purchaseRequest:finalize", run: purchaseRequests },
-  { kind: "purchaseOrder", permission: "purchaseOrder:finalize", run: purchaseOrders },
-  { kind: "productionOrder", permission: "productionOrder:finalize", run: productionOrders },
-  { kind: "costControl", permission: "costControl:finalize", run: costControls },
-  { kind: "productRequest", permission: "productRequest:review", run: productRequests },
+/** นับใบที่ตรงเงื่อนไข — ไม่มีเพดาน 100 ใบแบบรายการ */
+const countWhere = (collection: () => Promise<{ countDocuments(filter: never): Promise<number> }>, filter: object) =>
+  async () => (await collection()).countDocuments(filter as never);
+
+/** หมวด → สิทธิ์ที่ทำให้ "อนุมัติได้" + ตัวดึงข้อมูล + ตัวนับ (เงื่อนไขเดียวกัน) */
+const KINDS: { kind: PendingApprovalKind; permission: Permission; run: () => Promise<PendingApprovalItem[]>; count: () => Promise<number> }[] = [
+  { kind: "quotation", permission: "quotations:approve", run: quotations, count: countWhere(quotesCollection, QUOTATION_PENDING_FILTER) },
+  { kind: "scopeOfWork", permission: "scopeOfWork:finalize", run: scopeOfWorks, count: countWhere(scopeOfWorksCollection, SHARED_PENDING_FILTER) },
+  { kind: "deliveryOrder", permission: "deliveryOrder:finalize", run: deliveryOrders, count: countWhere(deliveryOrdersCollection, SHARED_PENDING_FILTER) },
+  { kind: "materialRequisition", permission: "materialRequisition:finalize", run: materialRequisitions, count: countWhere(materialRequisitionsCollection, SHARED_PENDING_FILTER) },
+  { kind: "jobOrder", permission: "jobOrder:finalize", run: jobOrders, count: countWhere(jobOrdersCollection, SHARED_PENDING_FILTER) },
+  { kind: "purchaseRequest", permission: "purchaseRequest:finalize", run: purchaseRequests, count: countWhere(purchaseRequestsCollection, SHARED_PENDING_FILTER) },
+  { kind: "purchaseOrder", permission: "purchaseOrder:finalize", run: purchaseOrders, count: countWhere(purchaseOrdersCollection, SHARED_PENDING_FILTER) },
+  { kind: "productionOrder", permission: "productionOrder:finalize", run: productionOrders, count: countWhere(productionOrdersCollection, SHARED_PENDING_FILTER) },
+  { kind: "costControl", permission: "costControl:finalize", run: costControls, count: countWhere(costControlsCollection, SHARED_PENDING_FILTER) },
+  { kind: "productRequest", permission: "productRequest:review", run: productRequests, count: countWhere(productRequestsCollection, PRODUCT_REQUEST_PENDING_FILTER) },
 ];
+
+/**
+ * จำนวนใบรออนุมัติต่อหมวด เฉพาะหมวดที่ผู้ใช้อนุมัติได้ (2026-09-14 — แท็บภาพรวมของแดชบอร์ด)
+ *
+ * กติกาสิทธิ์และเงื่อนไข "รออนุมัติ" เดียวกับ `collectPendingApprovals` ทุกข้อ · หมวดที่นับพังถูกตัดออก
+ * เงียบ ๆ แบบเดียวกับ `runKind` แทนที่จะทำให้ทั้งกล่องหาย
+ */
+export async function countPendingApprovals(ctx: AuthContext): Promise<{ kind: PendingApprovalKind; count: number }[]> {
+  const rows = await Promise.all(
+    KINDS.filter((k) => roleHasPermission(ctx.role, k.permission)).map(async (k) => {
+      try {
+        return { kind: k.kind, count: await k.count() };
+      } catch (err) {
+        console.error(`[pending-approvals] count "${k.kind}" failed`, err);
+        return null;
+      }
+    }),
+  );
+  return rows.filter((r): r is { kind: PendingApprovalKind; count: number } => r !== null);
+}
 
 /** หมวดหนึ่งพังต้องไม่ทำให้ทั้งหน้าว่าง — แนวเดียวกับ `runCategory` ของ Global Search */
 async function runKind(

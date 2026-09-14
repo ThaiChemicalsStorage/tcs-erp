@@ -635,6 +635,29 @@ Page containers: `p-6 space-y-5`/`space-y-6`. Card internal padding: `p-4`–`p-
 
 **Per-page/per-document tours (2026-07-29)**: `useModuleTour(tourKey, userId, steps, opts?)` in the same file gives an individual page or document editor its own tour with per-user "seen" tracking (`src/lib/tour.ts`), auto-started once (600 ms after mount) and replayed via the shared **`TourReplayButton`** component (also exported from `GuidedTour.tsx` — use it, never hand-roll the HelpCircle button; 11 pre-extraction copies remain, tracked in TODO.md). To add a tour: define the `DriveStep[]` with `tour.<key>.<step>.title`/`.desc` i18n keys (Thai + English), put matching `data-tour` attributes on the real elements, and mount the hook **in the component that renders the anchors**. `opts.autoStart` gates the one-time auto-fire and re-arms when it flips false→true — pass a *readiness* condition when the anchors/described UI appear asynchronously (`!!record` for fetched documents, stricter when a step describes conditional UI, e.g. DeliveryOrder's `installments.length > 0`, QuoteDocument's `isDetail`) or a *policy* condition (Dashboard's `hasTourCompleted(userId)` so it never races the main tour). Dismissal (Done/×/Escape/overlay) marks the tour seen; unmount deliberately does not.
 
+### Tabs (`src/components/Tabs.tsx`, added 2026-09-14)
+The shared tab bar — use it instead of hand-rolling `role="tab"` markup (CodeRegisterPage and
+ToolControlPage still have inline copies, tracked in TODO.md). WAI-ARIA pattern: roving `tabIndex`,
+←/→ select, Home/End jump; selection follows focus. Gold 2px underline on the active tab, muted text
+otherwise; icon optional. The bar scrolls horizontally rather than wrapping and scrolls the active tab
+into view. Pair each panel with `tabPanelProps(idPrefix, key)` (`src/components/tabPanelProps.ts`) so
+`aria-controls`/`aria-labelledby` match. Mount only the active panel; keep header and filters outside
+it so they render before the tab's data (shell-first).
+
+### Dashboard department tabs (2026-09-14)
+The Dashboard is now tabs — ภาพรวม plus one per department (see [MODULES/Dashboard.md](./MODULES/Dashboard.md)
+"Department Tabs"). The "Dashboard Overview" rules below now describe the **ขาย** tab. For the other tabs:
+- **One colour and icon per department** (`src/pages/dashboard/tabs/tabMeta.ts`), used on both the tab
+  and its overview card — never gold (Rare Gold Rule) or red (reserved for "something is wrong").
+- **Overview card** = department icon chip + Playfair title + 2–4 `label … value` rows + a
+  "ดูรายละเอียดแผนก →" footer that switches tab. A value turns red/orange **only when it is > 0** for
+  overdue/waiting counts; never colour a number permanently.
+- **A number the user has no permission for is omitted, not shown as 0.**
+- **Filter Honesty for department numbers:** snapshot is the default and says so once per tab
+  (`TabIntro`); period-filtered numbers carry an explicit "ช่วงที่เลือก" tag/caption.
+- Reuse `StatTile`, `StatusBreakdownCard`, `DueListTable`, `CardTable` from `tabs/DepartmentWidgets.tsx`
+  for any new department number rather than inventing another card shape.
+
 ### Dashboard Overview (KPIs + status/activity panels)
 **2026-07-13, seventh same-day pass (current state)**: the Dashboard's top-of-page "answer in 5 seconds" overview is now exactly **5 rows in the P'Keng/P'Kee business requirement's specified order** — Header+Filters, then:
 1. **`ExecutiveSummaryCards.tsx`** — exactly 4 cards, no more: Total Quotations, Total Quotation Value, Closed Sales, Expected Sales. `text-2xl font-mono` value, compact `p-4` card, a one-line `helper` caption under the value on **every** card (added this pass — previously only Expected Sales had any sub-text, via an (i) tooltip), plus `MetricInfoTooltip` still only where the calculation genuinely isn't obvious from the helper text alone (currently just Expected Sales). **This is the only place on the Dashboard that should look like a "KPI card" — everything else uses a table, compact grid, or tile row.**
