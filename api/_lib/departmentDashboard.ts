@@ -5,35 +5,37 @@ import { buildSimpleOwnershipClause, buildCostControlVisibilityClause } from "./
 import {
   purchaseOrdersCollection, purchaseRequestsCollection, receivingReportsCollection, productsCollection,
   stockMovementsCollection, materialRequisitionsCollection, productRequestsCollection, productionOrdersCollection,
-  jobOrdersCollection, costControlsCollection, serviceReportsCollection,
+  jobOrdersCollection, costControlsCollection, serviceReportsCollection, categoriesCollection,
 } from "./collections.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
 import { purchaseOrderTotals } from "../../src/lib/purchaseOrder.js";
 import { receivingReportTotals } from "../../src/lib/receivingReport.js";
-import { stockValueOf, type StockMovementKind } from "../../src/lib/stock.js";
+import { stockValueOf } from "../../src/lib/stock.js";
 import { requisitionHasOutstanding } from "../../src/lib/materialRequisition.js";
-import { DEPARTMENT_KEYS, canSeeDashboardTab, type DepartmentKey } from "../../src/lib/dashboardTabs.js";
+import { DEPARTMENT_KEYS, OPERATIONS_DEPARTMENTS, canSeeDepartmentBlock, type DepartmentKey } from "../../src/lib/dashboardTabs.js";
 import type {
-  BlockScope, DepartmentBlock, DepartmentDashboardResponse, DepartmentDashboardView, DueItem, StatusCounts,
+  AttentionItem, BlockScope, DepartmentBlock, DepartmentDashboardResponse, DepartmentDashboardView, DueItem,
+  MonthCount, OpenPurchaseRequestStages, ServiceFollowUp, StatusCounts,
 } from "../../src/lib/departmentDashboard.js";
 import { countPendingApprovals } from "./pendingApprovals.js";
 import {
-  todayIsoDate, addDaysIso, bangkokDayBoundsUtc, fetchActivityTimeline, computeCategoryBreakdown,
-  countDeliveryOrders, countServiceReports, serviceOwnershipClause,
+  todayIsoDate, addDaysIso, bangkokDayBoundsUtc, fetchActivityTimeline, countDeliveryOrders, serviceOwnershipClause,
 } from "./dashboardShared.js";
 
 /**
- * `GET /api/dashboard/departments?dept=overview|service|purchasing|inventory|production|project|bd&from&to`
+ * `GET /api/dashboard/departments?dept=overview|service|purchasing|inventory|operations&from&to`
  * — ตัวเลขของแท็บแผนกบนหน้าแดชบอร์ด (เพิ่ม 2026-09-14)
  *
  * เจ้าของสั่ง *"หน้า Dashboard อยากให้ทำให้ดูง่ายขึ้นแยกแต่ละแผนกอย่างชัดเจนแต่ก็ยังมี Dashboard ที่ดู
  * ข้อมูลรวมได้ทุกอย่างอยู่ด้วย"* · แท็บขายยังใช้ `GET /api/dashboard` เดิมทุกอย่าง และแท็บบัญชีใช้
  * `GET /api/ar-dashboard` เดิม — endpoint นี้คำนวณเฉพาะแผนกที่ก่อนหน้านี้ไม่มีตัวเลขบนแดชบอร์ดเลย
+ * · รอบออกแบบใหม่ (2026-09-14 ตาม docs/DASHBOARD_DESIGN.md) เพิ่มชุดข้อมูล 12 เดือนให้กราฟ และรวม
+ * ผลิต · โครงการ · BD เป็น `dept=operations` ตัวเดียว (ยังเป็นสามบล็อก สิทธิ์แยกกันเหมือนเดิม)
  *
  * **กติกาที่ต้องรักษา**
- *   1. ด่านของทั้ง route คือ `dashboard:view` (สิทธิ์ของหน้า) · แต่ละบล็อกเปิดด้วยกติกาแท็บใน
- *      `src/lib/dashboardTabs.ts` ซึ่งเป็นตัวเดียวกับที่หน้าจอใช้ซ่อนแท็บ · ตัวเลขแต่ละตัวในบล็อกยังเช็ก
+ *   1. ด่านของทั้ง route คือ `dashboard:view` (สิทธิ์ของหน้า) · แต่ละบล็อกเปิดด้วย `canSeeDepartmentBlock`
+ *      ใน `src/lib/dashboardTabs.ts` ซึ่งเป็นตัวเดียวกับที่หน้าจอใช้ · ตัวเลขแต่ละตัวในบล็อกยังเช็ก
  *      สิทธิ์ดูของเอกสารชนิดนั้นซ้ำอีกชั้น (แท็บหนึ่งรวมหลายชนิดเอกสาร) ไม่มีสิทธิ์ = `null`
  *   2. **นับเฉพาะใบที่หน้ารายการของผู้ใช้แสดง** — ทุก clause การมองเห็นลอกมาจาก `handleList` ของโมดูล
  *      นั้นตรง ๆ · ข้อยกเว้นที่ตั้งใจเหมือนต้นทาง: คิวตัดของของสโตร์ไม่กรองเจ้าของ (เปิดด้วย `stock:adjust`)
@@ -41,6 +43,8 @@ import {
  *      ที่แก้ใน MR/PR เมื่อ 2026-08-20i)
  *   4. บล็อกหนึ่งพังต้องไม่ทำให้ทั้งหน้าว่าง — บล็อกนั้นเป็น `null` และชื่ออยู่ใน `failed`
  *   5. BD ไม่มียอดเงินเลย ตามคำสั่งเจ้าของ 2026-08-31 ที่ถอดยอดรวมของ Cost Control ออก (มีเทสต์กันไว้)
+ *   6. ชุดข้อมูล `...ByMonth` คือ 12 เดือนล่าสุดสิ้นสุดเดือนนี้ **ไม่ขึ้นกับช่วงวันที่** และมีเฉพาะตัวเลขที่มี
+ *      วันที่จริงบนเอกสาร — ตัวเลข ณ ปัจจุบัน (สต๊อก ใบรออนุมัติ) ไม่มีประวัติ ห้ามทำเป็นเส้นแนวโน้ม
  */
 
 type Has = (permission: Permission) => boolean;
@@ -51,13 +55,19 @@ interface BlockContext {
   from: string;
   to: string;
   today: string;
+  /** "YYYY-MM" 12 ตัว เก่าสุดก่อน สิ้นสุดเดือนนี้ */
+  months: string[];
   /** false = ภาพรวม (ต้องการแค่ summary) */
   withDetail: boolean;
 }
 
 const DUE_SOON_DAYS = 7;
 const PM_WINDOW_DAYS = 30;
+const STALE_DRAFT_DAYS = 7;
 const LIST_LIMIT = 10;
+const TREND_MONTHS = 12;
+const TOP_VENDORS = 6;
+const ATTENTION_LIMIT = 8;
 
 type Clause = Record<string, unknown>;
 
@@ -85,6 +95,20 @@ function inPeriod(date: string | undefined, from: string, to: string): boolean {
   return (!from || date >= from) && (!to || date <= to);
 }
 
+/** 12 เดือนล่าสุดสิ้นสุดเดือนของ `today` — คิดบนปฏิทินล้วน */
+export function lastMonthKeys(today: string, n = TREND_MONTHS): string[] {
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  const keys: string[] = [];
+  for (let i = n - 1; i >= 0; i--) keys.push(new Date(Date.UTC(y, m - 1 - i, 1)).toISOString().slice(0, 7));
+  return keys;
+}
+
+/** เงื่อนไข "ฟิลด์วันที่แบบข้อความอยู่ใน 12 เดือนนี้" */
+function monthsClause(field: string, months: string[]): Clause {
+  return { [field]: { $gte: `${months[0]}-01`, $lte: `${months[months.length - 1]}-31` } };
+}
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 type Countable = { countDocuments(filter: never): Promise<number> };
@@ -104,18 +128,32 @@ async function statusCounts(collection: Aggregatable, match: Clause): Promise<St
   return { draft: by.get("Draft") ?? 0, pending: by.get("PendingApproval") ?? 0, final: by.get("Final") ?? 0 };
 }
 
+/** จำนวนเอกสารต่อเดือน นับตามฟิลด์วันที่แบบข้อความ — เดือนที่ไม่มีใบเป็น 0 */
+async function monthlyCounts(collection: Aggregatable, match: Clause, field: string, months: string[]): Promise<MonthCount[]> {
+  const rows = (await collection.aggregate([
+    { $match: and(match, monthsClause(field, months)) },
+    { $group: { _id: { $substrBytes: [`$${field}`, 0, 7] }, n: { $sum: 1 } } },
+  ] as never).toArray()) as { _id: string; n: number }[];
+  const by = new Map(rows.map((r) => [r._id, r.n]));
+  return months.map((month) => ({ month, count: by.get(month) ?? 0 }));
+}
+
 /** ใบที่ไม่มี `ownerDepartment` เป็นของฝ่ายโครงการ — ตรงกับ handler ของหน้ารายการ MR/PR */
 const PROJECT_OWNED: Clause = { $or: [{ ownerDepartment: "project" }, { ownerDepartment: { $exists: false } }] };
 const PRODUCTION_OWNED: Clause = { ownerDepartment: "production" };
 
 /** ใบเบิกที่อนุมัติแล้วและยังจ่ายไม่ครบ — ตัวตัดสินเดียวกับคิวของสโตร์ (`requisitionHasOutstanding`) */
-async function countRequisitionsAwaitingIssue(match: Clause): Promise<number> {
+async function requisitionsAwaitingIssue(match: Clause): Promise<{ ownerDepartment?: string }[]> {
   const col = await materialRequisitionsCollection();
   const docs = await col.find(
     and({ isDeleted: false, status: "Final" }, match) as never,
-    { projection: { status: 1, "lines.plannedQty": 1, "lines.withdrawal1Qty": 1, "lines.withdrawal2Qty": 1 } },
+    { projection: { status: 1, ownerDepartment: 1, "lines.plannedQty": 1, "lines.withdrawal1Qty": 1, "lines.withdrawal2Qty": 1 } },
   ).toArray();
-  return docs.filter((d) => requisitionHasOutstanding({ status: d.status, lines: d.lines ?? [] })).length;
+  return docs.filter((d) => requisitionHasOutstanding({ status: d.status, lines: d.lines ?? [] }));
+}
+
+async function countRequisitionsAwaitingIssue(match: Clause): Promise<number> {
+  return (await requisitionsAwaitingIssue(match)).length;
 }
 
 /** id ของใบขอซื้อที่มีใบสั่งซื้อผูกอยู่แล้ว (ไม่นับใบสั่งซื้อที่ถูกลบ) */
@@ -125,11 +163,24 @@ async function purchaseRequestIdsWithPo(): Promise<Set<string>> {
   return new Set(ids.filter((id): id is string => typeof id === "string" && id !== ""));
 }
 
+/** ใบขอซื้อที่อนุมัติแล้ว ยังไม่ได้ของ (สโตร์ยังไม่ปิด และยังไม่มีใบสั่งซื้อ) — แยกว่าอยู่ที่สโตร์หรือจัดซื้อ */
+async function openPurchaseRequestStages(match: Clause): Promise<OpenPurchaseRequestStages> {
+  const [approved, linkedToPo] = await Promise.all([
+    (await purchaseRequestsCollection()).find(and({ isDeleted: false, status: "Final" }, match) as never, { projection: { storeStage: 1 } }).toArray(),
+    purchaseRequestIdsWithPo(),
+  ]);
+  const open = approved.filter((p) => p.storeStage !== "closed" && !linkedToPo.has(p._id.toString()));
+  return {
+    atStore: open.filter((p) => p.storeStage === "pending").length,
+    atPurchasing: open.filter((p) => p.storeStage !== "pending").length,
+  };
+}
+
 const scopeOf = (...ownScoped: boolean[]): BlockScope => (ownScoped.some(Boolean) ? "own" : "all");
 
 // ── จัดซื้อ ───────────────────────────────────────────────────────────────────
 
-async function purchasingBlock({ ctx, has, from, to, today, withDetail }: BlockContext): Promise<DepartmentBlock<"purchasing">> {
+async function purchasingBlock({ ctx, has, from, to, today, months, withDetail }: BlockContext): Promise<DepartmentBlock<"purchasing">> {
   const canPo = has("purchaseOrder:view");
   const canPr = has("purchaseRequest:view");
   const poOwn = buildSimpleOwnershipClause(ctx.user.id, has("purchaseOrder:viewAll"), "createdBy");
@@ -138,7 +189,8 @@ async function purchasingBlock({ ctx, has, from, to, today, withDetail }: BlockC
 
   const summary: DepartmentBlock<"purchasing">["summary"] = { prAwaitingPo: null, poPending: null, poAwaitingReceipt: null, poOverdue: null };
   const detail: NonNullable<DepartmentBlock<"purchasing">["detail"]> = {
-    poStatus: null, poApprovedInPeriod: null, prStatusByDepartment: null, prStage: null, overduePurchaseOrders: null,
+    poApprovedInPeriod: null, poValueByMonth: null, topVendors: null, receiptProgress: null,
+    prAwaitingPoByDepartment: null, prStage: null, overduePurchaseOrders: null,
   };
 
   if (canPo) {
@@ -162,14 +214,41 @@ async function purchasingBlock({ ctx, has, from, to, today, withDetail }: BlockC
     summary.poPending = await count(pos, and({ isDeleted: false, status: "PendingApproval" }, poOwn));
 
     if (withDetail) {
-      detail.poStatus = await statusCounts(pos, and({ isDeleted: false }, poOwn));
-      const inRange = approved.filter((p) => inPeriod(p.orderDate, from, to));
-      detail.poApprovedInPeriod = {
-        count: inRange.length,
-        value: round2(inRange.reduce((sum, p) => sum + purchaseOrderTotals({
-          lines: p.lines ?? [], vatRate: p.vatRate ?? null, discount: p.discount, discountMode: p.discountMode,
-        }).total, 0)),
-      };
+      const totalOf = (p: (typeof approved)[number]) => purchaseOrderTotals({
+        lines: p.lines ?? [], vatRate: p.vatRate ?? null, discount: p.discount, discountMode: p.discountMode,
+      }).total;
+      const withTotal = approved.map((p) => ({ p, total: totalOf(p) }));
+
+      const inRange = withTotal.filter(({ p }) => inPeriod(p.orderDate, from, to));
+      detail.poApprovedInPeriod = { count: inRange.length, value: round2(inRange.reduce((sum, r) => sum + r.total, 0)) };
+
+      const byMonth = new Map<string, { count: number; value: number }>();
+      for (const { p, total } of withTotal) {
+        const month = (p.orderDate ?? "").slice(0, 7);
+        const bucket = byMonth.get(month) ?? { count: 0, value: 0 };
+        bucket.count += 1;
+        bucket.value += total;
+        byMonth.set(month, bucket);
+      }
+      detail.poValueByMonth = months.map((month) => ({
+        month, count: byMonth.get(month)?.count ?? 0, value: round2(byMonth.get(month)?.value ?? 0),
+      }));
+
+      const byVendor = new Map<string, { count: number; value: number }>();
+      for (const { p, total } of inRange) {
+        const name = (p.vendorName ?? "").trim();
+        if (!name) continue;
+        const bucket = byVendor.get(name) ?? { count: 0, value: 0 };
+        bucket.count += 1;
+        bucket.value += total;
+        byVendor.set(name, bucket);
+      }
+      detail.topVendors = [...byVendor.entries()]
+        .map(([name, v]) => ({ name, count: v.count, value: round2(v.value) }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, TOP_VENDORS);
+
+      detail.receiptProgress = { approved: approved.length, received: approved.length - awaiting.length };
       detail.overduePurchaseOrders = overdue.slice(0, LIST_LIMIT).map((p): DueItem => ({
         id: p._id.toString(), docNumber: p.documentNumber || p._id.toString(), party: p.vendorName ?? "", date: p.neededByDate,
       }));
@@ -178,12 +257,13 @@ async function purchasingBlock({ ctx, has, from, to, today, withDetail }: BlockC
 
   if (canPr) {
     const [approved, linkedToPo] = await Promise.all([
-      prs.find(and({ isDeleted: false, status: "Final" }, prOwn) as never, { projection: { storeStage: 1 } }).toArray(),
+      prs.find(and({ isDeleted: false, status: "Final" }, prOwn) as never, { projection: { storeStage: 1, ownerDepartment: 1 } }).toArray(),
       purchaseRequestIdsWithPo(),
     ]);
     // ใบก่อน 2026-09-09 ไม่มี storeStage — วิ่งตรงไปจัดซื้อตามกติกาเดิม (เงื่อนไขเดียวกับกล่องของจัดซื้อ)
     const atPurchasing = approved.filter((p) => p.storeStage === "forwarded" || !p.storeStage);
-    summary.prAwaitingPo = atPurchasing.filter((p) => !linkedToPo.has(p._id.toString())).length;
+    const awaitingPo = atPurchasing.filter((p) => !linkedToPo.has(p._id.toString()));
+    summary.prAwaitingPo = awaitingPo.length;
 
     if (withDetail) {
       detail.prStage = {
@@ -191,14 +271,8 @@ async function purchasingBlock({ ctx, has, from, to, today, withDetail }: BlockC
         atPurchasing: atPurchasing.length,
         closedByStore: approved.filter((p) => p.storeStage === "closed").length,
       };
-      const rows = (await prs.aggregate([
-        { $match: and({ isDeleted: false }, prOwn) },
-        { $group: { _id: { department: { $ifNull: ["$ownerDepartment", "project"] }, status: "$status" }, n: { $sum: 1 } } },
-      ] as never).toArray()) as { _id: { department: string; status: string }; n: number }[];
-      detail.prStatusByDepartment = (["project", "production", "general"] as const).map((ownerDepartment) => {
-        const of = (status: string) => rows.find((r) => r._id.department === ownerDepartment && r._id.status === status)?.n ?? 0;
-        return { ownerDepartment, counts: { draft: of("Draft"), pending: of("PendingApproval"), final: of("Final") } };
-      });
+      const ofDepartment = (dept: string) => awaitingPo.filter((p) => (p.ownerDepartment ?? "project") === dept).length;
+      detail.prAwaitingPoByDepartment = { project: ofDepartment("project"), production: ofDepartment("production"), general: ofDepartment("general") };
     }
   }
 
@@ -211,7 +285,7 @@ async function purchasingBlock({ ctx, has, from, to, today, withDetail }: BlockC
 
 // ── คลังสินค้า ────────────────────────────────────────────────────────────────
 
-async function inventoryBlock({ ctx, has, from, to, withDetail }: BlockContext): Promise<DepartmentBlock<"inventory">> {
+async function inventoryBlock({ ctx, has, from, to, today, months, withDetail }: BlockContext): Promise<DepartmentBlock<"inventory">> {
   const canStock = has("stock:view");
   const canReceiving = has("receivingReport:view");
   const canProductRequests = has("productRequest:view");
@@ -222,8 +296,8 @@ async function inventoryBlock({ ctx, has, from, to, withDetail }: BlockContext):
 
   const summary: DepartmentBlock<"inventory">["summary"] = { stockValue: null, lowStock: null, mrAwaitingIssue: null, openReceivingReports: null };
   const detail: NonNullable<DepartmentBlock<"inventory">["detail"]> = {
-    outstandingReceiveValue: null, prAwaitingStore: null, pendingProductRequests: null,
-    movementsByKind: null, recentMovements: null, lowStockItems: null, categoryBreakdown: [],
+    outstandingReceiveValue: null, prAwaitingStore: null, pendingProductRequests: null, outOfStock: null,
+    mrAwaitingIssueByDepartment: null, movementsByMonth: null, recentMovements: null, lowStockItems: null, stockValueByCategory: null,
   };
 
   const tasks: Promise<void>[] = [];
@@ -232,41 +306,64 @@ async function inventoryBlock({ ctx, has, from, to, withDetail }: BlockContext):
     tasks.push((async () => {
       const products = await (await productsCollection()).find(
         { archived: { $ne: true } } as never,
-        { projection: { code: 1, name: 1, unit: 1, stockQty: 1, avgCost: 1, reorderPoint: 1 } },
+        { projection: { code: 1, name: 1, unit: 1, stockQty: 1, avgCost: 1, reorderPoint: 1, categoryId: 1 } },
       ).toArray();
-      summary.stockValue = round2(products.reduce((sum, p) => sum + stockValueOf({ stockQty: p.stockQty ?? 0, avgCost: p.avgCost }), 0));
+      const valueOf = (p: (typeof products)[number]) => stockValueOf({ stockQty: p.stockQty ?? 0, avgCost: p.avgCost });
+      summary.stockValue = round2(products.reduce((sum, p) => sum + valueOf(p), 0));
       // จุดเตือน 0 หรือไม่มีค่า = ปิดการเตือนของสินค้าตัวนั้น — กติกาเดียวกับหน้าสต๊อก (StockPage.tsx)
       const low = products.filter((p) => (p.reorderPoint ?? 0) > 0 && (p.stockQty ?? 0) <= (p.reorderPoint ?? 0));
       summary.lowStock = low.length;
-      if (withDetail) {
-        detail.lowStockItems = low
-          .sort((a, b) => ((a.stockQty ?? 0) - (a.reorderPoint ?? 0)) - ((b.stockQty ?? 0) - (b.reorderPoint ?? 0)))
-          .slice(0, LIST_LIMIT)
-          .map((p) => ({ id: p._id.toString(), code: p.code, name: p.name, unit: p.unit, stockQty: p.stockQty ?? 0, reorderPoint: p.reorderPoint ?? 0 }));
+      if (!withDetail) return;
 
-        const movements = await stockMovementsCollection();
-        const match: Clause = from || to ? { createdAt: bangkokDayBoundsUtc(from, to) } : {};
-        const [byKind, recent] = await Promise.all([
-          movements.aggregate([
-            { $match: match },
-            { $group: { _id: "$kind", count: { $sum: 1 }, amount: { $sum: { $ifNull: ["$amount", 0] } } } },
-          ] as never).toArray() as Promise<{ _id: StockMovementKind; count: number; amount: number }[]>,
-          movements.find(match as never, { projection: { productCode: 1, productName: 1, kind: 1, delta: 1, createdAt: 1 } })
-            .sort({ createdAt: -1 }).limit(LIST_LIMIT).toArray(),
-        ]);
-        detail.movementsByKind = (["receive", "deduct", "return", "adjust"] as const).map((kind) => {
-          const row = byKind.find((r) => r._id === kind);
-          return { kind, count: row?.count ?? 0, amount: round2(row?.amount ?? 0) };
-        });
-        detail.recentMovements = recent.map((m) => ({
-          id: m._id.toString(), productCode: m.productCode, productName: m.productName, kind: m.kind, delta: m.delta, createdAt: m.createdAt,
-        }));
+      detail.outOfStock = low.filter((p) => (p.stockQty ?? 0) <= 0).length;
+      detail.lowStockItems = low
+        .sort((a, b) => ((a.stockQty ?? 0) - (a.reorderPoint ?? 0)) - ((b.stockQty ?? 0) - (b.reorderPoint ?? 0)))
+        .slice(0, LIST_LIMIT)
+        .map((p) => ({ id: p._id.toString(), code: p.code, name: p.name, unit: p.unit, stockQty: p.stockQty ?? 0, reorderPoint: p.reorderPoint ?? 0 }));
+
+      const categoryDocs = await (await categoriesCollection()).find({}, { projection: { name: 1 } }).toArray();
+      const categoryName = new Map(categoryDocs.map((c) => [c._id.toString(), c.name]));
+      const valueByCategory = new Map<string, number>();
+      for (const p of products) {
+        const value = valueOf(p);
+        if (value <= 0) continue;
+        valueByCategory.set(p.categoryId ?? "", (valueByCategory.get(p.categoryId ?? "") ?? 0) + value);
       }
+      detail.stockValueByCategory = [...valueByCategory.entries()]
+        .map(([categoryId, value]) => ({ categoryId, categoryName: categoryName.get(categoryId) ?? "ไม่ระบุหมวดหมู่", value: round2(value) }))
+        .sort((a, b) => b.value - a.value);
+
+      const movements = await stockMovementsCollection();
+      const periodMatch: Clause = from || to ? { createdAt: bangkokDayBoundsUtc(from, to) } : {};
+      const [byMonth, recent] = await Promise.all([
+        movements.aggregate([
+          { $match: { kind: { $in: ["receive", "deduct"] }, createdAt: bangkokDayBoundsUtc(`${months[0]}-01`, today) } },
+          {
+            $group: {
+              _id: { month: { $dateToString: { format: "%Y-%m", date: { $toDate: "$createdAt" }, timezone: "+07:00" } }, kind: "$kind" },
+              amount: { $sum: { $ifNull: ["$amount", 0] } },
+            },
+          },
+        ] as never).toArray() as Promise<{ _id: { month: string; kind: "receive" | "deduct" }; amount: number }[]>,
+        movements.find(periodMatch as never, { projection: { productCode: 1, productName: 1, kind: 1, delta: 1, createdAt: 1 } })
+          .sort({ createdAt: -1 }).limit(LIST_LIMIT).toArray(),
+      ]);
+      const amountOf = (month: string, kind: string) => round2(Math.abs(byMonth.find((r) => r._id.month === month && r._id.kind === kind)?.amount ?? 0));
+      detail.movementsByMonth = months.map((month) => ({ month, receive: amountOf(month, "receive"), deduct: amountOf(month, "deduct") }));
+      detail.recentMovements = recent.map((m) => ({
+        id: m._id.toString(), productCode: m.productCode, productName: m.productName, kind: m.kind, delta: m.delta, createdAt: m.createdAt,
+      }));
     })());
   }
 
   if (canIssueQueue) {
-    tasks.push(countRequisitionsAwaitingIssue({}).then((n) => { summary.mrAwaitingIssue = n; }));
+    tasks.push(requisitionsAwaitingIssue({}).then((docs) => {
+      summary.mrAwaitingIssue = docs.length;
+      if (withDetail) {
+        const production = docs.filter((d) => d.ownerDepartment === "production").length;
+        detail.mrAwaitingIssueByDepartment = { production, project: docs.length - production };
+      }
+    }));
   }
 
   if (canReceiving) {
@@ -303,10 +400,6 @@ async function inventoryBlock({ ctx, has, from, to, withDetail }: BlockContext):
     })());
   }
 
-  if (withDetail) {
-    tasks.push(computeCategoryBreakdown().then((rows) => { detail.categoryBreakdown = rows; }));
-  }
-
   await Promise.all(tasks);
 
   return {
@@ -318,7 +411,7 @@ async function inventoryBlock({ ctx, has, from, to, withDetail }: BlockContext):
 
 // ── ผลิต ──────────────────────────────────────────────────────────────────────
 
-async function productionBlock({ ctx, has, from, to, today, withDetail }: BlockContext): Promise<DepartmentBlock<"production">> {
+async function productionBlock({ ctx, has, from, to, today, months, withDetail }: BlockContext): Promise<DepartmentBlock<"production">> {
   const orders = await productionOrdersCollection();
   const own = buildSimpleOwnershipClause(ctx.user.id, has("productionOrder:viewAll"), "createdBy");
   const base = and({ isDeleted: false }, own);
@@ -335,21 +428,20 @@ async function productionBlock({ ctx, has, from, to, today, withDetail }: BlockC
 
   let detail: DepartmentBlock<"production">["detail"] = null;
   if (withDetail) {
-    const canPr = has("purchaseRequest:view");
     const prOwn = buildSimpleOwnershipClause(ctx.user.id, has("purchaseRequest:viewAll"), "createdBy");
-    const [status, startedInPeriod, due, requisitionStatus, purchaseRequestStatus, deliveryOrder] = await Promise.all([
+    const [status, startedInPeriod, startedByMonth, due, prOpenStage, deliveryOrder] = await Promise.all([
       statusCounts(orders, base),
       count(orders, and(base, periodClause("startDate", from, to))),
+      monthlyCounts(orders, base, "startDate", months),
       orders.find(
         and(base, { status: "Final", dueDate: { $gt: "", $lte: soon } }) as never,
         { projection: { documentNumber: 1, customerCompanyName: 1, productName: 1, dueDate: 1 } },
       ).sort({ dueDate: 1 }).limit(LIST_LIMIT).toArray(),
-      canRequisitions ? statusCounts(await materialRequisitionsCollection(), and({ isDeleted: false }, PRODUCTION_OWNED, mrOwn)) : Promise.resolve(null),
-      canPr ? statusCounts(await purchaseRequestsCollection(), and({ isDeleted: false }, PRODUCTION_OWNED, prOwn)) : Promise.resolve(null),
+      has("purchaseRequest:view") ? openPurchaseRequestStages(and(PRODUCTION_OWNED, prOwn)) : Promise.resolve(null),
       has("deliveryOrder:view") ? countDeliveryOrders(ctx) : Promise.resolve(null),
     ]);
     detail = {
-      status, startedInPeriod, requisitionStatus, purchaseRequestStatus, deliveryOrder,
+      status, startedInPeriod, startedByMonth, prOpenStage, deliveryOrder,
       dueList: due.map((d): DueItem => ({
         id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
         party: [d.customerCompanyName, d.productName].filter(Boolean).join(" · "), date: d.dueDate,
@@ -366,7 +458,7 @@ async function productionBlock({ ctx, has, from, to, today, withDetail }: BlockC
 
 // ── โครงการ ───────────────────────────────────────────────────────────────────
 
-async function projectBlock({ ctx, has, from, to, today, withDetail }: BlockContext): Promise<DepartmentBlock<"project">> {
+async function projectBlock({ ctx, has, from, to, today, months, withDetail }: BlockContext): Promise<DepartmentBlock<"project">> {
   const canJobOrders = has("jobOrder:view");
   const canRequisitions = has("materialRequisition:view");
   const canPr = has("purchaseRequest:view");
@@ -376,40 +468,30 @@ async function projectBlock({ ctx, has, from, to, today, withDetail }: BlockCont
   const prOwn = buildSimpleOwnershipClause(ctx.user.id, has("purchaseRequest:viewAll"), "createdBy");
   const soon = addDaysIso(today, DUE_SOON_DAYS);
 
-  const openProjectPurchaseRequests = async (): Promise<number> => {
-    const [approved, linkedToPo] = await Promise.all([
-      (await purchaseRequestsCollection()).find(
-        and({ isDeleted: false, status: "Final" }, PROJECT_OWNED, prOwn) as never, { projection: { storeStage: 1 } },
-      ).toArray(),
-      purchaseRequestIdsWithPo(),
-    ]);
-    return approved.filter((p) => p.storeStage !== "closed" && !linkedToPo.has(p._id.toString())).length;
-  };
-
-  const [jobOrderPending, jobOrderDueSoon, mrAwaitingIssue, prOpen] = await Promise.all([
+  const [jobOrderPending, jobOrderDueSoon, jobOrderPastDue, mrAwaitingIssue, prStages] = await Promise.all([
     canJobOrders ? count(jobs, and(jobBase, { status: "PendingApproval" })) : Promise.resolve(null),
     canJobOrders ? count(jobs, and(jobBase, { status: "Final", finishDate: { $gte: today, $lte: soon } })) : Promise.resolve(null),
+    canJobOrders ? count(jobs, and(jobBase, { status: "Final", finishDate: { $gt: "", $lt: today } })) : Promise.resolve(null),
     canRequisitions ? countRequisitionsAwaitingIssue(and(PROJECT_OWNED, mrOwn)) : Promise.resolve(null),
-    canPr ? openProjectPurchaseRequests() : Promise.resolve(null),
+    canPr ? openPurchaseRequestStages(and(PROJECT_OWNED, prOwn)) : Promise.resolve(null),
   ]);
 
   let detail: DepartmentBlock<"project">["detail"] = null;
   if (withDetail) {
-    const [jobOrderStatus, jobOrderStartedInPeriod, due, requisitionStatus, purchaseRequestStatus, deliveryOrder] = await Promise.all([
+    const [jobOrderStatus, jobOrderStartedInPeriod, startedByMonth, due, deliveryOrder] = await Promise.all([
       canJobOrders ? statusCounts(jobs, jobBase) : Promise.resolve(null),
       canJobOrders ? count(jobs, and(jobBase, periodClause("startDate", from, to))) : Promise.resolve(null),
+      canJobOrders ? monthlyCounts(jobs, jobBase, "startDate", months) : Promise.resolve(null),
       canJobOrders
         ? jobs.find(
           and(jobBase, { status: "Final", finishDate: { $gt: "", $lte: soon } }) as never,
           { projection: { jobCode: 1, customerName: 1, finishDate: 1 } },
         ).sort({ finishDate: 1 }).limit(LIST_LIMIT).toArray()
         : Promise.resolve(null),
-      canRequisitions ? statusCounts(await materialRequisitionsCollection(), and({ isDeleted: false }, PROJECT_OWNED, mrOwn)) : Promise.resolve(null),
-      canPr ? statusCounts(await purchaseRequestsCollection(), and({ isDeleted: false }, PROJECT_OWNED, prOwn)) : Promise.resolve(null),
       has("deliveryOrder:view") ? countDeliveryOrders(ctx) : Promise.resolve(null),
     ]);
     detail = {
-      jobOrderStatus, jobOrderStartedInPeriod, requisitionStatus, purchaseRequestStatus, deliveryOrder,
+      jobOrderStatus, jobOrderStartedInPeriod, startedByMonth, deliveryOrder, prOpenStage: prStages,
       dueList: due?.map((d): DueItem => ({
         id: d._id.toString(), docNumber: d._id.toString(), party: [d.jobCode, d.customerName].filter(Boolean).join(" · "), date: d.finishDate,
       })) ?? null,
@@ -422,14 +504,14 @@ async function projectBlock({ ctx, has, from, to, today, withDetail }: BlockCont
       canRequisitions && !has("materialRequisition:viewAll"),
       canPr && !has("purchaseRequest:viewAll"),
     ),
-    summary: { jobOrderPending, jobOrderDueSoon, mrAwaitingIssue, prOpen },
+    summary: { jobOrderPending, jobOrderDueSoon, jobOrderPastDue, mrAwaitingIssue, prOpen: prStages ? prStages.atStore + prStages.atPurchasing : null },
     detail,
   };
 }
 
 // ── BD (Cost Control) ─────────────────────────────────────────────────────────
 
-async function bdBlock({ ctx, has, from, to, withDetail }: BlockContext): Promise<DepartmentBlock<"bd">> {
+async function bdBlock({ ctx, has, from, to, months, withDetail }: BlockContext): Promise<DepartmentBlock<"bd">> {
   const costControls = await costControlsCollection();
   const base = and({ isDeleted: false }, await buildCostControlVisibilityClause(ctx, has("costControl:viewAll")));
 
@@ -440,9 +522,10 @@ async function bdBlock({ ctx, has, from, to, withDetail }: BlockContext): Promis
 
   let detail: DepartmentBlock<"bd">["detail"] = null;
   if (withDetail) {
-    const [linkedToScope, total, recent] = await Promise.all([
+    const [linkedToScope, total, createdByMonth, recent] = await Promise.all([
       count(costControls, and(base, { scopeOfWorkId: { $gt: "" } })),
       count(costControls, base),
+      monthlyCounts(costControls, base, "docDate", months),
       // projection ไม่มี lines โดยตั้งใจ — แท็บนี้ห้ามมีตัวเลขเงิน
       costControls.find(base as never, { projection: { documentNumber: 1, jobName: 1, docDate: 1, status: 1 } })
         .sort({ updatedAt: -1 }).limit(LIST_LIMIT).toArray(),
@@ -450,6 +533,7 @@ async function bdBlock({ ctx, has, from, to, withDetail }: BlockContext): Promis
     detail = {
       linkedToScope,
       standalone: total - linkedToScope,
+      createdByMonth,
       recent: recent.map((d) => ({
         id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(), party: d.jobName ?? "", date: d.docDate ?? "", status: d.status,
       })),
@@ -465,7 +549,7 @@ async function bdBlock({ ctx, has, from, to, withDetail }: BlockContext): Promis
 
 // ── บริการ ────────────────────────────────────────────────────────────────────
 
-async function serviceBlock({ ctx, has, from, to, today, withDetail }: BlockContext): Promise<DepartmentBlock<"service">> {
+async function serviceBlock({ ctx, has, from, to, today, months, withDetail }: BlockContext): Promise<DepartmentBlock<"service">> {
   const reports = await serviceReportsCollection();
   const base = and({ isDeleted: false }, serviceOwnershipClause(ctx));
   const monthPrefix = today.slice(0, 7);
@@ -479,20 +563,55 @@ async function serviceBlock({ ctx, has, from, to, today, withDetail }: BlockCont
   let detail: DepartmentBlock<"service">["detail"] = null;
   if (withDetail) {
     const pmWindow = and(base, { status: { $ne: "Cancelled" }, nextPmDate: { $gte: today, $lte: addDaysIso(today, PM_WINDOW_DAYS) } });
-    const [counts, inspectedInPeriod, approvalRejected, upcomingPmCount, upcoming] = await Promise.all([
-      countServiceReports(ctx, today),
+    const staleBefore = new Date(Date.parse(`${addDaysIso(today, -STALE_DRAFT_DAYS)}T00:00:00+07:00`)).toISOString();
+    const followUpProjection = { projection: { customerSnapshot: 1, serviceSystemName: 1, customerApproval: 1, updatedAt: 1 } };
+    const [inspectedInPeriod, approvalRejected, upcomingPmCount, upcoming, byMonth, approvalRows, rejected, waiting, staleDrafts] = await Promise.all([
       count(reports, and(base, periodClause("inspectionDate", from, to))),
       count(reports, and(base, { "customerApproval.status": "rejected" })),
       count(reports, pmWindow),
       reports.find(pmWindow as never, { projection: { customerSnapshot: 1, serviceSystemName: 1, nextPmDate: 1 } })
         .sort({ nextPmDate: 1 }).limit(LIST_LIMIT).toArray(),
+      reports.aggregate([
+        { $match: and(base, { status: { $ne: "Cancelled" } }, monthsClause("inspectionDate", months)) },
+        {
+          $group: {
+            _id: { $substrBytes: ["$inspectionDate", 0, 7] },
+            inspected: { $sum: 1 },
+            completed: { $sum: { $cond: [{ $eq: ["$status", "Completed"] }, 1, 0] } },
+          },
+        },
+      ] as never).toArray() as Promise<{ _id: string; inspected: number; completed: number }[]>,
+      reports.aggregate([
+        { $match: and(base, { status: "Completed" }, periodClause("inspectionDate", from, to)) },
+        { $group: { _id: { $ifNull: ["$customerApproval.status", "none"] }, n: { $sum: 1 } } },
+      ] as never).toArray() as Promise<{ _id: string; n: number }[]>,
+      reports.find(and(base, { "customerApproval.status": "rejected" }) as never, followUpProjection)
+        .sort({ "customerApproval.respondedAt": -1 }).limit(LIST_LIMIT).toArray(),
+      reports.find(and(base, { "customerApproval.status": "pending" }) as never, followUpProjection)
+        .sort({ "customerApproval.sentAt": 1 }).limit(LIST_LIMIT).toArray(),
+      reports.find(and(base, { status: "Draft", updatedAt: { $lt: staleBefore } }) as never, followUpProjection)
+        .sort({ updatedAt: 1 }).limit(LIST_LIMIT).toArray(),
     ]);
+
+    const partyOf = (r: { customerSnapshot?: { companyName?: string }; serviceSystemName?: string }) =>
+      [r.customerSnapshot?.companyName, r.serviceSystemName].filter(Boolean).join(" · ");
+    // ใบเดียวเข้าได้หลายเงื่อนไข (ข้อมูลจริงมีร่างที่ค้างสถานะรอลูกค้าอยู่) — แสดงครั้งเดียวด้วยเหตุผลแรกที่เจอ
+    const seen = new Set<string>();
+    const followUps: ServiceFollowUp[] = [
+      ...rejected.map((r): ServiceFollowUp => ({ id: r._id.toString(), party: partyOf(r), date: (r.customerApproval?.respondedAt ?? r.updatedAt ?? "").slice(0, 10), reason: "rejected" })),
+      ...waiting.map((r): ServiceFollowUp => ({ id: r._id.toString(), party: partyOf(r), date: (r.customerApproval?.sentAt ?? "").slice(0, 10), reason: "pending" })),
+      ...staleDrafts.map((r): ServiceFollowUp => ({ id: r._id.toString(), party: partyOf(r), date: (r.updatedAt ?? "").slice(0, 10), reason: "staleDraft" })),
+    ].filter((f) => (seen.has(f.id) ? false : (seen.add(f.id), true))).slice(0, LIST_LIMIT);
+
+    const approvalOf = (key: string) => approvalRows.find((r) => r._id === key)?.n ?? 0;
     detail = {
-      counts, inspectedInPeriod, approvalPending, approvalRejected, upcomingPmCount,
-      upcomingPm: upcoming.map((r): DueItem => ({
-        id: r._id.toString(), docNumber: r._id.toString(),
-        party: [r.customerSnapshot?.companyName, r.serviceSystemName].filter(Boolean).join(" · "), date: r.nextPmDate,
-      })),
+      inspectedInPeriod, approvalRejected, upcomingPmCount, followUps,
+      upcomingPm: upcoming.map((r): DueItem => ({ id: r._id.toString(), docNumber: r._id.toString(), party: partyOf(r), date: r.nextPmDate })),
+      inspectedByMonth: months.map((month) => {
+        const row = byMonth.find((r) => r._id === month);
+        return { month, inspected: row?.inspected ?? 0, completed: row?.completed ?? 0 };
+      }),
+      approvalBreakdown: { approved: approvalOf("approved"), pending: approvalOf("pending"), rejected: approvalOf("rejected"), notSent: approvalOf("none") },
     };
   }
 
@@ -501,6 +620,80 @@ async function serviceBlock({ ctx, has, from, to, today, withDetail }: BlockCont
     summary: { draft, completedThisMonth, approvalPending },
     detail,
   };
+}
+
+// ── ต้องจัดการก่อน (เฉพาะภาพรวม) ──────────────────────────────────────────────
+
+/**
+ * รายการสั้น ๆ ข้ามแผนก: ใบสั่งซื้อเลยวันรับของ · ใบสั่งผลิต/ใบสั่งงานที่ถึงหรือใกล้กำหนด · รายงานบริการที่รอลูกค้า
+ * แต่ละชนิดเปิดด้วยสิทธิ์ดูของชนิดนั้นและนับเฉพาะใบที่หน้ารายการของผู้ใช้แสดง เหมือนบล็อกของแผนก
+ */
+async function collectAttention({ ctx, has, today }: BlockContext): Promise<AttentionItem[]> {
+  const soon = addDaysIso(today, DUE_SOON_DAYS);
+  const per = 5;
+  const tasks: Promise<AttentionItem[]>[] = [];
+
+  if (has("purchaseOrder:view")) {
+    tasks.push((async () => {
+      const own = buildSimpleOwnershipClause(ctx.user.id, has("purchaseOrder:viewAll"), "createdBy");
+      const late = await (await purchaseOrdersCollection()).find(
+        and({ isDeleted: false, status: "Final", neededByDate: { $gt: "", $lt: today } }, own) as never,
+        { projection: { documentNumber: 1, vendorName: 1, neededByDate: 1 } },
+      ).sort({ neededByDate: 1 }).limit(50).toArray();
+      const closed = new Set((await (await receivingReportsCollection()).find(
+        { isDeleted: false, status: "Closed", purchaseOrderId: { $in: late.map((p) => p._id.toString()) } } as never,
+        { projection: { purchaseOrderId: 1 } },
+      ).toArray()).map((r) => r.purchaseOrderId));
+      return late.filter((p) => !closed.has(p._id.toString())).slice(0, per).map((p): AttentionItem => ({
+        dept: "purchasing", kind: "poOverdue", id: p._id.toString(), docNumber: p.documentNumber || p._id.toString(), party: p.vendorName ?? "", date: p.neededByDate,
+      }));
+    })());
+  }
+
+  if (has("productionOrder:view")) {
+    tasks.push((async () => {
+      const own = buildSimpleOwnershipClause(ctx.user.id, has("productionOrder:viewAll"), "createdBy");
+      const rows = await (await productionOrdersCollection()).find(
+        and({ isDeleted: false, status: "Final", dueDate: { $gt: "", $lte: soon } }, own) as never,
+        { projection: { documentNumber: 1, customerCompanyName: 1, productName: 1, dueDate: 1 } },
+      ).sort({ dueDate: 1 }).limit(per).toArray();
+      return rows.map((d): AttentionItem => ({
+        dept: "production", kind: "productionDue", id: d._id.toString(), docNumber: d.documentNumber || d._id.toString(),
+        party: [d.customerCompanyName, d.productName].filter(Boolean).join(" · "), date: d.dueDate,
+      }));
+    })());
+  }
+
+  if (has("jobOrder:view")) {
+    tasks.push((async () => {
+      const own = buildSimpleOwnershipClause(ctx.user.id, has("jobOrder:viewAll"), "createdBy");
+      const rows = await (await jobOrdersCollection()).find(
+        and({ isDeleted: false, status: "Final", finishDate: { $gt: "", $lte: soon } }, own) as never,
+        { projection: { jobCode: 1, customerName: 1, finishDate: 1 } },
+      ).sort({ finishDate: 1 }).limit(per).toArray();
+      return rows.map((d): AttentionItem => ({
+        dept: "project", kind: "jobOrderDue", id: d._id.toString(), docNumber: d._id.toString(),
+        party: [d.jobCode, d.customerName].filter(Boolean).join(" · "), date: d.finishDate,
+      }));
+    })());
+  }
+
+  if (has("service:view")) {
+    tasks.push((async () => {
+      const rows = await (await serviceReportsCollection()).find(
+        and({ isDeleted: false, "customerApproval.status": "pending" }, serviceOwnershipClause(ctx)) as never,
+        { projection: { customerSnapshot: 1, customerApproval: 1 } },
+      ).sort({ "customerApproval.sentAt": 1 }).limit(per).toArray();
+      return rows.map((r): AttentionItem => ({
+        dept: "service", kind: "serviceApproval", id: r._id.toString(), docNumber: r._id.toString(),
+        party: r.customerSnapshot?.companyName ?? "", date: (r.customerApproval?.sentAt ?? "").slice(0, 10),
+      }));
+    })());
+  }
+
+  return (await Promise.all(tasks)).flat()
+    .sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"))
+    .slice(0, ATTENTION_LIMIT);
 }
 
 // ── route ─────────────────────────────────────────────────────────────────────
@@ -514,7 +707,14 @@ const BLOCK_BUILDERS: { [K in DepartmentKey]: (c: BlockContext) => Promise<Depar
   bd: bdBlock,
 };
 
-const VIEWS = new Set<string>(["overview", ...DEPARTMENT_KEYS]);
+const VIEW_BLOCKS: Record<DepartmentDashboardView, readonly DepartmentKey[]> = {
+  overview: DEPARTMENT_KEYS,
+  service: ["service"],
+  purchasing: ["purchasing"],
+  inventory: ["inventory"],
+  operations: OPERATIONS_DEPARTMENTS,
+};
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function queryString(req: ApiRequest, key: string): string {
@@ -523,12 +723,16 @@ function queryString(req: ApiRequest, key: string): string {
   return typeof v === "string" ? v : "";
 }
 
+function isView(raw: string): raw is DepartmentDashboardView {
+  return Object.prototype.hasOwnProperty.call(VIEW_BLOCKS, raw);
+}
+
 export async function handleDepartmentDashboard(req: ApiRequest, res: ApiResponse): Promise<void> {
   if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
   const ctx = await requirePermission(req, "dashboard:view");
 
   const view = queryString(req, "dept") || "overview";
-  if (!VIEWS.has(view)) throw new HttpError(400, "ไม่รู้จักแท็บแดชบอร์ดนี้");
+  if (!isView(view)) throw new HttpError(400, "ไม่รู้จักแท็บแดชบอร์ดนี้");
   const from = queryString(req, "from");
   const to = queryString(req, "to");
   if ((from && !ISO_DATE.test(from)) || (to && !ISO_DATE.test(to))) throw new HttpError(400, "รูปแบบวันที่ไม่ถูกต้อง");
@@ -536,14 +740,13 @@ export async function handleDepartmentDashboard(req: ApiRequest, res: ApiRespons
   const has: Has = (p) => roleHasPermission(ctx.role, p);
   const today = todayIsoDate();
   const isOverview = view === "overview";
-  const blockContext: BlockContext = { ctx, has, from, to, today, withDetail: !isOverview };
+  const blockContext: BlockContext = { ctx, has, from, to, today, months: lastMonthKeys(today), withDetail: !isOverview };
 
-  const requested: DepartmentKey[] = isOverview ? [...DEPARTMENT_KEYS] : [view as DepartmentKey];
   const blocks: DepartmentDashboardResponse["blocks"] = {};
   const failed: DepartmentKey[] = [];
 
-  await Promise.all(requested.map(async (key) => {
-    if (!canSeeDashboardTab(key, has)) {
+  await Promise.all(VIEW_BLOCKS[view].map(async (key) => {
+    if (!canSeeDepartmentBlock(key, has)) {
       blocks[key] = null;
       return;
     }
@@ -558,28 +761,29 @@ export async function handleDepartmentDashboard(req: ApiRequest, res: ApiRespons
 
   let pendingApprovals: DepartmentDashboardResponse["pendingApprovals"] = null;
   let activityTimeline: DepartmentDashboardResponse["activityTimeline"] = null;
+  let attention: DepartmentDashboardResponse["attention"] = null;
   if (isOverview) {
-    try {
-      pendingApprovals = await countPendingApprovals(ctx);
-    } catch (err) {
-      console.error("[dashboard/departments] pending approval counts failed", err);
-    }
-    if (has("auditLog:view")) {
-      try {
-        activityTimeline = (await fetchActivityTimeline({ from, to })) as unknown as DepartmentDashboardResponse["activityTimeline"];
-      } catch (err) {
-        console.error("[dashboard/departments] activity timeline failed", err);
-      }
-    }
+    const [pendingResult, timelineResult, attentionResult] = await Promise.allSettled([
+      countPendingApprovals(ctx),
+      has("auditLog:view") ? fetchActivityTimeline({ from, to }) : Promise.resolve(null),
+      collectAttention(blockContext),
+    ]);
+    if (pendingResult.status === "fulfilled") pendingApprovals = pendingResult.value;
+    else console.error("[dashboard/departments] pending approval counts failed", pendingResult.reason);
+    if (timelineResult.status === "fulfilled") activityTimeline = timelineResult.value as unknown as DepartmentDashboardResponse["activityTimeline"];
+    else console.error("[dashboard/departments] activity timeline failed", timelineResult.reason);
+    if (attentionResult.status === "fulfilled") attention = attentionResult.value;
+    else console.error("[dashboard/departments] attention list failed", attentionResult.reason);
   }
 
   const body: DepartmentDashboardResponse = {
-    view: view as DepartmentDashboardView,
+    view,
     filters: { from, to },
     today,
     blocks,
     pendingApprovals,
     activityTimeline,
+    attention,
     failed: failed.sort(),
   };
   res.status(200).json(body);

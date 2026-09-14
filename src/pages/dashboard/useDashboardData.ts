@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { fetchDashboardStats, type DashboardFilters } from "../../lib/dashboard";
 import { fetchDepartmentDashboard, type DepartmentDashboardView } from "../../lib/departmentDashboard";
 import { fetchArDashboardStats } from "../../lib/accountingDashboard";
-import { fetchApSummary } from "../../lib/apEntries";
 
 /**
  * ที่พักข้อมูลของหน้าแดชบอร์ด (2026-09-14) — สลับแท็บไปมาแล้วไม่ต้องโหลดใหม่
@@ -18,8 +17,7 @@ import { fetchApSummary } from "../../lib/apEntries";
 export type DashboardRequest =
   | { kind: "sales"; filters: DashboardFilters; retry: number }
   | { kind: "departments"; view: DepartmentDashboardView; from: string; to: string; retry: number }
-  | { kind: "arSnapshot"; retry: number }
-  | { kind: "apMonth"; month: string; retry: number };
+  | { kind: "arSnapshot"; retry: number };
 
 interface Entry {
   data?: unknown;
@@ -45,7 +43,6 @@ function run(req: DashboardRequest): Promise<unknown> {
     case "departments": return fetchDepartmentDashboard(req.view, { from: req.from, to: req.to });
     // ตัวเลขที่ภาพรวมใช้จาก ar-dashboard เป็น "ณ ปัจจุบัน" ทั้งหมด จึงไม่ส่งช่วงวันที่
     case "arSnapshot": return fetchArDashboardStats();
-    case "apMonth": return fetchApSummary(req.month);
   }
 }
 

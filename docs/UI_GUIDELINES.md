@@ -644,19 +644,25 @@ into view. Pair each panel with `tabPanelProps(idPrefix, key)` (`src/components/
 `aria-controls`/`aria-labelledby` match. Mount only the active panel; keep header and filters outside
 it so they render before the tab's data (shell-first).
 
-### Dashboard department tabs (2026-09-14)
-The Dashboard is now tabs — ภาพรวม plus one per department (see [MODULES/Dashboard.md](./MODULES/Dashboard.md)
-"Department Tabs"). The "Dashboard Overview" rules below now describe the **ขาย** tab. For the other tabs:
-- **One colour and icon per department** (`src/pages/dashboard/tabs/tabMeta.ts`), used on both the tab
-  and its overview card — never gold (Rare Gold Rule) or red (reserved for "something is wrong").
-- **Overview card** = department icon chip + Playfair title + 2–4 `label … value` rows + a
-  "ดูรายละเอียดแผนก →" footer that switches tab. A value turns red/orange **only when it is > 0** for
-  overdue/waiting counts; never colour a number permanently.
-- **A number the user has no permission for is omitted, not shown as 0.**
-- **Filter Honesty for department numbers:** snapshot is the default and says so once per tab
-  (`TabIntro`); period-filtered numbers carry an explicit "ช่วงที่เลือก" tag/caption.
-- Reuse `StatTile`, `StatusBreakdownCard`, `DueListTable`, `CardTable` from `tabs/DepartmentWidgets.tsx`
-  for any new department number rather than inventing another card shape.
+### Dashboard department tabs (2026-09-14, chart redesign same day)
+The Dashboard is 7 tabs — ภาพรวม · ขาย · บริการ · จัดซื้อ · คลังสินค้า · ผลิต · โครงการ · BD (one combined
+tab) · บัญชี (see [MODULES/Dashboard.md](./MODULES/Dashboard.md) "Department Tabs"). **The full layout and
+component spec lives in [DASHBOARD_DESIGN.md](./DASHBOARD_DESIGN.md)** — every tab follows it:
+KPI ×4 → 2fr/1fr chart row → 2fr/1fr action list + ranking/breakdown row.
+- Build from `src/pages/dashboard/tabs/DepartmentWidgets.tsx`: `KpiCard` (icon chip + mono value + one
+  small visual: `sparkline` / `segments` / `progress` / caption), `MonthlyBars` (12-month bars, current
+  month gold, labels on peak + latest only), `RankBars`, `Donut`, `SegmentBar`, `DueListTable` (optional
+  department column), `Pill`, `DeptPill`, `DueBadge`, `SectionHeading`, `KpiGrid`, `SplitRow`. Shared
+  constants (`GOLD`, `SERIF`, `STATUS_COLORS`, table cell classes) are in `tabs/dashboardTokens.ts`.
+- **One colour and icon per department** (`DEPARTMENT_META` in `tabs/tabMeta.ts`, with a darker `ink` for
+  pill text) — never gold (Rare Gold Rule) or red (reserved for "something is wrong").
+- **Sparklines and monthly charts only on numbers with real dated history** (`...ByMonth` from the API);
+  snapshot numbers get a segment/progress bar or a caption instead. 12-month charts say "ไม่ขึ้นกับช่วงวันที่".
+- **In the combined ผลิต · โครงการ · BD tab every number names its department** (DeptPill, split bar, or a
+  department column). A department the user can't see is omitted entirely and dropped from the tab label.
+- A value turns red/orange **only when it is > 0**; a number the user has no permission for is omitted,
+  not shown as 0; snapshot is the default and `TabIntro` says so once per tab.
+- One dark navy highlight card per page at most (overview: pending approvals across departments).
 
 ### Dashboard Overview (KPIs + status/activity panels)
 **2026-07-13, seventh same-day pass (current state)**: the Dashboard's top-of-page "answer in 5 seconds" overview is now exactly **5 rows in the P'Keng/P'Kee business requirement's specified order** — Header+Filters, then:

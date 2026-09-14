@@ -366,8 +366,33 @@ recorded in TODO.md (section headers / tabs / separate pages), the owner picked 
 page**, with an overview that is a short summary of every department, and asked for every
 department to get real numbers now.
 
-**Tabs** — ภาพรวม · ขาย · บริการ · จัดซื้อ · คลังสินค้า · ผลิต · โครงการ · BD · บัญชี. There is no
-บุคคล tab: the system has no real HR data (users only).
+> **Same-day redesign (2026-09-14c).** The first version was number tiles with almost no charts; the
+> owner sent a set of chart-rich dashboard templates and asked for the overview and every tab to look
+> like that, adapted to our design system rather than copied ("เอาของที่ให้ไปมาปรับใช้กับของที่มีอยู่"),
+> governed by a written spec — [DASHBOARD_DESIGN.md](../DASHBOARD_DESIGN.md). Mockups of all tabs were
+> approved on a design canvas first. After seeing the drafts the owner also said *"แผนกไหนมีน้อยจับรวม
+> กันเลย"*, so **ผลิต · โครงการ · BD became one tab** (`operations`). What changed:
+> - Every tab is KPI ×4 → 2fr/1fr chart row → 2fr/1fr list + breakdown row, built from the widgets in
+>   `tabs/DepartmentWidgets.tsx` (`KpiCard`, `MonthlyBars`, `RankBars`, `Donut`, `SegmentBar`, …).
+> - The API gained 12-month series (`poValueByMonth`, `movementsByMonth`, `inspectedByMonth`,
+>   `startedByMonth`, `createdByMonth`), top vendors, receipt progress, per-department splits, stock value
+>   by category (replacing product *count* by category), service approval breakdown + follow-ups,
+>   `jobOrderPastDue`, and the overview's cross-department `attention` list. Data honesty: trends only
+>   where documents carry real dates; snapshot numbers use split/progress bars.
+> - The combined tab still gates each department separately: a block the user can't see is omitted and
+>   its name dropped from the tab label (someone with only `productionOrder:view` sees a tab called "ผลิต").
+>   Old `#dashboard/production|project|bd` links and remembered tabs map to the combined tab.
+> - ขาย's top is now KPI cards with sparklines, a clickable stage bar chart, a status donut, a salesperson
+>   ranking and follow-ups; the full original sales content stays under "รายละเอียดเชิงลึก" (the top-10
+>   ranking table and the old KPI/status components were removed as duplicates). Sales numbers unchanged.
+> - บัญชี keeps every number of the accounting dashboard; only the KPI cards and 2fr/1fr layout changed.
+> - Removed: `ProductionTab`/`ProjectTab`/`BdTab`, `ExecutiveSummaryCards`, `QuotationStatusSummary`,
+>   `ServiceSummary`, `ProductsByCategoryChart`, the overview's AP request.
+
+**Tabs** — ภาพรวม · ขาย · บริการ · จัดซื้อ · คลังสินค้า · ผลิต·โครงการ·BD · บัญชี. There is no
+บุคคล tab: the system has no real HR data (users only). The table below is the original 9-tab
+gating; ผลิต / โครงการ / BD now render inside the combined `operations` tab (visible with any of the
+three rows' permissions, data from `?dept=operations`).
 
 | Tab | Visible with any of | Data |
 |---|---|---|

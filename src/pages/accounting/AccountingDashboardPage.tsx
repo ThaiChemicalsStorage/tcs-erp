@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { CalendarRange, Users, Wallet, Receipt, AlertTriangle, Banknote, Ban } from "lucide-react";
+import { CalendarRange, Users, Wallet, Receipt, AlertTriangle, Banknote } from "lucide-react";
 import { fetchArDashboardStats, type ArDashboardStats } from "../../lib/accountingDashboard";
 import { rangeForPreset, type DateRangePreset } from "../dashboard/dateRanges";
 import { fmtShort, fmtDateShort } from "../dashboard/format";
 import { PageHeader } from "../../components/PageHeader";
 import { EmptyState } from "../../components/EmptyState";
-import { MetricInfoTooltip } from "../../components/MetricInfoTooltip";
 import { ArTrendChart, DocTypeBreakdownChart, BillingFunnelChart, AgingChart } from "./AccountingDashboardCharts";
-import { AGING_BUCKET_COLORS } from "../../lib/accountingDashboard";
+import { AGING_BUCKET_COLORS, AGING_BUCKET_LABEL_KEY } from "../../lib/accountingDashboard";
+import { KpiCard, KpiGrid, SplitRow } from "../dashboard/tabs/DepartmentWidgets";
 import { useI18n } from "../../lib/i18n";
 
 // แดชบอร์ดบัญชี (เพิ่ม 2026-08-18) — ภาพรวมและรายละเอียดเชิงลึกของบัญชีลูกหนี้ (AR/IV/BI/RE)
@@ -124,38 +124,12 @@ export function AccountingDashboardView() {
         <>
           <KpiCards stats={stats} />
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <ArTrendChart trend={stats.trend} />
-            <DocTypeBreakdownChart data={stats.docTypeBreakdown} />
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            <BillingFunnelChart data={stats.billingFunnel} />
-            <AgingChart buckets={stats.aging.buckets} />
-          </div>
-
-          <AgingTable invoices={stats.aging.invoices} />
-          <TopCustomersTable customers={stats.topCustomers} />
+          {/* โครง 2 ต่อ 1 ตาม docs/DASHBOARD_DESIGN.md ข้อ 3 — ตัวเลขทุกตัวเหมือนเดิม เปลี่ยนแค่การจัดวาง */}
+          <SplitRow main={<ArTrendChart trend={stats.trend} />} side={<DocTypeBreakdownChart data={stats.docTypeBreakdown} />} />
+          <SplitRow main={<AgingTable invoices={stats.aging.invoices} />} side={<BillingFunnelChart data={stats.billingFunnel} />} />
+          <SplitRow main={<TopCustomersTable customers={stats.topCustomers} />} side={<AgingChart buckets={stats.aging.buckets} />} />
         </>
       )}
-    </div>
-  );
-}
-
-function SummaryCard({ title, value, sub, icon: Icon, accent, help }: {
-  title: string; value: string; sub?: string; icon: typeof Wallet; accent: string; help?: string;
-}) {
-  return (
-    <div className="bg-card border border-border rounded-xl p-4 hover:border-[#c9a84c]/30 transition-all">
-      <div className="flex items-center justify-between mb-3">
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${accent}1a` }}>
-          <Icon size={16} style={{ color: accent }} />
-        </div>
-        {help && <MetricInfoTooltip label={title} text={help} />}
-      </div>
-      <p className="text-xl font-bold text-foreground font-mono">{value}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">{title}</p>
-      {sub && <p className="text-xs text-muted-foreground font-mono mt-1">{sub}</p>}
     </div>
   );
 }
@@ -165,29 +139,42 @@ function KpiCards({ stats }: { stats: ArDashboardStats }) {
   const { kpis } = stats;
   const docsUnit = t("accountingDashboard.unit.docs");
   const asOfNow = t("accountingDashboard.sub.asOfNow");
+  const accent = "#157347";
+  const agingSegments = stats.aging.buckets.map((b) => ({ key: b.key, label: t(AGING_BUCKET_LABEL_KEY[b.key]), value: Math.round(b.amount), color: AGING_BUCKET_COLORS[b.key] }));
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-      <SummaryCard
-        title={t("accountingDashboard.kpi.issuedTotal.title")} value={fmtShort(kpis.issuedNet)} sub={`${kpis.issuedCount.toLocaleString("th-TH")} ${docsUnit}`}
-        icon={Receipt} accent="#c9a84c" help={t("accountingDashboard.kpi.issuedTotal.help")}
+    <KpiGrid>
+      <KpiCard
+        icon={Receipt} chip={accent} label={t("accountingDashboard.kpi.issuedTotal.title")} value={fmtShort(kpis.issuedNet)} help={t("accountingDashboard.kpi.issuedTotal.help")}
+        sparkline={{ values: stats.trend.map((p) => p.netTotal), color: accent }}
+        caption={`${kpis.issuedCount.toLocaleString("th-TH")} ${docsUnit} · ${t("accountingDashboard.kpi.cancelled.title")} ${kpis.cancelledCount.toLocaleString("th-TH")}`}
       />
-      <SummaryCard
-        title={t("accountingDashboard.kpi.vatSales.title")} value={fmtShort(kpis.vatAmount)} sub={t("accountingDashboard.sub.selectedPeriod")}
-        icon={Banknote} accent="#1a5fb4" help={t("accountingDashboard.kpi.vatSales.help")}
+      <KpiCard icon={Banknote} chip={accent} label={t("accountingDashboard.kpi.vatSales.title")} value={fmtShort(kpis.vatAmount)} help={t("accountingDashboard.kpi.vatSales.help")} caption={t("accountingDashboard.sub.selectedPeriod")} />
+      <KpiCard
+        icon={AlertTriangle} chip="#e08a3c" label={t("accountingDashboard.kpi.outstanding.title")} value={fmtShort(kpis.outstandingNet)} help={t("accountingDashboard.kpi.outstanding.help")}
+        caption={<><AgingBar segments={agingSegments} /><span className="block mt-1.5">{`${kpis.outstandingCount.toLocaleString("th-TH")} ${docsUnit} · ${asOfNow}`}</span></>}
       />
-      <SummaryCard
-        title={t("accountingDashboard.kpi.outstanding.title")} value={fmtShort(kpis.outstandingNet)} sub={`${kpis.outstandingCount.toLocaleString("th-TH")} ${docsUnit} · ${asOfNow}`}
-        icon={AlertTriangle} accent="#e08a3c" help={t("accountingDashboard.kpi.outstanding.help")}
+      <KpiCard
+        icon={Wallet} chip="#e08a3c" tone={kpis.depositNotBilledJobs > 0 ? "warn" : undefined}
+        label={t("accountingDashboard.kpi.depositNotBilled.title")} value={kpis.depositNotBilledJobs.toLocaleString("th-TH")} help={t("accountingDashboard.kpi.depositNotBilled.help")} caption={asOfNow}
       />
-      <SummaryCard
-        title={t("accountingDashboard.kpi.depositNotBilled.title")} value={kpis.depositNotBilledJobs.toLocaleString("th-TH")} sub={asOfNow}
-        icon={Wallet} accent="#5a7299" help={t("accountingDashboard.kpi.depositNotBilled.help")}
-      />
-      <SummaryCard
-        title={t("accountingDashboard.kpi.cancelled.title")} value={kpis.cancelledCount.toLocaleString("th-TH")} sub={t("accountingDashboard.sub.selectedPeriod")}
-        icon={Ban} accent="#e05252" help={t("accountingDashboard.kpi.cancelled.help")}
-      />
-    </div>
+    </KpiGrid>
+  );
+}
+
+/** แถบอายุหนี้ในการ์ด KPI — สีชุดเดียวกับกราฟอายุหนี้ด้านล่าง คำอธิบายสีเป็นข้อความเสมอ (มูลค่าอยู่ในกราฟ) */
+function AgingBar({ segments }: { segments: { key: string; label: string; value: number; color: string }[] }) {
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  return (
+    <span className="block space-y-1.5">
+      <span className="flex gap-0.5 h-2 overflow-hidden rounded" role="img" aria-label={segments.map((s) => `${s.label} ${fmtShort(s.value)}`).join(", ")}>
+        {total === 0 ? <span className="flex-1 bg-muted" /> : segments.filter((s) => s.value > 0).map((s) => <span key={s.key} style={{ flexGrow: s.value, background: s.color }} />)}
+      </span>
+      <span className="flex flex-wrap gap-x-2.5 gap-y-0.5">
+        {segments.map((s) => (
+          <span key={s.key} className="inline-flex items-center gap-1 whitespace-nowrap"><span className="w-2 h-2 rounded-sm" style={{ background: s.color }} />{s.label}</span>
+        ))}
+      </span>
+    </span>
   );
 }
 

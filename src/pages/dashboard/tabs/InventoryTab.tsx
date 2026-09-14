@@ -1,104 +1,157 @@
-import { Wallet, AlertTriangle, PackageMinus, PackageCheck, Truck, ShoppingCart, PackagePlus } from "lucide-react";
+import { Wallet, AlertTriangle, PackageMinus, PackageCheck } from "lucide-react";
 import { useI18n } from "../../../lib/i18n";
 import { STOCK_MOVEMENT_KIND_LABEL_KEY } from "../../../lib/stock";
-import { ChartCard } from "../ChartCard";
-import { ProductsByCategoryChart } from "../DashboardCharts";
 import { fmtShort } from "../format";
-import { DASHBOARD_TAB_META } from "./tabMeta";
+import { ErrorState } from "../DashboardStates";
+import { DEPARTMENT_META } from "./tabMeta";
 import {
-  CardTable, DepartmentTabFrame, OpenListButton, StatTile, TabIntro, TileGrid, type DepartmentTabProps,
+  CardTable, ChartCard, DepartmentViewFrame, KpiCard, KpiGrid, MonthlyBars, OpenListButton, ProgressBar,
+  RankBars, SplitRow, TabIntro, type DepartmentTabProps
 } from "./DepartmentWidgets";
+import { TD, TD_MONO, TR } from "./dashboardTokens";
 import { fmtCount } from "./countFormat";
 
-/** แท็บคลังสินค้า — มูลค่าสต๊อก ของใกล้หมด คิวจ่ายของ/รับของ และความเคลื่อนไหวในช่วงที่เลือก */
+/**
+ * แท็บคลังสินค้า — มูลค่าสต๊อก ของใกล้หมด คิวจ่ายของ/รับของ · รับเข้า vs ตัดจ่าย 12 เดือน · มูลค่าตามหมวดหมู่
+ * · สินค้าถึงจุดเตือน · ความเคลื่อนไหวล่าสุด (docs/DASHBOARD_DESIGN.md ข้อ 7)
+ */
 export function InventoryTab({ result, onRetry, onNavigatePage }: DepartmentTabProps) {
   const { t } = useI18n();
-  const accent = DASHBOARD_TAB_META.inventory.accent;
+  const accent = DEPARTMENT_META.inventory.accent;
   return (
-    <DepartmentTabFrame dept="inventory" result={result} onRetry={onRetry}>
-      {(block) => {
+    <DepartmentViewFrame view="inventory" result={result} onRetry={onRetry}>
+      {(response) => {
+        const block = response.blocks.inventory;
+        if (!block) return <ErrorState onRetry={onRetry} />;
         const s = block.summary;
         const d = block.detail;
         const periodTag = t("dashboard.dept.periodTag");
+        const mrByDept = d?.mrAwaitingIssueByDepartment ?? null;
+        const storeQueue = d && (d.prAwaitingStore !== null || d.pendingProductRequests !== null);
         return (
           <>
             <TabIntro scope={block.scope} />
-            <TileGrid>
-              {s.stockValue !== null && <StatTile icon={Wallet} label={t("dashboard.inventory.stockValue")} value={fmtShort(s.stockValue)} accent={accent} help={t("dashboard.inventory.stockValueHelp")} />}
-              {s.lowStock !== null && <StatTile icon={AlertTriangle} label={t("dashboard.inventory.lowStock")} value={fmtCount(s.lowStock)} accent="#e08a3c" tone={s.lowStock > 0 ? "warn" : undefined} />}
-              {s.mrAwaitingIssue !== null && <StatTile icon={PackageMinus} label={t("dashboard.inventory.mrAwaitingIssue")} value={fmtCount(s.mrAwaitingIssue)} accent="#3b6fc9" />}
-              {s.openReceivingReports !== null && <StatTile icon={PackageCheck} label={t("dashboard.inventory.openReceivingReports")} value={fmtCount(s.openReceivingReports)} accent="#2aa36b" />}
-            </TileGrid>
+            <KpiGrid>
+              {s.stockValue !== null && (
+                <KpiCard icon={Wallet} chip={accent} label={t("dashboard.inventory.stockValue")} value={fmtShort(s.stockValue)} help={t("dashboard.inventory.stockValueHelp")} caption={t("dashboard.dept.caption.asOfNow")} />
+              )}
+              {s.lowStock !== null && (
+                <KpiCard
+                  icon={AlertTriangle} chip="#e08a3c" tone={s.lowStock > 0 ? "warn" : undefined}
+                  label={t("dashboard.inventory.lowStock")} value={fmtCount(s.lowStock)}
+                  caption={d?.outOfStock !== null && d?.outOfStock !== undefined
+                    ? <>{t("dashboard.inventory.outOfStock")} <span className={`font-mono ${d.outOfStock > 0 ? "text-[#d22626]" : "text-foreground"}`}>{fmtCount(d.outOfStock)}</span></>
+                    : undefined}
+                />
+              )}
+              {s.mrAwaitingIssue !== null && (
+                <KpiCard
+                  icon={PackageMinus} chip={accent} label={t("dashboard.inventory.mrAwaitingIssue")} value={fmtCount(s.mrAwaitingIssue)}
+                  segments={mrByDept ? [
+                    { key: "production", label: t("dashboard.tab.production"), value: mrByDept.production, color: "#2aa36b" },
+                    { key: "project", label: t("dashboard.tab.project"), value: mrByDept.project, color: "#3b6fc9" },
+                  ] : undefined}
+                />
+              )}
+              {s.openReceivingReports !== null && (
+                <KpiCard
+                  icon={PackageCheck} chip={accent} label={t("dashboard.inventory.openReceivingReports")} value={fmtCount(s.openReceivingReports)}
+                  caption={d?.outstandingReceiveValue !== null && d?.outstandingReceiveValue !== undefined
+                    ? <>{t("dashboard.inventory.outstandingReceiveValue")} <span className="font-mono text-foreground">{fmtShort(d.outstandingReceiveValue)}</span></>
+                    : undefined}
+                />
+              )}
+            </KpiGrid>
 
             {d && (
               <>
-                {(d.outstandingReceiveValue !== null || d.prAwaitingStore !== null || d.pendingProductRequests !== null) && (
-                  <TileGrid>
-                    {d.outstandingReceiveValue !== null && <StatTile icon={Truck} label={t("dashboard.inventory.outstandingReceiveValue")} value={fmtShort(d.outstandingReceiveValue)} accent="#5a7299" />}
-                    {d.prAwaitingStore !== null && <StatTile icon={ShoppingCart} label={t("dashboard.inventory.prAwaitingStore")} value={fmtCount(d.prAwaitingStore)} accent="#7c4dbb" />}
-                    {d.pendingProductRequests !== null && <StatTile icon={PackagePlus} label={t("dashboard.inventory.pendingProductRequests")} value={fmtCount(d.pendingProductRequests)} accent="#1f9d8a" />}
-                  </TileGrid>
-                )}
-
-                {d.lowStockItems && (
-                  <CardTable
-                    title={t("dashboard.inventory.lowStockTable.title")} sub={t("dashboard.inventory.lowStockTable.sub")}
-                    headers={[t("dashboard.inventory.col.code"), t("dashboard.inventory.col.product"), t("dashboard.inventory.col.remaining"), t("dashboard.inventory.col.reorderPoint")]}
-                    empty={t("dashboard.inventory.lowStockTable.empty")} isEmpty={d.lowStockItems.length === 0}
-                    actions={<OpenListButton onClick={() => onNavigatePage("stock")} />}
-                  >
-                    {d.lowStockItems.map((p) => (
-                      <tr key={p.id} className="border-b border-border/50 last:border-0">
-                        <td className="px-4 py-2.5 text-xs font-mono text-foreground font-semibold whitespace-nowrap">{p.code}</td>
-                        <td className="px-4 py-2.5 text-sm text-foreground max-w-[320px] truncate" title={p.name}>{p.name}</td>
-                        <td className={`px-4 py-2.5 text-xs font-mono whitespace-nowrap ${p.stockQty <= 0 ? "text-[#d22626]" : "text-[#a75d1a]"}`}>{fmtCount(p.stockQty)} {p.unit}</td>
-                        <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{fmtCount(p.reorderPoint)}</td>
-                      </tr>
-                    ))}
-                  </CardTable>
-                )}
-
-                {d.movementsByKind && (
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    <ChartCard title={t("dashboard.inventory.movements.title")} sub={periodTag}>
-                      <div className="grid grid-cols-2 gap-3">
-                        {d.movementsByKind.map((m) => (
-                          <div key={m.kind} className="border border-border rounded-lg p-3 min-w-0">
-                            <p className="text-xs text-muted-foreground truncate">{t(STOCK_MOVEMENT_KIND_LABEL_KEY[m.kind])}</p>
-                            <p className="text-lg font-bold font-mono text-foreground leading-tight mt-1">{fmtCount(m.count)} <span className="text-xs font-normal text-muted-foreground">{t("dashboard.inventory.movements.unit")}</span></p>
-                            <p className="text-xs font-mono text-muted-foreground mt-0.5">{fmtShort(m.amount)}</p>
-                          </div>
-                        ))}
-                      </div>
+                <SplitRow
+                  main={d.movementsByMonth && (
+                    <ChartCard title={t("dashboard.inventory.movementsByMonth.title")} sub={t("dashboard.inventory.movementsByMonth.sub")}>
+                      <MonthlyBars
+                        rows={d.movementsByMonth} format={fmtShort} empty={t("dashboard.inventory.movementsByMonth.empty")}
+                        series={[
+                          { key: "receive", name: t("dashboard.inventory.movementsByMonth.receive"), color: "#2aa36b" },
+                          { key: "deduct", name: t("dashboard.inventory.movementsByMonth.deduct"), color: "#e08a3c" },
+                        ]}
+                      />
                     </ChartCard>
+                  )}
+                  side={d.stockValueByCategory && (
+                    <ChartCard title={t("dashboard.inventory.valueByCategory.title")} sub={t("dashboard.inventory.valueByCategory.sub")} className="h-full">
+                      <RankBars
+                        rows={d.stockValueByCategory.map((c) => ({ key: c.categoryId || "none", label: c.categoryName, value: c.value, display: fmtShort(c.value) }))}
+                        color={accent} empty={t("dashboard.inventory.valueByCategory.empty")}
+                      />
+                    </ChartCard>
+                  )}
+                />
 
-                    {d.recentMovements && (
-                      <CardTable
-                        title={t("dashboard.inventory.recent.title")} sub={periodTag}
-                        headers={[t("dashboard.inventory.col.product"), t("dashboard.inventory.col.kind"), t("dashboard.inventory.col.qty"), t("dashboard.inventory.col.time")]}
-                        empty={t("dashboard.inventory.recent.empty")} isEmpty={d.recentMovements.length === 0}
-                      >
-                        {d.recentMovements.map((m) => (
-                          <tr key={m.id} className="border-b border-border/50 last:border-0">
-                            <td className="px-4 py-2.5 text-sm text-foreground max-w-[220px] truncate" title={`${m.productCode} ${m.productName}`}>
-                              <span className="font-mono text-xs text-muted-foreground mr-1.5">{m.productCode}</span>{m.productName}
-                            </td>
-                            <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">{t(STOCK_MOVEMENT_KIND_LABEL_KEY[m.kind])}</td>
-                            <td className={`px-4 py-2.5 text-xs font-mono whitespace-nowrap ${m.delta < 0 ? "text-[#d22626]" : "text-[#207e52]"}`}>{m.delta > 0 ? "+" : ""}{fmtCount(m.delta)}</td>
-                            <td className="px-4 py-2.5 text-xs font-mono text-muted-foreground whitespace-nowrap">{new Date(m.createdAt).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}</td>
-                          </tr>
-                        ))}
-                      </CardTable>
-                    )}
-                  </div>
-                )}
-
-                <ProductsByCategoryChart categoryBreakdown={d.categoryBreakdown} />
+                <SplitRow
+                  main={d.recentMovements && (
+                    <CardTable
+                      title={t("dashboard.inventory.recent.title")} sub={periodTag}
+                      headers={[{ label: t("dashboard.inventory.col.product") }, { label: t("dashboard.inventory.col.kind") }, { label: t("dashboard.inventory.col.qty"), align: "right" }, { label: t("dashboard.inventory.col.time") }]}
+                      empty={t("dashboard.inventory.recent.empty")} isEmpty={d.recentMovements.length === 0}
+                      actions={<OpenListButton onClick={() => onNavigatePage("stock")} />}
+                    >
+                      {d.recentMovements.map((m) => (
+                        <tr key={m.id} className={TR}>
+                          <td className={`${TD} max-w-[260px] truncate`} title={`${m.productCode} ${m.productName}`}>
+                            <span className="font-mono text-xs text-muted-foreground mr-1.5">{m.productCode}</span>{m.productName}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{t(STOCK_MOVEMENT_KIND_LABEL_KEY[m.kind])}</td>
+                          <td className={`${TD_MONO} text-right ${m.delta < 0 ? "text-[#d22626]" : "text-[#207e52]"}`}>{m.delta > 0 ? "+" : ""}{fmtCount(m.delta)}</td>
+                          <td className={`${TD_MONO} text-muted-foreground`}>{new Date(m.createdAt).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}</td>
+                        </tr>
+                      ))}
+                    </CardTable>
+                  )}
+                  side={(d.lowStockItems || storeQueue) && (
+                    <ChartCard
+                      title={t("dashboard.inventory.lowStockTable.title")} sub={t("dashboard.inventory.lowStockTable.sub")} className="h-full"
+                      actions={d.lowStockItems ? <OpenListButton onClick={() => onNavigatePage("stock")} /> : undefined}
+                    >
+                      {d.lowStockItems && (d.lowStockItems.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-6">{t("dashboard.inventory.lowStockTable.empty")}</p>
+                      ) : (
+                        <ul className="space-y-3.5">
+                          {d.lowStockItems.slice(0, 6).map((p) => (
+                            <li key={p.id} className="space-y-1.5 min-w-0">
+                              <div className="flex items-baseline justify-between gap-3 text-sm">
+                                <span className="truncate text-foreground min-w-0" title={`${p.code} ${p.name}`}>{p.name}</span>
+                                <span className={`font-mono text-xs whitespace-nowrap ${p.stockQty <= 0 ? "text-[#d22626]" : "text-[#a75d1a]"}`}>
+                                  {fmtCount(p.stockQty)} / {fmtCount(p.reorderPoint)} {p.unit}
+                                </span>
+                              </div>
+                              <ProgressBar value={Math.max(0, p.stockQty)} max={p.reorderPoint} color={p.stockQty <= 0 ? "#e05252" : "#e08a3c"} />
+                            </li>
+                          ))}
+                        </ul>
+                      ))}
+                      {storeQueue && (
+                        <div className={`space-y-2 ${d.lowStockItems ? "mt-5 pt-4 border-t border-border" : ""}`}>
+                          <p className="text-xs font-semibold text-muted-foreground">{t("dashboard.inventory.storeQueue.title")}</p>
+                          {d.prAwaitingStore !== null && (
+                            <button onClick={() => onNavigatePage("storeRequestInbox")} className="w-full flex items-center justify-between gap-3 text-sm hover:text-[#866d28] transition-colors">
+                              <span>{t("dashboard.inventory.prAwaitingStore")}</span><span className="font-mono font-semibold">{fmtCount(d.prAwaitingStore)}</span>
+                            </button>
+                          )}
+                          {d.pendingProductRequests !== null && (
+                            <button onClick={() => onNavigatePage("productRequest")} className="w-full flex items-center justify-between gap-3 text-sm hover:text-[#866d28] transition-colors">
+                              <span>{t("dashboard.inventory.pendingProductRequests")}</span><span className="font-mono font-semibold">{fmtCount(d.pendingProductRequests)}</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </ChartCard>
+                  )}
+                />
               </>
             )}
           </>
         );
       }}
-    </DepartmentTabFrame>
+    </DepartmentViewFrame>
   );
 }

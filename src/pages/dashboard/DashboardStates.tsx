@@ -40,22 +40,26 @@ export function DashboardContentSkeleton() {
   );
 }
 
-// โครงกะพริบของแท็บแผนก — แถวตัวเลข 4 ช่อง + การ์ดรายละเอียด 2 ใบ
-// Generic skeleton for a department tab: a 4-tile row and two detail cards.
+// โครงกะพริบของแท็บแผนก — วางผังเหมือนของจริง (KPI 4 ช่อง · กล่อง 2 ต่อ 1 สองแถว) ตาม DASHBOARD_DESIGN.md ข้อ 8
+// Generic skeleton for a department tab, laid out like the real page: 4 KPI cards and two 2fr/1fr rows.
 export function DepartmentTabSkeleton() {
   return (
     <div className="space-y-6" aria-hidden="true">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-card border border-border rounded-xl p-4 space-y-2">
-            <SkeletonBar className="h-3 w-24" />
-            <SkeletonBar className="h-6 w-16" />
+          <div key={i} className="bg-card border border-border rounded-xl p-[18px] space-y-3">
+            <div className="flex items-center gap-2.5"><SkeletonBar className="h-[34px] w-[34px] rounded-lg" /><SkeletonBar className="h-3 w-24" /></div>
+            <SkeletonBar className="h-6 w-20" />
+            <SkeletonBar className="h-2 w-full" />
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {[...Array(2)].map((_, i) => <div key={i} className="h-48 rounded-xl bg-muted animate-pulse" />)}
-      </div>
+      {[0, 1].map((row) => (
+        <div key={row} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 h-72 rounded-xl bg-muted animate-pulse" />
+          <div className="h-72 rounded-xl bg-muted animate-pulse" />
+        </div>
+      ))}
     </div>
   );
 }

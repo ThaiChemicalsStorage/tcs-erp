@@ -14,10 +14,11 @@ import { receivingReportTotals } from "../../src/lib/receivingReport";
  *      ignores the pathname — so the dispatch must run first, and the sales payload must still work.
  *   2. **Each number means what its label says** — especially the ones assembled in memory
  *      (PO awaiting receipt, MR awaiting issue, stock value) rather than a single count.
- *   3. **Snapshot vs period.** A document outside the date range drops out of "selected period"
- *      numbers only, never out of "as of now" ones.
- *   4. **Permissions.** A block is `null` without the tab's view permission; a number inside a block
- *      is `null` without that document type's own permission.
+ *   3. **Snapshot vs period vs 12-month series.** A document outside the date range drops out of
+ *      "selected period" numbers only; the monthly series ignore the range and always end this month.
+ *   4. **Permissions.** A block is `null` without its department's view permission; a number inside a
+ *      block is `null` without that document type's own permission. The combined operations tab still
+ *      gates production / project / BD separately.
  *   5. **BD carries no money** — the owner removed every Cost Control total on 2026-08-31.
  */
 
@@ -29,6 +30,7 @@ let baseUrl: string;
 let adminCookie: string;
 let adminId: string;
 let today: string;
+let months: string[];
 let addDays: (iso: string, n: number) => string;
 
 async function get(path: string, cookie = adminCookie): Promise<Response> {
@@ -70,6 +72,12 @@ const RR_C = {
   lines: [{ id: "l1", qtyOrdered: 10, unitPriceOrdered: 50, discount: 0 }],
   batches: [{ id: "b1", total: 107, lines: [] }],
 };
+/** ใบสั่งซื้อที่อนุมัติแล้วใน fixture: วันที่ออกใบ + VAT — ใช้คิดค่าที่คาดของกราฟรายเดือนโดยไม่ผูกกับวันที่รันเทสต์ */
+const APPROVED_POS = [
+  { orderDate: "2026-01-15", vatRate: 7 as number | null },
+  { orderDate: "2025-06-01", vatRate: null },
+  { orderDate: "2026-03-01", vatRate: 7 },
+];
 
 beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
@@ -93,17 +101,18 @@ beforeAll(async () => {
   const shared = await import("../../api/_lib/dashboardShared.js");
   today = shared.todayIsoDate();
   addDays = shared.addDaysIso;
+  months = (await import("../../api/_lib/departmentDashboard.js")).lastMonthKeys(today);
   const c = await import("../../api/_lib/collections.js");
   adminId = (await (await c.usersCollection()).findOne({ username: "admin" }))!._id.toString();
 
   // ── จัดซื้อ ──
   await (await c.purchaseOrdersCollection()).insertMany([
     // อนุมัติแล้ว ยังไม่มีใบรับ เลยวันต้องการรับของ · ออกใบเดือนมกราคม
-    { _id: "PO-A", ...base(), status: "Final", documentNumber: "PO-A", purchaseRequestId: "PR-2", vendorName: "ผู้ขาย A", orderDate: "2026-01-15", neededByDate: addDays(today, -1), lines: [poLine], vatRate: 7 },
+    { _id: "PO-A", ...base(), status: "Final", documentNumber: "PO-A", purchaseRequestId: "PR-2", vendorName: "ผู้ขาย A", orderDate: APPROVED_POS[0].orderDate, neededByDate: addDays(today, -1), lines: [poLine], vatRate: 7 },
     // ใบรับปิดแล้ว = รับครบ
-    { _id: "PO-B", ...base(), status: "Final", documentNumber: "PO-B", purchaseRequestId: "", vendorName: "ผู้ขาย B", orderDate: "2025-06-01", neededByDate: addDays(today, 5), lines: [poLine], vatRate: null },
+    { _id: "PO-B", ...base(), status: "Final", documentNumber: "PO-B", purchaseRequestId: "", vendorName: "ผู้ขาย B", orderDate: APPROVED_POS[1].orderDate, neededByDate: addDays(today, 5), lines: [poLine], vatRate: null },
     // ใบรับยังเปิด = ยังรับไม่ครบ แต่ยังไม่มีวันต้องการรับของ
-    { _id: "PO-C", ...base(), status: "Final", documentNumber: "PO-C", purchaseRequestId: "", vendorName: "ผู้ขาย C", orderDate: "2026-03-01", neededByDate: "", lines: [poLine], vatRate: 7 },
+    { _id: "PO-C", ...base(), status: "Final", documentNumber: "PO-C", purchaseRequestId: "", vendorName: "ผู้ขาย C", orderDate: APPROVED_POS[2].orderDate, neededByDate: "", lines: [poLine], vatRate: 7 },
     { _id: "PO-D", ...base(), status: "PendingApproval", documentNumber: "PO-D", purchaseRequestId: "", vendorName: "", orderDate: "", neededByDate: "", lines: [], vatRate: null },
     { _id: "PO-E", ...base(), isDeleted: true, status: "Final", documentNumber: "PO-E", purchaseRequestId: "", vendorName: "", orderDate: "2026-01-20", neededByDate: addDays(today, -9), lines: [poLine], vatRate: 7 },
   ] as never);
@@ -120,11 +129,13 @@ beforeAll(async () => {
   ] as never);
 
   // ── คลังสินค้า ──
+  await (await c.categoriesCollection()).insertOne({ _id: "CAT-A", name: "เคมี" } as never);
   await (await c.productsCollection()).insertMany([
-    { code: "P1", name: "ถึงจุดเตือน", unit: "ชิ้น", stockQty: 5, avgCost: 10, reorderPoint: 5, archived: false },
-    { code: "P2", name: "ติดลบ ไม่ตั้งจุดเตือน", unit: "ชิ้น", stockQty: -3, avgCost: 100, reorderPoint: 0, archived: false },
-    { code: "P3", name: "เก็บถาวร", unit: "ชิ้น", stockQty: 20, avgCost: 2, reorderPoint: 50, archived: true },
-    { code: "P4", name: "ปกติ", unit: "ชิ้น", stockQty: 10, avgCost: 3, reorderPoint: 2, archived: false },
+    { code: "P1", name: "ถึงจุดเตือน", unit: "ชิ้น", stockQty: 5, avgCost: 10, reorderPoint: 5, archived: false, categoryId: "CAT-A" },
+    { code: "P2", name: "ติดลบ ไม่ตั้งจุดเตือน", unit: "ชิ้น", stockQty: -3, avgCost: 100, reorderPoint: 0, archived: false, categoryId: "CAT-A" },
+    { code: "P3", name: "เก็บถาวร", unit: "ชิ้น", stockQty: 20, avgCost: 2, reorderPoint: 50, archived: true, categoryId: "CAT-A" },
+    { code: "P4", name: "ปกติ", unit: "ชิ้น", stockQty: 10, avgCost: 3, reorderPoint: 2, archived: false, categoryId: "CAT-A" },
+    { code: "P5", name: "หมดสต๊อก", unit: "ชิ้น", stockQty: 0, avgCost: 8, reorderPoint: 3, archived: false, categoryId: "" },
   ] as never);
   await (await c.stockMovementsCollection()).insertMany([
     { productId: "p1", productCode: "P1", productName: "ถึงจุดเตือน", kind: "receive", delta: 5, balanceAfter: 5, amount: 100, reason: "", sourceType: "manual", createdAt: new Date().toISOString(), createdBy: "" },
@@ -151,9 +162,11 @@ beforeAll(async () => {
 
   // ── บริการ ──
   await (await c.serviceReportsCollection()).insertMany([
-    { _id: "SR-1", ...base(), status: "Completed", inspectionDate: today, nextPmDate: addDays(today, 10), customerApproval: { status: "pending" }, customerSnapshot: { companyName: "ลูกค้า 1" }, serviceSystemName: "Scrubber" },
+    { _id: "SR-1", ...base(), status: "Completed", inspectionDate: today, nextPmDate: addDays(today, 10), customerApproval: { status: "pending", sentAt: `${addDays(today, -4)}T03:00:00.000Z` }, customerSnapshot: { companyName: "ลูกค้า 1" }, serviceSystemName: "Scrubber" },
     { _id: "SR-2", ...base(), status: "Draft", inspectionDate: "2020-01-01", nextPmDate: addDays(today, 40), customerApproval: null },
-    { _id: "SR-3", ...base(), status: "Cancelled", inspectionDate: today, nextPmDate: addDays(today, 5), customerApproval: { status: "rejected" } },
+    { _id: "SR-3", ...base(), status: "Cancelled", inspectionDate: today, nextPmDate: addDays(today, 5), customerApproval: { status: "rejected", respondedAt: `${today}T01:00:00.000Z` } },
+    // ร่างที่ค้างสถานะรอลูกค้าอยู่ด้วย (มีในข้อมูลจริง) — ต้องขึ้นในรายการต้องตามต่อครั้งเดียว
+    { _id: "SR-4", ...base(), updatedAt: "2020-02-01T00:00:00.000Z", status: "Draft", inspectionDate: "2020-02-01", nextPmDate: "", customerApproval: { status: "pending", sentAt: "2020-02-01T03:00:00.000Z" }, customerSnapshot: { companyName: "ลูกค้า 4" } },
   ] as never);
 });
 
@@ -167,9 +180,10 @@ describe("แดชบอร์ดแผนก — เส้นทาง", () =>
     expect((await fetch(`${baseUrl}/api/dashboard/departments?dept=overview`)).status).toBe(401);
   });
 
-  it("แท็บที่ไม่รู้จัก และวันที่ผิดรูปแบบ = 400", async () => {
+  it("แท็บที่ไม่รู้จัก ชื่อแท็บเก่าที่ถูกรวมแล้ว และวันที่ผิดรูปแบบ = 400", async () => {
     expect((await get("/api/dashboard/departments?dept=hr")).status).toBe(400);
-    expect((await get("/api/dashboard/departments?dept=bd&from=14/09/2026")).status).toBe(400);
+    expect((await get("/api/dashboard/departments?dept=production")).status).toBe(400);
+    expect((await get("/api/dashboard/departments?dept=operations&from=14/09/2026")).status).toBe(400);
   });
 
   it("แดชบอร์ดขายเดิมยังตอบ payload ของมันตามปกติ", async () => {
@@ -192,6 +206,18 @@ describe("แดชบอร์ดแผนก — ภาพรวม", () => {
     expect(Array.isArray(res.activityTimeline)).toBe(true);
   });
 
+  it("ต้องจัดการก่อน: รวมทุกแผนก เรียงวันที่เก่าสุดก่อน ไม่มีใบที่ลบ/รับของครบแล้ว", async () => {
+    const { attention } = await dept("overview");
+    expect(attention).not.toBeNull();
+    const ids = attention!.map((a) => a.id);
+    expect(ids).toEqual(expect.arrayContaining(["PO-A", "PD-2", "PD-1", "SR-1"]));
+    expect(ids).not.toContain("PO-E");
+    expect(ids).not.toContain("PO-B");
+    const dates = attention!.map((a) => a.date);
+    expect(dates).toEqual([...dates].sort());
+    expect(attention!.find((a) => a.id === "SR-1")).toMatchObject({ dept: "service", kind: "serviceApproval", date: addDays(today, -4) });
+  });
+
   it("จำนวนรออนุมัติตรงกับกล่องเอกสารรออนุมัติทุกชนิด", async () => {
     const res = await dept("overview");
     const listRes = await get("/api/pending-approvals");
@@ -199,6 +225,10 @@ describe("แดชบอร์ดแผนก — ภาพรวม", () => {
     for (const row of res.pendingApprovals ?? []) {
       expect(row.count, row.kind).toBe(items.filter((i) => i.kind === row.kind).length);
     }
+  });
+
+  it("แท็บอื่นไม่มีรายการต้องจัดการก่อน", async () => {
+    expect((await dept("purchasing")).attention).toBeNull();
   });
 });
 
@@ -209,8 +239,8 @@ describe("แดชบอร์ดแผนก — จัดซื้อ", () =>
     expect(b.summary).toEqual({ prAwaitingPo: 1, poPending: 1, poAwaitingReceipt: 2, poOverdue: 1 });
     expect(b.detail?.overduePurchaseOrders?.map((r) => r.id)).toEqual(["PO-A"]);
     expect(b.detail?.prStage).toEqual({ atStore: 1, atPurchasing: 2, closedByStore: 0 });
-    const production = b.detail?.prStatusByDepartment?.find((r) => r.ownerDepartment === "production");
-    expect(production?.counts).toEqual({ draft: 1, pending: 0, final: 0 });
+    expect(b.detail?.prAwaitingPoByDepartment).toEqual({ project: 0, production: 0, general: 1 });
+    expect(b.detail?.receiptProgress).toEqual({ approved: 3, received: 1 });
   });
 
   it("มูลค่าใบสั่งซื้อในช่วงที่เลือกคิดด้วยตัวคำนวณเดียวกับใบสั่งซื้อ และช่วงวันที่ไม่กระทบตัวเลข ณ ปัจจุบัน", async () => {
@@ -218,65 +248,99 @@ describe("แดชบอร์ดแผนก — จัดซื้อ", () =>
     const b = blocks.purchasing!;
     const expected = purchaseOrderTotals({ lines: [poLine] as never, vatRate: 7 }).total;
     expect(b.detail?.poApprovedInPeriod).toEqual({ count: 1, value: expected });
+    expect(b.detail?.topVendors).toEqual([{ name: "ผู้ขาย A", count: 1, value: expected }]);
     expect(b.summary.poAwaitingReceipt).toBe(2);
+  });
+
+  it("กราฟ 12 เดือนสิ้นสุดเดือนนี้ ไม่ขึ้นกับช่วงวันที่ และนับเฉพาะใบที่อนุมัติแล้ว", async () => {
+    const all = (await dept("purchasing")).blocks.purchasing!.detail!.poValueByMonth!;
+    const ranged = (await dept("purchasing", "&from=2026-01-01&to=2026-01-31")).blocks.purchasing!.detail!.poValueByMonth!;
+    expect(all.map((m) => m.month)).toEqual(months);
+    expect(all.at(-1)?.month).toBe(today.slice(0, 7));
+    expect(ranged).toEqual(all);
+    for (const month of months) {
+      const inMonth = APPROVED_POS.filter((p) => p.orderDate.startsWith(month));
+      const value = inMonth.reduce((sum, p) => sum + purchaseOrderTotals({ lines: [poLine] as never, vatRate: p.vatRate }).total, 0);
+      expect(all.find((m) => m.month === month), month).toEqual({ month, count: inMonth.length, value });
+    }
   });
 });
 
 describe("แดชบอร์ดแผนก — คลังสินค้า", () => {
-  it("มูลค่าสต๊อกไม่นับยอดติดลบและสินค้าเก็บถาวร · จุดเตือน 0 ไม่นับว่าใกล้หมด", async () => {
+  it("มูลค่าสต๊อกไม่นับยอดติดลบและสินค้าเก็บถาวร · จุดเตือน 0 ไม่นับว่าใกล้หมด · หมดสต๊อกแยกให้เห็น", async () => {
     const b = (await dept("inventory")).blocks.inventory!;
-    expect(b.summary.stockValue).toBe(5 * 10 + 0 + 10 * 3);
-    expect(b.summary.lowStock).toBe(1);
-    expect(b.detail?.lowStockItems?.map((p) => p.code)).toEqual(["P1"]);
+    expect(b.summary.stockValue).toBe(5 * 10 + 0 + 10 * 3 + 0);
+    expect(b.summary.lowStock).toBe(2);
+    expect(b.detail?.outOfStock).toBe(1);
+    expect(b.detail?.lowStockItems?.map((p) => p.code)).toEqual(["P5", "P1"]);
   });
 
-  it("ใบเบิกรอจ่ายนับเฉพาะใบอนุมัติที่ยังค้างจ่าย · ใบรับที่ยังเปิดและยอดค้างรับตรงกับหน้าใบรับสินค้า", async () => {
+  it("มูลค่าสต๊อกตามหมวดหมู่รวมกันได้เท่ามูลค่าสต๊อกทั้งหมด", async () => {
+    const b = (await dept("inventory")).blocks.inventory!;
+    expect(b.detail?.stockValueByCategory).toEqual([{ categoryId: "CAT-A", categoryName: "เคมี", value: 80 }]);
+    expect(b.detail!.stockValueByCategory!.reduce((s, c) => s + c.value, 0)).toBe(b.summary.stockValue);
+  });
+
+  it("ใบเบิกรอจ่ายนับเฉพาะใบอนุมัติที่ยังค้างจ่าย แยกแผนก · ใบรับที่ยังเปิดและยอดค้างรับตรงกับหน้าใบรับสินค้า", async () => {
     const b = (await dept("inventory")).blocks.inventory!;
     expect(b.summary.mrAwaitingIssue).toBe(1);
+    expect(b.detail?.mrAwaitingIssueByDepartment).toEqual({ production: 1, project: 0 });
     expect(b.summary.openReceivingReports).toBe(1);
     expect(b.detail?.outstandingReceiveValue).toBe(receivingReportTotals(RR_C as never).outstandingValue);
   });
 
-  it("ความเคลื่อนไหวของสต๊อกเป็นตัวเลขตามช่วงที่เลือก", async () => {
+  it("รับเข้า/ตัดจ่ายรายเดือนเป็น 12 เดือนล่าสุด · ความเคลื่อนไหวล่าสุดตามช่วงที่เลือก", async () => {
     const all = (await dept("inventory")).blocks.inventory!;
-    expect(all.detail?.movementsByKind?.find((m) => m.kind === "deduct")?.count).toBe(1);
+    expect(all.detail?.movementsByMonth?.map((m) => m.month)).toEqual(months);
+    expect(all.detail?.movementsByMonth?.at(-1)).toEqual({ month: today.slice(0, 7), receive: 100, deduct: 0 });
+    expect(all.detail?.recentMovements).toHaveLength(2);
     const recent = (await dept("inventory", `&from=${today.slice(0, 4)}-01-01`)).blocks.inventory!;
-    expect(recent.detail?.movementsByKind?.find((m) => m.kind === "deduct")?.count).toBe(0);
-    expect(recent.detail?.movementsByKind?.find((m) => m.kind === "receive")).toEqual({ kind: "receive", count: 1, amount: 100 });
+    expect(recent.detail?.recentMovements?.map((m) => m.kind)).toEqual(["receive"]);
+    expect(recent.detail?.movementsByMonth).toEqual(all.detail?.movementsByMonth);
     expect(recent.summary.stockValue).toBe(all.summary.stockValue);
   });
 });
 
-describe("แดชบอร์ดแผนก — ผลิต / โครงการ", () => {
-  it("ผลิต: ใกล้กำหนด เลยกำหนด และใบเบิกของฝ่ายผลิตที่ค้างจ่าย", async () => {
-    const b = (await dept("production")).blocks.production!;
+describe("แดชบอร์ดแผนก — แท็บรวม ผลิต · โครงการ · BD", () => {
+  it("ได้สามบล็อกพร้อมรายละเอียด ไม่มีบล็อกแผนกอื่น", async () => {
+    const res = await dept("operations");
+    expect(Object.keys(res.blocks).sort()).toEqual(["bd", "production", "project"]);
+    for (const key of ["production", "project", "bd"] as const) expect(res.blocks[key]?.detail, key).not.toBeNull();
+  });
+
+  it("ผลิต: ใกล้กำหนด เลยกำหนด ใบเบิกของฝ่ายผลิตที่ค้างจ่าย และงานที่เริ่มรายเดือน", async () => {
+    const b = (await dept("operations")).blocks.production!;
     expect(b.summary).toEqual({ pending: 1, dueSoon: 1, pastDue: 1, mrAwaitingIssue: 1 });
     expect(b.detail?.dueList.map((r) => r.id)).toEqual(["PD-2", "PD-1"]);
     expect(b.detail?.startedInPeriod).toBe(3);
-    const inRange = (await dept("production", `&from=${today}&to=${today}`)).blocks.production!;
+    expect(b.detail?.startedByMonth.map((m) => m.month)).toEqual(months);
+    expect(b.detail?.startedByMonth.at(-1)?.count).toBe(1);
+    // PR-4 ของฝ่ายผลิตยังเป็นร่าง จึงไม่นับว่ารอของ
+    expect(b.detail?.prOpenStage).toEqual({ atStore: 0, atPurchasing: 0 });
+    const inRange = (await dept("operations", `&from=${today}&to=${today}`)).blocks.production!;
     expect(inRange.detail?.startedInPeriod).toBe(1);
     expect(inRange.summary.pastDue).toBe(1);
   });
 
-  it("โครงการ: ใบเบิกที่ไม่มี ownerDepartment เป็นของโครงการ · ใบขอซื้อที่ยังไม่ได้ของ", async () => {
-    const b = (await dept("project")).blocks.project!;
+  it("โครงการ: ใบเบิกที่ไม่มี ownerDepartment เป็นของโครงการ · ใบขอซื้อที่ยังไม่ได้ของ แยกขั้น", async () => {
+    const b = (await dept("operations")).blocks.project!;
     // MR-2 ของโครงการจ่ายครบแล้ว
     expect(b.summary.mrAwaitingIssue).toBe(0);
     // PR-3 (รอสโตร์) และ PR-2 (ไม่มี ownerDepartment) — แต่ PR-2 มีใบสั่งซื้อแล้ว จึงเหลือ PR-3 ใบเดียว
     expect(b.summary.prOpen).toBe(1);
+    expect(b.detail?.prOpenStage).toEqual({ atStore: 1, atPurchasing: 0 });
   });
-});
 
-describe("แดชบอร์ดแผนก — BD", () => {
-  it("นับจำนวนตามสถานะและการผูก Scope ได้ถูก", async () => {
-    const b = (await dept("bd")).blocks.bd!;
+  it("BD: นับจำนวนตามสถานะ การผูก Scope และรายเดือนได้ถูก", async () => {
+    const b = (await dept("operations")).blocks.bd!;
     expect(b.summary).toEqual({ draft: 1, pending: 0, final: 1, createdInPeriod: 2 });
     expect(b.detail).toMatchObject({ linkedToScope: 1, standalone: 1 });
-    expect((await dept("bd", `&from=${today}`)).blocks.bd!.summary.createdInPeriod).toBe(1);
+    expect(b.detail?.createdByMonth.at(-1)).toEqual({ month: today.slice(0, 7), count: 1 });
+    expect((await dept("operations", `&from=${today}`)).blocks.bd!.summary.createdInPeriod).toBe(1);
   });
 
-  it("ไม่มีตัวเลขเงินหลุดออกมาเลย ทั้งชื่อฟิลด์และค่าต้นทุนที่อยู่ในฐานข้อมูล", async () => {
-    const b = (await dept("bd")).blocks.bd!;
+  it("BD: ไม่มีตัวเลขเงินหลุดออกมาเลย ทั้งชื่อฟิลด์และค่าต้นทุนที่อยู่ในฐานข้อมูล", async () => {
+    const b = (await dept("operations")).blocks.bd!;
     const keys: string[] = [];
     const walk = (value: unknown) => {
       if (Array.isArray(value)) return value.forEach(walk);
@@ -295,11 +359,23 @@ describe("แดชบอร์ดแผนก — BD", () => {
 describe("แดชบอร์ดแผนก — บริการ", () => {
   it("ร่าง ปิดงานเดือนนี้ รอลูกค้าอนุมัติ และ PM ใน 30 วัน (ไม่นับใบยกเลิก)", async () => {
     const b = (await dept("service")).blocks.service!;
-    expect(b.summary).toEqual({ draft: 1, completedThisMonth: 1, approvalPending: 1 });
+    expect(b.summary).toEqual({ draft: 2, completedThisMonth: 1, approvalPending: 2 });
     expect(b.detail?.approvalRejected).toBe(1);
     expect(b.detail?.upcomingPmCount).toBe(1);
     expect(b.detail?.upcomingPm.map((r) => r.id)).toEqual(["SR-1"]);
-    expect(b.detail?.counts).toMatchObject({ total: 3, draft: 1, completed: 1, cancelled: 1 });
+  });
+
+  it("งานที่ตรวจรายเดือนไม่นับใบยกเลิก · ผลการอนุมัติของลูกค้านับเฉพาะใบที่ปิดงาน", async () => {
+    const b = (await dept("service")).blocks.service!;
+    expect(b.detail?.inspectedByMonth.map((m) => m.month)).toEqual(months);
+    expect(b.detail?.inspectedByMonth.at(-1)).toEqual({ month: today.slice(0, 7), inspected: 1, completed: 1 });
+    expect(b.detail?.approvalBreakdown).toEqual({ approved: 0, pending: 1, rejected: 0, notSent: 0 });
+  });
+
+  it("ต้องตามต่อ: ลูกค้าไม่อนุมัติ รอลูกค้าตอบ (รอนานสุดก่อน) — ใบที่เข้าหลายเงื่อนไขขึ้นครั้งเดียว", async () => {
+    const b = (await dept("service")).blocks.service!;
+    expect(b.detail?.followUps.map((f) => [f.id, f.reason])).toEqual([["SR-3", "rejected"], ["SR-4", "pending"], ["SR-1", "pending"]]);
+    expect(b.detail?.followUps.find((f) => f.id === "SR-4")?.date).toBe("2020-02-01");
   });
 });
 
@@ -313,7 +389,21 @@ describe("แดชบอร์ดแผนก — สิทธิ์", () => {
     expect(res.blocks.inventory?.summary.openReceivingReports).toBeNull();
     expect(res.pendingApprovals).toEqual([]);
     expect(res.activityTimeline).toBeNull();
+    expect(res.attention).toEqual([]);
     expect((await dept("purchasing", "", cookie)).blocks.purchasing).toBeNull();
+  });
+
+  it("แท็บรวมแยกสิทธิ์รายแผนก — มีแค่สิทธิ์ใบสั่งผลิต เห็นเฉพาะส่วนของผลิต", async () => {
+    const { cookie } = await loginAs("factory", ["dashboard:view", "productionOrder:view"]);
+    const { blocks, attention } = await dept("operations", "", cookie);
+    expect(blocks.production).not.toBeNull();
+    expect(blocks.project).toBeNull();
+    expect(blocks.bd).toBeNull();
+    // ไม่มีสิทธิ์ดูใบขอซื้อ/ใบส่งมอบ
+    expect(blocks.production?.detail?.prOpenStage).toBeNull();
+    expect(blocks.production?.detail?.deliveryOrder).toBeNull();
+    expect(attention).toBeNull();
+    expect((await dept("overview", "", cookie)).attention?.every((a) => a.dept === "production")).toBe(true);
   });
 
   it("ไม่มี dashboard:view = 403", async () => {

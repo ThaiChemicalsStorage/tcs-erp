@@ -3,13 +3,12 @@ import { Download, FileSpreadsheet, HelpCircle } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import type { QuotationListFilter } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardFilters, type DashboardStats } from "../../lib/dashboard";
-import type { DepartmentDashboardResponse } from "../../lib/departmentDashboard";
+import type { DepartmentDashboardResponse, DepartmentDashboardView } from "../../lib/departmentDashboard";
 import type { ArDashboardStats } from "../../lib/accountingDashboard";
-import type { ApRegisterSummary } from "../../lib/apEntries";
 import type { Permission } from "../../lib/permissions";
 import {
-  DEPARTMENT_KEYS, dashboardTabHash, resolveInitialTab, tabFromHash, visibleDashboardTabs,
-  type DashboardTabKey, type DepartmentKey,
+  OPERATIONS_DEPARTMENTS, canSeeDepartmentBlock, dashboardTabHash, resolveInitialTab, tabFromHash, visibleDashboardTabs,
+  type DashboardTabKey,
 } from "../../lib/dashboardTabs";
 import { useI18n } from "../../lib/i18n";
 import { useModuleTour } from "../../components/GuidedTour";
@@ -23,15 +22,13 @@ import { buildDashboardCsv, downloadCsv } from "./csvExport";
 import { exportDashboardXlsx } from "./xlsxExport";
 import { DashboardContentSkeleton, ErrorState } from "./DashboardStates";
 import { DashboardDataCache, useDashboardData } from "./useDashboardData";
-import { DASHBOARD_TAB_META } from "./tabs/tabMeta";
+import { DASHBOARD_TAB_META, DEPARTMENT_META } from "./tabs/tabMeta";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { SalesTab } from "./tabs/SalesTab";
 import { ServiceTab } from "./tabs/ServiceTab";
 import { PurchasingTab } from "./tabs/PurchasingTab";
 import { InventoryTab } from "./tabs/InventoryTab";
-import { ProductionTab } from "./tabs/ProductionTab";
-import { ProjectTab } from "./tabs/ProjectTab";
-import { BdTab } from "./tabs/BdTab";
+import { OperationsTab } from "./tabs/OperationsTab";
 import { AccountingDashboardView } from "../accounting/AccountingDashboardPage";
 
 const TAB_STORAGE_PREFIX = "tcs_erp_dashboard_tab:";
@@ -52,17 +49,20 @@ function writeStoredTab(userId: string, tab: DashboardTabKey): void {
   }
 }
 
-function isDepartmentKey(tab: DashboardTabKey): tab is DepartmentKey {
-  return (DEPARTMENT_KEYS as readonly string[]).includes(tab);
+/** แท็บที่ใช้ตัวเลขจาก `GET /api/dashboard/departments` (ขายกับบัญชีมี endpoint ของตัวเอง) */
+function departmentViewOf(tab: DashboardTabKey): DepartmentDashboardView | null {
+  return tab === "overview" || tab === "service" || tab === "purchasing" || tab === "inventory" || tab === "operations" ? tab : null;
 }
 
 /**
  * หน้าแดชบอร์ด — แท็บภาพรวม + แท็บต่อแผนก (2026-09-14)
  *
  * เจ้าของสั่ง *"หน้า Dashboard อยากให้ทำให้ดูง่ายขึ้นแยกแต่ละแผนกอย่างชัดเจนแต่ก็ยังมี Dashboard ที่ดู
- * ข้อมูลรวมได้ทุกอย่างอยู่ด้วย"* และเลือกเองว่าให้เป็น "แท็บในหน้าแดชบอร์ด" โดยภาพรวมเป็นสรุปสั้นทุกแผนก
+ * ข้อมูลรวมได้ทุกอย่างอยู่ด้วย"* และเลือกเองว่าให้เป็น "แท็บในหน้าแดชบอร์ด" · รอบออกแบบใหม่วันเดียวกันเปลี่ยน
+ * ทุกแท็บเป็นแดชบอร์ดที่มีกราฟ (docs/DASHBOARD_DESIGN.md) และรวม ผลิต · โครงการ · BD เป็นแท็บเดียว
  *
  * - เห็นเฉพาะแท็บที่มีสิทธิ์ (`src/lib/dashboardTabs.ts` — กติกาเดียวกับเซิร์ฟเวอร์)
+ * - ชื่อแท็บรวมมีเฉพาะแผนกที่ผู้ใช้เห็นจริง — คนที่เห็นแค่ผลิตจะเห็นแท็บชื่อ "ผลิต"
  * - แท็บที่เปิดอยู่อยู่ใน URL (`#dashboard/inventory`) และจำไว้ต่อผู้ใช้ — รีเฟรช/ส่งลิงก์แล้วกลับมาที่เดิม
  * - หัวหน้า แถบแท็บ และตัวกรองขึ้นทันที เนื้อหาของแต่ละแท็บโหลดของตัวเอง (shell-first)
  * - ข้อมูลที่โหลดแล้วเก็บไว้จนกว่าหน้าจะถูกปิด สลับแท็บกลับมาไม่ต้องรอใหม่ (`useDashboardData.ts`)
@@ -116,19 +116,24 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
   const sales = useDashboardData<DashboardStats>(
     cache, canSales && (tab === "sales" || tab === "overview") ? { kind: "sales", filters: salesFilters, retry } : null,
   );
-  const departmentView = tab === "overview" ? "overview" : isDepartmentKey(tab) ? tab : null;
+  const departmentView = departmentViewOf(tab);
   const departments = useDashboardData<DepartmentDashboardResponse>(
     cache, departmentView ? { kind: "departments", view: departmentView, from: filters.from, to: filters.to, retry } : null,
   );
   const ar = useDashboardData<ArDashboardStats>(cache, tab === "overview" && can("ar:view") ? { kind: "arSnapshot", retry } : null);
-  const ap = useDashboardData<ApRegisterSummary>(
-    cache, tab === "overview" && can("ap:view") ? { kind: "apMonth", month: todayIsoBangkok().slice(0, 7), retry } : null,
-  );
 
   const tabLoading = tab === "sales" ? sales.loading
-    : tab === "overview" ? departments.loading || sales.loading || ar.loading || ap.loading
+    : tab === "overview" ? departments.loading || sales.loading || ar.loading
       : departments.loading;
   const hasShownData = tab === "sales" ? !!sales.data : !!departments.data;
+
+  const tabLabel = (key: DashboardTabKey): string => {
+    if (key !== "operations") return t(DASHBOARD_TAB_META[key].labelKey);
+    const seen = OPERATIONS_DEPARTMENTS.filter((d) => canSeeDepartmentBlock(d, can));
+    return seen.length === OPERATIONS_DEPARTMENTS.length
+      ? t(DASHBOARD_TAB_META.operations.labelKey)
+      : seen.map((d) => t(DEPARTMENT_META[d].labelKey)).join(" · ");
+  };
 
   const tourSteps: DriveStep[] = [
     { element: '[data-tour="dashboard-tabs"]', popover: { title: t("tour.dashboard.tabs.title"), description: t("tour.dashboard.tabs.desc"), side: "bottom" } },
@@ -212,7 +217,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
 
       <div data-tour="dashboard-tabs">
         <Tabs
-          items={visibleTabs.map((key) => ({ key, label: t(DASHBOARD_TAB_META[key].labelKey), icon: DASHBOARD_TAB_META[key].icon }))}
+          items={visibleTabs.map((key) => ({ key, label: tabLabel(key), icon: DASHBOARD_TAB_META[key].icon }))}
           active={tab}
           onChange={setRequestedTab}
           idPrefix="dashboard"
@@ -240,7 +245,6 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
             departments={departments}
             sales={canSales ? sales : null}
             ar={can("ar:view") ? ar : null}
-            ap={can("ap:view") ? ap : null}
             onOpenTab={setRequestedTab}
             onOpenQuote={onOpenQuote}
             onOpenPendingApprovals={() => onNavigatePage("pendingApprovals")}
@@ -255,9 +259,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
         {tab === "service" && <ServiceTab {...departmentTabProps} />}
         {tab === "purchasing" && <PurchasingTab {...departmentTabProps} />}
         {tab === "inventory" && <InventoryTab {...departmentTabProps} />}
-        {tab === "production" && <ProductionTab {...departmentTabProps} />}
-        {tab === "project" && <ProjectTab {...departmentTabProps} />}
-        {tab === "bd" && <BdTab {...departmentTabProps} />}
+        {tab === "operations" && <OperationsTab {...departmentTabProps} />}
         {tab === "accounting" && <AccountingDashboardView />}
       </div>
     </div>

@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { defaultRoles, roleHasPermission } from "../src/lib/roles";
 import {
-  DASHBOARD_TAB_RULES, dashboardTabHash, resolveInitialTab, tabFromHash, visibleDashboardTabs,
-  type DashboardTabKey,
+  DASHBOARD_TAB_RULES, canSeeDepartmentBlock, dashboardTabHash, normalizeDashboardTab, resolveInitialTab, tabFromHash,
+  tabOfDepartment, visibleDashboardTabs, type DashboardTabKey,
 } from "../src/lib/dashboardTabs";
+import type { Permission } from "../src/lib/permissions";
 import { navKeyFromHash } from "../src/lib/navResolution";
 
 /**
@@ -21,9 +22,12 @@ const tabsFor = (roleKey: string): DashboardTabKey[] => {
   return visibleDashboardTabs((p) => roleHasPermission(role, p));
 };
 
+const only = (...granted: Permission[]) => (p: Permission) => granted.includes(p);
+
 describe("แท็บที่แต่ละบทบาทเห็น", () => {
-  it("Super Admin เห็นครบทุกแท็บ ตามลำดับที่แสดง", () => {
+  it("Super Admin เห็นครบทุกแท็บ ตามลำดับที่แสดง — 7 แท็บ (ผลิต · โครงการ · BD รวมเป็นแท็บเดียว)", () => {
     expect(tabsFor("super_admin")).toEqual(DASHBOARD_TAB_RULES.map((r) => r.key));
+    expect(tabsFor("super_admin")).toEqual(["overview", "sales", "service", "purchasing", "inventory", "operations", "accounting"]);
   });
 
   it("ภาพรวมขึ้นเสมอ และเป็นแท็บแรก", () => {
@@ -48,6 +52,33 @@ describe("แท็บที่แต่ละบทบาทเห็น", () =
   });
 });
 
+describe("แท็บรวม ผลิต · โครงการ · BD", () => {
+  it("เปิดเมื่อเห็นแผนกใดแผนกหนึ่ง แต่บล็อกข้างในยังแยกสิทธิ์รายแผนก", () => {
+    const productionOnly = only("productionOrder:view");
+    expect(visibleDashboardTabs(productionOnly)).toEqual(["overview", "operations"]);
+    expect(canSeeDepartmentBlock("production", productionOnly)).toBe(true);
+    expect(canSeeDepartmentBlock("project", productionOnly)).toBe(false);
+    expect(canSeeDepartmentBlock("bd", productionOnly)).toBe(false);
+
+    expect(visibleDashboardTabs(only("costControl:view"))).toEqual(["overview", "operations"]);
+    expect(visibleDashboardTabs(only("project:view"))).toEqual(["overview", "operations"]);
+  });
+
+  it("การ์ดแผนกในภาพรวมพาไปแท็บที่ถูก", () => {
+    expect(tabOfDepartment("production")).toBe("operations");
+    expect(tabOfDepartment("bd")).toBe("operations");
+    expect(tabOfDepartment("purchasing")).toBe("purchasing");
+  });
+
+  it("ชื่อแท็บเก่าก่อนรวม (ลิงก์และค่าที่จำไว้) พาเข้าแท็บรวม", () => {
+    expect(normalizeDashboardTab("production")).toBe("operations");
+    expect(normalizeDashboardTab("project")).toBe("operations");
+    expect(normalizeDashboardTab("bd")).toBe("operations");
+    expect(normalizeDashboardTab("toString")).toBeNull();
+    expect(tabFromHash("#dashboard/production")).toBe("operations");
+  });
+});
+
 describe("แท็บที่เปิดตอนเข้าหน้า", () => {
   const visible: DashboardTabKey[] = ["overview", "sales", "inventory"];
 
@@ -55,12 +86,13 @@ describe("แท็บที่เปิดตอนเข้าหน้า", (
     expect(resolveInitialTab({ hashTab: "inventory", storedTab: "sales", visible })).toBe("inventory");
   });
 
-  it("ไม่มีแท็บใน URL ใช้แท็บล่าสุดที่จำไว้", () => {
+  it("ไม่มีแท็บใน URL ใช้แท็บล่าสุดที่จำไว้ — รวมชื่อแท็บเก่าที่ถูกรวมแล้ว", () => {
     expect(resolveInitialTab({ hashTab: null, storedTab: "sales", visible })).toBe("sales");
+    expect(resolveInitialTab({ hashTab: null, storedTab: "bd", visible: [...visible, "operations"] })).toBe("operations");
   });
 
   it("แท็บที่ไม่มีสิทธิ์ถูกข้าม ทั้งจาก URL และที่จำไว้ — ตกไปภาพรวม", () => {
-    expect(resolveInitialTab({ hashTab: "bd", storedTab: "accounting", visible })).toBe("overview");
+    expect(resolveInitialTab({ hashTab: "operations", storedTab: "accounting", visible })).toBe("overview");
   });
 
   it("ค่าที่จำไว้ที่ไม่ใช่แท็บจริง (ข้อมูลเก่า/พิมพ์เอง) ไม่ทำให้พัง", () => {
@@ -71,7 +103,7 @@ describe("แท็บที่เปิดตอนเข้าหน้า", (
 describe("แท็บใน URL", () => {
   it("อ่านแท็บจาก #dashboard/<แท็บ>", () => {
     expect(tabFromHash("#dashboard/inventory")).toBe("inventory");
-    expect(tabFromHash("#/dashboard/bd")).toBe("bd");
+    expect(tabFromHash("#/dashboard/operations")).toBe("operations");
   });
 
   it("ไม่มีแท็บ ไม่ใช่หน้าแดชบอร์ด หรือชื่อแท็บผิด = null", () => {
