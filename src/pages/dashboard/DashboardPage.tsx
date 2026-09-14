@@ -176,7 +176,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
   const departmentTabProps = { result: departments, onRetry: reload, onNavigatePage };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+    <div className="soft-scroll flex-1 overflow-y-auto p-6 space-y-6">
       <div data-tour="dashboard-title">
         <PageHeader
           title={t("dashboard.title")}

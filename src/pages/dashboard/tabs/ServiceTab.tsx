@@ -64,7 +64,7 @@ export function ServiceTab({ result, onRetry, onNavigatePage }: DepartmentTabPro
                 <SplitRow
                   main={(
                     <ChartCard
-                      title={t("dashboard.serviceTab.byMonth.title")} sub={t("dashboard.serviceTab.byMonth.sub")}
+                      fill title={t("dashboard.serviceTab.byMonth.title")} sub={t("dashboard.serviceTab.byMonth.sub")}
                       actions={(
                         <div className="text-right">
                           <p className="text-lg font-semibold font-mono text-foreground leading-none">{fmtCount(d.inspectedInPeriod)}</p>

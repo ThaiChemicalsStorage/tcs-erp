@@ -67,7 +67,7 @@ export function InventoryTab({ result, onRetry, onNavigatePage }: DepartmentTabP
               <>
                 <SplitRow
                   main={d.movementsByMonth && (
-                    <ChartCard title={t("dashboard.inventory.movementsByMonth.title")} sub={t("dashboard.inventory.movementsByMonth.sub")}>
+                    <ChartCard fill title={t("dashboard.inventory.movementsByMonth.title")} sub={t("dashboard.inventory.movementsByMonth.sub")}>
                       <MonthlyBars
                         rows={d.movementsByMonth} format={fmtShort} empty={t("dashboard.inventory.movementsByMonth.empty")}
                         series={[

@@ -125,6 +125,7 @@ export function OverviewTab({ visibleTabs, departments, sales, ar, onOpenTab, on
   const pending = overview?.pendingApprovals ?? null;
   const revenueChart = sales && !sales.error && (
     <ChartCard
+      fill
       title={`${t("dashboard.chart.revenue.title")} ${vatSuffix}`}
       sub={salesData ? `${t("dashboard.overview.revenue.sub")} ${fmtDateShort(salesData.filters.to || todayIsoBangkok(), lang)}` : undefined}
     >

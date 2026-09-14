@@ -663,6 +663,12 @@ KPI ×4 → 2fr/1fr chart row → 2fr/1fr action list + ranking/breakdown row.
 - A value turns red/orange **only when it is > 0**; a number the user has no permission for is omitted,
   not shown as 0; snapshot is the default and `TabIntro` says so once per tab.
 - One dark navy highlight card per page at most (overview: pending approvals across departments).
+- **Cards in a 2fr/1fr `SplitRow` are equal height** — the row stretches both cells; a chart card passes
+  `ChartCard fill` so `MonthlyBars` grows into the extra height (its `height` is a minimum) and an
+  `EmptyNote` centres in it. Never leave a short card with blank page below it beside a taller one.
+- **Scroll regions on light surfaces use `.soft-scroll`** (`src/styles/index.css`): thin, transparent
+  track, no arrow buttons, navy-tinted pill. Opt-in per region (dashboard page scroller, recent-activity
+  table), matching the sidebar's `.sidebar-scroll` on the dark rail.
 
 ### Dashboard Overview (KPIs + status/activity panels)
 **2026-07-13, seventh same-day pass (current state)**: the Dashboard's top-of-page "answer in 5 seconds" overview is now exactly **5 rows in the P'Keng/P'Kee business requirement's specified order** — Header+Filters, then:

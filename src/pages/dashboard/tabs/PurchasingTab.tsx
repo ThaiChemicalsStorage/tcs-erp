@@ -69,7 +69,7 @@ export function PurchasingTab({ result, onRetry, onNavigatePage }: DepartmentTab
                 <SplitRow
                   main={d.poValueByMonth && (
                     <ChartCard
-                      title={t("dashboard.purchasing.poValueByMonth.title")} sub={t("dashboard.purchasing.poValueByMonth.sub")}
+                      fill title={t("dashboard.purchasing.poValueByMonth.title")} sub={t("dashboard.purchasing.poValueByMonth.sub")}
                       actions={d.poApprovedInPeriod && (
                         <div className="text-right">
                           <p className="text-lg font-semibold font-mono text-foreground leading-none">{fmtShort(d.poApprovedInPeriod.value)}</p>

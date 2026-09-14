@@ -71,8 +71,8 @@ export function SplitRow({ main, side }: { main: ReactNode; side?: ReactNode }) 
   if (!main) return <div className="min-w-0">{side}</div>;
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-2 min-w-0">{main}</div>
-      <div className="min-w-0">{side}</div>
+      <div className="lg:col-span-2 min-w-0 flex flex-col [&>*]:flex-1">{main}</div>
+      <div className="min-w-0 flex flex-col [&>*]:flex-1">{side}</div>
     </div>
   );
 }
@@ -176,7 +176,7 @@ export function ProgressBar({ value, max, color }: { value: number; max: number;
 // ── กราฟ ─────────────────────────────────────────────────────────────────────
 
 export function EmptyNote({ children }: { children: ReactNode }) {
-  return <p className="text-xs text-muted-foreground text-center py-10">{children}</p>;
+  return <p className="flex-1 flex items-center justify-center text-xs text-muted-foreground text-center py-10">{children}</p>;
 }
 
 interface TooltipEntry { name: string; value: number; color: string }
@@ -214,7 +214,7 @@ export function MonthlyBars<T extends { month: string }>({ rows, series, format,
   const peakIndex = single ? rows.reduce((best, r, i) => (valueOf(r, series[0].key) > valueOf(rows[best], series[0].key) ? i : best), 0) : -1;
 
   return (
-    <div className="space-y-3">
+    <div className="flex-1 min-h-0 flex flex-col gap-3">
       {!single && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {series.map((s) => (
@@ -224,7 +224,11 @@ export function MonthlyBars<T extends { month: string }>({ rows, series, format,
           ))}
         </div>
       )}
-      <ResponsiveContainer width="100%" height={height}>
+      {/* ในการ์ดที่ถูกยืด (ChartCard fill) กราฟขยายลงเต็มพื้นที่ · `height` เป็นความสูงขั้นต่ำ
+          วางแบบ absolute เพื่อให้ ResponsiveContainer วัดขนาดได้แน่นอน ไม่ใช่ % ของความสูงที่ยังไม่รู้ */}
+      <div className="relative flex-1" style={{ minHeight: height }}>
+      <div className="absolute inset-0">
+      <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 18, right: 4, left: 0, bottom: 0 }} barGap={2} barCategoryGap={single ? "28%" : "22%"}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} interval={0} minTickGap={0} />
@@ -251,6 +255,8 @@ export function MonthlyBars<T extends { month: string }>({ rows, series, format,
           ))}
         </BarChart>
       </ResponsiveContainer>
+      </div>
+      </div>
     </div>
   );
 }

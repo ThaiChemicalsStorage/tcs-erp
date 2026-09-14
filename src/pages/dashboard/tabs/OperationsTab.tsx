@@ -100,7 +100,7 @@ function OperationsContent({ response, onRetry, onNavigatePage }: {
             <>
               <SplitRow
                 main={startedSeries.length > 0 && (
-                  <ChartCard title={t("dashboard.ops.started.title")} sub={t("dashboard.ops.started.sub")}>
+                  <ChartCard fill title={t("dashboard.ops.started.title")} sub={t("dashboard.ops.started.sub")}>
                     <MonthlyBars rows={startedRows} series={startedSeries} format={fmtCount} empty={t("dashboard.ops.started.empty")} />
                   </ChartCard>
                 )}
@@ -162,7 +162,7 @@ function OperationsContent({ response, onRetry, onNavigatePage }: {
           <SectionHeading depts={["bd"]} title={t("nav.costControl")} note={t("dashboard.ops.bd.note")} divider={works.length > 0} />
           <SplitRow
             main={(
-              <ChartCard title={t("dashboard.ops.bd.counts.title")} sub={t("dashboard.dept.allDocsNow")}>
+              <ChartCard fill title={t("dashboard.ops.bd.counts.title")} sub={t("dashboard.dept.allDocsNow")}>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {([
                     ["pending", t("dashboard.bd.pending"), bd.summary.pending, bd.summary.pending > 0 ? "text-[#a75d1a]" : "text-foreground"],
