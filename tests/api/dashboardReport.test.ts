@@ -142,7 +142,7 @@ describe("GET /api/dashboard — ส่วนที่เพิ่มสำห�
     const now = new Date().toISOString();
     await roles.insertOne({
       key: "sales-own", name: "Sales (own)", description: "", isSuperAdmin: false, isSystem: false,
-      permissions: ["dashboard:view", "quotations:view"], createdAt: now, updatedAt: now,
+      permissions: ["dashboard:view", "dashboard:tabSales", "quotations:view"], createdAt: now, updatedAt: now,
     } as never);
     const inserted = await users.insertOne({
       employeeId: "E002", fullName: "บี", username: "bee", email: "bee@test.local",

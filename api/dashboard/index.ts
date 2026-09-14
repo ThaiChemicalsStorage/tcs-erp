@@ -12,6 +12,7 @@ import {
   countDeliveryOrders, countServiceReports,
 } from "../_lib/dashboardShared.js";
 import { handleDepartmentDashboard } from "../_lib/departmentDashboard.js";
+import { canSeeDashboardTab } from "../../src/lib/dashboardTabs.js";
 import { roleHasPermission } from "../../src/lib/roles.js";
 import { ALL_RECIPIENT_KEYS } from "../../src/lib/documentRequirements.js";
 import type { ApprovalHistoryEntry } from "../../src/lib/quotes.js";
@@ -259,6 +260,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     if (req.method !== "GET") throw new HttpError(405, "Method not allowed");
     const ctx = await requirePermission(req, "dashboard:view");
+    // แท็บขายเปิดด้วยช่องติ๊ก "แดชบอร์ด: แท็บขาย" คู่กับสิทธิ์ดูใบเสนอราคา (2026-09-14) — กติกาเดียวกับแถบแท็บ
+    // ใน src/lib/dashboardTabs.ts · ภาพรวมก็ดึงตัวเลขขายจาก route นี้ จึงไม่ติ๊กขาย = ไม่มีตัวเลขขายที่ไหนเลย
+    if (!canSeeDashboardTab("sales", (p) => roleHasPermission(ctx.role, p))) throw new HttpError(403, "ไม่มีสิทธิ์ดูแท็บขายของแดชบอร์ด");
 
     const from = queryString(req, "from");
     const to = queryString(req, "to");

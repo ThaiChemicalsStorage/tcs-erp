@@ -1,4 +1,5 @@
 import { ALL_PERMISSIONS, type Permission, SUPER_ADMIN_ONLY_PERMISSIONS, withPermissionDependencies } from "./permissions.js";
+import { dashboardTicksFromDocumentPermissions } from "./dashboardTabGrants.js";
 import type { User } from "./users";
 import { apiFetch } from "./apiClient.js";
 
@@ -11,7 +12,18 @@ export interface Role {
   isSystem: boolean;
 }
 
-export const defaultRoles: Role[] = [
+/**
+ * สิทธิ์ติ๊กแท็บแดชบอร์ด (2026-09-14): บทบาทตั้งต้นได้ติ๊กตรงกับแท็บที่สิทธิ์เอกสารของมันเคยเปิดให้เห็น —
+ * ฐานข้อมูลที่ติดตั้งใหม่จึงเท่ากับฐานข้อมูลเดิมที่ได้ติ๊กจาก migration `dashboard-tab-ticks-2026-09-14`
+ */
+function withDashboardTicks(roles: Role[]): Role[] {
+  return roles.map((r) => (r.isSuperAdmin ? r : {
+    ...r,
+    permissions: [...r.permissions, ...dashboardTicksFromDocumentPermissions(r.permissions).filter((p) => !r.permissions.includes(p))],
+  }));
+}
+
+export const defaultRoles: Role[] = withDashboardTicks([
   {
     key: "super_admin",
     name: "Super Admin",
@@ -281,7 +293,7 @@ export const defaultRoles: Role[] = [
     isSuperAdmin: false,
     isSystem: false,
   },
-];
+]);
 
 // ค้นหาบทบาทจาก key ที่กำหนด
 // Finds a role by its key

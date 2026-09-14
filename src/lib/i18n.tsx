@@ -29,6 +29,8 @@ const translations = {
 
     // ── แท็บแผนกของแดชบอร์ด (2026-09-14) ──
     "dashboard.tabs.label": "แท็บแผนกของแดชบอร์ด",
+    "dashboard.noTabs.title": "ยังไม่มีแท็บแดชบอร์ดที่คุณดูได้",
+    "dashboard.noTabs.desc": "ขอให้ผู้ดูแลระบบติ๊กสิทธิ์แท็บแดชบอร์ดให้บทบาทของคุณในหน้า บทบาทและสิทธิ์ — แต่ละแท็บต้องมีสิทธิ์ดูเอกสารของแผนกนั้นด้วย",
     "dashboard.tab.overview": "ภาพรวม",
     "dashboard.tab.sales": "ขาย",
     "dashboard.tab.service": "บริการ",
@@ -1485,6 +1487,15 @@ const translations = {
 
     "permissionGroup.system": "ระบบ",
     "permission.dashboardView": "ดูแดชบอร์ด",
+    "permission.dashboardTabOverview": "แดชบอร์ด: แท็บภาพรวม",
+    "permission.dashboardTabSales": "แดชบอร์ด: แท็บขาย (ต้องดูใบเสนอราคาได้ด้วย)",
+    "permission.dashboardTabService": "แดชบอร์ด: แท็บบริการ (ต้องดูรายงานบริการได้ด้วย)",
+    "permission.dashboardTabPurchasing": "แดชบอร์ด: แท็บจัดซื้อ (ต้องดูใบสั่งซื้อหรือใบขอซื้อได้ด้วย)",
+    "permission.dashboardTabInventory": "แดชบอร์ด: แท็บคลังสินค้า (ต้องดูสต๊อก ใบรับสินค้า หรือคำขอเพิ่มสินค้าได้ด้วย)",
+    "permission.dashboardTabProduction": "แดชบอร์ด: ส่วนผลิต (ต้องดูใบสั่งผลิตได้ด้วย)",
+    "permission.dashboardTabProject": "แดชบอร์ด: ส่วนโครงการ (ต้องดูใบสั่งงานหรือโครงการได้ด้วย)",
+    "permission.dashboardTabBd": "แดชบอร์ด: ส่วน BD (ต้องดู Cost Control ได้ด้วย)",
+    "permission.dashboardTabAccounting": "แดชบอร์ด: แท็บบัญชี (ต้องดูเอกสารลูกหนี้หรือเจ้าหนี้ได้ด้วย)",
     "permission.quotationsView": "ดูใบเสนอราคา",
     "permission.quotationsViewAll": "ดูใบเสนอราคาของผู้อื่น",
     "permission.quotationsViewTeam": "ดูใบเสนอราคาของทีมตัวเอง",
@@ -3311,6 +3322,8 @@ const translations = {
 
     // ── Dashboard department tabs (2026-09-14) ──
     "dashboard.tabs.label": "Dashboard department tabs",
+    "dashboard.noTabs.title": "No dashboard tabs available to you",
+    "dashboard.noTabs.desc": "Ask an administrator to tick dashboard tabs for your role in Roles & Permissions — each tab also needs permission to view that department’s documents",
     "dashboard.tab.overview": "Overview",
     "dashboard.tab.sales": "Sales",
     "dashboard.tab.service": "Service",
@@ -4769,6 +4782,15 @@ const translations = {
 
     "permissionGroup.system": "System",
     "permission.dashboardView": "View Dashboard",
+    "permission.dashboardTabOverview": "Dashboard: Overview tab",
+    "permission.dashboardTabSales": "Dashboard: Sales tab (also needs View Quotations)",
+    "permission.dashboardTabService": "Dashboard: Service tab (also needs View Service Reports)",
+    "permission.dashboardTabPurchasing": "Dashboard: Purchasing tab (also needs View Purchase Orders or Purchase Requests)",
+    "permission.dashboardTabInventory": "Dashboard: Inventory tab (also needs View Stock, Receiving Reports or Product Requests)",
+    "permission.dashboardTabProduction": "Dashboard: Production section (also needs View Production Orders)",
+    "permission.dashboardTabProject": "Dashboard: Projects section (also needs View Job Orders or Projects)",
+    "permission.dashboardTabBd": "Dashboard: BD section (also needs View Cost Control)",
+    "permission.dashboardTabAccounting": "Dashboard: Accounting tab (also needs View AR or AP)",
     "permission.quotationsView": "View Quotations",
     "permission.quotationsViewAll": "View Others' Quotations",
     "permission.quotationsViewTeam": "View Own Team's Quotations",

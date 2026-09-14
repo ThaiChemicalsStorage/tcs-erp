@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Download, FileSpreadsheet, HelpCircle } from "lucide-react";
+import { Download, FileSpreadsheet, HelpCircle, LayoutDashboard } from "lucide-react";
 import type { DriveStep } from "driver.js";
 import type { QuotationListFilter } from "../../lib/quotes";
 import { fetchDashboardStats, type DashboardFilters, type DashboardStats } from "../../lib/dashboard";
@@ -14,6 +14,7 @@ import { useI18n } from "../../lib/i18n";
 import { useModuleTour } from "../../components/GuidedTour";
 import { hasTourCompleted } from "../../lib/tour";
 import { PageHeader } from "../../components/PageHeader";
+import { EmptyState } from "../../components/EmptyState";
 import { Tabs } from "../../components/Tabs";
 import { tabPanelProps } from "../../components/tabPanelProps";
 import { DashboardFilterBar, type DashboardFilterState } from "./DashboardFilterBar";
@@ -50,7 +51,7 @@ function writeStoredTab(userId: string, tab: DashboardTabKey): void {
 }
 
 /** แท็บที่ใช้ตัวเลขจาก `GET /api/dashboard/departments` (ขายกับบัญชีมี endpoint ของตัวเอง) */
-function departmentViewOf(tab: DashboardTabKey): DepartmentDashboardView | null {
+function departmentViewOf(tab: DashboardTabKey | null): DepartmentDashboardView | null {
   return tab === "overview" || tab === "service" || tab === "purchasing" || tab === "inventory" || tab === "operations" ? tab : null;
 }
 
@@ -77,15 +78,17 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
   const { t } = useI18n();
   const visibleTabs = visibleDashboardTabs(can);
 
-  const [requestedTab, setRequestedTab] = useState<DashboardTabKey>(() => resolveInitialTab({
+  const [requestedTab, setRequestedTab] = useState<DashboardTabKey | null>(() => resolveInitialTab({
     hashTab: tabFromHash(window.location.hash),
     storedTab: readStoredTab(currentUserId),
     visible: visibleTabs,
   }));
-  // กันกรณีสิทธิ์เปลี่ยนระหว่างเปิดหน้าอยู่ — แท็บที่ไม่มีสิทธิ์แล้วตกกลับไปภาพรวม
-  const tab: DashboardTabKey = visibleTabs.includes(requestedTab) ? requestedTab : "overview";
+  // กันกรณีสิทธิ์เปลี่ยนระหว่างเปิดหน้าอยู่ — แท็บที่ไม่มีสิทธิ์แล้วตกไปแท็บแรกที่เห็น (ภาพรวมก็ติ๊กปิดได้ 2026-09-14)
+  // · ไม่ได้ติ๊กแท็บไหนเลย = null แสดงหน้าว่างที่บอกให้ไปขอสิทธิ์
+  const tab: DashboardTabKey | null = requestedTab && visibleTabs.includes(requestedTab) ? requestedTab : (visibleTabs[0] ?? null);
 
   useEffect(() => {
+    if (!tab) return;
     const target = dashboardTabHash(tab);
     if (window.location.hash !== target) window.history.replaceState(null, "", target);
     writeStoredTab(currentUserId, tab);
@@ -95,7 +98,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
   useEffect(() => {
     const onHashChange = () => {
       if (window.location.hash.replace(/^#\/?/, "").split("/")[0] !== "dashboard") return;
-      setRequestedTab(tabFromHash(window.location.hash) ?? "overview");
+      setRequestedTab(tabFromHash(window.location.hash));
     };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
@@ -120,7 +123,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
   const departments = useDashboardData<DepartmentDashboardResponse>(
     cache, departmentView ? { kind: "departments", view: departmentView, from: filters.from, to: filters.to, retry } : null,
   );
-  const ar = useDashboardData<ArDashboardStats>(cache, tab === "overview" && can("ar:view") ? { kind: "arSnapshot", retry } : null);
+  const ar = useDashboardData<ArDashboardStats>(cache, tab === "overview" && visibleTabs.includes("accounting") ? { kind: "arSnapshot", retry } : null);
 
   const tabLoading = tab === "sales" ? sales.loading
     : tab === "overview" ? departments.loading || sales.loading || ar.loading
@@ -215,6 +218,9 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
         />
       </div>
 
+      {tab === null ? (
+        <EmptyState icon={LayoutDashboard} title={t("dashboard.noTabs.title")} description={t("dashboard.noTabs.desc")} />
+      ) : (<>
       <div data-tour="dashboard-tabs">
         <Tabs
           items={visibleTabs.map((key) => ({ key, label: tabLabel(key), icon: DASHBOARD_TAB_META[key].icon }))}
@@ -244,7 +250,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
             visibleTabs={visibleTabs}
             departments={departments}
             sales={canSales ? sales : null}
-            ar={can("ar:view") ? ar : null}
+            ar={visibleTabs.includes("accounting") ? ar : null}
             onOpenTab={setRequestedTab}
             onOpenQuote={onOpenQuote}
             onOpenPendingApprovals={() => onNavigatePage("pendingApprovals")}
@@ -262,6 +268,7 @@ export function DashboardPage({ currentUserId, can, onNavigateToQuotations, onOp
         {tab === "operations" && <OperationsTab {...departmentTabProps} />}
         {tab === "accounting" && <AccountingDashboardView />}
       </div>
+      </>)}
     </div>
   );
 }

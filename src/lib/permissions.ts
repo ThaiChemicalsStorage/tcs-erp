@@ -2,6 +2,15 @@ import type { TranslationKey } from "./i18n";
 
 export type Permission =
   | "dashboard:view"
+  | "dashboard:tabOverview"
+  | "dashboard:tabSales"
+  | "dashboard:tabService"
+  | "dashboard:tabPurchasing"
+  | "dashboard:tabInventory"
+  | "dashboard:tabProduction"
+  | "dashboard:tabProject"
+  | "dashboard:tabBd"
+  | "dashboard:tabAccounting"
   | "quotations:view"
   | "quotations:viewAll"
   | "quotations:viewTeam"
@@ -153,6 +162,15 @@ export type Permission =
 
 export const ALL_PERMISSIONS: Permission[] = [
   "dashboard:view",
+  "dashboard:tabOverview",
+  "dashboard:tabSales",
+  "dashboard:tabService",
+  "dashboard:tabPurchasing",
+  "dashboard:tabInventory",
+  "dashboard:tabProduction",
+  "dashboard:tabProject",
+  "dashboard:tabBd",
+  "dashboard:tabAccounting",
   "quotations:view",
   "quotations:viewAll",
   "quotations:viewTeam",
@@ -297,6 +315,15 @@ export const ALL_PERMISSIONS: Permission[] = [
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
   "dashboard:view": "ดูแดชบอร์ด",
+  "dashboard:tabOverview": "แดชบอร์ด: แท็บภาพรวม",
+  "dashboard:tabSales": "แดชบอร์ด: แท็บขาย (ต้องดูใบเสนอราคาได้ด้วย)",
+  "dashboard:tabService": "แดชบอร์ด: แท็บบริการ (ต้องดูรายงานบริการได้ด้วย)",
+  "dashboard:tabPurchasing": "แดชบอร์ด: แท็บจัดซื้อ (ต้องดูใบสั่งซื้อหรือใบขอซื้อได้ด้วย)",
+  "dashboard:tabInventory": "แดชบอร์ด: แท็บคลังสินค้า (ต้องดูสต๊อก ใบรับสินค้า หรือคำขอเพิ่มสินค้าได้ด้วย)",
+  "dashboard:tabProduction": "แดชบอร์ด: ส่วนผลิต (ต้องดูใบสั่งผลิตได้ด้วย)",
+  "dashboard:tabProject": "แดชบอร์ด: ส่วนโครงการ (ต้องดูใบสั่งงานหรือโครงการได้ด้วย)",
+  "dashboard:tabBd": "แดชบอร์ด: ส่วน BD (ต้องดู Cost Control ได้ด้วย)",
+  "dashboard:tabAccounting": "แดชบอร์ด: แท็บบัญชี (ต้องดูเอกสารลูกหนี้หรือเจ้าหนี้ได้ด้วย)",
   "quotations:view": "ดูใบเสนอราคา",
   "quotations:viewAll": "ดูใบเสนอราคาของผู้อื่น",
   "quotations:viewTeam": "ดูใบเสนอราคาของทีมตัวเอง",
@@ -441,6 +468,15 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 
 export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
   "dashboard:view": "permission.dashboardView",
+  "dashboard:tabOverview": "permission.dashboardTabOverview",
+  "dashboard:tabSales": "permission.dashboardTabSales",
+  "dashboard:tabService": "permission.dashboardTabService",
+  "dashboard:tabPurchasing": "permission.dashboardTabPurchasing",
+  "dashboard:tabInventory": "permission.dashboardTabInventory",
+  "dashboard:tabProduction": "permission.dashboardTabProduction",
+  "dashboard:tabProject": "permission.dashboardTabProject",
+  "dashboard:tabBd": "permission.dashboardTabBd",
+  "dashboard:tabAccounting": "permission.dashboardTabAccounting",
   "quotations:view": "permission.quotationsView",
   "quotations:viewAll": "permission.quotationsViewAll",
   "quotations:viewTeam": "permission.quotationsViewTeam",
@@ -584,7 +620,7 @@ export const PERMISSION_LABEL_KEY: Record<Permission, TranslationKey> = {
 };
 
 export const PERMISSION_GROUPS: { label: string; labelKey: TranslationKey; permissions: Permission[] }[] = [
-  { label: "แดชบอร์ด", labelKey: "nav.dashboard", permissions: ["dashboard:view"] },
+  { label: "แดชบอร์ด", labelKey: "nav.dashboard", permissions: ["dashboard:view", "dashboard:tabOverview", "dashboard:tabSales", "dashboard:tabService", "dashboard:tabPurchasing", "dashboard:tabInventory", "dashboard:tabProduction", "dashboard:tabProject", "dashboard:tabBd", "dashboard:tabAccounting"] },
   {
     label: "ใบเสนอราคา",
     labelKey: "nav.quotations",

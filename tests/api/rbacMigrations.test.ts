@@ -41,6 +41,11 @@ const STORE_PERMISSION = /^(receivingReport|ap):/;
 const PR_STORE_MIGRATION_ID = "purchase-request-store-stage-2026-09-09";
 const PR_EDIT_APPROVED = "purchaseRequest:editApproved";
 
+/** สิทธิ์ติ๊กแท็บแดชบอร์ด (2026-09-14) — ฐานข้อมูลเดิมไม่มีเลย ได้จาก migration แบบ derive */
+const DASHBOARD_TICK_MIGRATION_ID = "dashboard-tab-ticks-2026-09-14";
+const DASHBOARD_TICK = /^dashboard:tab/;
+const withoutTicks = (permissions: string[]) => permissions.filter((p) => !DASHBOARD_TICK.test(p));
+
 /**
  * The roles collection as it looks on a database provisioned before the Service module shipped —
  * and, since 2026-08-31, also before the purchasing/vendor/cost-control permissions existed.
@@ -53,7 +58,7 @@ async function seedLegacyRoles(): Promise<void> {
       .filter((r) => r.key !== "service_engineer")
       .map((r) => ({
         ...r,
-        permissions: r.permissions.filter((p) => !SERVICE_PERMISSION.test(p) && !PURCHASING_PERMISSION.test(p) && !STORE_PERMISSION.test(p) && p !== PR_EDIT_APPROVED),
+        permissions: r.permissions.filter((p) => !SERVICE_PERMISSION.test(p) && !PURCHASING_PERMISSION.test(p) && !STORE_PERMISSION.test(p) && p !== PR_EDIT_APPROVED && !DASHBOARD_TICK.test(p)),
       })),
   );
 }
@@ -183,7 +188,8 @@ describe("applyRbacMigrations (accounting_user gains ar:cancel, 2026-08-18)", ()
   it("does not touch a role that never had ar:* at all", async () => {
     const before = await permissionsOf("sales_user");
     await applyRbacMigrations();
-    expect(await permissionsOf("sales_user")).toEqual(before);
+    // the dashboard-tick derive migration runs in the same pass and adds sales_user's ticks — checked in its own describe
+    expect(withoutTicks(await permissionsOf("sales_user"))).toEqual(withoutTicks(before));
   });
 
   it("records the migration so a second run is idempotent", async () => {
@@ -232,7 +238,8 @@ describe("applyRbacMigrations (Product Stock permissions, 2026-08-18)", () => {
   it("does not touch a role that never had stock:* at all", async () => {
     const before = await permissionsOf("sales_user");
     await applyRbacMigrations();
-    expect(await permissionsOf("sales_user")).toEqual(before);
+    // the dashboard-tick derive migration runs in the same pass and adds sales_user's ticks — checked in its own describe
+    expect(withoutTicks(await permissionsOf("sales_user"))).toEqual(withoutTicks(before));
   });
 
   it("records the migration so a second run is idempotent", async () => {
@@ -386,5 +393,56 @@ describe("applyRbacMigrations (purchase request store stage)", () => {
     const snapshot = await permissionsOf("administrator");
     await applyRbacMigrations();
     expect(await permissionsOf("administrator")).toEqual(snapshot);
+  });
+});
+
+/**
+ * สิทธิ์ติ๊กแท็บแดชบอร์ด (`dashboard-tab-ticks-2026-09-14`) — migration แบบ derive ตัวแรก
+ *
+ * ต้องไปถึง**ทุกบทบาท** รวมบทบาทที่ลูกค้าสร้างเอง (บนเครื่องจริงสโตร์/จัดซื้อ/ผลิตเป็นแบบนี้ทั้งหมด) และแจก
+ * เฉพาะแท็บที่บทบาทนั้นเห็นอยู่แล้วก่อนมีติ๊ก — ถ้าพลาดทางหนึ่งทุกคนเสียแท็บทันทีที่ deploy อีกทางคือเปิดแท็บ
+ * ที่ไม่เคยเห็นให้ ซึ่งไม่มีใครสังเกต
+ */
+describe("applyRbacMigrations (dashboard tab ticks derived from each role's permissions)", () => {
+  it("every migrated default role ends up with exactly the ticks a fresh install gives it", async () => {
+    await applyRbacMigrations();
+    for (const role of defaultRoles.filter((r) => !r.isSuperAdmin && r.key !== "service_engineer")) {
+      const migrated = (await permissionsOf(role.key)).filter((p) => DASHBOARD_TICK.test(p)).sort();
+      expect(migrated, role.key).toEqual(role.permissions.filter((p) => DASHBOARD_TICK.test(p)).sort());
+    }
+  });
+
+  it("reaches a customer-created role and grants only the tabs its documents already opened", async () => {
+    await roles.insertOne({
+      key: "store_custom", name: "สโตร์", description: "", isSuperAdmin: false, isSystem: false,
+      permissions: ["dashboard:view", "stock:view", "receivingReport:view", "purchaseRequest:view"],
+    } as never);
+    await applyRbacMigrations();
+    expect((await permissionsOf("store_custom")).filter((p) => DASHBOARD_TICK.test(p)).sort())
+      .toEqual(["dashboard:tabInventory", "dashboard:tabOverview", "dashboard:tabPurchasing"]);
+  });
+
+  it("gives nothing to a role that cannot open the dashboard at all", async () => {
+    await roles.insertOne({
+      key: "no_dashboard", name: "ไม่มีแดชบอร์ด", description: "", isSuperAdmin: false, isSystem: false,
+      permissions: ["stock:view", "quotations:view"],
+    } as never);
+    await applyRbacMigrations();
+    expect((await permissionsOf("no_dashboard")).filter((p) => DASHBOARD_TICK.test(p))).toEqual([]);
+  });
+
+  it("runs once — a tab an admin unticks afterward stays unticked", async () => {
+    await applyRbacMigrations();
+    expect(await markers.findOne({ _id: DASHBOARD_TICK_MIGRATION_ID })).not.toBeNull();
+    await roles.updateOne({ key: "viewer" }, { $pull: { permissions: "dashboard:tabSales" } } as never);
+    await applyRbacMigrations();
+    expect(await permissionsOf("viewer")).not.toContain("dashboard:tabSales");
+    expect(await permissionsOf("viewer")).toContain("dashboard:tabOverview");
+  });
+
+  it("leaves the Super Admin role alone — it holds every tick implicitly", async () => {
+    const before = await permissionsOf("super_admin");
+    await applyRbacMigrations();
+    expect(await permissionsOf("super_admin")).toEqual(before);
   });
 });

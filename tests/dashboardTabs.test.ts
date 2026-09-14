@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { defaultRoles, roleHasPermission } from "../src/lib/roles";
 import {
-  DASHBOARD_TAB_RULES, canSeeDepartmentBlock, dashboardTabHash, normalizeDashboardTab, resolveInitialTab, tabFromHash,
+  DASHBOARD_TAB_ORDER, canSeeDepartmentBlock, dashboardTabHash, normalizeDashboardTab, resolveInitialTab, tabFromHash,
   tabOfDepartment, visibleDashboardTabs, type DashboardTabKey,
 } from "../src/lib/dashboardTabs";
+import { dashboardTicksFromDocumentPermissions } from "../src/lib/dashboardTabGrants";
 import type { Permission } from "../src/lib/permissions";
 import { navKeyFromHash } from "../src/lib/navResolution";
 
@@ -14,6 +15,9 @@ import { navKeyFromHash } from "../src/lib/navResolution";
  * blocks, so a mistake here either hides a department from the people who run it or shows one to
  * someone whose server response is all `null`. Pinned against the real default roles rather than
  * hand-built ones, because "which of our actual roles sees what" is the question the owner asks.
+ *
+ * Since the tick permissions (same day): a tab needs its tick **and** a document permission of that
+ * department — the owner chose that a tick never shows numbers beyond what the role can already see.
  */
 
 const tabsFor = (roleKey: string): DashboardTabKey[] => {
@@ -24,13 +28,13 @@ const tabsFor = (roleKey: string): DashboardTabKey[] => {
 
 const only = (...granted: Permission[]) => (p: Permission) => granted.includes(p);
 
-describe("แท็บที่แต่ละบทบาทเห็น", () => {
+describe("แท็บที่แต่ละบทบาทเห็น (บทบาทตั้งต้นได้ติ๊กตรงกับแท็บที่เคยเห็น)", () => {
   it("Super Admin เห็นครบทุกแท็บ ตามลำดับที่แสดง — 7 แท็บ (ผลิต · โครงการ · BD รวมเป็นแท็บเดียว)", () => {
-    expect(tabsFor("super_admin")).toEqual(DASHBOARD_TAB_RULES.map((r) => r.key));
+    expect(tabsFor("super_admin")).toEqual(DASHBOARD_TAB_ORDER);
     expect(tabsFor("super_admin")).toEqual(["overview", "sales", "service", "purchasing", "inventory", "operations", "accounting"]);
   });
 
-  it("ภาพรวมขึ้นเสมอ และเป็นแท็บแรก", () => {
+  it("ภาพรวมขึ้นเสมอสำหรับบทบาทตั้งต้น และเป็นแท็บแรก", () => {
     for (const role of defaultRoles) expect(tabsFor(role.key)[0]).toBe("overview");
   });
 
@@ -50,18 +54,47 @@ describe("แท็บที่แต่ละบทบาทเห็น", () =
     expect(tabsFor("approver_1")).toEqual(["overview", "sales", "service", "accounting"]);
     expect(tabsFor("viewer")).toEqual(["overview", "sales", "service", "inventory", "accounting"]);
   });
+
+  it("บทบาทตั้งต้นทุกบทบาทถือติ๊กเท่ากับที่สิทธิ์เอกสารของมันเปิดให้ — ไม่ขาด ไม่เกิน", () => {
+    for (const role of defaultRoles.filter((r) => !r.isSuperAdmin)) {
+      const ticks = role.permissions.filter((p) => p.startsWith("dashboard:tab")).sort();
+      expect(ticks, role.key).toEqual(dashboardTicksFromDocumentPermissions(role.permissions).sort());
+    }
+  });
+});
+
+describe("ช่องติ๊กแท็บ — ต้องมีทั้งติ๊กและสิทธิ์เอกสาร", () => {
+  it("ติ๊กอย่างเดียว ไม่มีสิทธิ์เอกสาร = แท็บไม่ขึ้น", () => {
+    expect(visibleDashboardTabs(only("dashboard:tabSales"))).toEqual([]);
+    expect(visibleDashboardTabs(only("dashboard:tabProduction", "dashboard:tabBd"))).toEqual([]);
+  });
+
+  it("มีสิทธิ์เอกสาร แต่ไม่ติ๊ก = แท็บไม่ขึ้น", () => {
+    expect(visibleDashboardTabs(only("quotations:view", "stock:view", "costControl:view"))).toEqual([]);
+  });
+
+  it("ติ๊กคู่กับสิทธิ์เอกสาร = แท็บขึ้น", () => {
+    expect(visibleDashboardTabs(only("dashboard:tabSales", "quotations:view"))).toEqual(["sales"]);
+    expect(visibleDashboardTabs(only("dashboard:tabAccounting", "ap:view"))).toEqual(["accounting"]);
+  });
+
+  it("ภาพรวมเป็นช่องติ๊กของตัวเอง ไม่ต้องมีสิทธิ์เอกสาร", () => {
+    expect(visibleDashboardTabs(only("dashboard:tabOverview"))).toEqual(["overview"]);
+    expect(visibleDashboardTabs(only("dashboard:tabInventory", "stock:view"))).toEqual(["inventory"]);
+  });
 });
 
 describe("แท็บรวม ผลิต · โครงการ · BD", () => {
-  it("เปิดเมื่อเห็นแผนกใดแผนกหนึ่ง แต่บล็อกข้างในยังแยกสิทธิ์รายแผนก", () => {
-    const productionOnly = only("productionOrder:view");
-    expect(visibleDashboardTabs(productionOnly)).toEqual(["overview", "operations"]);
+  it("เปิดเมื่อเห็นแผนกใดแผนกหนึ่ง แต่บล็อกข้างในยังแยกติ๊กและสิทธิ์รายแผนก", () => {
+    const productionOnly = only("dashboard:tabProduction", "productionOrder:view", "costControl:view");
+    expect(visibleDashboardTabs(productionOnly)).toEqual(["operations"]);
     expect(canSeeDepartmentBlock("production", productionOnly)).toBe(true);
     expect(canSeeDepartmentBlock("project", productionOnly)).toBe(false);
+    // มีสิทธิ์ดู Cost Control แต่ไม่ได้ติ๊ก BD
     expect(canSeeDepartmentBlock("bd", productionOnly)).toBe(false);
 
-    expect(visibleDashboardTabs(only("costControl:view"))).toEqual(["overview", "operations"]);
-    expect(visibleDashboardTabs(only("project:view"))).toEqual(["overview", "operations"]);
+    expect(visibleDashboardTabs(only("dashboard:tabBd", "costControl:view"))).toEqual(["operations"]);
+    expect(visibleDashboardTabs(only("dashboard:tabProject", "project:view"))).toEqual(["operations"]);
   });
 
   it("การ์ดแผนกในภาพรวมพาไปแท็บที่ถูก", () => {
@@ -79,6 +112,19 @@ describe("แท็บรวม ผลิต · โครงการ · BD", ()
   });
 });
 
+describe("ติ๊กที่บทบาทเดิมควรได้ (ใช้ครั้งเดียวตอน migration และกับบทบาทตั้งต้น)", () => {
+  it("ไม่มี dashboard:view = ไม่ได้ติ๊กอะไรเลย", () => {
+    expect(dashboardTicksFromDocumentPermissions(["stock:view", "quotations:view"])).toEqual([]);
+  });
+
+  it("บทบาทที่ลูกค้าสร้างเอง ได้ภาพรวม + แท็บที่สิทธิ์เอกสารของมันเคยเปิดให้ ไม่เกินนั้น", () => {
+    expect(dashboardTicksFromDocumentPermissions(["dashboard:view", "stock:view", "receivingReport:view"]).sort())
+      .toEqual(["dashboard:tabInventory", "dashboard:tabOverview"]);
+    expect(dashboardTicksFromDocumentPermissions(["dashboard:view", "productionOrder:view", "purchaseRequest:view"]).sort())
+      .toEqual(["dashboard:tabOverview", "dashboard:tabProduction", "dashboard:tabPurchasing"]);
+  });
+});
+
 describe("แท็บที่เปิดตอนเข้าหน้า", () => {
   const visible: DashboardTabKey[] = ["overview", "sales", "inventory"];
 
@@ -91,8 +137,13 @@ describe("แท็บที่เปิดตอนเข้าหน้า", (
     expect(resolveInitialTab({ hashTab: null, storedTab: "bd", visible: [...visible, "operations"] })).toBe("operations");
   });
 
-  it("แท็บที่ไม่มีสิทธิ์ถูกข้าม ทั้งจาก URL และที่จำไว้ — ตกไปภาพรวม", () => {
+  it("แท็บที่ไม่มีสิทธิ์ถูกข้าม ทั้งจาก URL และที่จำไว้ — ตกไปแท็บแรกที่เห็น", () => {
     expect(resolveInitialTab({ hashTab: "operations", storedTab: "accounting", visible })).toBe("overview");
+  });
+
+  it("ไม่ได้ติ๊กภาพรวม = เปิดแท็บแรกที่ติ๊กไว้ · ไม่เห็นแท็บไหนเลย = null", () => {
+    expect(resolveInitialTab({ hashTab: null, storedTab: null, visible: ["purchasing", "inventory"] })).toBe("purchasing");
+    expect(resolveInitialTab({ hashTab: "overview", storedTab: "overview", visible: [] })).toBeNull();
   });
 
   it("ค่าที่จำไว้ที่ไม่ใช่แท็บจริง (ข้อมูลเก่า/พิมพ์เอง) ไม่ทำให้พัง", () => {

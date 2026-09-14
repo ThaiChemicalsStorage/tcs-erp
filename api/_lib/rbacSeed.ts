@@ -1,6 +1,7 @@
 import { defaultRoles, isPermissionLockedToSuperAdmin } from "../../src/lib/roles.js";
 import type { Permission } from "../../src/lib/permissions.js";
 import { nowIso } from "../../src/lib/products.js";
+import { dashboardTicksFromDocumentPermissions } from "../../src/lib/dashboardTabGrants.js";
 import { rolesCollection, rbacMigrationsCollection } from "./collections.js";
 
 /** Idempotent: only seeds when the roles collection is empty (fresh DB or first-run setup). */
@@ -45,7 +46,12 @@ export async function syncDefaultRoles(): Promise<void> {
 interface RbacMigration {
   id: string;
   /** roleKey -> permissions to add. Must mirror `defaultRoles` so a fresh DB and a migrated one end up identical. */
-  grants: Record<string, Permission[]>;
+  grants?: Record<string, Permission[]>;
+  /**
+   * Permissions to add, computed from what each role already holds — applied to **every** non-Super-Admin
+   * role, including customer-created ones that have no fixed roleKey to list under `grants`.
+   */
+  derive?: (permissions: Permission[]) => Permission[];
 }
 
 /**
@@ -53,6 +59,15 @@ interface RbacMigration {
  * revokes in Role Management stays revoked. Never edit or remove a shipped entry; add a new one.
  */
 const RBAC_MIGRATIONS: RbacMigration[] = [
+  {
+    // สิทธิ์ติ๊กแท็บแดชบอร์ด (2026-09-14) — เจ้าของสั่ง "ติ๊กให้เห็นแผนกไหนได้บ้าง"
+    //
+    // ก่อนหน้านี้แท็บเปิดด้วยสิทธิ์ดูเอกสารของแผนกนั้นอย่างเดียว ถ้าไม่แจกติ๊กให้บทบาทเดิม ทุกคนจะเสียทุกแท็บ
+    // ทันทีที่ deploy · ต้องเป็น derive ไม่ใช่ grants เพราะบทบาทจริงบนเครื่องลูกค้าส่วนใหญ่สร้างเอง (สโตร์
+    // จัดซื้อ ผลิต ฯลฯ) ไม่มี roleKey คงที่ให้ระบุ · แจกเฉพาะแท็บที่บทบาทนั้นเห็นอยู่แล้ว ไม่เปิดอะไรเพิ่ม
+    id: "dashboard-tab-ticks-2026-09-14",
+    derive: dashboardTicksFromDocumentPermissions,
+  },
   {
     // ใบขอซื้อผ่านสโตร์ + จัดซื้อแก้ใบที่อนุมัติแล้ว (2026-09-09)
     //
@@ -185,13 +200,22 @@ const RBAC_MIGRATIONS: RbacMigration[] = [
 export async function applyRbacMigrations(): Promise<void> {
   const markers = await rbacMigrationsCollection();
   const applied = new Set((await markers.find({}, { projection: { _id: 1 } }).toArray()).map((m) => m._id));
-  const pending = RBAC_MIGRATIONS.filter((m) => !applied.has(m.id));
+  // derive migrations run after every grants migration in the same pass (stable sort keeps the rest in
+  // order): they read what a role already holds, so on a database several migrations behind they must see
+  // the permissions the grants migrations are about to add — otherwise a role would miss a dashboard tab
+  // its freshly granted document permission opens.
+  const pending = RBAC_MIGRATIONS.filter((m) => !applied.has(m.id)).sort((a, b) => Number(!!a.derive) - Number(!!b.derive));
   if (pending.length === 0) return;
 
   const roles = await rolesCollection();
   for (const migration of pending) {
     const appliedRoleKeys: string[] = [];
-    for (const [key, permissions] of Object.entries(migration.grants)) {
+    const perRole: [string, Permission[]][] = Object.entries(migration.grants ?? {});
+    if (migration.derive) {
+      const all = await roles.find({ isSuperAdmin: { $ne: true } }, { projection: { key: 1, permissions: 1 } }).toArray();
+      for (const role of all) perRole.push([role.key, migration.derive(role.permissions ?? [])]);
+    }
+    for (const [key, permissions] of perRole) {
       const grantable = permissions.filter((p) => !isPermissionLockedToSuperAdmin(p));
       if (grantable.length === 0) continue;
       // Super Admin holds every permission implicitly (roleHasPermission short-circuits) and the

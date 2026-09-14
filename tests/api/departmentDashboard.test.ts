@@ -381,7 +381,7 @@ describe("แดชบอร์ดแผนก — บริการ", () => {
 
 describe("แดชบอร์ดแผนก — สิทธิ์", () => {
   it("มีแค่สิทธิ์ดูสต๊อก = เห็นบล็อกคลังสินค้าบล็อกเดียว และตัวเลขที่ต้องใช้สิทธิ์อื่นเป็น null", async () => {
-    const { cookie } = await loginAs("stockonly", ["dashboard:view", "stock:view"]);
+    const { cookie } = await loginAs("stockonly", ["dashboard:view", "dashboard:tabOverview", "dashboard:tabInventory", "stock:view"]);
     const res = await dept("overview", "", cookie);
     expect(res.blocks.inventory).not.toBeNull();
     for (const key of ["service", "purchasing", "production", "project", "bd"] as const) expect(res.blocks[key], key).toBeNull();
@@ -394,7 +394,7 @@ describe("แดชบอร์ดแผนก — สิทธิ์", () => {
   });
 
   it("แท็บรวมแยกสิทธิ์รายแผนก — มีแค่สิทธิ์ใบสั่งผลิต เห็นเฉพาะส่วนของผลิต", async () => {
-    const { cookie } = await loginAs("factory", ["dashboard:view", "productionOrder:view"]);
+    const { cookie } = await loginAs("factory", ["dashboard:view", "dashboard:tabOverview", "dashboard:tabProduction", "productionOrder:view"]);
     const { blocks, attention } = await dept("operations", "", cookie);
     expect(blocks.production).not.toBeNull();
     expect(blocks.project).toBeNull();
@@ -406,13 +406,44 @@ describe("แดชบอร์ดแผนก — สิทธิ์", () => {
     expect((await dept("overview", "", cookie)).attention?.every((a) => a.dept === "production")).toBe(true);
   });
 
+  it("ติ๊กแท็บ: มีสิทธิ์เอกสารแต่ไม่ติ๊ก = บล็อกเป็น null · ไม่ติ๊กภาพรวม = 403 · ไม่ติ๊กขาย = แดชบอร์ดขาย 403", async () => {
+    const { cookie } = await loginAs("noticks", ["dashboard:view", "stock:view", "purchaseOrder:view", "productionOrder:view", "quotations:view"]);
+    expect((await get("/api/dashboard/departments?dept=overview", cookie)).status).toBe(403);
+    expect((await dept("inventory", "", cookie)).blocks.inventory).toBeNull();
+    expect((await dept("purchasing", "", cookie)).blocks.purchasing).toBeNull();
+    expect((await dept("operations", "", cookie)).blocks.production).toBeNull();
+    expect((await get("/api/dashboard", cookie)).status).toBe(403);
+  });
+
+  it("ติ๊กแล้วแต่ไม่มีสิทธิ์เอกสาร = ไม่เห็นตัวเลขเกินสิทธิ์ที่มี", async () => {
+    const { cookie } = await loginAs("tickonly", ["dashboard:view", "dashboard:tabOverview", "dashboard:tabPurchasing", "dashboard:tabSales", "dashboard:tabProduction"]);
+    const res = await dept("overview", "", cookie);
+    for (const key of ["service", "purchasing", "inventory", "production", "project", "bd"] as const) expect(res.blocks[key], key).toBeNull();
+    expect(res.attention).toEqual([]);
+    expect((await get("/api/dashboard", cookie)).status).toBe(403);
+  });
+
+  it("ต้องจัดการก่อนมีเฉพาะแผนกที่ติ๊ก แม้จะมีสิทธิ์เอกสารของแผนกอื่น", async () => {
+    const { cookie } = await loginAs("partial", [
+      "dashboard:view", "dashboard:tabOverview", "dashboard:tabProduction",
+      // viewAll ทุกชนิด: ถ้าไม่มีด่านติ๊ก ใบสั่งซื้อเลยกำหนด (PO-A) และรายงานรอลูกค้า (SR-1) ของ admin จะติดรายการด้วย
+      "productionOrder:view", "productionOrder:viewAll", "purchaseOrder:view", "purchaseOrder:viewAll", "service:view", "service:viewAll",
+    ]);
+    const { attention, blocks } = await dept("overview", "", cookie);
+    expect(blocks.purchasing).toBeNull();
+    expect(blocks.service).toBeNull();
+    expect(blocks.production).not.toBeNull();
+    expect(attention!.length).toBeGreaterThan(0);
+    expect(attention!.every((a) => a.dept === "production")).toBe(true);
+  });
+
   it("ไม่มี dashboard:view = 403", async () => {
     const { cookie } = await loginAs("nodash", ["stock:view"]);
     expect((await get("/api/dashboard/departments?dept=overview", cookie)).status).toBe(403);
   });
 
   it("ไม่มี viewAll = นับเฉพาะใบของตัวเองกับใบที่ไม่มีเจ้าของ เหมือนหน้ารายการ", async () => {
-    const { cookie, userId } = await loginAs("buyer", ["dashboard:view", "purchaseOrder:view"]);
+    const { cookie, userId } = await loginAs("buyer", ["dashboard:view", "dashboard:tabPurchasing", "purchaseOrder:view"]);
     const c = await import("../../api/_lib/collections.js");
     await (await c.purchaseOrdersCollection()).insertMany([
       { _id: "PO-MINE", ...base(), createdBy: userId, status: "PendingApproval", lines: [] },

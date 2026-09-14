@@ -13,7 +13,7 @@ import { purchaseOrderTotals } from "../../src/lib/purchaseOrder.js";
 import { receivingReportTotals } from "../../src/lib/receivingReport.js";
 import { stockValueOf } from "../../src/lib/stock.js";
 import { requisitionHasOutstanding } from "../../src/lib/materialRequisition.js";
-import { DEPARTMENT_KEYS, OPERATIONS_DEPARTMENTS, canSeeDepartmentBlock, type DepartmentKey } from "../../src/lib/dashboardTabs.js";
+import { DEPARTMENT_KEYS, OPERATIONS_DEPARTMENTS, canSeeDashboardTab, canSeeDepartmentBlock, type DepartmentKey } from "../../src/lib/dashboardTabs.js";
 import type {
   AttentionItem, BlockScope, DepartmentBlock, DepartmentDashboardResponse, DepartmentDashboardView, DueItem,
   MonthCount, OpenPurchaseRequestStages, ServiceFollowUp, StatusCounts,
@@ -643,7 +643,7 @@ async function collectAttention({ ctx, has, today }: BlockContext): Promise<Atte
   const per = 5;
   const tasks: Promise<AttentionItem[]>[] = [];
 
-  if (has("purchaseOrder:view")) {
+  if (canSeeDepartmentBlock("purchasing", has) && has("purchaseOrder:view")) {
     tasks.push((async () => {
       const own = buildSimpleOwnershipClause(ctx.user.id, has("purchaseOrder:viewAll"), "createdBy");
       // ไม่ใส่ limit ก่อนกรองใบที่รับครบ — ใบสั่งซื้อยังเป็น Final หลังรับของครบ ใบเก่าที่รับครบแล้วจึงเรียงอยู่หน้าสุด
@@ -662,7 +662,7 @@ async function collectAttention({ ctx, has, today }: BlockContext): Promise<Atte
     })());
   }
 
-  if (has("productionOrder:view")) {
+  if (canSeeDepartmentBlock("production", has)) {
     tasks.push((async () => {
       const own = buildSimpleOwnershipClause(ctx.user.id, has("productionOrder:viewAll"), "createdBy");
       const rows = await (await productionOrdersCollection()).find(
@@ -676,7 +676,7 @@ async function collectAttention({ ctx, has, today }: BlockContext): Promise<Atte
     })());
   }
 
-  if (has("jobOrder:view")) {
+  if (canSeeDepartmentBlock("project", has) && has("jobOrder:view")) {
     tasks.push((async () => {
       const own = buildSimpleOwnershipClause(ctx.user.id, has("jobOrder:viewAll"), "createdBy");
       const rows = await (await jobOrdersCollection()).find(
@@ -690,7 +690,7 @@ async function collectAttention({ ctx, has, today }: BlockContext): Promise<Atte
     })());
   }
 
-  if (has("service:view")) {
+  if (canSeeDepartmentBlock("service", has)) {
     tasks.push((async () => {
       const rows = await (await serviceReportsCollection()).find(
         and({ isDeleted: false, "customerApproval.status": "pending" }, serviceOwnershipClause(ctx)) as never,
@@ -751,6 +751,8 @@ export async function handleDepartmentDashboard(req: ApiRequest, res: ApiRespons
 
   const has: Has = (p) => roleHasPermission(ctx.role, p);
   const today = todayIsoDate();
+  // ภาพรวมเป็นช่องติ๊กของตัวเอง (2026-09-14) — ไม่ติ๊ก = ไม่ได้ใบรออนุมัติ/กิจกรรมล่าสุด/ต้องจัดการก่อนเลย
+  if (view === "overview" && !canSeeDashboardTab("overview", has)) throw new HttpError(403, "ไม่มีสิทธิ์ดูแท็บภาพรวมของแดชบอร์ด");
   const isOverview = view === "overview";
   const blockContext: BlockContext = { ctx, has, from, to, today, months: lastMonthKeys(today), withDetail: !isOverview };
 

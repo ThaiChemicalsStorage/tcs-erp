@@ -389,6 +389,14 @@ department to get real numbers now.
 > - Removed: `ProductionTab`/`ProjectTab`/`BdTab`, `ExecutiveSummaryCards`, `QuotationStatusSummary`,
 >   `ServiceSummary`, `ProductsByCategoryChart`, the overview's AP request.
 
+> **Tab ticks (2026-09-14).** Which tabs a role sees is now ticked per role in Role Management
+> (`dashboard:tabOverview` … `dashboard:tabAccounting`, with ผลิต / โครงการ / BD ticked separately). A
+> department needs its tick **and** a document view permission of that department, and its numbers keep
+> that permission's scope; ภาพรวม is a tick of its own (unticked → the page opens on the first ticked tab;
+> nothing ticked → empty state). Existing roles were given ticks matching what they already saw by a
+> derive RBAC migration. Server enforcement and the migration: [RBAC.md](../RBAC.md) "Dashboard tab ticks".
+> The permission table below (the original rule) is now the **document** half of each tab's rule.
+
 **Tabs** — ภาพรวม · ขาย · บริการ · จัดซื้อ · คลังสินค้า · ผลิต·โครงการ·BD · บัญชี. There is no
 บุคคล tab: the system has no real HR data (users only). The table below is the original 9-tab
 gating; ผลิต / โครงการ / BD now render inside the combined `operations` tab (visible with any of the
