@@ -89,8 +89,8 @@ export function ArTrendChart({ trend }: { trend: ArDashboardTrendPoint[] }) {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} minTickGap={16} />
-            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
+            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} minTickGap={16} />
+            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
             <Area type="monotone" dataKey="netTotal" name={t("accountingDashboard.chart.trend.seriesNetTotal")} stroke="#c9a84c" strokeWidth={2} fill="url(#arTrendGrad)" dot={false} activeDot={{ r: 4, fill: "#c9a84c" }} />
           </AreaChart>
@@ -148,8 +148,8 @@ export function BillingFunnelChart({ data }: { data: ArDashboardBillingFunnelSta
         <ResponsiveContainer width="100%" height={160}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" vertical={false} />
-            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
-            <YAxis allowDecimals={false} tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} />
+            <YAxis allowDecimals={false} tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} />
             <Tooltip content={<SimpleTooltip formatter={(v) => `${v} ${periodsUnit}`} />} />
             <Bar dataKey="count" name={t("accountingDashboard.chart.billingFunnel.seriesCount")} radius={[4, 4, 0, 0]}>
               {chartData.map((d) => <Cell key={d.status} fill={FUNNEL_COLORS[d.status]} />)}
@@ -177,8 +177,8 @@ export function AgingChart({ buckets }: { buckets: ArAgingBucket[] }) {
         <ResponsiveContainer width="100%" height={200}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" vertical={false} />
-            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
-            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
+            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} interval={0} angle={-12} textAnchor="end" height={50} />
+            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
             <Bar dataKey="amount" name={t("accountingDashboard.chart.aging.seriesOutstanding")} radius={[4, 4, 0, 0]}>
               {chartData.map((b) => <Cell key={b.key} fill={AGING_BUCKET_COLORS[b.key]} />)}

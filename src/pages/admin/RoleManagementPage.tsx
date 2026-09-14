@@ -4,7 +4,7 @@ import type { DriveStep } from "driver.js";
 import { useModuleTour } from "../../components/GuidedTour";
 import type { Role } from "../../lib/roles";
 import { isPermissionLockedToSuperAdmin, createRole, updateRole, deleteRole } from "../../lib/roles";
-import { PERMISSION_GROUPS, PERMISSION_LABEL_KEY, permissionsRequiring, withPermissionDependencies, type Permission } from "../../lib/permissions";
+import { PERMISSION_CHECKBOX_UI, PERMISSION_GROUPS, PERMISSION_LABEL_KEY, permissionsRequiring, withPermissionDependencies, type Permission } from "../../lib/permissions";
 import type { User } from "../../lib/users";
 import { ApiError } from "../../lib/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -169,39 +169,59 @@ export function RoleManagementPage({
             <div>
               <p className="text-xs font-medium text-foreground mb-2">{t("roles.permissionsTitle")}</p>
               <div className="space-y-3">
-                {PERMISSION_GROUPS.map((group) => (
-                  <div key={group.label} className="border border-border rounded-lg p-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{t(group.labelKey)}</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {group.permissions.map((p) => {
-                        const locked = isPermissionLockedToSuperAdmin(p);
-                        const dependents = requiredBy(p);
-                        const pinned = dependents.length > 0;
-                        const pinnedTitle = pinned
-                          ? t("roles.permissionRequiredBy").replace("{names}", dependents.map((d) => t(PERMISSION_LABEL_KEY[d])).join(", "))
-                          : undefined;
-                        return (
-                          <label
-                            key={p}
-                            title={pinnedTitle}
-                            className={`flex items-center gap-2 text-xs ${locked || readOnly || pinned ? "opacity-50" : "cursor-pointer"}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={form.permissions.includes(p)}
-                              disabled={locked || readOnly || pinned}
-                              onChange={() => togglePermission(p)}
-                              className="w-3.5 h-3.5 rounded border-border accent-[#c9a84c]"
-                            />
-                            <span className="text-foreground">{t(PERMISSION_LABEL_KEY[p])}</span>
-                            {locked && <Lock size={10} className="text-muted-foreground" />}
-                            {!locked && pinned && <Lock size={10} className="text-muted-foreground" aria-label={pinnedTitle} />}
-                          </label>
-                        );
-                      })}
+                {PERMISSION_GROUPS.map((group) => {
+                  // ช่องที่มีหัวข้อย่อย (PERMISSION_CHECKBOX_UI) วางเป็นตารางของตัวเองใต้ช่องทั่วไปของกลุ่ม — เช่น
+                  // แท็บแดชบอร์ด 9 ช่อง ที่ชื่อเต็มยาวจนตาราง 2 คอลัมน์เดิมตัดบรรทัดไม่เท่ากัน (2026-09-14)
+                  const plain = group.permissions.filter((p) => !PERMISSION_CHECKBOX_UI[p]?.sectionKey);
+                  const sectionKeys = [...new Set(group.permissions.map((p) => PERMISSION_CHECKBOX_UI[p]?.sectionKey))]
+                    .filter((k): k is NonNullable<typeof k> => !!k);
+                  const renderPermission = (p: Permission) => {
+                    const locked = isPermissionLockedToSuperAdmin(p);
+                    const dependents = requiredBy(p);
+                    const pinned = dependents.length > 0;
+                    const pinnedTitle = pinned
+                      ? t("roles.permissionRequiredBy").replace("{names}", dependents.map((d) => t(PERMISSION_LABEL_KEY[d])).join(", "))
+                      : undefined;
+                    const ui = PERMISSION_CHECKBOX_UI[p];
+                    return (
+                      <label
+                        key={p}
+                        title={pinnedTitle}
+                        className={`flex items-start gap-2 text-xs ${locked || readOnly || pinned ? "opacity-50" : "cursor-pointer"}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={form.permissions.includes(p)}
+                          disabled={locked || readOnly || pinned}
+                          onChange={() => togglePermission(p)}
+                          className="mt-0.5 w-3.5 h-3.5 flex-shrink-0 rounded border-border accent-[#c9a84c]"
+                        />
+                        <span className="min-w-0 leading-snug">
+                          <span className="text-foreground">{t(ui?.labelKey ?? PERMISSION_LABEL_KEY[p])}</span>
+                          {locked && <Lock size={10} className="inline ml-1 align-baseline text-muted-foreground" />}
+                          {!locked && pinned && <Lock size={10} className="inline ml-1 align-baseline text-muted-foreground" aria-label={pinnedTitle} />}
+                          {ui?.hintKey && <span className="block mt-0.5 text-muted-foreground">{t(ui.hintKey)}</span>}
+                        </span>
+                      </label>
+                    );
+                  };
+                  return (
+                    <div key={group.label} className="border border-border rounded-lg p-3">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{t(group.labelKey)}</p>
+                      {plain.length > 0 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">{plain.map(renderPermission)}</div>
+                      )}
+                      {sectionKeys.map((sectionKey) => (
+                        <div key={sectionKey} className={plain.length > 0 ? "mt-3 pt-3 border-t border-border" : ""}>
+                          <p className="text-xs text-muted-foreground mb-2.5">{t(sectionKey)}</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">
+                            {group.permissions.filter((p) => PERMISSION_CHECKBOX_UI[p]?.sectionKey === sectionKey).map(renderPermission)}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <p className="text-[10px] text-muted-foreground mt-2">
                 {t("roles.permissionsLockHintPrefix")} <Lock size={9} className="inline" /> {t("roles.permissionsLockHint")}

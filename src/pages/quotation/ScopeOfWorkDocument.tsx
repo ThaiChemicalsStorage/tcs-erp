@@ -840,7 +840,7 @@ export function ScopeOfWorkDocument({
           <ChevronRight size={14} className="rotate-180" /> {resolvedBackLabel}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{scope.scopeNumber}</span>
+        <span className="text-sm text-[#866d28] font-mono font-semibold">{scope.scopeNumber}</span>
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
           isDraft ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20"
           : scope.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20"
@@ -989,7 +989,7 @@ export function ScopeOfWorkDocument({
 
         <div data-tour="sowdoc-header" className="bg-card border border-border rounded-xl overflow-hidden print:hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5 print:hidden">
-            <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">SCOPE OF WORK</h1>
+            <h1 className="text-[#c9a84c] text-xl font-bold">SCOPE OF WORK</h1>
             <p className="text-[#a8bed8] text-xs mt-1">
               {t("scopeOfWorkDoc.subtitleFrom")} {scopeQuotationNumbers(scope).join(", ") || "-"} — {t("scopeOfWorkDoc.subtitleJobType")} {scope.jobTypeCode || "-"} {scope.jobTypeName}
               {scope.quotationSalesperson && ` — ${t("scopeOfWorkDoc.subtitleSalesperson")} ${scope.quotationSalesperson}`}

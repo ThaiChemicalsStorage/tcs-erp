@@ -68,8 +68,8 @@ export function SalesActivityAnalytics({ data, anchorDate, dateFiltered }: { dat
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-              <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} minTickGap={16} />
-              <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} minTickGap={16} />
+              <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} allowDecimals={false} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {CATEGORIES.map((c, i) => (

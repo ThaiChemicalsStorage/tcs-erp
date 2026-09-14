@@ -43,7 +43,7 @@ typography:
     fontWeight: 500
     letterSpacing: "0.05em"
   mono:
-    fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+    fontFamily: "'JetBrains Mono', 'Noto Sans Thai', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
     fontWeight: 400
 rounded:
   sm: "4px"
@@ -118,7 +118,7 @@ The system is deliberately flat and quiet at rest — surfaces are separated by 
 The palette reads as "navy ledger, gold seal": one deep authoritative ink color, one rare metallic accent, and a wide, deliberately desaturated family of blue-greys for every surface in between. (A warm-cream neutral family existed for a few hours on 2026-08-07 and was reverted the same day per direct user request — "ทำกลับไปธีมขาวเหมือนเดิม".)
 
 ### Primary
-- **Gilded Gold** (`#c9a84c`): the one accent color. Primary buttons, active sidebar nav item, focus rings, the "รออนุมัติ/Pending Approval" status pill, chart series #1. Also the color of the Thai subtitle under the logo and the topbar breadcrumb.
+- **Gilded Gold** (`#c9a84c`): the one accent color. Primary buttons, active sidebar nav item, focus rings, the "รออนุมัติ/Pending Approval" status pill, chart series #1. Also the color of the Thai subtitle under the logo. Gold **text** that must be read on white — the topbar breadcrumb page name and the document number in an editor's white toolbar — uses the darker gold ink `#866d28` instead (2026-09-14): `#c9a84c` on white fails contrast and the owner reported it as hard to read.
 - **Hover Gold** (`#f0c040`): the brighter, slightly warmer gold primary buttons and accents shift to on hover — never used as a resting-state color.
 
 ### Neutral
@@ -154,7 +154,7 @@ When a chart or donut legend needs more than 2-3 categories (job type distributi
 **Character:** An editorial serif for anything that announces a page or section, set against a plain, highly legible sans for everything the user actually reads and fills in — the pairing of a printed ledger's heading with its ruled interior pages.
 
 ### Hierarchy
-- **Display / Headings** (weight 500–600, `h1` 24px / `h2` 20px / `h3` 18px / `h4` 16px, line-height 1.5): Playfair Display, applied via an inline `fontFamily` style (not a Tailwind utility) on page titles, card/section titles, and the topbar breadcrumb. Always paired with the Noto Sans Thai fallback — never the bare `'Playfair Display', serif` stack.
+- **Display / Headings** (weight 500–600, `h1` 24px / `h2` 20px / `h3` 18px / `h4` 16px, line-height 1.5): Playfair Display, applied via an inline `fontFamily` style (not a Tailwind utility) on page titles and card/section titles. Always paired with the Noto Sans Thai fallback — never the bare `'Playfair Display', serif` stack. **Not on the topbar breadcrumb or on Thai-only titles set in monospace** (2026-09-14): the owner reported the top-left of every page and every document editor as a hard-to-read odd font — Playfair has no Thai glyphs, and JetBrains Mono (used for document form titles with wide tracking) had no Thai fallback at all, so Thai fell through to an OS font. The breadcrumb page name is now body-font semibold in gold ink `#866d28`; document editor form titles (on their navy `#0b1d3a` band) stay Gilded Gold `#c9a84c` but in the body font, bold, without tracking; `--font-mono` carries `'Noto Sans Thai'` as its Thai fallback.
 - **Body** (weight 400, 15px base, line-height 1.6): all paragraph copy, most static UI chrome, input values and table cell data on data-dense pages.
 - **Chrome / Label** (weight 500, 12px floor, `text-xs`): buttons, form labels, status pills, secondary/fine-print text. **Never below 12px for a real form label** — `text-[10px]` is reserved only for uppercase-tracking-wide "section eyebrows" (table header cells, sidebar group labels), a distinct, deliberately-tiny reading mode.
 - **Numbers / Codes** (JetBrains Mono, weight 400/500): quotation numbers, document numbers, currency amounts, dates, product codes — anything that must be scanned character-by-character.

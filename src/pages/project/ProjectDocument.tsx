@@ -166,7 +166,7 @@ export function ProjectDocument({
           <ChevronRight size={14} className="rotate-180" /> {backLabel ?? t("project.doc.backToList")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{project.scopeNumber}</span>
+        <span className="text-sm text-[#866d28] font-mono font-semibold">{project.scopeNumber}</span>
         {canEdit ? (
           <select
             value={project.status}
@@ -200,7 +200,7 @@ export function ProjectDocument({
       <div className="p-3 sm:p-6 space-y-5 max-w-5xl mx-auto">
         <div data-tour="projectdoc-header" className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("project.doc.title")}</h1>
+            <h1 className="text-[#c9a84c] text-xl font-bold">{t("project.doc.title")}</h1>
             <p className="text-[#a8bed8] text-xs mt-1">{t("project.doc.scopeOfWorkPrefix")} {project.scopeNumber}</p>
           </div>
           <div className="p-6 space-y-2.5">

@@ -209,7 +209,7 @@ export function CostControlDocument({
           <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft size={15} /> {t("costControlDoc.backToList")}
           </button>
-          <span className="font-mono text-sm text-[#c9a84c] font-semibold">{draft.documentNumber || draft.id}</span>
+          <span className="font-mono text-sm text-[#866d28] font-semibold">{draft.documentNumber || draft.id}</span>
 
           <div className="ml-auto flex items-center gap-2">
             {editable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}

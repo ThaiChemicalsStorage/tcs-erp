@@ -69,8 +69,8 @@ export function RevenueTrendChart({ trend, anchorDate, vatMode }: { trend: Reven
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
-            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} minTickGap={24} />
-            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
+            <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} minTickGap={24} />
+            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
             <Area type="monotone" dataKey="revenue" name={`${t("dashboard.kpi.closedSales")} ${vatSuffix}`} stroke="#c9a84c" strokeWidth={2} fill="url(#revGrad)" dot={false} activeDot={{ r: 4, fill: "#c9a84c" }} />
           </AreaChart>
@@ -93,8 +93,8 @@ export function RevenueByJobTypeChart({ jobTypeAnalytics, vatMode }: { jobTypeAn
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" horizontal={false} />
-            <XAxis type="number" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
-            <YAxis type="category" dataKey="jobTypeCode" width={60} tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
+            <XAxis type="number" tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
+            <YAxis type="category" dataKey="jobTypeCode" width={60} tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="totalValue" name={`${t("dashboard.chart.revenueByJobType.totalValue")} ${vatSuffix}`} fill="#5a7299" radius={[0, 4, 4, 0]} />
@@ -163,7 +163,7 @@ export function ExpectedSalesForecastChart({ forecast, vatMode }: { forecast: Fo
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(11,29,58,0.07)" />
             <XAxis dataKey="label" tick={{ fill: "#5a7299", fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
+            <YAxis tick={{ fill: "#5a7299", fontSize: 10, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" }} axisLine={false} tickLine={false} tickFormatter={fmtShort} />
             <Tooltip content={<SimpleTooltip formatter={fmtShort} />} />
             <Area type="monotone" dataKey="value" name={`${t("dashboard.kpi.expectedSales")} ${vatSuffix}`} stroke="#1a5fb4" strokeWidth={2} fill="url(#fcGrad)" />
           </AreaChart>

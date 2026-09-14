@@ -19,7 +19,7 @@ import type { BlockScope, DepartmentDashboardResponse, DepartmentDashboardView, 
  * ให้ทุกแท็บหน้าตาและภาษาเดียวกัน · สีทั้งหมดมาจากข้อ 6 ของเอกสารนั้น ห้ามเพิ่มสีใหม่ที่นี่
  */
 
-const AXIS_TICK = { fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono" } as const;
+const AXIS_TICK = { fill: "#5a7299", fontSize: 11, fontFamily: "JetBrains Mono, Noto Sans Thai, monospace" } as const;
 const GRID = "rgba(11,29,58,0.08)";
 
 export interface DepartmentTabProps {
@@ -244,7 +244,7 @@ export function MonthlyBars<T extends { month: string }>({ rows, series, format,
                     const { x, y, width, value, index } = props as { x?: number; y?: number; width?: number; value?: number; index?: number };
                     if ((index !== peakIndex && index !== lastIndex) || !value) return null;
                     return (
-                      <text x={(x ?? 0) + (width ?? 0) / 2} y={(y ?? 0) - 6} textAnchor="middle" fontSize={11} fontWeight={600} fontFamily="JetBrains Mono" fill="#0b1d3a">
+                      <text x={(x ?? 0) + (width ?? 0) / 2} y={(y ?? 0) - 6} textAnchor="middle" fontSize={11} fontWeight={600} fontFamily="JetBrains Mono, Noto Sans Thai, monospace" fill="#0b1d3a">
                         {format(value)}
                       </text>
                     );

@@ -281,7 +281,7 @@ export function ProductionOrderDocument({
           <ChevronRight size={14} className="rotate-180" /> {t("productionOrderDoc.backToList")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{doc.documentNumber || doc.id}</span>
+        <span className="text-sm text-[#866d28] font-mono font-semibold">{doc.documentNumber || doc.id}</span>
         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusPill}`}>{statusText}</span>
 
         <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
@@ -351,7 +351,7 @@ export function ProductionOrderDocument({
 
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("productionOrderDoc.title")}</h1>
+            <h1 className="text-[#c9a84c] text-xl font-bold">{t("productionOrderDoc.title")}</h1>
             <p className="text-[#a8bed8] text-xs mt-1">{t("productionOrderDoc.jobCodePrefix")} {doc.jobCode} · {doc.customerCompanyName}</p>
           </div>
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">

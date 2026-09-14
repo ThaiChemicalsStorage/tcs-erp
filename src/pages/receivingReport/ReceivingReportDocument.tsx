@@ -266,7 +266,7 @@ export function ReceivingReportDocument({
           <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft size={15} /> {t("receivingReportDoc.backToList")}
           </button>
-          <span className="text-sm font-mono font-semibold text-[#c9a84c] ml-2">{draft.documentNumber || draft.id}</span>
+          <span className="text-sm font-mono font-semibold text-[#866d28] ml-2">{draft.documentNumber || draft.id}</span>
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${isOpen ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
             {isOpen ? t("receivingReport.status.open") : t("receivingReport.status.closed")}
           </span>

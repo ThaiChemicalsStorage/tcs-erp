@@ -9,7 +9,11 @@
   /* JetBrains Mono is imported in fonts.css but was never actually wired to the `font-mono`
      utility (no --font-mono override existed) — every "font-mono" numbers/codes/dates span in
      the app was silently rendering in the browser's generic system monospace font instead. */
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  /* 2026-09-14: 'Noto Sans Thai' right after JetBrains Mono — the mono font has no Thai glyphs, so Thai
+     text in any font-mono span (document headers, card sub-lines, dates like "14 ก.ย. 2569") used to fall
+     through to whatever Thai font the OS picked, which the owner reported as a hard-to-read odd font.
+     Digits and Latin still render in JetBrains Mono; only the Thai glyphs change. */
+  --font-mono: 'JetBrains Mono', 'Noto Sans Thai', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   /* 2026-08-07: briefly warm cream for a few hours, reverted the same day per direct user
      request ("ทำกลับไปธีมขาวเหมือนเดิม") — these are the original cool near-white values. */
   --background: #f4f6fb;

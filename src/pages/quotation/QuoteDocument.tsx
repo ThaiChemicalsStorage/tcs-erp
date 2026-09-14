@@ -556,7 +556,7 @@ export function QuoteDocument({
           <ChevronRight size={14} className="rotate-180" /> {t("quotation.breadcrumb")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">
+        <span className="text-sm text-[#866d28] font-mono font-semibold">
           {isDetail ? quote!.id : t("quotation.newDoc")}
         </span>
 
@@ -694,7 +694,7 @@ export function QuoteDocument({
               <p className="text-[#a8bed8] text-sm">{t("quotation.field.contactPhone")}: {companyHeader.phone} · {t("settings.company.emailLabel")}: {companyHeader.email}</p>
             </div>
             <div className="sm:text-right sm:shrink-0">
-              <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("quotation.pageTitle")}</h1>
+              <h1 className="text-[#c9a84c] text-xl font-bold">{t("quotation.pageTitle")}</h1>
               <p className="text-[#a8bed8] text-xs font-mono mt-1">QUOTATION</p>
               <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#c9a84c]/20 text-[#c9a84c] border border-[#c9a84c]/30">
                 {statusIcon[quoteStatus]}
@@ -705,7 +705,7 @@ export function QuoteDocument({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border-b border-border print:hidden">
             <div data-tour="qdoc-customer" className="p-6 border-b sm:border-b-0 sm:border-r border-border">
-              <h2 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</h2>
+              <h2 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><Building2 size={10} /> {t("quotation.section.customerInfo")}</h2>
               <div className="space-y-2.5">
                 <div>
                   <label htmlFor="quote-customerSelector" className="text-xs text-muted-foreground block mb-1">{t("quotation.customerSelector.label")}</label>
@@ -756,7 +756,7 @@ export function QuoteDocument({
               </div>
             </div>
             <div className="p-6">
-              <h2 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5"><Hash size={10} /> {t("quotation.section.docDetails")}</h2>
+              <h2 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5"><Hash size={10} /> {t("quotation.section.docDetails")}</h2>
               <div className="space-y-2.5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>

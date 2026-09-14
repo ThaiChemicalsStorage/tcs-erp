@@ -237,7 +237,7 @@ export function PurchaseOrderDocument({
           <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft size={15} /> {t("purchaseOrderDoc.backToList")}
           </button>
-          <span className="text-sm font-mono font-semibold text-[#c9a84c] ml-2">{draft.documentNumber || draft.id}</span>
+          <span className="text-sm font-mono font-semibold text-[#866d28] ml-2">{draft.documentNumber || draft.id}</span>
 
           <div className="ml-auto flex items-center gap-2">
             {editable && <AutoSaveIndicator state={autoSave.state} lastSavedAt={autoSave.lastSavedAt} />}

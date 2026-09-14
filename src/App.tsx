@@ -1085,10 +1085,13 @@ export default function App() {
           <button onClick={() => setSidebarOpen(!sidebarOpen)} aria-label={sidebarOpen ? t("nav.collapseSidebar") : t("nav.expandSidebar")} className="hidden md:block text-muted-foreground hover:text-foreground transition-colors flex-shrink-0">
             {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <div className="hidden sm:flex items-center gap-1.5 text-sm min-w-0">
+          {/* 2026-09-14: เจ้าของแจ้งว่าตรงซ้ายบนเป็น "ฟ้อนแปลกๆ" อ่านยาก — ชื่อหน้าเคยเป็น Playfair Display สีทอง
+              (ไม่มีตัวไทย ตกไปใช้ฟอนต์สำรอง) และถูกช่องค้นหาเบียดจนเหลือตัวอักษรเดียว ("องค์กร › ใ")
+              ตอนนี้ใช้ฟอนต์ตัวหนังสือปกติ สีทองเข้มที่อ่านผ่านคอนทราสต์ และกันพื้นที่ขั้นต่ำให้ชื่อหน้าอ่านได้เสมอ */}
+          <div className="hidden sm:flex items-center gap-1.5 text-sm min-w-[8rem] max-w-[18rem] flex-shrink-0">
             <span className="text-muted-foreground flex-shrink-0">{t("topbar.org")}</span>
             <ChevronRight size={13} className="text-muted-foreground flex-shrink-0" />
-            <span className="text-[#c9a84c] font-medium truncate" style={{ fontFamily: "'Playfair Display', 'Noto Sans Thai', serif" }}>{t(NAV_LABEL_KEYS[effectiveNav])}</span>
+            <span className="text-[#866d28] font-semibold truncate" title={t(NAV_LABEL_KEYS[effectiveNav])}>{t(NAV_LABEL_KEYS[effectiveNav])}</span>
           </div>
           <GlobalSearch currentUserId={currentUser.id} onOpenResult={openSearchResult} />
           {/* 2026-08-07: opens the web manual page (public/manual.html) — replaced the old PDF per

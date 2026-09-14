@@ -587,7 +587,7 @@ export function MaterialRequisitionDocument({
           <ChevronRight size={14} className="rotate-180" /> {t("materialRequisitionDoc.backToList")}
         </button>
         <ChevronRight size={13} className="text-muted-foreground" />
-        <span className="text-sm text-[#c9a84c] font-mono font-medium tracking-wide">{formNumber}</span>
+        <span className="text-sm text-[#866d28] font-mono font-semibold">{formNumber}</span>
         {formNumber !== doc.id && <span className="text-xs font-mono text-muted-foreground">({doc.id})</span>}
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${doc.status === "Draft" ? "bg-[#5a7299]/10 text-[#576f94] border border-[#5a7299]/20" : doc.status === "PendingApproval" ? "bg-[#e08a3c]/10 text-[#a75d1a] border border-[#e08a3c]/20" : "bg-[#2aa36b]/10 text-[#207e52] border border-[#2aa36b]/20"}`}>
           {doc.status === "Draft" ? t("materialRequisition.status.draft") : doc.status === "PendingApproval" ? t("materialRequisition.status.pendingApproval") : t("materialRequisition.status.final")}
@@ -673,7 +673,7 @@ export function MaterialRequisitionDocument({
         )}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="bg-[#0b1d3a] px-4 sm:px-7 py-5">
-            <h1 className="text-[#c9a84c] text-xl font-bold font-mono tracking-wider">{t("materialRequisitionDoc.title")}</h1>
+            <h1 className="text-[#c9a84c] text-xl font-bold">{t("materialRequisitionDoc.title")}</h1>
             {/* สายที่มาของใบนี้ทั้งเส้น: มาจากใบสั่งผลิตใบไหน และใบสั่งผลิตนั้นมาจากงาน PQ ตัวไหน
                 (เจ้าของขอ 2026-09-02) — เลขใบสั่งผลิตขึ้นเฉพาะใบของฝ่ายผลิต ฝั่งโครงการไม่มีต้นทางนี้ */}
             <p className="text-[#a8bed8] text-xs mt-1">
