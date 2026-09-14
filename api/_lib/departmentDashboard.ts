@@ -403,7 +403,11 @@ async function inventoryBlock({ ctx, has, from, to, today, months, withDetail }:
   await Promise.all(tasks);
 
   return {
-    scope: scopeOf(canReceiving && !has("receivingReport:viewAll")),
+    scope: scopeOf(
+      canReceiving && !has("receivingReport:viewAll"),
+      withDetail && canStoreInbox && !has("purchaseRequest:viewAll"),
+      withDetail && canProductRequests && !(has("productRequest:viewAll") || has("productRequest:review")),
+    ),
     summary,
     detail: withDetail ? detail : null,
   };
@@ -450,7 +454,11 @@ async function productionBlock({ ctx, has, from, to, today, months, withDetail }
   }
 
   return {
-    scope: scopeOf(!has("productionOrder:viewAll"), canRequisitions && !has("materialRequisition:viewAll")),
+    scope: scopeOf(
+      !has("productionOrder:viewAll"),
+      canRequisitions && !has("materialRequisition:viewAll"),
+      withDetail && has("purchaseRequest:view") && !has("purchaseRequest:viewAll"),
+    ),
     summary: { pending, dueSoon, pastDue, mrAwaitingIssue },
     detail,
   };
